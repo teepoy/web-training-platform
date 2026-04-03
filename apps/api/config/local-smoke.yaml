@@ -1,0 +1,21 @@
+app:
+  env: local-smoke
+
+execution:
+  engine: local
+
+db:
+  url: "sqlite+aiosqlite:///./finetune-local-smoke.db"
+  echo: false
+  auto_create: true
+
+storage:
+  kind: memory
+
+notification:
+  sink: webhook
+  webhook:
+    endpoint: "http://localhost:9000/hooks/training"
+
+oauth:
+  enabled: false

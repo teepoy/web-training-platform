@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finetune-config
+  namespace: finetune
+data:
+  APP_CONFIG_PROFILE: "dev"

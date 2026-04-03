@@ -1,0 +1,15 @@
+execution:
+  engine: kubeflow
+
+db:
+  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"
+  echo: false
+  auto_create: false
+
+storage:
+  kind: minio
+
+k8s:
+  namespace: "finetune"
+  incluster: true
+  kubeconfig: null

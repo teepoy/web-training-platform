@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Node
+node_modules/
+apps/web/dist/
+
+# Compiled JS alongside TS/Vue source (build artifacts)
+apps/web/src/**/*.js
+apps/web/src/**/*.vue.js
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Lock files are committed for reproducible builds
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# SQLite databases
+*.db
+*.sqlite3
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Testing / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# OS
+Thumbs.db
+
+# Sisyphus agent state
+.sisyphus/
+
+# Claude
+.claude/
+
+# MinIO data
+minio-data/

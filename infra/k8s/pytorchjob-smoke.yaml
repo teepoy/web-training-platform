@@ -1,0 +1,17 @@
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: smoke-train
+  namespace: finetune
+spec:
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: Never
+      template:
+        spec:
+          containers:
+            - name: pytorch
+              image: python:3.11-slim
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-c", "print('training smoke')"]

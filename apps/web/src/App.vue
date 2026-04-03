@@ -1,0 +1,97 @@
+<template>
+  <n-config-provider :theme="computedTheme" :theme-overrides="themeOverrides">
+    <n-message-provider>
+      <n-notification-provider>
+        <n-dialog-provider>
+          <n-layout has-sider style="height: 100vh">
+            <n-layout-sider
+              :collapsed="uiStore.sidebarCollapsed"
+              :width="240"
+              :collapsed-width="64"
+              collapse-mode="width"
+              bordered
+              show-trigger
+              @collapse="uiStore.sidebarCollapsed = true"
+              @expand="uiStore.sidebarCollapsed = false"
+            >
+              <n-menu
+                :collapsed="uiStore.sidebarCollapsed"
+                :options="menuOptions"
+                :value="activeRoute"
+                @update:value="(key: string) => router.push(key)"
+              />
+            </n-layout-sider>
+            <n-layout vertical>
+              <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
+                <span style="font-weight: 600; flex: 1">ML Training Platform</span>
+                <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
+                <n-dropdown
+                  trigger="click"
+                  :options="avatarDropdownOptions"
+                  @select="handleAvatarSelect"
+                >
+                  <n-avatar
+                    round
+                    size="small"
+                    style="cursor: pointer"
+                  >LU</n-avatar>
+                </n-dropdown>
+              </n-layout-header>
+              <n-layout-content style="padding: 24px; overflow-y: auto">
+                <RouterView />
+                <n-back-top />
+              </n-layout-content>
+            </n-layout>
+          </n-layout>
+        </n-dialog-provider>
+      </n-notification-provider>
+    </n-message-provider>
+  </n-config-provider>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRouter, useRoute, RouterView } from 'vue-router'
+import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
+import { useUiStore } from './stores/ui'
+import { useAuthStore } from './stores/auth'
+
+const router = useRouter()
+const route = useRoute()
+const uiStore = useUiStore()
+const authStore = useAuthStore()
+
+const computedTheme = computed(() => uiStore.darkMode ? darkTheme : null)
+
+const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    fontSizeMedium: '13px',
+    fontSizeSmall: '12px',
+    borderRadius: '8px',
+  },
+}
+
+const activeRoute = computed(() => route.path)
+
+const menuOptions = [
+  { label: 'Datasets', key: '/datasets' },
+  { label: 'Training Jobs', key: '/jobs' },
+  { label: 'Predictions', key: '/predictions' },
+  { label: 'Presets', key: '/presets' },
+]
+
+const userInitials = computed(() =>
+  authStore.user?.name?.slice(0, 2).toUpperCase() ?? 'LU'
+)
+
+const avatarDropdownOptions = [
+  { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
+  { type: 'divider', key: 'd1' },
+  { label: 'Profile', key: 'profile', disabled: true },
+  { label: 'Logout', key: 'logout' },
+]
+
+function handleAvatarSelect(key: string) {
+  if (key === 'logout') authStore.logout()
+}
+</script>

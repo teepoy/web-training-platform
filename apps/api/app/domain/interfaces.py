@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from typing import Protocol
+
+from app.domain.models import ArtifactRef, TrainingEvent, TrainingJob
+from app.domain.types import JobStatus
+
+
+class ArtifactStorage(Protocol):
+    async def put_bytes(self, object_name: str, data: bytes, content_type: str = "application/octet-stream") -> str: ...
+
+    async def get_bytes(self, uri: str) -> bytes: ...
+
+
+class TrainingExecutionEngine(Protocol):
+    async def submit(self, job: TrainingJob) -> str: ...
+
+    async def status(self, external_job_id: str) -> JobStatus: ...
+
+    async def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]: ...
+
+    async def cancel(self, external_job_id: str) -> bool: ...
+
+    async def collect_artifacts(self, external_job_id: str) -> list[ArtifactRef]: ...
+
+
+class NotificationSink(Protocol):
+    def notify_job_update(self, event: TrainingEvent) -> None: ...
+
+    def notify_job_terminal(self, event: TrainingEvent) -> None: ...
+
+    def notify_user_left_and_complete(self, event: TrainingEvent) -> None: ...
