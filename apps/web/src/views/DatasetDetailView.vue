@@ -34,13 +34,21 @@
           <div v-if="dataset.ls_project_id" style="margin-top: 4px">
             <n-tag type="success" size="small">
               <a
-                :href="lsProjectUrl"
+                v-if="dataset.ls_project_url"
+                :href="dataset.ls_project_url"
                 target="_blank"
+                rel="noreferrer"
                 style="color: inherit; text-decoration: none"
               >
                 Label Studio Project #{{ dataset.ls_project_id }} ↗
               </a>
+              <span v-else>
+                Label Studio Project #{{ dataset.ls_project_id }}
+              </span>
             </n-tag>
+            <n-text v-if="!dataset.ls_project_url" depth="3" style="display: block; font-size: 12px; margin-top: 4px">
+              Linked project ID is saved, but the Label Studio URL is not configured on the server yet.
+            </n-text>
           </div>
           <div v-else style="margin-top: 4px">
             <n-button size="tiny" @click="showLinkLsModal = true">
@@ -140,39 +148,7 @@
         </n-tab-pane>
 
         <!-- ============================================================ -->
-        <!-- TAB 2: Annotations -->
-        <!-- ============================================================ -->
-        <n-tab-pane name="annotations" tab="Annotations">
-          <n-alert type="info" style="margin-bottom: 16px">
-            Annotation listing is not available. Use the form below to add annotations.
-          </n-alert>
-
-          <n-button type="primary" @click="showAddAnnotationModal = true">Add Annotation</n-button>
-
-          <!-- Add Annotation Modal -->
-          <n-modal v-model:show="showAddAnnotationModal" preset="dialog" title="Add Annotation" style="width: 480px">
-            <n-form ref="annotationFormRef" :model="annotationForm" :rules="annotationRules" label-placement="top">
-              <n-form-item label="Sample ID" path="sample_id">
-                <n-input v-model:value="annotationForm.sample_id" placeholder="Enter sample UUID" />
-              </n-form-item>
-              <n-form-item label="Label" path="label">
-                <n-input v-model:value="annotationForm.label" placeholder="e.g. cat" />
-              </n-form-item>
-              <n-form-item label="Created By" path="created_by">
-                <n-input v-model:value="annotationForm.created_by" placeholder="web-user" />
-              </n-form-item>
-            </n-form>
-            <template #action>
-              <n-button @click="showAddAnnotationModal = false">Cancel</n-button>
-              <n-button type="primary" :loading="createAnnotationMutation.isPending.value" @click="submitAnnotation">
-                Create
-              </n-button>
-            </template>
-          </n-modal>
-        </n-tab-pane>
-
-        <!-- ============================================================ -->
-        <!-- TAB 3: Export -->
+        <!-- TAB 2: Export -->
         <!-- ============================================================ -->
         <n-tab-pane name="export" tab="Export">
           <div style="display: flex; gap: 12px; margin-bottom: 16px">
@@ -196,7 +172,7 @@
         </n-tab-pane>
 
         <!-- ============================================================ -->
-        <!-- TAB 4: Feature Ops -->
+        <!-- TAB 3: Feature Ops -->
         <!-- ============================================================ -->
         <n-tab-pane name="feature-ops" tab="Feature Ops">
           <n-space vertical size="large">
@@ -316,60 +292,44 @@
         </n-tab-pane>
 
         <!-- ============================================================ -->
-        <!-- TAB 5: Annotate -->
+        <!-- TAB 4: Annotate -->
         <!-- ============================================================ -->
         <n-tab-pane name="annotate" tab="Annotate">
-          <!-- Label set -->
-          <n-space align="center" style="margin-bottom: 12px">
-            <n-text>Labels:</n-text>
-            <n-tag v-for="l in annotateLabels" :key="l" size="small" type="info">{{ l }}</n-tag>
-            <n-input
-              v-model:value="newCustomLabel"
-              placeholder="Custom label"
-              size="small"
-              style="width: 140px"
-              @keydown.enter="addCustomLabel"
+          <template v-if="dataset?.ls_project_url">
+            <iframe
+              :src="dataset.ls_project_url"
+              style="width: 100%; height: calc(100vh - 200px); border: 1px solid #eee; border-radius: 8px;"
+              allow="clipboard-read; clipboard-write"
             />
-            <n-button size="small" @click="addCustomLabel">Add</n-button>
-          </n-space>
-
-          <!-- Samples annotation table -->
-          <n-spin :show="samplesQuery.isLoading.value">
-            <n-data-table
-              :columns="annotateColumns"
-              :data="samples"
-              :bordered="true"
-              :single-line="false"
-              :row-key="(row: Sample) => row.id"
-              :checked-row-keys="checkedAnnotateRows"
-              @update:checked-row-keys="(keys: string[]) => { checkedAnnotateRows = keys }"
-            />
-          </n-spin>
-
-          <!-- Footer bar -->
-          <n-space align="center" style="margin-top: 12px">
-            <n-select
-              v-model:value="bulkApplyLabel"
-              :options="annotateLabelOptions"
-              placeholder="Label"
-              size="small"
-              style="width: 160px"
-            />
-            <n-button
-              size="small"
-              :disabled="!bulkApplyLabel || checkedAnnotateRows.length === 0"
-              @click="applyLabelToSelected"
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px">
+              <n-text depth="3" style="font-size: 12px">
+                Label Studio Project #{{ dataset.ls_project_id }}
+              </n-text>
+              <n-button text size="small" tag="a" :href="dataset.ls_project_url" target="_blank">
+                Open in new tab ↗
+              </n-button>
+            </div>
+          </template>
+          <template v-else>
+            <n-result
+              status="info"
+              title="Label Studio Not Configured"
+              description="This dataset does not have a Label Studio project URL configured."
             >
-              Apply to selected ({{ checkedAnnotateRows.length }})
-            </n-button>
-            <n-button
-              type="primary"
-              :loading="bulkAnnotateMutation.isPending.value"
-              @click="submitAnnotations"
-            >
-              Submit Annotations
-            </n-button>
-          </n-space>
+              <template #footer>
+                <n-button
+                  v-if="!dataset?.ls_project_id"
+                  size="small"
+                  @click="showLinkLsModal = true"
+                >
+                  Link to Label Studio
+                </n-button>
+                <n-text v-else depth="3">
+                  Project #{{ dataset.ls_project_id }} is linked, but the Label Studio URL is not set on the server.
+                </n-text>
+              </template>
+            </n-result>
+          </template>
         </n-tab-pane>
       </n-tabs>
 
@@ -389,10 +349,10 @@
 import { ref, computed, h, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, type FormInst, type FormRules, type DataTableColumns, NImage, NImageGroup, NTag, NInputNumber, NSelect } from "naive-ui";
-import { api, linkDatasetToLs, bulkCreateAnnotations, syncAnnotationsToLs } from "../api";
-import { resolveImageUri, resolveImageUris } from "../utils/imageAdapters";
-import type { Sample, Dataset, LinkLsRequest, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult } from "../types";
+import { useMessage, type FormInst, type FormRules, type DataTableColumns, NImage, NImageGroup, NTag, NInputNumber } from "naive-ui";
+import { api, linkDatasetToLs } from "../api";
+import { resolveImageUris } from "../utils/imageAdapters";
+import type { Sample, Dataset, LinkLsRequest } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
 import type { DatasetExport, ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 
@@ -416,13 +376,6 @@ const datasetQuery = useQuery({
 });
 
 const dataset = computed(() => datasetQuery.data.value as Dataset);
-
-const lsProjectUrl = computed(() => {
-  const lsBaseUrl = import.meta.env.VITE_LABEL_STUDIO_URL || "http://localhost:8080";
-  return dataset.value?.ls_project_id
-    ? `${lsBaseUrl}/projects/${dataset.value.ls_project_id}`
-    : "#";
-});
 
 // ---------------------------------------------------------------------------
 // Drawer state
@@ -600,7 +553,7 @@ const linkLsMutation = useMutation({
 
 function submitLinkLs() {
   if (linkLsProjectId.value) {
-    linkLsMutation.mutate({ ls_project_id: linkLsProjectId.value });
+    linkLsMutation.mutate({ ls_project_id: String(linkLsProjectId.value) });
   }
 }
 
@@ -642,42 +595,6 @@ function submitSample() {
     } catch (e) {
       message.error(`Failed to create sample: ${(e as Error).message}`);
     }
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Annotations tab
-// ---------------------------------------------------------------------------
-const showAddAnnotationModal = ref(false);
-const annotationFormRef = ref<FormInst | null>(null);
-const annotationForm = ref({ sample_id: "", label: "", created_by: "web-user" });
-
-const annotationRules: FormRules = {
-  sample_id: [{ required: true, message: "Sample ID is required", trigger: ["blur", "input"] }],
-  label: [{ required: true, message: "Label is required", trigger: ["blur", "input"] }],
-};
-
-const createAnnotationMutation = useMutation({
-  mutationFn: (vars: { sample_id: string; label: string; created_by: string }) =>
-    api.createAnnotation(vars),
-  onSuccess: () => {
-    message.success("Annotation created");
-    showAddAnnotationModal.value = false;
-    annotationForm.value = { sample_id: "", label: "", created_by: "web-user" };
-  },
-  onError: (e: Error) => {
-    message.error(`Failed to create annotation: ${e.message}`);
-  },
-});
-
-function submitAnnotation() {
-  annotationFormRef.value?.validate((errors) => {
-    if (errors) return;
-    createAnnotationMutation.mutate({
-      sample_id: annotationForm.value.sample_id,
-      label: annotationForm.value.label,
-      created_by: annotationForm.value.created_by || "web-user",
-    });
   });
 }
 
@@ -896,115 +813,4 @@ async function doUncoveredClusters() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Annotate tab
-// ---------------------------------------------------------------------------
-
-const annotationDraft = ref<Record<string, string>>({});
-const checkedAnnotateRows = ref<string[]>([]);
-const bulkApplyLabel = ref<string | null>(null);
-const customLabels = ref<string[]>([]);
-const newCustomLabel = ref("");
-
-const annotateLabels = computed(() => {
-  const base = dataset.value?.task_spec?.label_space ?? [];
-  return [...base, ...customLabels.value];
-});
-
-const annotateLabelOptions = computed(() =>
-  annotateLabels.value.map((l) => ({ label: l, value: l }))
-);
-
-function addCustomLabel() {
-  const label = newCustomLabel.value.trim();
-  if (label && !annotateLabels.value.includes(label)) {
-    customLabels.value.push(label);
-  }
-  newCustomLabel.value = "";
-}
-
-function applyLabelToSelected() {
-  if (!bulkApplyLabel.value || checkedAnnotateRows.value.length === 0) return;
-  for (const sid of checkedAnnotateRows.value) {
-    annotationDraft.value[sid] = bulkApplyLabel.value;
-  }
-  annotationDraft.value = { ...annotationDraft.value };
-}
-
-const bulkAnnotateMutation = useMutation({
-  mutationFn: (body: BulkAnnotationRequest) => bulkCreateAnnotations(id.value, body),
-  onSuccess: (data: BulkAnnotationResponse) => {
-    message.success(`Created ${data.created} annotations`);
-    qc.invalidateQueries({ queryKey: ["samples", id.value] });
-    if (dataset.value?.ls_project_id) {
-      syncToLsMutation.mutate();
-    }
-    annotationDraft.value = {};
-    checkedAnnotateRows.value = [];
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to create annotations");
-  },
-});
-
-const syncToLsMutation = useMutation({
-  mutationFn: () => syncAnnotationsToLs(id.value),
-  onSuccess: (data: SyncResult) => {
-    message.success(`Synced ${data.synced_count} annotations to Label Studio`);
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to sync to Label Studio");
-  },
-});
-
-function submitAnnotations() {
-  const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
-  if (entries.length === 0) {
-    message.warning("No annotations to submit");
-    return;
-  }
-  bulkAnnotateMutation.mutate({
-    annotations: entries.map(([sample_id, label]) => ({
-      sample_id,
-      label,
-      annotator: "platform-user",
-    })),
-  });
-}
-
-const annotateColumns = computed<DataTableColumns<Sample>>(() => [
-  { type: "selection" },
-  {
-    title: "Preview",
-    key: "preview",
-    width: 72,
-    render: (row) => {
-      const srcs = resolveImageUris(row.image_uris);
-      if (srcs.length === 0) return h("span", "—");
-      return h(NImage, { src: srcs[0], width: 48, height: 48, objectFit: "cover", style: "border-radius: 4px" });
-    },
-  },
-  {
-    title: "ID",
-    key: "id",
-    width: 100,
-    ellipsis: { tooltip: true },
-    render: (row) => h("span", { style: "font-family: monospace; font-size: 11px" }, row.id.slice(0, 8) + "…"),
-  },
-  {
-    title: "New Label",
-    key: "new_label",
-    width: 180,
-    render: (row) =>
-      h(NSelect, {
-        value: annotationDraft.value[row.id] ?? null,
-        options: annotateLabelOptions.value,
-        size: "small",
-        placeholder: "Select…",
-        onUpdateValue: (val: string) => {
-          annotationDraft.value = { ...annotationDraft.value, [row.id]: val };
-        },
-      }),
-  },
-]);
 </script>
