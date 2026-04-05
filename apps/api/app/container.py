@@ -15,6 +15,7 @@ from app.services.kubeflow_client import KubeflowClient
 from app.services.label_studio import LabelStudioClient, NullLabelStudioClient
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
+from app.services.auth import AuthService
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 
 
@@ -120,3 +121,4 @@ class Container(containers.DeclarativeContainer):
         repository=repository,
         artifact_service=artifacts,
     )
+    auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
