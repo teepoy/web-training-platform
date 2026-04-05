@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -8,6 +9,7 @@ import bcrypt
 from jose import JWTError, jwt  # noqa: F401 — re-exported for callers
 
 from app.core.config import load_config
+from app.db.models import PersonalAccessTokenORM
 
 _cfg = load_config()
 JWT_SECRET_KEY: str = cast(str, os.environ.get("JWT_SECRET_KEY") or str(_cfg.auth.jwt_secret_key))
@@ -34,6 +36,22 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+
+def create_personal_access_token(user_id: str, name: str) -> tuple[str, PersonalAccessTokenORM]:
+    token = f"ftp_{secrets.token_hex(32)}"
+    token_hash = bcrypt.hashpw(token.encode(), bcrypt.gensalt()).decode()
+    token_obj = PersonalAccessTokenORM(
+        user_id=user_id,
+        name=name,
+        token_hash=token_hash,
+        token_prefix=token[:8],
+    )
+    return token, token_obj
+
+
+def verify_personal_access_token(token: str, token_hash: str) -> bool:
+    return bcrypt.checkpw(token.encode(), token_hash.encode())
 
 
 class AuthService:
