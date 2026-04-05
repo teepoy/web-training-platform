@@ -18,5 +18,5 @@ class AgentTools:
     def get_job_status(self, job_id: str) -> dict[str, Any]:
         return self.client.get_job_status(job_id)
 
-    def start_training(self, dataset_id: str, preset_id: str, created_by: str = "agent") -> dict[str, Any]:
-        return self.client.start_training(dataset_id=dataset_id, preset_id=preset_id, created_by=created_by)
+    def start_training(self, dataset_id: str, preset_id: str) -> dict[str, Any]:
+        return self.client.start_training(dataset_id=dataset_id, preset_id=preset_id)
