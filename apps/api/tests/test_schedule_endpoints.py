@@ -61,32 +61,32 @@ class MockSchedulerService:
     """Async-compatible mock that returns fixture data for happy-path tests."""
 
     async def create_schedule(
-        self, name, flow_name, cron, parameters=None, description=""
+        self, org_id, created_by, name, flow_name, cron, parameters=None, description=""
     ) -> dict:
         return MOCK_DEPLOYMENT
 
-    async def list_schedules(self) -> list[dict]:
+    async def list_schedules(self, org_id=None) -> list[dict]:
         return [MOCK_DEPLOYMENT]
 
-    async def get_schedule(self, deployment_id: str) -> dict:
+    async def get_schedule(self, schedule_id: str, org_id=None) -> dict:
         return MOCK_DEPLOYMENT
 
-    async def update_schedule(self, deployment_id: str, updates: dict) -> dict:
+    async def update_schedule(self, schedule_id: str, updates: dict) -> dict:
         return {**MOCK_DEPLOYMENT, **updates}
 
-    async def delete_schedule(self, deployment_id: str) -> None:
+    async def delete_schedule(self, schedule_id: str) -> None:
         return None
 
-    async def trigger_run(self, deployment_id: str, parameters=None) -> dict:
+    async def trigger_run(self, schedule_id: str, parameters=None) -> dict:
         return MOCK_RUN
 
-    async def pause_schedule(self, deployment_id: str) -> dict:
+    async def pause_schedule(self, schedule_id: str) -> dict:
         return {**MOCK_DEPLOYMENT, "paused": True}
 
-    async def resume_schedule(self, deployment_id: str) -> dict:
+    async def resume_schedule(self, schedule_id: str) -> dict:
         return {**MOCK_DEPLOYMENT, "paused": False}
 
-    async def list_runs(self, deployment_id: str, limit: int = 50) -> list[dict]:
+    async def list_runs(self, schedule_id: str, limit: int = 50) -> list[dict]:
         return [MOCK_RUN]
 
     async def get_run(self, run_id: str) -> dict:
@@ -99,22 +99,22 @@ class MockSchedulerService:
 class NotFoundSchedulerService(MockSchedulerService):
     """Raises 404 for all get/delete operations — used to test 404 propagation."""
 
-    async def get_schedule(self, deployment_id: str) -> dict:
+    async def get_schedule(self, schedule_id: str, org_id=None) -> dict:
         raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def delete_schedule(self, deployment_id: str) -> None:
+    async def delete_schedule(self, schedule_id: str) -> None:
         raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def trigger_run(self, deployment_id: str, parameters=None) -> dict:
+    async def trigger_run(self, schedule_id: str, parameters=None) -> dict:
         raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def pause_schedule(self, deployment_id: str) -> dict:
+    async def pause_schedule(self, schedule_id: str) -> dict:
         raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def resume_schedule(self, deployment_id: str) -> dict:
+    async def resume_schedule(self, schedule_id: str) -> dict:
         raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def list_runs(self, deployment_id: str, limit: int = 50) -> list[dict]:
+    async def list_runs(self, schedule_id: str, limit: int = 50) -> list[dict]:
         raise HTTPException(status_code=404, detail="schedule not found")
 
 

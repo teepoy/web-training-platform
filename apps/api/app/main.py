@@ -1285,6 +1285,21 @@ async def get_dashboard(
 
 
 def _deployment_to_schedule(raw: dict) -> ScheduleResponse:
+    # Handle ORM-based dict (from local DB path): has direct 'cron' and 'is_schedule_active'
+    if "is_schedule_active" in raw and "prefect_deployment_id" in raw:
+        return ScheduleResponse(
+            id=raw.get("id", ""),
+            name=raw.get("name", ""),
+            flow_name=raw.get("flow_name", ""),
+            cron=raw.get("cron"),
+            parameters=raw.get("parameters", {}),
+            description=raw.get("description", ""),
+            is_schedule_active=raw.get("is_schedule_active", True),
+            created=raw.get("created"),
+            updated=raw.get("updated"),
+            prefect_deployment_id=raw.get("prefect_deployment_id") or raw.get("id", ""),
+        )
+    # Handle Prefect deployment dict (legacy / mock path)
     schedules = raw.get("schedules", [])
     cron: str | None = None
     if schedules:
@@ -1301,7 +1316,7 @@ def _deployment_to_schedule(raw: dict) -> ScheduleResponse:
         is_schedule_active=is_active,
         created=raw.get("created"),
         updated=raw.get("updated"),
-        prefect_deployment_id=raw.get("id", ""),
+        prefect_deployment_id=raw.get("prefect_deployment_id") or raw.get("id", ""),
     )
 
 
@@ -1338,6 +1353,8 @@ async def create_schedule(
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     raw = await svc.create_schedule(
+        org_id=org.id,
+        created_by=current_user.id,
         name=payload.name,
         flow_name=payload.flow_name,
         cron=payload.cron,
@@ -1353,7 +1370,7 @@ async def list_schedules(
     org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> list[ScheduleResponse]:
-    raws = await svc.list_schedules()
+    raws = await svc.list_schedules(org_id=org.id)
     return [_deployment_to_schedule(r) for r in raws]
 
 
@@ -1364,7 +1381,7 @@ async def get_schedule(
     org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
-    raw = await svc.get_schedule(schedule_id)
+    raw = await svc.get_schedule(schedule_id, org_id=org.id)
     return _deployment_to_schedule(raw)
 
 

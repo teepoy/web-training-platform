@@ -157,6 +157,8 @@ async def test_create_schedule_sends_correct_body(svc: SchedulerService) -> None
     ) as mock_req:
         mock_req.side_effect = [flow_filter_resp, deployment_resp]
         result = await svc.create_schedule(
+            org_id="org-001",
+            created_by="user-001",
             name="test-schedule",
             flow_name="drain-dataset",
             cron="*/5 * * * *",
@@ -191,6 +193,8 @@ async def test_create_schedule_default_parameters(svc: SchedulerService) -> None
     ) as mock_req:
         mock_req.side_effect = [flow_filter_resp, deployment_resp]
         await svc.create_schedule(
+            org_id="org-001",
+            created_by="user-001",
             name="s", flow_name="drain-dataset", cron="0 * * * *"
         )
 

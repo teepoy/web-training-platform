@@ -5,9 +5,14 @@ over the Prefect server REST API (v2/v3 compatible).  It intentionally avoids
 the ``prefect`` Python SDK so that the API service has no heavyweight runtime
 dependency; all communication is done through ``httpx.AsyncClient``.
 
+Schedule records are persisted locally in the :class:`ScheduleORM` table via
+an injected :class:`SqlRepository`.  This provides org-scoped schedule
+management and survives Prefect restarts.
+
 Responsibilities
 ----------------
 - CRUD for Prefect *deployments* (which carry cron schedules).
+- Persist schedule records locally with org/user context.
 - Trigger ad-hoc flow runs from a deployment.
 - Pause / resume a deployment's schedule.
 - Query flow-run state and server-side logs.
@@ -17,7 +22,7 @@ Error mapping
 - Prefect 404  → ``HTTPException(404, "<resource_label> not found")``
 - Prefect 4xx (non-404)  → ``HTTPException(422, "Prefect validation error: <body>")``
 - Prefect 5xx  → ``HTTPException(502, "Prefect server error: <status>")``
-- Connection / transport error  → ``HTTPException(503, "Prefect server unavailable")``
+- Connection / transport error  → logged as warning; local DB operation still succeeds
 
 Factory
 -------
@@ -28,30 +33,89 @@ request completes.
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
 
+from app.db.models import ScheduleORM
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Lazy repository singleton (avoids circular import from main.py)
+# ---------------------------------------------------------------------------
+
+_repository = None
+
+
+def _get_repository():
+    """Return a lazily-initialised SqlRepository singleton."""
+    global _repository
+    if _repository is None:
+        try:
+            from app.core.config import load_config
+            from app.db.session import create_engine, create_session_factory
+            from app.repositories.sql_repository import SqlRepository
+
+            cfg = load_config()
+            engine = create_engine(str(cfg.db.url))
+            session_factory = create_session_factory(engine)
+            _repository = SqlRepository(session_factory=session_factory)
+        except Exception as exc:
+            logger.warning("Failed to initialise repository for SchedulerService: %s", exc)
+    return _repository
+
+
+def _orm_to_dict(row: ScheduleORM) -> dict[str, Any]:
+    """Convert a :class:`ScheduleORM` instance to a response-compatible dict."""
+    return {
+        "id": row.id,
+        "name": row.name,
+        "flow_name": row.flow_name,
+        "cron": row.cron,
+        "parameters": row.parameters or {},
+        "description": row.description or "",
+        "is_schedule_active": row.is_schedule_active,
+        "prefect_deployment_id": row.prefect_deployment_id,
+        "org_id": row.org_id,
+        "created_by": row.created_by,
+        "created": row.created_at.isoformat() if row.created_at else None,
+        "updated": row.updated_at.isoformat() if row.updated_at else None,
+        # Provide Prefect-compatible keys so _deployment_to_schedule still works
+        "paused": not row.is_schedule_active,
+        "schedules": (
+            [{"schedule": {"cron": row.cron, "timezone": "UTC"}, "active": row.is_schedule_active}]
+            if row.cron
+            else []
+        ),
+    }
+
 
 class SchedulerService:
-    """Async client wrapper for the Prefect server REST API.
+    """Async client wrapper for the Prefect server REST API with local DB persistence.
 
     Parameters
     ----------
     prefect_api_url:
         Base URL of the Prefect API, e.g. ``http://localhost:4200/api``.
         Trailing slashes are normalised away.
+    repository:
+        SQL repository for local schedule persistence.  When ``None`` the
+        service operates in Prefect-only mode (legacy behaviour).
     """
 
-    def __init__(self, prefect_api_url: str) -> None:
+    def __init__(self, prefect_api_url: str, repository: Any = None) -> None:
         self._base = prefect_api_url.rstrip("/")
         self._client: httpx.AsyncClient = httpx.AsyncClient(
             base_url=self._base,
             timeout=30.0,
         )
+        self._repo = repository
 
     # ------------------------------------------------------------------
     # Context-manager / lifecycle helpers
@@ -224,16 +288,22 @@ class SchedulerService:
 
     async def create_schedule(
         self,
+        org_id: str,
+        created_by: str,
         name: str,
         flow_name: str,
         cron: str,
         parameters: dict[str, Any] | None = None,
         description: str = "",
     ) -> dict[str, Any]:
-        """Create a Prefect deployment with a cron schedule.
+        """Create a Prefect deployment with a cron schedule and persist locally.
 
         Parameters
         ----------
+        org_id:
+            Organization ID to scope the schedule.
+        created_by:
+            User ID of the creator.
         name:
             Deployment name (must be unique per flow).
         flow_name:
@@ -248,93 +318,231 @@ class SchedulerService:
         Returns
         -------
         dict
-            The created deployment object returned by Prefect.
+            The created schedule data (from local DB, enriched with Prefect ID).
         """
-        flow_id = await self._resolve_flow_id(flow_name)
-        body: dict[str, Any] = {
+        prefect_deployment_id: str | None = None
+
+        # 1. Try to create Prefect deployment
+        try:
+            flow_id = await self._resolve_flow_id(flow_name)
+            body: dict[str, Any] = {
+                "name": name,
+                "flow_id": flow_id,
+                "schedules": [
+                    {
+                        "schedule": {"cron": cron, "timezone": "UTC"},
+                        "active": True,
+                    }
+                ],
+                "parameters": parameters or {},
+                "description": description,
+                "enforce_parameter_schema": False,
+            }
+            raw = await self._request("POST", "/deployments/", json=body)
+            prefect_deployment_id = raw.get("id")
+        except HTTPException as exc:
+            logger.warning("Prefect unavailable during create_schedule: %s", exc.detail)
+
+        # 2. Persist locally in DB
+        if self._repo is not None:
+            orm = ScheduleORM(
+                id=str(uuid4()),
+                org_id=org_id,
+                created_by=created_by,
+                prefect_deployment_id=prefect_deployment_id,
+                name=name,
+                flow_name=flow_name,
+                cron=cron,
+                parameters=parameters or {},
+                description=description,
+                is_schedule_active=True,
+            )
+            orm = await self._repo.create_schedule(orm)
+            return _orm_to_dict(orm)
+
+        # Fallback: return Prefect-style dict if no repo
+        return {
+            "id": prefect_deployment_id or str(uuid4()),
             "name": name,
-            "flow_id": flow_id,
-            "schedules": [
-                {
-                    "schedule": {"cron": cron, "timezone": "UTC"},
-                    "active": True,
-                }
-            ],
+            "flow_name": flow_name,
+            "schedules": [{"schedule": {"cron": cron, "timezone": "UTC"}, "active": True}],
             "parameters": parameters or {},
             "description": description,
-            "enforce_parameter_schema": False,
+            "paused": False,
+            "prefect_deployment_id": prefect_deployment_id,
         }
-        raw = await self._request("POST", "/deployments/", json=body)
-        raw["flow_name"] = flow_name  # We already know the name
-        return raw
 
-    async def list_schedules(self) -> list[dict[str, Any]]:
-        """Return all deployments registered in Prefect.
+    async def list_schedules(self, org_id: str | None = None) -> list[dict[str, Any]]:
+        """Return schedules for an org from local DB.
+
+        When ``org_id`` is provided (expected for org-scoped calls), queries
+        the local DB filtered by org.  Falls back to Prefect if no repository
+        is configured.
+
+        Parameters
+        ----------
+        org_id:
+            Organization ID to filter schedules.
 
         Returns
         -------
         list[dict]
-            List of deployment objects (enriched with ``flow_name``).
+            List of schedule data dicts.
         """
+        if self._repo is not None and org_id is not None:
+            rows = await self._repo.list_schedules(org_id)
+            return [_orm_to_dict(r) for r in rows]
+
+        if self._repo is not None:
+            # repo present but no org_id — return empty (safety guard)
+            return []
+
+        # Legacy Prefect-only fallback
         body: dict[str, Any] = {"offset": 0, "limit": 100}
         result = await self._request("POST", "/deployments/filter", json=body)
         if not isinstance(result, list):
             return []
-        # Enrich each deployment with flow_name
         return [await self._enrich_deployment(d) for d in result]
 
-    async def get_schedule(self, deployment_id: str) -> dict[str, Any]:
-        """Fetch a single deployment by ID.
+    async def get_schedule(
+        self,
+        schedule_id: str,
+        org_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch a single schedule by local DB ID.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID (ScheduleORM primary key).
+        org_id:
+            When provided, enforces that the schedule belongs to the org.
 
         Returns
         -------
         dict
-            The deployment object.
+            The schedule data.
+
+        Raises
+        ------
+        HTTPException
+            404 if not found or org mismatch.
         """
+        if self._repo is not None:
+            row = await self._repo.get_schedule(schedule_id, org_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+            return _orm_to_dict(row)
+
+        # Legacy Prefect-only fallback
         return await self._enrich_deployment(
-            await self._request("GET", f"/deployments/{deployment_id}")
+            await self._request("GET", f"/deployments/{schedule_id}")
         )
 
     async def update_schedule(
         self,
-        deployment_id: str,
+        schedule_id: str,
         updates: dict[str, Any],
     ) -> dict[str, Any]:
-        """Partially update a deployment.
+        """Partially update a schedule in local DB and optionally in Prefect.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID.
         updates:
-            Fields to update (merged on top of the existing deployment).
+            Fields to update.  Prefect-compatible fields (``paused``,
+            ``schedules``, etc.) are forwarded to Prefect if the record has
+            a ``prefect_deployment_id``.
 
         Returns
         -------
         dict
-            The updated deployment object.
+            The updated schedule data.
         """
-        await self._request(
-            "PATCH", f"/deployments/{deployment_id}", json=updates, expect_json=False
-        )
-        # Prefect returns 204 on PATCH; re-fetch the updated object.
-        return await self.get_schedule(deployment_id)
+        if self._repo is not None:
+            # Translate Prefect fields back to ORM fields for local update
+            orm_updates: dict[str, Any] = {}
+            if "name" in updates:
+                orm_updates["name"] = updates["name"]
+            if "description" in updates:
+                orm_updates["description"] = updates["description"]
+            if "parameters" in updates:
+                orm_updates["parameters"] = updates["parameters"]
+            if "paused" in updates:
+                orm_updates["is_schedule_active"] = not updates["paused"]
+            if "schedules" in updates:
+                schedules = updates["schedules"]
+                if schedules and isinstance(schedules, list):
+                    cron = schedules[0].get("schedule", {}).get("cron")
+                    if cron:
+                        orm_updates["cron"] = cron
 
-    async def delete_schedule(self, deployment_id: str) -> None:
-        """Delete a deployment permanently.
+            row = await self._repo.update_schedule(schedule_id, **orm_updates)
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+
+            # Also update Prefect if deployment ID exists
+            if row.prefect_deployment_id:
+                try:
+                    await self._request(
+                        "PATCH",
+                        f"/deployments/{row.prefect_deployment_id}",
+                        json=updates,
+                        expect_json=False,
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Prefect unavailable during update_schedule %s: %s",
+                        schedule_id,
+                        exc.detail,
+                    )
+
+            return _orm_to_dict(row)
+
+        # Legacy Prefect-only fallback
+        await self._request(
+            "PATCH", f"/deployments/{schedule_id}", json=updates, expect_json=False
+        )
+        return await self.get_schedule(schedule_id)
+
+    async def delete_schedule(self, schedule_id: str) -> None:
+        """Delete a schedule from local DB and from Prefect.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID.
         """
+        if self._repo is not None:
+            row = await self._repo.get_schedule(schedule_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+
+            prefect_deployment_id = row.prefect_deployment_id
+
+            # Delete from local DB first
+            await self._repo.delete_schedule(schedule_id)
+
+            # Then try to delete from Prefect
+            if prefect_deployment_id:
+                try:
+                    await self._request(
+                        "DELETE",
+                        f"/deployments/{prefect_deployment_id}",
+                        expect_json=False,
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Prefect unavailable during delete_schedule %s: %s",
+                        schedule_id,
+                        exc.detail,
+                    )
+            return
+
+        # Legacy Prefect-only fallback
         await self._request(
-            "DELETE", f"/deployments/{deployment_id}", expect_json=False
+            "DELETE", f"/deployments/{schedule_id}", expect_json=False
         )
 
     # ------------------------------------------------------------------
@@ -343,15 +551,15 @@ class SchedulerService:
 
     async def trigger_run(
         self,
-        deployment_id: str,
+        schedule_id: str,
         parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create an ad-hoc flow run from a deployment.
+        """Create an ad-hoc flow run from a schedule.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID (used to look up the Prefect deployment ID).
         parameters:
             Run-time parameter overrides.
 
@@ -360,6 +568,19 @@ class SchedulerService:
         dict
             The created flow-run object.
         """
+        if self._repo is not None:
+            row = await self._repo.get_schedule(schedule_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+            deployment_id = row.prefect_deployment_id
+            if not deployment_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Schedule has no associated Prefect deployment",
+                )
+        else:
+            deployment_id = schedule_id
+
         body: dict[str, Any] = {"parameters": parameters or {}}
         return await self._request(
             "POST",
@@ -371,39 +592,89 @@ class SchedulerService:
     # Schedule pause / resume
     # ------------------------------------------------------------------
 
-    async def pause_schedule(self, deployment_id: str) -> dict[str, Any]:
+    async def pause_schedule(self, schedule_id: str) -> dict[str, Any]:
         """Disable the cron schedule on a deployment.
 
-        Prefect 3.x uses the ``paused`` boolean field on deployments.
+        Updates local ``is_schedule_active=False`` and calls Prefect pause.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID.
 
         Returns
         -------
         dict
-            The updated deployment object.
+            The updated schedule data.
         """
-        return await self.update_schedule(deployment_id, {"paused": True})
+        if self._repo is not None:
+            row = await self._repo.update_schedule(
+                schedule_id, is_schedule_active=False
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
 
-    async def resume_schedule(self, deployment_id: str) -> dict[str, Any]:
+            if row.prefect_deployment_id:
+                try:
+                    await self._request(
+                        "PATCH",
+                        f"/deployments/{row.prefect_deployment_id}",
+                        json={"paused": True},
+                        expect_json=False,
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Prefect unavailable during pause_schedule %s: %s",
+                        schedule_id,
+                        exc.detail,
+                    )
+
+            return _orm_to_dict(row)
+
+        # Legacy Prefect-only fallback
+        return await self.update_schedule(schedule_id, {"paused": True})
+
+    async def resume_schedule(self, schedule_id: str) -> dict[str, Any]:
         """Re-enable the cron schedule on a deployment.
 
-        Prefect 3.x uses the ``paused`` boolean field on deployments.
+        Updates local ``is_schedule_active=True`` and calls Prefect resume.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID.
 
         Returns
         -------
         dict
-            The updated deployment object.
+            The updated schedule data.
         """
-        return await self.update_schedule(deployment_id, {"paused": False})
+        if self._repo is not None:
+            row = await self._repo.update_schedule(
+                schedule_id, is_schedule_active=True
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+
+            if row.prefect_deployment_id:
+                try:
+                    await self._request(
+                        "PATCH",
+                        f"/deployments/{row.prefect_deployment_id}",
+                        json={"paused": False},
+                        expect_json=False,
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Prefect unavailable during resume_schedule %s: %s",
+                        schedule_id,
+                        exc.detail,
+                    )
+
+            return _orm_to_dict(row)
+
+        # Legacy Prefect-only fallback
+        return await self.update_schedule(schedule_id, {"paused": False})
 
     # ------------------------------------------------------------------
     # Flow-run queries
@@ -411,15 +682,15 @@ class SchedulerService:
 
     async def list_runs(
         self,
-        deployment_id: str,
+        schedule_id: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """List flow runs belonging to a deployment.
+        """List flow runs belonging to a schedule/deployment.
 
         Parameters
         ----------
-        deployment_id:
-            Prefect deployment UUID.
+        schedule_id:
+            Local schedule UUID (used to look up the Prefect deployment ID).
         limit:
             Maximum number of runs to return (default 50).
 
@@ -428,6 +699,16 @@ class SchedulerService:
         list[dict]
             Flow-run objects ordered by expected start time descending.
         """
+        if self._repo is not None:
+            row = await self._repo.get_schedule(schedule_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule not found")
+            deployment_id = row.prefect_deployment_id
+            if not deployment_id:
+                return []
+        else:
+            deployment_id = schedule_id
+
         body: dict[str, Any] = {
             "deployments": {"id": {"any_": [deployment_id]}},
             "limit": limit,
@@ -497,6 +778,8 @@ async def get_scheduler_service() -> AsyncGenerator[SchedulerService, None]:
     underlying ``httpx.AsyncClient`` is closed after each request via the
     generator's ``finally`` block.
 
+    The repository is lazily initialised for local DB persistence.
+
     Usage
     -----
     .. code-block:: python
@@ -513,7 +796,8 @@ async def get_scheduler_service() -> AsyncGenerator[SchedulerService, None]:
     prefect_api_url = os.environ.get(
         "PREFECT_API_URL", "http://localhost:4200/api"
     )
-    svc = SchedulerService(prefect_api_url=prefect_api_url)
+    repo = _get_repository()
+    svc = SchedulerService(prefect_api_url=prefect_api_url, repository=repo)
     try:
         yield svc
     finally:
