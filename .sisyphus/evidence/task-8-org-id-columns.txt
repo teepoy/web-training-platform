@@ -1,0 +1,8 @@
+QA:
+- APP_CONFIG_PROFILE=local-smoke uv run alembic upgrade head
+- PRAGMA checks: datasets=True, training_presets=True, training_jobs=True
+- make test-api: 157 passed, 1 warning
+
+Migration:
+- revision: bcd4ef5bcd6a
+- down_revision: abc2def3abc4

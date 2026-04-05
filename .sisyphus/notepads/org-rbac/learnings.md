@@ -24,3 +24,10 @@
 - OrgMembership.role: "admin" or "member" (string, not enum)
 - User domain model fields: id, email, name, is_superadmin, is_active, created_at
 - Organization domain model fields: id, name, slug, created_at
+## [T8] org_id on resource ORMs
+- migration 0010 revision: bcd4ef5bcd6a
+- down_revision: "abc2def3abc4" (T9)
+- default org seeded in migration upgrade() before adding NOT NULL columns
+- server_default used for batch_alter_table so existing rows get filled
+- sql_repository.py: create_dataset, create_preset, create_job updated with org_id fallback
+- domain models: org_id added as optional with default
