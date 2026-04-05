@@ -1,9 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+const AUTH_ROUTES = ['/login', '/register']
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/dashboard' },
+    { path: '/login', component: () => import('./views/LoginView.vue') },
+    { path: '/register', component: () => import('./views/RegisterView.vue') },
     { path: '/dashboard', component: () => import('./views/DashboardView.vue') },
     { path: '/datasets', component: () => import('./views/DatasetsView.vue') },
     { path: '/datasets/:id', component: () => import('./views/DatasetDetailView.vue') },
@@ -18,11 +22,19 @@ export const router = createRouter({
   ],
 })
 
-// NOTE: router.beforeEach runs before the store is initialized in some setups
-// Use pinia store lazily inside the callback
-router.beforeEach((_to, _from, next) => {
-  // TODO: Enable auth guard when OAuth is implemented
-  // const authStore = useAuthStore()
-  // if (!authStore.isAuthenticated && _to.meta.requiresAuth) { next('/login'); return }
-  next() // Always pass through for now
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('auth_token')
+  const isAuthRoute = AUTH_ROUTES.includes(to.path)
+
+  if (isAuthRoute && token) {
+    next('/datasets')
+    return
+  }
+
+  if (!isAuthRoute && !token) {
+    next('/login')
+    return
+  }
+
+  next()
 })

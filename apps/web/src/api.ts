@@ -5,6 +5,7 @@ import type {
   BulkAnnotationResponse,
   DashboardResponse,
   Dataset,
+  LoginResponse,
   PaginatedResponse,
   LinkLsRequest,
   PredictionEdit,
@@ -19,6 +20,8 @@ import type {
   TrainingPreset,
   UploadResponse,
   UpdateAnnotationPayload,
+  User,
+  UserWithOrgs,
 } from "./types";
 import type { ApiError as ApiErrorType } from "./types";
 import { useAuthStore } from "./stores/auth";
@@ -473,6 +476,59 @@ export const api = {
   // ---- Dashboard ----
   getDashboard: () => req<DashboardResponse>('/dashboard'),
 };
+
+// ---------------------------------------------------------------------------
+// Auth functions
+// ---------------------------------------------------------------------------
+
+export async function authLogin(email: string, password: string): Promise<LoginResponse> {
+  const r = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!r.ok) {
+    let detail = `login failed: ${r.status}`;
+    try {
+      const body = await r.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch { /* ignore */ }
+    throw new ApiError(detail, r.status);
+  }
+  return r.json() as Promise<LoginResponse>;
+}
+
+export async function authRegister(name: string, email: string, password: string): Promise<User> {
+  const r = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password }),
+  });
+  if (!r.ok) {
+    let detail = `register failed: ${r.status}`;
+    try {
+      const body = await r.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch { /* ignore */ }
+    throw new ApiError(detail, r.status);
+  }
+  return r.json() as Promise<User>;
+}
+
+export async function authMe(token: string): Promise<UserWithOrgs> {
+  const r = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    let detail = `auth/me failed: ${r.status}`;
+    try {
+      const body = await r.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch { /* ignore */ }
+    throw new ApiError(detail, r.status);
+  }
+  return r.json() as Promise<UserWithOrgs>;
+}
 
 // ---------------------------------------------------------------------------
 // SSE helper

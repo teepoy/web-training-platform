@@ -3,7 +3,10 @@
     <n-message-provider>
       <n-notification-provider>
         <n-dialog-provider>
-          <n-layout has-sider style="height: 100vh">
+          <template v-if="isAuthPage">
+            <RouterView />
+          </template>
+          <n-layout v-else has-sider style="height: 100vh">
             <n-layout-sider
               :collapsed="uiStore.sidebarCollapsed"
               :width="240"
@@ -37,7 +40,7 @@
                     round
                     size="small"
                     style="cursor: pointer"
-                  >LU</n-avatar>
+                  >{{ userInitials }}</n-avatar>
                 </n-dropdown>
               </n-layout-header>
               <n-layout-content style="padding: 24px; overflow-y: auto">
@@ -53,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
 import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { useUiStore } from './stores/ui'
@@ -63,6 +66,9 @@ const router = useRouter()
 const route = useRoute()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
+
+const AUTH_PATHS = ['/login', '/register']
+const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))
 
 const computedTheme = computed(() => uiStore.darkMode ? darkTheme : null)
 
@@ -89,14 +95,21 @@ const userInitials = computed(() =>
   authStore.user?.name?.slice(0, 2).toUpperCase() ?? 'LU'
 )
 
-const avatarDropdownOptions = [
+const avatarDropdownOptions = computed(() => [
   { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
   { type: 'divider', key: 'd1' },
   { label: 'Profile', key: 'profile', disabled: true },
   { label: 'Logout', key: 'logout' },
-]
+])
 
 function handleAvatarSelect(key: string) {
-  if (key === 'logout') authStore.logout()
+  if (key === 'logout') {
+    authStore.logout()
+    router.push('/login')
+  }
 }
+
+onMounted(() => {
+  authStore.initFromStorage()
+})
 </script>
