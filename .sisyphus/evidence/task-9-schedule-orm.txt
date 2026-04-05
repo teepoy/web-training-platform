@@ -1,0 +1,4 @@
+make test-api: PASS (157 passed, 1 warning)
+alembic upgrade head: PASS
+schedules table: ('schedules',)
+Note: lsp_diagnostics unavailable because basedpyright-langserver is not installed in this environment.
