@@ -233,3 +233,58 @@ export interface DashboardResponse {
   recent_jobs: RecentJobSummary[]
   prefect_connected: boolean
 }
+
+export type OrgRole = "admin" | "member";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  is_superadmin: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface OrgMembership {
+  id: string;
+  user_id: string;
+  org_id: string;
+  role: OrgRole;
+  created_at: string;
+}
+
+export interface UserWithOrgs extends User {
+  organizations: OrgMembership[];
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export interface PersonalAccessToken {
+  id: string;
+  user_id: string;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface PersonalAccessTokenCreated extends PersonalAccessToken {
+  token: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  org_id: string;
+  role: OrgRole;
+  user: User;
+}

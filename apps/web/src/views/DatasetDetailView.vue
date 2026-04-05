@@ -375,7 +375,7 @@ const datasetQuery = useQuery({
   retry: false,
 });
 
-const dataset = computed(() => datasetQuery.data.value as Dataset);
+const dataset = computed(() => datasetQuery.data.value as Dataset & { ls_project_url?: string | null });
 
 // ---------------------------------------------------------------------------
 // Drawer state
@@ -553,7 +553,7 @@ const linkLsMutation = useMutation({
 
 function submitLinkLs() {
   if (linkLsProjectId.value) {
-    linkLsMutation.mutate({ ls_project_id: String(linkLsProjectId.value) });
+    linkLsMutation.mutate({ ls_project_id: linkLsProjectId.value });
   }
 }
 
