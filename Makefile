@@ -72,6 +72,10 @@ test-api: ## Run API tests
 build-web: ## Build frontend for production
 	cd $(WEB_DIR) && pnpm build
 
+.PHONY: create-superadmin
+create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
+	cd $(API_DIR) && APP_CONFIG_PROFILE=local-smoke uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)
+
 # ──────────────────────────────────────────────
 # SDK / CLI
 # ──────────────────────────────────────────────
