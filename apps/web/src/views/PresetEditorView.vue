@@ -1,5 +1,11 @@
 <template>
   <div>
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Training Presets</n-h2>
       <n-button type="primary" @click="showModal = true">
@@ -98,25 +104,29 @@
         </n-space>
       </template>
     </n-modal>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, h } from "vue";
+import { ref, h, computed } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules } from "naive-ui";
 import { NTag } from "naive-ui";
 import { api } from "../api";
 import type { TrainingPreset } from "../types";
+import { useOrgStore } from "../stores/org";
 
 // ─── message / query client ──────────────────────────────────────────────────
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ─── query ───────────────────────────────────────────────────────────────────
 const { data: presets, isLoading, isError, error } = useQuery({
-  queryKey: ["presets"],
+  queryKey: computed(() => ["presets", orgStore.currentOrgId]),
   queryFn: api.listPresets,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 // ─── mutation ────────────────────────────────────────────────────────────────
@@ -139,7 +149,7 @@ const createPresetMutation = useMutation({
     }),
   onSuccess: () => {
     message.success("Preset created");
-    qc.invalidateQueries({ queryKey: ["presets"] });
+    qc.invalidateQueries({ queryKey: ["presets", orgStore.currentOrgId] });
     showModal.value = false;
   },
   onError: (err: Error) => {

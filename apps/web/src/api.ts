@@ -363,7 +363,7 @@ export const api = {
       body: JSON.stringify({
         sample_id: body.sample_id,
         label: body.label,
-        created_by: body.created_by ?? "web-user",
+        ...(body.created_by !== undefined ? { created_by: body.created_by } : {}),
       }),
     }),
 
@@ -384,7 +384,7 @@ export const api = {
   createJob: (dataset_id: string, preset_id: string) =>
     req<TrainingJob>("/training-jobs", {
       method: "POST",
-      body: JSON.stringify({ dataset_id, preset_id, created_by: "web-user" }),
+      body: JSON.stringify({ dataset_id, preset_id }),
     }),
 
   getJob: (id: string) => req<TrainingJob>(`/training-jobs/${id}`),
@@ -411,7 +411,7 @@ export const api = {
   editPrediction: (id: string, body: EditPredictionBody) =>
     req<PredictionEdit>(`/predictions/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ corrected_label: body.corrected_label, edited_by: body.edited_by ?? "web-user" }),
+      body: JSON.stringify({ corrected_label: body.corrected_label, edited_by: body.edited_by }),
     }),
 
   // ---- Exports ----

@@ -1,5 +1,11 @@
 <template>
   <n-space vertical size="large">
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-page-header title="Schedules">
       <template #extra>
         <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
@@ -70,6 +76,7 @@
         </n-form-item>
       </n-form>
     </n-modal>
+    </template>
   </n-space>
 </template>
 
@@ -81,18 +88,21 @@ import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
 import { api } from "../api";
 import type { Schedule } from "../types";
+import { useOrgStore } from "../stores/org";
 
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ---------------------------------------------------------------------------
 // Query
 // ---------------------------------------------------------------------------
 
 const { data: schedules, isLoading } = useQuery({
-  queryKey: ["schedules"],
+  queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
   queryFn: api.listSchedules,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 // ---------------------------------------------------------------------------
@@ -103,7 +113,7 @@ const createMutation = useMutation({
   mutationFn: (body: Parameters<typeof api.createSchedule>[0]) =>
     api.createSchedule(body),
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule created");
     showModal.value = false;
     resetForm();
@@ -114,7 +124,7 @@ const createMutation = useMutation({
 const deleteMutation = useMutation({
   mutationFn: (id: string) => api.deleteSchedule(id),
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule deleted");
   },
   onError: (err: Error) => message.error(err.message ?? "Failed to delete schedule"),
@@ -123,7 +133,7 @@ const deleteMutation = useMutation({
 const pauseMutation = useMutation({
   mutationFn: (id: string) => api.pauseSchedule(id),
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule paused");
   },
   onError: (err: Error) => message.error(err.message ?? "Failed to pause schedule"),
@@ -132,7 +142,7 @@ const pauseMutation = useMutation({
 const resumeMutation = useMutation({
   mutationFn: (id: string) => api.resumeSchedule(id),
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule resumed");
   },
   onError: (err: Error) => message.error(err.message ?? "Failed to resume schedule"),

@@ -1,5 +1,11 @@
 <template>
   <div>
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Predictions</n-h2>
       <n-space align="center">
@@ -160,6 +166,7 @@
         </n-space>
       </template>
     </n-modal>
+    </template>
   </div>
 </template>
 
@@ -172,15 +179,18 @@ import { api } from "../api";
 import { syncPredictionsToLs } from "../api";
 import type { PredictionResult, Sample, Dataset, SyncResult } from "../types";
 import { resolveImageUri, resolveImageUris } from "../utils/imageAdapters";
+import { useOrgStore } from "../stores/org";
 
 // ─── message / query client ──────────────────────────────────────────────────
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ─── query ───────────────────────────────────────────────────────────────────
 const { data: predictions, isLoading, isError, error } = useQuery({
-  queryKey: ["predictions"],
+  queryKey: computed(() => ["predictions", orgStore.currentOrgId]),
   queryFn: api.listPredictions,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 // ─── sample image cache ──────────────────────────────────────────────────────
@@ -221,7 +231,7 @@ const createPrediction = useMutation({
   }) => api.createPrediction(body),
   onSuccess: () => {
     message.success("Prediction created");
-    qc.invalidateQueries({ queryKey: ["predictions"] });
+    qc.invalidateQueries({ queryKey: ["predictions", orgStore.currentOrgId] });
     showCreateModal.value = false;
   },
   onError: (err: Error) => {
@@ -235,7 +245,7 @@ const editPrediction = useMutation({
     api.editPrediction(id, { corrected_label, edited_by }),
   onSuccess: () => {
     message.success("Prediction updated");
-    qc.invalidateQueries({ queryKey: ["predictions"] });
+    qc.invalidateQueries({ queryKey: ["predictions", orgStore.currentOrgId] });
     showEditModal.value = false;
   },
   onError: (err: Error) => {
@@ -245,8 +255,9 @@ const editPrediction = useMutation({
 
 // ─── datasets for LS sync ────────────────────────────────────────────────────
 const { data: allDatasets } = useQuery({
-  queryKey: ["datasets"],
+  queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
   queryFn: api.listDatasets,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const lsLinkedDatasets = computed(() =>

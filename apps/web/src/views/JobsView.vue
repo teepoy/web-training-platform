@@ -1,5 +1,11 @@
 <template>
   <n-space vertical size="large">
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-page-header title="Training Jobs">
       <template #extra>
         <n-button type="primary" @click="showModal = true">Start New Job</n-button>
@@ -54,6 +60,7 @@
         </n-form-item>
       </n-form>
     </n-modal>
+    </template>
   </n-space>
 </template>
 
@@ -65,29 +72,34 @@ import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-
 import { useMessage, NTag, NButton } from "naive-ui";
 import { api } from "../api";
 import type { TrainingJob, JobStatus } from "../types";
+import { useOrgStore } from "../stores/org";
 
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
 
 const { data: jobs, isLoading } = useQuery({
-  queryKey: ["jobs"],
+  queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
   queryFn: api.listJobs,
   refetchInterval: 5000,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
-  queryKey: ["datasets"],
+  queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
   queryFn: api.listDatasets,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: presets, isLoading: presetsLoading } = useQuery({
-  queryKey: ["presets"],
+  queryKey: computed(() => ["presets", orgStore.currentOrgId]),
   queryFn: api.listPresets,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 // ---------------------------------------------------------------------------
@@ -203,7 +215,7 @@ const createJobMutation = useMutation({
   mutationFn: ({ dataset_id, preset_id }: { dataset_id: string; preset_id: string }) =>
     api.createJob(dataset_id, preset_id),
   onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["jobs"] });
+    qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
     message.success("Job started");
     showModal.value = false;
     resetForm();

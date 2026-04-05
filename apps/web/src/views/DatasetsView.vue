@@ -1,5 +1,11 @@
 <template>
   <div>
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Datasets</n-h2>
       <n-space>
@@ -71,28 +77,32 @@
           </n-button>
         </n-space>
       </template>
-    </n-modal>
+      </n-modal>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, h } from "vue";
+import { ref, h, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules, type DataTableRowKey } from "naive-ui";
 import { NButton, NTag } from "naive-ui";
 import { api } from "../api";
 import type { Dataset } from "../types";
+import { useOrgStore } from "../stores/org";
 
 // ─── router / message ───────────────────────────────────────────────────────
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ─── query ───────────────────────────────────────────────────────────────────
 const { data: datasets, isLoading } = useQuery({
-  queryKey: ["datasets"],
+  queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
   queryFn: api.listDatasets,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 // ─── mutations ───────────────────────────────────────────────────────────────
@@ -104,7 +114,7 @@ const createDataset = useMutation({
     }),
   onSuccess: () => {
     message.success("Dataset created");
-    qc.invalidateQueries({ queryKey: ["datasets"] });
+    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
     showModal.value = false;
     resetForm();
   },

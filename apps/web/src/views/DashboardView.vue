@@ -1,5 +1,11 @@
 <template>
   <n-space vertical size="large">
+    <template v-if="!orgStore.currentOrgId">
+      <div style="padding: 48px; text-align: center;">
+        <n-empty description="You are not a member of any organization. Contact an admin." />
+      </div>
+    </template>
+    <template v-else>
     <n-page-header title="Dashboard" />
 
     <n-alert v-if="data && !data.prefect_connected" type="warning" title="Prefect not connected">
@@ -67,6 +73,7 @@
         </n-card>
       </n-space>
     </n-spin>
+    </template>
   </n-space>
 </template>
 
@@ -77,13 +84,17 @@ import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
 import { api } from "../api";
 import type { RecentJobSummary } from "../types";
+import { useOrgStore } from "../stores/org";
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
+const orgStore = useOrgStore();
+
 const { data, isLoading } = useQuery({
-  queryKey: ["dashboard"],
+  queryKey: computed(() => ["dashboard", orgStore.currentOrgId]),
   queryFn: () => api.getDashboard(),
   refetchInterval: 10000,
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 function statusType(status: string): TagType {
