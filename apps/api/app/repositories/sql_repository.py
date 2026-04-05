@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import (
@@ -69,7 +69,7 @@ class SqlRepository:
         async with self.session_factory() as session:
             stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
             if org_id is not None:
-                stmt = stmt.where(DatasetORM.org_id == org_id)
+                stmt = stmt.where(or_(DatasetORM.org_id == org_id, DatasetORM.is_public == True))  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 Dataset(
@@ -90,7 +90,7 @@ class SqlRepository:
             row = await session.get(DatasetORM, dataset_id)
             if row is None:
                 return None
-            if org_id is not None and row.org_id != org_id:
+            if org_id is not None and row.org_id != org_id and not row.is_public:
                 return None
             return Dataset(
                 id=row.id,
@@ -320,7 +320,7 @@ class SqlRepository:
 
             return result, total
 
-    async def create_annotation(self, annotation: Annotation) -> Annotation:
+    async def create_annotation(self, annotation: Annotation, user_id: str | None = None) -> Annotation:
         async with self.session_factory() as session:
             session.add(
                 AnnotationORM(
@@ -329,6 +329,7 @@ class SqlRepository:
                     label=annotation.label,
                     created_by=annotation.created_by,
                     created_at=annotation.created_at,
+                    user_id=user_id,
                 )
             )
             await session.commit()
@@ -427,7 +428,7 @@ class SqlRepository:
                 dataloader_ref=row.dataloader_ref,
             )
 
-    async def create_job(self, job: TrainingJob, org_id: str | None = None) -> TrainingJob:
+    async def create_job(self, job: TrainingJob, org_id: str | None = None, user_id: str | None = None) -> TrainingJob:
         org_id = org_id or job.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             session.add(
@@ -440,6 +441,7 @@ class SqlRepository:
                     created_by=job.created_by,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
+                    user_id=user_id,
                 )
             )
             session.add(JobUserStateORM(job_id=job.id, user_left=False))
@@ -638,7 +640,7 @@ class SqlRepository:
                 model_artifact_id=row.model_artifact_id,
             )
 
-    async def create_prediction_edit(self, edit: PredictionEdit) -> PredictionEdit:
+    async def create_prediction_edit(self, edit: PredictionEdit, user_id: str | None = None) -> PredictionEdit:
         async with self.session_factory() as session:
             session.add(
                 PredictionEditORM(
@@ -647,6 +649,7 @@ class SqlRepository:
                     corrected_label=edit.corrected_label,
                     edited_by=edit.edited_by,
                     edited_at=edit.edited_at,
+                    user_id=user_id,
                 )
             )
             await session.commit()

@@ -91,6 +91,7 @@ class AnnotationORM(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class TrainingPresetORM(Base):
@@ -117,6 +118,7 @@ class TrainingJobORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     external_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class TrainingEventORM(Base):
@@ -166,6 +168,7 @@ class PredictionEditORM(Base):
     corrected_label: Mapped[str] = mapped_column(String(255), nullable=False)
     edited_by: Mapped[str] = mapped_column(String(255), nullable=False)
     edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class SampleFeatureORM(Base):
