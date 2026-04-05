@@ -30,6 +30,7 @@ class Dataset(BaseModel):
     dataset_type: DatasetType = DatasetType.IMAGE_CLASSIFICATION
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
     org_id: str | None = DEFAULT_ORG_ID
+    is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     embed_config: dict = Field(default_factory=dict)
     ls_project_id: str | None = None
@@ -82,6 +83,7 @@ class TrainingJob(BaseModel):
     status: JobStatus = JobStatus.QUEUED
     created_by: str
     org_id: str | None = DEFAULT_ORG_ID
+    is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     artifact_refs: list[ArtifactRef] = Field(default_factory=list)
