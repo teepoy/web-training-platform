@@ -1,5 +1,5 @@
 execution:
-  engine: kubeflow
+  engine: prefect
 
 db:
   url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"

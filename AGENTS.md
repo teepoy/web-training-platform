@@ -11,6 +11,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ```text
 ./
 ├── apps/api/           # API runtime, config profiles, migrations, tests
+├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
 ├── apps/web/           # Vue app shell, routes, API client, views
 ├── apps/worker/        # placeholder worker package
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
@@ -31,6 +32,8 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Use CLI / agent wrappers | `libs/python-sdk/ftsdk/cli.py` + `agent_tools.py` | `ftctl` is the console entry |
 | Deploy locally | `infra/compose/docker-compose.yaml` | Postgres + MinIO + API |
 | Deploy to minikube | `infra/k8s/` | Requires `pytorchjobs.kubeflow.org` CRD |
+| Manage cron schedules | `apps/api/app/services/scheduler.py` + `apps/api/app/main.py` (schedule endpoints) | Wraps Prefect REST API; `PREFECT_API_URL` env var |
+| Register Prefect flows | `apps/api/app/flows/` | `drain_dataset.py` + `serve.py` entrypoint for flow-worker container |
 
 ## CODE MAP
 | Symbol / Surface | Type | Location | Role |
@@ -44,6 +47,11 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | `api` / `buildJobEventSource` | frontend client | `apps/web/src/api.ts` | REST + SSE consumer |
 | `FinetuneClient` | SDK client | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |
 | `app` (Typer) | CLI | `libs/python-sdk/ftsdk/cli.py` | `ftctl` commands |
+| `SchedulerService` | service | `apps/api/app/services/scheduler.py` | Prefect REST client, CRUD deployments/runs/logs via httpx |
+| `drain_dataset` | Prefect flow | `apps/api/app/flows/drain_dataset.py` | `@flow(name="drain-dataset")` — drain/export dataset |
+| `SchedulesView` | Vue view | `apps/web/src/views/SchedulesView.vue` | Schedule list with create modal |
+| `ScheduleDetailView` | Vue view | `apps/web/src/views/ScheduleDetailView.vue` | Schedule config, run history, trigger, Prefect link |
+| `RunLogViewer` | Vue component | `apps/web/src/components/RunLogViewer.vue` | Inline log viewer for Prefect flow runs |
 
 ## CONVENTIONS
 - Python tasks run through `uv run ...`; frontend tasks run through `pnpm`.

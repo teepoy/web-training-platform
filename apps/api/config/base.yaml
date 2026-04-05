@@ -42,3 +42,18 @@ oauth:
   client_id: "replace-me"
   client_secret: "replace-me"
   redirect_uri: "http://localhost:8000/api/v1/auth/callback"
+
+prefect:
+  api_url: "http://localhost:4200/api"
+  work_pool_name: "training-pool"
+  work_pool_type: "process"
+  flow_name: "train-job"
+  concurrency_limit: 1
+
+embedding:
+  grpc_target: "localhost:50051"
+
+label_studio:
+  enabled: false
+  url: ""
+  api_key: ""

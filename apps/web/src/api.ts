@@ -1,11 +1,20 @@
 import type {
   Annotation,
   ArtifactRef,
+  BulkAnnotationRequest,
+  BulkAnnotationResponse,
+  DashboardResponse,
   Dataset,
   PaginatedResponse,
+  LinkLsRequest,
   PredictionEdit,
   PredictionResult,
+  RunLog,
   Sample,
+  SampleWithLabels,
+  Schedule,
+  ScheduleRun,
+  SyncResult,
   TrainingJob,
   TrainingPreset,
   UploadResponse,
@@ -153,6 +162,22 @@ export interface EditPredictionBody {
   edited_by?: string;
 }
 
+export interface CreateScheduleBody {
+  name: string;
+  flow_name: string;
+  cron: string;
+  parameters?: Record<string, unknown>;
+  description?: string;
+}
+
+export interface UpdateScheduleBody {
+  name?: string;
+  cron?: string;
+  parameters?: Record<string, unknown>;
+  description?: string;
+  is_schedule_active?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Export/feature-op response shapes
 // ---------------------------------------------------------------------------
@@ -198,6 +223,57 @@ export interface MarkLeftResponse {
 
 export interface JobMetricsResponse {
   metrics: Record<string, unknown>;
+}
+
+export function linkDatasetToLs(datasetId: string, body: LinkLsRequest) {
+  return req<Dataset>(`/datasets/${datasetId}/link-ls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function syncAnnotationsToLs(datasetId: string) {
+  return req<SyncResult>(`/datasets/${datasetId}/sync-annotations-to-ls`, {
+    method: "POST",
+  });
+}
+
+export function syncPredictionsToLs(datasetId: string) {
+  return req<SyncResult>(`/datasets/${datasetId}/sync-predictions-to-ls`, {
+    method: "POST",
+  });
+}
+
+export function bulkCreateAnnotations(
+  datasetId: string,
+  body: BulkAnnotationRequest
+) {
+  return req<BulkAnnotationResponse>(
+    `/datasets/${datasetId}/annotations/bulk`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+export async function listSamplesWithLabels(
+  datasetId: string,
+  offset = 0,
+  limit = 50,
+  label?: string,
+  orderBy = 'id',
+): Promise<PaginatedResponse<SampleWithLabels>> {
+  const params = new URLSearchParams()
+  params.set('offset', String(offset))
+  params.set('limit', String(limit))
+  if (label != null) params.set('label', label)
+  params.set('order_by', orderBy)
+  return req<PaginatedResponse<SampleWithLabels>>(
+    `/datasets/${datasetId}/samples-with-labels?${params.toString()}`
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -346,6 +422,56 @@ export const api = {
 
   deleteAnnotation: (annotationId: string) =>
     req<void>(`/annotations/${annotationId}`, { method: "DELETE" }),
+
+  // ---- Schedules ----
+  listSchedules: () => req<Schedule[]>('/schedules'),
+
+  createSchedule: (body: CreateScheduleBody) =>
+    req<Schedule>('/schedules', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: body.name,
+        flow_name: body.flow_name,
+        cron: body.cron,
+        parameters: body.parameters ?? {},
+        description: body.description ?? '',
+      }),
+    }),
+
+  getSchedule: (id: string) => req<Schedule>(`/schedules/${id}`),
+
+  updateSchedule: (id: string, body: UpdateScheduleBody) =>
+    req<Schedule>(`/schedules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  deleteSchedule: (id: string) =>
+    req<void>(`/schedules/${id}`, { method: 'DELETE' }),
+
+  triggerScheduleRun: (id: string) =>
+    req<ScheduleRun>(`/schedules/${id}/run`, { method: 'POST' }),
+
+  pauseSchedule: (id: string) =>
+    req<Schedule>(`/schedules/${id}/pause`, { method: 'POST' }),
+
+  resumeSchedule: (id: string) =>
+    req<Schedule>(`/schedules/${id}/resume`, { method: 'POST' }),
+
+  listScheduleRuns: (id: string, limit?: number) => {
+    const qs = limit !== undefined ? `?limit=${limit}` : '';
+    return req<ScheduleRun[]>(`/schedules/${id}/runs${qs}`);
+  },
+
+  getRun: (runId: string) => req<ScheduleRun>(`/runs/${runId}`),
+
+  getRunLogs: (runId: string, limit?: number) => {
+    const qs = limit !== undefined ? `?limit=${limit}` : '';
+    return req<RunLog[]>(`/runs/${runId}/logs${qs}`);
+  },
+
+  // ---- Dashboard ----
+  getDashboard: () => req<DashboardResponse>('/dashboard'),
 };
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ export interface Dataset {
   dataset_type: DatasetType;
   task_spec: TaskSpec;
   created_at: string;
+  ls_project_id?: string | null;
 }
 
 export interface Sample {
@@ -22,6 +23,7 @@ export interface Sample {
   dataset_id: string;
   image_uris: string[];
   metadata: Record<string, unknown>;
+  ls_task_id?: number | null;
 }
 
 export interface Annotation {
@@ -30,6 +32,30 @@ export interface Annotation {
   label: string;
   created_by: string;
   created_at: string;
+}
+
+export interface LatestAnnotation {
+  id: string;
+  label: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface LatestPrediction {
+  id: string;
+  predicted_label: string;
+  score: number;
+  model_artifact_id: string;
+}
+
+export interface SampleWithLabels {
+  id: string;
+  dataset_id: string;
+  image_uris: string[];
+  metadata: Record<string, unknown>;
+  ls_task_id?: number | null;
+  latest_annotation: LatestAnnotation | null;
+  latest_prediction: LatestPrediction | null;
 }
 
 export interface ModelSpec {
@@ -112,4 +138,98 @@ export interface UploadResponse {
 
 export interface UpdateAnnotationPayload {
   label: string;
+}
+
+export type ScheduleStatus = "active" | "paused";
+
+export interface Schedule {
+  id: string;
+  name: string;
+  flow_name: string;
+  cron: string | null;
+  parameters: Record<string, unknown>;
+  description: string;
+  is_schedule_active: boolean;
+  created: string | null;
+  updated: string | null;
+  prefect_deployment_id: string;
+}
+
+export interface ScheduleRun {
+  id: string;
+  name: string;
+  deployment_id: string | null;
+  flow_name: string | null;
+  state_type: string | null;
+  state_name: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  total_run_time: number | null;
+  parameters: Record<string, unknown>;
+}
+
+export interface RunLog {
+  id: string | null;
+  flow_run_id: string | null;
+  level: number;
+  timestamp: string;
+  message: string;
+}
+
+export interface SyncResult {
+  synced_count: number;
+  skipped_count?: number;
+  errors: string[];
+}
+
+export interface LinkLsRequest {
+  ls_project_id: number;
+}
+
+export interface BulkAnnotationItem {
+  sample_id: string;
+  label: string;
+  annotator: string;
+}
+
+export interface BulkAnnotationRequest {
+  annotations: BulkAnnotationItem[];
+}
+
+export interface BulkAnnotationResponse {
+  created: number;
+}
+
+export interface WorkPoolStatus {
+  name: string
+  type: string
+  is_paused: boolean
+  concurrency_limit: number | null
+  slots_used: number
+  status: string
+}
+
+export interface JobQueueStats {
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  cancelled: number
+}
+
+export interface RecentJobSummary {
+  id: string
+  dataset_id: string
+  preset_id: string
+  status: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DashboardResponse {
+  work_pool: WorkPoolStatus | null
+  job_queue: JobQueueStats
+  recent_jobs: RecentJobSummary[]
+  prefect_connected: boolean
 }

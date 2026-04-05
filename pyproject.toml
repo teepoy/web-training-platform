@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 [tool.uv.workspace]
 members = [
   "apps/api",
+  "apps/embedding",
   "apps/worker",
   "libs/python-sdk",
+  "libs/protos",
 ]

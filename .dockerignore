@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+node_modules
+apps/web/dist
+apps/web/node_modules
+.mypy_cache
+.pytest_cache
+*.db
+.sisyphus
+.claude

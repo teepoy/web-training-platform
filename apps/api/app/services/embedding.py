@@ -1,45 +1,67 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+
+import grpc
+
+from embedding_pb.embedding_pb2 import EmbedBatchRequest, EmbedRequest, HealthRequest
+from embedding_pb.embedding_pb2_grpc import EmbeddingServiceStub
+
+logger = logging.getLogger(__name__)
 
 
-class EmbeddingService:
-    _models: dict = {}      # class-level cache keyed by model_name
-    _processors: dict = {}  # class-level cache keyed by model_name
+class EmbeddingClient:
 
-    def __init__(self, model_name: str = "openai/clip-vit-base-patch32"):
-        self.model_name = model_name
+    def __init__(self, grpc_target: str = "localhost:50051"):
+        self._target = grpc_target
+        self._channel: grpc.Channel | None = None
+        self._stub: EmbeddingServiceStub | None = None
 
-    def _load_model(self, model_name: str):
-        """Lazy-load CLIP for a given model_name. Called only on first embed per model."""
-        if model_name not in self.__class__._models:
-            from transformers import CLIPProcessor, CLIPModel
-            processor = CLIPProcessor.from_pretrained(model_name)
-            model = CLIPModel.from_pretrained(model_name)
-            model.eval()
-            self.__class__._processors[model_name] = processor
-            self.__class__._models[model_name] = model
-        return self.__class__._models[model_name], self.__class__._processors[model_name]
+    def _ensure_channel(self) -> EmbeddingServiceStub:
+        if self._stub is None:
+            self._channel = grpc.insecure_channel(self._target)
+            self._stub = EmbeddingServiceStub(self._channel)
+        return self._stub
 
     def _embed_sync(self, image_bytes: bytes, model_name: str) -> list[float]:
-        """Sync. Must be called via asyncio.to_thread()."""
-        import torch
-        from PIL import Image
-        import io
-        model, processor = self._load_model(model_name)
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        inputs = processor(images=image, return_tensors="pt")
-        with torch.no_grad():
-            features = model.get_image_features(**inputs)
-            # normalize
-            features = features / features.norm(dim=-1, keepdim=True)
-        return features[0].tolist()  # list of 512 floats
+        stub = self._ensure_channel()
+        response = stub.Embed(EmbedRequest(image_data=image_bytes, model_name=model_name))
+        return list(response.embedding)
 
-    async def embed_image(self, image_bytes: bytes, model_name: str = "openai/clip-vit-base-patch32") -> list[float]:
+    async def embed_image(
+        self,
+        image_bytes: bytes,
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> list[float]:
         return await asyncio.to_thread(self._embed_sync, image_bytes, model_name)
 
-    async def embed_batch(self, image_bytes_list: list[bytes], model_name: str = "openai/clip-vit-base-patch32") -> list[list[float]]:
-        results = []
-        for b in image_bytes_list:
-            results.append(await self.embed_image(b, model_name))
-        return results
+    def _embed_batch_sync(self, image_bytes_list: list[bytes], model_name: str) -> list[list[float]]:
+        stub = self._ensure_channel()
+        response = stub.EmbedBatch(
+            EmbedBatchRequest(images=image_bytes_list, model_name=model_name),
+        )
+        return [list(r.embedding) for r in response.embeddings]
+
+    async def embed_batch(
+        self,
+        image_bytes_list: list[bytes],
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> list[list[float]]:
+        return await asyncio.to_thread(self._embed_batch_sync, image_bytes_list, model_name)
+
+    async def health(self) -> bool:
+        def _check() -> bool:
+            try:
+                stub = self._ensure_channel()
+                resp = stub.Health(HealthRequest())
+                return resp.healthy
+            except grpc.RpcError:
+                return False
+        return await asyncio.to_thread(_check)
+
+    def close(self):
+        if self._channel is not None:
+            self._channel.close()
+            self._channel = None
+            self._stub = None

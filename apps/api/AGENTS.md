@@ -14,6 +14,8 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Job execution | `app/services/orchestrator.py` + `services/engines.py` | Local vs Kubeflow path |
 | Artifact persistence | `app/services/artifacts.py` + `app/storage/` | Memory or MinIO backends |
 | Tests | `tests/` | Smoke integration only |
+| Add/manage cron schedules | `app/services/scheduler.py` | `SchedulerService` — pure httpx Prefect REST client, no SDK |
+| Register Prefect flows | `app/flows/` | `drain_dataset.py` flow definition + `serve.py` serve entrypoint |
 
 ## STRUCTURE
 ```text
@@ -24,6 +26,8 @@ apps/api/
 ├── app/domain/      # enums, Pydantic models, interfaces
 ├── app/repositories/# async SQL repository
 ├── app/services/    # orchestrator, engines, notifications, artifacts
+├── app/services/scheduler.py  # Prefect REST API client wrapper (httpx, no SDK)
+├── app/flows/       # Prefect flow definitions and serve entrypoint
 ├── config/          # base/dev/local-smoke profiles
 ├── alembic/         # migrations
 └── tests/           # pytest smoke flows

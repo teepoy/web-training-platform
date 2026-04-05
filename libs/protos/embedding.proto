@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package embedding;
+
+service EmbeddingService {
+  rpc Embed (EmbedRequest) returns (EmbedResponse);
+  rpc EmbedBatch (EmbedBatchRequest) returns (EmbedBatchResponse);
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message EmbedRequest {
+  bytes image_data = 1;
+  string model_name = 2;
+}
+
+message EmbedResponse {
+  repeated float embedding = 1;
+  string model_name = 2;
+  int32 dimension = 3;
+}
+
+message EmbedBatchRequest {
+  repeated bytes images = 1;
+  string model_name = 2;
+}
+
+message EmbedBatchResponse {
+  repeated EmbedResponse embeddings = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool healthy = 1;
+  string model_name = 2;
+}

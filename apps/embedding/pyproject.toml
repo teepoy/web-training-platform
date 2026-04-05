@@ -1,0 +1,16 @@
+[project]
+name = "finetune-embedding"
+version = "0.1.0"
+description = "gRPC embedding server (CLIP inference)"
+requires-python = ">=3.11"
+dependencies = [
+  "grpcio>=1.68.0",
+  "protobuf>=5.29.0",
+  "transformers>=4.40.0",
+  "torch>=2.0.0",
+  "pillow>=10.0.0",
+  "embedding-protos",
+]
+
+[tool.uv.sources]
+embedding-protos = { workspace = true }

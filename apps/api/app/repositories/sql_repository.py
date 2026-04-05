@@ -51,6 +51,7 @@ class SqlRepository:
                 task_spec=dataset.task_spec.model_dump(mode="json"),
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
+                ls_project_id=dataset.ls_project_id,
             )
             session.add(row)
             await session.commit()
@@ -67,6 +68,7 @@ class SqlRepository:
                     task_spec=r.task_spec,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
+                    ls_project_id=r.ls_project_id,
                 )
                 for r in rows
             ]
@@ -83,6 +85,7 @@ class SqlRepository:
                 task_spec=row.task_spec,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
+                ls_project_id=row.ls_project_id,
             )
 
     async def update_dataset_embed_config(self, dataset_id: str, embed_config: dict) -> None:
@@ -90,6 +93,13 @@ class SqlRepository:
             row = await session.get(DatasetORM, dataset_id)
             if row is not None:
                 row.embed_config = embed_config
+                await session.commit()
+
+    async def update_dataset_ls_project_id(self, dataset_id: str, ls_project_id: str) -> None:
+        async with self.session_factory() as session:
+            row = await session.get(DatasetORM, dataset_id)
+            if row is not None:
+                row.ls_project_id = ls_project_id
                 await session.commit()
 
     async def create_sample(self, sample: Sample) -> Sample:
@@ -100,6 +110,7 @@ class SqlRepository:
                     dataset_id=sample.dataset_id,
                     image_uris=sample.image_uris,
                     metadata_json=sample.metadata,
+                    ls_task_id=sample.ls_task_id,
                 )
             )
             await session.commit()
@@ -118,14 +129,181 @@ class SqlRepository:
                     .limit(limit)
                 )
             ).scalars().all()
-            return [Sample(id=r.id, dataset_id=r.dataset_id, image_uris=r.image_uris, metadata=r.metadata_json) for r in rows], total or 0
+            return [
+                Sample(
+                    id=r.id,
+                    dataset_id=r.dataset_id,
+                    image_uris=r.image_uris,
+                    metadata=r.metadata_json,
+                    ls_task_id=r.ls_task_id,
+                )
+                for r in rows
+            ], total or 0
 
     async def get_sample(self, sample_id: str) -> Sample | None:
         async with self.session_factory() as session:
             row = await session.get(SampleORM, sample_id)
             if row is None:
                 return None
-            return Sample(id=row.id, dataset_id=row.dataset_id, image_uris=row.image_uris, metadata=row.metadata_json)
+            return Sample(
+                id=row.id,
+                dataset_id=row.dataset_id,
+                image_uris=row.image_uris,
+                metadata=row.metadata_json,
+                ls_task_id=row.ls_task_id,
+            )
+
+    async def list_samples_with_labels(
+        self,
+        dataset_id: str,
+        offset: int = 0,
+        limit: int = 50,
+        label_filter: str | None = None,
+        order_by: str = "id",
+    ) -> tuple[list[dict], int]:
+        """Return samples enriched with latest annotation and highest-score prediction.
+
+        Uses subqueries to find:
+        - Latest annotation per sample (MAX created_at)
+        - Highest-score prediction per sample (MAX score)
+
+        label_filter="__unlabeled__" → WHERE latest_annotation IS NULL
+        label_filter="cat" → WHERE latest_annotation.label == "cat"
+        """
+        from sqlalchemy import alias, and_, null, outerjoin
+
+        async with self.session_factory() as session:
+            # Subquery: latest annotation per sample (max created_at)
+            latest_ann_subq = (
+                select(
+                    AnnotationORM.sample_id.label("sample_id"),
+                    func.max(AnnotationORM.created_at).label("max_created_at"),
+                )
+                .group_by(AnnotationORM.sample_id)
+                .subquery("latest_ann_time")
+            )
+
+            # Subquery: highest-score prediction per sample (max score)
+            best_pred_subq = (
+                select(
+                    PredictionORM.sample_id.label("sample_id"),
+                    func.max(PredictionORM.score).label("max_score"),
+                )
+                .group_by(PredictionORM.sample_id)
+                .subquery("best_pred_score")
+            )
+
+            # Alias AnnotationORM for the JOIN to get annotation details
+            AnnAlias = alias(AnnotationORM.__table__, name="ann")
+            # Alias PredictionORM for the JOIN to get prediction details
+            PredAlias = alias(PredictionORM.__table__, name="pred")
+
+            # Build base query: SampleORM LEFT JOIN to latest annotation, LEFT JOIN to best prediction
+            stmt = (
+                select(
+                    SampleORM.id,
+                    SampleORM.dataset_id,
+                    SampleORM.image_uris,
+                    SampleORM.metadata_json,
+                    SampleORM.ls_task_id,
+                    # Annotation fields
+                    AnnAlias.c.id.label("ann_id"),
+                    AnnAlias.c.label.label("ann_label"),
+                    AnnAlias.c.created_by.label("ann_created_by"),
+                    AnnAlias.c.created_at.label("ann_created_at"),
+                    # Prediction fields
+                    PredAlias.c.id.label("pred_id"),
+                    PredAlias.c.predicted_label.label("pred_predicted_label"),
+                    PredAlias.c.score.label("pred_score"),
+                    PredAlias.c.model_artifact_id.label("pred_model_artifact_id"),
+                )
+                .where(SampleORM.dataset_id == dataset_id)
+                .outerjoin(
+                    latest_ann_subq,
+                    latest_ann_subq.c.sample_id == SampleORM.id,
+                )
+                .outerjoin(
+                    AnnAlias,
+                    and_(
+                        AnnAlias.c.sample_id == SampleORM.id,
+                        AnnAlias.c.created_at == latest_ann_subq.c.max_created_at,
+                    ),
+                )
+                .outerjoin(
+                    best_pred_subq,
+                    best_pred_subq.c.sample_id == SampleORM.id,
+                )
+                .outerjoin(
+                    PredAlias,
+                    and_(
+                        PredAlias.c.sample_id == SampleORM.id,
+                        PredAlias.c.score == best_pred_subq.c.max_score,
+                    ),
+                )
+            )
+
+            # Apply label filter
+            if label_filter == "__unlabeled__":
+                stmt = stmt.where(AnnAlias.c.id.is_(None))
+            elif label_filter is not None:
+                stmt = stmt.where(AnnAlias.c.label == label_filter)
+
+            # Count total (before pagination)
+            count_stmt = select(func.count()).select_from(stmt.subquery("filtered"))
+            total = await session.scalar(count_stmt) or 0
+
+            # Apply ordering
+            if order_by == "label":
+                stmt = stmt.order_by(AnnAlias.c.label.nullslast())
+            elif order_by == "created_at":
+                stmt = stmt.order_by(SampleORM.created_at.desc())
+            else:
+                stmt = stmt.order_by(SampleORM.id)
+
+            # Apply pagination
+            stmt = stmt.offset(offset).limit(limit)
+
+            rows = (await session.execute(stmt)).mappings().all()
+
+            result = []
+            for row in rows:
+                latest_annotation = None
+                if row["ann_id"] is not None:
+                    ann_created_at = row["ann_created_at"]
+                    # Normalize datetime to ISO string
+                    if hasattr(ann_created_at, "isoformat"):
+                        ann_created_at_str = ann_created_at.isoformat()
+                    else:
+                        ann_created_at_str = str(ann_created_at)
+                    latest_annotation = {
+                        "id": row["ann_id"],
+                        "label": row["ann_label"],
+                        "created_by": row["ann_created_by"],
+                        "created_at": ann_created_at_str,
+                    }
+
+                latest_prediction = None
+                if row["pred_id"] is not None:
+                    latest_prediction = {
+                        "id": row["pred_id"],
+                        "predicted_label": row["pred_predicted_label"],
+                        "score": row["pred_score"],
+                        "model_artifact_id": row["pred_model_artifact_id"],
+                    }
+
+                result.append(
+                    {
+                        "id": row["id"],
+                        "dataset_id": row["dataset_id"],
+                        "image_uris": row["image_uris"],
+                        "metadata": row["metadata_json"],
+                        "ls_task_id": row["ls_task_id"],
+                        "latest_annotation": latest_annotation,
+                        "latest_prediction": latest_prediction,
+                    }
+                )
+
+            return result, total
 
     async def create_annotation(self, annotation: Annotation) -> Annotation:
         async with self.session_factory() as session:
@@ -393,6 +571,26 @@ class SqlRepository:
                 for r in rows
             ]
 
+    async def list_predictions_for_dataset(self, dataset_id: str) -> list[PredictionResult]:
+        async with self.session_factory() as session:
+            stmt = (
+                select(PredictionORM)
+                .join(SampleORM, PredictionORM.sample_id == SampleORM.id)
+                .where(SampleORM.dataset_id == dataset_id)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                PredictionResult(
+                    id=r.id,
+                    result_type=r.result_type,
+                    sample_id=r.sample_id,
+                    predicted_label=r.predicted_label,
+                    score=r.score,
+                    model_artifact_id=r.model_artifact_id,
+                )
+                for r in rows
+            ]
+
     async def get_prediction(self, prediction_id: str) -> PredictionResult | None:
         async with self.session_factory() as session:
             row = await session.get(PredictionORM, prediction_id)
@@ -428,7 +626,20 @@ class SqlRepository:
                 return None
             row.image_uris = image_uris
             await session.commit()
-            return Sample(id=row.id, dataset_id=row.dataset_id, image_uris=row.image_uris, metadata=row.metadata_json)
+            return Sample(
+                id=row.id,
+                dataset_id=row.dataset_id,
+                image_uris=row.image_uris,
+                metadata=row.metadata_json,
+                ls_task_id=row.ls_task_id,
+            )
+
+    async def update_sample_ls_task_id(self, sample_id: str, ls_task_id: int) -> None:
+        async with self.session_factory() as session:
+            row = await session.get(SampleORM, sample_id)
+            if row is not None:
+                row.ls_task_id = ls_task_id
+                await session.commit()
 
     async def _list_artifacts_by_job_in_session(self, session: AsyncSession, job_id: str) -> list[ArtifactRef]:
         rows = (await session.execute(select(ArtifactORM).where(ArtifactORM.job_id == job_id))).scalars().all()

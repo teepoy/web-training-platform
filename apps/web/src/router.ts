@@ -3,13 +3,17 @@ import { createRouter, createWebHistory } from 'vue-router'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/datasets' },
+    { path: '/', redirect: '/dashboard' },
+    { path: '/dashboard', component: () => import('./views/DashboardView.vue') },
     { path: '/datasets', component: () => import('./views/DatasetsView.vue') },
     { path: '/datasets/:id', component: () => import('./views/DatasetDetailView.vue') },
+    { path: '/datasets/:id/classify', component: () => import('./views/ClassifyView.vue') },
     { path: '/jobs', component: () => import('./views/JobsView.vue') },
     { path: '/jobs/:id', component: () => import('./views/JobDetailView.vue') },
     { path: '/predictions', component: () => import('./views/PredictionsView.vue') },
     { path: '/presets', component: () => import('./views/PresetEditorView.vue') },
+    { path: '/schedules', component: () => import('./views/SchedulesView.vue') },
+    { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./views/NotFoundView.vue') },
   ],
 })

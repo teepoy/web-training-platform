@@ -14,6 +14,9 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Dataset workflow | `src/views/DatasetsView.vue` | Create dataset, create default preset |
 | Job workflow | `src/views/JobsView.vue` | Start job, consume SSE |
 | Prediction view | `src/views/PredictionsView.vue` | Read-only listing today |
+| Schedule list | `src/views/SchedulesView.vue` | CRUD + create modal + pause/resume/delete |
+| Schedule detail | `src/views/ScheduleDetailView.vue` | Config display, run history table, Trigger Now, Prefect deep link |
+| Run log viewer | `src/components/RunLogViewer.vue` | Reusable; props: `runId: string`; shows level badges |
 
 ## CONVENTIONS
 - Run with `pnpm` from this directory.

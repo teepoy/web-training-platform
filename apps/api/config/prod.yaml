@@ -2,7 +2,7 @@ app:
   env: prod
 
 execution:
-  engine: local
+  engine: prefect
 
 db:
   url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"

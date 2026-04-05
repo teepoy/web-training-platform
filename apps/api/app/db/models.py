@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,6 +21,7 @@ class DatasetORM(Base):
     task_spec: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     embed_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ls_project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class SampleORM(Base):
@@ -30,6 +31,7 @@ class SampleORM(Base):
     dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
     image_uris: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    ls_task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class AnnotationORM(Base):

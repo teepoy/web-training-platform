@@ -25,9 +25,10 @@ class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     dataset_type: DatasetType = DatasetType.IMAGE_CLASSIFICATION
-    task_spec: TaskSpec
+    task_spec: TaskSpec = Field(default_factory=TaskSpec)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     embed_config: dict = Field(default_factory=dict)
+    ls_project_id: str | None = None
 
 
 class Sample(BaseModel):
@@ -35,6 +36,7 @@ class Sample(BaseModel):
     dataset_id: str
     image_uris: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    ls_task_id: int | None = None
 
 
 class Annotation(BaseModel):

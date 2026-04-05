@@ -6,10 +6,13 @@ from app.core.config import load_config
 from app.db.session import create_engine, create_session_factory
 from app.repositories.sql_repository import SqlRepository
 from app.services.engines import KubeflowTrainingOperatorEngine, LocalProcessEngine
+from app.services.prefect_client import PrefectClient
+from app.services.prefect_engine import PrefectWorkPoolEngine
 from app.services.artifacts import ArtifactService
-from app.services.embedding import EmbeddingService
+from app.services.embedding import EmbeddingClient
 from app.services.feature_ops import FeatureOpsService
 from app.services.kubeflow_client import KubeflowClient
+from app.services.label_studio import LabelStudioClient, NullLabelStudioClient
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
@@ -60,10 +63,24 @@ class Container(containers.DeclarativeContainer):
         image=providers.Callable(lambda cfg: cfg.kubeflow.image, config),
     )
 
+    prefect_client = providers.Singleton(
+        PrefectClient,
+        prefect_api_url=providers.Callable(lambda cfg: cfg.prefect.api_url, config),
+    )
+    prefect_engine = providers.Singleton(
+        PrefectWorkPoolEngine,
+        prefect_client=prefect_client,
+        work_pool_name=providers.Callable(lambda cfg: cfg.prefect.work_pool_name, config),
+        work_pool_type=providers.Callable(lambda cfg: cfg.prefect.work_pool_type, config),
+        flow_name=providers.Callable(lambda cfg: cfg.prefect.flow_name, config),
+        concurrency_limit=providers.Callable(lambda cfg: int(cfg.prefect.concurrency_limit), config),
+    )
+
     execution_engine = providers.Selector(
         providers.Callable(lambda cfg: cfg.execution.engine, config),
         local=local_engine,
         kubeflow=kubeflow_engine,
+        prefect=prefect_engine,
     )
 
     notification_sink = providers.Singleton(
@@ -72,7 +89,24 @@ class Container(containers.DeclarativeContainer):
         timeout_seconds=providers.Callable(lambda cfg: cfg.notification.webhook.timeout_seconds, config),
     )
 
-    embedding_service = providers.Singleton(EmbeddingService)
+    _null_ls_client = providers.Singleton(NullLabelStudioClient)
+    _real_ls_client = providers.Singleton(
+        LabelStudioClient,
+        url=providers.Callable(lambda cfg: cfg.label_studio.url, config),
+        api_key=providers.Callable(lambda cfg: cfg.label_studio.api_key, config),
+    )
+    label_studio_client = providers.Selector(
+        providers.Callable(
+            lambda cfg: "real" if cfg.label_studio.enabled else "null", config
+        ),
+        real=_real_ls_client,
+        null=_null_ls_client,
+    )
+
+    embedding_service = providers.Singleton(
+        EmbeddingClient,
+        grpc_target=providers.Callable(lambda cfg: cfg.embedding.grpc_target, config),
+    )
     feature_ops = providers.Singleton(
         FeatureOpsService,
         repository=repository,

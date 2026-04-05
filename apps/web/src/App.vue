@@ -25,6 +25,9 @@
               <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
                 <span style="font-weight: 600; flex: 1">ML Training Platform</span>
                 <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
+                <n-button tag="a" href="http://localhost:4200" target="_blank" text type="primary" size="small">
+                  Prefect ↗
+                </n-button>
                 <n-dropdown
                   trigger="click"
                   :options="avatarDropdownOptions"
@@ -74,10 +77,12 @@ const themeOverrides: GlobalThemeOverrides = {
 const activeRoute = computed(() => route.path)
 
 const menuOptions = [
+  { label: 'Dashboard', key: '/dashboard' },
   { label: 'Datasets', key: '/datasets' },
   { label: 'Training Jobs', key: '/jobs' },
   { label: 'Predictions', key: '/predictions' },
   { label: 'Presets', key: '/presets' },
+  { label: 'Schedules', key: '/schedules' },
 ]
 
 const userInitials = computed(() =>

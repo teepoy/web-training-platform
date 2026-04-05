@@ -4,24 +4,42 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 import json
+import logging
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+import httpx
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
+    BulkAnnotationRequest,
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreatePredictionRequest,
     CreatePresetRequest,
     CreateSampleRequest,
+    CreateScheduleRequest,
     CreateTrainingJobRequest,
+    DashboardResponse,
     EditPredictionRequest,
+    JobQueueStats,
+    LatestAnnotation,
+    LatestPrediction,
+    LinkLabelStudioRequest,
     PaginatedResponse,
+    RecentJobSummary,
+    RunLogResponse,
+    RunResponse,
+    ScheduleResponse,
+    SampleWithLabels,
+    SyncPredictionsResponse,
     UpdateAnnotationRequest,
     UpdateEmbedConfigRequest,
     UpdateSampleImageResponse,
+    UpdateScheduleRequest,
+    WorkPoolStatus,
 )
+from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.session import init_db
 from app.domain.models import Annotation, Dataset, PredictionEdit, PredictionResult, Sample, TrainingEvent, TrainingJob, TrainingPreset
@@ -47,6 +65,14 @@ app.add_middleware(
 container = Container()
 
 
+def _make_ls_image_url(uri: str) -> str:
+    """Convert platform image URI to LS-accessible URL."""
+    from urllib.parse import quote
+    if uri.startswith(("s3://", "memory://")):
+        return f"/api/v1/images/resolve?uri={quote(uri, safe='')}"
+    return uri  # data: URIs and http:// pass through
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -55,7 +81,26 @@ def health() -> dict[str, str]:
 @app.post("/api/v1/datasets", response_model=Dataset)
 async def create_dataset(payload: CreateDatasetRequest) -> Dataset:
     dataset = Dataset(name=payload.name, task_spec=payload.task_spec)
-    return await container.repository().create_dataset(dataset)
+    dataset = await container.repository().create_dataset(dataset)
+    # LS hook: create project if enabled
+    cfg = container.config()
+    if cfg.label_studio.enabled:
+        try:
+            from app.services.label_studio import LabelStudioClient as _LSC
+            ls_client = container.label_studio_client()
+            label_config = _LSC.generate_image_classification_config(
+                payload.task_spec.label_space
+            )
+            project = await ls_client.create_project(payload.name, label_config)
+            ls_project_id = str(project.get("id", ""))
+            if ls_project_id:
+                await container.repository().update_dataset_ls_project_id(
+                    dataset.id, ls_project_id
+                )
+                dataset = dataset.model_copy(update={"ls_project_id": ls_project_id})
+        except Exception:
+            pass  # LS failure shouldn't break dataset creation
+    return dataset
 
 
 @app.get("/api/v1/datasets", response_model=list[Dataset])
@@ -71,12 +116,38 @@ async def get_dataset(dataset_id: str) -> Dataset:
     return dataset
 
 
+@app.post("/api/v1/datasets/{dataset_id}/link-ls", response_model=Dataset)
+async def link_label_studio(dataset_id: str, payload: LinkLabelStudioRequest) -> Dataset:
+    dataset = await container.repository().get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    await container.repository().update_dataset_ls_project_id(dataset_id, payload.ls_project_id)
+    return (await container.repository().get_dataset(dataset_id))
+
+
 @app.post("/api/v1/datasets/{dataset_id}/samples", response_model=Sample)
 async def create_sample(dataset_id: str, payload: CreateSampleRequest) -> Sample:
-    if await container.repository().get_dataset(dataset_id) is None:
+    dataset = await container.repository().get_dataset(dataset_id)
+    if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata)
-    return await container.repository().create_sample(sample)
+    sample = await container.repository().create_sample(sample)
+    # LS hook: create task if enabled and dataset linked
+    cfg = container.config()
+    if cfg.label_studio.enabled and dataset.ls_project_id:
+        try:
+            ls_client = container.label_studio_client()
+            image_url = _make_ls_image_url(sample.image_uris[0]) if sample.image_uris else ""
+            task = await ls_client.create_task(
+                int(dataset.ls_project_id), {"image": image_url}
+            )
+            ls_task_id = task.get("id")
+            if ls_task_id is not None:
+                await container.repository().update_sample_ls_task_id(sample.id, int(ls_task_id))
+                sample = sample.model_copy(update={"ls_task_id": int(ls_task_id)})
+        except Exception:
+            pass  # LS failure shouldn't break sample creation
+    return sample
 
 
 @app.get("/api/v1/datasets/{dataset_id}/samples", response_model=PaginatedResponse[Sample])
@@ -87,6 +158,27 @@ async def list_samples(
 ) -> PaginatedResponse[Sample]:
     items, total = await container.repository().list_samples(dataset_id, offset=offset, limit=limit)
     return PaginatedResponse(items=items, total=total)
+
+
+@app.get("/api/v1/datasets/{dataset_id}/samples-with-labels", response_model=PaginatedResponse[SampleWithLabels])
+async def list_samples_with_labels_endpoint(
+    dataset_id: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1),
+    label: str | None = None,
+    order_by: str = "id",
+) -> PaginatedResponse[SampleWithLabels]:
+    dataset = await container.repository().get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    items, total = await container.repository().list_samples_with_labels(
+        dataset_id=dataset_id,
+        offset=offset,
+        limit=limit,
+        label_filter=label,
+        order_by=order_by,
+    )
+    return PaginatedResponse(items=[SampleWithLabels(**item) for item in items], total=total)
 
 
 @app.get("/api/v1/samples/{sample_id}", response_model=Sample)
@@ -134,10 +226,23 @@ async def embed_sample(sample_id: str) -> dict:
 
 @app.post("/api/v1/annotations", response_model=Annotation)
 async def create_annotation(payload: CreateAnnotationRequest) -> Annotation:
-    if await container.repository().get_sample(payload.sample_id) is None:
+    sample = await container.repository().get_sample(payload.sample_id)
+    if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
     ann = Annotation(sample_id=payload.sample_id, label=payload.label, created_by=payload.created_by)
-    return await container.repository().create_annotation(ann)
+    ann = await container.repository().create_annotation(ann)
+    # LS hook: sync annotation if enabled and sample linked
+    cfg = container.config()
+    if cfg.label_studio.enabled and sample.ls_task_id:
+        try:
+            from app.services.label_studio import platform_annotation_to_ls
+            ls_result = platform_annotation_to_ls(payload.label)
+            await container.label_studio_client().create_annotation(
+                sample.ls_task_id, ls_result
+            )
+        except Exception:
+            pass  # LS failure shouldn't break annotation creation
+    return ann
 
 
 @app.get("/api/v1/samples/{sample_id}/annotations", response_model=list[Annotation])
@@ -161,6 +266,58 @@ async def delete_annotation(annotation_id: str) -> Response:
     if not deleted:
         raise HTTPException(status_code=404, detail="annotation not found")
     return Response(status_code=204)
+
+
+@app.post("/api/v1/datasets/{dataset_id}/annotations/bulk")
+async def bulk_create_annotations(dataset_id: str, payload: BulkAnnotationRequest) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    created = 0
+    for item in payload.annotations:
+        ann = Annotation(
+            id=__import__("uuid").uuid4().hex,
+            sample_id=item.sample_id,
+            label=item.label,
+            created_by=item.annotator,
+        )
+        await container.repository().create_annotation(ann)
+        created += 1
+    return {"created": created}
+
+
+@app.post("/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+async def sync_annotations_to_ls(dataset_id: str) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    cfg = container.config()
+    if not cfg.label_studio.enabled or not dataset.ls_project_id:
+        return {"synced_count": 0, "errors": ["Label Studio not enabled or dataset not linked"]}
+
+    # Get all samples and annotations for this dataset
+    samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
+    sample_map = {s.id: s for s in samples}
+    annotations = await container.repository().list_annotations_for_dataset(dataset_id)
+
+    synced_count = 0
+    errors = []
+    ls_client = container.label_studio_client()
+
+    from app.services.label_studio import platform_annotation_to_ls
+    for ann in annotations:
+        sample = sample_map.get(ann.sample_id)
+        if not sample or not sample.ls_task_id:
+            continue
+        try:
+            ls_result = platform_annotation_to_ls(ann.label)
+            await ls_client.create_annotation(sample.ls_task_id, ls_result)
+            synced_count += 1
+        except Exception as e:
+            errors.append(f"annotation {ann.id}: {str(e)}")
+
+    return {"synced_count": synced_count, "errors": errors}
 
 
 @app.post("/api/v1/training-presets", response_model=TrainingPreset)
@@ -281,13 +438,145 @@ async def edit_prediction(prediction_id: str, payload: EditPredictionRequest) ->
     return await container.repository().create_prediction_edit(edit)
 
 
-@app.get("/api/v1/exports/{dataset_id}")
-async def export_dataset(dataset_id: str) -> dict:
+@app.post("/api/v1/datasets/{dataset_id}/sync-predictions-to-ls", response_model=SyncPredictionsResponse)
+async def sync_predictions_to_ls(dataset_id: str) -> SyncPredictionsResponse:
     dataset = await container.repository().get_dataset(dataset_id)
     if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    cfg = container.config()
+    if not cfg.label_studio.enabled or not dataset.ls_project_id:
+        return SyncPredictionsResponse(
+            synced_count=0, skipped_count=0,
+            errors=["Label Studio not enabled or dataset not linked"]
+        )
+
+    # Get predictions for this dataset's samples
+    predictions = await container.repository().list_predictions_for_dataset(dataset_id)
+    if not predictions:
+        return SyncPredictionsResponse(synced_count=0, skipped_count=0, errors=[])
+
+    # Get sample map for ls_task_id lookup
     samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
-    anns = await container.repository().list_annotations_for_dataset(dataset_id)
+    sample_map = {s.id: s for s in samples}
+
+    from app.services.label_studio import platform_prediction_to_ls
+
+    ls_predictions = []
+    skipped = 0
+    for pred in predictions:
+        sample = sample_map.get(pred.sample_id)
+        if not sample or not sample.ls_task_id:
+            skipped += 1
+            continue
+        ls_pred = platform_prediction_to_ls(
+            predicted_label=pred.predicted_label,
+            score=pred.score,
+            task_id=sample.ls_task_id,
+            model_version=pred.model_artifact_id,
+        )
+        ls_predictions.append(ls_pred)
+
+    synced = 0
+    errors = []
+    ls_client = container.label_studio_client()
+
+    # Batch import (100 at a time)
+    batch_size = 100
+    for i in range(0, len(ls_predictions), batch_size):
+        batch = ls_predictions[i:i + batch_size]
+        try:
+            await ls_client.import_predictions(int(dataset.ls_project_id), batch)
+            synced += len(batch)
+        except Exception as e:
+            errors.append(f"batch {i // batch_size}: {str(e)}")
+
+    return SyncPredictionsResponse(synced_count=synced, skipped_count=skipped, errors=errors)
+
+
+_logger = logging.getLogger(__name__)
+
+
+async def _build_export_data(dataset_id: str):
+    """Return (dataset, samples, annotations) — sourcing from LS when appropriate.
+
+    If Label Studio is enabled and the dataset has an ``ls_project_id``, tasks
+    and annotations are fetched from LS and converted to the platform format.
+    On any LS failure the function falls back to the local repository data and
+    logs a warning.
+    """
+    from app.services.label_studio import ls_annotation_to_platform
+
+    repo = container.repository()
+    dataset = await repo.get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+
+    cfg = container.config()
+    ls_enabled = bool(getattr(cfg, "label_studio", None) and cfg.label_studio.enabled)
+
+    if ls_enabled and dataset.ls_project_id:
+        try:
+            ls_client = container.label_studio_client()
+            ls_tasks = await ls_client.export_project(int(dataset.ls_project_id))
+
+            # Build a lookup: ls_task_id → platform Sample
+            all_samples, _ = await repo.list_samples(dataset_id, limit=100_000)
+            task_id_to_sample: dict[int, Sample] = {
+                s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
+            }
+
+            samples_out: list[Sample] = []
+            annotations_out: list[Annotation] = []
+
+            for ls_task in ls_tasks:
+                task_id = ls_task.get("id")
+                platform_sample = task_id_to_sample.get(task_id) if task_id is not None else None
+
+                if platform_sample is None:
+                    # LS task has no matching platform sample — skip
+                    continue
+
+                samples_out.append(platform_sample)
+
+                for ls_ann in ls_task.get("annotations", []):
+                    result = ls_ann.get("result", [])
+                    label = ls_annotation_to_platform(result)
+                    if label:
+                        annotations_out.append(
+                            Annotation(
+                                sample_id=platform_sample.id,
+                                label=label,
+                                created_by="label_studio",
+                            )
+                        )
+
+            # Include any platform samples that have no LS task (no duplicates)
+            ls_task_ids_seen = {s.ls_task_id for s in samples_out}
+            for s in all_samples:
+                if s.ls_task_id not in ls_task_ids_seen or s.ls_task_id is None:
+                    if s not in samples_out:
+                        samples_out.append(s)
+
+            return dataset, samples_out, annotations_out
+
+        except Exception as exc:
+            _logger.warning(
+                "LS export failed for dataset %s project %s — falling back to local data: %s",
+                dataset_id,
+                dataset.ls_project_id,
+                exc,
+            )
+
+    # Default: use local repository data
+    samples, _ = await repo.list_samples(dataset_id, limit=100_000)
+    anns = await repo.list_annotations_for_dataset(dataset_id)
+    return dataset, samples, anns
+
+
+@app.get("/api/v1/exports/{dataset_id}")
+async def export_dataset(dataset_id: str) -> dict:
+    dataset, samples, anns = await _build_export_data(dataset_id)
     return container.artifacts().build_dataset_export(
         dataset=dataset,
         samples=samples,
@@ -297,11 +586,7 @@ async def export_dataset(dataset_id: str) -> dict:
 
 @app.post("/api/v1/exports/{dataset_id}/persist")
 async def export_dataset_persist(dataset_id: str) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
-    anns = await container.repository().list_annotations_for_dataset(dataset_id)
+    dataset, samples, anns = await _build_export_data(dataset_id)
     uri = await container.artifacts().persist_dataset_export(dataset=dataset, samples=samples, annotations=anns)
     return {"uri": uri}
 
@@ -416,9 +701,30 @@ async def upload_sample_image(sample_id: str, file: UploadFile = File(...)) -> U
 
 @app.get("/api/v1/images/resolve")
 async def resolve_image(uri: str = Query(...)) -> Response:
-    # Reject http/https for security
     if uri.startswith("http://") or uri.startswith("https://"):
-        raise HTTPException(status_code=400, detail="http/https URIs are not allowed")
+        cfg = container.config()
+        ls_enabled = bool(getattr(cfg, "label_studio", None) and cfg.label_studio.enabled)
+        ls_url = str(cfg.label_studio.url).rstrip("/") if ls_enabled else ""
+        if not (ls_enabled and ls_url and uri.startswith(ls_url)):
+            raise HTTPException(status_code=400, detail="http/https URIs are not allowed")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(uri)
+                resp.raise_for_status()
+        except Exception:
+            raise HTTPException(status_code=502, detail="failed to fetch image from Label Studio")
+        content_type = resp.headers.get("content-type") or resp.headers.get("Content-Type")
+        if not content_type:
+            lower_uri = uri.lower()
+            if lower_uri.endswith(".png"):
+                content_type = "image/png"
+            elif lower_uri.endswith(".gif"):
+                content_type = "image/gif"
+            elif lower_uri.endswith(".webp"):
+                content_type = "image/webp"
+            else:
+                content_type = "image/jpeg"
+        return Response(content=resp.content, media_type=content_type)
     # Handle data: URIs
     if uri.startswith("data:"):
         try:
@@ -490,3 +796,264 @@ def auth_me() -> dict:
 @app.post("/api/v1/auth/callback")
 def auth_callback() -> dict:
     return {"token": "dummy-token", "user": _DUMMY_USER}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/dashboard", response_model=DashboardResponse)
+async def get_dashboard() -> DashboardResponse:
+    """Return runtime analytics: work pool status, job queue stats, recent jobs."""
+    repo = container.repository()
+    cfg = container.config()
+
+    # -- Job queue stats from local DB --
+    all_jobs = await repo.list_jobs()
+    stats = JobQueueStats()
+    for j in all_jobs:
+        s = j.status.value if hasattr(j.status, "value") else str(j.status)
+        if s == "queued":
+            stats.queued += 1
+        elif s == "running":
+            stats.running += 1
+        elif s == "completed":
+            stats.completed += 1
+        elif s == "failed":
+            stats.failed += 1
+        elif s == "cancelled":
+            stats.cancelled += 1
+
+    # -- Recent jobs (last 20) --
+    sorted_jobs = sorted(all_jobs, key=lambda j: j.created_at, reverse=True)[:20]
+    recent: list[RecentJobSummary] = [
+        RecentJobSummary(
+            id=j.id,
+            dataset_id=j.dataset_id,
+            preset_id=j.preset_id,
+            status=j.status.value if hasattr(j.status, "value") else str(j.status),
+            created_by=j.created_by,
+            created_at=j.created_at if isinstance(j.created_at, str) else j.created_at.isoformat(),
+            updated_at=j.updated_at if isinstance(j.updated_at, str) else j.updated_at.isoformat(),
+        )
+        for j in sorted_jobs
+    ]
+
+    # -- Work pool status from Prefect (only when engine is prefect) --
+    work_pool: WorkPoolStatus | None = None
+    prefect_connected = False
+    engine_name = str(cfg.execution.engine)
+
+    if engine_name == "prefect":
+        pool_name = str(cfg.prefect.work_pool_name)
+        try:
+            prefect_client = container.prefect_client()
+            pool_data = await prefect_client.get_work_pool(pool_name)
+            prefect_connected = True
+
+            # Count running flow runs to determine slots_used
+            slots_used = 0
+            try:
+                running_runs = await prefect_client.filter_flow_runs(
+                    work_pool_name=pool_name,
+                    state_types=["RUNNING"],
+                )
+                slots_used = len(running_runs)
+            except Exception:
+                pass
+
+            work_pool = WorkPoolStatus(
+                name=pool_data.get("name", pool_name),
+                type=pool_data.get("type", "unknown"),
+                is_paused=pool_data.get("is_paused", False),
+                concurrency_limit=pool_data.get("concurrency_limit"),
+                slots_used=slots_used,
+                status="paused" if pool_data.get("is_paused", False) else "ready",
+            )
+        except Exception:
+            # Prefect not reachable — return dashboard without pool info
+            pass
+
+    return DashboardResponse(
+        work_pool=work_pool,
+        job_queue=stats,
+        recent_jobs=recent,
+        prefect_connected=prefect_connected,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Schedule endpoints (Prefect-backed)
+# ---------------------------------------------------------------------------
+
+
+def _deployment_to_schedule(raw: dict) -> ScheduleResponse:
+    schedules = raw.get("schedules", [])
+    cron: str | None = None
+    if schedules:
+        cron = schedules[0].get("schedule", {}).get("cron")
+    # Prefect 3.x uses "paused" (inverted logic vs our is_schedule_active)
+    is_active = not raw.get("paused", False)
+    return ScheduleResponse(
+        id=raw.get("id", ""),
+        name=raw.get("name", ""),
+        flow_name=raw.get("flow_name", ""),
+        cron=cron,
+        parameters=raw.get("parameters", {}),
+        description=raw.get("description", ""),
+        is_schedule_active=is_active,
+        created=raw.get("created"),
+        updated=raw.get("updated"),
+        prefect_deployment_id=raw.get("id", ""),
+    )
+
+
+def _run_to_response(raw: dict) -> RunResponse:
+    return RunResponse(
+        id=raw.get("id", ""),
+        name=raw.get("name", ""),
+        deployment_id=raw.get("deployment_id"),
+        flow_name=raw.get("flow_name"),
+        state_type=raw.get("state_type"),
+        state_name=raw.get("state_name"),
+        start_time=raw.get("start_time"),
+        end_time=raw.get("end_time"),
+        total_run_time=raw.get("total_run_time"),
+        parameters=raw.get("parameters", {}),
+    )
+
+
+def _log_to_response(raw: dict) -> RunLogResponse:
+    return RunLogResponse(
+        id=raw.get("id"),
+        flow_run_id=raw.get("flow_run_id"),
+        level=raw.get("level", 0),
+        timestamp=raw.get("timestamp", ""),
+        message=raw.get("message", ""),
+    )
+
+
+@app.post("/api/v1/schedules", response_model=ScheduleResponse)
+async def create_schedule(
+    payload: CreateScheduleRequest,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> ScheduleResponse:
+    raw = await svc.create_schedule(
+        name=payload.name,
+        flow_name=payload.flow_name,
+        cron=payload.cron,
+        parameters=payload.parameters,
+        description=payload.description,
+    )
+    return _deployment_to_schedule(raw)
+
+
+@app.get("/api/v1/schedules", response_model=list[ScheduleResponse])
+async def list_schedules(
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> list[ScheduleResponse]:
+    raws = await svc.list_schedules()
+    return [_deployment_to_schedule(r) for r in raws]
+
+
+@app.get("/api/v1/schedules/{schedule_id}", response_model=ScheduleResponse)
+async def get_schedule(
+    schedule_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> ScheduleResponse:
+    raw = await svc.get_schedule(schedule_id)
+    return _deployment_to_schedule(raw)
+
+
+@app.patch("/api/v1/schedules/{schedule_id}", response_model=ScheduleResponse)
+async def update_schedule(
+    schedule_id: str,
+    payload: UpdateScheduleRequest,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> ScheduleResponse:
+    updates = payload.model_dump(exclude_none=True)
+    # Translate our API fields to Prefect 3.x deployment fields
+    prefect_updates: dict = {}
+    if "name" in updates:
+        prefect_updates["name"] = updates["name"]
+    if "description" in updates:
+        prefect_updates["description"] = updates["description"]
+    if "parameters" in updates:
+        prefect_updates["parameters"] = updates["parameters"]
+    if "is_schedule_active" in updates:
+        prefect_updates["paused"] = not updates["is_schedule_active"]
+    if "cron" in updates:
+        prefect_updates["schedules"] = [
+            {
+                "schedule": {"cron": updates["cron"], "timezone": "UTC"},
+                "active": True,
+            }
+        ]
+    raw = await svc.update_schedule(schedule_id, prefect_updates)
+    return _deployment_to_schedule(raw)
+
+
+@app.delete("/api/v1/schedules/{schedule_id}", status_code=204)
+async def delete_schedule(
+    schedule_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> Response:
+    await svc.delete_schedule(schedule_id)
+    return Response(status_code=204)
+
+
+@app.post("/api/v1/schedules/{schedule_id}/run", response_model=RunResponse)
+async def trigger_run(
+    schedule_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> RunResponse:
+    raw = await svc.trigger_run(schedule_id)
+    return _run_to_response(raw)
+
+
+@app.post("/api/v1/schedules/{schedule_id}/pause", response_model=ScheduleResponse)
+async def pause_schedule(
+    schedule_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> ScheduleResponse:
+    raw = await svc.pause_schedule(schedule_id)
+    return _deployment_to_schedule(raw)
+
+
+@app.post("/api/v1/schedules/{schedule_id}/resume", response_model=ScheduleResponse)
+async def resume_schedule(
+    schedule_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> ScheduleResponse:
+    raw = await svc.resume_schedule(schedule_id)
+    return _deployment_to_schedule(raw)
+
+
+@app.get("/api/v1/schedules/{schedule_id}/runs", response_model=list[RunResponse])
+async def list_runs(
+    schedule_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> list[RunResponse]:
+    raws = await svc.list_runs(schedule_id, limit=limit)
+    return [_run_to_response(r) for r in raws]
+
+
+@app.get("/api/v1/runs/{run_id}", response_model=RunResponse)
+async def get_run(
+    run_id: str,
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> RunResponse:
+    raw = await svc.get_run(run_id)
+    return _run_to_response(raw)
+
+
+@app.get("/api/v1/runs/{run_id}/logs", response_model=list[RunLogResponse])
+async def get_run_logs(
+    run_id: str,
+    limit: int = Query(default=200, ge=1, le=500),
+    svc: SchedulerService = Depends(get_scheduler_service),
+) -> list[RunLogResponse]:
+    raws = await svc.get_run_logs(run_id, limit=limit)
+    return [_log_to_response(r) for r in raws]

@@ -2,9 +2,35 @@
   <div>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Predictions</n-h2>
-      <n-button type="primary" @click="showCreateModal = true">
-        + Create Prediction
-      </n-button>
+      <n-space align="center">
+        <!-- LS Sync Section — only when LS-linked datasets exist -->
+        <template v-if="lsLinkedDatasets.length > 0">
+          <n-select
+            v-model:value="selectedLsDatasetId"
+            :options="lsDatasetOptions"
+            placeholder="Select LS dataset"
+            size="small"
+            style="width: 200px"
+          />
+          <n-tooltip>
+            <template #trigger>
+              <n-button
+                type="info"
+                size="small"
+                :loading="syncToLsMutation.isPending.value"
+                :disabled="!selectedLsDatasetId"
+                @click="onSyncToLs"
+              >
+                Sync to LS
+              </n-button>
+            </template>
+            Push predictions for this dataset to the linked Label Studio project as pre-annotations
+          </n-tooltip>
+        </template>
+        <n-button type="primary" @click="showCreateModal = true">
+          + Create Prediction
+        </n-button>
+      </n-space>
     </n-space>
 
     <n-alert v-if="isError" type="error" style="margin-bottom: 16px">
@@ -138,12 +164,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h, watch } from "vue";
+import { ref, computed, h, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules } from "naive-ui";
-import { NButton, NTag, NImage, NImageGroup } from "naive-ui";
+import { NButton, NTag, NImage, NImageGroup, NTooltip, NSelect } from "naive-ui";
 import { api } from "../api";
-import type { PredictionResult, Sample } from "../types";
+import { syncPredictionsToLs } from "../api";
+import type { PredictionResult, Sample, Dataset, SyncResult } from "../types";
 import { resolveImageUri, resolveImageUris } from "../utils/imageAdapters";
 
 // ─── message / query client ──────────────────────────────────────────────────
@@ -215,6 +242,38 @@ const editPrediction = useMutation({
     message.error(err.message ?? "Failed to update prediction");
   },
 });
+
+// ─── datasets for LS sync ────────────────────────────────────────────────────
+const { data: allDatasets } = useQuery({
+  queryKey: ["datasets"],
+  queryFn: api.listDatasets,
+});
+
+const lsLinkedDatasets = computed(() =>
+  (allDatasets.value ?? []).filter((d: Dataset) => d.ls_project_id != null)
+);
+
+const lsDatasetOptions = computed(() =>
+  lsLinkedDatasets.value.map((d: Dataset) => ({ label: d.name, value: d.id }))
+);
+
+const selectedLsDatasetId = ref<string | null>(null);
+
+const syncToLsMutation = useMutation({
+  mutationFn: (datasetId: string) => syncPredictionsToLs(datasetId),
+  onSuccess: (data: SyncResult) => {
+    message.success(`Synced ${data.synced_count} predictions to Label Studio`);
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Sync failed");
+  },
+});
+
+function onSyncToLs() {
+  if (selectedLsDatasetId.value) {
+    syncToLsMutation.mutate(selectedLsDatasetId.value);
+  }
+}
 
 // ─── create modal / form ─────────────────────────────────────────────────────
 const showCreateModal = ref(false);
