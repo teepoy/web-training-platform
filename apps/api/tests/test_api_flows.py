@@ -171,25 +171,13 @@ def test_events_history_pagination() -> None:
         assert r.status_code == 404
 
 
-def test_auth_me() -> None:
+def test_auth_me_requires_auth() -> None:
     with TestClient(app) as c:
         r = c.get("/api/v1/auth/me")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["id"] == "dummy"
-        assert body["name"] == "Local User"
-        assert body["email"] == "user@local.dev"
-        assert body["roles"] == ["admin"]
+        assert r.status_code == 401
 
 
-def test_auth_callback() -> None:
+def test_auth_callback_removed() -> None:
     with TestClient(app) as c:
         r = c.post("/api/v1/auth/callback")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["token"] == "dummy-token"
-        user = body["user"]
-        assert user["id"] == "dummy"
-        assert user["name"] == "Local User"
-        assert user["email"] == "user@local.dev"
-        assert user["roles"] == ["admin"]
+        assert r.status_code == 404
