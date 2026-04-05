@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 from app.domain.types import DatasetType, JobStatus, ModelFramework, OrgRole, ResultType, TaskType
 
 
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+
+
 class ArtifactRef(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     uri: str
@@ -26,6 +29,7 @@ class Dataset(BaseModel):
     name: str
     dataset_type: DatasetType = DatasetType.IMAGE_CLASSIFICATION
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
+    org_id: str | None = DEFAULT_ORG_ID
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     embed_config: dict = Field(default_factory=dict)
     ls_project_id: str | None = None
@@ -60,6 +64,7 @@ class TrainingPreset(BaseModel):
     model_spec: ModelSpec
     omegaconf_yaml: str
     dataloader_ref: str
+    org_id: str | None = DEFAULT_ORG_ID
 
 
 class TrainingEvent(BaseModel):
@@ -76,6 +81,7 @@ class TrainingJob(BaseModel):
     preset_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
+    org_id: str | None = DEFAULT_ORG_ID
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     artifact_refs: list[ArtifactRef] = Field(default_factory=list)

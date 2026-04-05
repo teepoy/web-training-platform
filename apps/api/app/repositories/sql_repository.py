@@ -23,6 +23,7 @@ from app.domain.models import (
     Annotation,
     ArtifactRef,
     Dataset,
+    DEFAULT_ORG_ID,
     PredictionEdit,
     PredictionResult,
     Sample,
@@ -42,10 +43,12 @@ class SqlRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
-    async def create_dataset(self, dataset: Dataset) -> Dataset:
+    async def create_dataset(self, dataset: Dataset, org_id: str | None = None) -> Dataset:
+        org_id = org_id or dataset.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             row = DatasetORM(
                 id=dataset.id,
+                org_id=org_id,
                 name=dataset.name,
                 dataset_type=dataset.dataset_type.value,
                 task_spec=dataset.task_spec.model_dump(mode="json"),
@@ -55,7 +58,7 @@ class SqlRepository:
             )
             session.add(row)
             await session.commit()
-        return dataset
+        return dataset.model_copy(update={"org_id": org_id})
 
     async def list_datasets(self) -> list[Dataset]:
         async with self.session_factory() as session:
@@ -63,6 +66,7 @@ class SqlRepository:
             return [
                 Dataset(
                     id=r.id,
+                    org_id=r.org_id,
                     name=r.name,
                     dataset_type=r.dataset_type,
                     task_spec=r.task_spec,
@@ -80,6 +84,7 @@ class SqlRepository:
                 return None
             return Dataset(
                 id=row.id,
+                org_id=row.org_id,
                 name=row.name,
                 dataset_type=row.dataset_type,
                 task_spec=row.task_spec,
@@ -362,11 +367,13 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def create_preset(self, preset: TrainingPreset) -> TrainingPreset:
+    async def create_preset(self, preset: TrainingPreset, org_id: str | None = None) -> TrainingPreset:
+        org_id = org_id or preset.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             session.add(
                 TrainingPresetORM(
                     id=preset.id,
+                    org_id=org_id,
                     name=preset.name,
                     model_spec=preset.model_spec.model_dump(mode="json"),
                     omegaconf_yaml=preset.omegaconf_yaml,
@@ -374,7 +381,7 @@ class SqlRepository:
                 )
             )
             await session.commit()
-        return preset
+        return preset.model_copy(update={"org_id": org_id})
 
     async def list_presets(self) -> list[TrainingPreset]:
         async with self.session_factory() as session:
@@ -382,6 +389,7 @@ class SqlRepository:
             return [
                 TrainingPreset(
                     id=r.id,
+                    org_id=r.org_id,
                     name=r.name,
                     model_spec=r.model_spec,
                     omegaconf_yaml=r.omegaconf_yaml,
@@ -397,17 +405,20 @@ class SqlRepository:
                 return None
             return TrainingPreset(
                 id=row.id,
+                org_id=row.org_id,
                 name=row.name,
                 model_spec=row.model_spec,
                 omegaconf_yaml=row.omegaconf_yaml,
                 dataloader_ref=row.dataloader_ref,
             )
 
-    async def create_job(self, job: TrainingJob) -> TrainingJob:
+    async def create_job(self, job: TrainingJob, org_id: str | None = None) -> TrainingJob:
+        org_id = org_id or job.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             session.add(
                 TrainingJobORM(
                     id=job.id,
+                    org_id=org_id,
                     dataset_id=job.dataset_id,
                     preset_id=job.preset_id,
                     status=job.status.value,
@@ -418,7 +429,7 @@ class SqlRepository:
             )
             session.add(JobUserStateORM(job_id=job.id, user_left=False))
             await session.commit()
-        return job
+        return job.model_copy(update={"org_id": org_id})
 
     async def set_job_external_id(self, job_id: str, external_job_id: str) -> None:
         async with self.session_factory() as session:
@@ -452,6 +463,7 @@ class SqlRepository:
                 jobs.append(
                     TrainingJob(
                         id=row.id,
+                        org_id=row.org_id,
                         dataset_id=row.dataset_id,
                         preset_id=row.preset_id,
                         status=row.status,
@@ -471,6 +483,7 @@ class SqlRepository:
             arts = await self._list_artifacts_by_job_in_session(session, row.id)
             return TrainingJob(
                 id=row.id,
+                org_id=row.org_id,
                 dataset_id=row.dataset_id,
                 preset_id=row.preset_id,
                 status=row.status,

@@ -17,6 +17,7 @@ class DatasetORM(Base):
     __tablename__ = "datasets"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dataset_type: Mapped[str] = mapped_column(String(64), nullable=False)
     task_spec: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -95,6 +96,7 @@ class TrainingPresetORM(Base):
     __tablename__ = "training_presets"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     model_spec: Mapped[dict] = mapped_column(JSON, nullable=False)
     omegaconf_yaml: Mapped[str] = mapped_column(Text, nullable=False)
@@ -105,6 +107,7 @@ class TrainingJobORM(Base):
     __tablename__ = "training_jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="RESTRICT"), nullable=False)
     preset_id: Mapped[str] = mapped_column(ForeignKey("training_presets.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
