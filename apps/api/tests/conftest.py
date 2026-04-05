@@ -52,3 +52,69 @@ def _add_member(client, org_id: str, user_id: str, role: str, admin_token: str) 
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Auth dependency overrides for existing tests
+#
+# Existing tests (test_api_flows, test_annotation_crud, etc.) do NOT send
+# auth headers.  After T11, all resource routes require auth + org context.
+# We override the FastAPI dependencies globally for all non-auth tests so
+# existing tests keep passing without modification.
+#
+# test_auth_routes.py opts OUT of these overrides by clearing them with the
+# `no_auth_override` marker — see that file for details.
+# ---------------------------------------------------------------------------
+
+import pytest
+from fastapi.testclient import TestClient
+
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000002"
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_auth_deps(request):
+    """Override get_current_user and get_current_org for all tests by default.
+
+    Tests that need real auth enforcement should either:
+    - Use the ``no_auth_override`` marker, OR
+    - Be in test_auth.py or test_auth_routes.py (automatically skipped)
+    """
+    # Allow specific tests to opt out of the override
+    if request.node.get_closest_marker("no_auth_override"):
+        yield
+        return
+
+    # Skip override for auth-specific test modules that test real auth behavior
+    module_name = getattr(request.module, "__name__", "")
+    if module_name in ("test_auth", "test_auth_routes"):
+        yield
+        return
+
+    from app.main import app
+    from app.api.deps import get_current_user, get_current_org
+    from app.domain.models import User, Organization
+    import datetime
+
+    _mock_user = User(
+        id=DEFAULT_USER_ID,
+        email="test@test.com",
+        name="Test User",
+        is_superadmin=True,
+        is_active=True,
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    _mock_org = Organization(
+        id=DEFAULT_ORG_ID,
+        name="Default",
+        slug="default",
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: _mock_user
+    app.dependency_overrides[get_current_org] = lambda: _mock_org
+    yield
+    # Clean up overrides after each test
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_org, None)

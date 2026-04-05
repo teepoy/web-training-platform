@@ -1,7 +1,7 @@
 """FastAPI auth dependencies."""
 from __future__ import annotations
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy import select
 
@@ -140,7 +140,7 @@ async def get_current_user(request: Request) -> User:
 
 async def get_current_org(
     request: Request,
-    current_user: User | None = None,
+    current_user: User = Depends(get_current_user),
 ) -> Organization:
     """Resolve the request's organization context.
 
@@ -151,8 +151,6 @@ async def get_current_org(
     3. Return 400 (ambiguous) if the user has multiple orgs and no header.
     4. Return 400 (no org) if the user has zero orgs and no header.
     """
-    if current_user is None:
-        current_user = await get_current_user(request)
 
     session_factory = _get_session_factory()
     org_id_header = request.headers.get("X-Organization-ID")

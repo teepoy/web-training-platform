@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -171,6 +172,7 @@ def test_events_history_pagination() -> None:
         assert r.status_code == 404
 
 
+@pytest.mark.no_auth_override
 def test_auth_me_requires_auth() -> None:
     with TestClient(app) as c:
         r = c.get("/api/v1/auth/me")

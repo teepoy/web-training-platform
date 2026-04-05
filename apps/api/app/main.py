@@ -52,12 +52,12 @@ from app.api.schemas import (
     UserWithOrgsResponse,
     WorkPoolStatus,
 )
-from app.api.deps import get_current_user, require_superadmin
+from app.api.deps import get_current_org, get_current_user, require_superadmin
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.models import OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, UserORM
 from app.db.session import init_db
-from app.domain.models import Annotation, Dataset, PredictionEdit, PredictionResult, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
+from app.domain.models import Annotation, Dataset, Organization, PredictionEdit, PredictionResult, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
 
 
@@ -95,8 +95,12 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/v1/datasets", response_model=Dataset)
-async def create_dataset(payload: CreateDatasetRequest) -> Dataset:
-    dataset = Dataset(name=payload.name, task_spec=payload.task_spec)
+async def create_dataset(
+    payload: CreateDatasetRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Dataset:
+    dataset = Dataset(name=payload.name, task_spec=payload.task_spec, org_id=org.id)
     dataset = await container.repository().create_dataset(dataset)
     # LS hook: create project if enabled
     cfg = container.config()
@@ -120,30 +124,47 @@ async def create_dataset(payload: CreateDatasetRequest) -> Dataset:
 
 
 @app.get("/api/v1/datasets", response_model=list[Dataset])
-async def list_datasets() -> list[Dataset]:
-    return await container.repository().list_datasets()
+async def list_datasets(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[Dataset]:
+    return await container.repository().list_datasets(org_id=org.id)
 
 
 @app.get("/api/v1/datasets/{dataset_id}", response_model=Dataset)
-async def get_dataset(dataset_id: str) -> Dataset:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def get_dataset(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Dataset:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset
 
 
 @app.post("/api/v1/datasets/{dataset_id}/link-ls", response_model=Dataset)
-async def link_label_studio(dataset_id: str, payload: LinkLabelStudioRequest) -> Dataset:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def link_label_studio(
+    dataset_id: str,
+    payload: LinkLabelStudioRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Dataset:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     await container.repository().update_dataset_ls_project_id(dataset_id, payload.ls_project_id)
-    return (await container.repository().get_dataset(dataset_id))
+    return (await container.repository().get_dataset(dataset_id, org_id=org.id))
 
 
 @app.post("/api/v1/datasets/{dataset_id}/samples", response_model=Sample)
-async def create_sample(dataset_id: str, payload: CreateSampleRequest) -> Sample:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def create_sample(
+    dataset_id: str,
+    payload: CreateSampleRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Sample:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata)
@@ -171,6 +192,8 @@ async def list_samples(
     dataset_id: str,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> PaginatedResponse[Sample]:
     items, total = await container.repository().list_samples(dataset_id, offset=offset, limit=limit)
     return PaginatedResponse(items=items, total=total)
@@ -183,8 +206,10 @@ async def list_samples_with_labels_endpoint(
     limit: int = Query(default=50, ge=1),
     label: str | None = None,
     order_by: str = "id",
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> PaginatedResponse[SampleWithLabels]:
-    dataset = await container.repository().get_dataset(dataset_id)
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     items, total = await container.repository().list_samples_with_labels(
@@ -198,7 +223,11 @@ async def list_samples_with_labels_endpoint(
 
 
 @app.get("/api/v1/samples/{sample_id}", response_model=Sample)
-async def get_sample(sample_id: str) -> Sample:
+async def get_sample(
+    sample_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Sample:
     sample = await container.repository().get_sample(sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -206,7 +235,11 @@ async def get_sample(sample_id: str) -> Sample:
 
 
 @app.post("/api/v1/samples/{sample_id}/embed")
-async def embed_sample(sample_id: str) -> dict:
+async def embed_sample(
+    sample_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
     sample = await container.repository().get_sample(sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -241,11 +274,15 @@ async def embed_sample(sample_id: str) -> dict:
 
 
 @app.post("/api/v1/annotations", response_model=Annotation)
-async def create_annotation(payload: CreateAnnotationRequest) -> Annotation:
+async def create_annotation(
+    payload: CreateAnnotationRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Annotation:
     sample = await container.repository().get_sample(payload.sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
-    ann = Annotation(sample_id=payload.sample_id, label=payload.label, created_by=payload.created_by)
+    ann = Annotation(sample_id=payload.sample_id, label=payload.label, created_by=current_user.id)
     ann = await container.repository().create_annotation(ann)
     # LS hook: sync annotation if enabled and sample linked
     cfg = container.config()
@@ -262,14 +299,23 @@ async def create_annotation(payload: CreateAnnotationRequest) -> Annotation:
 
 
 @app.get("/api/v1/samples/{sample_id}/annotations", response_model=list[Annotation])
-async def list_annotations_for_sample(sample_id: str) -> list[Annotation]:
+async def list_annotations_for_sample(
+    sample_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[Annotation]:
     if await container.repository().get_sample(sample_id) is None:
         raise HTTPException(status_code=404, detail="sample not found")
     return await container.repository().list_annotations_for_sample(sample_id)
 
 
 @app.patch("/api/v1/annotations/{annotation_id}", response_model=Annotation)
-async def update_annotation(annotation_id: str, payload: UpdateAnnotationRequest) -> Annotation:
+async def update_annotation(
+    annotation_id: str,
+    payload: UpdateAnnotationRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Annotation:
     result = await container.repository().update_annotation(annotation_id, payload.label)
     if result is None:
         raise HTTPException(status_code=404, detail="annotation not found")
@@ -277,7 +323,11 @@ async def update_annotation(annotation_id: str, payload: UpdateAnnotationRequest
 
 
 @app.delete("/api/v1/annotations/{annotation_id}", status_code=204)
-async def delete_annotation(annotation_id: str) -> Response:
+async def delete_annotation(
+    annotation_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
     deleted = await container.repository().delete_annotation(annotation_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="annotation not found")
@@ -285,8 +335,13 @@ async def delete_annotation(annotation_id: str) -> Response:
 
 
 @app.post("/api/v1/datasets/{dataset_id}/annotations/bulk")
-async def bulk_create_annotations(dataset_id: str, payload: BulkAnnotationRequest) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def bulk_create_annotations(
+    dataset_id: str,
+    payload: BulkAnnotationRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     created = 0
@@ -295,7 +350,7 @@ async def bulk_create_annotations(dataset_id: str, payload: BulkAnnotationReques
             id=__import__("uuid").uuid4().hex,
             sample_id=item.sample_id,
             label=item.label,
-            created_by=item.annotator,
+            created_by=current_user.id,
         )
         await container.repository().create_annotation(ann)
         created += 1
@@ -303,8 +358,12 @@ async def bulk_create_annotations(dataset_id: str, payload: BulkAnnotationReques
 
 
 @app.post("/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
-async def sync_annotations_to_ls(dataset_id: str) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def sync_annotations_to_ls(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
@@ -337,61 +396,93 @@ async def sync_annotations_to_ls(dataset_id: str) -> dict:
 
 
 @app.post("/api/v1/training-presets", response_model=TrainingPreset)
-async def create_preset(payload: CreatePresetRequest) -> TrainingPreset:
+async def create_preset(
+    payload: CreatePresetRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> TrainingPreset:
     preset = TrainingPreset(
         name=payload.name,
         model_spec=payload.model_spec,
         omegaconf_yaml=payload.omegaconf_yaml,
         dataloader_ref=payload.dataloader_ref,
+        org_id=org.id,
     )
     return await container.repository().create_preset(preset)
 
 
 @app.get("/api/v1/training-presets", response_model=list[TrainingPreset])
-async def list_presets() -> list[TrainingPreset]:
-    return await container.repository().list_presets()
+async def list_presets(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[TrainingPreset]:
+    return await container.repository().list_presets(org_id=org.id)
 
 
 @app.get("/api/v1/training-presets/{preset_id}", response_model=TrainingPreset)
-async def get_preset(preset_id: str) -> TrainingPreset:
-    preset = await container.repository().get_preset(preset_id)
+async def get_preset(
+    preset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> TrainingPreset:
+    preset = await container.repository().get_preset(preset_id, org_id=org.id)
     if preset is None:
         raise HTTPException(status_code=404, detail="Preset not found")
     return preset
 
 
 @app.post("/api/v1/training-jobs", response_model=TrainingJob)
-async def create_training_job(payload: CreateTrainingJobRequest) -> TrainingJob:
-    if await container.repository().get_dataset(payload.dataset_id) is None:
+async def create_training_job(
+    payload: CreateTrainingJobRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> TrainingJob:
+    if await container.repository().get_dataset(payload.dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    if await container.repository().get_preset(payload.preset_id) is None:
+    if await container.repository().get_preset(payload.preset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="preset not found")
-    job = TrainingJob(dataset_id=payload.dataset_id, preset_id=payload.preset_id, created_by=payload.created_by)
+    job = TrainingJob(dataset_id=payload.dataset_id, preset_id=payload.preset_id, created_by=current_user.id, org_id=org.id)
     return await container.orchestrator().start_job(job)
 
 
 @app.get("/api/v1/training-jobs", response_model=list[TrainingJob])
-async def list_jobs() -> list[TrainingJob]:
-    return await container.repository().list_jobs()
+async def list_jobs(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[TrainingJob]:
+    return await container.repository().list_jobs(org_id=org.id)
 
 
 @app.get("/api/v1/training-jobs/{job_id}", response_model=TrainingJob)
-async def get_job(job_id: str) -> TrainingJob:
-    job = await container.repository().get_job(job_id)
+async def get_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> TrainingJob:
+    job = await container.repository().get_job(job_id, org_id=org.id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return job
 
 
 @app.post("/api/v1/training-jobs/{job_id}/cancel")
-async def cancel_job(job_id: str) -> dict[str, bool]:
+async def cancel_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict[str, bool]:
     ok = await container.orchestrator().cancel_job(job_id)
     return {"cancelled": ok}
 
 
 @app.get("/api/v1/training-jobs/{job_id}/events")
-async def get_job_events(job_id: str, request: Request):
-    if await container.repository().get_job(job_id) is None:
+async def get_job_events(
+    job_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+):
+    if await container.repository().get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
 
     async def event_stream():
@@ -414,22 +505,32 @@ async def get_job_events_history(
     job_id: str,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> PaginatedResponse[TrainingEvent]:
-    if await container.repository().get_job(job_id) is None:
+    if await container.repository().get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
     items, total = await container.repository().list_events_paginated(job_id, offset=offset, limit=limit)
     return PaginatedResponse(items=items, total=total)
 
 
 @app.post("/api/v1/training-jobs/{job_id}/mark-left")
-async def mark_user_left(job_id: str) -> dict[str, bool]:
-    if await container.repository().get_job(job_id) is None:
+async def mark_user_left(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict[str, bool]:
+    if await container.repository().get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
     return {"marked": await container.repository().mark_user_left(job_id)}
 
 
 @app.post("/api/v1/predictions", response_model=PredictionResult)
-async def create_prediction(payload: CreatePredictionRequest) -> PredictionResult:
+async def create_prediction(
+    payload: CreatePredictionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> PredictionResult:
     if await container.repository().get_sample(payload.sample_id) is None:
         raise HTTPException(status_code=404, detail="sample not found")
     pred = PredictionResult(
@@ -442,21 +543,33 @@ async def create_prediction(payload: CreatePredictionRequest) -> PredictionResul
 
 
 @app.get("/api/v1/predictions", response_model=list[PredictionResult])
-async def list_predictions() -> list[PredictionResult]:
+async def list_predictions(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[PredictionResult]:
     return await container.repository().list_predictions()
 
 
 @app.patch("/api/v1/predictions/{prediction_id}", response_model=PredictionEdit)
-async def edit_prediction(prediction_id: str, payload: EditPredictionRequest) -> PredictionEdit:
+async def edit_prediction(
+    prediction_id: str,
+    payload: EditPredictionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> PredictionEdit:
     if await container.repository().get_prediction(prediction_id) is None:
         raise HTTPException(status_code=404, detail="prediction not found")
-    edit = PredictionEdit(result_id=prediction_id, corrected_label=payload.corrected_label, edited_by=payload.edited_by)
+    edit = PredictionEdit(result_id=prediction_id, corrected_label=payload.corrected_label, edited_by=current_user.id)
     return await container.repository().create_prediction_edit(edit)
 
 
 @app.post("/api/v1/datasets/{dataset_id}/sync-predictions-to-ls", response_model=SyncPredictionsResponse)
-async def sync_predictions_to_ls(dataset_id: str) -> SyncPredictionsResponse:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def sync_predictions_to_ls(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SyncPredictionsResponse:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
@@ -591,7 +704,11 @@ async def _build_export_data(dataset_id: str):
 
 
 @app.get("/api/v1/exports/{dataset_id}")
-async def export_dataset(dataset_id: str) -> dict:
+async def export_dataset(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
     dataset, samples, anns = await _build_export_data(dataset_id)
     return container.artifacts().build_dataset_export(
         dataset=dataset,
@@ -601,15 +718,24 @@ async def export_dataset(dataset_id: str) -> dict:
 
 
 @app.post("/api/v1/exports/{dataset_id}/persist")
-async def export_dataset_persist(dataset_id: str) -> dict:
+async def export_dataset_persist(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
     dataset, samples, anns = await _build_export_data(dataset_id)
     uri = await container.artifacts().persist_dataset_export(dataset=dataset, samples=samples, annotations=anns)
     return {"uri": uri}
 
 
 @app.post("/api/v1/datasets/{dataset_id}/features/extract")
-async def extract_features(dataset_id: str, force: bool = Query(default=False)) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def extract_features(
+    dataset_id: str,
+    force: bool = Query(default=False),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
@@ -652,8 +778,14 @@ async def extract_features(dataset_id: str, force: bool = Query(default=False)) 
 
 
 @app.get("/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
-async def similarity_search(dataset_id: str, sample_id: str, k: int = 5) -> dict:
-    if await container.repository().get_dataset(dataset_id) is None:
+async def similarity_search(
+    dataset_id: str,
+    sample_id: str,
+    k: int = 5,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     sample = await container.repository().get_sample(sample_id)
     if sample is None or sample.dataset_id != dataset_id:
@@ -662,8 +794,12 @@ async def similarity_search(dataset_id: str, sample_id: str, k: int = 5) -> dict
 
 
 @app.get("/api/v1/datasets/{dataset_id}/selection-metrics")
-async def selection_metrics(dataset_id: str) -> dict:
-    if await container.repository().get_dataset(dataset_id) is None:
+async def selection_metrics(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
     sample_ids = [s.id for s in samples]
@@ -675,14 +811,22 @@ async def selection_metrics(dataset_id: str) -> dict:
 
 
 @app.get("/api/v1/datasets/{dataset_id}/hints/uncovered")
-async def uncovered_hints(dataset_id: str) -> dict:
-    if await container.repository().get_dataset(dataset_id) is None:
+async def uncovered_hints(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     return container.feature_ops().uncovered_cluster_hints(dataset_id)
 
 
 @app.get("/api/v1/artifacts/{artifact_id}/download")
-async def download_artifact(artifact_id: str) -> Response:
+async def download_artifact(
+    artifact_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
     artifact = await container.repository().get_artifact(artifact_id)
     if artifact is None:
         raise HTTPException(status_code=404, detail="artifact not found")
@@ -697,7 +841,12 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @app.post("/api/v1/samples/{sample_id}/upload", response_model=UpdateSampleImageResponse)
-async def upload_sample_image(sample_id: str, file: UploadFile = File(...)) -> UpdateSampleImageResponse:
+async def upload_sample_image(
+    sample_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> UpdateSampleImageResponse:
     sample = await container.repository().get_sample(sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -775,16 +924,25 @@ async def resolve_image(uri: str = Query(...)) -> Response:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v1/datasets/{dataset_id}/embed-config")
-async def get_embed_config(dataset_id: str) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def get_embed_config(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     return dataset.embed_config or {}
 
 
 @app.patch("/api/v1/datasets/{dataset_id}/embed-config")
-async def update_embed_config(dataset_id: str, payload: UpdateEmbedConfigRequest) -> dict:
-    dataset = await container.repository().get_dataset(dataset_id)
+async def update_embed_config(
+    dataset_id: str,
+    payload: UpdateEmbedConfigRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     new_config = {"model": payload.model, "dimension": payload.dimension}
@@ -1039,13 +1197,16 @@ async def remove_org_member(
 
 
 @app.get("/api/v1/dashboard", response_model=DashboardResponse)
-async def get_dashboard() -> DashboardResponse:
+async def get_dashboard(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> DashboardResponse:
     """Return runtime analytics: work pool status, job queue stats, recent jobs."""
     repo = container.repository()
     cfg = container.config()
 
-    # -- Job queue stats from local DB --
-    all_jobs = await repo.list_jobs()
+    # -- Job queue stats from local DB (scoped by org) --
+    all_jobs = await repo.list_jobs(org_id=org.id)
     stats = JobQueueStats()
     for j in all_jobs:
         s = j.status.value if hasattr(j.status, "value") else str(j.status)
@@ -1172,6 +1333,8 @@ def _log_to_response(raw: dict) -> RunLogResponse:
 @app.post("/api/v1/schedules", response_model=ScheduleResponse)
 async def create_schedule(
     payload: CreateScheduleRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     raw = await svc.create_schedule(
@@ -1186,6 +1349,8 @@ async def create_schedule(
 
 @app.get("/api/v1/schedules", response_model=list[ScheduleResponse])
 async def list_schedules(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> list[ScheduleResponse]:
     raws = await svc.list_schedules()
@@ -1195,6 +1360,8 @@ async def list_schedules(
 @app.get("/api/v1/schedules/{schedule_id}", response_model=ScheduleResponse)
 async def get_schedule(
     schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     raw = await svc.get_schedule(schedule_id)
@@ -1205,6 +1372,8 @@ async def get_schedule(
 async def update_schedule(
     schedule_id: str,
     payload: UpdateScheduleRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     updates = payload.model_dump(exclude_none=True)
@@ -1232,6 +1401,8 @@ async def update_schedule(
 @app.delete("/api/v1/schedules/{schedule_id}", status_code=204)
 async def delete_schedule(
     schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> Response:
     await svc.delete_schedule(schedule_id)
@@ -1241,6 +1412,8 @@ async def delete_schedule(
 @app.post("/api/v1/schedules/{schedule_id}/run", response_model=RunResponse)
 async def trigger_run(
     schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> RunResponse:
     raw = await svc.trigger_run(schedule_id)
@@ -1250,6 +1423,8 @@ async def trigger_run(
 @app.post("/api/v1/schedules/{schedule_id}/pause", response_model=ScheduleResponse)
 async def pause_schedule(
     schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     raw = await svc.pause_schedule(schedule_id)
@@ -1259,6 +1434,8 @@ async def pause_schedule(
 @app.post("/api/v1/schedules/{schedule_id}/resume", response_model=ScheduleResponse)
 async def resume_schedule(
     schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> ScheduleResponse:
     raw = await svc.resume_schedule(schedule_id)
@@ -1269,6 +1446,8 @@ async def resume_schedule(
 async def list_runs(
     schedule_id: str,
     limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> list[RunResponse]:
     raws = await svc.list_runs(schedule_id, limit=limit)
@@ -1278,6 +1457,8 @@ async def list_runs(
 @app.get("/api/v1/runs/{run_id}", response_model=RunResponse)
 async def get_run(
     run_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> RunResponse:
     raw = await svc.get_run(run_id)
@@ -1288,6 +1469,8 @@ async def get_run(
 async def get_run_logs(
     run_id: str,
     limit: int = Query(default=200, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
     svc: SchedulerService = Depends(get_scheduler_service),
 ) -> list[RunLogResponse]:
     raws = await svc.get_run_logs(run_id, limit=limit)

@@ -40,3 +40,6 @@ embedding-protos = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "no_auth_override: skip the global auth dependency override for this test",
+]
