@@ -99,15 +99,17 @@
     <div
       :key="gridLayoutVersion"
       ref="gridContainer"
-      class="classify-grid"
+      :class="['classify-grid', isDragging && 'classify-grid--dragging']"
       :style="{ '--cell-size': thumbSize + 'px' }"
+      @mousedown.prevent="onGridMouseDown"
     >
       <div
         v-for="sample in pageSamples"
         :key="sample.id"
-        :class="['grid-cell', selectedIds.has(sample.id) && 'grid-cell--selected']"
+        :data-sample-id="sample.id"
+        :class="['grid-cell', selectedIds.has(sample.id) && 'grid-cell--selected', isDragging && 'grid-cell--no-click']"
         :style="labelDraft[sample.id] ? { borderColor: '#18a058' } : {}"
-        @click="toggleSelect(sample.id)"
+        @click="onCellClick(sample.id)"
       >
         <!-- Checkbox overlay top-left -->
         <div
@@ -136,6 +138,11 @@
           }"
         >{{ effectiveBadgeLabel(sample) }}</span>
       </div>
+      <div
+        v-if="isDragging && dragStart && dragCurrent"
+        class="rubber-band-rect"
+        :style="rubberBandStyle"
+      />
     </div>
 
     <!-- Pagination -->
@@ -216,6 +223,14 @@ const orderBy = ref<string>('id')
 const gridLayoutVersion = ref(0)
 const gridContainer = ref<HTMLElement | null>(null)
 const pendingScrollTop = ref<number | null>(null)
+
+// Rubber-band drag state
+const isDragging = ref(false)
+const dragStart = ref<{ x: number; y: number } | null>(null)
+const dragCurrent = ref<{ x: number; y: number } | null>(null)
+const DRAG_THRESHOLD = 5
+let wasDragging = false
+let cachedGridRect: DOMRect | null = null
 
 // Pagination state
 const currentPage = ref(1)
@@ -335,6 +350,78 @@ async function refreshGridLayout() {
   }
 }
 
+const rubberBandStyle = computed(() => {
+  if (!dragStart.value || !dragCurrent.value) return {}
+  const x1 = Math.min(dragStart.value.x, dragCurrent.value.x)
+  const y1 = Math.min(dragStart.value.y, dragCurrent.value.y)
+  const x2 = Math.max(dragStart.value.x, dragCurrent.value.x)
+  const y2 = Math.max(dragStart.value.y, dragCurrent.value.y)
+  const rect = cachedGridRect
+  if (!rect) return {}
+  return {
+    left: (x1 - rect.left) + 'px',
+    top: (y1 - rect.top) + 'px',
+    width: (x2 - x1) + 'px',
+    height: (y2 - y1) + 'px',
+  }
+})
+
+function onGridMouseDown(e: MouseEvent) {
+  if (e.button !== 0) return
+  cachedGridRect = gridContainer.value?.getBoundingClientRect() ?? null
+  dragStart.value = { x: e.clientX, y: e.clientY }
+  dragCurrent.value = { x: e.clientX, y: e.clientY }
+  document.addEventListener('mousemove', onDocMouseMove)
+  document.addEventListener('mouseup', onDocMouseUp)
+}
+
+function onDocMouseMove(e: MouseEvent) {
+  if (!dragStart.value) return
+  dragCurrent.value = { x: e.clientX, y: e.clientY }
+  const dx = dragCurrent.value.x - dragStart.value.x
+  const dy = dragCurrent.value.y - dragStart.value.y
+  if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
+    isDragging.value = true
+  }
+}
+
+function onDocMouseUp(_e: MouseEvent) {
+  document.removeEventListener('mousemove', onDocMouseMove)
+  document.removeEventListener('mouseup', onDocMouseUp)
+
+  if (isDragging.value && dragStart.value && dragCurrent.value && cachedGridRect) {
+    const selLeft = Math.min(dragStart.value.x, dragCurrent.value.x)
+    const selTop = Math.min(dragStart.value.y, dragCurrent.value.y)
+    const selRight = Math.max(dragStart.value.x, dragCurrent.value.x)
+    const selBottom = Math.max(dragStart.value.y, dragCurrent.value.y)
+
+    const cells = gridContainer.value?.querySelectorAll<HTMLElement>('.grid-cell[data-sample-id]') ?? []
+    const intersecting: string[] = []
+    cells.forEach((cell) => {
+      const cr = cell.getBoundingClientRect()
+      const overlaps = !(cr.right < selLeft || cr.left > selRight || cr.bottom < selTop || cr.top > selBottom)
+      if (overlaps) {
+        const id = cell.dataset.sampleId
+        if (id) intersecting.push(id)
+      }
+    })
+    selectedIds.value = new Set(intersecting)
+
+    wasDragging = true
+    setTimeout(() => { wasDragging = false }, 0)
+  }
+
+  isDragging.value = false
+  dragStart.value = null
+  dragCurrent.value = null
+  cachedGridRect = null
+}
+
+function onCellClick(id: string) {
+  if (wasDragging) return
+  toggleSelect(id)
+}
+
 // Selection helpers
 function toggleSelect(id: string) {
   const next = new Set(selectedIds.value)
@@ -391,6 +478,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('mousemove', onDocMouseMove)
+  document.removeEventListener('mouseup', onDocMouseUp)
 })
 </script>
 
@@ -427,6 +516,20 @@ onUnmounted(() => {
   overflow-y: auto;
   flex: 1;
   padding: 8px;
+  position: relative;
+}
+
+.classify-grid--dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rubber-band-rect {
+  position: absolute;
+  border: 2px dashed #18a058;
+  background: rgba(24, 160, 88, 0.1);
+  pointer-events: none;
+  z-index: 10;
 }
 
 .grid-cell {
