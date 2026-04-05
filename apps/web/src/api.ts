@@ -516,6 +516,19 @@ export const api = {
 
   // ---- Dashboard ----
   getDashboard: () => req<DashboardResponse>('/dashboard'),
+
+  // ---- Public visibility toggles (superadmin) ----
+  toggleDatasetPublic: (id: string, isPublic: boolean) =>
+    req<Dataset>(`/datasets/${id}/public`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_public: isPublic }),
+    }),
+
+  toggleJobPublic: (id: string, isPublic: boolean) =>
+    req<TrainingJob>(`/training-jobs/${id}/public`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_public: isPublic }),
+    }),
 };
 
 // ---------------------------------------------------------------------------

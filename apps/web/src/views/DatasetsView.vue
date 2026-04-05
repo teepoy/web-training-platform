@@ -91,12 +91,14 @@ import { NButton, NTag } from "naive-ui";
 import { api } from "../api";
 import type { Dataset } from "../types";
 import { useOrgStore } from "../stores/org";
+import { useAuthStore } from "../stores/auth";
 
 // ─── router / message ───────────────────────────────────────────────────────
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
 
 // ─── query ───────────────────────────────────────────────────────────────────
 const { data: datasets, isLoading } = useQuery({
@@ -136,6 +138,17 @@ const createPreset = useMutation({
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to create preset");
+  },
+});
+
+const toggleDatasetPublic = useMutation({
+  mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+    api.toggleDatasetPublic(id, isPublic),
+  onSuccess: () => {
+    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to update visibility");
   },
 });
 
@@ -198,8 +211,20 @@ const columns = [
   {
     title: "Name",
     key: "name",
-    render: (row: Dataset) =>
-      h("span", { style: "font-weight: 500" }, row.name),
+    render: (row: Dataset) => {
+      const nodes = [h("span", { style: "font-weight: 500" }, row.name)];
+      if (row.is_public) {
+        nodes.push(
+          h(NTag, { type: "info", size: "small", style: "margin-left: 6px" }, { default: () => "Public" })
+        );
+      }
+      if (row.is_public && row.org_id !== orgStore.currentOrgId) {
+        nodes.push(
+          h("span", { style: "margin-left: 4px; font-size: 12px; color: #aaa" }, `(${row.org_name ?? "Other Org"})`)
+        );
+      }
+      return h("span", {}, nodes);
+    },
   },
   {
     title: "Task Type",
@@ -216,18 +241,38 @@ const columns = [
   {
     title: "Actions",
     key: "actions",
-    render: (row: Dataset) =>
-      h(
-        NButton,
-        {
-          size: "small",
-          onClick: (e: MouseEvent) => {
-            e.stopPropagation();
-            router.push(`/datasets/${row.id}`);
+    render: (row: Dataset) => {
+      const nodes = [
+        h(
+          NButton,
+          {
+            size: "small",
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation();
+              router.push(`/datasets/${row.id}`);
+            },
           },
-        },
-        { default: () => "View" }
-      ),
+          { default: () => "View" }
+        ),
+      ];
+      if (authStore.user?.is_superadmin === true && row.org_id === orgStore.currentOrgId) {
+        nodes.push(
+          h(
+            NButton,
+            {
+              size: "small",
+              style: "margin-left: 6px",
+              onClick: (e: MouseEvent) => {
+                e.stopPropagation();
+                toggleDatasetPublic.mutate({ id: row.id, isPublic: !row.is_public });
+              },
+            },
+            { default: () => (row.is_public ? "Make Private" : "Make Public") }
+          )
+        );
+      }
+      return h("span", {}, nodes);
+    },
   },
 ];
 

@@ -73,11 +73,13 @@ import { useMessage, NTag, NButton } from "naive-ui";
 import { api } from "../api";
 import type { TrainingJob, JobStatus } from "../types";
 import { useOrgStore } from "../stores/org";
+import { useAuthStore } from "../stores/auth";
 
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -154,6 +156,23 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
       ),
   },
   {
+    title: "Public",
+    key: "is_public",
+    width: 160,
+    render: (row) => {
+      const nodes = [];
+      if (row.is_public) {
+        nodes.push(h(NTag, { type: "info", size: "small" }, { default: () => "Public" }));
+      }
+      if (row.is_public && row.org_id !== orgStore.currentOrgId) {
+        nodes.push(
+          h("span", { style: "margin-left: 4px; font-size: 12px; color: #aaa" }, `(${row.org_name ?? "Other Org"})`)
+        );
+      }
+      return h("span", {}, nodes);
+    },
+  },
+  {
     title: "Dataset ID",
     key: "dataset_id",
     ellipsis: { tooltip: true },
@@ -174,19 +193,39 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 90,
-    render: (row) =>
-      h(
-        NButton,
-        {
-          size: "small",
-          onClick: (e: Event) => {
-            e.stopPropagation();
-            router.push("/jobs/" + row.id);
+    width: 180,
+    render: (row) => {
+      const nodes = [
+        h(
+          NButton,
+          {
+            size: "small",
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              router.push("/jobs/" + row.id);
+            },
           },
-        },
-        { default: () => "View" }
-      ),
+          { default: () => "View" }
+        ),
+      ];
+      if (authStore.user?.is_superadmin === true && row.org_id === orgStore.currentOrgId) {
+        nodes.push(
+          h(
+            NButton,
+            {
+              size: "small",
+              style: "margin-left: 6px",
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                toggleJobPublic.mutate({ id: row.id, isPublic: !row.is_public });
+              },
+            },
+            { default: () => (row.is_public ? "Make Private" : "Make Public") }
+          )
+        );
+      }
+      return h("span", {}, nodes);
+    },
   },
 ]);
 
@@ -222,6 +261,17 @@ const createJobMutation = useMutation({
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to start job");
+  },
+});
+
+const toggleJobPublic = useMutation({
+  mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+    api.toggleJobPublic(id, isPublic),
+  onSuccess: () => {
+    qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to update visibility");
   },
 });
 
