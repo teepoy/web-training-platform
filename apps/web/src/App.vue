@@ -27,6 +27,7 @@
             <n-layout vertical>
               <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
                 <span style="font-weight: 600; flex: 1">ML Training Platform</span>
+                <OrgSelector v-if="authStore.isAuthenticated" />
                 <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
                 <n-button tag="a" href="http://localhost:4200" target="_blank" text type="primary" size="small">
                   Prefect ↗
@@ -59,13 +60,18 @@
 import { computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
 import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
+import { useQueryClient } from '@tanstack/vue-query'
 import { useUiStore } from './stores/ui'
 import { useAuthStore } from './stores/auth'
+import { useOrgStore } from './stores/org'
+import OrgSelector from './components/OrgSelector.vue'
 
 const router = useRouter()
 const route = useRoute()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
+const orgStore = useOrgStore()
+const queryClient = useQueryClient()
 
 const AUTH_PATHS = ['/login', '/register']
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))
@@ -109,7 +115,14 @@ function handleAvatarSelect(key: string) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   authStore.initFromStorage()
+  orgStore.initFromStorage()
+  orgStore._queryClient = queryClient
+  try {
+    await orgStore.fetchOrganizations()
+  } catch {
+    // Not logged in yet — org fetch will happen after login
+  }
 })
 </script>

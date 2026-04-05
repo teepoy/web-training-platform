@@ -6,6 +6,7 @@ import type {
   DashboardResponse,
   Dataset,
   LoginResponse,
+  Organization,
   PaginatedResponse,
   LinkLsRequest,
   PredictionEdit,
@@ -476,6 +477,14 @@ export const api = {
   // ---- Dashboard ----
   getDashboard: () => req<DashboardResponse>('/dashboard'),
 };
+
+// ---------------------------------------------------------------------------
+// Organizations
+// ---------------------------------------------------------------------------
+
+export async function fetchOrganizations(): Promise<Organization[]> {
+  return req<Organization[]>('/organizations');
+}
 
 // ---------------------------------------------------------------------------
 // Auth functions
