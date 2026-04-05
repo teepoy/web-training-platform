@@ -16,6 +16,9 @@ export interface Dataset {
   task_spec: TaskSpec;
   created_at: string;
   ls_project_id?: string | null;
+  org_id?: string;
+  org_name?: string;
+  is_public?: boolean;
 }
 
 export interface Sample {
@@ -96,6 +99,9 @@ export interface TrainingJob {
   created_at: string;
   updated_at: string;
   artifact_refs: ArtifactRef[];
+  org_id?: string;
+  org_name?: string;
+  is_public?: boolean;
 }
 
 export interface PredictionResult {

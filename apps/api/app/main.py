@@ -41,6 +41,7 @@ from app.api.schemas import (
     RunResponse,
     ScheduleResponse,
     SampleWithLabels,
+    SetPublicRequest,
     SyncPredictionsResponse,
     TokenCreatedResponse,
     TokenResponse,
@@ -55,7 +56,7 @@ from app.api.schemas import (
 from app.api.deps import get_current_org, get_current_user, require_superadmin
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
-from app.db.models import OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, UserORM
+from app.db.models import DatasetORM, OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, TrainingJobORM, UserORM
 from app.db.session import init_db
 from app.domain.models import Annotation, Dataset, Organization, PredictionEdit, PredictionResult, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
@@ -948,6 +949,32 @@ async def update_embed_config(
     new_config = {"model": payload.model, "dimension": payload.dimension}
     await container.repository().update_dataset_embed_config(dataset_id, new_config)
     return new_config
+
+
+@app.patch("/api/v1/datasets/{dataset_id}/public")
+async def set_dataset_public(
+    dataset_id: str,
+    payload: SetPublicRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    await require_superadmin(current_user=current_user)
+    ok = await container.repository().set_dataset_public(dataset_id, payload.is_public)
+    if not ok:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    return {"ok": True}
+
+
+@app.patch("/api/v1/training-jobs/{job_id}/public")
+async def set_job_public(
+    job_id: str,
+    payload: SetPublicRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    await require_superadmin(current_user=current_user)
+    ok = await container.repository().set_job_public(job_id, payload.is_public)
+    if not ok:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

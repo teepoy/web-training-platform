@@ -110,6 +110,24 @@ class SqlRepository:
                 row.embed_config = embed_config
                 await session.commit()
 
+    async def set_dataset_public(self, dataset_id: str, is_public: bool) -> bool:
+        async with self.session_factory() as session:
+            row = await session.get(DatasetORM, dataset_id)
+            if row is None:
+                return False
+            row.is_public = is_public
+            await session.commit()
+            return True
+
+    async def set_job_public(self, job_id: str, is_public: bool) -> bool:
+        async with self.session_factory() as session:
+            row = await session.get(TrainingJobORM, job_id)
+            if row is None:
+                return False
+            row.is_public = is_public
+            await session.commit()
+            return True
+
     async def update_dataset_ls_project_id(self, dataset_id: str, ls_project_id: str) -> None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
@@ -475,7 +493,7 @@ class SqlRepository:
         async with self.session_factory() as session:
             stmt = select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc())
             if org_id is not None:
-                stmt = stmt.where(TrainingJobORM.org_id == org_id)
+                stmt = stmt.where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
@@ -500,7 +518,7 @@ class SqlRepository:
             row = await session.get(TrainingJobORM, job_id)
             if row is None:
                 return None
-            if org_id is not None and row.org_id != org_id:
+            if org_id is not None and row.org_id != org_id and not row.is_public:
                 return None
             arts = await self._list_artifacts_by_job_in_session(session, row.id)
             return TrainingJob(
@@ -830,7 +848,7 @@ class SqlRepository:
                 .where(TrainingJobORM.dataset_id == dataset_id)
             )
             if org_id is not None:
-                stmt = stmt.where(TrainingJobORM.org_id == org_id)
+                stmt = stmt.where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             return [ArtifactRef(id=r.id, uri=r.uri, kind=r.kind, metadata=r.metadata_json) for r in rows]
 

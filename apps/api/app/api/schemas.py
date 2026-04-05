@@ -316,3 +316,29 @@ class TokenCreatedResponse(BaseModel):
     name: str
     token: str
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Model asset schemas
+# ---------------------------------------------------------------------------
+
+
+class ModelAssetVersion(BaseModel):
+    id: str
+    uri: str
+    kind: str
+    metadata: dict = Field(default_factory=dict)
+    is_public: bool = False
+    org_name: str = ""
+
+
+class ModelAssetSummary(BaseModel):
+    dataset_id: str
+    total: int = 0
+    assets: list[ModelAssetVersion] = Field(default_factory=list)
+    is_public: bool = False
+    org_name: str = ""
+
+
+class SetPublicRequest(BaseModel):
+    is_public: bool
