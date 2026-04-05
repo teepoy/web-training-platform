@@ -25,3 +25,8 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class OrgRole(str, Enum):
+    ADMIN = "admin"
+    MEMBER = "member"

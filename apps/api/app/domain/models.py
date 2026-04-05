@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from app.domain.types import DatasetType, JobStatus, ModelFramework, ResultType, TaskType
+from app.domain.types import DatasetType, JobStatus, ModelFramework, OrgRole, ResultType, TaskType
 
 
 class ArtifactRef(BaseModel):
@@ -29,6 +29,7 @@ class Dataset(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     embed_config: dict = Field(default_factory=dict)
     ls_project_id: str | None = None
+    ls_project_url: str | None = None
 
 
 class Sample(BaseModel):
@@ -37,6 +38,7 @@ class Sample(BaseModel):
     image_uris: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     ls_task_id: int | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class Annotation(BaseModel):
@@ -101,3 +103,37 @@ class SampleFeature(BaseModel):
     embedding: list[float] = Field(default_factory=list)
     embed_model: str | None = None
     computed_at: datetime | None = None
+
+
+class User(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    email: str
+    name: str
+    is_superadmin: bool = False
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class Organization(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    slug: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class OrgMembership(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str
+    org_id: str
+    role: OrgRole
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class UserWithOrgs(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    email: str
+    name: str
+    is_superadmin: bool = False
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    organizations: list[OrgMembership] = Field(default_factory=list)
