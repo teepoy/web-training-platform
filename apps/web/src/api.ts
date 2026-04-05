@@ -56,15 +56,22 @@ async function req<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Auth header injection — no-op when token is null (scaffold)
   let authHeader: Record<string, string> = {};
   try {
     const authStore = useAuthStore();
     if (authStore.token) {
-      authHeader = { Authorization: `Bearer ${authStore.token}` };
+      authHeader["Authorization"] = `Bearer ${authStore.token}`;
     }
   } catch {
-    // Pinia not yet active (e.g. called outside Vue context) — skip auth
+  }
+
+  try {
+    const { useOrgStore } = await import("./stores/org");
+    const orgStore = useOrgStore();
+    if (orgStore.currentOrgId) {
+      authHeader["X-Organization-ID"] = orgStore.currentOrgId;
+    }
+  } catch {
   }
 
   try {
@@ -79,6 +86,20 @@ async function req<T>(
     });
 
     if (!r.ok) {
+      if (r.status === 401) {
+        try {
+          const authStore = useAuthStore();
+          authStore.logout();
+        } catch {
+          /* ignore */
+        }
+        try {
+          const { router } = await import("./router");
+          router.push("/login");
+        } catch {
+          /* ignore */
+        }
+      }
       let detail = `request failed: ${r.status}`;
       try {
         const body = await r.json();
@@ -106,8 +127,27 @@ async function req<T>(
 export async function uploadSampleImage(sampleId: string, file: File): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
+  const uploadHeaders: Record<string, string> = {};
+  try {
+    const authStore = useAuthStore();
+    if (authStore.token) {
+      uploadHeaders["Authorization"] = `Bearer ${authStore.token}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { useOrgStore } = await import("./stores/org");
+    const orgStore = useOrgStore();
+    if (orgStore.currentOrgId) {
+      uploadHeaders["X-Organization-ID"] = orgStore.currentOrgId;
+    }
+  } catch {
+    /* ignore */
+  }
   const r = await fetch(`${API_BASE}/samples/${sampleId}/upload`, {
     method: "POST",
+    headers: uploadHeaders,
     body: form,
   });
   if (!r.ok) {
@@ -544,5 +584,14 @@ export async function authMe(token: string): Promise<UserWithOrgs> {
 // ---------------------------------------------------------------------------
 
 export function buildJobEventSource(jobId: string): EventSource {
-  return new EventSource(`${API_BASE}/training-jobs/${jobId}/events`);
+  let tokenParam = "";
+  try {
+    const authStore = useAuthStore();
+    if (authStore.token) {
+      tokenParam = `?token=${encodeURIComponent(authStore.token)}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return new EventSource(`${API_BASE}/training-jobs/${jobId}/events${tokenParam}`);
 }
