@@ -15,6 +15,7 @@ from app.db.models import (
     PredictionORM,
     SampleFeatureORM,
     SampleORM,
+    ScheduleORM,
     TrainingEventORM,
     TrainingJobORM,
     TrainingPresetORM,
@@ -60,9 +61,12 @@ class SqlRepository:
             await session.commit()
         return dataset.model_copy(update={"org_id": org_id})
 
-    async def list_datasets(self) -> list[Dataset]:
+    async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
         async with self.session_factory() as session:
-            rows = (await session.execute(select(DatasetORM).order_by(DatasetORM.created_at.desc()))).scalars().all()
+            stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
+            if org_id is not None:
+                stmt = stmt.where(DatasetORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
             return [
                 Dataset(
                     id=r.id,
@@ -77,10 +81,12 @@ class SqlRepository:
                 for r in rows
             ]
 
-    async def get_dataset(self, dataset_id: str) -> Dataset | None:
+    async def get_dataset(self, dataset_id: str, org_id: str | None = None) -> Dataset | None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
             if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id:
                 return None
             return Dataset(
                 id=row.id,
@@ -383,9 +389,12 @@ class SqlRepository:
             await session.commit()
         return preset.model_copy(update={"org_id": org_id})
 
-    async def list_presets(self) -> list[TrainingPreset]:
+    async def list_presets(self, org_id: str | None = None) -> list[TrainingPreset]:
         async with self.session_factory() as session:
-            rows = (await session.execute(select(TrainingPresetORM))).scalars().all()
+            stmt = select(TrainingPresetORM)
+            if org_id is not None:
+                stmt = stmt.where(TrainingPresetORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
             return [
                 TrainingPreset(
                     id=r.id,
@@ -398,10 +407,12 @@ class SqlRepository:
                 for r in rows
             ]
 
-    async def get_preset(self, preset_id: str) -> TrainingPreset | None:
+    async def get_preset(self, preset_id: str, org_id: str | None = None) -> TrainingPreset | None:
         async with self.session_factory() as session:
             row = await session.get(TrainingPresetORM, preset_id)
             if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id:
                 return None
             return TrainingPreset(
                 id=row.id,
@@ -454,9 +465,12 @@ class SqlRepository:
             row = await session.get(TrainingJobORM, job_id)
             return None if row is None else row.external_job_id
 
-    async def list_jobs(self) -> list[TrainingJob]:
+    async def list_jobs(self, org_id: str | None = None) -> list[TrainingJob]:
         async with self.session_factory() as session:
-            rows = (await session.execute(select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc()))).scalars().all()
+            stmt = select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc())
+            if org_id is not None:
+                stmt = stmt.where(TrainingJobORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
                 arts = await self._list_artifacts_by_job_in_session(session, row.id)
@@ -475,10 +489,12 @@ class SqlRepository:
                 )
             return jobs
 
-    async def get_job(self, job_id: str) -> TrainingJob | None:
+    async def get_job(self, job_id: str, org_id: str | None = None) -> TrainingJob | None:
         async with self.session_factory() as session:
             row = await session.get(TrainingJobORM, job_id)
             if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id:
                 return None
             arts = await self._list_artifacts_by_job_in_session(session, row.id)
             return TrainingJob(
@@ -797,3 +813,76 @@ class SqlRepository:
                 # Sort by score descending, take top k
                 results.sort(key=lambda x: x["score"], reverse=True)
                 return results[:k]
+
+    async def list_model_assets(self, dataset_id: str, org_id: str | None = None) -> list[ArtifactRef]:
+        """Return artifact refs for all training jobs on dataset_id, optionally filtered by org_id."""
+        async with self.session_factory() as session:
+            stmt = (
+                select(ArtifactORM)
+                .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
+                .where(TrainingJobORM.dataset_id == dataset_id)
+            )
+            if org_id is not None:
+                stmt = stmt.where(TrainingJobORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
+            return [ArtifactRef(id=r.id, uri=r.uri, kind=r.kind, metadata=r.metadata_json) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Schedule CRUD
+    # ------------------------------------------------------------------
+
+    async def create_schedule(self, schedule: ScheduleORM) -> ScheduleORM:
+        async with self.session_factory() as session:
+            session.add(schedule)
+            await session.flush()
+            await session.refresh(schedule)
+            # Detach from session so the object can be used outside
+            session.expunge(schedule)
+            await session.commit()
+            return schedule
+
+    async def list_schedules(self, org_id: str) -> list[ScheduleORM]:
+        async with self.session_factory() as session:
+            stmt = (
+                select(ScheduleORM)
+                .where(ScheduleORM.org_id == org_id)
+                .order_by(ScheduleORM.created_at.desc())
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            # Expunge so callers can use them outside session
+            for row in rows:
+                session.expunge(row)
+            return list(rows)
+
+    async def get_schedule(self, schedule_id: str, org_id: str | None = None) -> ScheduleORM | None:
+        async with self.session_factory() as session:
+            row = await session.get(ScheduleORM, schedule_id)
+            if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id:
+                return None
+            session.expunge(row)
+            return row
+
+    async def update_schedule(self, schedule_id: str, **kwargs: object) -> ScheduleORM | None:
+        async with self.session_factory() as session:
+            row = await session.get(ScheduleORM, schedule_id)
+            if row is None:
+                return None
+            for key, value in kwargs.items():
+                setattr(row, key, value)
+            row.updated_at = _utcnow()
+            await session.flush()
+            await session.refresh(row)
+            session.expunge(row)
+            await session.commit()
+            return row
+
+    async def delete_schedule(self, schedule_id: str) -> bool:
+        async with self.session_factory() as session:
+            row = await session.get(ScheduleORM, schedule_id)
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
