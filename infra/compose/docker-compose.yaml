@@ -69,6 +69,8 @@ services:
       test:
         [
           "CMD",
+          "uv",
+          "run",
           "python",
           "-c",
           "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)",
@@ -98,7 +100,8 @@ services:
       PREFECT_API_URL: http://prefect-server:4200/api
       EMBEDDING_GRPC_TARGET: embedding:50051
       LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_API_KEY: ""
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
       LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -175,6 +178,8 @@ services:
       POSTGRE_PORT: "5432"
       LABEL_STUDIO_USERNAME: admin@example.com
       LABEL_STUDIO_PASSWORD: admin123
+      LABEL_STUDIO_USER_TOKEN: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
     ports:
       - "8080:8080"
     volumes:

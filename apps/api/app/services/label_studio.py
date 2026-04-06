@@ -169,6 +169,36 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
+    async def update_project(
+        self, project_id: int, *, label_config: str | None = None
+    ) -> dict:
+        """Update a Label Studio project.
+
+        Parameters
+        ----------
+        project_id:
+            Numeric Label Studio project ID.
+        label_config:
+            Optional new XML labeling configuration string.
+
+        Returns
+        -------
+        dict
+            Updated project object.
+        """
+        try:
+            kwargs: dict[str, Any] = {}
+            if label_config is not None:
+                kwargs["label_config"] = label_config
+            result = await asyncio.to_thread(
+                self._client.projects.update,
+                id=project_id,
+                **kwargs,
+            )
+            return _to_dict(result)
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
     # ------------------------------------------------------------------
     # Tasks
     # ------------------------------------------------------------------

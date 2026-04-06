@@ -21,6 +21,10 @@ class CreateDatasetRequest(BaseModel):
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
 
 
+class UpdateLabelSpaceRequest(BaseModel):
+    label_space: list[str]
+
+
 class CreateSampleRequest(BaseModel):
     image_uris: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
@@ -122,10 +126,6 @@ class RunLogResponse(BaseModel):
     level: int
     timestamp: str
     message: str
-
-
-class LinkLabelStudioRequest(BaseModel):
-    ls_project_id: str
 
 
 class BulkAnnotationItem(BaseModel):

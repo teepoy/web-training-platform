@@ -1,0 +1,50 @@
+/* Global reset and base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: transparent;
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Fix Naive UI input width - override HTML size attribute */
+.n-input__input-el,
+.n-input__textarea-el {
+  width: 100% !important;
+  background: transparent !important;
+}
+
+/* Ensure inputs don't have browser default white background */
+input,
+textarea,
+select,
+button {
+  background: inherit;
+  color: inherit;
+  border: none;
+  font: inherit;
+}

@@ -39,6 +39,9 @@ def load_config() -> DictConfig:
     ls_url = os.getenv("LABEL_STUDIO_URL")
     if ls_url:
         cfg.label_studio.url = ls_url
+    ls_external_url = os.getenv("LABEL_STUDIO_EXTERNAL_URL")
+    if ls_external_url:
+        cfg.label_studio.external_url = ls_external_url
     ls_api_key = os.getenv("LABEL_STUDIO_API_KEY")
     if ls_api_key:
         cfg.label_studio.api_key = ls_api_key

@@ -75,6 +75,13 @@
       />
       <n-button
         size="small"
+        @click="showAddLabelModal = true"
+        title="Add a new label to this dataset"
+      >
+        + Add Label
+      </n-button>
+      <n-button
+        size="small"
         :disabled="!bulkLabel || selectedIds.size === 0"
         @click="applyBulkLabel"
       >
@@ -90,6 +97,26 @@
         Submit {{ draftCount }} Annotations
       </n-button>
     </div>
+
+    <!-- Add Label Modal -->
+    <n-modal v-model:show="showAddLabelModal" preset="dialog" title="Add New Label">
+      <n-input
+        v-model:value="newLabelName"
+        placeholder="Enter label name"
+        @keyup.enter="addNewLabel"
+      />
+      <template #action>
+        <n-button @click="showAddLabelModal = false">Cancel</n-button>
+        <n-button
+          type="primary"
+          :loading="addLabelMutation.isPending.value"
+          :disabled="!newLabelName.trim()"
+          @click="addNewLabel"
+        >
+          Add
+        </n-button>
+      </template>
+    </n-modal>
 
     <!-- Table container -->
     <DnDProvider>
@@ -261,9 +288,9 @@ import {
 } from '@tanstack/vue-table'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { DnDProvider } from '@vue-dnd-kit/core'
-import { NButton, NText, NSlider, NDivider, NSelect, useMessage, useDialog, useThemeVars } from 'naive-ui'
+import { NButton, NText, NSlider, NDivider, NSelect, NModal, NInput, useMessage, useDialog, useThemeVars } from 'naive-ui'
 import { listSamplesWithLabels, api, bulkCreateAnnotations, syncAnnotationsToLs } from '../api'
-import type { SampleWithLabels, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult } from '../types'
+import type { SampleWithLabels, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult, Dataset } from '../types'
 import { resolveImageUris } from '../utils/imageAdapters'
 
 const route = useRoute()
@@ -833,6 +860,37 @@ function submitAnnotations() {
       })
     },
   })
+}
+
+// ─── Add Label ─────────────────────────────────────────────────────────────────
+
+const showAddLabelModal = ref(false)
+const newLabelName = ref('')
+
+const addLabelMutation = useMutation({
+  mutationFn: (newLabel: string) => {
+    const currentLabels = labelSpace.value
+    if (currentLabels.includes(newLabel)) {
+      throw new Error(`Label "${newLabel}" already exists`)
+    }
+    return api.updateLabelSpace(datasetId, [...currentLabels, newLabel])
+  },
+  onSuccess: (data: Dataset) => {
+    message.success(`Added label "${newLabelName.value}"`)
+    showAddLabelModal.value = false
+    newLabelName.value = ''
+    // Refetch dataset to get updated label space
+    datasetQuery.refetch()
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? 'Failed to add label')
+  },
+})
+
+function addNewLabel() {
+  const trimmed = newLabelName.value.trim()
+  if (!trimmed) return
+  addLabelMutation.mutate(trimmed)
 }
 
 onUnmounted(() => {

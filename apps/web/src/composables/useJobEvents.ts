@@ -1,7 +1,12 @@
-import { ref, computed, onUnmounted, isRef, watch, type Ref, type ComputedRef } from "vue";
+import { ref, computed, onUnmounted, onMounted, isRef, watch, type Ref, type ComputedRef } from "vue";
 import type { TrainingEvent } from "../types";
+import { useAuthStore } from "../stores/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
+
+// Retry interval for connecting when auth is not ready
+const AUTH_RETRY_MS = 500;
+const AUTH_MAX_RETRIES = 20; // 10 seconds max wait for auth
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
@@ -24,8 +29,11 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
 
   let es: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let authRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let backoffMs = BACKOFF_INITIAL_MS;
+  let authRetries = 0;
   let closed = false;
+  let mounted = false;
 
   const latestMetrics = computed<{ epoch: number; loss: number }[]>(() =>
     events.value
@@ -54,12 +62,20 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
     }
   }
 
+  function clearAuthRetryTimer() {
+    if (authRetryTimer !== null) {
+      clearTimeout(authRetryTimer);
+      authRetryTimer = null;
+    }
+  }
+
   function closeEs() {
     if (es !== null) {
       es.close();
       es = null;
     }
     clearReconnectTimer();
+    clearAuthRetryTimer();
   }
 
   function close() {
@@ -77,7 +93,46 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
     closeEs();
     status.value = "connecting";
 
-    const url = `${API_BASE}/training-jobs/${encodeURIComponent(id)}/events`;
+    // Check if auth token is available; if not, retry later
+    // (auth store may not be initialized yet on first render)
+    let token: string | null = null;
+    try {
+      const authStore = useAuthStore();
+      token = authStore.token;
+    } catch {
+      /* pinia not ready */
+    }
+
+    // Fallback: read directly from localStorage if store token is null
+    // This handles the race condition where the store hasn't been initialized yet
+    if (!token) {
+      try {
+        token = localStorage.getItem("auth_token");
+      } catch {
+        /* localStorage not available */
+      }
+    }
+
+    if (!token && authRetries < AUTH_MAX_RETRIES) {
+      // Auth not ready yet, retry after a short delay
+      authRetries++;
+      authRetryTimer = setTimeout(() => {
+        authRetryTimer = null;
+        if (!closed) {
+          connect();
+        }
+      }, AUTH_RETRY_MS);
+      return;
+    }
+
+    // Reset auth retry counter once we proceed
+    authRetries = 0;
+
+    // Build URL with token query param for SSE authentication
+    let url = `${API_BASE}/training-jobs/${encodeURIComponent(id)}/events`;
+    if (token) {
+      url += `?token=${encodeURIComponent(token)}`;
+    }
     es = new EventSource(url);
 
     es.onopen = () => {
@@ -137,12 +192,20 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
         closed = false;
         events.value = [];
         backoffMs = BACKOFF_INITIAL_MS;
-        connect();
+        authRetries = 0;
+        if (mounted) {
+          connect();
+        }
       }
     });
   }
 
-  connect();
+  // Start connection in onMounted to ensure App.vue's onMounted
+  // (which calls authStore.initFromStorage) has a chance to run first
+  onMounted(() => {
+    mounted = true;
+    connect();
+  });
 
   onUnmounted(() => {
     close();

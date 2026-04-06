@@ -2,7 +2,7 @@
 
 """Tests for Label Studio dataset hooks.
 
-Covers strict LS-always-on dataset creation and link-ls persistence.
+Covers strict LS-always-on dataset creation (LS project is mandatory).
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def _reset() -> None:
 
 
 def test_create_dataset_creates_ls_project() -> None:
-    """Creating a dataset should create and persist an LS project."""
+    """Creating a dataset should create and persist an LS project, and include ls_project_url."""
     mock_ls = MagicMock()
     mock_ls.create_project = AsyncMock(return_value={"id": 42, "title": "test-dataset-ls"})
 
@@ -44,6 +44,7 @@ def test_create_dataset_creates_ls_project() -> None:
         assert r.status_code == 200
         body = r.json()
         assert body["ls_project_id"] == "42"
+        assert body["ls_project_url"] == "http://localhost:8080/projects/42"
         mock_ls.create_project.assert_called_once()
     finally:
         _reset()
@@ -61,55 +62,3 @@ def test_create_dataset_fails_when_ls_fails() -> None:
         assert r.status_code == 502
     finally:
         _reset()
-
-
-# ---------------------------------------------------------------------------
-# test_link_ls_project
-# ---------------------------------------------------------------------------
-
-
-def test_link_ls_project() -> None:
-    """POST /api/v1/datasets/{id}/link-ls should persist the ls_project_id."""
-    mock_ls = MagicMock()
-    mock_ls.create_project = AsyncMock(return_value={"id": 42, "title": "test-dataset-ls"})
-
-    _override_ls(mock_ls)
-    try:
-        with TestClient(app) as c:
-            r = c.post("/api/v1/datasets", json=_DS_PAYLOAD)
-            assert r.status_code == 200
-            body = r.json()
-            assert body["ls_project_id"] == "42"
-            dataset_id = body["id"]
-
-            r2 = c.post(f"/api/v1/datasets/{dataset_id}/link-ls", json={"ls_project_id": "99"})
-            assert r2.status_code == 200
-            assert r2.json()["ls_project_id"] == "99"
-
-            r3 = c.get(f"/api/v1/datasets/{dataset_id}")
-            assert r3.status_code == 200
-            assert r3.json()["ls_project_id"] == "99"
-    finally:
-        _reset()
-
-
-# ---------------------------------------------------------------------------
-# test_link_ls_project_not_found
-# ---------------------------------------------------------------------------
-
-
-def test_link_ls_project_not_found() -> None:
-    """POST /api/v1/datasets/{id}/link-ls should return 404 for nonexistent dataset."""
-    mock_ls = MagicMock()
-    mock_ls.create_project = AsyncMock(return_value={"id": 42, "title": "test-dataset-ls"})
-
-    _override_ls(mock_ls)
-    try:
-        with TestClient(app) as c:
-            r = c.post(
-                "/api/v1/datasets/nonexistent-dataset-id-xyz/link-ls",
-                json={"ls_project_id": "1"},
-            )
-    finally:
-        _reset()
-    assert r.status_code == 404

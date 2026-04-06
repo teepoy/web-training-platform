@@ -44,6 +44,7 @@ import subprocess
 import sys
 
 from prefect import serve
+from prefect.runner import Runner
 
 from app.flows.drain_dataset import drain_dataset
 from app.flows.train_job import train_job  # noqa: F401 — register flow for V2 worker
@@ -52,11 +53,19 @@ from app.flows.train_job import train_job  # noqa: F401 — register flow for V2
 async def main() -> None:
     # Each flow gets a well-known deployment name.
     # UI-created schedules that use this deployment name will be executed.
-    drain_deploy = drain_dataset.to_deployment(
+    drain_deploy = await drain_dataset.ato_deployment(
         name="drain-dataset-deployment",
         description="Default deployment for drain-dataset flow (managed by flow-worker)",
     )
-    await serve(drain_deploy)
+    train_deploy = await train_job.ato_deployment(
+        name="train-job-deployment",
+        description="Default deployment for train-job flow (managed by flow-worker)",
+    )
+    # Use Runner for async context instead of serve()
+    runner = Runner(name="flow-worker")
+    await runner.aadd_deployment(drain_deploy)
+    await runner.aadd_deployment(train_deploy)
+    await runner.start()
 
 
 async def main_v2() -> None:

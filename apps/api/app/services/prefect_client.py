@@ -256,6 +256,65 @@ class PrefectClient:
         )
         return created["id"]
 
+    async def resolve_deployment_id(self, deployment_name: str) -> str | None:
+        """Look up a Prefect deployment by name.
+
+        Parameters
+        ----------
+        deployment_name:
+            Exact name of the deployment (e.g. ``"train-job-deployment"``).
+
+        Returns
+        -------
+        str | None
+            UUID of the deployment, or None if not found.
+        """
+        result = await self._request(
+            "POST",
+            "/deployments/filter",
+            json={
+                "deployments": {"name": {"any_": [deployment_name]}},
+                "limit": 1,
+            },
+        )
+        if result:
+            return result[0]["id"]
+        return None
+
+    async def create_flow_run_from_deployment(
+        self,
+        deployment_id: str,
+        parameters: dict,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        """Create a flow run from a deployment.
+
+        Parameters
+        ----------
+        deployment_id:
+            UUID of the Prefect deployment.
+        parameters:
+            Parameter values for the flow run.
+        idempotency_key:
+            Optional key to prevent duplicate submissions.
+
+        Returns
+        -------
+        dict
+            The created flow-run object returned by Prefect.
+        """
+        body: dict[str, Any] = {
+            "parameters": parameters,
+        }
+        if idempotency_key is not None:
+            body["idempotency_key"] = idempotency_key
+        return await self._request(
+            "POST",
+            f"/deployments/{deployment_id}/create_flow_run",
+            json=body,
+            resource_label="flow run",
+        )
+
     # ------------------------------------------------------------------
     # Flow run operations
     # ------------------------------------------------------------------

@@ -8,7 +8,6 @@ import type {
   LoginResponse,
   Organization,
   PaginatedResponse,
-  LinkLsRequest,
   RunLog,
   Sample,
   SampleWithLabels,
@@ -255,14 +254,6 @@ export interface JobMetricsResponse {
   metrics: Record<string, unknown>;
 }
 
-export function linkDatasetToLs(datasetId: string, body: LinkLsRequest) {
-  return req<Dataset>(`/datasets/${datasetId}/link-ls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 export function syncAnnotationsToLs(datasetId: string) {
   return req<SyncResult>(`/datasets/${datasetId}/sync-annotations-to-ls`, {
     method: "POST",
@@ -318,6 +309,12 @@ export const api = {
     }),
 
   getDataset: (id: string) => req<Dataset>(`/datasets/${id}`),
+
+  updateLabelSpace: (datasetId: string, labelSpace: string[]) =>
+    req<Dataset>(`/datasets/${datasetId}/label-space`, {
+      method: "PATCH",
+      body: JSON.stringify({ label_space: labelSpace }),
+    }),
 
   // ---- Samples ----
   listSamples: (datasetId: string, offset?: number, limit?: number) => {

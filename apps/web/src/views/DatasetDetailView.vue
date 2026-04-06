@@ -46,14 +46,6 @@
                 Label Studio Project #{{ dataset.ls_project_id }}
               </span>
             </n-tag>
-            <n-text v-if="!dataset.ls_project_url" depth="3" style="display: block; font-size: 12px; margin-top: 4px">
-              Linked project ID is saved, but the Label Studio URL is not configured on the server yet.
-            </n-text>
-          </div>
-          <div v-else style="margin-top: 4px">
-            <n-button size="tiny" @click="showLinkLsModal = true">
-              Link to Label Studio
-            </n-button>
           </div>
         </div>
         <n-button
@@ -124,24 +116,6 @@
               <n-button @click="showAddSampleModal = false">Cancel</n-button>
               <n-button type="primary" :loading="uploadingImage" @click="submitSample">
                 Create
-              </n-button>
-            </template>
-          </n-modal>
-
-          <!-- Link to Label Studio Modal -->
-          <n-modal v-model:show="showLinkLsModal" preset="dialog" title="Link to Label Studio Project" style="width: 400px">
-            <n-form-item label="Label Studio Project ID">
-              <n-input-number v-model:value="linkLsProjectId" :min="1" placeholder="Enter LS project ID" style="width: 100%" />
-            </n-form-item>
-            <template #action>
-              <n-button @click="showLinkLsModal = false">Cancel</n-button>
-              <n-button
-                type="primary"
-                :loading="linkLsMutation.isPending.value"
-                :disabled="!linkLsProjectId"
-                @click="submitLinkLs"
-              >
-                Link
               </n-button>
             </template>
           </n-modal>
@@ -313,22 +287,9 @@
           <template v-else>
             <n-result
               status="info"
-              title="Label Studio Not Configured"
-              description="This dataset does not have a Label Studio project URL configured."
-            >
-              <template #footer>
-                <n-button
-                  v-if="!dataset?.ls_project_id"
-                  size="small"
-                  @click="showLinkLsModal = true"
-                >
-                  Link to Label Studio
-                </n-button>
-                <n-text v-else depth="3">
-                  Project #{{ dataset.ls_project_id }} is linked, but the Label Studio URL is not set on the server.
-                </n-text>
-              </template>
-            </n-result>
+              title="Label Studio URL Not Configured"
+              description="The server does not have a Label Studio URL configured. Contact your administrator."
+            />
           </template>
         </n-tab-pane>
       </n-tabs>
@@ -349,10 +310,10 @@
 import { ref, computed, h, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, type FormInst, type FormRules, type DataTableColumns, NImage, NImageGroup, NTag, NInputNumber } from "naive-ui";
-import { api, linkDatasetToLs } from "../api";
+import { useMessage, type FormInst, type FormRules, type DataTableColumns, NImage, NImageGroup, NTag } from "naive-ui";
+import { api } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
-import type { Sample, Dataset, LinkLsRequest } from "../types";
+import type { Sample, Dataset } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
 import type { DatasetExport, ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 
@@ -489,8 +450,6 @@ const sampleColumns = computed<DataTableColumns<Sample>>(() => [
 
 // Add Sample form
 const showAddSampleModal = ref(false);
-const showLinkLsModal = ref(false);
-const linkLsProjectId = ref<number | null>(null);
 
 // Row props for clickable sample rows
 const rowProps = (row: Sample) => ({
@@ -537,25 +496,6 @@ const createSampleMutation = useMutation({
     message.error(`Failed to create sample: ${e.message}`);
   },
 });
-
-const linkLsMutation = useMutation({
-  mutationFn: (body: LinkLsRequest) => linkDatasetToLs(id.value, body),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["dataset", id.value] });
-    showLinkLsModal.value = false;
-    linkLsProjectId.value = null;
-    message.success("Dataset linked to Label Studio");
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to link to Label Studio");
-  },
-});
-
-function submitLinkLs() {
-  if (linkLsProjectId.value) {
-    linkLsMutation.mutate({ ls_project_id: linkLsProjectId.value });
-  }
-}
 
 function submitSample() {
   sampleFormRef.value?.validate(async (errors) => {

@@ -85,8 +85,19 @@ ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
 	cd $(SDK_DIR) && uv run ftctl $(ARGS)
 
 # ──────────────────────────────────────────────
+# Seed data
+# ──────────────────────────────────────────────
+
+.PHONY: seed
+seed: ## Seed Oxford Flowers 102 dataset (requires running compose stack)
+	uv run scripts/seed_oxford_flowers.py --compose-file $(COMPOSE) $(ARGS)
+
+# ──────────────────────────────────────────────
 # Docker / Infra
 # ──────────────────────────────────────────────
+.PHONY: build
+build:
+	docker compose -f $(COMPOSE) build
 
 .PHONY: up
 up: ## Start Compose stack (Postgres + MinIO + API)

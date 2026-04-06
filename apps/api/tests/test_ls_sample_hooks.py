@@ -104,17 +104,14 @@ def test_create_sample_no_ls_project_returns_500() -> None:
             ds = c.post("/api/v1/datasets", json=_DS_PAYLOAD)
             assert ds.status_code == 502  # strict enforcement
 
-            # We need a dataset without ls_project_id. Use link-ls to create one,
-            # or create with a mock that returns a dataset without ls_project_id.
-            # Reset config to something that won't fail at dataset creation level
+            # We need a dataset without ls_project_id to test sample creation
+            # against it. Since strict enforcement means create_dataset always
+            # creates an LS project, we mock get_dataset below to return one
+            # without ls_project_id.
             _reset_container_overrides()
 
-            # Create dataset without LS by patching container to have a no-op LS client for creation
-            # Actually, the simplest approach: create dataset normally then test sample creation
-            # against a dataset that has no ls_project_id by using the link-ls endpoint to clear it.
-            # Better: just use the real local-smoke config which doesn't have LS enforcement
-            # Wait — with strict enforcement, create_dataset ALWAYS creates LS project.
-            # So we need to mock get_dataset to return a dataset without ls_project_id.
+            # Since strict enforcement means create_dataset always creates an
+            # LS project, we mock get_dataset below to return a dataset without one.
             pass
 
         # Use mocked repository to test the sample creation path

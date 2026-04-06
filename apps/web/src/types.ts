@@ -15,6 +15,7 @@ export interface Dataset {
   task_spec: TaskSpec;
   created_at: string;
   ls_project_id?: string | null;
+  ls_project_url?: string | null;
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
@@ -160,10 +161,6 @@ export interface SyncResult {
   synced_count: number;
   skipped_count?: number;
   errors: string[];
-}
-
-export interface LinkLsRequest {
-  ls_project_id: number;
 }
 
 export interface BulkAnnotationItem {

@@ -1,14 +1,12 @@
-"""PrefectWorkPoolEngine — TrainingExecutionEngine backed by Prefect work pools.
+"""PrefectWorkPoolEngine — TrainingExecutionEngine backed by Prefect deployments.
 
 This module implements the :class:`~app.domain.interfaces.TrainingExecutionEngine`
-Protocol using direct Prefect flow run submission (no deployments).  All Prefect
-communication is delegated to :class:`~app.services.prefect_client.PrefectClient`
-via plain httpx REST calls — no ``prefect`` Python SDK is imported here.
+Protocol using Prefect deployments. Flow runs are submitted via a pre-registered
+deployment (``train-job-deployment``) which the flow-worker serves.
 
 Design notes
 ------------
-- Work pool is lazily ensured on first ``submit()`` call.
-- Flow ID is resolved (and auto-created) per submission via ``resolve_flow_id``.
+- Deployment must be registered by the flow-worker before jobs can be submitted.
 - ``stream_events`` polls the Prefect API every 2 seconds, yielding state
   transitions and new log lines until the run reaches a terminal state.
 - ``collect_artifacts`` returns placeholder S3 URIs matching the
@@ -44,20 +42,22 @@ _TERMINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}
 
 
 class PrefectWorkPoolEngine:
-    """Training engine that submits flow runs to a Prefect work pool.
+    """Training engine that submits flow runs via a Prefect deployment.
 
     Parameters
     ----------
     prefect_client:
         Configured :class:`PrefectClient` instance.
     work_pool_name:
-        Name of the Prefect work pool to create/use.
+        Name of the Prefect work pool (kept for compatibility, not used).
     work_pool_type:
-        Work pool type (e.g. ``"process"`` or ``"kubernetes"``).
+        Work pool type (kept for compatibility, not used).
     flow_name:
-        Name of the Prefect flow to register and run.
+        Name of the Prefect flow (kept for compatibility, not used).
+    deployment_name:
+        Name of the deployment to submit runs to (default: ``train-job-deployment``).
     concurrency_limit:
-        Maximum concurrent flow runs on the work pool (default 1).
+        Maximum concurrent flow runs (kept for compatibility, not used).
     """
 
     def __init__(
@@ -66,35 +66,43 @@ class PrefectWorkPoolEngine:
         work_pool_name: str,
         work_pool_type: str,
         flow_name: str,
+        deployment_name: str = "train-job-deployment",
         concurrency_limit: int = 1,
     ) -> None:
         self._client = prefect_client
         self._pool_name = work_pool_name
         self._pool_type = work_pool_type
         self._flow_name = flow_name
+        self._deployment_name = deployment_name
         self._concurrency_limit = concurrency_limit
-        self._pool_ensured: bool = False
+        self._deployment_id: str | None = None
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _ensure_pool(self) -> None:
-        """Create or verify the work pool on first use."""
-        if not self._pool_ensured:
-            await self._client.ensure_work_pool(
-                self._pool_name,
-                self._pool_type,
-                self._concurrency_limit,
-            )
-            self._pool_ensured = True
+    async def _ensure_deployment(self) -> str:
+        """Resolve the deployment ID, caching it for subsequent calls.
+        
+        Raises HTTPException if deployment is not found.
+        """
+        if self._deployment_id is None:
+            self._deployment_id = await self._client.resolve_deployment_id(self._deployment_name)
+            if self._deployment_id is None:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Deployment '{self._deployment_name}' not found. "
+                           "The flow-worker may not be running.",
+                )
+        return self._deployment_id
 
     # ------------------------------------------------------------------
     # TrainingExecutionEngine Protocol implementation
     # ------------------------------------------------------------------
 
     async def submit(self, job: TrainingJob) -> str:
-        """Submit a training job as a Prefect flow run.
+        """Submit a training job as a Prefect flow run via deployment.
 
         Parameters
         ----------
@@ -106,13 +114,10 @@ class PrefectWorkPoolEngine:
         str
             The Prefect flow-run UUID (used as ``external_job_id``).
         """
-        await self._ensure_pool()
+        deployment_id = await self._ensure_deployment()
 
-        flow_id = await self._client.resolve_flow_id(self._flow_name)
-
-        run = await self._client.create_flow_run(
-            flow_id=flow_id,
-            work_pool_name=self._pool_name,
+        run = await self._client.create_flow_run_from_deployment(
+            deployment_id=deployment_id,
             parameters={
                 "job_id": job.id,
                 "dataset_id": job.dataset_id,

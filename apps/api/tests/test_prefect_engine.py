@@ -20,9 +20,8 @@ from app.services.prefect_engine import PrefectWorkPoolEngine
 def mock_client() -> AsyncMock:
     """Return a fully mocked PrefectClient with sensible defaults."""
     client = AsyncMock()
-    client.ensure_work_pool = AsyncMock()
-    client.resolve_flow_id = AsyncMock(return_value="flow-uuid-1")
-    client.create_flow_run = AsyncMock(return_value={"id": "run-uuid-1"})
+    client.resolve_deployment_id = AsyncMock(return_value="deploy-uuid-1")
+    client.create_flow_run_from_deployment = AsyncMock(return_value={"id": "run-uuid-1"})
     client.get_flow_run = AsyncMock(return_value={
         "id": "run-uuid-1",
         "state": {"type": "SCHEDULED"},
@@ -41,6 +40,7 @@ def engine(mock_client: AsyncMock) -> PrefectWorkPoolEngine:
         work_pool_name="test-pool",
         work_pool_type="process",
         flow_name="train-job",
+        deployment_name="train-job-deployment",
         concurrency_limit=1,
     )
 
@@ -57,31 +57,50 @@ def sample_job() -> TrainingJob:
 
 @pytest.mark.asyncio
 async def test_submit(engine: PrefectWorkPoolEngine, mock_client: AsyncMock, sample_job: TrainingJob) -> None:
-    """submit() ensures pool, resolves flow, creates run, returns run ID."""
+    """submit() resolves deployment and creates run via deployment."""
     result = await engine.submit(sample_job)
 
     assert result == "run-uuid-1"
-    mock_client.ensure_work_pool.assert_awaited_once_with("test-pool", "process", 1)
-    mock_client.resolve_flow_id.assert_awaited_once_with("train-job")
-    mock_client.create_flow_run.assert_awaited_once()
+    mock_client.resolve_deployment_id.assert_awaited_once_with("train-job-deployment")
+    mock_client.create_flow_run_from_deployment.assert_awaited_once()
     # Verify parameters passed
-    call_kwargs = mock_client.create_flow_run.call_args
-    assert call_kwargs.kwargs["flow_id"] == "flow-uuid-1"
-    assert call_kwargs.kwargs["work_pool_name"] == "test-pool"
+    call_kwargs = mock_client.create_flow_run_from_deployment.call_args
+    assert call_kwargs.kwargs["deployment_id"] == "deploy-uuid-1"
     assert call_kwargs.kwargs["parameters"]["job_id"] == "job-1"
 
 
 @pytest.mark.asyncio
-async def test_submit_pool_ensured_once(engine: PrefectWorkPoolEngine, mock_client: AsyncMock, sample_job: TrainingJob) -> None:
-    """Pool should only be ensured once across multiple submits."""
-    mock_client.create_flow_run.side_effect = [
+async def test_submit_deployment_cached(engine: PrefectWorkPoolEngine, mock_client: AsyncMock, sample_job: TrainingJob) -> None:
+    """Deployment ID should only be resolved once across multiple submits."""
+    mock_client.create_flow_run_from_deployment.side_effect = [
         {"id": "run-1"},
         {"id": "run-2"},
     ]
     await engine.submit(sample_job)
     await engine.submit(sample_job)
 
-    assert mock_client.ensure_work_pool.await_count == 1
+    # Deployment ID should be resolved only once (cached)
+    assert mock_client.resolve_deployment_id.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_submit_deployment_not_found(mock_client: AsyncMock, sample_job: TrainingJob) -> None:
+    """submit() raises HTTPException when deployment is not found."""
+    mock_client.resolve_deployment_id.return_value = None
+    engine = PrefectWorkPoolEngine(
+        prefect_client=mock_client,
+        work_pool_name="test-pool",
+        work_pool_type="process",
+        flow_name="train-job",
+        deployment_name="missing-deployment",
+    )
+    
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc_info:
+        await engine.submit(sample_job)
+    
+    assert exc_info.value.status_code == 503
+    assert "missing-deployment" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

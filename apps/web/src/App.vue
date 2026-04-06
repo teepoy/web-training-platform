@@ -76,7 +76,11 @@ const queryClient = useQueryClient()
 const AUTH_PATHS = ['/login', '/register']
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))
 
-const computedTheme = computed(() => uiStore.darkMode ? darkTheme : null)
+// Always use dark theme for auth pages (they have dark gradient background)
+const computedTheme = computed(() => {
+  if (isAuthPage.value) return darkTheme
+  return uiStore.darkMode ? darkTheme : null
+})
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {

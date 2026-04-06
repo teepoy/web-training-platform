@@ -155,6 +155,7 @@ def _mock_ls_client(request):
 
     _mock_ls = MagicMock()
     _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.update_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
     _mock_ls.create_task = AsyncMock(return_value={"id": 1})
     _mock_ls.create_annotation = AsyncMock(return_value={"id": 0, "task": 0, "result": []})
     _mock_ls.list_tasks = AsyncMock(return_value=([], 0))

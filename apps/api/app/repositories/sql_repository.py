@@ -119,6 +119,26 @@ class SqlRepository:
                 row.embed_config = embed_config
                 await session.commit()
 
+    async def update_dataset_task_spec(self, dataset_id: str, task_spec: dict) -> Dataset | None:
+        async with self.session_factory() as session:
+            row = await session.get(DatasetORM, dataset_id)
+            if row is None:
+                return None
+            row.task_spec = task_spec
+            await session.commit()
+            return Dataset(
+                id=row.id,
+                org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
+                name=row.name,
+                dataset_type=row.dataset_type,
+                task_spec=row.task_spec,
+                is_public=row.is_public,
+                created_at=row.created_at,
+                embed_config=row.embed_config or {},
+                ls_project_id=row.ls_project_id,
+            )
+
     async def set_dataset_public(self, dataset_id: str, is_public: bool) -> bool:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
@@ -136,13 +156,6 @@ class SqlRepository:
             row.is_public = is_public
             await session.commit()
             return True
-
-    async def update_dataset_ls_project_id(self, dataset_id: str, ls_project_id: str) -> None:
-        async with self.session_factory() as session:
-            row = await session.get(DatasetORM, dataset_id)
-            if row is not None:
-                row.ls_project_id = ls_project_id
-                await session.commit()
 
     async def create_sample(self, sample: Sample) -> Sample:
         async with self.session_factory() as session:
@@ -433,6 +446,8 @@ class SqlRepository:
                     user_id=user_id,
                 )
             )
+            # Flush the job insert before creating the dependent JobUserState row
+            await session.flush()
             session.add(JobUserStateORM(job_id=job.id, user_left=False))
             await session.commit()
         return job.model_copy(update={"org_id": org_id, "org_name": org_name})

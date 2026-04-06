@@ -17,5 +17,9 @@ notification:
   webhook:
     endpoint: "http://localhost:9000/hooks/training"
 
+label_studio:
+  url: "http://localhost:8080"
+  external_url: "http://localhost:8080"
+
 oauth:
   enabled: false

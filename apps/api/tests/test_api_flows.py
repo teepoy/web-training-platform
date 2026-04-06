@@ -54,6 +54,41 @@ def test_get_dataset_detail_not_found() -> None:
         assert r.json()["detail"] == "Dataset not found"
 
 
+def test_update_label_space() -> None:
+    with TestClient(app) as c:
+        # Create dataset with initial labels
+        created = c.post(
+            "/api/v1/datasets",
+            json={"name": "label-update-ds", "task_spec": {"task_type": "classification", "label_space": ["cat", "dog"]}},
+        )
+        assert created.status_code == 200
+        dataset_id = created.json()["id"]
+        assert created.json()["task_spec"]["label_space"] == ["cat", "dog"]
+
+        # Add a new label
+        r = c.patch(
+            f"/api/v1/datasets/{dataset_id}/label-space",
+            json={"label_space": ["cat", "dog", "bird"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task_spec"]["label_space"] == ["cat", "dog", "bird"]
+
+        # Verify the change persisted
+        r = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert r.status_code == 200
+        assert r.json()["task_spec"]["label_space"] == ["cat", "dog", "bird"]
+
+
+def test_update_label_space_not_found() -> None:
+    with TestClient(app) as c:
+        r = c.patch(
+            "/api/v1/datasets/nonexistent-id-12345/label-space",
+            json={"label_space": ["a", "b"]},
+        )
+        assert r.status_code == 404
+
+
 def test_get_preset_detail() -> None:
     with TestClient(app) as c:
         created = c.post(

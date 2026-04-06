@@ -25,7 +25,6 @@ from app.api.schemas import (
     DashboardResponse,
     JobQueueStats,
     LatestAnnotation,
-    LinkLabelStudioRequest,
     LoginRequest,
     LoginResponse,
     MemberResponse,
@@ -43,6 +42,7 @@ from app.api.schemas import (
     TokenResponse,
     UpdateAnnotationRequest,
     UpdateEmbedConfigRequest,
+    UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
     UpdateScheduleRequest,
     UserResponse,
@@ -86,6 +86,21 @@ def _make_ls_image_url(uri: str) -> str:
     return uri  # data: URIs and http:// pass through
 
 
+def _with_ls_url(dataset: Dataset) -> Dataset:
+    """Compute ls_project_url at response time from config.
+    
+    Uses external_url (browser-facing) if available, falls back to url (internal).
+    """
+    cfg = container.config()
+    # Prefer external_url for browser access, fall back to internal url
+    ls_url = str(cfg.label_studio.external_url or cfg.label_studio.url).rstrip("/")
+    if dataset.ls_project_id and ls_url:
+        return dataset.model_copy(
+            update={"ls_project_url": f"{ls_url}/projects/{dataset.ls_project_id}"}
+        )
+    return dataset
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -114,7 +129,7 @@ async def create_dataset(
         raise HTTPException(status_code=502, detail=f"Label Studio project creation failed: {exc}")
     dataset = Dataset(name=payload.name, task_spec=payload.task_spec, org_id=org.id, ls_project_id=ls_project_id)
     dataset = await container.repository().create_dataset(dataset)
-    return dataset
+    return _with_ls_url(dataset)
 
 
 @app.get("/api/v1/datasets", response_model=list[Dataset])
@@ -122,7 +137,8 @@ async def list_datasets(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> list[Dataset]:
-    return await container.repository().list_datasets(org_id=org.id)
+    datasets = await container.repository().list_datasets(org_id=org.id)
+    return [_with_ls_url(d) for d in datasets]
 
 
 @app.get("/api/v1/datasets/{dataset_id}", response_model=Dataset)
@@ -134,21 +150,40 @@ async def get_dataset(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return dataset
+    return _with_ls_url(dataset)
 
 
-@app.post("/api/v1/datasets/{dataset_id}/link-ls", response_model=Dataset)
-async def link_label_studio(
+@app.patch("/api/v1/datasets/{dataset_id}/label-space", response_model=Dataset)
+async def update_label_space(
     dataset_id: str,
-    payload: LinkLabelStudioRequest,
+    payload: UpdateLabelSpaceRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> Dataset:
+    """Update the label space for a dataset. Also updates the Label Studio project config."""
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    await container.repository().update_dataset_ls_project_id(dataset_id, payload.ls_project_id)
-    return (await container.repository().get_dataset(dataset_id, org_id=org.id))
+
+    # Update Label Studio project config with new labels
+    if dataset.ls_project_id:
+        try:
+            from app.services.label_studio import LabelStudioClient as _LSC
+            ls_client = container.label_studio_client()
+            label_config = _LSC.generate_image_classification_config(payload.label_space)
+            await ls_client.update_project(int(dataset.ls_project_id), label_config=label_config)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to update Label Studio project: {exc}")
+
+    # Update the task_spec with the new label_space
+    new_task_spec = {
+        "task_type": dataset.task_spec.task_type,
+        "label_space": payload.label_space,
+    }
+    updated = await container.repository().update_dataset_task_spec(dataset_id, new_task_spec)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return _with_ls_url(updated)
 
 
 @app.post("/api/v1/datasets/{dataset_id}/samples", response_model=Sample)

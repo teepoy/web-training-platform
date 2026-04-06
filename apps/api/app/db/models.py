@@ -24,7 +24,7 @@ class DatasetORM(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     embed_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    ls_project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ls_project_id: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
 class SampleORM(Base):

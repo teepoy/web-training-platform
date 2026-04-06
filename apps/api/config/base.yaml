@@ -55,6 +55,7 @@ embedding:
 
 label_studio:
   url: ""
+  external_url: ""
   api_key: ""
   database_url: ""
 
