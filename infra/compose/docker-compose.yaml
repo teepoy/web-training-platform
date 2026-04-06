@@ -121,6 +121,16 @@ services:
     command: ["uv", "run", "python", "-m", "app.flows.serve"]
     restart: on-failure
 
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+    restart: on-failure
+
   label-studio:
     image: heartexlabs/label-studio:latest
     profiles:

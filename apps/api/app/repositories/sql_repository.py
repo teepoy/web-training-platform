@@ -44,6 +44,13 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
+    if not org_id:
+        return ""
+    org_row = await session.get(OrganizationORM, org_id)
+    return "" if org_row is None else org_row.name
+
+
 class SqlRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
@@ -51,19 +58,21 @@ class SqlRepository:
     async def create_dataset(self, dataset: Dataset, org_id: str | None = None) -> Dataset:
         org_id = org_id or dataset.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
+            org_name = await _org_name_for(session, org_id)
             row = DatasetORM(
                 id=dataset.id,
                 org_id=org_id,
                 name=dataset.name,
                 dataset_type=dataset.dataset_type.value,
                 task_spec=dataset.task_spec.model_dump(mode="json"),
+                is_public=dataset.is_public,
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
                 ls_project_id=dataset.ls_project_id,
             )
             session.add(row)
             await session.commit()
-        return dataset.model_copy(update={"org_id": org_id})
+        return dataset.model_copy(update={"org_id": org_id, "org_name": org_name})
 
     async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
         async with self.session_factory() as session:
@@ -75,9 +84,11 @@ class SqlRepository:
                 Dataset(
                     id=r.id,
                     org_id=r.org_id,
+                    org_name=await _org_name_for(session, r.org_id),
                     name=r.name,
                     dataset_type=r.dataset_type,
                     task_spec=r.task_spec,
+                    is_public=r.is_public,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
                     ls_project_id=r.ls_project_id,
@@ -95,9 +106,11 @@ class SqlRepository:
             return Dataset(
                 id=row.id,
                 org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
                 name=row.name,
                 dataset_type=row.dataset_type,
                 task_spec=row.task_spec,
+                is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
                 ls_project_id=row.ls_project_id,
@@ -449,6 +462,7 @@ class SqlRepository:
     async def create_job(self, job: TrainingJob, org_id: str | None = None, user_id: str | None = None) -> TrainingJob:
         org_id = org_id or job.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
+            org_name = await _org_name_for(session, org_id)
             session.add(
                 TrainingJobORM(
                     id=job.id,
@@ -456,6 +470,7 @@ class SqlRepository:
                     dataset_id=job.dataset_id,
                     preset_id=job.preset_id,
                     status=job.status.value,
+                    is_public=job.is_public,
                     created_by=job.created_by,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
@@ -464,7 +479,7 @@ class SqlRepository:
             )
             session.add(JobUserStateORM(job_id=job.id, user_left=False))
             await session.commit()
-        return job.model_copy(update={"org_id": org_id})
+        return job.model_copy(update={"org_id": org_id, "org_name": org_name})
 
     async def set_job_external_id(self, job_id: str, external_job_id: str) -> None:
         async with self.session_factory() as session:
@@ -502,10 +517,12 @@ class SqlRepository:
                     TrainingJob(
                         id=row.id,
                         org_id=row.org_id,
+                        org_name=await _org_name_for(session, row.org_id),
                         dataset_id=row.dataset_id,
                         preset_id=row.preset_id,
                         status=row.status,
                         created_by=row.created_by,
+                        is_public=row.is_public,
                         created_at=row.created_at,
                         updated_at=row.updated_at,
                         artifact_refs=arts,
@@ -524,10 +541,12 @@ class SqlRepository:
             return TrainingJob(
                 id=row.id,
                 org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
                 dataset_id=row.dataset_id,
                 preset_id=row.preset_id,
                 status=row.status,
                 created_by=row.created_by,
+                is_public=row.is_public,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 artifact_refs=arts,
