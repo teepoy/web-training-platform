@@ -32,7 +32,7 @@ def upgrade() -> None:
             sa.text(
                 f"INSERT INTO users (id, email, name, hashed_password, is_superadmin, is_active, created_at) "
                 f"VALUES ('{SUPERADMIN_USER_ID}', '{SUPERADMIN_EMAIL}', '{SUPERADMIN_NAME}', "
-                f"'{SUPERADMIN_HASHED_PASSWORD}', 1, 1, '{created_at}')"
+                f"'{SUPERADMIN_HASHED_PASSWORD}', TRUE, TRUE, '{created_at}')"
             )
         )
     except IntegrityError:

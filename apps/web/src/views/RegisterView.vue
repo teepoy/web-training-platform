@@ -54,6 +54,9 @@ const router = useRouter()
 const message = useMessage()
 const authStore = useAuthStore()
 
+import { useOrgStore } from '../stores/org'
+const orgStore = useOrgStore()
+
 const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
 
@@ -78,6 +81,7 @@ async function handleSubmit() {
   loading.value = true
   try {
     await authStore.register(formData.value.name, formData.value.email, formData.value.password)
+    await orgStore.fetchOrganizations()
     router.push('/datasets')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Registration failed'

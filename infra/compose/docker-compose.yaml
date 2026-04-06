@@ -45,7 +45,13 @@ services:
     command: ["prefect", "server", "start", "--host", "0.0.0.0"]
     restart: on-failure
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -60,7 +66,13 @@ services:
     environment:
       GRPC_PORT: "50051"
     healthcheck:
-      test: ["CMD", "python", "-c", "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -83,7 +95,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
       PREFECT_API_URL: http://prefect-server:4200/api
       EMBEDDING_GRPC_TARGET: embedding:50051
-      LABEL_STUDIO_URL: ""
+      LABEL_STUDIO_URL: "http://label-studio:8080"
       LABEL_STUDIO_API_KEY: ""
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -91,7 +103,20 @@ services:
       MINIO_BUCKET: finetune-artifacts
     ports:
       - "8000:8000"
-    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../libs/python-sdk:/app/libs/python-sdk
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
 
   flow-worker:
     build:

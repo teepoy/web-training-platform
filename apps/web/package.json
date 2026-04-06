@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.66.9",
+    "@tanstack/vue-table": "^8.21.3",
+    "@tanstack/vue-virtual": "^3.13.23",
+    "@vue-dnd-kit/core": "^2.4.4",
     "echarts": "^6.0.0",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.1",

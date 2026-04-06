@@ -116,13 +116,15 @@ function handleAvatarSelect(key: string) {
 }
 
 onMounted(async () => {
-  authStore.initFromStorage()
+  await authStore.initFromStorage()
   orgStore.initFromStorage()
   orgStore._queryClient = queryClient
-  try {
-    await orgStore.fetchOrganizations()
-  } catch {
-    // Not logged in yet — org fetch will happen after login
+  if (authStore.isAuthenticated) {
+    try {
+      await orgStore.fetchOrganizations()
+    } catch {
+      // org fetch will happen after login
+    }
   }
 })
 </script>
