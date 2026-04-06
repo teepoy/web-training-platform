@@ -8,9 +8,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def _make_config(enabled: bool, url: str = "http://label-studio:8080") -> MagicMock:
+def _make_config(url: str = "http://label-studio:8080") -> MagicMock:
     cfg = MagicMock()
-    cfg.label_studio.enabled = enabled
     cfg.label_studio.url = url
     cfg.label_studio.api_key = "fake-key"
     return cfg
@@ -22,8 +21,8 @@ def _make_storage() -> AsyncMock:
     return storage
 
 
-def test_http_uri_allowed_when_ls_enabled() -> None:
-    mock_config = _make_config(True)
+def test_http_uri_allowed_when_ls_url_matches() -> None:
+    mock_config = _make_config("http://label-studio:8080")
     mock_response = MagicMock()
     mock_response.content = b"\x89PNG\r\n\x1a\nimage-bytes"
     mock_response.headers = {"content-type": "image/png"}
@@ -49,8 +48,8 @@ def test_http_uri_allowed_when_ls_enabled() -> None:
     assert r.headers["content-type"] == "image/png"
 
 
-def test_http_uri_rejected_when_ls_disabled() -> None:
-    mock_config = _make_config(False)
+def test_http_uri_rejected_when_ls_url_empty() -> None:
+    mock_config = _make_config("")
 
     import app.main as main_module
 
@@ -66,7 +65,7 @@ def test_http_uri_rejected_when_ls_disabled() -> None:
 
 
 def test_http_uri_rejected_from_wrong_origin() -> None:
-    mock_config = _make_config(True, url="http://label-studio:8080")
+    mock_config = _make_config("http://label-studio:8080")
 
     import app.main as main_module
 
@@ -87,7 +86,7 @@ def test_data_uri_still_works() -> None:
     data_uri = "data:image/png;base64,iVBORw0KGgo="
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=_make_config(False)):
+        with patch.object(main_module.container, "config", return_value=_make_config("http://label-studio:8080")):
             r = c.get("/api/v1/images/resolve", params={"uri": data_uri})
 
     assert r.status_code == 200

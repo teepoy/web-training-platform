@@ -1,7 +1,6 @@
 export type TaskType = "classification";
 export type DatasetType = "image_classification";
 export type ModelFramework = "pytorch";
-export type ResultType = "class_prediction";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface TaskSpec {
@@ -44,13 +43,6 @@ export interface LatestAnnotation {
   created_at: string;
 }
 
-export interface LatestPrediction {
-  id: string;
-  predicted_label: string;
-  score: number;
-  model_artifact_id: string;
-}
-
 export interface SampleWithLabels {
   id: string;
   dataset_id: string;
@@ -58,7 +50,6 @@ export interface SampleWithLabels {
   metadata: Record<string, unknown>;
   ls_task_id?: number | null;
   latest_annotation: LatestAnnotation | null;
-  latest_prediction: LatestPrediction | null;
 }
 
 export interface ModelSpec {
@@ -102,23 +93,6 @@ export interface TrainingJob {
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
-}
-
-export interface PredictionResult {
-  id: string;
-  result_type: ResultType;
-  sample_id: string;
-  predicted_label: string;
-  score: number;
-  model_artifact_id: string;
-}
-
-export interface PredictionEdit {
-  id: string;
-  result_id: string;
-  corrected_label: string;
-  edited_by: string;
-  edited_at: string;
 }
 
 export interface SampleFeature {

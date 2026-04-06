@@ -49,18 +49,6 @@ class CreateTrainingJobRequest(BaseModel):
     created_by: str = "demo-user"
 
 
-class CreatePredictionRequest(BaseModel):
-    sample_id: str
-    predicted_label: str
-    score: float
-    model_artifact_id: str
-
-
-class EditPredictionRequest(BaseModel):
-    corrected_label: str
-    edited_by: str = "demo-user"
-
-
 class UpdateEmbedConfigRequest(BaseModel):
     model: str
     dimension: int = 512
@@ -140,12 +128,6 @@ class LinkLabelStudioRequest(BaseModel):
     ls_project_id: str
 
 
-class SyncPredictionsResponse(BaseModel):
-    synced_count: int = 0
-    skipped_count: int = 0
-    errors: list[str] = Field(default_factory=list)
-
-
 class BulkAnnotationItem(BaseModel):
     sample_id: str
     label: str
@@ -163,13 +145,6 @@ class LatestAnnotation(BaseModel):
     created_at: str
 
 
-class LatestPrediction(BaseModel):
-    id: str
-    predicted_label: str
-    score: float
-    model_artifact_id: str
-
-
 class SampleWithLabels(BaseModel):
     id: str
     dataset_id: str
@@ -177,7 +152,6 @@ class SampleWithLabels(BaseModel):
     metadata: dict
     ls_task_id: int | None = None
     latest_annotation: LatestAnnotation | None = None
-    latest_prediction: LatestPrediction | None = None
 
 
 # ---------------------------------------------------------------------------

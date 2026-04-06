@@ -3,7 +3,7 @@
 ## Monorepo layout
 
 - `apps/api`: FastAPI backend with extensible domain interfaces and in-app orchestration
-- `apps/web`: Vue 3 frontend for datasets, jobs, and prediction views
+- `apps/web`: Vue 3 frontend for datasets and jobs
 - `apps/worker`: worker scaffold for training/inference code paths
 - `libs/python-sdk`: Python SDK and CLI for automation and agent tool-calling
 

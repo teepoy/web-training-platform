@@ -82,23 +82,6 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.JSON(), nullable=False),
     )
     op.create_table(
-        "predictions",
-        sa.Column("id", sa.String(length=64), primary_key=True),
-        sa.Column("result_type", sa.String(length=64), nullable=False),
-        sa.Column("sample_id", sa.String(length=64), sa.ForeignKey("samples.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("predicted_label", sa.String(length=255), nullable=False),
-        sa.Column("score", sa.Float(), nullable=False),
-        sa.Column("model_artifact_id", sa.String(length=64), nullable=False),
-    )
-    op.create_table(
-        "prediction_edits",
-        sa.Column("id", sa.String(length=64), primary_key=True),
-        sa.Column("result_id", sa.String(length=64), sa.ForeignKey("predictions.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("corrected_label", sa.String(length=255), nullable=False),
-        sa.Column("edited_by", sa.String(length=255), nullable=False),
-        sa.Column("edited_at", sa.DateTime(timezone=True), nullable=False),
-    )
-    op.create_table(
         "sample_features",
         sa.Column("sample_id", sa.String(length=64), sa.ForeignKey("samples.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("embedding", sa.JSON(), nullable=False),
@@ -107,8 +90,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("sample_features")
-    op.drop_table("prediction_edits")
-    op.drop_table("predictions")
     op.drop_table("artifacts")
     op.drop_table("job_user_state")
     op.drop_index("ix_training_events_job_id", table_name="training_events")

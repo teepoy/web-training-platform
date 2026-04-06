@@ -12,11 +12,13 @@ from app.services.artifacts import ArtifactService
 from app.services.embedding import EmbeddingClient
 from app.services.feature_ops import FeatureOpsService
 from app.services.kubeflow_client import KubeflowClient
-from app.services.label_studio import LabelStudioClient, NullLabelStudioClient
+from app.services.label_studio import LabelStudioClient
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
 from app.services.auth import AuthService
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
+from app.db.ls_session import create_ls_engine, create_ls_session_factory
+from app.repositories.ls_read_repository import LsReadRepository
 
 
 class Container(containers.DeclarativeContainer):
@@ -90,18 +92,23 @@ class Container(containers.DeclarativeContainer):
         timeout_seconds=providers.Callable(lambda cfg: cfg.notification.webhook.timeout_seconds, config),
     )
 
-    _null_ls_client = providers.Singleton(NullLabelStudioClient)
-    _real_ls_client = providers.Singleton(
+    label_studio_client = providers.Singleton(
         LabelStudioClient,
         url=providers.Callable(lambda cfg: cfg.label_studio.url, config),
         api_key=providers.Callable(lambda cfg: cfg.label_studio.api_key, config),
     )
-    label_studio_client = providers.Selector(
-        providers.Callable(
-            lambda cfg: "real" if cfg.label_studio.enabled else "null", config
-        ),
-        real=_real_ls_client,
-        null=_null_ls_client,
+
+    ls_engine = providers.Singleton(
+        create_ls_engine,
+        database_url=providers.Callable(lambda cfg: cfg.label_studio.database_url, config),
+    )
+    ls_session_factory = providers.Singleton(
+        create_ls_session_factory,
+        engine=ls_engine,
+    )
+    ls_read_repository = providers.Singleton(
+        LsReadRepository,
+        session_factory=ls_session_factory,
     )
 
     embedding_service = providers.Singleton(

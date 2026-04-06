@@ -1,7 +1,12 @@
-"""Tests for Label Studio sample hooks (T6).
+"""Tests for Label Studio sample hooks.
 
 Tests the create-sample LS task creation hook and the _make_ls_image_url helper.
 Uses dependency_overrides on the Container providers so no real LS server is needed.
+
+With strict LS enforcement:
+- LS is always on (no ``enabled`` flag).
+- ``create_sample`` fails 500 if dataset has no ``ls_project_id``.
+- ``create_sample`` fails 502 if LS task creation fails.
 """
 from __future__ import annotations
 
@@ -41,33 +46,14 @@ def _reset_container_overrides() -> None:
 
 
 # ---------------------------------------------------------------------------
-# test_create_sample_ls_disabled
+# test_create_sample_with_project
 # ---------------------------------------------------------------------------
 
 
-def test_create_sample_ls_disabled() -> None:
-    """Creating a sample with LS disabled must NOT set ls_task_id."""
-    # local-smoke config has label_studio.enabled = false by default
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json=_DS_PAYLOAD)
-        assert ds.status_code == 200
-        dataset_id = ds.json()["id"]
-
-        r = c.post(f"/api/v1/datasets/{dataset_id}/samples", json=_SAMPLE_PAYLOAD)
-    assert r.status_code == 200
-    assert r.json()["ls_task_id"] is None
-
-
-# ---------------------------------------------------------------------------
-# test_create_sample_ls_enabled_with_project
-# ---------------------------------------------------------------------------
-
-
-def test_create_sample_ls_enabled_with_project() -> None:
-    """Creating a sample with LS enabled and dataset linked should set ls_task_id."""
+def test_create_sample_with_ls_project() -> None:
+    """Creating a sample with dataset linked to LS should set ls_task_id."""
     mock_cfg = MagicMock()
     mock_cfg.db.auto_create = True
-    mock_cfg.label_studio.enabled = True
 
     mock_ls = MagicMock()
     mock_ls.create_project = AsyncMock(return_value={"id": 7, "title": "sample-test-dataset"})
@@ -95,42 +81,119 @@ def test_create_sample_ls_enabled_with_project() -> None:
 
 
 # ---------------------------------------------------------------------------
-# test_create_sample_ls_enabled_no_project
+# test_create_sample_no_ls_project_returns_500
 # ---------------------------------------------------------------------------
 
 
-def test_create_sample_ls_enabled_no_project() -> None:
-    """Sample creation with LS enabled but dataset NOT linked should not set ls_task_id."""
+def test_create_sample_no_ls_project_returns_500() -> None:
+    """Sample creation on dataset without ls_project_id returns 500."""
     mock_cfg = MagicMock()
     mock_cfg.db.auto_create = True
-    mock_cfg.label_studio.enabled = True
 
+    # create_project raises so dataset gets no ls_project_id
     mock_ls = MagicMock()
+    mock_ls.create_project = AsyncMock(side_effect=RuntimeError("LS down"))
     mock_ls.create_task = AsyncMock(return_value={"id": 99})
-    # create_project returns id=0, which means ls_project_id stored would be "0"
-    # We want dataset without ls_project_id — disable LS during dataset creation,
-    # then re-enable for sample creation
+
+    container.config.override(providers_value(mock_cfg))
     container.label_studio_client.override(providers_value(mock_ls))
 
-    # First create dataset with LS disabled so ls_project_id stays None
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json=_DS_PAYLOAD)
-        assert ds.status_code == 200
-        dataset_id = ds.json()["id"]
-        assert ds.json()["ls_project_id"] is None
-
-        # Now override config to enable LS for sample creation
-        container.config.override(providers_value(mock_cfg))
-
-        r = c.post(f"/api/v1/datasets/{dataset_id}/samples", json=_SAMPLE_PAYLOAD)
-
     try:
-        assert r.status_code == 200
-        # ls_task_id should remain None because dataset has no ls_project_id
-        assert r.json()["ls_task_id"] is None
-        mock_ls.create_task.assert_not_called()
+        with TestClient(app) as c:
+            # Dataset creation will fail at LS project creation → 502
+            ds = c.post("/api/v1/datasets", json=_DS_PAYLOAD)
+            assert ds.status_code == 502  # strict enforcement
+
+            # We need a dataset without ls_project_id. Use link-ls to create one,
+            # or create with a mock that returns a dataset without ls_project_id.
+            # Reset config to something that won't fail at dataset creation level
+            _reset_container_overrides()
+
+            # Create dataset without LS by patching container to have a no-op LS client for creation
+            # Actually, the simplest approach: create dataset normally then test sample creation
+            # against a dataset that has no ls_project_id by using the link-ls endpoint to clear it.
+            # Better: just use the real local-smoke config which doesn't have LS enforcement
+            # Wait — with strict enforcement, create_dataset ALWAYS creates LS project.
+            # So we need to mock get_dataset to return a dataset without ls_project_id.
+            pass
+
+        # Use mocked repository to test the sample creation path
+        from app.domain.models import Dataset, Sample
+        from uuid import uuid4
+        from unittest.mock import patch
+
+        import app.main as main_module
+
+        dataset_no_project = Dataset(
+            id=str(uuid4()),
+            name="no-project-ds",
+            ls_project_id=None,
+        )
+
+        repo_mock = AsyncMock()
+        repo_mock.get_dataset = AsyncMock(return_value=dataset_no_project)
+
+        mock_cfg2 = MagicMock()
+        mock_cfg2.db.auto_create = True
+
+        with TestClient(app) as c:
+            with patch.object(main_module.container, "config", return_value=mock_cfg2):
+                with patch.object(main_module.container, "repository", return_value=repo_mock):
+                    r = c.post(
+                        f"/api/v1/datasets/{dataset_no_project.id}/samples",
+                        json=_SAMPLE_PAYLOAD,
+                    )
+
+        assert r.status_code == 500
+        assert "no Label Studio project" in r.json()["detail"]
     finally:
         _reset_container_overrides()
+
+
+# ---------------------------------------------------------------------------
+# test_create_sample_ls_task_creation_fails_returns_502
+# ---------------------------------------------------------------------------
+
+
+def test_create_sample_ls_task_creation_fails_returns_502() -> None:
+    """When LS task creation fails, sample creation returns 502."""
+    from app.domain.models import Dataset, Sample
+    from unittest.mock import patch
+    from uuid import uuid4
+
+    import app.main as main_module
+
+    dataset = Dataset(
+        id=str(uuid4()),
+        name="task-fail-ds",
+        ls_project_id="10",
+    )
+
+    sample = Sample(
+        id=str(uuid4()),
+        dataset_id=dataset.id,
+        image_uris=["memory://samples/test.jpg"],
+        metadata={},
+    )
+
+    repo_mock = AsyncMock()
+    repo_mock.get_dataset = AsyncMock(return_value=dataset)
+    repo_mock.create_sample = AsyncMock(return_value=sample)
+
+    mock_ls = AsyncMock()
+    mock_ls.create_task = AsyncMock(side_effect=RuntimeError("LS connection refused"))
+
+    with TestClient(app) as c:
+        with patch.object(main_module.container, "config", return_value=MagicMock()):
+            with patch.object(main_module.container, "repository", return_value=repo_mock):
+                with patch.object(main_module.container, "label_studio_client", return_value=mock_ls):
+                    r = c.post(
+                        f"/api/v1/datasets/{dataset.id}/samples",
+                        json=_SAMPLE_PAYLOAD,
+                    )
+
+    assert r.status_code == 502
+    assert "Label Studio task creation failed" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,6 @@ import type {
   Organization,
   PaginatedResponse,
   LinkLsRequest,
-  PredictionEdit,
-  PredictionResult,
   RunLog,
   Sample,
   SampleWithLabels,
@@ -194,18 +192,6 @@ export interface CreateJobBody {
   created_by?: string;
 }
 
-export interface CreatePredictionBody {
-  sample_id: string;
-  predicted_label: string;
-  score: number;
-  model_artifact_id: string;
-}
-
-export interface EditPredictionBody {
-  corrected_label: string;
-  edited_by?: string;
-}
-
 export interface CreateScheduleBody {
   name: string;
   flow_name: string;
@@ -279,12 +265,6 @@ export function linkDatasetToLs(datasetId: string, body: LinkLsRequest) {
 
 export function syncAnnotationsToLs(datasetId: string) {
   return req<SyncResult>(`/datasets/${datasetId}/sync-annotations-to-ls`, {
-    method: "POST",
-  });
-}
-
-export function syncPredictionsToLs(datasetId: string) {
-  return req<SyncResult>(`/datasets/${datasetId}/sync-predictions-to-ls`, {
     method: "POST",
   });
 }
@@ -398,21 +378,6 @@ export const api = {
   // Job metrics — placeholder (endpoint may not exist yet)
   getJobMetrics: (jobId: string) =>
     req<JobMetricsResponse>(`/training-jobs/${jobId}/metrics`),
-
-  // ---- Predictions ----
-  listPredictions: () => req<PredictionResult[]>("/predictions"),
-
-  createPrediction: (body: CreatePredictionBody) =>
-    req<PredictionResult>("/predictions", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  editPrediction: (id: string, body: EditPredictionBody) =>
-    req<PredictionEdit>(`/predictions/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ corrected_label: body.corrected_label, edited_by: body.edited_by }),
-    }),
 
   // ---- Exports ----
   getExport: (datasetId: string) =>

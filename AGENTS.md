@@ -43,7 +43,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | `TrainingOrchestrator` | service | `apps/api/app/services/orchestrator.py` | Persists jobs, emits notifications |
 | `KubeflowTrainingOperatorEngine` | engine | `apps/api/app/services/engines.py` | Distributed execution adapter |
 | `createApp(...).mount()` | frontend boot | `apps/web/src/main.ts` | Vue entrypoint |
-| `router` | router | `apps/web/src/router.ts` | `/datasets`, `/jobs`, `/predictions` |
+| `router` | router | `apps/web/src/router.ts` | `/datasets`, `/jobs` |
 | `api` / `buildJobEventSource` | frontend client | `apps/web/src/api.ts` | REST + SSE consumer |
 | `FinetuneClient` | SDK client | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |
 | `app` (Typer) | CLI | `libs/python-sdk/ftsdk/cli.py` | `ftctl` commands |

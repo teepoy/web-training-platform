@@ -1,4 +1,4 @@
-"""Unit tests for LabelStudioClient, NullLabelStudioClient, and format converters.
+"""Unit tests for LabelStudioClient and format converters.
 
 Tests mock the label-studio-sdk so no real Label Studio server is needed.
 Async tests use pytest-asyncio (@pytest.mark.asyncio).
@@ -14,10 +14,8 @@ from app.services.label_studio import (
     LabelStudioConnectionError,
     LabelStudioError,
     LabelStudioNotFoundError,
-    NullLabelStudioClient,
     ls_annotation_to_platform,
     platform_annotation_to_ls,
-    platform_prediction_to_ls,
 )
 
 
@@ -137,113 +135,6 @@ def test_annotation_roundtrip():
     ls_result = platform_annotation_to_ls(label)
     recovered = ls_annotation_to_platform(ls_result)
     assert recovered == label
-
-
-# ---------------------------------------------------------------------------
-# platform_prediction_to_ls
-# ---------------------------------------------------------------------------
-
-
-def test_platform_prediction_to_ls():
-    pred = platform_prediction_to_ls("cat", score=0.95, task_id=42, model_version="v1")
-    assert pred["task"] == 42
-    assert pred["score"] == 0.95
-    assert pred["model_version"] == "v1"
-    result = pred["result"]
-    assert len(result) == 1
-    assert result[0]["type"] == "choices"
-    assert result[0]["value"]["choices"] == ["cat"]
-
-
-def test_platform_prediction_to_ls_default_model_version():
-    pred = platform_prediction_to_ls("dog", score=0.8, task_id=1)
-    assert pred["model_version"] == ""
-
-
-# ---------------------------------------------------------------------------
-# NullLabelStudioClient
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_null_client_create_project():
-    client = NullLabelStudioClient()
-    result = await client.create_project("test-proj", "<View/>")
-    assert result["id"] == 0
-    assert result["title"] == "test-proj"
-
-
-@pytest.mark.asyncio
-async def test_null_client_get_project():
-    client = NullLabelStudioClient()
-    result = await client.get_project(99)
-    assert result["id"] == 99
-
-
-@pytest.mark.asyncio
-async def test_null_client_list_projects():
-    client = NullLabelStudioClient()
-    result = await client.list_projects()
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_null_client_create_task():
-    client = NullLabelStudioClient()
-    result = await client.create_task(1, {"image": "http://example.com/img.png"})
-    assert result["id"] == 0
-
-
-@pytest.mark.asyncio
-async def test_null_client_list_tasks():
-    client = NullLabelStudioClient()
-    tasks, total = await client.list_tasks(1)
-    assert tasks == []
-    assert total == 0
-
-
-@pytest.mark.asyncio
-async def test_null_client_get_task():
-    client = NullLabelStudioClient()
-    result = await client.get_task(7)
-    assert result["id"] == 7
-
-
-@pytest.mark.asyncio
-async def test_null_client_create_annotation():
-    client = NullLabelStudioClient()
-    r = [{"type": "choices", "value": {"choices": ["cat"]}}]
-    result = await client.create_annotation(5, r)
-    assert result["task"] == 5
-    assert result["result"] == r
-
-
-@pytest.mark.asyncio
-async def test_null_client_list_annotations():
-    client = NullLabelStudioClient()
-    result = await client.list_annotations(5)
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_null_client_import_predictions():
-    client = NullLabelStudioClient()
-    result = await client.import_predictions(1, [])
-    assert result["count"] == 0
-
-
-@pytest.mark.asyncio
-async def test_null_client_export_project():
-    client = NullLabelStudioClient()
-    result = await client.export_project(1)
-    assert result == []
-
-
-def test_null_client_generate_config():
-    client = NullLabelStudioClient()
-    xml = client.generate_image_classification_config(["yes", "no"])
-    assert "<Choice value=\"yes\"/>" in xml
-    assert "<Choice value=\"no\"/>" in xml
 
 
 # ---------------------------------------------------------------------------

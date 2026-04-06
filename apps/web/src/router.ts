@@ -14,7 +14,6 @@ export const router = createRouter({
     { path: '/datasets/:id/classify', component: () => import('./views/ClassifyView.vue') },
     { path: '/jobs', component: () => import('./views/JobsView.vue') },
     { path: '/jobs/:id', component: () => import('./views/JobDetailView.vue') },
-    { path: '/predictions', component: () => import('./views/PredictionsView.vue') },
     { path: '/presets', component: () => import('./views/PresetEditorView.vue') },
     { path: '/schedules', component: () => import('./views/SchedulesView.vue') },
     { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },

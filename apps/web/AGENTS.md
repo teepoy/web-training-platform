@@ -8,12 +8,11 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 |------|----------|-------|
 | Boot sequence | `src/main.ts` + `index.html` | Mounts app, installs router/query/pinia |
 | Top-level shell | `src/App.vue` | Navigation and `RouterView` |
-| Routes | `src/router.ts` | `/datasets`, `/jobs`, `/predictions` |
+| Routes | `src/router.ts` | `/datasets`, `/jobs` |
 | API + SSE | `src/api.ts` | Hardcoded `API_BASE`, EventSource helper |
 | Shared types | `src/types.ts` + `src/contracts.ts` | Classification-first shapes |
 | Dataset workflow | `src/views/DatasetsView.vue` | Create dataset, create default preset |
 | Job workflow | `src/views/JobsView.vue` | Start job, consume SSE |
-| Prediction view | `src/views/PredictionsView.vue` | Read-only listing today |
 | Schedule list | `src/views/SchedulesView.vue` | CRUD + create modal + pause/resume/delete |
 | Schedule detail | `src/views/ScheduleDetailView.vue` | Config display, run history table, Trigger Now, Prefect deep link |
 | Run log viewer | `src/components/RunLogViewer.vue` | Reusable; props: `runId: string`; shows level badges |
@@ -41,4 +40,4 @@ pnpm preview
 ## GOTCHAS
 - `JobsView.vue` appends raw SSE payload strings to local state; there is no reconnection or typed event parsing.
 - There are no frontend tests or test scripts in `package.json`.
-- `PredictionsView.vue` only lists predictions; editing still requires backend/API work.
+- Prediction CRUD has been removed from both backend and frontend. Predictions are read from Label Studio only.

@@ -1,10 +1,10 @@
 """Tests for Label Studio-sourced export endpoints.
 
 Tests cover:
-1. Export with LS enabled — data sourced from LS and converted to platform format.
-2. Export with LS disabled — original local-data behavior unchanged.
-3. Export with LS fallback — LS raises exception, falls back to local data.
-4. Export persist with LS enabled — same as #1 but for the persist endpoint.
+1. Export with LS project — data sourced from LS Postgres via LsReadRepository.
+2. Export with no LS project — returns 500 (strict enforcement).
+3. Export when LS DB fails — returns 502 (no fallback).
+4. Export persist with LS — same as #1 but for the persist endpoint.
 """
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ from app.main import app
 # ---------------------------------------------------------------------------
 
 
-def _make_config(enabled: bool = False) -> MagicMock:
+def _make_config() -> MagicMock:
     cfg = MagicMock()
-    cfg.label_studio.enabled = enabled
     cfg.label_studio.url = "http://fake-ls:8080"
     cfg.label_studio.api_key = "fake-key"
+    cfg.label_studio.database_url = "postgresql+asyncpg://fake"
     return cfg
 
 
@@ -64,12 +64,31 @@ def _make_annotation(sample_id: str, label: str = "cat") -> "Annotation":
     )
 
 
-def _ls_task(task_id: int, label: str = "dog") -> dict:
-    """Build a minimal LS export task dict."""
-    return {
-        "id": task_id,
-        "data": {"image": "http://img/1.jpg"},
-        "annotations": [
+# ---------------------------------------------------------------------------
+# Test 1: export sourced from LS Postgres (LsReadRepository)
+# ---------------------------------------------------------------------------
+
+
+def test_export_with_ls_project() -> None:
+    """When dataset has ls_project_id, export uses LsReadRepository to read LS Postgres."""
+    mock_config = _make_config()
+
+    import app.main as main_module
+
+    dataset = _make_dataset(ls_project_id="10")
+    sample = _make_sample(dataset.id, ls_task_id=101)
+
+    repo_mock = AsyncMock()
+    repo_mock.get_dataset = AsyncMock(return_value=dataset)
+    repo_mock.list_samples = AsyncMock(return_value=([sample], 1))
+
+    # LsReadRepository mock — returns tasks and annotations from LS Postgres
+    ls_read_mock = AsyncMock()
+    ls_read_mock.get_tasks_for_project = AsyncMock(return_value=[
+        {"id": 101, "data": {"image": "http://img/1.jpg"}},
+    ])
+    ls_read_mock.get_annotations_for_tasks = AsyncMock(return_value={
+        101: [
             {
                 "id": 999,
                 "result": [
@@ -77,38 +96,14 @@ def _ls_task(task_id: int, label: str = "dog") -> dict:
                         "from_name": "classification",
                         "to_name": "image",
                         "type": "choices",
-                        "value": {"choices": [label]},
+                        "value": {"choices": ["dog"]},
                     }
                 ],
             }
         ],
-    }
+    })
 
-
-# ---------------------------------------------------------------------------
-# Test 1: export_with_ls_enabled
-# ---------------------------------------------------------------------------
-
-
-def test_export_with_ls_enabled() -> None:
-    """When LS is enabled and dataset has ls_project_id, export uses LS data."""
-    mock_config = _make_config(enabled=True)
-    mock_ls_client = AsyncMock()
-
-    import app.main as main_module
-
-    dataset = _make_dataset(ls_project_id="10")
-    sample = _make_sample(dataset.id, ls_task_id=101)
-    ls_tasks = [_ls_task(task_id=101, label="dog")]
-
-    mock_ls_client.export_project = AsyncMock(return_value=ls_tasks)
-
-    repo_mock = AsyncMock()
-    repo_mock.get_dataset = AsyncMock(return_value=dataset)
-    repo_mock.list_samples = AsyncMock(return_value=([sample], 1))
-    repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[])
-
-    # Minimal artifacts mock that returns a valid export structure
+    # Minimal artifacts mock
     artifacts_mock = MagicMock()
     artifacts_mock.build_dataset_export = MagicMock(
         side_effect=lambda dataset, samples, annotations: {
@@ -122,7 +117,7 @@ def test_export_with_ls_enabled() -> None:
 
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
+            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
                     with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
                         r = c.get(f"/api/v1/exports/{dataset.id}")
@@ -131,8 +126,9 @@ def test_export_with_ls_enabled() -> None:
     body = r.json()
     assert body["format"] == "hf-datasets-friendly-json"
 
-    # LS export_project must have been called
-    mock_ls_client.export_project.assert_called_once_with(10)
+    # LsReadRepository must have been called
+    ls_read_mock.get_tasks_for_project.assert_called_once_with(10)
+    ls_read_mock.get_annotations_for_tasks.assert_called_once_with([101])
 
     # Annotation should come from LS (label="dog"), not local data
     assert len(body["annotations"]) == 1
@@ -145,136 +141,105 @@ def test_export_with_ls_enabled() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: export_with_ls_disabled
+# Test 2: export with no LS project — returns 500 (strict enforcement)
 # ---------------------------------------------------------------------------
 
 
-def test_export_with_ls_disabled() -> None:
-    """When LS is disabled, export uses local repository data unchanged."""
-    mock_config = _make_config(enabled=False)
-    mock_ls_client = AsyncMock()
-    mock_ls_client.export_project = AsyncMock(return_value=[])
+def test_export_no_ls_project_returns_500() -> None:
+    """When dataset has no ls_project_id, export returns 500."""
+    mock_config = _make_config()
+
+    import app.main as main_module
+
+    dataset = _make_dataset(ls_project_id=None)
+
+    repo_mock = AsyncMock()
+    repo_mock.get_dataset = AsyncMock(return_value=dataset)
+
+    with TestClient(app) as c:
+        with patch.object(main_module.container, "config", return_value=mock_config):
+            with patch.object(main_module.container, "repository", return_value=repo_mock):
+                r = c.get(f"/api/v1/exports/{dataset.id}")
+
+    assert r.status_code == 500
+    assert "no Label Studio project" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Test 3: export when LS DB fails — returns 502 (no fallback)
+# ---------------------------------------------------------------------------
+
+
+def test_export_ls_db_failure_returns_502() -> None:
+    """When LsReadRepository raises, export returns 502 with no fallback."""
+    mock_config = _make_config()
 
     import app.main as main_module
 
     dataset = _make_dataset(ls_project_id="10")
     sample = _make_sample(dataset.id, ls_task_id=101)
-    local_ann = _make_annotation(sample.id, label="cat")
 
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=dataset)
     repo_mock.list_samples = AsyncMock(return_value=([sample], 1))
-    repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[local_ann])
 
-    artifacts_mock = MagicMock()
-    artifacts_mock.build_dataset_export = MagicMock(
-        side_effect=lambda dataset, samples, annotations: {
-            "format": "hf-datasets-friendly-json",
-            "dataset": dataset.model_dump(mode="json"),
-            "samples": [s.model_dump(mode="json") for s in samples],
-            "annotations": [a.model_dump(mode="json") for a in annotations],
-            "artifact_layout": {},
-        }
-    )
+    ls_read_mock = AsyncMock()
+    ls_read_mock.get_tasks_for_project = AsyncMock(side_effect=RuntimeError("LS DB connection refused"))
 
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
+            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                        r = c.get(f"/api/v1/exports/{dataset.id}")
+                    r = c.get(f"/api/v1/exports/{dataset.id}")
 
-    assert r.status_code == 200
-    body = r.json()
-
-    # LS export_project must NOT have been called
-    mock_ls_client.export_project.assert_not_called()
-
-    # Should use local annotation (cat), not LS data
-    assert len(body["annotations"]) == 1
-    assert body["annotations"][0]["label"] == "cat"
+    assert r.status_code == 502
+    assert "Label Studio database read failed" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
-# Test 3: export_with_ls_fallback
-# ---------------------------------------------------------------------------
-
-
-def test_export_with_ls_fallback() -> None:
-    """When LS enabled but export_project raises, falls back to local data."""
-    mock_config = _make_config(enabled=True)
-    mock_ls_client = AsyncMock()
-    mock_ls_client.export_project = AsyncMock(side_effect=RuntimeError("LS connection refused"))
-
-    import app.main as main_module
-
-    dataset = _make_dataset(ls_project_id="10")
-    sample = _make_sample(dataset.id, ls_task_id=101)
-    local_ann = _make_annotation(sample.id, label="cat")
-
-    repo_mock = AsyncMock()
-    repo_mock.get_dataset = AsyncMock(return_value=dataset)
-    repo_mock.list_samples = AsyncMock(return_value=([sample], 1))
-    repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[local_ann])
-
-    artifacts_mock = MagicMock()
-    artifacts_mock.build_dataset_export = MagicMock(
-        side_effect=lambda dataset, samples, annotations: {
-            "format": "hf-datasets-friendly-json",
-            "dataset": dataset.model_dump(mode="json"),
-            "samples": [s.model_dump(mode="json") for s in samples],
-            "annotations": [a.model_dump(mode="json") for a in annotations],
-            "artifact_layout": {},
-        }
-    )
-
-    with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                        r = c.get(f"/api/v1/exports/{dataset.id}")
-
-    assert r.status_code == 200
-    body = r.json()
-
-    # LS export_project was attempted
-    mock_ls_client.export_project.assert_called_once_with(10)
-
-    # Fell back to local annotation (cat)
-    assert len(body["annotations"]) == 1
-    assert body["annotations"][0]["label"] == "cat"
-
-
-# ---------------------------------------------------------------------------
-# Test 4: export_persist_with_ls
+# Test 4: export persist with LS
 # ---------------------------------------------------------------------------
 
 
 def test_export_persist_with_ls() -> None:
-    """POST /persist with LS enabled sources data from LS and persists it."""
-    mock_config = _make_config(enabled=True)
-    mock_ls_client = AsyncMock()
+    """POST /persist with LS project sources data from LS Postgres and persists it."""
+    mock_config = _make_config()
 
     import app.main as main_module
 
     dataset = _make_dataset(ls_project_id="20")
     sample = _make_sample(dataset.id, ls_task_id=202)
-    ls_tasks = [_ls_task(task_id=202, label="dog")]
-
-    mock_ls_client.export_project = AsyncMock(return_value=ls_tasks)
 
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=dataset)
     repo_mock.list_samples = AsyncMock(return_value=([sample], 1))
-    repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[])
+
+    ls_read_mock = AsyncMock()
+    ls_read_mock.get_tasks_for_project = AsyncMock(return_value=[
+        {"id": 202, "data": {"image": "http://img/2.jpg"}},
+    ])
+    ls_read_mock.get_annotations_for_tasks = AsyncMock(return_value={
+        202: [
+            {
+                "id": 888,
+                "result": [
+                    {
+                        "from_name": "classification",
+                        "to_name": "image",
+                        "type": "choices",
+                        "value": {"choices": ["dog"]},
+                    }
+                ],
+            }
+        ],
+    })
 
     artifacts_mock = AsyncMock()
     artifacts_mock.persist_dataset_export = AsyncMock(return_value="memory://exports/test.json")
 
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
+            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
                     with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
                         r = c.post(f"/api/v1/exports/{dataset.id}/persist")
@@ -283,8 +248,8 @@ def test_export_persist_with_ls() -> None:
     body = r.json()
     assert body["uri"] == "memory://exports/test.json"
 
-    # LS was consulted
-    mock_ls_client.export_project.assert_called_once_with(20)
+    # LS Postgres was consulted
+    ls_read_mock.get_tasks_for_project.assert_called_once_with(20)
 
     # persist_dataset_export was called — check annotations contain LS label
     artifacts_mock.persist_dataset_export.assert_called_once()

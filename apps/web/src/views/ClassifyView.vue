@@ -1,5 +1,5 @@
 <template>
-  <div class="classify-view">
+  <div class="classify-view" :style="themeStyleVars">
     <!-- Header bar -->
     <div class="classify-header">
       <n-button text @click="router.push(`/datasets/${datasetId}`)">
@@ -40,10 +40,6 @@
           size="small"
           style="width: 150px"
         />
-        <n-radio-group v-model:value="viewMode" size="small">
-          <n-radio-button value="annotations">Annotations</n-radio-button>
-          <n-radio-button value="predictions">Predictions</n-radio-button>
-        </n-radio-group>
       </div>
 
       <n-text depth="3">
@@ -100,16 +96,21 @@
       <div
         ref="tableContainerRef"
         class="table-container"
-        @mousedown.prevent="onTableMouseDown"
+        @mousedown="onTableMouseDown"
       >
-        <div :style="{ width: totalTableWidth + 'px', minWidth: '100%' }">
+        <!-- Sticky header -->
+        <div class="table-head" :style="{ width: totalTableWidth + 'px', minWidth: '100%' }">
           <table :style="{ width: totalTableWidth + 'px', tableLayout: 'fixed', borderCollapse: 'collapse' }">
-            <thead class="table-head">
+            <thead>
               <tr>
                 <th
-                  v-for="header in table.getFlatHeaders()"
+                  v-for="(header, hIdx) in table.getFlatHeaders()"
                   :key="header.id"
-                  :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px', position: 'relative' }"
+                  :style="{
+                    width: (header.getSize() + (hIdx === table.getFlatHeaders().length - 1 ? lastColExtraWidth : 0)) + 'px',
+                    minWidth: (header.getSize() + (hIdx === table.getFlatHeaders().length - 1 ? lastColExtraWidth : 0)) + 'px',
+                    position: 'relative',
+                  }"
                   class="table-th"
                   :class="{ 'th-dragging': draggingHeaderId === header.id }"
                   :draggable="header.id !== 'checkbox'"
@@ -128,14 +129,18 @@
                   <div
                     v-if="header.column.getCanResize()"
                     class="resize-handle"
-                    @mousedown.stop="header.getResizeHandler()($event)"
+                    draggable="false"
+                    @mousedown.stop.prevent="header.getResizeHandler()($event)"
+                    @dragstart.stop.prevent
                   />
                 </th>
               </tr>
             </thead>
           </table>
+        </div>
 
-          <!-- Virtual scroll body -->
+        <!-- Virtual scroll body -->
+        <div :style="{ width: totalTableWidth + 'px', minWidth: '100%' }">
           <div
             class="virtual-scroll-body"
             :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
@@ -161,72 +166,63 @@
                     :class="['table-row', selectedIds.has(allSamples[virtualRow.index].id) && 'table-row--selected']"
                     @click="onRowClick(virtualRow.index, $event)"
                   >
-                    <!-- Checkbox -->
-                    <td :style="{ width: '40px', minWidth: '40px' }" class="table-td td-checkbox">
-                      <div
-                        :class="['cell-checkbox', selectedIds.has(allSamples[virtualRow.index].id) && 'cell-checkbox--checked']"
-                        @click.stop="toggleSelect(allSamples[virtualRow.index].id)"
-                      />
-                    </td>
-
-                    <!-- Images -->
                     <td
-                      :style="{ width: imageColWidth + 'px', minWidth: imageColWidth + 'px', height: imageColWidth + 'px' }"
-                      class="table-td td-image"
+                      v-for="header in table.getFlatHeaders()"
+                      :key="header.id"
+                      :style="cellStyle(header)"
+                      :class="cellClass(header.id)"
                     >
-                      <div class="image-cell-inner" :style="{ height: imageColWidth + 'px' }">
-                        <img
-                          v-for="(src, imgIdx) in resolveImageUris(allSamples[virtualRow.index].image_uris ?? [])"
-                          :key="imgIdx"
-                          :src="src"
-                          loading="lazy"
-                          alt=""
-                          :style="{ width: imageColWidth + 'px', height: imageColWidth + 'px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }"
+                      <!-- Checkbox -->
+                      <template v-if="header.id === 'checkbox'">
+                        <div
+                          :class="['cell-checkbox', selectedIds.has(allSamples[virtualRow.index].id) && 'cell-checkbox--checked']"
+                          @click.stop="toggleSelect(allSamples[virtualRow.index].id)"
                         />
-                      </div>
-                    </td>
+                      </template>
 
-                    <!-- ID -->
-                    <td :style="{ width: getColWidth('id') + 'px', minWidth: getColWidth('id') + 'px' }" class="table-td td-text">
-                      <span class="cell-text-truncate" :title="allSamples[virtualRow.index].id">{{ allSamples[virtualRow.index].id }}</span>
-                    </td>
+                      <!-- Images -->
+                      <template v-else-if="header.id === 'images'">
+                        <div class="image-cell-inner" :style="{ height: imageColWidth + 'px' }">
+                          <img
+                            v-for="(src, imgIdx) in resolveImageUris(allSamples[virtualRow.index].image_uris ?? [])"
+                            :key="imgIdx"
+                            :src="src"
+                            loading="lazy"
+                            alt=""
+                            :style="{ width: imageColWidth + 'px', height: imageColWidth + 'px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }"
+                          />
+                        </div>
+                      </template>
 
-                    <!-- Annotation -->
-                    <td :style="{ width: getColWidth('annotation') + 'px', minWidth: getColWidth('annotation') + 'px' }" class="table-td">
-                      <span
-                        v-if="allSamples[virtualRow.index].latest_annotation?.label"
-                        class="label-badge"
-                        :style="{ background: labelColor(allSamples[virtualRow.index].latest_annotation!.label, labelSpace) }"
-                      >{{ allSamples[virtualRow.index].latest_annotation!.label }}</span>
-                      <span v-else class="cell-empty">&mdash;</span>
-                    </td>
+                      <!-- ID -->
+                      <template v-else-if="header.id === 'id'">
+                        <span class="cell-text-truncate" :title="allSamples[virtualRow.index].id">{{ allSamples[virtualRow.index].id }}</span>
+                      </template>
 
-                    <!-- Prediction -->
-                    <td :style="{ width: getColWidth('prediction') + 'px', minWidth: getColWidth('prediction') + 'px' }" class="table-td">
-                      <span
-                        v-if="allSamples[virtualRow.index].latest_prediction?.predicted_label"
-                        class="label-badge label-badge--prediction"
-                        :style="{ background: labelColor(allSamples[virtualRow.index].latest_prediction!.predicted_label, labelSpace) }"
-                      >
-                        {{ allSamples[virtualRow.index].latest_prediction!.predicted_label }}
-                        <span class="badge-score">{{ (allSamples[virtualRow.index].latest_prediction!.score * 100).toFixed(0) }}%</span>
-                      </span>
-                      <span v-else class="cell-empty">&mdash;</span>
-                    </td>
+                      <!-- Annotation -->
+                      <template v-else-if="header.id === 'annotation'">
+                        <span
+                          v-if="allSamples[virtualRow.index].latest_annotation?.label"
+                          class="label-badge"
+                          :style="{ background: labelColor(allSamples[virtualRow.index].latest_annotation!.label, labelSpace) }"
+                        >{{ allSamples[virtualRow.index].latest_annotation!.label }}</span>
+                        <span v-else class="cell-empty">&mdash;</span>
+                      </template>
 
-                    <!-- Draft Label -->
-                    <td :style="{ width: getColWidth('draft') + 'px', minWidth: getColWidth('draft') + 'px' }" class="table-td">
-                      <span
-                        v-if="labelDraft[allSamples[virtualRow.index].id]"
-                        class="label-badge label-badge--draft"
-                      >{{ labelDraft[allSamples[virtualRow.index].id] }}</span>
-                    </td>
+                      <!-- Draft Label -->
+                      <template v-else-if="header.id === 'draft'">
+                        <span
+                          v-if="labelDraft[allSamples[virtualRow.index].id]"
+                          class="label-badge label-badge--draft"
+                        >{{ labelDraft[allSamples[virtualRow.index].id] }}</span>
+                      </template>
 
-                    <!-- Metadata -->
-                    <td :style="{ width: getColWidth('metadata') + 'px', minWidth: getColWidth('metadata') + 'px' }" class="table-td td-text">
-                      <span class="cell-text-truncate" :title="JSON.stringify(allSamples[virtualRow.index].metadata)">
-                        {{ JSON.stringify(allSamples[virtualRow.index].metadata) }}
-                      </span>
+                      <!-- Metadata -->
+                      <template v-else-if="header.id === 'metadata'">
+                        <span class="cell-text-truncate" :title="JSON.stringify(allSamples[virtualRow.index].metadata)">
+                          {{ JSON.stringify(allSamples[virtualRow.index].metadata) }}
+                        </span>
+                      </template>
                     </td>
                   </tr>
                 </tbody>
@@ -261,10 +257,11 @@ import {
   createColumnHelper,
   FlexRender,
   type ColumnSizingState,
+  type ColumnSizingInfoState,
 } from '@tanstack/vue-table'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { DnDProvider } from '@vue-dnd-kit/core'
-import { NButton, NText, NSlider, NDivider, NSelect, NRadioGroup, NRadioButton, useMessage, useDialog } from 'naive-ui'
+import { NButton, NText, NSlider, NDivider, NSelect, useMessage, useDialog, useThemeVars } from 'naive-ui'
 import { listSamplesWithLabels, api, bulkCreateAnnotations, syncAnnotationsToLs } from '../api'
 import type { SampleWithLabels, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult } from '../types'
 import { resolveImageUris } from '../utils/imageAdapters'
@@ -274,6 +271,20 @@ const router = useRouter()
 const datasetId = route.params.id as string
 const message = useMessage()
 const dialog = useDialog()
+const themeVars = useThemeVars()
+
+const themeStyleVars = computed(() => ({
+  '--cv-bg': themeVars.value.bodyColor,
+  '--cv-card-bg': themeVars.value.cardColor,
+  '--cv-text': themeVars.value.textColor1,
+  '--cv-text-secondary': themeVars.value.textColor3,
+  '--cv-text-disabled': themeVars.value.textColorDisabled,
+  '--cv-border': themeVars.value.borderColor,
+  '--cv-divider': themeVars.value.dividerColor,
+  '--cv-hover': themeVars.value.hoverColor,
+  '--cv-primary': themeVars.value.primaryColor,
+  '--cv-primary-hover': themeVars.value.primaryColorHover,
+}))
 
 // Dataset query (for header title)
 const datasetQuery = useQuery({
@@ -281,9 +292,6 @@ const datasetQuery = useQuery({
   queryFn: () => api.getDataset(datasetId),
   retry: false,
 })
-
-// Mode toggle
-const viewMode = ref<'annotations' | 'predictions'>('annotations')
 
 // Color palette — 10 distinguishable colors
 const LABEL_COLORS = [
@@ -304,14 +312,10 @@ const labelSpace = computed<string[]>(
 
 // Badge label for display (used indirectly via effectiveBadgeLabel)
 function badgeLabel(sample: SampleWithLabels): string | null {
-  if (viewMode.value === 'annotations') {
-    return sample.latest_annotation?.label ?? null
-  } else {
-    return sample.latest_prediction?.predicted_label ?? null
-  }
+  return sample.latest_annotation?.label ?? null
 }
 
-// Effective badge label: draft overrides annotation/prediction
+// Effective badge label: draft overrides annotation
 function effectiveBadgeLabel(sample: SampleWithLabels): string | null {
   if (labelDraft.value[sample.id]) return labelDraft.value[sample.id]
   return badgeLabel(sample)
@@ -392,6 +396,16 @@ function resetAndFetch() {
 onMounted(() => {
   resetAndFetch()
   document.addEventListener('keydown', onKeyDown)
+  // Set up ResizeObserver for container width tracking
+  if (tableContainerRef.value) {
+    containerWidth.value = tableContainerRef.value.clientWidth
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        containerWidth.value = entry.contentRect.width
+      }
+    })
+    resizeObserver.observe(tableContainerRef.value)
+  }
 })
 
 // Reset when filters change
@@ -405,6 +419,14 @@ const columnHelper = createColumnHelper<SampleWithLabels>()
 
 // Column sizing state
 const columnSizing = ref<ColumnSizingState>({})
+const columnSizingInfo = ref<ColumnSizingInfoState>({
+  startOffset: null,
+  startSize: null,
+  deltaOffset: null,
+  deltaPercentage: null,
+  isResizingColumn: false,
+  columnSizingStart: [],
+})
 
 // Column width defaults
 const colDefaults: Record<string, number> = {
@@ -412,13 +434,12 @@ const colDefaults: Record<string, number> = {
   images: 128,
   id: 120,
   annotation: 120,
-  prediction: 120,
   draft: 100,
   metadata: 200,
 }
 
 // Column order state
-const columnOrder = ref<string[]>(['checkbox', 'images', 'id', 'annotation', 'prediction', 'draft', 'metadata'])
+const columnOrder = ref<string[]>(['checkbox', 'images', 'id', 'annotation', 'draft', 'metadata'])
 
 // Define columns using createColumnHelper
 const columns = [
@@ -457,14 +478,6 @@ const columns = [
     cell: () => null,
   }),
   columnHelper.display({
-    id: 'prediction',
-    size: 120,
-    minSize: 60,
-    enableResizing: true,
-    header: () => 'Prediction',
-    cell: () => null,
-  }),
-  columnHelper.display({
     id: 'draft',
     size: 100,
     minSize: 60,
@@ -487,6 +500,7 @@ const table = useVueTable({
   columns,
   state: {
     get columnSizing() { return columnSizing.value },
+    get columnSizingInfo() { return columnSizingInfo.value },
     get columnOrder() { return columnOrder.value },
   },
   enableColumnResizing: true,
@@ -494,6 +508,9 @@ const table = useVueTable({
   onColumnSizingChange: (updater) => {
     columnSizing.value = typeof updater === 'function' ? updater(columnSizing.value) : updater
     nextTick(() => { virtualizer.value.measure() })
+  },
+  onColumnSizingInfoChange: (updater) => {
+    columnSizingInfo.value = typeof updater === 'function' ? updater(columnSizingInfo.value) : updater
   },
   onColumnOrderChange: (updater) => {
     columnOrder.value = typeof updater === 'function' ? updater(columnOrder.value) : updater
@@ -508,10 +525,38 @@ function getColWidth(colId: string): number {
   return colDefaults[colId] ?? 120
 }
 
-// Total table width
+// Total table width (at least container width so last column can fill space)
 const totalTableWidth = computed(() => {
-  return table.getFlatHeaders().reduce((sum, h) => sum + h.getSize(), 0)
+  const naturalWidth = table.getFlatHeaders().reduce((sum, h) => sum + h.getSize(), 0)
+  return Math.max(naturalWidth, containerWidth.value)
 })
+
+// Compute extra width to assign to the last column so it fills remaining space
+const lastColExtraWidth = computed(() => {
+  const headers = table.getFlatHeaders()
+  if (headers.length === 0) return 0
+  const naturalWidth = headers.reduce((sum, h) => sum + h.getSize(), 0)
+  const extra = containerWidth.value - naturalWidth
+  return extra > 0 ? extra : 0
+})
+
+// Per-cell style and class helpers (driven by header order for column reorder support)
+function cellStyle(header: { id: string; getSize: () => number }) {
+  const headers = table.getFlatHeaders()
+  const isLast = headers.length > 0 && headers[headers.length - 1].id === header.id
+  const w = header.getSize() + (isLast ? lastColExtraWidth.value : 0)
+  const base: Record<string, string> = { width: w + 'px', minWidth: w + 'px' }
+  if (header.id === 'images') base.height = imageColWidth.value + 'px'
+  return base
+}
+
+function cellClass(colId: string): string[] {
+  const cls = ['table-td']
+  if (colId === 'checkbox') cls.push('td-checkbox')
+  else if (colId === 'images') cls.push('td-image')
+  else if (colId === 'id' || colId === 'metadata') cls.push('td-text')
+  return cls
+}
 
 // Watch thumbSize to update the images column size
 watch(thumbSize, (newSize) => {
@@ -522,6 +567,10 @@ watch(thumbSize, (newSize) => {
 // ─── Virtualizer setup ─────────────────────────────────────────────────────────
 
 const tableContainerRef = ref<HTMLElement | null>(null)
+const containerWidth = ref(0)
+
+// Track container width with ResizeObserver for last-column-fill
+let resizeObserver: ResizeObserver | null = null
 
 const virtualizer = useVirtualizer({
   get count() { return allSamples.value.length },
@@ -637,8 +686,9 @@ const rubberBandStyle = computed(() => {
 
 function onTableMouseDown(e: MouseEvent) {
   if (e.button !== 0) return
-  // Don't start rubber-band if clicking on a header
+  // Don't start rubber-band if clicking on a header (allows HTML5 drag for column reorder)
   if ((e.target as HTMLElement).closest('thead')) return
+  e.preventDefault()
   cachedContainerRect = tableContainerRef.value?.getBoundingClientRect() ?? null
   dragStart.value = { x: e.clientX, y: e.clientY }
   dragCurrent.value = { x: e.clientX, y: e.clientY }
@@ -789,6 +839,10 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown)
   document.removeEventListener('mousemove', onDocMouseMove)
   document.removeEventListener('mouseup', onDocMouseUp)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
 })
 </script>
 
@@ -799,6 +853,7 @@ onUnmounted(() => {
   height: 100vh;
   padding: 12px;
   box-sizing: border-box;
+  color: var(--cv-text);
 }
 
 .classify-header {
@@ -822,21 +877,21 @@ onUnmounted(() => {
   overflow: auto;
   flex: 1;
   position: relative;
-  border: 1px solid #eee;
+  border: 1px solid var(--cv-border);
   border-radius: 6px;
-  background: white;
+  background: var(--cv-card-bg);
 }
 
 .table-head {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: white;
+  background: var(--cv-card-bg);
 }
 
 .table-th {
   padding: 8px;
-  border-bottom: 2px solid #eee;
+  border-bottom: 2px solid var(--cv-border);
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -845,7 +900,8 @@ onUnmounted(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  background: white;
+  background: var(--cv-card-bg);
+  color: var(--cv-text);
 }
 
 .table-th.th-dragging {
@@ -858,17 +914,17 @@ onUnmounted(() => {
 
 .resize-handle {
   position: absolute;
-  right: 0;
+  right: -3px;
   top: 0;
   height: 100%;
-  width: 4px;
+  width: 7px;
   cursor: col-resize;
   background: transparent;
   z-index: 3;
 }
 
 .resize-handle:hover {
-  background: #18a058;
+  background: var(--cv-primary);
 }
 
 .virtual-scroll-body {
@@ -880,21 +936,22 @@ onUnmounted(() => {
 }
 
 .table-row:hover {
-  background: rgba(24, 160, 88, 0.04);
+  background: var(--cv-hover);
 }
 
 .table-row--selected {
-  background: rgba(24, 160, 88, 0.08) !important;
-  outline: 1px solid #18a058;
+  background: color-mix(in srgb, var(--cv-primary) 12%, transparent) !important;
+  outline: 1px solid var(--cv-primary);
 }
 
 .table-td {
   padding: 4px 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--cv-divider);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   vertical-align: middle;
+  color: var(--cv-text);
 }
 
 .td-checkbox {
@@ -915,7 +972,7 @@ onUnmounted(() => {
 
 .td-text {
   font-size: 12px;
-  color: #333;
+  color: var(--cv-text-secondary);
 }
 
 .cell-text-truncate {
@@ -927,7 +984,7 @@ onUnmounted(() => {
 }
 
 .cell-empty {
-  color: #bbb;
+  color: var(--cv-text-disabled);
   font-size: 12px;
 }
 
@@ -941,14 +998,8 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.label-badge--prediction {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .label-badge--draft {
-  background: #18a058;
+  background: var(--cv-primary);
   color: white;
 }
 
@@ -960,9 +1011,9 @@ onUnmounted(() => {
 .cell-checkbox {
   width: 18px;
   height: 18px;
-  border: 2px solid #ccc;
+  border: 2px solid var(--cv-border);
   border-radius: 4px;
-  background: white;
+  background: var(--cv-card-bg);
   cursor: pointer;
   margin: 0 auto;
   display: flex;
@@ -972,8 +1023,8 @@ onUnmounted(() => {
 }
 
 .cell-checkbox--checked {
-  background: #18a058;
-  border-color: #18a058;
+  background: var(--cv-primary);
+  border-color: var(--cv-primary);
 }
 
 .cell-checkbox--checked::after {
@@ -985,8 +1036,8 @@ onUnmounted(() => {
 
 .rubber-band-rect {
   position: absolute;
-  border: 2px dashed #18a058;
-  background: rgba(24, 160, 88, 0.1);
+  border: 2px dashed var(--cv-primary);
+  background: color-mix(in srgb, var(--cv-primary) 15%, transparent);
   pointer-events: none;
   z-index: 10;
 }
@@ -997,10 +1048,10 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in srgb, var(--cv-card-bg) 90%, transparent);
   font-size: 12px;
-  color: #666;
+  color: var(--cv-text-secondary);
   text-align: center;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--cv-border);
 }
 </style>

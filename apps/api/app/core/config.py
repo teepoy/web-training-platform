@@ -36,15 +36,15 @@ def load_config() -> DictConfig:
     minio_bucket = os.getenv("MINIO_BUCKET")
     if minio_bucket:
         cfg.storage.minio.bucket = minio_bucket
-    ls_enabled = os.getenv("LABEL_STUDIO_ENABLED")
-    if ls_enabled is not None:
-        cfg.label_studio.enabled = ls_enabled.lower() in ("true", "1", "yes")
     ls_url = os.getenv("LABEL_STUDIO_URL")
     if ls_url:
         cfg.label_studio.url = ls_url
     ls_api_key = os.getenv("LABEL_STUDIO_API_KEY")
     if ls_api_key:
         cfg.label_studio.api_key = ls_api_key
+    ls_db_url = os.getenv("LABEL_STUDIO_DATABASE_URL")
+    if ls_db_url:
+        cfg.label_studio.database_url = ls_db_url
     prefect_api_url = os.getenv("PREFECT_API_URL")
     if prefect_api_url:
         cfg.prefect.api_url = prefect_api_url

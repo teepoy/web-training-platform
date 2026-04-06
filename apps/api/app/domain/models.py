@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from app.domain.types import DatasetType, JobStatus, ModelFramework, OrgRole, ResultType, TaskType
+from app.domain.types import DatasetType, JobStatus, ModelFramework, OrgRole, TaskType
 
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
@@ -89,23 +89,6 @@ class TrainingJob(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     artifact_refs: list[ArtifactRef] = Field(default_factory=list)
-
-
-class PredictionResult(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    result_type: ResultType = ResultType.CLASS_PREDICTION
-    sample_id: str
-    predicted_label: str
-    score: float
-    model_artifact_id: str
-
-
-class PredictionEdit(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    result_id: str
-    corrected_label: str
-    edited_by: str
-    edited_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SampleFeature(BaseModel):

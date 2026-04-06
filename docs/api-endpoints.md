@@ -19,12 +19,6 @@
 - `GET /api/v1/training-jobs/{job_id}/events` (SSE)
 - `POST /api/v1/training-jobs/{job_id}/mark-left`
 
-## Predictions and edits
-
-- `POST /api/v1/predictions`
-- `GET /api/v1/predictions`
-- `PATCH /api/v1/predictions/{prediction_id}`
-
 ## Export and advanced sample-selection ops
 
 - `GET /api/v1/exports/{dataset_id}`

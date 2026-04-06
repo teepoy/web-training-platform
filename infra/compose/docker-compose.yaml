@@ -90,6 +90,8 @@ services:
         condition: service_healthy
       embedding:
         condition: service_healthy
+      label-studio:
+        condition: service_healthy
     environment:
       APP_CONFIG_PROFILE: dev
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
@@ -97,6 +99,7 @@ services:
       EMBEDDING_GRPC_TARGET: embedding:50051
       LABEL_STUDIO_URL: "http://label-studio:8080"
       LABEL_STUDIO_API_KEY: ""
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -154,12 +157,12 @@ services:
       - api
     ports:
       - "5173:80"
+    volumes:
+      - ../../apps/web/dist:/usr/share/nginx/html:ro
     restart: on-failure
 
   label-studio:
     image: heartexlabs/label-studio:latest
-    profiles:
-      - labelstudio
     depends_on:
       postgres:
         condition: service_healthy

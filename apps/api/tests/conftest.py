@@ -118,3 +118,49 @@ def _mock_auth_deps(request):
     # Clean up overrides after each test
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_current_org, None)
+
+
+# ---------------------------------------------------------------------------
+# Label Studio client override for non-LS tests
+#
+# After the LS-always-on migration, create_dataset always calls LS to create
+# a project.  Non-LS tests don't mock LS themselves, so we provide a global
+# mock that succeeds silently.  Tests in test_ls_*.py manage their own
+# overrides — they call container.label_studio_client.override() directly
+# and reset it in their finally blocks.
+# ---------------------------------------------------------------------------
+
+from unittest.mock import AsyncMock, MagicMock
+from dependency_injector import providers
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_ls_client(request):
+    """Override the LS client for all tests by default.
+
+    Tests that manage their own LS client overrides (test_ls_* modules) opt
+    out via the ``no_ls_override`` marker or by being in a module whose name
+    starts with ``test_ls_``.
+    """
+    if request.node.get_closest_marker("no_ls_override"):
+        yield
+        return
+
+    module_name = getattr(request.module, "__name__", "").rsplit(".", 1)[-1]
+    if module_name.startswith("test_ls_") or module_name == "test_label_studio_client":
+        yield
+        return
+
+    from app.main import container
+
+    _mock_ls = MagicMock()
+    _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.create_task = AsyncMock(return_value={"id": 1})
+    _mock_ls.create_annotation = AsyncMock(return_value={"id": 0, "task": 0, "result": []})
+    _mock_ls.list_tasks = AsyncMock(return_value=([], 0))
+    _mock_ls.list_annotations = AsyncMock(return_value=[])
+    _mock_ls.export_project = AsyncMock(return_value=[])
+
+    container.label_studio_client.override(providers.Object(_mock_ls))
+    yield
+    container.label_studio_client.reset_override()

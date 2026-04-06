@@ -92,7 +92,6 @@ const menuOptions = [
   { label: 'Dashboard', key: '/dashboard' },
   { label: 'Datasets', key: '/datasets' },
   { label: 'Training Jobs', key: '/jobs' },
-  { label: 'Predictions', key: '/predictions' },
   { label: 'Presets', key: '/presets' },
   { label: 'Schedules', key: '/schedules' },
 ]

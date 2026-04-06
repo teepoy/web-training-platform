@@ -15,10 +15,6 @@ class ModelFramework(str, Enum):
     PYTORCH = "pytorch"
 
 
-class ResultType(str, Enum):
-    CLASS_PREDICTION = "class_prediction"
-
-
 class JobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"

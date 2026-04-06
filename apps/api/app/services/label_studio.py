@@ -1,11 +1,10 @@
 """Label Studio client wrapper for annotation management.
 
 This module provides :class:`LabelStudioClient` — an async wrapper around the
-``label-studio-sdk`` library for managing annotation projects, tasks, annotations,
-and predictions in Label Studio.
+``label-studio-sdk`` library for managing annotation projects, tasks, and
+annotations in Label Studio.
 
-A :class:`NullLabelStudioClient` no-op implementation is also provided for use
-when Label Studio integration is disabled (``label_studio.enabled: false``).
+Label Studio is always required.  There is no null/disabled mode.
 
 Error mapping
 -------------
@@ -16,7 +15,7 @@ Error mapping
 Format converters
 -----------------
 Module-level helpers convert between the platform's flat label representation
-and Label Studio's structured annotation/prediction JSON format.
+and Label Studio's structured annotation JSON format.
 """
 from __future__ import annotations
 
@@ -318,51 +317,6 @@ class LabelStudioClient:
             raise _wrap_sdk_error(exc) from exc
 
     # ------------------------------------------------------------------
-    # Predictions
-    # ------------------------------------------------------------------
-
-    async def import_predictions(
-        self, project_id: int, predictions: list[dict]
-    ) -> dict:
-        """Bulk-import predictions into a project.
-
-        Parameters
-        ----------
-        project_id:
-            Target project ID.
-        predictions:
-            List of prediction dicts. Each should contain at least
-            ``task``, ``result``, and optionally ``score`` / ``model_version``.
-
-        Returns
-        -------
-        dict
-            Response from the import endpoint.
-        """
-        from label_studio_sdk.types.prediction_request import (  # type: ignore[import]
-            PredictionRequest,
-        )
-
-        try:
-            request_objects = [
-                PredictionRequest(
-                    task=p.get("task"),
-                    result=p.get("result", []),
-                    score=p.get("score"),
-                    model_version=p.get("model_version"),
-                )
-                for p in predictions
-            ]
-            result = await asyncio.to_thread(
-                self._client.projects.import_predictions,
-                id=project_id,
-                request=request_objects,
-            )
-            return _to_dict(result)
-        except Exception as exc:
-            raise _wrap_sdk_error(exc) from exc
-
-    # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
 
@@ -422,60 +376,6 @@ class LabelStudioClient:
 
 
 # ---------------------------------------------------------------------------
-# Null (no-op) client
-# ---------------------------------------------------------------------------
-
-
-class NullLabelStudioClient:
-    """No-op implementation of the Label Studio client interface.
-
-    Used when ``label_studio.enabled`` is ``false`` in the config.  All methods
-    return safe empty defaults so callers don't need to special-case the
-    disabled state.
-    """
-
-    async def create_project(self, name: str, label_config: str) -> dict:
-        return {"id": 0, "title": name}
-
-    async def get_project(self, project_id: int) -> dict:
-        return {"id": project_id, "title": ""}
-
-    async def list_projects(self) -> list[dict]:
-        return []
-
-    async def create_task(self, project_id: int, data: dict) -> dict:
-        return {"id": 0}
-
-    async def list_tasks(
-        self, project_id: int, page: int = 1, page_size: int = 50
-    ) -> tuple[list[dict], int]:
-        return [], 0
-
-    async def get_task(self, task_id: int) -> dict:
-        return {"id": task_id}
-
-    async def create_annotation(
-        self, task_id: int, result: list[dict]
-    ) -> dict:
-        return {"id": 0, "task": task_id, "result": result}
-
-    async def list_annotations(self, task_id: int) -> list[dict]:
-        return []
-
-    async def import_predictions(
-        self, project_id: int, predictions: list[dict]
-    ) -> dict:
-        return {"count": 0}
-
-    async def export_project(self, project_id: int) -> list[dict]:
-        return []
-
-    @staticmethod
-    def generate_image_classification_config(label_space: list[str]) -> str:
-        return LabelStudioClient.generate_image_classification_config(label_space)
-
-
-# ---------------------------------------------------------------------------
 # Format conversion helpers
 # ---------------------------------------------------------------------------
 
@@ -526,42 +426,3 @@ def ls_annotation_to_platform(result: list[dict]) -> str:
             if choices:
                 return choices[0]
     return ""
-
-
-def platform_prediction_to_ls(
-    predicted_label: str,
-    score: float,
-    task_id: int,
-    model_version: str = "",
-) -> dict:
-    """Convert a platform prediction to a Label Studio prediction dict.
-
-    Parameters
-    ----------
-    predicted_label:
-        The model's predicted class label.
-    score:
-        Confidence score in [0, 1].
-    task_id:
-        Label Studio task ID the prediction belongs to.
-    model_version:
-        Optional model version string for traceability.
-
-    Returns
-    -------
-    dict
-        Prediction dict suitable for passing to :meth:`LabelStudioClient.import_predictions`.
-    """
-    return {
-        "task": task_id,
-        "result": [
-            {
-                "from_name": "classification",
-                "to_name": "image",
-                "type": "choices",
-                "value": {"choices": [predicted_label]},
-            }
-        ],
-        "score": score,
-        "model_version": model_version,
-    }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.domain.types import DatasetType, ModelFramework, ResultType, TaskType
+from app.domain.types import DatasetType, ModelFramework, TaskType
 
 
 class DatasetContract(BaseModel):
@@ -19,8 +19,3 @@ class TaskContract(BaseModel):
 class ModelContract(BaseModel):
     framework: ModelFramework
     base_model: str
-
-
-class ResultContract(BaseModel):
-    result_type: ResultType
-    sample_id: str

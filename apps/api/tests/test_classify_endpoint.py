@@ -45,34 +45,13 @@ def _create_annotation(c: TestClient, sample_id: str, label: str, created_by: st
     return r.json()["id"]
 
 
-def _create_prediction(
-    c: TestClient,
-    sample_id: str,
-    predicted_label: str,
-    score: float = 0.9,
-    model_artifact_id: str = "model-1",
-) -> str:
-    """Create a prediction and return prediction_id."""
-    r = c.post(
-        "/api/v1/predictions",
-        json={
-            "sample_id": sample_id,
-            "predicted_label": predicted_label,
-            "score": score,
-            "model_artifact_id": model_artifact_id,
-        },
-    )
-    assert r.status_code == 200
-    return r.json()["id"]
-
-
 # ---------------------------------------------------------------------------
-# Test 1: Happy path — enriched response shape with annotations and predictions
+# Test 1: Happy path — enriched response shape with annotations
 # ---------------------------------------------------------------------------
 
 
 def test_samples_with_labels_happy_path() -> None:
-    """Create dataset + 3 samples + annotations for 2 + prediction for 1 → correct enriched shape."""
+    """Create dataset + 3 samples + annotations for 2 → correct enriched shape."""
     with TestClient(app) as c:
         dataset_id = _create_dataset(c)
 
@@ -84,9 +63,6 @@ def test_samples_with_labels_happy_path() -> None:
         # annotations for s1 and s2 (s3 unannotated)
         _create_annotation(c, s1, "cat")
         _create_annotation(c, s2, "dog")
-
-        # prediction for s1 only
-        pred_id = _create_prediction(c, s1, "cat", score=0.95, model_artifact_id="m-abc")
 
         resp = c.get(f"/api/v1/datasets/{dataset_id}/samples-with-labels")
         assert resp.status_code == 200
@@ -107,7 +83,6 @@ def test_samples_with_labels_happy_path() -> None:
         assert "image_uris" in s1_item
         assert "metadata" in s1_item
         assert "latest_annotation" in s1_item
-        assert "latest_prediction" in s1_item
 
         # s1 has annotation
         assert s1_item["latest_annotation"] is not None
@@ -116,17 +91,9 @@ def test_samples_with_labels_happy_path() -> None:
         assert "created_by" in s1_item["latest_annotation"]
         assert "created_at" in s1_item["latest_annotation"]
 
-        # s1 has prediction
-        assert s1_item["latest_prediction"] is not None
-        assert s1_item["latest_prediction"]["predicted_label"] == "cat"
-        assert s1_item["latest_prediction"]["score"] == 0.95
-        assert s1_item["latest_prediction"]["model_artifact_id"] == "m-abc"
-        assert s1_item["latest_prediction"]["id"] == pred_id
-
-        # s3 has no annotation and no prediction
+        # s3 has no annotation
         s3_item = next(item for item in body["items"] if item["id"] == s3)
         assert s3_item["latest_annotation"] is None
-        assert s3_item["latest_prediction"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -250,28 +217,3 @@ def test_samples_with_labels_latest_annotation_wins() -> None:
         # Should return the latest annotation
         assert s1_item["latest_annotation"] is not None
         assert s1_item["latest_annotation"]["label"] == "dog"
-
-
-# ---------------------------------------------------------------------------
-# Test 7: Multiple predictions per sample — highest score wins
-# ---------------------------------------------------------------------------
-
-
-def test_samples_with_labels_highest_score_prediction_wins() -> None:
-    """Multiple predictions on same sample → highest score is returned."""
-    with TestClient(app) as c:
-        dataset_id = _create_dataset(c, name="highest-pred-ds")
-        s1 = _create_sample(c, dataset_id)
-
-        # Two predictions: lower score first, then higher score
-        _create_prediction(c, s1, "cat", score=0.5, model_artifact_id="m-1")
-        _create_prediction(c, s1, "dog", score=0.99, model_artifact_id="m-2")
-
-        resp = c.get(f"/api/v1/datasets/{dataset_id}/samples-with-labels")
-        assert resp.status_code == 200
-        body = resp.json()
-
-        s1_item = next(item for item in body["items"] if item["id"] == s1)
-        assert s1_item["latest_prediction"] is not None
-        assert s1_item["latest_prediction"]["score"] == 0.99
-        assert s1_item["latest_prediction"]["model_artifact_id"] == "m-2"

@@ -149,28 +149,6 @@ class ArtifactORM(Base):
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
 
-class PredictionORM(Base):
-    __tablename__ = "predictions"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    result_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    sample_id: Mapped[str] = mapped_column(ForeignKey("samples.id", ondelete="CASCADE"), nullable=False)
-    predicted_label: Mapped[str] = mapped_column(String(255), nullable=False)
-    score: Mapped[float] = mapped_column(Float, nullable=False)
-    model_artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)
-
-
-class PredictionEditORM(Base):
-    __tablename__ = "prediction_edits"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    result_id: Mapped[str] = mapped_column(ForeignKey("predictions.id", ondelete="CASCADE"), nullable=False)
-    corrected_label: Mapped[str] = mapped_column(String(255), nullable=False)
-    edited_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
-    user_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-
-
 class SampleFeatureORM(Base):
     __tablename__ = "sample_features"
 

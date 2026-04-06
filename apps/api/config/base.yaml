@@ -54,9 +54,9 @@ embedding:
   grpc_target: "localhost:50051"
 
 label_studio:
-  enabled: false
   url: ""
   api_key: ""
+  database_url: ""
 
 auth:
   jwt_secret_key: "replace-me-in-production"

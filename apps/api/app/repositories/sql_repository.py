@@ -14,8 +14,6 @@ from app.db.models import (
     OrgMembershipORM,
     OrganizationORM,
     PersonalAccessTokenORM,
-    PredictionEditORM,
-    PredictionORM,
     SampleFeatureORM,
     SampleORM,
     ScheduleORM,
@@ -29,8 +27,6 @@ from app.domain.models import (
     ArtifactRef,
     Dataset,
     DEFAULT_ORG_ID,
-    PredictionEdit,
-    PredictionResult,
     Sample,
     SampleFeature,
     TrainingEvent,
@@ -207,16 +203,14 @@ class SqlRepository:
         label_filter: str | None = None,
         order_by: str = "id",
     ) -> tuple[list[dict], int]:
-        """Return samples enriched with latest annotation and highest-score prediction.
+        """Return samples enriched with latest annotation.
 
-        Uses subqueries to find:
-        - Latest annotation per sample (MAX created_at)
-        - Highest-score prediction per sample (MAX score)
+        Uses a subquery to find the latest annotation per sample (MAX created_at).
 
         label_filter="__unlabeled__" → WHERE latest_annotation IS NULL
         label_filter="cat" → WHERE latest_annotation.label == "cat"
         """
-        from sqlalchemy import alias, and_, null, outerjoin
+        from sqlalchemy import alias, and_
 
         async with self.session_factory() as session:
             # Subquery: latest annotation per sample (max created_at)
@@ -229,22 +223,10 @@ class SqlRepository:
                 .subquery("latest_ann_time")
             )
 
-            # Subquery: highest-score prediction per sample (max score)
-            best_pred_subq = (
-                select(
-                    PredictionORM.sample_id.label("sample_id"),
-                    func.max(PredictionORM.score).label("max_score"),
-                )
-                .group_by(PredictionORM.sample_id)
-                .subquery("best_pred_score")
-            )
-
             # Alias AnnotationORM for the JOIN to get annotation details
             AnnAlias = alias(AnnotationORM.__table__, name="ann")
-            # Alias PredictionORM for the JOIN to get prediction details
-            PredAlias = alias(PredictionORM.__table__, name="pred")
 
-            # Build base query: SampleORM LEFT JOIN to latest annotation, LEFT JOIN to best prediction
+            # Build base query: SampleORM LEFT JOIN to latest annotation
             stmt = (
                 select(
                     SampleORM.id,
@@ -257,11 +239,6 @@ class SqlRepository:
                     AnnAlias.c.label.label("ann_label"),
                     AnnAlias.c.created_by.label("ann_created_by"),
                     AnnAlias.c.created_at.label("ann_created_at"),
-                    # Prediction fields
-                    PredAlias.c.id.label("pred_id"),
-                    PredAlias.c.predicted_label.label("pred_predicted_label"),
-                    PredAlias.c.score.label("pred_score"),
-                    PredAlias.c.model_artifact_id.label("pred_model_artifact_id"),
                 )
                 .where(SampleORM.dataset_id == dataset_id)
                 .outerjoin(
@@ -273,17 +250,6 @@ class SqlRepository:
                     and_(
                         AnnAlias.c.sample_id == SampleORM.id,
                         AnnAlias.c.created_at == latest_ann_subq.c.max_created_at,
-                    ),
-                )
-                .outerjoin(
-                    best_pred_subq,
-                    best_pred_subq.c.sample_id == SampleORM.id,
-                )
-                .outerjoin(
-                    PredAlias,
-                    and_(
-                        PredAlias.c.sample_id == SampleORM.id,
-                        PredAlias.c.score == best_pred_subq.c.max_score,
                     ),
                 )
             )
@@ -328,15 +294,6 @@ class SqlRepository:
                         "created_at": ann_created_at_str,
                     }
 
-                latest_prediction = None
-                if row["pred_id"] is not None:
-                    latest_prediction = {
-                        "id": row["pred_id"],
-                        "predicted_label": row["pred_predicted_label"],
-                        "score": row["pred_score"],
-                        "model_artifact_id": row["pred_model_artifact_id"],
-                    }
-
                 result.append(
                     {
                         "id": row["id"],
@@ -345,7 +302,6 @@ class SqlRepository:
                         "metadata": row["metadata_json"],
                         "ls_task_id": row["ls_task_id"],
                         "latest_annotation": latest_annotation,
-                        "latest_prediction": latest_prediction,
                     }
                 )
 
@@ -612,85 +568,6 @@ class SqlRepository:
             if row is None:
                 return None
             return ArtifactRef(id=row.id, uri=row.uri, kind=row.kind, metadata=row.metadata_json)
-
-    async def create_prediction(self, prediction: PredictionResult) -> PredictionResult:
-        async with self.session_factory() as session:
-            session.add(
-                PredictionORM(
-                    id=prediction.id,
-                    result_type=prediction.result_type.value,
-                    sample_id=prediction.sample_id,
-                    predicted_label=prediction.predicted_label,
-                    score=prediction.score,
-                    model_artifact_id=prediction.model_artifact_id,
-                )
-            )
-            await session.commit()
-        return prediction
-
-    async def list_predictions(self) -> list[PredictionResult]:
-        async with self.session_factory() as session:
-            rows = (await session.execute(select(PredictionORM))).scalars().all()
-            return [
-                PredictionResult(
-                    id=r.id,
-                    result_type=r.result_type,
-                    sample_id=r.sample_id,
-                    predicted_label=r.predicted_label,
-                    score=r.score,
-                    model_artifact_id=r.model_artifact_id,
-                )
-                for r in rows
-            ]
-
-    async def list_predictions_for_dataset(self, dataset_id: str) -> list[PredictionResult]:
-        async with self.session_factory() as session:
-            stmt = (
-                select(PredictionORM)
-                .join(SampleORM, PredictionORM.sample_id == SampleORM.id)
-                .where(SampleORM.dataset_id == dataset_id)
-            )
-            rows = (await session.execute(stmt)).scalars().all()
-            return [
-                PredictionResult(
-                    id=r.id,
-                    result_type=r.result_type,
-                    sample_id=r.sample_id,
-                    predicted_label=r.predicted_label,
-                    score=r.score,
-                    model_artifact_id=r.model_artifact_id,
-                )
-                for r in rows
-            ]
-
-    async def get_prediction(self, prediction_id: str) -> PredictionResult | None:
-        async with self.session_factory() as session:
-            row = await session.get(PredictionORM, prediction_id)
-            if row is None:
-                return None
-            return PredictionResult(
-                id=row.id,
-                result_type=row.result_type,
-                sample_id=row.sample_id,
-                predicted_label=row.predicted_label,
-                score=row.score,
-                model_artifact_id=row.model_artifact_id,
-            )
-
-    async def create_prediction_edit(self, edit: PredictionEdit, user_id: str | None = None) -> PredictionEdit:
-        async with self.session_factory() as session:
-            session.add(
-                PredictionEditORM(
-                    id=edit.id,
-                    result_id=edit.result_id,
-                    corrected_label=edit.corrected_label,
-                    edited_by=edit.edited_by,
-                    edited_at=edit.edited_at,
-                    user_id=user_id,
-                )
-            )
-            await session.commit()
-        return edit
 
     async def update_sample_image_uris(self, sample_id: str, image_uris: list[str]) -> Sample | None:
         async with self.session_factory() as session:

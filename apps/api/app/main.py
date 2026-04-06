@@ -17,17 +17,14 @@ from app.api.schemas import (
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateOrgRequest,
-    CreatePredictionRequest,
     CreatePresetRequest,
     CreateSampleRequest,
     CreateScheduleRequest,
     CreateTokenRequest,
     CreateTrainingJobRequest,
     DashboardResponse,
-    EditPredictionRequest,
     JobQueueStats,
     LatestAnnotation,
-    LatestPrediction,
     LinkLabelStudioRequest,
     LoginRequest,
     LoginResponse,
@@ -42,7 +39,6 @@ from app.api.schemas import (
     ScheduleResponse,
     SampleWithLabels,
     SetPublicRequest,
-    SyncPredictionsResponse,
     TokenCreatedResponse,
     TokenResponse,
     UpdateAnnotationRequest,
@@ -58,7 +54,7 @@ from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.models import DatasetORM, OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, TrainingJobORM, UserORM
 from app.db.session import init_db
-from app.domain.models import Annotation, Dataset, Organization, PredictionEdit, PredictionResult, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
+from app.domain.models import Annotation, Dataset, Organization, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
 
 
@@ -101,26 +97,23 @@ async def create_dataset(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> Dataset:
-    dataset = Dataset(name=payload.name, task_spec=payload.task_spec, org_id=org.id)
+    # LS-first: create project, fail if LS fails
+    try:
+        from app.services.label_studio import LabelStudioClient as _LSC
+        ls_client = container.label_studio_client()
+        label_config = _LSC.generate_image_classification_config(
+            payload.task_spec.label_space
+        )
+        project = await ls_client.create_project(payload.name, label_config)
+        ls_project_id = str(project.get("id", ""))
+        if not ls_project_id:
+            raise HTTPException(status_code=502, detail="Label Studio project creation returned no ID.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Label Studio project creation failed: {exc}")
+    dataset = Dataset(name=payload.name, task_spec=payload.task_spec, org_id=org.id, ls_project_id=ls_project_id)
     dataset = await container.repository().create_dataset(dataset)
-    # LS hook: create project if enabled
-    cfg = container.config()
-    if cfg.label_studio.enabled:
-        try:
-            from app.services.label_studio import LabelStudioClient as _LSC
-            ls_client = container.label_studio_client()
-            label_config = _LSC.generate_image_classification_config(
-                payload.task_spec.label_space
-            )
-            project = await ls_client.create_project(payload.name, label_config)
-            ls_project_id = str(project.get("id", ""))
-            if ls_project_id:
-                await container.repository().update_dataset_ls_project_id(
-                    dataset.id, ls_project_id
-                )
-                dataset = dataset.model_copy(update={"ls_project_id": ls_project_id})
-        except Exception:
-            pass  # LS failure shouldn't break dataset creation
     return dataset
 
 
@@ -168,23 +161,24 @@ async def create_sample(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata)
+    if not dataset.ls_project_id:
+        raise HTTPException(status_code=500, detail="Dataset has no Label Studio project — cannot create sample.")
+    # LS-first: create task before persisting sample (avoid orphan rows on LS failure)
+    try:
+        ls_client = container.label_studio_client()
+        image_url = _make_ls_image_url(payload.image_uris[0]) if payload.image_uris else ""
+        task = await ls_client.create_task(
+            int(dataset.ls_project_id), {"image": image_url}
+        )
+        ls_task_id = task.get("id")
+        if ls_task_id is None:
+            raise HTTPException(status_code=502, detail="Label Studio task creation returned no ID.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Label Studio task creation failed: {exc}")
+    sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata, ls_task_id=int(ls_task_id))
     sample = await container.repository().create_sample(sample)
-    # LS hook: create task if enabled and dataset linked
-    cfg = container.config()
-    if cfg.label_studio.enabled and dataset.ls_project_id:
-        try:
-            ls_client = container.label_studio_client()
-            image_url = _make_ls_image_url(sample.image_uris[0]) if sample.image_uris else ""
-            task = await ls_client.create_task(
-                int(dataset.ls_project_id), {"image": image_url}
-            )
-            ls_task_id = task.get("id")
-            if ls_task_id is not None:
-                await container.repository().update_sample_ls_task_id(sample.id, int(ls_task_id))
-                sample = sample.model_copy(update={"ls_task_id": int(ls_task_id)})
-        except Exception:
-            pass  # LS failure shouldn't break sample creation
     return sample
 
 
@@ -283,19 +277,21 @@ async def create_annotation(
     sample = await container.repository().get_sample(payload.sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
+    if not sample.ls_task_id:
+        raise HTTPException(status_code=500, detail="Sample has no Label Studio task — cannot create annotation.")
+    # LS-first: sync annotation before persisting locally (avoid orphan rows on LS failure)
+    try:
+        from app.services.label_studio import platform_annotation_to_ls
+        ls_result = platform_annotation_to_ls(payload.label)
+        await container.label_studio_client().create_annotation(
+            sample.ls_task_id, ls_result
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Label Studio annotation sync failed: {exc}")
     ann = Annotation(sample_id=payload.sample_id, label=payload.label, created_by=current_user.id)
     ann = await container.repository().create_annotation(ann)
-    # LS hook: sync annotation if enabled and sample linked
-    cfg = container.config()
-    if cfg.label_studio.enabled and sample.ls_task_id:
-        try:
-            from app.services.label_studio import platform_annotation_to_ls
-            ls_result = platform_annotation_to_ls(payload.label)
-            await container.label_studio_client().create_annotation(
-                sample.ls_task_id, ls_result
-            )
-        except Exception:
-            pass  # LS failure shouldn't break annotation creation
     return ann
 
 
@@ -368,9 +364,8 @@ async def sync_annotations_to_ls(
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    cfg = container.config()
-    if not cfg.label_studio.enabled or not dataset.ls_project_id:
-        return {"synced_count": 0, "errors": ["Label Studio not enabled or dataset not linked"]}
+    if not dataset.ls_project_id:
+        raise HTTPException(status_code=500, detail="Dataset has no Label Studio project — cannot sync annotations.")
 
     # Get all samples and annotations for this dataset
     samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
@@ -384,7 +379,11 @@ async def sync_annotations_to_ls(
     from app.services.label_studio import platform_annotation_to_ls
     for ann in annotations:
         sample = sample_map.get(ann.sample_id)
-        if not sample or not sample.ls_task_id:
+        if not sample:
+            errors.append(f"annotation {ann.id}: sample {ann.sample_id} not found")
+            continue
+        if not sample.ls_task_id:
+            errors.append(f"annotation {ann.id}: sample {ann.sample_id} has no ls_task_id — cannot sync")
             continue
         try:
             ls_result = platform_annotation_to_ls(ann.label)
@@ -526,114 +525,15 @@ async def mark_user_left(
     return {"marked": await container.repository().mark_user_left(job_id)}
 
 
-@app.post("/api/v1/predictions", response_model=PredictionResult)
-async def create_prediction(
-    payload: CreatePredictionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> PredictionResult:
-    if await container.repository().get_sample(payload.sample_id) is None:
-        raise HTTPException(status_code=404, detail="sample not found")
-    pred = PredictionResult(
-        sample_id=payload.sample_id,
-        predicted_label=payload.predicted_label,
-        score=payload.score,
-        model_artifact_id=payload.model_artifact_id,
-    )
-    return await container.repository().create_prediction(pred)
-
-
-@app.get("/api/v1/predictions", response_model=list[PredictionResult])
-async def list_predictions(
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> list[PredictionResult]:
-    return await container.repository().list_predictions()
-
-
-@app.patch("/api/v1/predictions/{prediction_id}", response_model=PredictionEdit)
-async def edit_prediction(
-    prediction_id: str,
-    payload: EditPredictionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> PredictionEdit:
-    if await container.repository().get_prediction(prediction_id) is None:
-        raise HTTPException(status_code=404, detail="prediction not found")
-    edit = PredictionEdit(result_id=prediction_id, corrected_label=payload.corrected_label, edited_by=current_user.id)
-    return await container.repository().create_prediction_edit(edit)
-
-
-@app.post("/api/v1/datasets/{dataset_id}/sync-predictions-to-ls", response_model=SyncPredictionsResponse)
-async def sync_predictions_to_ls(
-    dataset_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> SyncPredictionsResponse:
-    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-
-    cfg = container.config()
-    if not cfg.label_studio.enabled or not dataset.ls_project_id:
-        return SyncPredictionsResponse(
-            synced_count=0, skipped_count=0,
-            errors=["Label Studio not enabled or dataset not linked"]
-        )
-
-    # Get predictions for this dataset's samples
-    predictions = await container.repository().list_predictions_for_dataset(dataset_id)
-    if not predictions:
-        return SyncPredictionsResponse(synced_count=0, skipped_count=0, errors=[])
-
-    # Get sample map for ls_task_id lookup
-    samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
-    sample_map = {s.id: s for s in samples}
-
-    from app.services.label_studio import platform_prediction_to_ls
-
-    ls_predictions = []
-    skipped = 0
-    for pred in predictions:
-        sample = sample_map.get(pred.sample_id)
-        if not sample or not sample.ls_task_id:
-            skipped += 1
-            continue
-        ls_pred = platform_prediction_to_ls(
-            predicted_label=pred.predicted_label,
-            score=pred.score,
-            task_id=sample.ls_task_id,
-            model_version=pred.model_artifact_id,
-        )
-        ls_predictions.append(ls_pred)
-
-    synced = 0
-    errors = []
-    ls_client = container.label_studio_client()
-
-    # Batch import (100 at a time)
-    batch_size = 100
-    for i in range(0, len(ls_predictions), batch_size):
-        batch = ls_predictions[i:i + batch_size]
-        try:
-            await ls_client.import_predictions(int(dataset.ls_project_id), batch)
-            synced += len(batch)
-        except Exception as e:
-            errors.append(f"batch {i // batch_size}: {str(e)}")
-
-    return SyncPredictionsResponse(synced_count=synced, skipped_count=skipped, errors=errors)
-
-
 _logger = logging.getLogger(__name__)
 
 
 async def _build_export_data(dataset_id: str):
-    """Return (dataset, samples, annotations) — sourcing from LS when appropriate.
+    """Return (dataset, samples, annotations) — sourcing from LS Postgres directly.
 
-    If Label Studio is enabled and the dataset has an ``ls_project_id``, tasks
-    and annotations are fetched from LS and converted to the platform format.
-    On any LS failure the function falls back to the local repository data and
-    logs a warning.
+    LS is always required. The dataset must have an ``ls_project_id``.
+    Annotations are read from LS's ``task_completion`` table via ``LsReadRepository``.
+    Raises 500 if no LS project, 502 if LS DB read fails. NO local fallback.
     """
     from app.services.label_studio import ls_annotation_to_platform
 
@@ -642,66 +542,51 @@ async def _build_export_data(dataset_id: str):
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
-    cfg = container.config()
-    ls_enabled = bool(getattr(cfg, "label_studio", None) and cfg.label_studio.enabled)
+    if not dataset.ls_project_id:
+        raise HTTPException(status_code=500, detail="Dataset has no Label Studio project — cannot export.")
 
-    if ls_enabled and dataset.ls_project_id:
-        try:
-            ls_client = container.label_studio_client()
-            ls_tasks = await ls_client.export_project(int(dataset.ls_project_id))
+    try:
+        ls_read = container.ls_read_repository()
 
-            # Build a lookup: ls_task_id → platform Sample
-            all_samples, _ = await repo.list_samples(dataset_id, limit=100_000)
-            task_id_to_sample: dict[int, Sample] = {
-                s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
-            }
+        # Get all platform samples for this dataset
+        all_samples, _ = await repo.list_samples(dataset_id, limit=100_000)
+        task_id_to_sample: dict[int, Sample] = {
+            s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
+        }
 
-            samples_out: list[Sample] = []
-            annotations_out: list[Annotation] = []
+        # Read tasks and annotations from LS Postgres
+        ls_tasks = await ls_read.get_tasks_for_project(int(dataset.ls_project_id))
+        task_ids = [t["id"] for t in ls_tasks]
+        ls_annotations = await ls_read.get_annotations_for_tasks(task_ids) if task_ids else {}
 
-            for ls_task in ls_tasks:
-                task_id = ls_task.get("id")
-                platform_sample = task_id_to_sample.get(task_id) if task_id is not None else None
+        samples_out: list[Sample] = []
+        annotations_out: list[Annotation] = []
 
-                if platform_sample is None:
-                    # LS task has no matching platform sample — skip
-                    continue
+        for ls_task in ls_tasks:
+            task_id = ls_task["id"]
+            platform_sample = task_id_to_sample.get(task_id)
+            if platform_sample is None:
+                continue
+            samples_out.append(platform_sample)
 
-                samples_out.append(platform_sample)
-
-                for ls_ann in ls_task.get("annotations", []):
-                    result = ls_ann.get("result", [])
-                    label = ls_annotation_to_platform(result)
-                    if label:
-                        annotations_out.append(
-                            Annotation(
-                                sample_id=platform_sample.id,
-                                label=label,
-                                created_by="label_studio",
-                            )
+            for ls_ann in ls_annotations.get(task_id, []):
+                result = ls_ann.get("result", [])
+                label = ls_annotation_to_platform(result)
+                if label:
+                    annotations_out.append(
+                        Annotation(
+                            sample_id=platform_sample.id,
+                            label=label,
+                            created_by="label_studio",
                         )
+                    )
 
-            # Include any platform samples that have no LS task (no duplicates)
-            ls_task_ids_seen = {s.ls_task_id for s in samples_out}
-            for s in all_samples:
-                if s.ls_task_id not in ls_task_ids_seen or s.ls_task_id is None:
-                    if s not in samples_out:
-                        samples_out.append(s)
+        return dataset, samples_out, annotations_out
 
-            return dataset, samples_out, annotations_out
-
-        except Exception as exc:
-            _logger.warning(
-                "LS export failed for dataset %s project %s — falling back to local data: %s",
-                dataset_id,
-                dataset.ls_project_id,
-                exc,
-            )
-
-    # Default: use local repository data
-    samples, _ = await repo.list_samples(dataset_id, limit=100_000)
-    anns = await repo.list_annotations_for_dataset(dataset_id)
-    return dataset, samples, anns
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Label Studio database read failed: {exc}")
 
 
 @app.get("/api/v1/exports/{dataset_id}")
@@ -869,9 +754,8 @@ async def upload_sample_image(
 async def resolve_image(uri: str = Query(...)) -> Response:
     if uri.startswith("http://") or uri.startswith("https://"):
         cfg = container.config()
-        ls_enabled = bool(getattr(cfg, "label_studio", None) and cfg.label_studio.enabled)
-        ls_url = str(cfg.label_studio.url).rstrip("/") if ls_enabled else ""
-        if not (ls_enabled and ls_url and uri.startswith(ls_url)):
+        ls_url = str(cfg.label_studio.url).rstrip("/")
+        if not (ls_url and uri.startswith(ls_url)):
             raise HTTPException(status_code=400, detail="http/https URIs are not allowed")
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
