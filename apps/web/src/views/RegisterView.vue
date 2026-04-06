@@ -94,11 +94,13 @@ async function handleSubmit() {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: var(--n-color);
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .auth-card {
   width: 360px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
 }
 
 .auth-link {
