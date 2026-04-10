@@ -347,6 +347,89 @@ class LabelStudioClient:
             raise _wrap_sdk_error(exc) from exc
 
     # ------------------------------------------------------------------
+    # Predictions
+    # ------------------------------------------------------------------
+
+    async def create_prediction(
+        self,
+        task_id: int,
+        result: list[dict],
+        model_version: str | None = None,
+        score: float | None = None,
+    ) -> dict:
+        """Create a prediction for a task.
+
+        Parameters
+        ----------
+        task_id:
+            ID of the task to add prediction to.
+        result:
+            Prediction result in Label Studio format.
+        model_version:
+            Optional model version tag for filtering in LS.
+        score:
+            Optional confidence score (0-1).
+
+        Returns
+        -------
+        dict
+            Created prediction object.
+        """
+        try:
+            kwargs: dict[str, Any] = {
+                "task": task_id,
+                "result": result,
+            }
+            if model_version is not None:
+                kwargs["model_version"] = model_version
+            if score is not None:
+                kwargs["score"] = score
+
+            prediction = await asyncio.to_thread(
+                self._client.predictions.create,
+                **kwargs,
+            )
+            return _to_dict(prediction)
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
+    async def list_predictions(self, task_id: int) -> list[dict]:
+        """List all predictions for a task.
+
+        Parameters
+        ----------
+        task_id:
+            ID of the task.
+
+        Returns
+        -------
+        list[dict]
+            List of prediction objects.
+        """
+        try:
+            predictions = await asyncio.to_thread(
+                self._client.predictions.list, task=task_id
+            )
+            return [_to_dict(p) for p in predictions]
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
+    async def delete_prediction(self, prediction_id: int) -> None:
+        """Delete a prediction.
+
+        Parameters
+        ----------
+        prediction_id:
+            ID of the prediction to delete.
+        """
+        try:
+            await asyncio.to_thread(
+                self._client.predictions.delete, id=prediction_id
+            )
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
+    # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
 
@@ -456,3 +539,59 @@ def ls_annotation_to_platform(result: list[dict]) -> str:
             if choices:
                 return choices[0]
     return ""
+
+
+def platform_prediction_to_ls(
+    label: str,
+    score: float | None = None,
+) -> list[dict]:
+    """Convert a prediction label to Label Studio prediction result format.
+
+    Parameters
+    ----------
+    label:
+        The predicted classification label, e.g. ``"cat"``.
+    score:
+        Optional confidence score (will be ignored - score is set at prediction level).
+
+    Returns
+    -------
+    list[dict]
+        List with a single LS ``choices`` result object for predictions.
+    """
+    return [
+        {
+            "from_name": "classification",
+            "to_name": "image",
+            "type": "choices",
+            "value": {"choices": [label]},
+        }
+    ]
+
+
+def ls_prediction_to_platform(prediction: dict) -> tuple[str, float | None]:
+    """Extract label and score from a Label Studio prediction.
+
+    Parameters
+    ----------
+    prediction:
+        LS prediction object with ``result`` and optionally ``score`` fields.
+
+    Returns
+    -------
+    tuple[str, float | None]
+        (label, score) where label is the first choice found or "", and score
+        is the prediction confidence if present.
+    """
+    result = prediction.get("result", [])
+    score = prediction.get("score")
+    
+    label = ""
+    for item in result:
+        if item.get("type") == "choices":
+            choices = item.get("value", {}).get("choices", [])
+            if choices:
+                label = choices[0]
+                break
+    
+    return label, score

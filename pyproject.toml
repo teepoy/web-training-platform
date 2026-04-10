@@ -11,3 +11,8 @@ members = [
   "libs/python-sdk",
   "libs/protos",
 ]
+
+[dependency-groups]
+dev = [
+    "grpcio-tools>=1.80.0",
+]

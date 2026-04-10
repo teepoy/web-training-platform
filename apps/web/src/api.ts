@@ -1,14 +1,19 @@
 import type {
   Annotation,
   ArtifactRef,
+  BatchPredictionResult,
   BulkAnnotationRequest,
   BulkAnnotationResponse,
   DashboardResponse,
   Dataset,
   LoginResponse,
+  Model,
   Organization,
   PaginatedResponse,
+  PredictionResult,
+  PredictSingleRequest,
   RunLog,
+  RunPredictionRequest,
   Sample,
   SampleWithLabels,
   Schedule,
@@ -156,6 +161,56 @@ export async function uploadSampleImage(sampleId: string, file: File): Promise<U
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<UploadResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Model upload (multipart)
+// ---------------------------------------------------------------------------
+
+export async function uploadModel(
+  file: File,
+  name: string,
+  format: string,
+  jobId: string
+): Promise<Model> {
+  const form = new FormData();
+  form.append("file", file);
+  const uploadHeaders: Record<string, string> = {};
+  try {
+    const authStore = useAuthStore();
+    if (authStore.token) {
+      uploadHeaders["Authorization"] = `Bearer ${authStore.token}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { useOrgStore } = await import("./stores/org");
+    const orgStore = useOrgStore();
+    if (orgStore.currentOrgId) {
+      uploadHeaders["X-Organization-ID"] = orgStore.currentOrgId;
+    }
+  } catch {
+    /* ignore */
+  }
+  const params = new URLSearchParams();
+  params.set("name", name);
+  params.set("format", format);
+  params.set("job_id", jobId);
+  const r = await fetch(`${API_BASE}/models/upload?${params.toString()}`, {
+    method: "POST",
+    headers: uploadHeaders,
+    body: form,
+  });
+  if (!r.ok) {
+    let detail = `upload failed: ${r.status}`;
+    try {
+      const body = await r.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch { /* ignore */ }
+    throw new ApiError(detail, r.status);
+  }
+  return r.json() as Promise<Model>;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +468,21 @@ export const api = {
   downloadArtifact: (id: string) =>
     req<ArtifactRef>(`/artifacts/${id}/download`),
 
+  // ---- Models ----
+  listModels: (datasetId?: string, jobId?: string) => {
+    const params = new URLSearchParams();
+    if (datasetId) params.set("dataset_id", datasetId);
+    if (jobId) params.set("job_id", jobId);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return req<Model[]>(`/models${qs}`);
+  },
+
+  getModel: (id: string) => req<Model>(`/models/${id}`),
+
+  deleteModel: (id: string) => req<void>(`/models/${id}`, { method: "DELETE" }),
+
+  downloadModelUrl: (id: string) => `${API_BASE}/models/${id}/download`,
+
   // ---- Image Upload ----
   uploadSampleImage: (sampleId: string, file: File) => uploadSampleImage(sampleId, file),
 
@@ -478,6 +548,22 @@ export const api = {
 
   // ---- Dashboard ----
   getDashboard: () => req<DashboardResponse>('/dashboard'),
+
+  // ---- Predictions ----
+  runPredictions: (request: RunPredictionRequest) =>
+    req<BatchPredictionResult>('/predictions/run', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }),
+
+  predictSingle: (request: PredictSingleRequest) =>
+    req<PredictionResult>('/predictions/single', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }),
+
+  listSamplePredictions: (sampleId: string) =>
+    req<Record<string, unknown>[]>(`/samples/${sampleId}/predictions`),
 
   // ---- Public visibility toggles (superadmin) ----
   toggleDatasetPublic: (id: string, isPublic: boolean) =>

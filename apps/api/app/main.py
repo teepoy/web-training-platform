@@ -13,6 +13,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
+    BatchPredictionResponse,
     BulkAnnotationRequest,
     CreateAnnotationRequest,
     CreateDatasetRequest,
@@ -29,11 +30,15 @@ from app.api.schemas import (
     LoginResponse,
     MemberResponse,
     MembershipResponse,
+    ModelResponse,
     OrgResponse,
     PaginatedResponse,
+    PredictionResultResponse,
+    PredictSingleRequest,
     RecentJobSummary,
     RegisterRequest,
     RunLogResponse,
+    RunPredictionRequest,
     RunResponse,
     ScheduleResponse,
     SampleWithLabels,
@@ -45,6 +50,7 @@ from app.api.schemas import (
     UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
     UpdateScheduleRequest,
+    UploadModelRequest,
     UserResponse,
     UserWithOrgsResponse,
     WorkPoolStatus,
@@ -58,12 +64,57 @@ from app.domain.models import Annotation, Dataset, Organization, Sample, Trainin
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
 
 
+_logger = logging.getLogger(__name__)
+
+
+async def _run_prefect_runner() -> None:
+    """Start the Prefect Runner inside the API process.
+
+    Registers the well-known deployments (``drain-dataset-deployment``,
+    ``train-job-deployment``) and polls Prefect server for scheduled runs.
+    Runs indefinitely; designed to be wrapped in an ``asyncio.Task`` that
+    is cancelled on shutdown.
+    """
+    from prefect.runner import Runner
+
+    from app.flows.drain_dataset import drain_dataset
+    from app.flows.train_job import train_job
+
+    drain_deploy = await drain_dataset.ato_deployment(
+        name="drain-dataset-deployment",
+        description="Default deployment for drain-dataset flow (managed by API)",
+    )
+    train_deploy = await train_job.ato_deployment(
+        name="train-job-deployment",
+        description="Default deployment for train-job flow (managed by API)",
+    )
+    runner = Runner(name="flow-worker")
+    await runner.aadd_deployment(drain_deploy)
+    await runner.aadd_deployment(train_deploy)
+    await runner.start()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     cfg = container.config()
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
+
+    # Start the embedded Prefect runner when execution engine is prefect.
+    runner_task: asyncio.Task | None = None
+    if str(cfg.execution.engine) == "prefect":
+        _logger.info("Starting embedded Prefect flow runner (execution.engine=prefect)")
+        runner_task = asyncio.create_task(_run_prefect_runner())
+
     yield
+
+    # Gracefully shut down the runner on application exit.
+    if runner_task is not None:
+        runner_task.cancel()
+        try:
+            await runner_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Online Finetune API", version="0.1.0", lifespan=lifespan)
@@ -560,9 +611,6 @@ async def mark_user_left(
     return {"marked": await container.repository().mark_user_left(job_id)}
 
 
-_logger = logging.getLogger(__name__)
-
-
 async def _build_export_data(dataset_id: str):
     """Return (dataset, samples, annotations) — sourcing from LS Postgres directly.
 
@@ -758,6 +806,103 @@ async def download_artifact(
     return Response(content=data, media_type="application/octet-stream")
 
 
+# ---------------------------------------------------------------------------
+# Model management endpoints
+# ---------------------------------------------------------------------------
+
+
+def _model_to_response(model) -> ModelResponse:
+    """Convert domain Model to API response."""
+    return ModelResponse(
+        id=model.id,
+        uri=model.uri,
+        kind=model.kind,
+        name=model.name,
+        file_size=model.file_size,
+        file_hash=model.file_hash,
+        format=model.format,
+        created_at=model.created_at,
+        metadata=model.metadata,
+        job_id=model.job_id,
+        dataset_id=model.dataset_id,
+        dataset_name=model.dataset_name,
+        preset_name=model.preset_name,
+    )
+
+
+@app.get("/api/v1/models", response_model=list[ModelResponse])
+async def list_models(
+    dataset_id: str | None = Query(default=None),
+    job_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[ModelResponse]:
+    """List all trained models, optionally filtered by dataset or job."""
+    models = await container.model_service().list_models(
+        org_id=org.id,
+        dataset_id=dataset_id,
+        job_id=job_id,
+    )
+    return [_model_to_response(m) for m in models]
+
+
+@app.get("/api/v1/models/{model_id}", response_model=ModelResponse)
+async def get_model(
+    model_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ModelResponse:
+    """Get a single model by ID."""
+    model = await container.model_service().get_model(model_id, org_id=org.id)
+    return _model_to_response(model)
+
+
+@app.delete("/api/v1/models/{model_id}", status_code=204)
+async def delete_model(
+    model_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    """Delete a model artifact."""
+    await container.model_service().delete_model(model_id, org_id=org.id)
+    return Response(status_code=204)
+
+
+@app.get("/api/v1/models/{model_id}/download")
+async def download_model(
+    model_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    """Download a model file."""
+    data, filename = await container.model_service().download_model(model_id, org_id=org.id)
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/v1/models/upload", response_model=ModelResponse)
+async def upload_model(
+    file: UploadFile = File(...),
+    name: str = Query(...),
+    format: str = Query(...),
+    job_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ModelResponse:
+    """Upload an external model file and associate it with a training job."""
+    model = await container.model_service().upload_model(
+        file=file,
+        org_id=org.id,
+        name=name,
+        format=format,
+        job_id=job_id,
+    )
+    return _model_to_response(model)
+
+
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -868,6 +1013,91 @@ async def update_embed_config(
     new_config = {"model": payload.model, "dimension": payload.dimension}
     await container.repository().update_dataset_embed_config(dataset_id, new_config)
     return new_config
+
+
+# ---------------------------------------------------------------------------
+# Prediction endpoints
+# ---------------------------------------------------------------------------
+
+
+def _prediction_result_to_response(result) -> PredictionResultResponse:
+    """Convert domain PredictionResult to API response."""
+    return PredictionResultResponse(
+        sample_id=result.sample_id,
+        ls_task_id=result.ls_task_id,
+        predicted_label=result.predicted_label,
+        confidence=result.confidence,
+        ls_prediction_id=result.ls_prediction_id,
+        error=result.error,
+    )
+
+
+@app.post("/api/v1/predictions/run", response_model=BatchPredictionResponse)
+async def run_predictions(
+    payload: RunPredictionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> BatchPredictionResponse:
+    """Run batch predictions on a dataset using a trained model.
+    
+    Predictions are stored in Label Studio and can be viewed in the LS UI.
+    """
+    try:
+        result = await container.prediction_service().run_prediction(
+            model_id=payload.model_id,
+            dataset_id=payload.dataset_id,
+            org_id=org.id,
+            sample_ids=payload.sample_ids,
+            model_version=payload.model_version,
+        )
+        return BatchPredictionResponse(
+            model_id=result.model_id,
+            dataset_id=result.dataset_id,
+            total_samples=result.total_samples,
+            successful=result.successful,
+            failed=result.failed,
+            predictions=[_prediction_result_to_response(p) for p in result.predictions],
+            started_at=result.started_at,
+            completed_at=result.completed_at,
+            model_version=result.model_version,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/predictions/single", response_model=PredictionResultResponse)
+async def predict_single(
+    payload: PredictSingleRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> PredictionResultResponse:
+    """Run prediction on a single sample using a trained model."""
+    try:
+        result = await container.prediction_service().predict_single(
+            model_id=payload.model_id,
+            sample_id=payload.sample_id,
+            org_id=org.id,
+            model_version=payload.model_version,
+        )
+        return _prediction_result_to_response(result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/v1/samples/{sample_id}/predictions")
+async def list_sample_predictions(
+    sample_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[dict]:
+    """List all predictions for a sample from Label Studio."""
+    try:
+        return await container.prediction_service().list_predictions_for_sample(
+            sample_id=sample_id,
+            org_id=org.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.patch("/api/v1/datasets/{dataset_id}/public")

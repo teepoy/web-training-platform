@@ -316,3 +316,84 @@ class ModelAssetSummary(BaseModel):
 
 class SetPublicRequest(BaseModel):
     is_public: bool
+
+
+# ---------------------------------------------------------------------------
+# Model management schemas
+# ---------------------------------------------------------------------------
+
+
+class ModelResponse(BaseModel):
+    """Response schema for model artifacts."""
+    id: str
+    uri: str
+    kind: str
+    name: str | None = None
+    file_size: int | None = None
+    file_hash: str | None = None
+    format: str | None = None
+    created_at: datetime | None = None
+    metadata: dict = Field(default_factory=dict)
+    job_id: str
+    dataset_id: str
+    dataset_name: str
+    preset_name: str
+
+
+class UploadModelRequest(BaseModel):
+    """Request metadata for model upload (file sent separately)."""
+    name: str
+    format: str = Field(description="Model format: pytorch, onnx, safetensors, keras")
+    job_id: str = Field(description="Training job ID to associate the model with")
+
+
+# ---------------------------------------------------------------------------
+# Prediction schemas
+# ---------------------------------------------------------------------------
+
+
+class RunPredictionRequest(BaseModel):
+    """Request to run predictions on a dataset using a model."""
+    model_id: str = Field(description="ID of the model artifact to use")
+    dataset_id: str = Field(description="ID of the dataset to run predictions on")
+    sample_ids: list[str] | None = Field(
+        default=None,
+        description="Optional list of sample IDs. If None, runs on all samples in dataset",
+    )
+    model_version: str | None = Field(
+        default=None,
+        description="Optional version tag for Label Studio filtering",
+    )
+
+
+class PredictionResultResponse(BaseModel):
+    """Result of a single sample prediction."""
+    sample_id: str
+    ls_task_id: int | None = None
+    predicted_label: str
+    confidence: float | None = None
+    ls_prediction_id: int | None = None
+    error: str | None = None
+
+
+class BatchPredictionResponse(BaseModel):
+    """Response for batch prediction run."""
+    model_id: str
+    dataset_id: str
+    total_samples: int
+    successful: int
+    failed: int
+    predictions: list[PredictionResultResponse]
+    started_at: datetime
+    completed_at: datetime
+    model_version: str | None = None
+
+
+class PredictSingleRequest(BaseModel):
+    """Request to predict a single sample."""
+    model_id: str = Field(description="ID of the model artifact to use")
+    sample_id: str = Field(description="ID of the sample to predict")
+    model_version: str | None = Field(
+        default=None,
+        description="Optional version tag for Label Studio filtering",
+    )

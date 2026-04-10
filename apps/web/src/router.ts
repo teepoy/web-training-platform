@@ -14,6 +14,7 @@ export const router = createRouter({
     { path: '/datasets/:id/classify', component: () => import('./views/ClassifyView.vue') },
     { path: '/jobs', component: () => import('./views/JobsView.vue') },
     { path: '/jobs/:id', component: () => import('./views/JobDetailView.vue') },
+    { path: '/models', component: () => import('./views/ModelsView.vue') },
     { path: '/presets', component: () => import('./views/PresetEditorView.vue') },
     { path: '/schedules', component: () => import('./views/SchedulesView.vue') },
     { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },

@@ -265,3 +265,63 @@ export interface OrgMember {
   role: OrgRole;
   user: User;
 }
+
+// ---------------------------------------------------------------------------
+// Model artifacts
+// ---------------------------------------------------------------------------
+
+export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";
+
+export interface Model {
+  id: string;
+  uri: string;
+  kind: string;
+  name: string | null;
+  file_size: number | null;
+  file_hash: string | null;
+  format: string | null;
+  created_at: string | null;
+  metadata: Record<string, unknown>;
+  job_id: string;
+  dataset_id: string;
+  dataset_name: string;
+  preset_name: string;
+}
+
+// ---------------------------------------------------------------------------
+// Predictions
+// ---------------------------------------------------------------------------
+
+export interface PredictionResult {
+  sample_id: string;
+  ls_task_id: number | null;
+  predicted_label: string;
+  confidence: number | null;
+  ls_prediction_id: number | null;
+  error: string | null;
+}
+
+export interface BatchPredictionResult {
+  model_id: string;
+  dataset_id: string;
+  total_samples: number;
+  successful: number;
+  failed: number;
+  predictions: PredictionResult[];
+  started_at: string;
+  completed_at: string;
+  model_version: string | null;
+}
+
+export interface RunPredictionRequest {
+  model_id: string;
+  dataset_id: string;
+  sample_ids?: string[] | null;
+  model_version?: string | null;
+}
+
+export interface PredictSingleRequest {
+  model_id: string;
+  sample_id: string;
+  model_version?: string | null;
+}

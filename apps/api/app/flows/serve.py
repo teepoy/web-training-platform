@@ -5,20 +5,26 @@ Run with:
 
 This starts a long-lived process that polls Prefect server for scheduled runs.
 
+Embedded runner (default path)
+------------------------------
+The API process starts the V1 runner automatically during its FastAPI lifespan
+when ``execution.engine`` is set to ``prefect``.  See ``app.main._run_prefect_runner``.
+
+This module can still be run standalone (``python -m app.flows.serve``) for the
+**training-worker** container, which uses V2 work-pool mode.
+
 V1 strategy
 -----------
-We use ``prefect.serve()`` to register and serve deployments for every flow
-defined in this package.  On startup the worker:
+We use ``prefect.runner.Runner`` to register and serve deployments for every flow
+defined in this package.  On startup the runner:
 
 1. Registers a default deployment per flow (``{flow_name}-deployment``) so
    at least one always exists.
 2. Picks up scheduled/triggered runs for those deployments.
 
 Deployments created through the platform UI (which hit the Prefect REST API
-directly) will also appear on the server.  In V1, the worker only executes
-runs for its own served deployments — this is a known limitation.  The UI
-deployment names should match the served names to ensure execution.  V2 will
-migrate to work pools for fully dynamic execution.
+directly) will also appear on the server.  The runner only executes runs for
+its own served deployments — this is a known limitation.
 
 V2 strategy
 -----------

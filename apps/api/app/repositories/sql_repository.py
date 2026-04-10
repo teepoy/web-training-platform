@@ -27,6 +27,7 @@ from app.domain.models import (
     ArtifactRef,
     Dataset,
     DEFAULT_ORG_ID,
+    Model,
     Sample,
     SampleFeature,
     TrainingEvent,
@@ -574,7 +575,18 @@ class SqlRepository:
     async def add_artifacts(self, job_id: str, artifacts: list[ArtifactRef]) -> None:
         async with self.session_factory() as session:
             for a in artifacts:
-                session.add(ArtifactORM(id=a.id, job_id=job_id, uri=a.uri, kind=a.kind, metadata_json=a.metadata))
+                session.add(ArtifactORM(
+                    id=a.id,
+                    job_id=job_id,
+                    uri=a.uri,
+                    kind=a.kind,
+                    metadata_json=a.metadata,
+                    name=a.name,
+                    file_size=a.file_size,
+                    file_hash=a.file_hash,
+                    format=a.format,
+                    created_at=a.created_at,
+                ))
             await session.commit()
 
     async def get_artifact(self, artifact_id: str) -> ArtifactRef | None:
@@ -582,7 +594,17 @@ class SqlRepository:
             row = await session.get(ArtifactORM, artifact_id)
             if row is None:
                 return None
-            return ArtifactRef(id=row.id, uri=row.uri, kind=row.kind, metadata=row.metadata_json)
+            return ArtifactRef(
+                id=row.id,
+                uri=row.uri,
+                kind=row.kind,
+                metadata=row.metadata_json,
+                name=row.name,
+                file_size=row.file_size,
+                file_hash=row.file_hash,
+                format=row.format,
+                created_at=row.created_at,
+            )
 
     async def update_sample_image_uris(self, sample_id: str, image_uris: list[str]) -> Sample | None:
         async with self.session_factory() as session:
@@ -608,7 +630,20 @@ class SqlRepository:
 
     async def _list_artifacts_by_job_in_session(self, session: AsyncSession, job_id: str) -> list[ArtifactRef]:
         rows = (await session.execute(select(ArtifactORM).where(ArtifactORM.job_id == job_id))).scalars().all()
-        return [ArtifactRef(id=r.id, uri=r.uri, kind=r.kind, metadata=r.metadata_json) for r in rows]
+        return [
+            ArtifactRef(
+                id=r.id,
+                uri=r.uri,
+                kind=r.kind,
+                metadata=r.metadata_json,
+                name=r.name,
+                file_size=r.file_size,
+                file_hash=r.file_hash,
+                format=r.format,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
 
     async def upsert_sample_feature(
         self,
@@ -997,3 +1032,91 @@ class SqlRepository:
                 session.expunge(org)
                 out.append((membership, org))
             return out
+
+    # ------------------------------------------------------------------
+    # Model (Artifact) Management
+    # ------------------------------------------------------------------
+
+    async def list_models(
+        self,
+        org_id: str,
+        dataset_id: str | None = None,
+        job_id: str | None = None,
+    ) -> list[Model]:
+        """List model artifacts with full context (job, dataset, preset info)."""
+        async with self.session_factory() as session:
+            stmt = (
+                select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
+                .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
+                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .join(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .where(ArtifactORM.kind == "model")
+                .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+            )
+            if dataset_id is not None:
+                stmt = stmt.where(TrainingJobORM.dataset_id == dataset_id)
+            if job_id is not None:
+                stmt = stmt.where(ArtifactORM.job_id == job_id)
+            stmt = stmt.order_by(ArtifactORM.created_at.desc().nulls_last())
+
+            rows = (await session.execute(stmt)).all()
+            return [
+                Model(
+                    id=artifact.id,
+                    uri=artifact.uri,
+                    kind=artifact.kind,
+                    metadata=artifact.metadata_json,
+                    name=artifact.name,
+                    file_size=artifact.file_size,
+                    file_hash=artifact.file_hash,
+                    format=artifact.format,
+                    created_at=artifact.created_at,
+                    job_id=artifact.job_id,
+                    dataset_id=job.dataset_id,
+                    dataset_name=dataset.name,
+                    preset_name=preset.name,
+                )
+                for artifact, job, dataset, preset in rows
+            ]
+
+    async def get_model(self, artifact_id: str, org_id: str) -> Model | None:
+        """Get a single model artifact with full context."""
+        async with self.session_factory() as session:
+            stmt = (
+                select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
+                .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
+                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .join(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .where(ArtifactORM.id == artifact_id)
+                .where(ArtifactORM.kind == "model")
+                .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+            )
+            row = (await session.execute(stmt)).first()
+            if row is None:
+                return None
+            artifact, job, dataset, preset = row
+            return Model(
+                id=artifact.id,
+                uri=artifact.uri,
+                kind=artifact.kind,
+                metadata=artifact.metadata_json,
+                name=artifact.name,
+                file_size=artifact.file_size,
+                file_hash=artifact.file_hash,
+                format=artifact.format,
+                created_at=artifact.created_at,
+                job_id=artifact.job_id,
+                dataset_id=job.dataset_id,
+                dataset_name=dataset.name,
+                preset_name=preset.name,
+            )
+
+    async def delete_artifact(self, artifact_id: str) -> bool:
+        """Delete an artifact by ID."""
+        async with self.session_factory() as session:
+            row = await session.get(ArtifactORM, artifact_id)
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True

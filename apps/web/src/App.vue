@@ -29,9 +29,23 @@
                 <span style="font-weight: 600; flex: 1">ML Training Platform</span>
                 <OrgSelector v-if="authStore.isAuthenticated" />
                 <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
-                <n-button tag="a" href="http://localhost:4200" target="_blank" text type="primary" size="small">
-                  Prefect ↗
+                
+                <!-- External service links -->
+                <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
+                  Label Studio ↗
                 </n-button>
+                <template v-if="isAdmin">
+                  <n-button tag="a" :href="prefectUrl" target="_blank" text type="primary" size="small">
+                    Prefect ↗
+                  </n-button>
+                  <n-button tag="a" :href="minioUrl" target="_blank" text type="primary" size="small">
+                    MinIO ↗
+                  </n-button>
+                  <n-button tag="a" :href="pgAdminUrl" target="_blank" text type="primary" size="small">
+                    pgAdmin ↗
+                  </n-button>
+                </template>
+                
                 <n-dropdown
                   trigger="click"
                   :options="avatarDropdownOptions"
@@ -92,10 +106,20 @@ const themeOverrides: GlobalThemeOverrides = {
 
 const activeRoute = computed(() => route.path)
 
+// Check if current user is an admin (superadmin)
+const isAdmin = computed(() => authStore.user?.is_superadmin ?? false)
+
+// External service URLs - these can be configured via environment variables in production
+const labelStudioUrl = 'http://localhost:8080'
+const prefectUrl = 'http://localhost:4200'
+const minioUrl = 'http://localhost:9001'
+const pgAdminUrl = 'http://localhost:5050'
+
 const menuOptions = [
   { label: 'Dashboard', key: '/dashboard' },
   { label: 'Datasets', key: '/datasets' },
   { label: 'Training Jobs', key: '/jobs' },
+  { label: 'Models', key: '/models' },
   { label: 'Presets', key: '/presets' },
   { label: 'Schedules', key: '/schedules' },
 ]

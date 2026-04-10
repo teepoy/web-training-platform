@@ -17,31 +17,46 @@ class ArtifactService:
         return await self.storage.put_bytes(object_name=object_name, data=json.dumps(payload).encode("utf-8"), content_type="application/json")
 
     async def persist_job_artifacts(self, job_id: str, artifacts: list[ArtifactRef]) -> list[ArtifactRef]:
+        """Persist artifacts to repository.
+        
+        If artifacts already have real storage URIs (s3://, memory://), they are 
+        stored directly. Legacy artifacts with placeholder URIs get re-wrapped.
+        """
         persisted: list[ArtifactRef] = []
         for artifact in artifacts:
-            content = json.dumps(
-                {
-                    "source_uri": artifact.uri,
-                    "kind": artifact.kind,
-                    "metadata": artifact.metadata,
-                },
-                sort_keys=True,
-            ).encode("utf-8")
-            checksum = hashlib.sha256(content).hexdigest()
-            object_name = f"artifacts/{job_id}/{artifact.id}.json"
-            stored_uri = await self.storage.put_bytes(object_name=object_name, data=content, content_type="application/json")
-            persisted.append(
-                ArtifactRef(
-                    id=artifact.id,
-                    uri=stored_uri,
-                    kind=artifact.kind,
-                    metadata={
-                        **artifact.metadata,
+            # Check if artifact already has a real storage URI
+            if artifact.uri.startswith(("s3://", "memory://")):
+                # Artifact already stored by engine - just add to repository
+                persisted.append(artifact)
+            else:
+                # Legacy path: wrap metadata as JSON and store
+                content = json.dumps(
+                    {
                         "source_uri": artifact.uri,
-                        "checksum_sha256": checksum,
+                        "kind": artifact.kind,
+                        "metadata": artifact.metadata,
                     },
+                    sort_keys=True,
+                ).encode("utf-8")
+                checksum = hashlib.sha256(content).hexdigest()
+                object_name = f"artifacts/{job_id}/{artifact.id}.json"
+                stored_uri = await self.storage.put_bytes(
+                    object_name=object_name,
+                    data=content,
+                    content_type="application/json",
                 )
-            )
+                persisted.append(
+                    ArtifactRef(
+                        id=artifact.id,
+                        uri=stored_uri,
+                        kind=artifact.kind,
+                        metadata={
+                            **artifact.metadata,
+                            "source_uri": artifact.uri,
+                            "checksum_sha256": checksum,
+                        },
+                    )
+                )
         await self.repository.add_artifacts(job_id, persisted)
         return persisted
 

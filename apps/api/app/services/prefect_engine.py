@@ -2,11 +2,14 @@
 
 This module implements the :class:`~app.domain.interfaces.TrainingExecutionEngine`
 Protocol using Prefect deployments. Flow runs are submitted via a pre-registered
-deployment (``train-job-deployment``) which the flow-worker serves.
+deployment (``train-job-deployment``) which the embedded Prefect runner serves
+inside the API process.
 
 Design notes
 ------------
-- Deployment must be registered by the flow-worker before jobs can be submitted.
+- Deployment must be registered by the embedded runner before jobs can be
+  submitted.  The runner starts automatically in the API lifespan when
+  ``execution.engine`` is set to ``prefect``.
 - ``stream_events`` polls the Prefect API every 2 seconds, yielding state
   transitions and new log lines until the run reaches a terminal state.
 - ``collect_artifacts`` returns placeholder S3 URIs matching the
@@ -93,7 +96,7 @@ class PrefectWorkPoolEngine:
                 raise HTTPException(
                     status_code=503,
                     detail=f"Deployment '{self._deployment_name}' not found. "
-                           "The flow-worker may not be running.",
+                           "The embedded Prefect runner may still be starting up.",
                 )
         return self._deployment_id
 

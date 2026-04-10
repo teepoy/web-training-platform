@@ -1,10 +1,15 @@
 from embedding_pb.embedding_pb2 import (
-    EmbedRequest,
-    EmbedResponse,
+    ClassifyBatchRequest,
+    ClassifyBatchResponse,
+    ClassifyRequest,
+    ClassifyResponse,
     EmbedBatchRequest,
     EmbedBatchResponse,
+    EmbedRequest,
+    EmbedResponse,
     HealthRequest,
     HealthResponse,
+    LabelScore,
 )
 from embedding_pb.embedding_pb2_grpc import (
     EmbeddingServiceStub,
@@ -13,12 +18,17 @@ from embedding_pb.embedding_pb2_grpc import (
 )
 
 __all__ = [
-    "EmbedRequest",
-    "EmbedResponse",
+    "ClassifyBatchRequest",
+    "ClassifyBatchResponse",
+    "ClassifyRequest",
+    "ClassifyResponse",
     "EmbedBatchRequest",
     "EmbedBatchResponse",
+    "EmbedRequest",
+    "EmbedResponse",
     "HealthRequest",
     "HealthResponse",
+    "LabelScore",
     "EmbeddingServiceStub",
     "EmbeddingServiceServicer",
     "add_EmbeddingServiceServicer_to_server",

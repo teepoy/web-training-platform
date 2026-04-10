@@ -5,6 +5,8 @@ package embedding;
 service EmbeddingService {
   rpc Embed (EmbedRequest) returns (EmbedResponse);
   rpc EmbedBatch (EmbedBatchRequest) returns (EmbedBatchResponse);
+  rpc Classify (ClassifyRequest) returns (ClassifyResponse);
+  rpc ClassifyBatch (ClassifyBatchRequest) returns (ClassifyBatchResponse);
   rpc Health (HealthRequest) returns (HealthResponse);
 }
 
@@ -33,4 +35,33 @@ message HealthRequest {}
 message HealthResponse {
   bool healthy = 1;
   string model_name = 2;
+}
+
+// Classification messages for zero-shot CLIP classification
+message ClassifyRequest {
+  bytes image_data = 1;
+  repeated string labels = 2;  // Label space for classification
+  string model_name = 3;       // Optional, defaults to CLIP model
+}
+
+message ClassifyResponse {
+  string predicted_label = 1;
+  float confidence = 2;
+  repeated LabelScore scores = 3;  // All label scores
+  string model_name = 4;
+}
+
+message LabelScore {
+  string label = 1;
+  float score = 2;
+}
+
+message ClassifyBatchRequest {
+  repeated bytes images = 1;
+  repeated string labels = 2;
+  string model_name = 3;
+}
+
+message ClassifyBatchResponse {
+  repeated ClassifyResponse predictions = 1;
 }

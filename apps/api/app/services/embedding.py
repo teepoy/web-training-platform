@@ -5,7 +5,13 @@ import logging
 
 import grpc
 
-from embedding_pb.embedding_pb2 import EmbedBatchRequest, EmbedRequest, HealthRequest
+from embedding_pb.embedding_pb2 import (
+    ClassifyBatchRequest,
+    ClassifyRequest,
+    EmbedBatchRequest,
+    EmbedRequest,
+    HealthRequest,
+)
 from embedding_pb.embedding_pb2_grpc import EmbeddingServiceStub
 
 logger = logging.getLogger(__name__)
@@ -65,3 +71,99 @@ class EmbeddingClient:
             self._channel.close()
             self._channel = None
             self._stub = None
+
+    # Classification methods
+
+    def _classify_sync(
+        self,
+        image_bytes: bytes,
+        labels: list[str],
+        model_name: str,
+    ) -> tuple[str, float, dict[str, float]]:
+        """Synchronous classification call.
+        
+        Returns (predicted_label, confidence, {label: score}).
+        """
+        stub = self._ensure_channel()
+        response = stub.Classify(
+            ClassifyRequest(
+                image_data=image_bytes,
+                labels=labels,
+                model_name=model_name,
+            )
+        )
+        scores = {s.label: s.score for s in response.scores}
+        return response.predicted_label, response.confidence, scores
+
+    async def classify_image(
+        self,
+        image_bytes: bytes,
+        labels: list[str],
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> tuple[str, float, dict[str, float]]:
+        """Zero-shot CLIP classification for a single image.
+        
+        Parameters
+        ----------
+        image_bytes:
+            Raw image bytes (JPEG, PNG, etc.)
+        labels:
+            List of class labels for classification.
+        model_name:
+            CLIP model to use (default: openai/clip-vit-base-patch32).
+            
+        Returns
+        -------
+        tuple[str, float, dict[str, float]]
+            (predicted_label, confidence, {label: score})
+        """
+        return await asyncio.to_thread(
+            self._classify_sync, image_bytes, labels, model_name
+        )
+
+    def _classify_batch_sync(
+        self,
+        image_bytes_list: list[bytes],
+        labels: list[str],
+        model_name: str,
+    ) -> list[tuple[str, float, dict[str, float]]]:
+        """Synchronous batch classification call."""
+        stub = self._ensure_channel()
+        response = stub.ClassifyBatch(
+            ClassifyBatchRequest(
+                images=image_bytes_list,
+                labels=labels,
+                model_name=model_name,
+            )
+        )
+        results = []
+        for pred in response.predictions:
+            scores = {s.label: s.score for s in pred.scores}
+            results.append((pred.predicted_label, pred.confidence, scores))
+        return results
+
+    async def classify_batch(
+        self,
+        image_bytes_list: list[bytes],
+        labels: list[str],
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> list[tuple[str, float, dict[str, float]]]:
+        """Zero-shot CLIP classification for multiple images.
+        
+        Parameters
+        ----------
+        image_bytes_list:
+            List of raw image bytes.
+        labels:
+            List of class labels for classification.
+        model_name:
+            CLIP model to use.
+            
+        Returns
+        -------
+        list[tuple[str, float, dict[str, float]]]
+            List of (predicted_label, confidence, {label: score}) tuples.
+        """
+        return await asyncio.to_thread(
+            self._classify_batch_sync, image_bytes_list, labels, model_name
+        )

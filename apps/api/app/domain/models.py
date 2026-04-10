@@ -17,6 +17,20 @@ class ArtifactRef(BaseModel):
     uri: str
     kind: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Model-specific fields (optional)
+    name: str | None = None
+    file_size: int | None = None
+    file_hash: str | None = None
+    format: str | None = None
+    created_at: datetime | None = None
+
+
+class Model(ArtifactRef):
+    """A trained model artifact with additional context."""
+    job_id: str
+    dataset_id: str | None = None
+    dataset_name: str | None = None
+    preset_name: str | None = None
 
 
 class TaskSpec(BaseModel):

@@ -13,8 +13,10 @@ from app.services.embedding import EmbeddingClient
 from app.services.feature_ops import FeatureOpsService
 from app.services.kubeflow_client import KubeflowClient
 from app.services.label_studio import LabelStudioClient
+from app.services.model_service import ModelService
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
+from app.services.prediction_service import PredictionService
 from app.services.auth import AuthService
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 from app.db.ls_session import create_ls_engine, create_ls_session_factory
@@ -59,11 +61,12 @@ class Container(containers.DeclarativeContainer):
         kubeconfig=providers.Callable(lambda cfg: cfg.k8s.kubeconfig, config),
     )
 
-    local_engine = providers.Singleton(LocalProcessEngine)
+    local_engine = providers.Singleton(LocalProcessEngine, storage=artifact_storage)
     kubeflow_engine = providers.Singleton(
         KubeflowTrainingOperatorEngine,
         kubeflow_client=kubeflow_client,
         image=providers.Callable(lambda cfg: cfg.kubeflow.image, config),
+        storage=artifact_storage,
     )
 
     prefect_client = providers.Singleton(
@@ -127,5 +130,17 @@ class Container(containers.DeclarativeContainer):
         notification_sink=notification_sink,
         repository=repository,
         artifact_service=artifacts,
+    )
+    model_service = providers.Singleton(
+        ModelService,
+        repository=repository,
+        artifact_storage=artifact_storage,
+    )
+    prediction_service = providers.Singleton(
+        PredictionService,
+        repository=repository,
+        artifact_storage=artifact_storage,
+        config=config,
+        embedding_client=embedding_service,
     )
     auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)

@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x65mbedding.proto\x12\tembedding\"6\n\x0c\x45mbedRequest\x12\x12\n\nimage_data\x18\x01 \x01(\x0c\x12\x12\n\nmodel_name\x18\x02 \x01(\t\"I\n\rEmbedResponse\x12\x11\n\tembedding\x18\x01 \x03(\x02\x12\x12\n\nmodel_name\x18\x02 \x01(\t\x12\x11\n\tdimension\x18\x03 \x01(\x05\"7\n\x11\x45mbedBatchRequest\x12\x0e\n\x06images\x18\x01 \x03(\x0c\x12\x12\n\nmodel_name\x18\x02 \x01(\t\"B\n\x12\x45mbedBatchResponse\x12,\n\nembeddings\x18\x01 \x03(\x0b\x32\x18.embedding.EmbedResponse\"\x0f\n\rHealthRequest\"5\n\x0eHealthResponse\x12\x0f\n\x07healthy\x18\x01 \x01(\x08\x12\x12\n\nmodel_name\x18\x02 \x01(\t2\xd8\x01\n\x10\x45mbeddingService\x12:\n\x05\x45mbed\x12\x17.embedding.EmbedRequest\x1a\x18.embedding.EmbedResponse\x12I\n\nEmbedBatch\x12\x1c.embedding.EmbedBatchRequest\x1a\x1d.embedding.EmbedBatchResponse\x12=\n\x06Health\x12\x18.embedding.HealthRequest\x1a\x19.embedding.HealthResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x65mbedding.proto\x12\tembedding\"6\n\x0c\x45mbedRequest\x12\x12\n\nimage_data\x18\x01 \x01(\x0c\x12\x12\n\nmodel_name\x18\x02 \x01(\t\"I\n\rEmbedResponse\x12\x11\n\tembedding\x18\x01 \x03(\x02\x12\x12\n\nmodel_name\x18\x02 \x01(\t\x12\x11\n\tdimension\x18\x03 \x01(\x05\"7\n\x11\x45mbedBatchRequest\x12\x0e\n\x06images\x18\x01 \x03(\x0c\x12\x12\n\nmodel_name\x18\x02 \x01(\t\"B\n\x12\x45mbedBatchResponse\x12,\n\nembeddings\x18\x01 \x03(\x0b\x32\x18.embedding.EmbedResponse\"\x0f\n\rHealthRequest\"5\n\x0eHealthResponse\x12\x0f\n\x07healthy\x18\x01 \x01(\x08\x12\x12\n\nmodel_name\x18\x02 \x01(\t\"I\n\x0f\x43lassifyRequest\x12\x12\n\nimage_data\x18\x01 \x01(\x0c\x12\x0e\n\x06labels\x18\x02 \x03(\t\x12\x12\n\nmodel_name\x18\x03 \x01(\t\"z\n\x10\x43lassifyResponse\x12\x17\n\x0fpredicted_label\x18\x01 \x01(\t\x12\x12\n\nconfidence\x18\x02 \x01(\x02\x12%\n\x06scores\x18\x03 \x03(\x0b\x32\x15.embedding.LabelScore\x12\x12\n\nmodel_name\x18\x04 \x01(\t\"*\n\nLabelScore\x12\r\n\x05label\x18\x01 \x01(\t\x12\r\n\x05score\x18\x02 \x01(\x02\"J\n\x14\x43lassifyBatchRequest\x12\x0e\n\x06images\x18\x01 \x03(\x0c\x12\x0e\n\x06labels\x18\x02 \x03(\t\x12\x12\n\nmodel_name\x18\x03 \x01(\t\"I\n\x15\x43lassifyBatchResponse\x12\x30\n\x0bpredictions\x18\x01 \x03(\x0b\x32\x1b.embedding.ClassifyResponse2\xf1\x02\n\x10\x45mbeddingService\x12:\n\x05\x45mbed\x12\x17.embedding.EmbedRequest\x1a\x18.embedding.EmbedResponse\x12I\n\nEmbedBatch\x12\x1c.embedding.EmbedBatchRequest\x1a\x1d.embedding.EmbedBatchResponse\x12\x43\n\x08\x43lassify\x12\x1a.embedding.ClassifyRequest\x1a\x1b.embedding.ClassifyResponse\x12R\n\rClassifyBatch\x12\x1f.embedding.ClassifyBatchRequest\x1a .embedding.ClassifyBatchResponse\x12=\n\x06Health\x12\x18.embedding.HealthRequest\x1a\x19.embedding.HealthResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,6 +43,16 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_HEALTHREQUEST']._serialized_end=301
   _globals['_HEALTHRESPONSE']._serialized_start=303
   _globals['_HEALTHRESPONSE']._serialized_end=356
-  _globals['_EMBEDDINGSERVICE']._serialized_start=359
-  _globals['_EMBEDDINGSERVICE']._serialized_end=575
+  _globals['_CLASSIFYREQUEST']._serialized_start=358
+  _globals['_CLASSIFYREQUEST']._serialized_end=431
+  _globals['_CLASSIFYRESPONSE']._serialized_start=433
+  _globals['_CLASSIFYRESPONSE']._serialized_end=555
+  _globals['_LABELSCORE']._serialized_start=557
+  _globals['_LABELSCORE']._serialized_end=599
+  _globals['_CLASSIFYBATCHREQUEST']._serialized_start=601
+  _globals['_CLASSIFYBATCHREQUEST']._serialized_end=675
+  _globals['_CLASSIFYBATCHRESPONSE']._serialized_start=677
+  _globals['_CLASSIFYBATCHRESPONSE']._serialized_end=750
+  _globals['_EMBEDDINGSERVICE']._serialized_start=753
+  _globals['_EMBEDDINGSERVICE']._serialized_end=1122
 # @@protoc_insertion_point(module_scope)

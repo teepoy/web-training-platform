@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from embedding_pb import embedding_pb2 as embedding__pb2
+import embedding_pb.embedding_pb2 as embedding__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -44,6 +44,16 @@ class EmbeddingServiceStub(object):
                 request_serializer=embedding__pb2.EmbedBatchRequest.SerializeToString,
                 response_deserializer=embedding__pb2.EmbedBatchResponse.FromString,
                 _registered_method=True)
+        self.Classify = channel.unary_unary(
+                '/embedding.EmbeddingService/Classify',
+                request_serializer=embedding__pb2.ClassifyRequest.SerializeToString,
+                response_deserializer=embedding__pb2.ClassifyResponse.FromString,
+                _registered_method=True)
+        self.ClassifyBatch = channel.unary_unary(
+                '/embedding.EmbeddingService/ClassifyBatch',
+                request_serializer=embedding__pb2.ClassifyBatchRequest.SerializeToString,
+                response_deserializer=embedding__pb2.ClassifyBatchResponse.FromString,
+                _registered_method=True)
         self.Health = channel.unary_unary(
                 '/embedding.EmbeddingService/Health',
                 request_serializer=embedding__pb2.HealthRequest.SerializeToString,
@@ -61,6 +71,18 @@ class EmbeddingServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def EmbedBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Classify(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ClassifyBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -84,6 +106,16 @@ def add_EmbeddingServiceServicer_to_server(servicer, server):
                     servicer.EmbedBatch,
                     request_deserializer=embedding__pb2.EmbedBatchRequest.FromString,
                     response_serializer=embedding__pb2.EmbedBatchResponse.SerializeToString,
+            ),
+            'Classify': grpc.unary_unary_rpc_method_handler(
+                    servicer.Classify,
+                    request_deserializer=embedding__pb2.ClassifyRequest.FromString,
+                    response_serializer=embedding__pb2.ClassifyResponse.SerializeToString,
+            ),
+            'ClassifyBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.ClassifyBatch,
+                    request_deserializer=embedding__pb2.ClassifyBatchRequest.FromString,
+                    response_serializer=embedding__pb2.ClassifyBatchResponse.SerializeToString,
             ),
             'Health': grpc.unary_unary_rpc_method_handler(
                     servicer.Health,
@@ -145,6 +177,60 @@ class EmbeddingService(object):
             '/embedding.EmbeddingService/EmbedBatch',
             embedding__pb2.EmbedBatchRequest.SerializeToString,
             embedding__pb2.EmbedBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Classify(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/embedding.EmbeddingService/Classify',
+            embedding__pb2.ClassifyRequest.SerializeToString,
+            embedding__pb2.ClassifyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ClassifyBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/embedding.EmbeddingService/ClassifyBatch',
+            embedding__pb2.ClassifyBatchRequest.SerializeToString,
+            embedding__pb2.ClassifyBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

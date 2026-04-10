@@ -13,14 +13,13 @@ docker compose -f infra/compose/docker-compose.yaml ps
 ```
 
 Services should be running:
-- `compose-api-1` - API server (port 8000)
+- `compose-api-1` - API server (port 8000) — also runs the embedded Prefect flow runner
 - `compose-web-1` - Web frontend (port 5173)
 - `compose-postgres-1` - PostgreSQL (port 5432)
 - `compose-minio-1` - MinIO storage (ports 9000, 9001)
 - `compose-prefect-server-1` - Prefect server (port 4200)
 - `compose-label-studio-1` - Label Studio (port 8080)
-- `compose-flow-worker-1` - Prefect flow worker
-- `compose-training-worker-1` - Training worker
+- `compose-training-worker-1` - Training worker (GPU, V2 mode)
 - `compose-embedding-1` - Embedding service (port 50051)
 
 ## 1. Authentication

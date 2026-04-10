@@ -44,6 +44,21 @@ class MinioArtifactStorage:
         except Exception as exc:
             raise FileNotFoundError(f"Object not found in MinIO: {uri!r}") from exc
 
+    async def delete(self, uri: str) -> None:
+        """Delete an object from MinIO storage."""
+        prefix = f"s3://{self.bucket}/"
+        if not uri.startswith(prefix):
+            raise FileNotFoundError(f"URI does not match bucket: {uri!r}")
+        object_name = uri[len(prefix):]
+        client = self.client
+        bucket = self.bucket
+        try:
+            await asyncio.to_thread(
+                lambda: client.remove_object(bucket_name=bucket, object_name=object_name)
+            )
+        except Exception as exc:
+            raise FileNotFoundError(f"Failed to delete object from MinIO: {uri!r}") from exc
+
 
 class InMemoryArtifactStorage:
     def __init__(self) -> None:
@@ -62,3 +77,13 @@ class InMemoryArtifactStorage:
         if object_name not in self._objects:
             raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
         return self._objects[object_name]
+
+    async def delete(self, uri: str) -> None:
+        """Delete an object from in-memory storage."""
+        prefix = "memory://"
+        if not uri.startswith(prefix):
+            raise FileNotFoundError(f"Unknown URI scheme: {uri!r}")
+        object_name = uri[len(prefix):]
+        if object_name not in self._objects:
+            raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
+        del self._objects[object_name]

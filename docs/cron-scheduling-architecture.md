@@ -8,37 +8,36 @@ The Docker Compose setup uses one shared database and a separate Prefect control
 
 - `postgres`: shared Postgres instance with two databases (`finetune` and `prefect`). An init script auto-creates the `prefect` database on first boot.
 - `minio`: artifact and log-related storage for platform workflows
-- `api`: FastAPI platform API that owns `/schedules` and proxies Prefect REST calls
+- `api`: FastAPI platform API that owns `/schedules`, proxies Prefect REST calls, and runs an embedded Prefect runner for flow execution
 - `prefect-server`: Prefect 3 server on port `4200`
-- `flow-worker`: process that runs `prefect.serve()` and executes scheduled flows
+- `training-worker` (optional): GPU-capable process worker for training flows (V2 work-pool mode)
 
 ```mermaid
 flowchart LR
-  UI[Platform UI /schedules] --> API[api\nFastAPI platform API]
+  UI[Platform UI /schedules] --> API[api\nFastAPI + embedded runner]
   API -->|REST proxy| Prefect[prefect-server\nPrefect 3 :4200]
   Prefect -->|metadata DB| Postgres[(postgres\nfinetune + prefect DBs)]
   API -->|app data| Postgres
   API -->|artifacts| MinIO[(minio)]
   Prefect -->|schedule state| Postgres
-  Worker[flow-worker\nprefect.serve()] -->|connects to| Prefect
-  Worker -->|executes| Flow[drain-dataset flow]
-  Flow -->|calls back| API
+  API -->|embedded runner\npolls + executes| Prefect
+  API -->|executes| Flow[drain-dataset / train-job flows]
 ```
 
 ### What this means
 
 - The platform API is the only client the UI talks to for schedule management.
 - Prefect owns deployment, cron, run, and log state.
-- The worker is separate from the API so scheduled execution stays out of the request path.
-- The worker calls back to the platform API via `PLATFORM_API_URL` for data operations.
+- The Prefect runner is embedded in the API process, started as a background task during the FastAPI lifespan when `execution.engine` is set to `prefect`. This eliminates a separate flow-worker container.
+- The `training-worker` remains a separate container for GPU-bound training workloads using Prefect V2 work pools.
 
 ### Compose service dependencies
 
 ```
 postgres (healthcheck: pg_isready)
   ├── prefect-server (healthcheck: /api/health)
-  │     └── flow-worker (restart: on-failure)
-  ├── api
+  │     └── training-worker (restart: on-failure, optional)
+  ├── api (embedded runner connects to prefect-server)
   └── minio (healthcheck: mc ready)
 ```
 
@@ -60,9 +59,8 @@ The end-to-end flow is:
 sequenceDiagram
   actor User
   participant UI as Platform UI
-  participant API as Platform API
+  participant API as Platform API + Runner
   participant Prefect as Prefect Server
-  participant Worker as Flow Worker
 
   User->>UI: Open /schedules
   User->>UI: Fill Create Schedule form
@@ -74,8 +72,9 @@ sequenceDiagram
   User->>UI: Trigger run now
   UI->>API: POST /api/v1/schedules/{id}/run
   API->>Prefect: POST /api/deployments/{id}/create_flow_run
-  Prefect-->>Worker: queued flow run
-  Worker->>Worker: execute drain-dataset flow
+  Prefect-->>API: queued flow run
+  Note over API: Embedded runner picks up run
+  API->>API: execute drain-dataset flow
 
   User->>UI: View run status
   UI->>API: GET /api/v1/schedules/{id}/runs
@@ -117,17 +116,26 @@ sequenceDiagram
 - Cron schedules live in the `schedules` array: `[{"schedule": {"cron": "...", "timezone": "UTC"}, "active": true}]`.
 - PATCH returns 204 (no body); the platform re-fetches after patching.
 
-## Worker deployment model (V1)
+## Embedded runner deployment model
 
-The flow-worker uses `prefect.serve()` to register and poll a **well-known deployment** for each flow:
+The API process starts an embedded Prefect runner (via `prefect.runner.Runner`) during
+its lifespan to register and poll **well-known deployments** for each flow:
 
 | Flow | Served Deployment Name |
 |---|---|
 | `drain-dataset` | `drain-dataset-deployment` |
+| `train-job` | `train-job-deployment` |
 
-**V1 limitation**: Only runs for the served deployment names are executed by the worker. The UI should create schedules with matching deployment names for automatic execution. Manually triggered runs (`create_flow_run`) work regardless.
+The runner starts automatically when `execution.engine` is set to `prefect` in the
+config profile. For `local-smoke` mode (`execution.engine: local`), no runner is started
+and Prefect is not required.
 
-**V2 plan**: Migrate to Prefect work pools for fully dynamic execution of any deployment.
+**Limitation**: Only runs for the served deployment names are executed by the embedded
+runner. The UI should create schedules with matching deployment names for automatic
+execution. Manually triggered runs (`create_flow_run`) work regardless.
+
+The `training-worker` container (GPU-capable, V2 work-pool mode) remains separate for
+heavy training workloads that require dedicated hardware.
 
 ## First flow
 
