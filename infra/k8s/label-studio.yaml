@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: label-studio
+  namespace: finetune
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: label-studio
+  template:
+    metadata:
+      labels:
+        app: label-studio
+    spec:
+      containers:
+        - name: label-studio
+          image: heartexlabs/label-studio:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DJANGO_DB
+              value: default
+            - name: POSTGRE_NAME
+              value: labelstudio
+            - name: POSTGRE_HOST
+              value: postgres.finetune.svc.cluster.local
+            - name: POSTGRE_PORT
+              value: "5432"
+            - name: POSTGRE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: POSTGRES_PASSWORD
+            - name: LABEL_STUDIO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: LABEL_STUDIO_USERNAME
+            - name: LABEL_STUDIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: LABEL_STUDIO_PASSWORD
+            - name: LABEL_STUDIO_USER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: LABEL_STUDIO_API_KEY
+            - name: LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN
+              value: "true"
+          volumeMounts:
+            - name: ls-data
+              mountPath: /label-studio/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 20
+      volumes:
+        - name: ls-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: label-studio
+  namespace: finetune
+spec:
+  selector:
+    app: label-studio
+  ports:
+    - port: 8080
+      targetPort: 8080

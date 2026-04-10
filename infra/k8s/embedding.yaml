@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding
+  namespace: finetune
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding
+  template:
+    metadata:
+      labels:
+        app: embedding
+    spec:
+      containers:
+        - name: embedding
+          image: finetune-embedding:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50051
+          env:
+            - name: GRPC_PORT
+              value: "50051"
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)"
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding
+  namespace: finetune
+spec:
+  selector:
+    app: embedding
+  ports:
+    - port: 50051
+      targetPort: 50051

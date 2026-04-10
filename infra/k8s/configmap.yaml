@@ -5,3 +5,7 @@ metadata:
   namespace: finetune
 data:
   APP_CONFIG_PROFILE: "dev"
+  PREFECT_API_URL: "http://prefect-server.finetune.svc.cluster.local:4200/api"
+  EMBEDDING_GRPC_TARGET: "embedding.finetune.svc.cluster.local:50051"
+  LABEL_STUDIO_URL: "http://label-studio.finetune.svc.cluster.local:8080"
+  LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
