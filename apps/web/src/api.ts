@@ -1,6 +1,8 @@
 import type {
   Annotation,
   AnnotationVersion,
+  BulkCreateSampleItem,
+  BulkCreateSampleResponse,
   BulkAnnotationRequest,
   BulkAnnotationResponse,
   DashboardResponse,
@@ -381,6 +383,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ image_uris: body.image_uris, metadata: body.metadata ?? {} }),
     }),
+
+  importSamples: (datasetId: string, items: BulkCreateSampleItem[]) =>
+    req<BulkCreateSampleResponse>(`/datasets/${datasetId}/samples/import`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }, 120_000),
 
   getSample: (sampleId: string) => req<Sample>(`/samples/${sampleId}`),
 

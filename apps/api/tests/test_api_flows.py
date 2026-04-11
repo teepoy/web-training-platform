@@ -144,6 +144,43 @@ def test_samples_pagination() -> None:
         assert len(body["items"]) == 3
 
 
+def test_bulk_sample_import() -> None:
+    with TestClient(app) as c:
+        ds = c.post(
+            "/api/v1/datasets",
+            json={
+                "name": "bulk-import-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+            },
+        )
+        assert ds.status_code == 200
+        dataset_id = ds.json()["id"]
+
+        r = c.post(
+            f"/api/v1/datasets/{dataset_id}/samples/import",
+            json={
+                "items": [
+                    {"image_uris": ["memory://samples/1.jpg"], "metadata": {"index": 1}},
+                    {"image_uris": ["memory://samples/2.jpg"], "metadata": {"index": 2}},
+                    {"image_uris": ["memory://samples/3.jpg"], "metadata": {"index": 3}},
+                ]
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["dataset_id"] == dataset_id
+        assert body["imported"] == 3
+        assert body["failed"] == 0
+        assert len(body["sample_ids"]) == 3
+        assert len(body["ls_task_ids"]) == 3
+
+        listed = c.get(f"/api/v1/datasets/{dataset_id}/samples")
+        assert listed.status_code == 200
+        listed_body = listed.json()
+        assert listed_body["total"] == 3
+
+
 def test_events_history_pagination() -> None:
     with TestClient(app) as c:
         # Set up dataset + job

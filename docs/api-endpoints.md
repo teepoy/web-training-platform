@@ -8,6 +8,7 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `GET /api/v1/datasets`
 - `GET /api/v1/datasets/{dataset_id}`
 - `POST /api/v1/datasets/{dataset_id}/samples`
+- `POST /api/v1/datasets/{dataset_id}/samples/import` (bulk sample import via Label Studio `import_tasks`; each item may include optional `label`, and `null` means unlabeled task/sample)
 - `POST /api/v1/datasets/{dataset_id}/samples/import-vqa` (JSONL bulk import for VQA datasets)
 - `GET /api/v1/datasets/{dataset_id}/samples`
 - `POST /api/v1/annotations`

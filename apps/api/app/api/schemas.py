@@ -32,6 +32,25 @@ class CreateSampleRequest(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class BulkCreateSampleItem(BaseModel):
+    image_uris: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+    label: str | None = None
+
+
+class BulkCreateSampleRequest(BaseModel):
+    items: list[BulkCreateSampleItem] = Field(default_factory=list)
+
+
+class BulkCreateSampleResponse(BaseModel):
+    dataset_id: str
+    imported: int
+    failed: int
+    sample_ids: list[str] = Field(default_factory=list)
+    ls_task_ids: list[int] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
 class ImportVqaJsonlResponse(BaseModel):
     dataset_id: str
     imported: int

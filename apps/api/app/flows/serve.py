@@ -104,7 +104,7 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
             work_queue_name=queue_name,
         )
     elif queue_name == _PREDICT_QUEUE:
-        deployment_name = "predict-job-deployment"
+        deployment_name = "predict-job-batch-deployment"
         deployment = await predict_job.ato_deployment(
             name=deployment_name,
             description="Prediction runtime deployment for predict-job flow (managed by delegated worker)",

@@ -48,8 +48,8 @@ def _config_root() -> Path:
     return Path(__file__).resolve().parents[2] / "config"
 
 
-@lru_cache(maxsize=1)
-def load_config() -> DictConfig:
+@lru_cache(maxsize=4)
+def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     base = OmegaConf.load(_config_root() / "base.yaml")
     profile = os.getenv("APP_CONFIG_PROFILE", "dev")
     profile_path = _config_root() / f"{profile}.yaml"
@@ -106,5 +106,6 @@ def load_config() -> DictConfig:
     llm_model = os.getenv("LLM_MODEL")
     if llm_model:
         cfg.llm.model = llm_model
-    _validate_runtime_config(cfg, profile)
+    if not skip_runtime_validation:
+        _validate_runtime_config(cfg, profile)
     return cfg

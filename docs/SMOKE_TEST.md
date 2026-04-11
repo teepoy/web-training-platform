@@ -140,7 +140,29 @@ Services should be running:
 - [ ] Call `POST /api/v1/predictions/single` with `target: "vqa"` and `prompt`
 - [ ] Verify prediction is stored in Label Studio as `textarea` result
 
-## 9. Dashboard
+## 9. ImageNet Prediction Review
+
+- [ ] Run `make seed-imagenet-dev` against a healthy dev stack
+- [ ] Open http://localhost:5173/prediction-review
+- [ ] Select dataset `ImageNet-1K` and the seeded compatible model
+- [ ] Click `Run Predictions`
+- [ ] Verify the job is accepted instead of returning `API 400: Prediction deployment is not registered`
+- [ ] Verify predictions complete and become reviewable
+
+Hybrid automation note:
+- The current Playwright suite in `apps/web/e2e/` mocks API responses with `page.route(...)`, so it does not validate live seeded data or Prefect deployment availability.
+- A practical hybrid smoke test is possible today as a scripted API-level check: seed dev data, submit `POST /api/v1/predictions/run`, then poll `/api/v1/prediction-jobs/{id}` until completion.
+- Turning this into a real browser E2E gate requires a separate live-stack Playwright path that does not mock the backend and can authenticate against the seeded stack.
+
+## 9.1 Batch Dev Smoke
+
+- [ ] Run `make seed-imagenet-dev` against a healthy dev stack
+- [ ] Run `make smoke-dev-batch`
+- [ ] Verify the script finds the seeded ImageNet dataset and model
+- [ ] Verify batch prediction completes successfully
+- [ ] Verify feature extraction completes successfully
+
+## 10. Dashboard
 
 - [ ] Navigate to http://localhost:5173/dashboard
 - [ ] Verify statistics load

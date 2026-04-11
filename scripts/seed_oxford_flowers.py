@@ -229,6 +229,8 @@ def main() -> None:
 
     total_created = 0
     total_skipped = 0
+    batch_size = 5000
+    batch: list[dict] = []
     t0 = time.time()
     max_samples = args.max_samples if args.max_samples > 0 else float("inf")
 
@@ -255,17 +257,21 @@ def main() -> None:
                 "hf_index": i,
             }
 
-            resp = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples", json={
+            batch.append({
                 "image_uris": [data_uri],
                 "metadata": metadata,
+                "label": label_name,
             })
 
-            if resp.status_code == 200:
-                total_created += 1
-            else:
-                total_skipped += 1
-                if total_skipped <= 3:
-                    print(f"    WARN sample {i}: {resp.status_code} {resp.text[:120]}")
+            if len(batch) >= batch_size or (args.max_samples > 0 and total_created + len(batch) >= max_samples):
+                resp = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples/import", json={"items": batch})
+                if resp.status_code == 200:
+                    total_created += int(resp.json().get("imported", 0))
+                else:
+                    total_skipped += len(batch)
+                    if total_skipped <= batch_size * 3:
+                        print(f"    WARN batch ending at sample {i}: {resp.status_code} {resp.text[:120]}")
+                batch = []
 
             if total_created % args.batch_report == 0 and total_created > 0:
                 elapsed = time.time() - t0

@@ -6,13 +6,15 @@ import asyncio
 from sqlalchemy import select  # type: ignore[import-not-found]
 
 from app.core.config import load_config
+from app.db.base import Base
 from app.db.models import UserORM
 from app.db.session import create_engine, create_session_factory
-from app.services.auth import hash_password
 
 
 async def _create_superadmin(email: str, password: str, name: str) -> None:
-    cfg = load_config()
+    from app.services.auth import hash_password
+
+    cfg = load_config(skip_runtime_validation=True)
     engine = create_engine(str(cfg.db.url))
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
@@ -37,6 +39,18 @@ async def _create_superadmin(email: str, password: str, name: str) -> None:
         print(f"Superadmin created/updated: id={user.id}, email={user.email}")
 
 
+async def _reset_app_data() -> None:
+    cfg = load_config(skip_runtime_validation=True)
+    engine = create_engine(str(cfg.db.url))
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        print("Application database reset complete.")
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Platform CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -46,9 +60,13 @@ def main() -> None:
     sa.add_argument("--password", required=True)
     sa.add_argument("--name", required=True)
 
+    subparsers.add_parser("reset-app-data", help="Drop and recreate all application tables")
+
     args = parser.parse_args()
     if args.command == "create-superadmin":
         asyncio.run(_create_superadmin(args.email, args.password, args.name))
+    elif args.command == "reset-app-data":
+        asyncio.run(_reset_app_data())
     else:
         parser.print_help()
 

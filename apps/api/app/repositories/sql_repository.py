@@ -180,6 +180,25 @@ class SqlRepository:
             await session.commit()
         return sample
 
+    async def create_samples(self, samples: list[Sample]) -> list[Sample]:
+        if not samples:
+            return []
+        async with self.session_factory() as session:
+            session.add_all(
+                [
+                    SampleORM(
+                        id=sample.id,
+                        dataset_id=sample.dataset_id,
+                        image_uris=sample.image_uris,
+                        metadata_json=sample.metadata,
+                        ls_task_id=sample.ls_task_id,
+                    )
+                    for sample in samples
+                ]
+            )
+            await session.commit()
+        return samples
+
     async def list_samples(self, dataset_id: str, offset: int = 0, limit: int = 50) -> tuple[list[Sample], int]:
         async with self.session_factory() as session:
             total = await session.scalar(

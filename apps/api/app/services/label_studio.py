@@ -228,6 +228,29 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
+    async def import_tasks(self, project_id: int, tasks: list[dict], return_task_ids: bool = True) -> dict:
+        """Bulk import tasks into a project.
+
+        Parameters
+        ----------
+        project_id:
+            Target project ID.
+        tasks:
+            Task payload list in Label Studio import format.
+        return_task_ids:
+            Whether the response should include created task IDs.
+        """
+        try:
+            result = await asyncio.to_thread(
+                self._client.projects.import_tasks,
+                id=project_id,
+                request=tasks,
+                return_task_ids=return_task_ids,
+            )
+            return _to_dict(result)
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
     async def list_tasks(
         self, project_id: int, page: int = 1, page_size: int = 50
     ) -> tuple[list[dict], int]:

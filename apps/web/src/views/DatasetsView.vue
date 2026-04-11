@@ -9,6 +9,9 @@
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Datasets</n-h2>
       <n-space>
+        <n-button @click="showImportModal = true">
+          Import Dataset
+        </n-button>
         <n-button type="primary" @click="showModal = true">
           + New Dataset
         </n-button>
@@ -79,6 +82,53 @@
         </n-space>
       </template>
       </n-modal>
+
+      <n-modal
+        v-model:show="showImportModal"
+        preset="card"
+        title="Import Dataset"
+        style="width: 560px"
+        :mask-closable="false"
+      >
+        <n-form label-placement="left" label-width="110px">
+          <n-form-item label="Name">
+            <n-input v-model:value="importForm.name" placeholder="e.g. imported-dataset" clearable />
+          </n-form-item>
+
+          <n-form-item label="Dataset Type">
+            <n-select
+              v-model:value="importForm.dataset_type"
+              :options="datasetTypeOptions"
+              placeholder="Select dataset type"
+            />
+          </n-form-item>
+
+          <n-form-item label="Task Type">
+            <n-input :value="importForm.task_type ?? ''" disabled />
+          </n-form-item>
+
+          <n-form-item v-if="importForm.dataset_type === 'image_classification'" label="Label Space">
+            <n-dynamic-tags v-model:value="importForm.label_space" />
+          </n-form-item>
+
+          <n-form-item label="Samples JSON">
+            <input type="file" accept="application/json" @change="handleImportFileChange" />
+          </n-form-item>
+
+          <n-alert v-if="importFileName" type="info" :show-icon="false">
+            {{ importFileName }}
+          </n-alert>
+        </n-form>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="closeImportModal">Cancel</n-button>
+            <n-button type="primary" :loading="importDataset.isPending.value" @click="onImportDataset">
+              Import
+            </n-button>
+          </n-space>
+        </template>
+      </n-modal>
     </template>
   </div>
 </template>
@@ -90,7 +140,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules, type DataTableRowKey } from "naive-ui";
 import { NButton, NTag } from "naive-ui";
 import { api } from "../api";
-import type { Dataset } from "../types";
+import type { BulkCreateSampleItem, Dataset } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
 
@@ -138,8 +188,39 @@ const toggleDatasetPublic = useMutation({
   },
 });
 
+const importDataset = useMutation({
+  mutationFn: async (payload: {
+    name: string;
+    dataset_type: string;
+    task_type: string;
+    label_space: string[];
+    items: BulkCreateSampleItem[];
+  }) => {
+    const dataset = await api.createDataset({
+      name: payload.name,
+      dataset_type: payload.dataset_type,
+      task_spec: { task_type: payload.task_type, label_space: payload.label_space },
+    });
+    const chunkSize = 5000;
+    for (let offset = 0; offset < payload.items.length; offset += chunkSize) {
+      const chunk = payload.items.slice(offset, offset + chunkSize);
+      await api.importSamples(dataset.id, chunk);
+    }
+    return dataset;
+  },
+  onSuccess: () => {
+    message.success("Dataset imported");
+    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
+    closeImportModal();
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to import dataset");
+  },
+});
+
 // ─── modal / form ────────────────────────────────────────────────────────────
 const showModal = ref(false);
+const showImportModal = ref(false);
 const formRef = ref<FormInst | null>(null);
 
 const defaultFormData = () => ({
@@ -150,23 +231,23 @@ const defaultFormData = () => ({
 });
 
 const formData = ref(defaultFormData());
+const importForm = ref(defaultFormData());
+const importItems = ref<BulkCreateSampleItem[]>([]);
+const importFileName = ref("");
 
 const datasetTypeOptions = [
   { label: "Image Classification", value: "image_classification" },
   { label: "Image VQA", value: "image_vqa" },
 ];
 
-function syncTaskType(datasetType: string | null) {
+function taskTypeForDatasetType(datasetType: string | null): string | null {
   if (datasetType === "image_classification") {
-    formData.value.task_type = "classification";
-    return;
+    return "classification";
   }
   if (datasetType === "image_vqa") {
-    formData.value.task_type = "vqa";
-    formData.value.label_space = [];
-    return;
+    return "vqa";
   }
-  formData.value.task_type = null;
+  return null;
 }
 
 const formRules: FormRules = {
@@ -202,6 +283,17 @@ function resetForm() {
   formData.value = defaultFormData();
 }
 
+function resetImportForm() {
+  importForm.value = defaultFormData();
+  importItems.value = [];
+  importFileName.value = "";
+}
+
+function closeImportModal() {
+  showImportModal.value = false;
+  resetImportForm();
+}
+
 function onSubmit() {
   formRef.value?.validate((errors) => {
     if (errors) return;
@@ -217,9 +309,71 @@ function onSubmit() {
 watch(
   () => formData.value.dataset_type,
   (datasetType) => {
-    syncTaskType(datasetType);
+    formData.value.task_type = taskTypeForDatasetType(datasetType);
+    if (datasetType === "image_vqa") {
+      formData.value.label_space = [];
+    }
   }
 );
+
+watch(
+  () => importForm.value.dataset_type,
+  (datasetType) => {
+    importForm.value.task_type = taskTypeForDatasetType(datasetType);
+    if (datasetType === "image_vqa") {
+      importForm.value.label_space = [];
+    }
+  }
+);
+
+async function handleImportFileChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) {
+    importItems.value = [];
+    importFileName.value = "";
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Import file must be a JSON array of sample items");
+    }
+    importItems.value = parsed.map((item) => ({
+      image_uris: Array.isArray(item?.image_uris) ? item.image_uris.map(String) : [],
+      metadata: typeof item?.metadata === "object" && item?.metadata !== null ? item.metadata as Record<string, unknown> : {},
+      label: item?.label == null ? null : String(item.label),
+    }));
+    importFileName.value = `${file.name} (${importItems.value.length} samples)`;
+  } catch (err: unknown) {
+    importItems.value = [];
+    importFileName.value = "";
+    message.error((err as Error).message ?? "Failed to parse import file");
+  }
+}
+
+function onImportDataset() {
+  if (!importForm.value.name || !importForm.value.dataset_type || !importForm.value.task_type) {
+    message.error("Dataset name and type are required");
+    return;
+  }
+  if (importForm.value.dataset_type === "image_classification" && importForm.value.label_space.length === 0) {
+    message.error("Label space is required for image classification datasets");
+    return;
+  }
+  if (importItems.value.length === 0) {
+    message.error("Select a JSON file with samples to import");
+    return;
+  }
+  importDataset.mutate({
+    name: importForm.value.name,
+    dataset_type: importForm.value.dataset_type,
+    task_type: importForm.value.task_type,
+    label_space: importForm.value.label_space,
+    items: importItems.value,
+  });
+}
 
 // ─── table ───────────────────────────────────────────────────────────────────
 const columns = [

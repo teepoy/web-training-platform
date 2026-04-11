@@ -361,7 +361,9 @@ def _create_synthetic_samples(
     print(f"  Generating {count} synthetic samples (coloured squares) ...")
 
     created = 0
+    batch_size = 5000
     t0 = time.time()
+    batch: list[dict] = []
     for idx in range(count):
         label = IMAGENET_LABELS[idx]
         data_uri = _generate_synthetic_image(label, idx)
@@ -370,15 +372,15 @@ def _create_synthetic_samples(
             "label_index": idx,
             "label_name": label,
         }
-        r = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples", json={
-            "image_uris": [data_uri],
-            "metadata": metadata,
-        })
-        if r.status_code == 200:
-            created += 1
-        else:
-            if created < 3:
-                print(f"    WARN sample {idx}: {r.status_code} {r.text[:120]}")
+        batch.append({"image_uris": [data_uri], "metadata": metadata})
+
+        if len(batch) >= batch_size or idx == count - 1:
+            r = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples/import", json={"items": batch})
+            if r.status_code == 200:
+                created += int(r.json().get("imported", 0))
+            else:
+                print(f"    WARN batch ending at sample {idx}: {r.status_code} {r.text[:120]}")
+            batch = []
 
         if created > 0 and created % batch_report == 0:
             elapsed = time.time() - t0

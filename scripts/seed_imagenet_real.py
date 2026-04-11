@@ -21,7 +21,7 @@ Usage::
 
 Creates:
   1. Dataset "ImageNet-1K" with full 1000-class label space.
-  2. Preset "imagenet-resnet50".
+  2. Uses bundled preset ``resnet50-cls-v1``.
   3. Real images streamed from HuggingFace ``ILSVRC/imagenet-1k``
      (validation split).
   4. Training job, then uploads real pretrained ResNet-50 weights
@@ -56,7 +56,8 @@ ORG_SLUG = "default-org"
 COMPOSE_FILE = "infra/compose/docker-compose.yaml"
 
 DATASET_NAME = "ImageNet-1K"
-PRESET_NAME = "imagenet-resnet50"
+PRESET_ID = "resnet50-cls-v1"
+PRESET_NAME = "ResNet50 Classification (v1)"
 
 # Full ImageNet-1K class list (ILSVRC 2012, 1000 classes)
 # Source: https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt
@@ -263,43 +264,6 @@ IMAGENET_LABELS: list[str] = [
     "earthstar", "hen-of-the-woods", "bolete", "ear", "toilet tissue",
 ]
 
-PRESET_SPEC = {
-    "name": PRESET_NAME,
-    "model_spec": {
-        "framework": "pytorch",
-        "base_model": "resnet50",
-    },
-    "omegaconf_yaml": """# ResNet-50 ImageNet Classification
-model:
-  name: resnet50
-  pretrained: true
-  num_classes: 1000
-
-training:
-  epochs: 90
-  batch_size: 256
-  learning_rate: 0.1
-  optimizer: SGD
-  momentum: 0.9
-  weight_decay: 0.0001
-
-scheduler:
-  name: StepLR
-  step_size: 30
-  gamma: 0.1
-
-augment:
-  resize: 256
-  crop: 224
-  horizontal_flip: true
-  normalize:
-    mean: [0.485, 0.456, 0.406]
-    std: [0.229, 0.224, 0.225]
-""",
-    "dataloader_ref": "torchvision.datasets:ImageNet",
-}
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -368,12 +332,16 @@ def _create_real_samples(
 
     created = 0
     skipped = 0
+    batch_size = 5000
+    batch: list[dict] = []
     t0 = time.time()
-    limit = max_samples if max_samples > 0 else float("inf")
+    limit = max_samples if max_samples > 0 else None
+    seen = 0
 
     for example in hf:
-        if created >= limit:
+        if limit is not None and seen >= limit:
             break
+        seen += 1
 
         image = example["image"]
         label_idx = example["label"]
@@ -387,16 +355,17 @@ def _create_real_samples(
             "label_name": label_name,
         }
 
-        r = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples", json={
-            "image_uris": [data_uri],
-            "metadata": metadata,
-        })
-        if r.status_code == 200:
-            created += 1
-        else:
-            skipped += 1
-            if skipped <= 3:
-                print(f"    WARN: {r.status_code} {r.text[:120]}")
+        batch.append({"image_uris": [data_uri], "metadata": metadata, "label": None})
+
+        if len(batch) >= batch_size or (limit is not None and seen >= limit):
+            r = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples/import", json={"items": batch})
+            if r.status_code == 200:
+                created += int(r.json().get("imported", 0))
+            else:
+                skipped += len(batch)
+                if skipped <= batch_size * 3:
+                    print(f"    WARN: {r.status_code} {r.text[:120]}")
+            batch = []
 
         if created > 0 and created % batch_report == 0:
             elapsed = time.time() - t0
@@ -628,26 +597,26 @@ Examples:
             return 1
 
     # ------------------------------------------------------------------
-    # Step 6: Create or find preset
+    # Step 6: Resolve preset
     # ------------------------------------------------------------------
-    print(f"\n[6/{total_steps}] Creating/finding training preset ...")
+    print(f"\n[6/{total_steps}] Resolving training preset ...")
 
     r = _api(client, "get", "/api/v1/training-presets")
     existing_presets = r.json() if r.status_code == 200 else []
-    preset = _find_by_name(existing_presets, PRESET_NAME)
+    preset = None
+    for item in existing_presets:
+        if item.get("id") == PRESET_ID or item.get("name") == PRESET_NAME:
+            preset = item
+            break
     preset_id: str
 
     if preset:
         preset_id = preset["id"]
-        print(f"  Preset already exists: {preset_id}")
+        print(f"  Using preset: {preset_id} ({preset.get('name', 'unknown')})")
     else:
-        r = _api(client, "post", "/api/v1/training-presets", json=PRESET_SPEC)
-        if r.status_code == 200:
-            preset_id = r.json()["id"]
-            print(f"  Created preset: {preset_id}")
-        else:
-            print(f"  ERROR: preset creation failed: {r.status_code} {r.text}")
-            return 1
+        print(f"  ERROR: required preset '{PRESET_ID}' is not available from /api/v1/training-presets")
+        print("  Presets are file-backed and read-only; make sure the API started with the bundled preset registry.")
+        return 1
 
     # ------------------------------------------------------------------
     # Step 7: Create samples

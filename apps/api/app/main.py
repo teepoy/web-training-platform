@@ -17,6 +17,8 @@ from app.api.schemas import (
     AnnotationVersionResponse,
     BatchPredictionResponse,
     BulkAnnotationRequest,
+    BulkCreateSampleRequest,
+    BulkCreateSampleResponse,
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateOrgRequest,
@@ -75,7 +77,7 @@ from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.models import DatasetORM, OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, TrainingJobORM, UserORM
 from app.db.session import init_db
-from app.domain.models import Annotation, Dataset, Organization, Sample, TrainingEvent, TrainingJob, User
+from app.domain.models import Annotation, Dataset, DEFAULT_ORG_ID, Organization, Sample, TrainingEvent, TrainingJob, User
 from app.domain.types import DatasetType, TaskType
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
 from app.services.compatibility import (
@@ -83,6 +85,7 @@ from app.services.compatibility import (
     validate_dataset_contract,
     validate_dataset_preset_training,
 )
+from app.services.label_studio import platform_annotation_to_ls
 _logger = logging.getLogger(__name__)
 
 
@@ -95,6 +98,15 @@ def _infer_dataset_type(task_type: TaskType) -> DatasetType:
 async def _sync_file_presets_to_db() -> None:
     registry = container.preset_registry()
     repo = container.repository()
+    existing_default_org = await repo.get_organization(DEFAULT_ORG_ID)
+    if existing_default_org is None:
+        await repo.create_organization(
+            OrganizationORM(
+                id=DEFAULT_ORG_ID,
+                name="Default",
+                slug="default",
+            )
+        )
     existing = await repo.list_preset_ids()
     for spec in registry.list_presets():
         if spec.id in existing:
@@ -294,6 +306,81 @@ async def create_sample(
     sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata, ls_task_id=int(ls_task_id))
     sample = await container.repository().create_sample(sample)
     return sample
+
+
+@app.post("/api/v1/datasets/{dataset_id}/samples/import", response_model=BulkCreateSampleResponse)
+async def import_samples(
+    dataset_id: str,
+    payload: BulkCreateSampleRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> BulkCreateSampleResponse:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    if not dataset.ls_project_id:
+        raise HTTPException(status_code=500, detail="Dataset has no Label Studio project — cannot create sample.")
+    if not payload.items:
+        return BulkCreateSampleResponse(dataset_id=dataset_id, imported=0, failed=0)
+
+    ls_tasks: list[dict] = []
+    for item in payload.items:
+        image_url = _make_ls_image_url(item.image_uris[0]) if item.image_uris else ""
+        task_data = {"image": image_url}
+        if dataset.task_spec.task_type == TaskType.VQA:
+            task_data["question"] = str(item.metadata.get("question", ""))
+        ls_tasks.append(task_data)
+
+    try:
+        imported = await container.label_studio_client().import_tasks(
+            int(dataset.ls_project_id),
+            ls_tasks,
+            return_task_ids=True,
+        )
+        task_ids = [int(task_id) for task_id in imported.get("task_ids", [])]
+        if len(task_ids) != len(payload.items):
+            raise HTTPException(status_code=502, detail="Label Studio bulk import returned mismatched task IDs.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Label Studio bulk import failed: {exc}")
+
+    samples = [
+        Sample(
+            dataset_id=dataset_id,
+            image_uris=item.image_uris,
+            metadata=item.metadata,
+            ls_task_id=task_ids[idx],
+        )
+        for idx, item in enumerate(payload.items)
+    ]
+    created = await container.repository().create_samples(samples)
+
+    for idx, item in enumerate(payload.items):
+        if item.label is None:
+            continue
+        sample = created[idx]
+        if sample.ls_task_id is not None:
+            await container.label_studio_client().create_annotation(
+                sample.ls_task_id,
+                platform_annotation_to_ls(item.label),
+            )
+        await container.repository().create_annotation(
+            Annotation(
+                sample_id=sample.id,
+                label=item.label,
+                created_by=current_user.email,
+            ),
+            user_id=current_user.id,
+        )
+
+    return BulkCreateSampleResponse(
+        dataset_id=dataset_id,
+        imported=len(created),
+        failed=0,
+        sample_ids=[sample.id for sample in created],
+        ls_task_ids=task_ids,
+    )
 
 
 @app.post("/api/v1/datasets/{dataset_id}/samples/import-vqa", response_model=ImportVqaJsonlResponse)

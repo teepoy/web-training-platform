@@ -29,6 +29,21 @@ export interface Sample {
   ls_task_id?: number | null;
 }
 
+export interface BulkCreateSampleItem {
+  image_uris: string[];
+  metadata: Record<string, unknown>;
+  label?: string | null;
+}
+
+export interface BulkCreateSampleResponse {
+  dataset_id: string;
+  imported: number;
+  failed: number;
+  sample_ids: string[];
+  ls_task_ids: number[];
+  errors: string[];
+}
+
 export interface Annotation {
   id: string;
   sample_id: string;

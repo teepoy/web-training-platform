@@ -75,6 +75,27 @@ async def test_bootstrap_dspy_worker_registers_owned_deployment() -> None:
 
 
 @pytest.mark.asyncio
+async def test_bootstrap_prediction_worker_registers_owned_deployment() -> None:
+    deployment = AsyncMock()
+    deployment.aapply = AsyncMock()
+
+    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()) as ensure_pool, patch(
+        "app.flows.serve.predict_job.ato_deployment",
+        new=AsyncMock(return_value=deployment),
+    ) as ato_deployment:
+        await serve._bootstrap_worker_deployment("training-pool", "predict-batch")
+
+    ensure_pool.assert_awaited_once_with("training-pool")
+    ato_deployment.assert_awaited_once_with(
+        name="predict-job-batch-deployment",
+        description="Prediction runtime deployment for predict-job flow (managed by delegated worker)",
+        work_pool_name="training-pool",
+        work_queue_name="predict-batch",
+    )
+    deployment.aapply.assert_awaited_once_with(work_pool_name="training-pool")
+
+
+@pytest.mark.asyncio
 async def test_bootstrap_rejects_unknown_queue() -> None:
     with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()):
         with pytest.raises(RuntimeError) as exc_info:

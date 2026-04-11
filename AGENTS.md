@@ -32,13 +32,19 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Build frontend | `make build-web` | vue-tsc + vite build |
 | Alembic migrate | `make db-migrate` | `upgrade head` |
 | New migration | `make db-revision MSG="add column"` | autogenerate |
+| Reset app data | `make reset-app-data` | Drops and recreates app tables in the configured DB |
 | SDK CLI | `make ftctl ARGS="jobs ls"` | Wraps `ftctl` |
+| Seed ImageNet dev | `make seed-imagenet-dev` | Health-checks `API_URL` first; uses bundled `resnet50-cls-v1` preset |
+| Seed ImageNet real | `make seed-imagenet-real` | Health-checks `API_URL` first; uses bundled `resnet50-cls-v1` preset |
+| Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-dev`; verifies seeded batch prediction and feature extraction |
 | Compose up/down | `make up` / `make down` | Postgres + MinIO + API |
 
 Raw single-test (when Make is unavailable):
 ```bash
 cd apps/api && uv run --extra dev pytest tests/test_datasets.py::test_create_dataset -v
 ```
+
+`make seed`, `make seed-imagenet-dev`, and `make seed-imagenet-real` now check `$(API_URL)/api/v1/health` before running. Override with `API_URL=http://localhost:9000` when needed.
 
 ## CODE STYLE — PYTHON
 
@@ -127,6 +133,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - K8s namespace: `finetune`; config via `finetune-config` and `finetune-secrets`.
 - Job progress exposed via SSE, not websockets.
 - Presets are engineer-managed YAML (`apps/api/presets/`) and read-only via API/UI.
+- Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 

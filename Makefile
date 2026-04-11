@@ -9,6 +9,7 @@ WEB_DIR     := apps/web
 SDK_DIR     := libs/python-sdk
 COMPOSE     := infra/compose/docker-compose.yaml
 API_PORT    ?= 8000
+API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 60
@@ -77,6 +78,10 @@ build-web: ## Build frontend for production
 .PHONY: create-superadmin
 create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
 	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)
+
+.PHONY: reset-app-data
+reset-app-data: ## Drop and recreate all application tables
+	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli reset-app-data
 	
 
 # ──────────────────────────────────────────────
@@ -93,15 +98,24 @@ ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
 
 .PHONY: seed
 seed: ## Seed Oxford Flowers 102 dataset (requires running compose stack)
-	uv run scripts/seed_oxford_flowers.py --compose-file $(COMPOSE) $(ARGS)
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run scripts/seed_oxford_flowers.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-imagenet-dev
 seed-imagenet-dev: ## Seed ImageNet-1K with synthetic samples + fake model (no extra deps)
-	uv run python scripts/seed_imagenet_dev.py --compose-file $(COMPOSE) $(ARGS)
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_imagenet_dev.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-imagenet-real
 seed-imagenet-real: ## Seed ImageNet-1K with real HF images + pretrained ResNet-50
-	uv run python scripts/seed_imagenet_real.py --compose-file $(COMPOSE) $(ARGS)
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_imagenet_real.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: smoke-dev-batch
+smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/smoke_dev_batch.py $(ARGS)
+
 
 # ──────────────────────────────────────────────
 # Docker / Infra
@@ -116,7 +130,7 @@ up: ## Start Compose stack (Postgres + MinIO + API)
 
 .PHONY: down
 down: ## Stop Compose stack
-	docker compose -f $(COMPOSE) down
+	docker compose -f $(COMPOSE) down --remove-orphans
 
 .PHONY: logs
 logs: ## Tail Compose logs (usage: make logs ARGS="api")
@@ -143,6 +157,7 @@ help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf '\nVariables:\n'
 	@printf '  \033[36m%-16s\033[0m %s\n' "API_PORT" "API server port (default: 8000)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "API_URL" "API base URL used by seed targets (default: http://localhost:API_PORT)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "WEB_PORT" "Web dev server port (default: 5173)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for test targets in seconds (default: 300)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stuck timeout for stack dumps in seconds (default: 60)"
