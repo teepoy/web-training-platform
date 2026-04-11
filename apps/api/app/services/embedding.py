@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingClient:
 
-    def __init__(self, grpc_target: str = "localhost:50051"):
+    def __init__(self, grpc_target: str = "localhost:50051", timeout_seconds: float = 5.0):
         self._target = grpc_target
+        self._timeout_seconds = timeout_seconds
         self._channel: grpc.Channel | None = None
         self._stub: EmbeddingServiceStub | None = None
 
@@ -32,7 +33,10 @@ class EmbeddingClient:
 
     def _embed_sync(self, image_bytes: bytes, model_name: str) -> list[float]:
         stub = self._ensure_channel()
-        response = stub.Embed(EmbedRequest(image_data=image_bytes, model_name=model_name))
+        response = stub.Embed(
+            EmbedRequest(image_data=image_bytes, model_name=model_name),
+            timeout=self._timeout_seconds,
+        )
         return list(response.embedding)
 
     async def embed_image(
@@ -46,6 +50,7 @@ class EmbeddingClient:
         stub = self._ensure_channel()
         response = stub.EmbedBatch(
             EmbedBatchRequest(images=image_bytes_list, model_name=model_name),
+            timeout=self._timeout_seconds,
         )
         return [list(r.embedding) for r in response.embeddings]
 
@@ -60,7 +65,7 @@ class EmbeddingClient:
         def _check() -> bool:
             try:
                 stub = self._ensure_channel()
-                resp = stub.Health(HealthRequest())
+                resp = stub.Health(HealthRequest(), timeout=self._timeout_seconds)
                 return resp.healthy
             except grpc.RpcError:
                 return False
@@ -90,7 +95,8 @@ class EmbeddingClient:
                 image_data=image_bytes,
                 labels=labels,
                 model_name=model_name,
-            )
+            ),
+            timeout=self._timeout_seconds,
         )
         scores = {s.label: s.score for s in response.scores}
         return response.predicted_label, response.confidence, scores
@@ -134,7 +140,8 @@ class EmbeddingClient:
                 images=image_bytes_list,
                 labels=labels,
                 model_name=model_name,
-            )
+            ),
+            timeout=self._timeout_seconds,
         )
         results = []
         for pred in response.predictions:

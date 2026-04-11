@@ -9,6 +9,9 @@ resources:
   - minio.yaml
   - prefect-server.yaml
   - embedding.yaml
+  - inference-worker.yaml
   - label-studio.yaml
   - api-deployment.yaml
-  - training-worker.yaml
+  - training-worker-gpu.yaml
+  - training-worker-dspy.yaml
+  - prediction-worker.yaml

@@ -1,6 +1,6 @@
-export type TaskType = "classification";
-export type DatasetType = "image_classification";
-export type ModelFramework = "pytorch";
+export type TaskType = "classification" | "vqa";
+export type DatasetType = "image_classification" | "image_vqa";
+export type ModelFramework = "pytorch" | "dspy";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface TaskSpec {
@@ -58,13 +58,66 @@ export interface ModelSpec {
   num_classes: number;
 }
 
+// ---------------------------------------------------------------------------
+// File-backed preset (new shape from preset registry)
+// ---------------------------------------------------------------------------
+
+export interface PresetModelSource {
+  framework: string;
+  base_model: string;
+  source?: string | null;
+  checkpoint?: string | null;
+}
+
+export interface PresetTrainConfig {
+  process: string;
+  dataloader?: { ref: string } | null;
+  hyperparams?: Record<string, unknown>;
+}
+
+export interface PresetPredictTarget {
+  process: string;
+  label_space?: string[] | null;
+  threshold?: number | null;
+}
+
+export interface PresetPredictConfig {
+  targets: Record<string, PresetPredictTarget>;
+}
+
+export interface PresetRuntimeConfig {
+  gpu?: boolean;
+  min_vram_gb?: number | null;
+  env?: Record<string, string>;
+  queue?: string | null;
+}
+
+export interface PresetCompatibility {
+  dataset_types: string[];
+  task_types: string[];
+  prediction_targets: string[];
+}
+
 export interface TrainingPreset {
   id: string;
   name: string;
-  model_spec: ModelSpec;
-  omegaconf_yaml: string;
-  dataloader_ref: string;
-  created_at?: string;
+  version?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+  trainable?: boolean;
+  model: PresetModelSource;
+  train: PresetTrainConfig;
+  predict: PresetPredictConfig;
+  test?: Record<string, unknown> | null;
+  convert?: Record<string, unknown> | null;
+  runtime: PresetRuntimeConfig;
+  compatibility?: PresetCompatibility;
+  // Legacy compat fields
+  model_spec?: ModelSpec | { framework: string; base_model: string };
+  omegaconf_yaml?: string;
+  dataloader_ref?: string;
+  org_id?: string | null;
 }
 
 export interface TrainingEvent {
@@ -204,10 +257,20 @@ export interface RecentJobSummary {
   updated_at: string
 }
 
+export interface ServiceStatus {
+  name: string
+  kind: string
+  status: string
+  detail: string
+  latency_ms: number | null
+  endpoint: string | null
+}
+
 export interface DashboardResponse {
   work_pool: WorkPoolStatus | null
   job_queue: JobQueueStats
   recent_jobs: RecentJobSummary[]
+  services: ServiceStatus[]
   prefect_connected: boolean
 }
 
@@ -272,6 +335,48 @@ export interface OrgMember {
 
 export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";
 
+export interface ModelCompatibility {
+  dataset_types: string[];
+  task_types: string[];
+  prediction_targets: string[];
+  label_space: string[];
+  embedding_dimension?: number | null;
+  normalized_output?: boolean | null;
+}
+
+export interface UploadedModelSpec {
+  framework: string;
+  architecture: string;
+  base_model: string;
+}
+
+export interface ModelUploadProfile {
+  id: string;
+  name: string;
+  model_spec: Record<string, string>;
+  default_prediction_targets: string[];
+}
+
+export interface ModelUploadTemplate {
+  id: string;
+  name: string;
+  dataset_types: string[];
+  task_types: string[];
+  profiles: ModelUploadProfile[];
+  label_space_mode: "required" | "forbidden";
+  requires_embedding_metadata: boolean;
+}
+
+export interface UploadModelMetadata {
+  name: string;
+  format: ModelFormat;
+  job_id: string;
+  template_id: string;
+  profile_id: string;
+  model_spec: UploadedModelSpec;
+  compatibility: ModelCompatibility;
+}
+
 export interface Model {
   id: string;
   uri: string;
@@ -313,15 +418,89 @@ export interface BatchPredictionResult {
   model_version: string | null;
 }
 
+export interface PredictionJob {
+  id: string;
+  dataset_id: string;
+  model_id: string;
+  status: string;
+  created_by: string;
+  target: string;
+  model_version: string | null;
+  created_at: string;
+  updated_at: string;
+  external_job_id: string | null;
+  sample_ids: string[] | null;
+  summary: Record<string, unknown>;
+}
+
+export interface PredictionEvent {
+  job_id: string;
+  ts: string;
+  level: string;
+  message: string;
+  payload: Record<string, unknown>;
+}
+
 export interface RunPredictionRequest {
   model_id: string;
   dataset_id: string;
   sample_ids?: string[] | null;
   model_version?: string | null;
+  target?: string;
+  prompt?: string | null;
 }
 
 export interface PredictSingleRequest {
   model_id: string;
   sample_id: string;
   model_version?: string | null;
+  target?: string;
+  prompt?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Prediction Review
+// ---------------------------------------------------------------------------
+
+export interface ReviewAction {
+  id: string;
+  dataset_id: string;
+  model_id: string;
+  model_version: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface AnnotationVersion {
+  id: string;
+  review_action_id: string;
+  annotation_id: string;
+  source_prediction_id: number | null;
+  predicted_label: string;
+  final_label: string;
+  confidence: number | null;
+  created_at: string;
+}
+
+export interface SaveReviewAnnotationItem {
+  sample_id: string;
+  predicted_label: string;
+  final_label: string;
+  confidence: number | null;
+  source_prediction_id: number | null;
+}
+
+export interface SaveReviewAnnotationsResponse {
+  review_action_id: string;
+  created_count: number;
+  annotation_versions: AnnotationVersion[];
+}
+
+export interface ExportFormat {
+  format_id: string;
+}
+
+export interface VersionExportResponse {
+  uri: string;
+  format_id: string;
 }

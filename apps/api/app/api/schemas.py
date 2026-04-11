@@ -7,6 +7,7 @@ from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models import ModelSpec, TaskSpec
+from app.domain.types import DatasetType
 
 T = TypeVar("T")
 
@@ -18,6 +19,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class CreateDatasetRequest(BaseModel):
     name: str
+    dataset_type: DatasetType | None = None
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
 
 
@@ -28,6 +30,13 @@ class UpdateLabelSpaceRequest(BaseModel):
 class CreateSampleRequest(BaseModel):
     image_uris: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
+
+
+class ImportVqaJsonlResponse(BaseModel):
+    dataset_id: str
+    imported: int
+    failed: int
+    errors: list[str] = Field(default_factory=list)
 
 
 class CreateAnnotationRequest(BaseModel):
@@ -186,10 +195,20 @@ class RecentJobSummary(BaseModel):
     updated_at: str
 
 
+class ServiceStatus(BaseModel):
+    name: str
+    kind: str
+    status: str
+    detail: str = ""
+    latency_ms: int | None = None
+    endpoint: str | None = None
+
+
 class DashboardResponse(BaseModel):
     work_pool: WorkPoolStatus | None = None
     job_queue: JobQueueStats = Field(default_factory=JobQueueStats)
     recent_jobs: list[RecentJobSummary] = Field(default_factory=list)
+    services: list[ServiceStatus] = Field(default_factory=list)
     prefect_connected: bool = False
 
 
@@ -347,6 +366,48 @@ class UploadModelRequest(BaseModel):
     job_id: str = Field(description="Training job ID to associate the model with")
 
 
+class ModelCompatibilityRequest(BaseModel):
+    dataset_types: list[str] = Field(default_factory=list)
+    task_types: list[str] = Field(default_factory=list)
+    prediction_targets: list[str] = Field(default_factory=list)
+    label_space: list[str] = Field(default_factory=list)
+    embedding_dimension: int | None = None
+    normalized_output: bool | None = None
+
+
+class UploadModelSpecRequest(BaseModel):
+    framework: str
+    architecture: str
+    base_model: str
+
+
+class UploadModelMetadataRequest(BaseModel):
+    name: str
+    format: str = Field(description="Model format: pytorch, onnx, safetensors, keras")
+    job_id: str = Field(description="Training job ID to associate the model with")
+    template_id: str
+    profile_id: str = "custom"
+    model_spec: UploadModelSpecRequest
+    compatibility: ModelCompatibilityRequest
+
+
+class UploadTemplateProfileResponse(BaseModel):
+    id: str
+    name: str
+    model_spec: dict = Field(default_factory=dict)
+    default_prediction_targets: list[str] = Field(default_factory=list)
+
+
+class ModelUploadTemplateResponse(BaseModel):
+    id: str
+    name: str
+    dataset_types: list[str] = Field(default_factory=list)
+    task_types: list[str] = Field(default_factory=list)
+    profiles: list[UploadTemplateProfileResponse] = Field(default_factory=list)
+    label_space_mode: str = "forbidden"
+    requires_embedding_metadata: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Prediction schemas
 # ---------------------------------------------------------------------------
@@ -364,6 +425,8 @@ class RunPredictionRequest(BaseModel):
         default=None,
         description="Optional version tag for Label Studio filtering",
     )
+    target: str = Field(default="image_classification", description="Prediction target key in preset")
+    prompt: str | None = Field(default=None, description="Optional runtime prompt/question override")
 
 
 class PredictionResultResponse(BaseModel):
@@ -374,6 +437,29 @@ class PredictionResultResponse(BaseModel):
     confidence: float | None = None
     ls_prediction_id: int | None = None
     error: str | None = None
+
+
+class PredictionJobResponse(BaseModel):
+    id: str
+    dataset_id: str
+    model_id: str
+    status: str
+    created_by: str
+    target: str
+    model_version: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    external_job_id: str | None = None
+    sample_ids: list[str] | None = None
+    summary: dict = Field(default_factory=dict)
+
+
+class PredictionEventResponse(BaseModel):
+    job_id: str
+    ts: datetime
+    level: str
+    message: str
+    payload: dict = Field(default_factory=dict)
 
 
 class BatchPredictionResponse(BaseModel):
@@ -396,4 +482,77 @@ class PredictSingleRequest(BaseModel):
     model_version: str | None = Field(
         default=None,
         description="Optional version tag for Label Studio filtering",
+    )
+    target: str = Field(default="image_classification", description="Prediction target key in preset")
+    prompt: str | None = Field(default=None, description="Optional runtime prompt/question override")
+
+
+# ---------------------------------------------------------------------------
+# Prediction review schemas
+# ---------------------------------------------------------------------------
+
+
+class CreateReviewActionRequest(BaseModel):
+    """Request to start a prediction review session."""
+    dataset_id: str = Field(description="ID of the dataset")
+    model_id: str = Field(description="ID of the model used for predictions")
+    model_version: str | None = Field(
+        default=None,
+        description="Version tag used when running predictions",
+    )
+
+
+class ReviewActionResponse(BaseModel):
+    """Response for a prediction review action."""
+    id: str
+    dataset_id: str
+    model_id: str
+    model_version: str | None = None
+    created_by: str
+    created_at: datetime
+
+
+class SaveReviewAnnotationItem(BaseModel):
+    """Single reviewed prediction to save as annotation."""
+    sample_id: str
+    predicted_label: str
+    final_label: str
+    confidence: float | None = None
+    source_prediction_id: int | None = None
+
+
+class SaveReviewAnnotationsRequest(BaseModel):
+    """Request to save reviewed predictions as annotations for a review action."""
+    items: list[SaveReviewAnnotationItem]
+
+
+class AnnotationVersionResponse(BaseModel):
+    """Response for a single annotation version entry."""
+    id: str
+    review_action_id: str
+    annotation_id: str
+    source_prediction_id: int | None = None
+    predicted_label: str
+    final_label: str
+    confidence: float | None = None
+    created_at: datetime
+
+
+class SaveReviewAnnotationsResponse(BaseModel):
+    """Response after saving reviewed annotations."""
+    review_action_id: str
+    created_count: int
+    annotation_versions: list[AnnotationVersionResponse]
+
+
+class ExportFormatResponse(BaseModel):
+    """Available export format descriptor."""
+    format_id: str
+
+
+class VersionExportRequest(BaseModel):
+    """Request to export an annotation version."""
+    format_id: str = Field(
+        default="annotation-version-full-context-v1",
+        description="Export format identifier",
     )

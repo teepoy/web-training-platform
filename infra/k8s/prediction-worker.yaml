@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-worker
+  namespace: finetune
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prediction-worker
+  template:
+    metadata:
+      labels:
+        app: prediction-worker
+    spec:
+      containers:
+        - name: prediction-worker
+          image: finetune-worker:latest
+          imagePullPolicy: IfNotPresent
+          command: ["uv", "run", "python", "-m", "app.flows.serve"]
+          env:
+            - name: PREFECT_API_URL
+              value: "http://prefect-server.finetune.svc.cluster.local:4200/api"
+            - name: PLATFORM_API_URL
+              value: "http://finetune-api.finetune.svc.cluster.local:8000"
+            - name: WORKER_MODE
+              value: v2
+            - name: WORK_POOL_NAME
+              value: training-pool
+            - name: WORK_QUEUE_NAME
+              value: predict-batch
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets

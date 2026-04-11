@@ -41,6 +41,16 @@
           </n-alert>
         </n-card>
 
+        <n-card title="Service Health" size="small">
+          <n-data-table
+            :columns="serviceColumns"
+            :data="data?.services ?? []"
+            :bordered="true"
+            :striped="true"
+            size="small"
+          />
+        </n-card>
+
         <n-card title="Job Queue" size="small">
           <n-grid :cols="5" :x-gap="16" :y-gap="16">
             <n-gi>
@@ -83,7 +93,7 @@ import { useQuery } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
 import { api } from "../api";
-import type { RecentJobSummary } from "../types";
+import type { RecentJobSummary, ServiceStatus } from "../types";
 import { useOrgStore } from "../stores/org";
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
@@ -117,6 +127,50 @@ function poolStatusType(status: string): TagType {
   };
   return map[status] ?? "default";
 }
+
+function serviceStatusType(status: string): TagType {
+  const map: Record<string, TagType> = {
+    healthy: "success",
+    degraded: "warning",
+    down: "error",
+  };
+  return map[status] ?? "default";
+}
+
+const serviceColumns = computed<DataTableColumns<ServiceStatus>>(() => [
+  {
+    title: "Service",
+    key: "name",
+    width: 160,
+  },
+  {
+    title: "Kind",
+    key: "kind",
+    width: 110,
+  },
+  {
+    title: "Status",
+    key: "status",
+    width: 120,
+    render: (row) =>
+      h(
+        NTag,
+        { type: serviceStatusType(row.status), size: "small", round: true },
+        { default: () => row.status }
+      ),
+  },
+  {
+    title: "Latency",
+    key: "latency_ms",
+    width: 110,
+    render: (row) => row.latency_ms !== null ? `${row.latency_ms} ms` : "-",
+  },
+  {
+    title: "Detail",
+    key: "detail",
+    minWidth: 220,
+  },
+]);
 
 const columns = computed<DataTableColumns<RecentJobSummary>>(() => [
   {

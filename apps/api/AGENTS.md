@@ -9,7 +9,7 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | HTTP routes | `app/main.py` | Main API surface, SSE, export persist endpoint |
 | Dependency wiring | `app/container.py` | Engine/storage/repository selection |
 | Config profile logic | `app/core/config.py` + `config/*.yaml` | Env overrides plus profile merge |
-| DB session/bootstrap | `app/db/session.py` | Async engine, session factory, optional auto-create |
+| DB session/bootstrap | `app/db/session.py` | Async engine, session factory, optional auto-create in tests |
 | Schema/migrations | `app/db/models.py` + `alembic/` | Use migration files for non-smoke envs |
 | Job execution | `app/services/orchestrator.py` + `services/engines.py` | Local vs Kubeflow path |
 | Artifact persistence | `app/services/artifacts.py` + `app/storage/` | Memory or MinIO backends |
@@ -28,17 +28,16 @@ apps/api/
 ├── app/services/    # orchestrator, engines, notifications, artifacts
 ├── app/services/scheduler.py  # Prefect REST API client wrapper (httpx, no SDK)
 ├── app/flows/       # Prefect flow definitions and serve entrypoint
-├── config/          # base/dev/local-smoke profiles
+├── config/          # base/dev/prod/test profiles
 ├── alembic/         # migrations
 └── tests/           # pytest smoke flows
 ```
 
 ## CONVENTIONS
 - Run from this directory with `uv run ...`.
-- `APP_CONFIG_PROFILE=local-smoke` is the default assumption for tests and quick local runs.
-- `db.auto_create` is only a smoke convenience; dev/prod should use Alembic.
-- `execution.engine` picks `LocalProcessEngine` vs `KubeflowTrainingOperatorEngine` in `container.py`.
-- `storage.kind` picks in-memory artifact storage vs MinIO.
+- `APP_CONFIG_PROFILE=test` is the test-only profile. Supported runtime profiles are `dev` and `prod`.
+- `db.auto_create` is only a test convenience; dev/prod should use Alembic.
+- `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect and MinIO/S3-compatible storage.
 
 ## ANTI-PATTERNS
 - Don’t add new route-level persistence shortcuts; keep handlers thin and push logic into services/repository.

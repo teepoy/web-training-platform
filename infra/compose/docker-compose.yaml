@@ -70,9 +70,7 @@ services:
       test:
         [
           "CMD",
-          "uv",
-          "run",
-          "python",
+          "/app/.venv/bin/python",
           "-c",
           "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)",
         ]
@@ -93,6 +91,8 @@ services:
         condition: service_healthy
       embedding:
         condition: service_healthy
+      inference-worker:
+        condition: service_healthy
       label-studio:
         condition: service_healthy
       prefect-server:
@@ -102,6 +102,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
       PREFECT_API_URL: http://prefect-server:4200/api
       EMBEDDING_GRPC_TARGET: embedding:50051
+      INFERENCE_BASE_URL: http://inference-worker:8010
       LABEL_STUDIO_URL: "http://label-studio:8080"
       LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
@@ -117,8 +118,8 @@ services:
       - ../../libs/python-sdk:/app/libs/python-sdk
     command:
       [
-        "uv",
-        "run",
+        "/app/.venv/bin/python",
+        "-m",
         "uvicorn",
         "app.main:app",
         "--host",
@@ -126,8 +127,20 @@ services:
         "--port",
         "8000",
       ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
-  training-worker:
+  training-worker-gpu:
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile
@@ -135,11 +148,82 @@ services:
       prefect-server:
         condition: service_healthy
     environment:
+      APP_CONFIG_PROFILE: dev
       PREFECT_API_URL: http://prefect-server:4200/api
       PLATFORM_API_URL: http://api:8000
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      EMBEDDING_GRPC_TARGET: embedding:50051
+      INFERENCE_BASE_URL: http://inference-worker:8010
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
       WORKER_MODE: v2
       WORK_POOL_NAME: training-pool
-    command: ["uv", "run", "python", "-m", "app.flows.serve"]
+      WORK_QUEUE_NAME: train-gpu
+    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
+    restart: on-failure
+
+  training-worker-dspy:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    environment:
+      APP_CONFIG_PROFILE: dev
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PLATFORM_API_URL: http://api:8000
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      EMBEDDING_GRPC_TARGET: embedding:50051
+      INFERENCE_BASE_URL: http://inference-worker:8010
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      WORKER_MODE: v2
+      WORK_POOL_NAME: training-pool
+      WORK_QUEUE_NAME: optimize-llm-cpu
+    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
+    restart: on-failure
+
+  prediction-worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+      inference-worker:
+        condition: service_healthy
+    environment:
+      APP_CONFIG_PROFILE: dev
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PLATFORM_API_URL: http://api:8000
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      EMBEDDING_GRPC_TARGET: embedding:50051
+      INFERENCE_BASE_URL: http://inference-worker:8010
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      WORKER_MODE: v2
+      WORK_POOL_NAME: training-pool
+      WORK_QUEUE_NAME: predict-batch
+    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
     restart: on-failure
 
   web:
@@ -152,6 +236,30 @@ services:
       - "5173:80"
     volumes:
       - ../../apps/web/dist:/usr/share/nginx/html:ro
+    restart: on-failure
+
+  inference-worker:
+    build:
+      context: ../..
+      dockerfile: apps/inference/Dockerfile
+    environment:
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
+      LLM_API_KEY: local-dev-token
+      LLM_MODEL: llava
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: on-failure
 
   label-studio:

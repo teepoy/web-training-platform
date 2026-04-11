@@ -13,14 +13,16 @@ docker compose -f infra/compose/docker-compose.yaml ps
 ```
 
 Services should be running:
-- `compose-api-1` - API server (port 8000) — also runs the embedded Prefect flow runner
+- `compose-api-1` - API server (port 8000)
 - `compose-web-1` - Web frontend (port 5173)
 - `compose-postgres-1` - PostgreSQL (port 5432)
 - `compose-minio-1` - MinIO storage (ports 9000, 9001)
 - `compose-prefect-server-1` - Prefect server (port 4200)
 - `compose-label-studio-1` - Label Studio (port 8080)
-- `compose-training-worker-1` - Training worker (GPU, V2 mode)
+- `compose-training-worker-gpu-1` - GPU delegated worker
+- `compose-training-worker-dspy-1` - DSPy delegated worker
 - `compose-embedding-1` - Embedding service (port 50051)
+- `compose-inference-worker-1` - Inference worker (port 8010)
 
 ## 1. Authentication
 
@@ -76,12 +78,7 @@ Services should be running:
 
 ### 4.1 List Presets
 - [ ] Navigate to http://localhost:5173/presets
-- [ ] Verify default presets are listed (yolov8n-cls, resnet18, etc.)
-
-### 4.2 Create Preset
-- [ ] Click "New Preset"
-- [ ] Fill in preset details
-- [ ] Verify preset appears in list
+- [ ] Verify presets are listed as read-only catalog entries (no create/edit controls)
 
 ## 5. Training Jobs
 
@@ -133,13 +130,24 @@ Services should be running:
 - [ ] Sync annotations back to platform
 - [ ] Verify annotations appear in platform
 
-## 8. Dashboard
+## 8. VQA Runtime (DSPy)
+
+- [ ] Set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` for API runtime
+- [ ] Create dataset with `dataset_type: "image_vqa"` and `task_type: "vqa"`
+- [ ] Import VQA samples via `POST /api/v1/datasets/{dataset_id}/samples/import-vqa`
+- [ ] Create training job with preset `dspy-vqa-v1`
+- [ ] Wait for completion and verify model artifact `optimized_program.json` exists
+- [ ] Call `POST /api/v1/predictions/single` with `target: "vqa"` and `prompt`
+- [ ] Verify prediction is stored in Label Studio as `textarea` result
+
+## 9. Dashboard
 
 - [ ] Navigate to http://localhost:5173/dashboard
 - [ ] Verify statistics load
 - [ ] Verify recent items display
+- [ ] Verify service health table shows postgres, object storage, prefect, label studio, embedding, training workers, and inference worker
 
-## 9. API Health
+## 10. API Health
 
 ```bash
 # Health check
@@ -149,7 +157,7 @@ curl http://localhost:8000/api/v1/health
 curl -H "Authorization: Bearer <token>" http://localhost:8000/api/v1/datasets
 ```
 
-## 10. Backend Tests
+## 11. Backend Tests
 
 ```bash
 # Run all API tests

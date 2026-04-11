@@ -68,3 +68,4 @@ uv run python -m ftsdk.cli jobs ls
 - Local smoke uses async SQLite storage and local execution engine.
 - Docker/K8s integration is scaffolded but intentionally optional.
 - `pnpm` was not available in this environment, so frontend build was scaffolded but not executed.
+- Prefect queue-based delegation design is documented in `docs/prefect-training-delegation.md`.

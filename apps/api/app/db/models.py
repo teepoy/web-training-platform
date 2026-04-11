@@ -111,7 +111,7 @@ class TrainingJobORM(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     org_id: Mapped[str] = mapped_column(String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="RESTRICT"), nullable=False)
-    preset_id: Mapped[str] = mapped_column(ForeignKey("training_presets.id", ondelete="RESTRICT"), nullable=False)
+    preset_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -162,6 +162,63 @@ class SampleFeatureORM(Base):
     embedding: Mapped[list[float]] = mapped_column(JSON, default=list, nullable=False)
     embed_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PredictionReviewActionORM(Base):
+    __tablename__ = "prediction_review_actions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class AnnotationVersionORM(Base):
+    __tablename__ = "annotation_versions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    review_action_id: Mapped[str] = mapped_column(
+        ForeignKey("prediction_review_actions.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    annotation_id: Mapped[str] = mapped_column(
+        ForeignKey("annotations.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    source_prediction_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    predicted_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    final_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PredictionJobORM(Base):
+    __tablename__ = "prediction_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="RESTRICT"), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    target: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sample_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    summary_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    external_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class PredictionEventORM(Base):
+    __tablename__ = "prediction_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("prediction_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    level: Mapped[str] = mapped_column(String(32), nullable=False, default="info")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
 
 class ScheduleORM(Base):

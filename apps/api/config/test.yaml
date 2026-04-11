@@ -1,11 +1,11 @@
 app:
-  env: local-smoke
+  env: test
 
 execution:
   engine: local
 
 db:
-  url: "sqlite+aiosqlite:///./finetune-local-smoke.db"
+  url: "sqlite+aiosqlite:///./finetune-test.db"
   echo: false
   auto_create: true
 

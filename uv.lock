@@ -28,6 +28,7 @@ members = [
     "embedding-protos",
     "finetune-api",
     "finetune-embedding",
+    "finetune-inference",
     "finetune-worker",
     "ftsdk",
     "online-finetune-platform",
@@ -997,6 +998,7 @@ dependencies = [
     { name = "minio" },
     { name = "omegaconf" },
     { name = "pgvector" },
+    { name = "pillow" },
     { name = "prefect" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
@@ -1029,6 +1031,7 @@ requires-dist = [
     { name = "minio", specifier = ">=7.2.14" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pgvector", specifier = ">=0.3.0" },
+    { name = "pillow", specifier = ">=11.0.0" },
     { name = "prefect", specifier = ">=3.0.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.11.0" },
@@ -1062,6 +1065,27 @@ requires-dist = [
     { name = "protobuf", specifier = ">=5.29.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "transformers", specifier = ">=4.40.0" },
+]
+
+[[package]]
+name = "finetune-inference"
+version = "0.1.0"
+source = { virtual = "apps/inference" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.116.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "pillow", specifier = ">=11.0.0" },
+    { name = "pydantic", specifier = ">=2.11.0" },
+    { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 
 [[package]]

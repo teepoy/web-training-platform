@@ -1,0 +1,12 @@
+[project]
+name = "finetune-inference"
+version = "0.1.0"
+description = "Inference worker for prediction and embedding execution"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn>=0.35.0",
+  "pydantic>=2.11.0",
+  "pillow>=11.0.0",
+  "httpx>=0.28.0",
+]

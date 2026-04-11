@@ -4,24 +4,36 @@ This module provides :class:`PredictionService` for:
 - Running batch predictions on entire datasets
 - Running single-sample predictions
 - Storing prediction results in Label Studio
-
-Uses CLIP zero-shot classification via the gRPC embedding service for real inference.
+- Creating prediction review actions and saving reviewed annotations
 """
 from __future__ import annotations
 
 import base64
+import importlib
+import inspect
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 
+from app.domain.models import Annotation, AnnotationVersion, PredictionReviewAction
+from app.domain.types import TaskType
+from app.presets.registry import PresetRegistry
+from app.presets.runtime import DatasetRef, ModelRef, PredictContext, PredictResult as RuntimePredictResult
+from app.services.compatibility import validate_model_prediction, validate_model_review
 from app.services.embedding import EmbeddingClient
+from app.services.inference_worker import InferenceWorkerClient
+from app.services.llm import OpenAICompatibleLlmClient
 from app.services.label_studio import (
     LabelStudioClient,
     LabelStudioError,
+    platform_annotation_to_ls,
     platform_prediction_to_ls,
+    platform_text_prediction_to_ls,
 )
 
 if TYPE_CHECKING:
@@ -81,12 +93,16 @@ class PredictionService:
         artifact_storage: ArtifactStorage,
         config: AppConfig,
         embedding_client: EmbeddingClient | None = None,
+        llm_client: OpenAICompatibleLlmClient | None = None,
+        inference_worker: InferenceWorkerClient | None = None,
     ) -> None:
         self.repository = repository
         self.artifact_storage = artifact_storage
         self.config = config
         self._ls_client: LabelStudioClient | None = None
         self._embedding_client = embedding_client
+        self._llm_client = llm_client
+        self._inference_worker = inference_worker
 
     def _get_ls_client(self) -> LabelStudioClient:
         """Lazy initialization of Label Studio client."""
@@ -107,6 +123,94 @@ class PredictionService:
             grpc_target = getattr(self.config, 'embedding_grpc_target', 'localhost:50051')
             self._embedding_client = EmbeddingClient(grpc_target=grpc_target)
         return self._embedding_client
+
+    def _load_preset_registry(self) -> PresetRegistry:
+        try:
+            presets_dir = str(self.config.presets.dir)
+        except Exception:
+            presets_dir = "presets"
+        root = Path(presets_dir)
+        if not root.is_absolute():
+            root = (Path(__file__).resolve().parents[2] / presets_dir).resolve()
+        registry = PresetRegistry(str(root), strict=True)
+        registry.load()
+        return registry
+
+    @staticmethod
+    def _load_entrypoint(ref: str) -> Any:
+        module_name, sep, attr_name = ref.partition(":")
+        if sep != ":" or not module_name or not attr_name:
+            raise ValueError(f"Invalid predict entrypoint reference: {ref}")
+        module = importlib.import_module(module_name)
+        return getattr(module, attr_name)
+
+    async def _resolve_predictor(self, model, org_id: str, target: str = "image_classification") -> tuple[Any, PredictContext]:
+        registry = self._load_preset_registry()
+        preset_id = model.preset_id or model.preset_name or ""
+        preset = registry.get_preset(preset_id)
+        if preset is None and model.job_id:
+            job = await self.repository.get_job(model.job_id, org_id=org_id)
+            if job is not None:
+                preset_id = job.preset_id
+                preset = registry.get_preset(preset_id)
+        if preset is None:
+            raise ValueError(f"Preset not found for model/job: {model.id}")
+
+        target_cfg = preset.predict.targets.get(target)
+        entrypoint_ref = target_cfg.entrypoint if target_cfg is not None else preset.predict.entrypoint
+        if not entrypoint_ref:
+            raise ValueError(f"No predict entrypoint configured for preset: {preset.id}")
+
+        entrypoint = self._load_entrypoint(entrypoint_ref)
+        predictor = None
+        if inspect.isclass(entrypoint):
+            try:
+                ctor = inspect.signature(entrypoint)
+                ctor_kwargs = {
+                    "embedding_client": self._get_embedding_client(),
+                    "llm_client": self._llm_client,
+                    "artifact_storage": self.artifact_storage,
+                }
+                accepts_kwargs = any(
+                    param.kind == inspect.Parameter.VAR_KEYWORD
+                    for param in ctor.parameters.values()
+                )
+                filtered_kwargs = {
+                    key: value
+                    for key, value in ctor_kwargs.items()
+                    if accepts_kwargs or key in ctor.parameters
+                }
+                predictor = entrypoint(**filtered_kwargs)
+            except (TypeError, ValueError):
+                predictor = entrypoint()
+        else:
+            maybe_predictor = entrypoint
+            if hasattr(maybe_predictor, "predict_single") and callable(getattr(maybe_predictor, "predict_single")):
+                predictor = maybe_predictor
+
+        if predictor is None:
+            raise ValueError(
+                f"Predict entrypoint must resolve to a Predictor class/instance with predict_single: {entrypoint_ref}"
+            )
+
+        dataset_ref = DatasetRef(dataset_id=model.dataset_id or "")
+        model_ref = ModelRef(
+            uri=model.uri,
+            framework=str(model.metadata.get("framework", "")) if isinstance(model.metadata, dict) else "",
+            architecture=str(model.metadata.get("architecture", "")) if isinstance(model.metadata, dict) else "",
+            base_model=str(model.metadata.get("base_model", "")) if isinstance(model.metadata, dict) else "",
+            format=model.format,
+            metadata=model.metadata,
+        )
+
+        ctx = PredictContext(
+            job_id=model.job_id,
+            preset=preset,
+            model_ref=model_ref,
+            dataset_ref=dataset_ref,
+            target=target,
+        )
+        return predictor, ctx
 
     async def _get_image_bytes(self, sample: Sample) -> bytes | None:
         """Fetch image bytes for a sample.
@@ -142,6 +246,8 @@ class PredictionService:
         org_id: str,
         sample_ids: list[str] | None = None,
         model_version: str | None = None,
+        target: str = "image_classification",
+        prompt: str | None = None,
     ) -> BatchPredictionResult:
         """Run predictions on a dataset using a trained model.
         
@@ -177,11 +283,8 @@ class PredictionService:
         
         if dataset.ls_project_id is None:
             raise ValueError(f"Dataset {dataset_id} has no Label Studio project")
-        
-        # Get label space from dataset task spec
+        validate_model_prediction(dataset, model.metadata if isinstance(model.metadata, dict) else {}, target)
         label_space = dataset.task_spec.label_space
-        if not label_space:
-            raise ValueError(f"Dataset {dataset_id} has no label space defined")
         
         # Get samples
         if sample_ids:
@@ -206,31 +309,60 @@ class PredictionService:
         
         # Generate model version tag
         version_tag = model_version or f"model-{model_id[:8]}"
-        
-        # Run predictions
+
         predictions: list[PredictionResult] = []
         successful = 0
         failed = 0
         
         ls_client = self._get_ls_client()
-        embedding_client = self._get_embedding_client()
-        
-        for sample in samples:
-            result = await self._predict_sample(
-                sample=sample,
-                label_space=label_space,
-                model_version=version_tag,
-                ls_client=ls_client,
-                embedding_client=embedding_client,
+
+        if self._should_use_inference_worker():
+            worker_results = await self._predict_via_worker(
+                model=model,
+                samples=samples,
+                label_space=list(label_space),
+                target=target,
+                prompt=prompt,
             )
-            predictions.append(result)
-            if result.error:
-                failed += 1
-            else:
-                successful += 1
-        
+            worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
+            for sample in samples:
+                result = await self._prediction_result_from_worker(
+                    sample=sample,
+                    worker_result=worker_by_sample.get(sample.id, {"sample_id": sample.id, "error": "missing worker result"}),
+                    model_version=version_tag,
+                    ls_client=ls_client,
+                    target=target,
+                )
+                predictions.append(result)
+                if result.error:
+                    failed += 1
+                else:
+                    successful += 1
+        else:
+            predictor, predict_ctx = await self._resolve_predictor(model, org_id=org_id, target=target)
+            predict_ctx.dataset_ref.label_space = list(label_space)
+            if prompt:
+                predict_ctx.dataset_ref.metadata["prompt"] = prompt
+            await predictor.load_model(predict_ctx.model_ref)
+            for sample in samples:
+                result = await self._predict_sample(
+                    sample=sample,
+                    predictor=predictor,
+                    predict_ctx=predict_ctx,
+                    model_version=version_tag,
+                    ls_client=ls_client,
+                    target=target,
+                    prompt=prompt,
+                )
+                predictions.append(result)
+                if result.error:
+                    failed += 1
+                else:
+                    successful += 1
+            await predictor.unload_model()
+
         completed_at = datetime.now(UTC)
-        
+
         return BatchPredictionResult(
             model_id=model_id,
             dataset_id=dataset_id,
@@ -243,59 +375,113 @@ class PredictionService:
             model_version=version_tag,
         )
 
-    async def _predict_sample(
+    def _should_use_inference_worker(self) -> bool:
+        try:
+            return str(self.config.app.env) != "test" and self._inference_worker is not None
+        except Exception:
+            return self._inference_worker is not None
+
+    async def _predict_via_worker(
         self,
-        sample: Sample,
+        *,
+        model: Any,
+        samples: list[Sample],
         label_space: list[str],
+        target: str,
+        prompt: str | None,
+    ) -> list[dict[str, Any]]:
+        if self._inference_worker is None:
+            raise ValueError("Inference worker is not configured")
+        model_bytes = await self.artifact_storage.get_bytes(model.uri)
+        payload_samples: list[dict[str, Any]] = []
+        for sample in samples:
+            text_input = sample.metadata.get("text") if isinstance(sample.metadata, dict) else None
+            question_input = prompt or (str(sample.metadata.get("question", "")) if isinstance(sample.metadata, dict) else "")
+            image_bytes = await self._get_image_bytes(sample) if sample.image_uris else None
+            payload_samples.append(
+                {
+                    "sample_id": sample.id,
+                    "image_bytes": image_bytes,
+                    "metadata": sample.metadata,
+                    "image_uris": sample.image_uris,
+                    "question": question_input,
+                    "text": text_input,
+                }
+            )
+        metadata = model.metadata if isinstance(model.metadata, dict) else {}
+        return await self._inference_worker.predict_batch(
+            model_id=model.id,
+            model_uri=model.uri,
+            model_format=model.format,
+            model_metadata=metadata,
+            model_bytes=model_bytes,
+            target=target,
+            label_space=label_space,
+            samples=payload_samples,
+        )
+
+    async def _prediction_result_from_worker(
+        self,
+        *,
+        sample: Sample,
+        worker_result: dict[str, Any],
         model_version: str,
         ls_client: LabelStudioClient,
-        embedding_client: EmbeddingClient,
+        target: str,
     ) -> PredictionResult:
-        """Run prediction on a single sample and store in Label Studio.
-        
-        Uses CLIP zero-shot classification for real inference.
-        """
-        # Check if sample has Label Studio task ID
-        if sample.ls_task_id is None:
-            return PredictionResult(
-                sample_id=sample.id,
-                ls_task_id=None,
-                predicted_label="",
-                confidence=None,
-                error="Sample has no Label Studio task ID",
-            )
-        
-        # Get image bytes
-        image_bytes = await self._get_image_bytes(sample)
-        if image_bytes is None:
-            return PredictionResult(
-                sample_id=sample.id,
-                ls_task_id=sample.ls_task_id,
-                predicted_label="",
-                confidence=None,
-                error="Could not fetch image for sample",
-            )
-        
-        # Run real inference via CLIP zero-shot classification
-        try:
-            predicted_label, confidence, all_scores = await embedding_client.classify_image(
-                image_bytes=image_bytes,
-                labels=label_space,
-            )
-        except Exception as e:
-            logger.exception(f"Inference failed for sample {sample.id}")
+        predicted_label = str(worker_result.get("label", ""))
+        confidence_raw = worker_result.get("confidence")
+        confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else None
+        all_scores = worker_result.get("scores") if isinstance(worker_result.get("scores"), dict) else None
+        runtime_error = worker_result.get("error")
+        return await self._finalize_prediction(
+            sample=sample,
+            predicted_label=predicted_label,
+            confidence=confidence,
+            all_scores=all_scores,
+            runtime_error=str(runtime_error) if runtime_error else None,
+            model_version=model_version,
+            ls_client=ls_client,
+            target=target,
+        )
+
+    async def _finalize_prediction(
+        self,
+        *,
+        sample: Sample,
+        predicted_label: str,
+        confidence: float | None,
+        all_scores: dict[str, float] | None,
+        runtime_error: str | None,
+        model_version: str,
+        ls_client: LabelStudioClient,
+        target: str,
+    ) -> PredictionResult:
+        if runtime_error:
             return PredictionResult(
                 sample_id=sample.id,
                 ls_task_id=sample.ls_task_id,
-                predicted_label="",
-                confidence=None,
-                error=f"Inference failed: {e}",
+                predicted_label=predicted_label,
+                confidence=confidence,
+                all_scores=all_scores,
+                error=str(runtime_error),
             )
-        
-        # Convert to Label Studio format
-        ls_result = platform_prediction_to_ls(predicted_label)
-        
-        # Store prediction in Label Studio
+
+        if target == "embedding":
+            return PredictionResult(
+                sample_id=sample.id,
+                ls_task_id=sample.ls_task_id,
+                predicted_label=predicted_label or "embedding",
+                confidence=confidence,
+                all_scores=all_scores,
+                ls_prediction_id=None,
+            )
+
+        if target == "vqa":
+            ls_result = platform_text_prediction_to_ls(predicted_label)
+        else:
+            ls_result = platform_prediction_to_ls(predicted_label)
+
         try:
             ls_prediction = await ls_client.create_prediction(
                 task_id=sample.ls_task_id,
@@ -321,12 +507,112 @@ class PredictionService:
                 error=f"Failed to store prediction in Label Studio: {e}",
             )
 
+    async def _predict_sample(
+        self,
+        sample: Sample,
+        predictor: Any,
+        predict_ctx: PredictContext,
+        model_version: str,
+        ls_client: LabelStudioClient,
+        target: str,
+        prompt: str | None = None,
+    ) -> PredictionResult:
+        """Run prediction on a single sample and store in Label Studio.
+        
+        Uses preset-runtime predictor dispatch.
+        """
+        # Check if sample has Label Studio task ID
+        if sample.ls_task_id is None:
+            return PredictionResult(
+                sample_id=sample.id,
+                ls_task_id=None,
+                predicted_label="",
+                confidence=None,
+                error="Sample has no Label Studio task ID",
+            )
+        
+        text_input = sample.metadata.get("text") if isinstance(sample.metadata, dict) else None
+        question_input = ""
+        if prompt:
+            question_input = prompt
+        elif isinstance(sample.metadata, dict):
+            question_input = str(sample.metadata.get("question", ""))
+        image_bytes = await self._get_image_bytes(sample) if sample.image_uris else None
+        if target == "vqa":
+            if image_bytes is None:
+                return PredictionResult(
+                    sample_id=sample.id,
+                    ls_task_id=sample.ls_task_id,
+                    predicted_label="",
+                    confidence=None,
+                    error="No image available for VQA prediction",
+                )
+            if not question_input:
+                return PredictionResult(
+                    sample_id=sample.id,
+                    ls_task_id=sample.ls_task_id,
+                    predicted_label="",
+                    confidence=None,
+                    error="No prompt/question provided for VQA prediction",
+                )
+        elif image_bytes is None and text_input is None:
+            return PredictionResult(
+                sample_id=sample.id,
+                ls_task_id=sample.ls_task_id,
+                predicted_label="",
+                confidence=None,
+                error="No usable prediction input (image or text)",
+            )
+        
+        runtime_input: dict[str, Any] = {
+            "sample_id": sample.id,
+            "image_bytes": image_bytes,
+            "metadata": sample.metadata,
+            "image_uris": sample.image_uris,
+            "question": question_input,
+        }
+        if text_input is not None:
+            runtime_input["text"] = text_input
+
+        # Run inference via runtime predictor
+        try:
+            runtime_pred: RuntimePredictResult = await predictor.predict_single(
+                predict_ctx,
+                runtime_input,
+            )
+            predicted_label = runtime_pred.label
+            confidence = runtime_pred.confidence
+            all_scores = runtime_pred.scores
+            runtime_error = runtime_pred.metadata.get("error") if runtime_pred.metadata else None
+            return await self._finalize_prediction(
+                sample=sample,
+                predicted_label=predicted_label,
+                confidence=confidence,
+                all_scores=all_scores,
+                runtime_error=str(runtime_error) if runtime_error else None,
+                model_version=model_version,
+                ls_client=ls_client,
+                target=target,
+            )
+        except Exception as e:
+            logger.exception(f"Inference failed for sample {sample.id}")
+            return PredictionResult(
+                sample_id=sample.id,
+                ls_task_id=sample.ls_task_id,
+                predicted_label="",
+                confidence=None,
+                error=f"Inference failed: {e}",
+            )
+        
+
     async def predict_single(
         self,
         model_id: str,
         sample_id: str,
         org_id: str,
         model_version: str | None = None,
+        target: str = "image_classification",
+        prompt: str | None = None,
     ) -> PredictionResult:
         """Run prediction on a single sample.
         
@@ -360,22 +646,44 @@ class PredictionService:
         dataset = await self.repository.get_dataset(sample.dataset_id, org_id)
         if dataset is None:
             raise ValueError(f"Dataset not found: {sample.dataset_id}")
-        
+        validate_model_prediction(dataset, model.metadata if isinstance(model.metadata, dict) else {}, target)
         label_space = dataset.task_spec.label_space
-        if not label_space:
-            raise ValueError(f"Dataset {sample.dataset_id} has no label space defined")
         
         version_tag = model_version or f"model-{model_id[:8]}"
         ls_client = self._get_ls_client()
-        embedding_client = self._get_embedding_client()
-        
-        return await self._predict_sample(
+        if self._should_use_inference_worker():
+            worker_results = await self._predict_via_worker(
+                model=model,
+                samples=[sample],
+                label_space=list(label_space),
+                target=target,
+                prompt=prompt,
+            )
+            worker_result = worker_results[0] if worker_results else {"sample_id": sample.id, "error": "missing worker result"}
+            return await self._prediction_result_from_worker(
+                sample=sample,
+                worker_result=worker_result,
+                model_version=version_tag,
+                ls_client=ls_client,
+                target=target,
+            )
+
+        predictor, predict_ctx = await self._resolve_predictor(model, org_id=org_id, target=target)
+        predict_ctx.dataset_ref.label_space = list(label_space)
+        if prompt:
+            predict_ctx.dataset_ref.metadata["prompt"] = prompt
+        await predictor.load_model(predict_ctx.model_ref)
+        result = await self._predict_sample(
             sample=sample,
-            label_space=label_space,
+            predictor=predictor,
+            predict_ctx=predict_ctx,
             model_version=version_tag,
             ls_client=ls_client,
-            embedding_client=embedding_client,
+            target=target,
+            prompt=prompt,
         )
+        await predictor.unload_model()
+        return result
 
     async def list_predictions_for_sample(
         self,
@@ -405,3 +713,108 @@ class PredictionService:
         
         ls_client = self._get_ls_client()
         return await ls_client.list_predictions(sample.ls_task_id)
+
+    # ------------------------------------------------------------------
+    # Prediction review actions
+    # ------------------------------------------------------------------
+
+    async def create_review_action(
+        self,
+        dataset_id: str,
+        model_id: str,
+        org_id: str,
+        created_by: str,
+        model_version: str | None = None,
+    ) -> PredictionReviewAction:
+        """Create a new prediction review action (a review session).
+
+        Validates that the dataset and model exist before creating.
+        """
+        dataset = await self.repository.get_dataset(dataset_id, org_id)
+        if dataset is None:
+            raise ValueError(f"Dataset not found: {dataset_id}")
+
+        model = await self.repository.get_model(model_id, org_id)
+        if model is None:
+            raise ValueError(f"Model not found: {model_id}")
+        validate_model_review(dataset, model.metadata if isinstance(model.metadata, dict) else {})
+
+        action = PredictionReviewAction(
+            dataset_id=dataset_id,
+            model_id=model_id,
+            model_version=model_version,
+            created_by=created_by,
+        )
+        return await self.repository.create_review_action(action)
+
+    async def save_review_annotations(
+        self,
+        review_action_id: str,
+        items: list[dict],
+        created_by: str,
+    ) -> tuple[list[Annotation], list[AnnotationVersion]]:
+        """Save reviewed predictions as annotations.
+
+        For each item in ``items`` (with keys: sample_id, predicted_label,
+        final_label, confidence, source_prediction_id):
+        1. Create LS annotation first (LS-first pattern).
+        2. Create local Annotation.
+        3. Create AnnotationVersion linking to the review action.
+
+        Returns (annotations, annotation_versions).
+        """
+        action = await self.repository.get_review_action(review_action_id)
+        if action is None:
+            raise ValueError(f"Review action not found: {review_action_id}")
+
+        ls_client = self._get_ls_client()
+
+        annotations: list[Annotation] = []
+        versions: list[AnnotationVersion] = []
+
+        for item in items:
+            sample_id: str = item["sample_id"]
+            final_label: str = item["final_label"]
+            predicted_label: str = item["predicted_label"]
+            confidence: float | None = item.get("confidence")
+            source_prediction_id: int | None = item.get("source_prediction_id")
+
+            sample = await self.repository.get_sample(sample_id)
+            if sample is None:
+                logger.warning(f"Sample not found during review save: {sample_id}")
+                continue
+
+            # LS-first: create annotation in Label Studio
+            if sample.ls_task_id:
+                try:
+                    ls_result = platform_annotation_to_ls(final_label)
+                    await ls_client.create_annotation(sample.ls_task_id, ls_result)
+                except LabelStudioError as e:
+                    logger.warning(f"LS annotation failed for sample {sample_id}: {e}")
+                    # Continue anyway — local annotation still valuable
+
+            # Create local annotation
+            ann = Annotation(
+                sample_id=sample_id,
+                label=final_label,
+                created_by=created_by,
+            )
+            ann = await self.repository.create_annotation(ann)
+            annotations.append(ann)
+
+            # Create annotation version
+            version = AnnotationVersion(
+                review_action_id=review_action_id,
+                annotation_id=ann.id,
+                source_prediction_id=source_prediction_id,
+                predicted_label=predicted_label,
+                final_label=final_label,
+                confidence=confidence,
+            )
+            versions.append(version)
+
+        # Bulk-insert annotation versions
+        if versions:
+            versions = await self.repository.create_annotation_versions_bulk(versions)
+
+        return annotations, versions

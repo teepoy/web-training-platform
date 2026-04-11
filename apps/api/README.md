@@ -14,9 +14,9 @@ uv run alembic upgrade head
 
 Configuration profiles:
 
-- Local smoke (default): async SQLite via `sqlite+aiosqlite`
-- Dev/prod: async Postgres via `postgresql+asyncpg`
-- `APP_CONFIG_PROFILE` selects config file in `config/` (default `local-smoke`).
+- `test`: async SQLite + in-memory storage (tests only)
+- `dev` / `prod`: async Postgres + S3-compatible object storage + Prefect + workers
+- `APP_CONFIG_PROFILE` selects config file in `config/`.
 
 Run tests:
 

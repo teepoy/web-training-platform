@@ -1,37 +1,27 @@
 """Tests for the dashboard endpoint (GET /api/v1/dashboard).
 
-The local-smoke profile uses ``execution.engine: local`` so the dashboard
-will report ``prefect_connected=False`` and ``work_pool=None``.  These tests
-validate the job-queue aggregation and recent-jobs listing without needing
-a live Prefect server.
+The test profile uses mocked or unavailable infra dependencies, so the dashboard
+may report degraded/down service states while still returning queue aggregates.
+These tests validate the response shape without requiring a live Prefect server.
 """
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.conftest import PRESET_ID
 
 
 def _create_job(c: TestClient) -> str:
-    """Helper: create a dataset + preset + job, return job_id."""
+    """Helper: create a dataset + job, return job_id."""
     ds = c.post(
         "/api/v1/datasets",
         json={"name": "dash-ds", "task_spec": {"task_type": "classification", "label_space": ["a"]}},
     )
     dataset_id = ds.json()["id"]
-    pr = c.post(
-        "/api/v1/training-presets",
-        json={
-            "name": "dash-preset",
-            "model_spec": {"framework": "pytorch", "base_model": "resnet18"},
-            "omegaconf_yaml": "trainer:\n  max_epochs: 1",
-            "dataloader_ref": "ref",
-        },
-    )
-    preset_id = pr.json()["id"]
     job = c.post(
         "/api/v1/training-jobs",
-        json={"dataset_id": dataset_id, "preset_id": preset_id, "created_by": "tester"},
+        json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "tester"},
     )
     return job.json()["id"]
 
@@ -44,7 +34,9 @@ def test_dashboard_empty() -> None:
         body = r.json()
         assert "job_queue" in body
         assert "recent_jobs" in body
+        assert "services" in body
         assert isinstance(body["recent_jobs"], list)
+        assert isinstance(body["services"], list)
         assert body["prefect_connected"] is False
         assert body["work_pool"] is None
         # Job queue stats should all be zero-ish (may inherit from other tests)
@@ -79,7 +71,7 @@ def test_dashboard_response_shape() -> None:
         body = r.json()
 
         # Top-level keys
-        assert set(body.keys()) == {"work_pool", "job_queue", "recent_jobs", "prefect_connected"}
+        assert set(body.keys()) == {"work_pool", "job_queue", "recent_jobs", "services", "prefect_connected"}
 
         # job_queue keys
         assert set(body["job_queue"].keys()) == {"queued", "running", "completed", "failed", "cancelled"}
@@ -88,3 +80,7 @@ def test_dashboard_response_shape() -> None:
         for job in body["recent_jobs"]:
             for field in ("id", "dataset_id", "preset_id", "status", "created_by", "created_at", "updated_at"):
                 assert field in job
+
+        for service in body["services"]:
+            for field in ("name", "kind", "status", "detail", "latency_ms", "endpoint"):
+                assert field in service

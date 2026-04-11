@@ -10,17 +10,22 @@ from app.services.prefect_client import PrefectClient
 from app.services.prefect_engine import PrefectWorkPoolEngine
 from app.services.artifacts import ArtifactService
 from app.services.embedding import EmbeddingClient
+from app.services.llm import OpenAICompatibleLlmClient
 from app.services.feature_ops import FeatureOpsService
+from app.services.inference_worker import InferenceWorkerClient
 from app.services.kubeflow_client import KubeflowClient
 from app.services.label_studio import LabelStudioClient
 from app.services.model_service import ModelService
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
 from app.services.prediction_service import PredictionService
+from app.services.prediction_orchestrator import PredictionOrchestrator
+from app.services.service_health import ServiceHealthService
 from app.services.auth import AuthService
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 from app.db.ls_session import create_ls_engine, create_ls_session_factory
 from app.repositories.ls_read_repository import LsReadRepository
+from app.presets.registry import PresetRegistry
 
 
 class Container(containers.DeclarativeContainer):
@@ -73,6 +78,13 @@ class Container(containers.DeclarativeContainer):
         PrefectClient,
         prefect_api_url=providers.Callable(lambda cfg: cfg.prefect.api_url, config),
     )
+
+    preset_registry = providers.Singleton(
+        PresetRegistry,
+        presets_dir=providers.Callable(lambda cfg: cfg.presets.dir, config),
+        strict=providers.Callable(lambda cfg: bool(cfg.presets.strict), config),
+    )
+
     prefect_engine = providers.Singleton(
         PrefectWorkPoolEngine,
         prefect_client=prefect_client,
@@ -80,6 +92,7 @@ class Container(containers.DeclarativeContainer):
         work_pool_type=providers.Callable(lambda cfg: cfg.prefect.work_pool_type, config),
         flow_name=providers.Callable(lambda cfg: cfg.prefect.flow_name, config),
         concurrency_limit=providers.Callable(lambda cfg: int(cfg.prefect.concurrency_limit), config),
+        preset_registry=preset_registry,
     )
 
     execution_engine = providers.Selector(
@@ -118,10 +131,22 @@ class Container(containers.DeclarativeContainer):
         EmbeddingClient,
         grpc_target=providers.Callable(lambda cfg: cfg.embedding.grpc_target, config),
     )
+    llm_client = providers.Singleton(
+        OpenAICompatibleLlmClient,
+        base_url=providers.Callable(lambda cfg: cfg.llm.base_url, config),
+        api_key=providers.Callable(lambda cfg: cfg.llm.api_key, config),
+        model=providers.Callable(lambda cfg: cfg.llm.model, config),
+        timeout_seconds=providers.Callable(lambda cfg: float(cfg.llm.timeout_seconds), config),
+    )
+    inference_worker = providers.Singleton(
+        InferenceWorkerClient,
+        base_url=providers.Callable(lambda cfg: cfg.inference.base_url, config),
+    )
     feature_ops = providers.Singleton(
         FeatureOpsService,
         repository=repository,
         embedding_service=embedding_service,
+        inference_worker=inference_worker,
     )
     artifacts = providers.Singleton(ArtifactService, storage=artifact_storage, repository=repository)
     orchestrator = providers.Singleton(
@@ -141,6 +166,19 @@ class Container(containers.DeclarativeContainer):
         repository=repository,
         artifact_storage=artifact_storage,
         config=config,
+        embedding_client=embedding_service,
+        llm_client=llm_client,
+        inference_worker=inference_worker,
+    )
+    prediction_orchestrator = providers.Singleton(
+        PredictionOrchestrator,
+        prefect_client=prefect_client,
+        repository=repository,
+    )
+    service_health = providers.Singleton(
+        ServiceHealthService,
+        config=config,
+        prefect_client=prefect_client,
         embedding_client=embedding_service,
     )
     auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)

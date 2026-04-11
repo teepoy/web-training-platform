@@ -8,12 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import (
     AnnotationORM,
+    AnnotationVersionORM,
     ArtifactORM,
     DatasetORM,
     JobUserStateORM,
     OrgMembershipORM,
     OrganizationORM,
     PersonalAccessTokenORM,
+    PredictionEventORM,
+    PredictionJobORM,
+    PredictionReviewActionORM,
     SampleFeatureORM,
     SampleORM,
     ScheduleORM,
@@ -24,10 +28,14 @@ from app.db.models import (
 )
 from app.domain.models import (
     Annotation,
+    AnnotationVersion,
     ArtifactRef,
     Dataset,
     DEFAULT_ORG_ID,
     Model,
+    PredictionEvent,
+    PredictionJob,
+    PredictionReviewAction,
     Sample,
     SampleFeature,
     TrainingEvent,
@@ -395,6 +403,40 @@ class SqlRepository:
             await session.commit()
         return preset.model_copy(update={"org_id": org_id})
 
+    async def list_preset_ids(self, org_id: str | None = None) -> set[str]:
+        async with self.session_factory() as session:
+            stmt = select(TrainingPresetORM.id)
+            if org_id is not None:
+                stmt = stmt.where(TrainingPresetORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
+            return set(rows)
+
+    async def ensure_preset_row(
+        self,
+        preset_id: str,
+        name: str,
+        model_spec: dict,
+        omegaconf_yaml: str,
+        dataloader_ref: str,
+        org_id: str | None = None,
+    ) -> None:
+        org_id = org_id or DEFAULT_ORG_ID
+        async with self.session_factory() as session:
+            existing = await session.get(TrainingPresetORM, preset_id)
+            if existing is not None:
+                return
+            session.add(
+                TrainingPresetORM(
+                    id=preset_id,
+                    org_id=org_id,
+                    name=name,
+                    model_spec=model_spec,
+                    omegaconf_yaml=omegaconf_yaml,
+                    dataloader_ref=dataloader_ref,
+                )
+            )
+            await session.commit()
+
     async def list_presets(self, org_id: str | None = None) -> list[TrainingPreset]:
         async with self.session_factory() as session:
             stmt = select(TrainingPresetORM)
@@ -557,6 +599,124 @@ class SqlRepository:
                 )
             ).scalars().all()
             return [TrainingEvent(job_id=r.job_id, ts=r.ts, level=r.level, message=r.message, payload=r.payload) for r in rows], total or 0
+
+    async def create_prediction_job(self, job: PredictionJob, org_id: str | None = None) -> PredictionJob:
+        org_id = org_id or job.org_id or DEFAULT_ORG_ID
+        async with self.session_factory() as session:
+            org_name = await _org_name_for(session, org_id)
+            session.add(
+                PredictionJobORM(
+                    id=job.id,
+                    org_id=org_id,
+                    dataset_id=job.dataset_id,
+                    model_id=job.model_id,
+                    status=job.status.value,
+                    target=job.target,
+                    model_version=job.model_version,
+                    sample_ids=job.sample_ids,
+                    summary_json=job.summary,
+                    created_by=job.created_by,
+                    created_at=job.created_at,
+                    updated_at=job.updated_at,
+                    external_job_id=job.external_job_id,
+                )
+            )
+            await session.commit()
+        return job.model_copy(update={"org_id": org_id, "org_name": org_name})
+
+    async def set_prediction_job_external_id(self, job_id: str, external_job_id: str) -> None:
+        async with self.session_factory() as session:
+            row = await session.get(PredictionJobORM, job_id)
+            if row is None:
+                return
+            row.external_job_id = external_job_id
+            row.updated_at = _utcnow()
+            await session.commit()
+
+    async def update_prediction_job_status(self, job_id: str, status: JobStatus, summary: dict | None = None) -> None:
+        async with self.session_factory() as session:
+            row = await session.get(PredictionJobORM, job_id)
+            if row is None:
+                return
+            row.status = status.value
+            row.updated_at = _utcnow()
+            if summary is not None:
+                row.summary_json = summary
+            await session.commit()
+
+    async def get_prediction_job(self, job_id: str, org_id: str | None = None) -> PredictionJob | None:
+        async with self.session_factory() as session:
+            row = await session.get(PredictionJobORM, job_id)
+            if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id:
+                return None
+            return PredictionJob(
+                id=row.id,
+                org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
+                dataset_id=row.dataset_id,
+                model_id=row.model_id,
+                status=row.status,
+                created_by=row.created_by,
+                target=row.target,
+                model_version=row.model_version,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                external_job_id=row.external_job_id,
+                sample_ids=row.sample_ids,
+                summary=row.summary_json or {},
+            )
+
+    async def list_prediction_jobs(self, org_id: str | None = None) -> list[PredictionJob]:
+        async with self.session_factory() as session:
+            stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
+            if org_id is not None:
+                stmt = stmt.where(PredictionJobORM.org_id == org_id)
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                PredictionJob(
+                    id=row.id,
+                    org_id=row.org_id,
+                    org_name=await _org_name_for(session, row.org_id),
+                    dataset_id=row.dataset_id,
+                    model_id=row.model_id,
+                    status=row.status,
+                    created_by=row.created_by,
+                    target=row.target,
+                    model_version=row.model_version,
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                    external_job_id=row.external_job_id,
+                    sample_ids=row.sample_ids,
+                    summary=row.summary_json or {},
+                )
+                for row in rows
+            ]
+
+    async def add_prediction_event(self, event: PredictionEvent) -> None:
+        async with self.session_factory() as session:
+            session.add(
+                PredictionEventORM(
+                    job_id=event.job_id,
+                    ts=event.ts,
+                    level=event.level,
+                    message=event.message,
+                    payload=event.payload,
+                )
+            )
+            await session.commit()
+
+    async def list_prediction_events(self, job_id: str) -> list[PredictionEvent]:
+        async with self.session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(PredictionEventORM)
+                    .where(PredictionEventORM.job_id == job_id)
+                    .order_by(PredictionEventORM.id.asc())
+                )
+            ).scalars().all()
+            return [PredictionEvent(job_id=r.job_id, ts=r.ts, level=r.level, message=r.message, payload=r.payload) for r in rows]
 
     async def mark_user_left(self, job_id: str) -> bool:
         async with self.session_factory() as session:
@@ -1049,7 +1209,7 @@ class SqlRepository:
                 select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .join(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .outerjoin(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
                 .where(ArtifactORM.kind == "model")
                 .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
             )
@@ -1074,7 +1234,8 @@ class SqlRepository:
                     job_id=artifact.job_id,
                     dataset_id=job.dataset_id,
                     dataset_name=dataset.name,
-                    preset_name=preset.name,
+                    preset_id=job.preset_id,
+                    preset_name=preset.name if preset else job.preset_id,
                 )
                 for artifact, job, dataset, preset in rows
             ]
@@ -1086,7 +1247,7 @@ class SqlRepository:
                 select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .join(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .outerjoin(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
                 .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
@@ -1108,7 +1269,8 @@ class SqlRepository:
                 job_id=artifact.job_id,
                 dataset_id=job.dataset_id,
                 dataset_name=dataset.name,
-                preset_name=preset.name,
+                preset_id=job.preset_id,
+                preset_name=preset.name if preset else job.preset_id,
             )
 
     async def delete_artifact(self, artifact_id: str) -> bool:
@@ -1120,3 +1282,142 @@ class SqlRepository:
             await session.delete(row)
             await session.commit()
             return True
+
+    # ------------------------------------------------------------------
+    # Prediction Review Action CRUD
+    # ------------------------------------------------------------------
+
+    async def create_review_action(self, action: PredictionReviewAction) -> PredictionReviewAction:
+        async with self.session_factory() as session:
+            session.add(
+                PredictionReviewActionORM(
+                    id=action.id,
+                    dataset_id=action.dataset_id,
+                    model_id=action.model_id,
+                    model_version=action.model_version,
+                    created_by=action.created_by,
+                    created_at=action.created_at,
+                )
+            )
+            await session.commit()
+        return action
+
+    async def get_review_action(self, action_id: str) -> PredictionReviewAction | None:
+        async with self.session_factory() as session:
+            row = await session.get(PredictionReviewActionORM, action_id)
+            if row is None:
+                return None
+            return PredictionReviewAction(
+                id=row.id,
+                dataset_id=row.dataset_id,
+                model_id=row.model_id,
+                model_version=row.model_version,
+                created_by=row.created_by,
+                created_at=row.created_at,
+            )
+
+    async def list_review_actions(self, dataset_id: str) -> list[PredictionReviewAction]:
+        async with self.session_factory() as session:
+            stmt = (
+                select(PredictionReviewActionORM)
+                .where(PredictionReviewActionORM.dataset_id == dataset_id)
+                .order_by(PredictionReviewActionORM.created_at.desc())
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                PredictionReviewAction(
+                    id=r.id,
+                    dataset_id=r.dataset_id,
+                    model_id=r.model_id,
+                    model_version=r.model_version,
+                    created_by=r.created_by,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    async def delete_review_action(self, action_id: str) -> bool:
+        async with self.session_factory() as session:
+            row = await session.get(PredictionReviewActionORM, action_id)
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
+    # ------------------------------------------------------------------
+    # Annotation Version CRUD
+    # ------------------------------------------------------------------
+
+    async def create_annotation_version(self, version: AnnotationVersion) -> AnnotationVersion:
+        async with self.session_factory() as session:
+            session.add(
+                AnnotationVersionORM(
+                    id=version.id,
+                    review_action_id=version.review_action_id,
+                    annotation_id=version.annotation_id,
+                    source_prediction_id=version.source_prediction_id,
+                    predicted_label=version.predicted_label,
+                    final_label=version.final_label,
+                    confidence=version.confidence,
+                    created_at=version.created_at,
+                )
+            )
+            await session.commit()
+        return version
+
+    async def create_annotation_versions_bulk(self, versions: list[AnnotationVersion]) -> list[AnnotationVersion]:
+        async with self.session_factory() as session:
+            for v in versions:
+                session.add(
+                    AnnotationVersionORM(
+                        id=v.id,
+                        review_action_id=v.review_action_id,
+                        annotation_id=v.annotation_id,
+                        source_prediction_id=v.source_prediction_id,
+                        predicted_label=v.predicted_label,
+                        final_label=v.final_label,
+                        confidence=v.confidence,
+                        created_at=v.created_at,
+                    )
+                )
+            await session.commit()
+        return versions
+
+    async def list_annotation_versions(self, review_action_id: str) -> list[AnnotationVersion]:
+        async with self.session_factory() as session:
+            stmt = (
+                select(AnnotationVersionORM)
+                .where(AnnotationVersionORM.review_action_id == review_action_id)
+                .order_by(AnnotationVersionORM.created_at.asc())
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                AnnotationVersion(
+                    id=r.id,
+                    review_action_id=r.review_action_id,
+                    annotation_id=r.annotation_id,
+                    source_prediction_id=r.source_prediction_id,
+                    predicted_label=r.predicted_label,
+                    final_label=r.final_label,
+                    confidence=r.confidence,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    async def get_annotation_version(self, version_id: str) -> AnnotationVersion | None:
+        async with self.session_factory() as session:
+            row = await session.get(AnnotationVersionORM, version_id)
+            if row is None:
+                return None
+            return AnnotationVersion(
+                id=row.id,
+                review_action_id=row.review_action_id,
+                annotation_id=row.annotation_id,
+                source_prediction_id=row.source_prediction_id,
+                predicted_label=row.predicted_label,
+                final_label=row.final_label,
+                confidence=row.confidence,
+                created_at=row.created_at,
+            )

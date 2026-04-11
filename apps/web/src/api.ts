@@ -1,30 +1,38 @@
 import type {
   Annotation,
-  ArtifactRef,
-  BatchPredictionResult,
+  AnnotationVersion,
   BulkAnnotationRequest,
   BulkAnnotationResponse,
   DashboardResponse,
   Dataset,
+  ExportFormat,
   LoginResponse,
   Model,
+  ModelUploadTemplate,
   Organization,
   PaginatedResponse,
+  PredictionEvent,
+  PredictionJob,
   PredictionResult,
   PredictSingleRequest,
+  ReviewAction,
   RunLog,
   RunPredictionRequest,
   Sample,
   SampleWithLabels,
+  SaveReviewAnnotationItem,
+  SaveReviewAnnotationsResponse,
   Schedule,
   ScheduleRun,
   SyncResult,
   TrainingJob,
   TrainingPreset,
   UploadResponse,
+  UploadModelMetadata,
   UpdateAnnotationPayload,
   User,
   UserWithOrgs,
+  VersionExportResponse,
 } from "./types";
 import type { ApiError as ApiErrorType } from "./types";
 import { useAuthStore } from "./stores/auth";
@@ -169,9 +177,7 @@ export async function uploadSampleImage(sampleId: string, file: File): Promise<U
 
 export async function uploadModel(
   file: File,
-  name: string,
-  format: string,
-  jobId: string
+  metadata: UploadModelMetadata,
 ): Promise<Model> {
   const form = new FormData();
   form.append("file", file);
@@ -193,11 +199,8 @@ export async function uploadModel(
   } catch {
     /* ignore */
   }
-  const params = new URLSearchParams();
-  params.set("name", name);
-  params.set("format", format);
-  params.set("job_id", jobId);
-  const r = await fetch(`${API_BASE}/models/upload?${params.toString()}`, {
+  form.append("metadata", JSON.stringify(metadata));
+  const r = await fetch(`${API_BASE}/models/upload`, {
     method: "POST",
     headers: uploadHeaders,
     body: form,
@@ -219,6 +222,7 @@ export async function uploadModel(
 
 export interface CreateDatasetBody {
   name: string;
+  dataset_type: string;
   task_spec?: { task_type: string; label_space: string[] };
 }
 
@@ -231,13 +235,6 @@ export interface CreateAnnotationBody {
   sample_id: string;
   label: string;
   created_by?: string;
-}
-
-export interface CreatePresetBody {
-  name: string;
-  model_spec: { architecture: string; num_classes: number };
-  omegaconf_yaml: string;
-  dataloader_ref?: string;
 }
 
 export interface CreateJobBody {
@@ -277,9 +274,9 @@ export interface PersistExportResponse {
 }
 
 export interface ExtractFeaturesResponse {
-  count: number;
-  embedding_model: string;
+  id: string;
   status: string;
+  summary: Record<string, unknown>;
 }
 
 export interface SimilarityResponse {
@@ -303,10 +300,6 @@ export interface CancelJobResponse {
 
 export interface MarkLeftResponse {
   marked: boolean;
-}
-
-export interface JobMetricsResponse {
-  metrics: Record<string, unknown>;
 }
 
 export function syncAnnotationsToLs(datasetId: string) {
@@ -359,6 +352,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({
         name: body.name,
+        dataset_type: body.dataset_type,
         task_spec: body.task_spec ?? { task_type: "classification", label_space: [] },
       }),
     }),
@@ -399,16 +393,12 @@ export const api = {
       }),
     }),
 
-  // ---- Training Presets ----
+  // ---- Training Presets (read-only catalog) ----
   listPresets: () => req<TrainingPreset[]>("/training-presets"),
 
-  createPreset: (body: CreatePresetBody) =>
-    req<TrainingPreset>("/training-presets", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
   getPreset: (id: string) => req<TrainingPreset>(`/training-presets/${id}`),
+
+  listModelUploadTemplates: () => req<ModelUploadTemplate[]>("/model-upload-templates"),
 
   // ---- Training Jobs ----
   listJobs: () => req<TrainingJob[]>("/training-jobs"),
@@ -426,10 +416,6 @@ export const api = {
 
   markJobLeft: (id: string) =>
     req<MarkLeftResponse>(`/training-jobs/${id}/mark-left`, { method: "POST" }),
-
-  // Job metrics — placeholder (endpoint may not exist yet)
-  getJobMetrics: (jobId: string) =>
-    req<JobMetricsResponse>(`/training-jobs/${jobId}/metrics`),
 
   // ---- Exports ----
   getExport: (datasetId: string) =>
@@ -463,10 +449,6 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(config),
     }),
-
-  // ---- Artifacts (Wave 2 placeholders) ----
-  downloadArtifact: (id: string) =>
-    req<ArtifactRef>(`/artifacts/${id}/download`),
 
   // ---- Models ----
   listModels: (datasetId?: string, jobId?: string) => {
@@ -551,10 +533,20 @@ export const api = {
 
   // ---- Predictions ----
   runPredictions: (request: RunPredictionRequest) =>
-    req<BatchPredictionResult>('/predictions/run', {
+    req<PredictionJob>('/predictions/run', {
       method: 'POST',
       body: JSON.stringify(request),
     }),
+
+  listPredictionJobs: () => req<PredictionJob[]>('/prediction-jobs'),
+
+  getPredictionJob: (id: string) => req<PredictionJob>(`/prediction-jobs/${id}`),
+
+  listPredictionJobEvents: (id: string) => req<PredictionEvent[]>(`/prediction-jobs/${id}/events`),
+
+  cancelPredictionJob: (id: string) => req<{ cancelled: boolean }>(`/prediction-jobs/${id}/cancel`, {
+    method: 'POST',
+  }),
 
   predictSingle: (request: PredictSingleRequest) =>
     req<PredictionResult>('/predictions/single', {
@@ -564,6 +556,59 @@ export const api = {
 
   listSamplePredictions: (sampleId: string) =>
     req<Record<string, unknown>[]>(`/samples/${sampleId}/predictions`),
+
+  // ---- Prediction Reviews ----
+  createReviewAction: (datasetId: string, modelId: string, modelVersion?: string | null) =>
+    req<ReviewAction>('/prediction-reviews', {
+      method: 'POST',
+      body: JSON.stringify({
+        dataset_id: datasetId,
+        model_id: modelId,
+        ...(modelVersion ? { model_version: modelVersion } : {}),
+      }),
+    }),
+
+  listReviewActions: (datasetId: string) =>
+    req<ReviewAction[]>(`/prediction-reviews?dataset_id=${encodeURIComponent(datasetId)}`),
+
+  getReviewAction: (actionId: string) =>
+    req<ReviewAction>(`/prediction-reviews/${actionId}`),
+
+  deleteReviewAction: (actionId: string) =>
+    req<void>(`/prediction-reviews/${actionId}`, { method: 'DELETE' }),
+
+  saveReviewAnnotations: (actionId: string, items: SaveReviewAnnotationItem[]) =>
+    req<SaveReviewAnnotationsResponse>(
+      `/prediction-reviews/${actionId}/annotations`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      },
+    ),
+
+  listAnnotationVersions: (actionId: string) =>
+    req<AnnotationVersion[]>(`/prediction-reviews/${actionId}/annotation-versions`),
+
+  listExportFormats: () =>
+    req<ExportFormat[]>('/export-formats'),
+
+  previewReviewExport: (actionId: string, formatId?: string) => {
+    const params = new URLSearchParams();
+    if (formatId) params.set('format_id', formatId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return req<Record<string, unknown>>(`/prediction-reviews/${actionId}/export${qs}`);
+  },
+
+  persistReviewExport: (actionId: string, formatId?: string) =>
+    req<VersionExportResponse>(
+      `/prediction-reviews/${actionId}/export/persist`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          format_id: formatId ?? 'annotation-version-full-context-v1',
+        }),
+      },
+    ),
 
   // ---- Public visibility toggles (superadmin) ----
   toggleDatasetPublic: (id: string, isPublic: boolean) =>

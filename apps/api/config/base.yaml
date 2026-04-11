@@ -11,7 +11,7 @@ db:
   auto_create: false
 
 storage:
-  kind: memory
+  kind: minio
   minio:
     endpoint: "localhost:9000"
     access_key: "minioadmin"
@@ -53,11 +53,25 @@ prefect:
 embedding:
   grpc_target: "localhost:50051"
 
+inference:
+  base_url: "http://localhost:8010"
+
+llm:
+  provider: "openai-compatible"
+  base_url: ""
+  api_key: ""
+  model: "gpt-4o-mini"
+  timeout_seconds: 30
+
 label_studio:
   url: ""
   external_url: ""
   api_key: ""
   database_url: ""
+
+presets:
+  dir: "presets"
+  strict: false
 
 auth:
   jwt_secret_key: "replace-me-in-production"

@@ -26,6 +26,9 @@
             filterable
           />
         </n-form-item>
+        <n-form-item label="Target">
+          <n-input :value="predictionTarget" disabled />
+        </n-form-item>
         <n-form-item label="Model Version Tag">
           <n-input
             v-model:value="form.modelVersion"
@@ -59,39 +62,23 @@
       </n-space>
     </template>
     <template v-else>
-      <n-result
-        :status="result.failed === 0 ? 'success' : result.failed === result.total_samples ? 'error' : 'warning'"
-        :title="resultTitle"
-        :description="resultDescription"
-      >
+      <n-result status="success" :title="resultTitle" :description="resultDescription">
         <template #footer>
           <n-space vertical>
             <n-descriptions bordered :column="2">
-              <n-descriptions-item label="Total Samples">
-                {{ result.total_samples }}
+              <n-descriptions-item label="Prediction Job">
+                {{ result.id }}
               </n-descriptions-item>
-              <n-descriptions-item label="Successful">
-                <n-text type="success">{{ result.successful }}</n-text>
-              </n-descriptions-item>
-              <n-descriptions-item label="Failed">
-                <n-text type="error">{{ result.failed }}</n-text>
+              <n-descriptions-item label="Status">
+                {{ result.status }}
               </n-descriptions-item>
               <n-descriptions-item label="Model Version">
                 {{ result.model_version || '-' }}
               </n-descriptions-item>
-              <n-descriptions-item label="Duration">
-                {{ formatDuration(result.started_at, result.completed_at) }}
+              <n-descriptions-item label="Target">
+                {{ result.target }}
               </n-descriptions-item>
             </n-descriptions>
-            <n-collapse v-if="failedPredictions.length > 0">
-              <n-collapse-item title="Failed Predictions" name="errors">
-                <n-list>
-                  <n-list-item v-for="pred in failedPredictions" :key="pred.sample_id">
-                    <n-thing :title="pred.sample_id.slice(0, 12) + '...'" :description="pred.error || ''" />
-                  </n-list-item>
-                </n-list>
-              </n-collapse-item>
-            </n-collapse>
             <n-space justify="center">
               <n-button @click="reset">Run Another</n-button>
               <n-button type="primary" @click="$emit('update:show', false)">Close</n-button>
@@ -109,7 +96,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage } from "naive-ui";
 import { api } from "../api";
-import type { Model, BatchPredictionResult } from "../types";
+import type { Model, PredictionJob } from "../types";
 import { useOrgStore } from "../stores/org";
 
 const props = defineProps<{
@@ -155,6 +142,14 @@ const datasetOptions = computed<SelectOption[]>(() =>
   (datasets.value ?? []).map((d) => ({ label: d.name, value: d.id }))
 );
 
+const predictionTarget = computed(() => {
+  const targets = props.model?.metadata?.prediction_targets;
+  if (Array.isArray(targets) && typeof targets[0] === "string") {
+    return targets[0];
+  }
+  return "image_classification";
+});
+
 // ---------------------------------------------------------------------------
 // Prefill dataset from model
 // ---------------------------------------------------------------------------
@@ -173,7 +168,7 @@ watch(
 // Mutation
 // ---------------------------------------------------------------------------
 
-const result = ref<BatchPredictionResult | null>(null);
+const result = ref<PredictionJob | null>(null);
 
 const mutation = useMutation({
   mutationFn: () => {
@@ -187,18 +182,13 @@ const mutation = useMutation({
         ? form.value.sampleIds
         : null,
       model_version: form.value.modelVersion || null,
+      target: predictionTarget.value,
     });
   },
   onSuccess: (data) => {
     result.value = data;
-    qc.invalidateQueries({ queryKey: ["predictions"] });
-    if (data.failed === 0) {
-      message.success(`Successfully predicted ${data.successful} samples`);
-    } else if (data.successful > 0) {
-      message.warning(`Predicted ${data.successful} samples, ${data.failed} failed`);
-    } else {
-      message.error(`All ${data.failed} predictions failed`);
-    }
+    qc.invalidateQueries({ queryKey: ["prediction-jobs"] });
+    message.success("Prediction job submitted");
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to run predictions");
@@ -226,30 +216,15 @@ function reset() {
 // Result display
 // ---------------------------------------------------------------------------
 
-const failedPredictions = computed(() =>
-  result.value?.predictions.filter((p) => p.error) ?? []
-);
-
 const resultTitle = computed(() => {
   if (!result.value) return "";
-  if (result.value.failed === 0) return "Predictions Complete";
-  if (result.value.successful === 0) return "Predictions Failed";
-  return "Predictions Partially Complete";
+  return "Prediction Job Submitted";
 });
 
 const resultDescription = computed(() => {
   if (!result.value) return "";
-  return `Predictions have been stored in Label Studio and can be viewed in the project.`;
+  return "The batch prediction run is executing asynchronously. Check job status via the prediction job APIs and Label Studio.";
 });
-
-function formatDuration(start: string, end: string): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const ms = endDate.getTime() - startDate.getTime();
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
 
 // ---------------------------------------------------------------------------
 // Reset when modal opens

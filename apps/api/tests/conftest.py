@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -9,7 +10,47 @@ if str(ROOT) not in sys.path:
 
 import os
 
-os.environ.setdefault("APP_CONFIG_PROFILE", "local-smoke")
+os.environ.setdefault("APP_CONFIG_PROFILE", "test")
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db")
+
+
+# ---------------------------------------------------------------------------
+# Clean DB at the start of each test session
+#
+# The test profile uses SQLite. Without cleanup
+# previous test data survives across runs, causing 409 Conflict errors
+# when auth tests try to register the same email addresses.
+# ---------------------------------------------------------------------------
+
+import asyncio
+
+
+def _reset_database() -> None:
+    """Drop all tables and recreate them so every test session starts clean."""
+    from app.core.config import load_config
+    from app.db.session import create_engine as _create_engine
+    from app.db.base import Base
+    from app.db import models as _models  # noqa: F401 — ensure all models registered
+
+    cfg = load_config()
+    engine = _create_engine(str(cfg.db.url))
+
+    async def _drop_and_create() -> None:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        await engine.dispose()
+
+    asyncio.run(_drop_and_create())
+
+    # Reset the module-level session factory in deps.py so it doesn't
+    # hold a stale connection to the old (dropped) tables.
+    import app.api.deps as _deps
+    _deps._session_factory = None
+
+
+# Run once at import time (before any test or fixture executes).
+_reset_database()
 
 
 def _register_user(client, email: str, password: str, name: str) -> dict:
@@ -165,3 +206,85 @@ def _mock_ls_client(request):
     container.label_studio_client.override(providers.Object(_mock_ls))
     yield
     container.label_studio_client.reset_override()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_embedding_service(request):
+    """Override the embedding service for tests by default.
+
+    Feature extraction and related endpoints otherwise depend on an external
+    gRPC embedding server, which can make the test suite block indefinitely
+    when that service is unavailable.
+    """
+    if request.node.get_closest_marker("no_embedding_override"):
+        yield
+        return
+
+    from app.main import container
+
+    async def _embed_image(image_bytes: bytes, model_name: str = "openai/clip-vit-base-patch32") -> list[float]:
+        size = max(1, len(image_bytes))
+        base = min(1.0, size / 255.0)
+        return [base, 0.5, 0.25, 0.125]
+
+    async def _embed_batch(image_bytes_list: list[bytes], model_name: str = "openai/clip-vit-base-patch32") -> list[list[float]]:
+        return [await _embed_image(image_bytes, model_name=model_name) for image_bytes in image_bytes_list]
+
+    async def _classify_image(
+        image_bytes: bytes,
+        labels: list[str],
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> tuple[str, float, dict[str, float]]:
+        if not labels:
+            return "", 0.0, {}
+        score = 1.0 / len(labels)
+        scores = {label: score for label in labels}
+        return labels[0], score, scores
+
+    async def _classify_batch(
+        image_bytes_list: list[bytes],
+        labels: list[str],
+        model_name: str = "openai/clip-vit-base-patch32",
+    ) -> list[tuple[str, float, dict[str, float]]]:
+        return [await _classify_image(image_bytes, labels, model_name=model_name) for image_bytes in image_bytes_list]
+
+    _mock_embedding = MagicMock()
+    _mock_embedding.embed_image = AsyncMock(side_effect=_embed_image)
+    _mock_embedding.embed_batch = AsyncMock(side_effect=_embed_batch)
+    _mock_embedding.classify_image = AsyncMock(side_effect=_classify_image)
+    _mock_embedding.classify_batch = AsyncMock(side_effect=_classify_batch)
+    _mock_embedding.health = AsyncMock(return_value=True)
+
+    container.embedding_service.override(providers.Object(_mock_embedding))
+    yield
+    container.embedding_service.reset_override()
+
+
+# ---------------------------------------------------------------------------
+# Preset registry helper
+#
+# After the preset refactor, presets are loaded from YAML files on disk
+# (not from the database).  The registry is loaded during the FastAPI
+# lifespan, but some test helpers need a known preset ID without going
+# through the full app lifecycle.  This constant points to a preset that
+# ships in the repo.
+# ---------------------------------------------------------------------------
+
+PRESET_ID = "resnet50-cls-v1"
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _ensure_preset_registry():
+    """Ensure the file-backed preset registry is loaded before each test.
+
+    The registry is normally loaded in the FastAPI lifespan, which runs
+    when ``TestClient(app)`` enters its context.  This fixture eagerly
+    loads it so that tests that access the registry outside the TestClient
+    context (rare) also work.
+    """
+    from app.main import container
+
+    registry = container.preset_registry()
+    if registry.count == 0:
+        registry.load()
+    yield

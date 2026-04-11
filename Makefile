@@ -10,6 +10,8 @@ SDK_DIR     := libs/python-sdk
 COMPOSE     := infra/compose/docker-compose.yaml
 API_PORT    ?= 8000
 WEB_PORT    ?= 5173
+TEST_TIMEOUT ?= 300
+PYTEST_FAULTHANDLER_TIMEOUT ?= 60
 
 # ──────────────────────────────────────────────
 # Setup
@@ -66,7 +68,7 @@ test: test-api ## Run all tests
 
 .PHONY: test-api
 test-api: ## Run API tests
-	cd $(API_DIR) && uv run --extra dev pytest $(ARGS)
+	timeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'
 
 .PHONY: build-web
 build-web: ## Build frontend for production
@@ -74,7 +76,8 @@ build-web: ## Build frontend for production
 
 .PHONY: create-superadmin
 create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
-	cd $(API_DIR) && APP_CONFIG_PROFILE=local-smoke uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)
+	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)
+	
 
 # ──────────────────────────────────────────────
 # SDK / CLI
@@ -91,6 +94,14 @@ ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
 .PHONY: seed
 seed: ## Seed Oxford Flowers 102 dataset (requires running compose stack)
 	uv run scripts/seed_oxford_flowers.py --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: seed-imagenet-dev
+seed-imagenet-dev: ## Seed ImageNet-1K with synthetic samples + fake model (no extra deps)
+	uv run python scripts/seed_imagenet_dev.py --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: seed-imagenet-real
+seed-imagenet-real: ## Seed ImageNet-1K with real HF images + pretrained ResNet-50
+	uv run python scripts/seed_imagenet_real.py --compose-file $(COMPOSE) $(ARGS)
 
 # ──────────────────────────────────────────────
 # Docker / Infra
@@ -133,6 +144,8 @@ help: ## Show this help
 	@printf '\nVariables:\n'
 	@printf '  \033[36m%-16s\033[0m %s\n' "API_PORT" "API server port (default: 8000)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "WEB_PORT" "Web dev server port (default: 5173)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for test targets in seconds (default: 300)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stuck timeout for stack dumps in seconds (default: 60)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "ARGS" "Extra args passed to test/ftctl/logs"
 	@printf '  \033[36m%-16s\033[0m %s\n' "MSG" "Alembic revision message"
 	@echo

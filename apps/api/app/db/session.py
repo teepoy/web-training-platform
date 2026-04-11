@@ -9,7 +9,10 @@ from app.db import models as _models  # noqa: F401
 
 
 def create_engine(db_url: str, echo: bool = False) -> AsyncEngine:
-    return create_async_engine(db_url, echo=echo)
+    connect_args: dict = {}
+    if db_url.startswith("sqlite"):
+        connect_args = {"timeout": 30}
+    return create_async_engine(db_url, echo=echo, connect_args=connect_args)
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

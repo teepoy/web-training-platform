@@ -176,18 +176,18 @@
 
             <!-- ---- Panel 1: Extract Features ---- -->
             <n-card title="Extract Features" size="small">
-              <template #header-extra>
-                <n-tag type="warning">Mock Data</n-tag>
-              </template>
               <n-button type="primary" :loading="extractFeaturesLoading" @click="doExtractFeatures">
                 Extract Features
               </n-button>
               <template v-if="extractFeaturesResult">
                 <n-space style="margin-top: 16px">
-                  <n-statistic label="Count" :value="extractFeaturesResult.count" />
-                  <n-statistic label="Embedding Model" :value="extractFeaturesResult.embedding_model" />
+                  <n-statistic label="Job" :value="extractFeaturesResult.id" />
                   <n-statistic label="Status" :value="extractFeaturesResult.status" />
+                  <n-statistic label="Processed" :value="Number(extractFeaturesResult.summary.processed || 0)" />
                 </n-space>
+                <n-text depth="3" style="display: block; margin-top: 8px">
+                  Embedding model: {{ String(extractFeaturesResult.summary.embedding_model || embedConfigModel) }}
+                </n-text>
               </template>
             </n-card>
 

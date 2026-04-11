@@ -30,6 +30,7 @@ class Model(ArtifactRef):
     job_id: str
     dataset_id: str | None = None
     dataset_name: str | None = None
+    preset_id: str | None = None
     preset_name: str | None = None
 
 
@@ -134,6 +135,51 @@ class OrgMembership(BaseModel):
     org_id: str
     role: OrgRole
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionReviewAction(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    model_id: str
+    model_version: str | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AnnotationVersion(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    review_action_id: str
+    annotation_id: str
+    source_prediction_id: int | None = None
+    predicted_label: str
+    final_label: str
+    confidence: float | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionEvent(BaseModel):
+    job_id: str
+    ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    level: str = "info"
+    message: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class PredictionJob(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    model_id: str
+    status: JobStatus = JobStatus.QUEUED
+    created_by: str
+    target: str = "image_classification"
+    model_version: str | None = None
+    org_id: str | None = DEFAULT_ORG_ID
+    org_name: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    external_job_id: str | None = None
+    sample_ids: list[str] | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserWithOrgs(BaseModel):

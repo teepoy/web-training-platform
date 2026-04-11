@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 members = [
   "apps/api",
   "apps/embedding",
+  "apps/inference",
   "apps/worker",
   "libs/python-sdk",
   "libs/protos",

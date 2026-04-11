@@ -28,7 +28,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Start Web only | `make dev-web` | `WEB_PORT=3000` to override |
 | **Run all tests** | `make test` | API tests only (no frontend tests) |
 | **Run single test** | `make test-api ARGS="-k test_health"` | pytest `-k` filter |
-| **Run test file** | `make test-api ARGS="tests/test_datasets.py -v"` | Verbose single file |
+| **Run test file** | `make test-api ARGS="tests/test_vqa_runtime.py -v"` | Verbose single file |
 | Build frontend | `make build-web` | vue-tsc + vite build |
 | Alembic migrate | `make db-migrate` | `upgrade head` |
 | New migration | `make db-revision MSG="add column"` | autogenerate |
@@ -68,7 +68,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 ## TEST INFRASTRUCTURE
 
 - **Framework**: pytest + `fastapi.testclient.TestClient` (sync client over async app).
-- **Config**: Tests force `APP_CONFIG_PROFILE=local-smoke` in `conftest.py`.
+- **Config**: Tests force `APP_CONFIG_PROFILE=test` in `conftest.py`.
 - **Auth mock**: `_mock_auth_deps` autouse fixture overrides auth for all tests. Use marker `@pytest.mark.no_auth_override` to skip.
 - **LS mock**: `_mock_ls_client` autouse fixture mocks Label Studio client. LS-specific tests (`test_ls_*.py`) manage their own overrides.
 - **Pattern**: `with TestClient(app) as c:` inside each test function.
@@ -101,7 +101,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 ### Architecture
 - Don't add route-level persistence; keep handlers thin, push logic into services/repository.
 - Don't change ORM models without a corresponding Alembic migration.
-- Don't treat `apps/worker` as real — it's a placeholder.
+- `apps/worker` is the Prefect training-worker package; keep API, training workers, and inference worker separated in dev/prod.
 - Don't assume Kubeflow/MinIO are live; smoke paths degrade gracefully.
 - Don't hardcode new backend URLs; the existing `localhost:8000` hardcode is a known debt.
 - Don't reuse example secrets (`postgres`, `minioadmin`) outside smoke.
@@ -112,6 +112,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't add platform-side prediction CRUD — predictions live in Label Studio only.
 - Don't use `cfg.label_studio.enabled` — it was removed. LS is always required; check `cfg.label_studio.url`.
 - Don't re-add the "link to LS" manual flow — it was intentionally removed.
+- VQA predictions are stored as Label Studio `textarea` results, not classification choices.
 
 ### Code Quality
 - Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.
@@ -121,16 +122,23 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 
 ## CONVENTIONS
 - Python packages managed by `uv`; frontend by `pnpm`.
-- `APP_CONFIG_PROFILE` defaults to `local-smoke`.
-- `execution.engine`: `local` | `kubeflow`; `storage.kind`: `memory` | `minio`.
+- `APP_CONFIG_PROFILE=test` is test-only; supported runtime profiles are `dev` and `prod`.
+- `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect + shared S3-compatible storage.
 - K8s namespace: `finetune`; config via `finetune-config` and `finetune-secrets`.
 - Job progress exposed via SSE, not websockets.
+- Presets are engineer-managed YAML (`apps/api/presets/`) and read-only via API/UI.
+- Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 
 ## NOTES
 - No linter, formatter, or CI pipeline is configured. Conventions are enforced manually.
 - Test coverage is backend-only; frontend, SDK, and worker are untested.
 - Auth scaffolding exists but route protection is not wired — don't assume auth is enforced.
+
+## DOCUMENTATION RULE
+- After completing any non-trivial task, either:
+  1) update the relevant docs in `docs/` and/or `AGENTS.md`, or
+  2) explicitly ask the user whether they want docs updated in this change.
 
 ## SMOKE TEST REMINDER
 

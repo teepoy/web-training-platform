@@ -1,46 +1,56 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 from contextlib import asynccontextmanager
 import json
 import logging
+from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
+    AnnotationVersionResponse,
     BatchPredictionResponse,
     BulkAnnotationRequest,
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateOrgRequest,
-    CreatePresetRequest,
+    CreateReviewActionRequest,
     CreateSampleRequest,
     CreateScheduleRequest,
     CreateTokenRequest,
     CreateTrainingJobRequest,
     DashboardResponse,
+    ExportFormatResponse,
+    ImportVqaJsonlResponse,
     JobQueueStats,
     LatestAnnotation,
     LoginRequest,
     LoginResponse,
     MemberResponse,
+    ModelUploadTemplateResponse,
     MembershipResponse,
     ModelResponse,
     OrgResponse,
     PaginatedResponse,
+    PredictionEventResponse,
+    PredictionJobResponse,
     PredictionResultResponse,
     PredictSingleRequest,
     RecentJobSummary,
     RegisterRequest,
+    ReviewActionResponse,
     RunLogResponse,
     RunPredictionRequest,
     RunResponse,
+    SaveReviewAnnotationsRequest,
+    SaveReviewAnnotationsResponse,
     ScheduleResponse,
+    ServiceStatus,
     SampleWithLabels,
     SetPublicRequest,
     TokenCreatedResponse,
@@ -51,8 +61,10 @@ from app.api.schemas import (
     UpdateSampleImageResponse,
     UpdateScheduleRequest,
     UploadModelRequest,
+    UploadTemplateProfileResponse,
     UserResponse,
     UserWithOrgsResponse,
+    VersionExportRequest,
     WorkPoolStatus,
 )
 from app.api.deps import get_current_org, get_current_user, require_superadmin
@@ -60,38 +72,38 @@ from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.models import DatasetORM, OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, TrainingJobORM, UserORM
 from app.db.session import init_db
-from app.domain.models import Annotation, Dataset, Organization, Sample, TrainingEvent, TrainingJob, TrainingPreset, User
+from app.domain.models import Annotation, Dataset, Organization, Sample, TrainingEvent, TrainingJob, User
+from app.domain.types import DatasetType, TaskType
 from app.services.auth import create_access_token, create_personal_access_token, hash_password, verify_password
-
-
+from app.services.compatibility import (
+    UPLOAD_TEMPLATE_DEFINITIONS,
+    validate_dataset_contract,
+    validate_dataset_preset_training,
+)
 _logger = logging.getLogger(__name__)
 
 
-async def _run_prefect_runner() -> None:
-    """Start the Prefect Runner inside the API process.
+def _infer_dataset_type(task_type: TaskType) -> DatasetType:
+    if task_type == TaskType.VQA:
+        return DatasetType.IMAGE_VQA
+    return DatasetType.IMAGE_CLASSIFICATION
 
-    Registers the well-known deployments (``drain-dataset-deployment``,
-    ``train-job-deployment``) and polls Prefect server for scheduled runs.
-    Runs indefinitely; designed to be wrapped in an ``asyncio.Task`` that
-    is cancelled on shutdown.
-    """
-    from prefect.runner import Runner
 
-    from app.flows.drain_dataset import drain_dataset
-    from app.flows.train_job import train_job
-
-    drain_deploy = await drain_dataset.ato_deployment(
-        name="drain-dataset-deployment",
-        description="Default deployment for drain-dataset flow (managed by API)",
-    )
-    train_deploy = await train_job.ato_deployment(
-        name="train-job-deployment",
-        description="Default deployment for train-job flow (managed by API)",
-    )
-    runner = Runner(name="flow-worker")
-    await runner.aadd_deployment(drain_deploy)
-    await runner.aadd_deployment(train_deploy)
-    await runner.start()
+async def _sync_file_presets_to_db() -> None:
+    registry = container.preset_registry()
+    repo = container.repository()
+    existing = await repo.list_preset_ids()
+    for spec in registry.list_presets():
+        if spec.id in existing:
+            continue
+        legacy = registry.preset_to_api_dict(spec)
+        await repo.ensure_preset_row(
+            preset_id=spec.id,
+            name=spec.name,
+            model_spec=legacy.get("model_spec", {}) if isinstance(legacy.get("model_spec", {}), dict) else {},
+            omegaconf_yaml=str(legacy.get("omegaconf_yaml", "")),
+            dataloader_ref=str(legacy.get("dataloader_ref", "")),
+        )
 
 
 @asynccontextmanager
@@ -100,21 +112,13 @@ async def lifespan(_: FastAPI):
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
 
-    # Start the embedded Prefect runner when execution engine is prefect.
-    runner_task: asyncio.Task | None = None
-    if str(cfg.execution.engine) == "prefect":
-        _logger.info("Starting embedded Prefect flow runner (execution.engine=prefect)")
-        runner_task = asyncio.create_task(_run_prefect_runner())
+    # Load file-backed preset registry
+    registry = container.preset_registry()
+    count = registry.load()
+    _logger.info("Preset registry: %d presets loaded", count)
+    await _sync_file_presets_to_db()
 
     yield
-
-    # Gracefully shut down the runner on application exit.
-    if runner_task is not None:
-        runner_task.cancel()
-        try:
-            await runner_task
-        except asyncio.CancelledError:
-            pass
 
 
 app = FastAPI(title="Online Finetune API", version="0.1.0", lifespan=lifespan)
@@ -163,13 +167,22 @@ async def create_dataset(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> Dataset:
+    dataset_type = payload.dataset_type or _infer_dataset_type(payload.task_spec.task_type)
+    try:
+        validate_dataset_contract(dataset_type, payload.task_spec.task_type, payload.task_spec.label_space)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     # LS-first: create project, fail if LS fails
     try:
         from app.services.label_studio import LabelStudioClient as _LSC
         ls_client = container.label_studio_client()
-        label_config = _LSC.generate_image_classification_config(
-            payload.task_spec.label_space
-        )
+        if payload.task_spec.task_type == TaskType.VQA:
+            label_config = _LSC.generate_vqa_config()
+        else:
+            label_config = _LSC.generate_image_classification_config(
+                payload.task_spec.label_space
+            )
         project = await ls_client.create_project(payload.name, label_config)
         ls_project_id = str(project.get("id", ""))
         if not ls_project_id:
@@ -178,7 +191,13 @@ async def create_dataset(
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Label Studio project creation failed: {exc}")
-    dataset = Dataset(name=payload.name, task_spec=payload.task_spec, org_id=org.id, ls_project_id=ls_project_id)
+    dataset = Dataset(
+        name=payload.name,
+        dataset_type=dataset_type,
+        task_spec=payload.task_spec,
+        org_id=org.id,
+        ls_project_id=ls_project_id,
+    )
     dataset = await container.repository().create_dataset(dataset)
     return _with_ls_url(dataset)
 
@@ -221,7 +240,10 @@ async def update_label_space(
         try:
             from app.services.label_studio import LabelStudioClient as _LSC
             ls_client = container.label_studio_client()
-            label_config = _LSC.generate_image_classification_config(payload.label_space)
+            if dataset.task_spec.task_type == TaskType.VQA:
+                label_config = _LSC.generate_vqa_config()
+            else:
+                label_config = _LSC.generate_image_classification_config(payload.label_space)
             await ls_client.update_project(int(dataset.ls_project_id), label_config=label_config)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Failed to update Label Studio project: {exc}")
@@ -253,8 +275,11 @@ async def create_sample(
     try:
         ls_client = container.label_studio_client()
         image_url = _make_ls_image_url(payload.image_uris[0]) if payload.image_uris else ""
+        task_data = {"image": image_url}
+        if dataset.task_spec.task_type == TaskType.VQA:
+            task_data["question"] = str(payload.metadata.get("question", ""))
         task = await ls_client.create_task(
-            int(dataset.ls_project_id), {"image": image_url}
+            int(dataset.ls_project_id), task_data
         )
         ls_task_id = task.get("id")
         if ls_task_id is None:
@@ -266,6 +291,75 @@ async def create_sample(
     sample = Sample(dataset_id=dataset_id, image_uris=payload.image_uris, metadata=payload.metadata, ls_task_id=int(ls_task_id))
     sample = await container.repository().create_sample(sample)
     return sample
+
+
+@app.post("/api/v1/datasets/{dataset_id}/samples/import-vqa", response_model=ImportVqaJsonlResponse)
+async def import_vqa_samples(
+    dataset_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ImportVqaJsonlResponse:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    if dataset.task_spec.task_type != TaskType.VQA:
+        raise HTTPException(status_code=400, detail="dataset task_type must be 'vqa'")
+    if not dataset.ls_project_id:
+        raise HTTPException(status_code=500, detail="Dataset has no Label Studio project")
+    content = (await file.read()).decode("utf-8")
+    ls_client = container.label_studio_client()
+    imported = 0
+    failed = 0
+    errors: list[str] = []
+
+    for idx, raw_line in enumerate(content.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError("line is not a JSON object")
+            image_uri = str(row.get("image_uri", "")).strip()
+            question = str(row.get("question", "")).strip()
+            answer = row.get("answer")
+            if not image_uri:
+                raise ValueError("image_uri is required")
+            if not question:
+                raise ValueError("question is required")
+
+            image_url = _make_ls_image_url(image_uri)
+            task = await ls_client.create_task(
+                int(dataset.ls_project_id),
+                {"image": image_url, "question": question},
+            )
+            ls_task_id = task.get("id")
+            if ls_task_id is None:
+                raise ValueError("Label Studio task creation returned no ID")
+
+            metadata = {"question": question}
+            if answer is not None:
+                metadata["answer"] = str(answer)
+
+            sample = Sample(
+                dataset_id=dataset_id,
+                image_uris=[image_uri],
+                metadata=metadata,
+                ls_task_id=int(ls_task_id),
+            )
+            await container.repository().create_sample(sample)
+            imported += 1
+        except Exception as exc:
+            failed += 1
+            errors.append(f"line {idx}: {exc}")
+
+    return ImportVqaJsonlResponse(
+        dataset_id=dataset_id,
+        imported=imported,
+        failed=failed,
+        errors=errors,
+    )
 
 
 @app.get("/api/v1/datasets/{dataset_id}/samples", response_model=PaginatedResponse[Sample])
@@ -481,40 +575,26 @@ async def sync_annotations_to_ls(
     return {"synced_count": synced_count, "errors": errors}
 
 
-@app.post("/api/v1/training-presets", response_model=TrainingPreset)
-async def create_preset(
-    payload: CreatePresetRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> TrainingPreset:
-    preset = TrainingPreset(
-        name=payload.name,
-        model_spec=payload.model_spec,
-        omegaconf_yaml=payload.omegaconf_yaml,
-        dataloader_ref=payload.dataloader_ref,
-        org_id=org.id,
-    )
-    return await container.repository().create_preset(preset)
-
-
-@app.get("/api/v1/training-presets", response_model=list[TrainingPreset])
+@app.get("/api/v1/training-presets")
 async def list_presets(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> list[TrainingPreset]:
-    return await container.repository().list_presets(org_id=org.id)
+) -> list[dict]:
+    registry = container.preset_registry()
+    return [registry.preset_to_api_dict(p) for p in registry.list_presets()]
 
 
-@app.get("/api/v1/training-presets/{preset_id}", response_model=TrainingPreset)
+@app.get("/api/v1/training-presets/{preset_id}")
 async def get_preset(
     preset_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> TrainingPreset:
-    preset = await container.repository().get_preset(preset_id, org_id=org.id)
-    if preset is None:
+) -> dict:
+    registry = container.preset_registry()
+    spec = registry.get_preset(preset_id)
+    if spec is None:
         raise HTTPException(status_code=404, detail="Preset not found")
-    return preset
+    return registry.preset_to_api_dict(spec)
 
 
 @app.post("/api/v1/training-jobs", response_model=TrainingJob)
@@ -523,10 +603,24 @@ async def create_training_job(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TrainingJob:
-    if await container.repository().get_dataset(payload.dataset_id, org_id=org.id) is None:
+    dataset = await container.repository().get_dataset(payload.dataset_id, org_id=org.id)
+    if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    if await container.repository().get_preset(payload.preset_id, org_id=org.id) is None:
+    registry = container.preset_registry()
+    preset = registry.get_preset(payload.preset_id)
+    if preset is None:
         raise HTTPException(status_code=404, detail="preset not found")
+    if not preset.trainable:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"preset '{preset.id}' is inference-only and does not support training jobs"
+            ),
+        )
+    try:
+        validate_dataset_preset_training(dataset, preset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     job = TrainingJob(dataset_id=payload.dataset_id, preset_id=payload.preset_id, created_by=current_user.id, org_id=org.id)
     return await container.orchestrator().start_job(job)
 
@@ -709,41 +803,38 @@ async def extract_features(
         raise HTTPException(status_code=404, detail="dataset not found")
 
     embed_model: str = (dataset.embed_config or {}).get("model", "openai/clip-vit-base-patch32")
+    from app.domain.models import PredictionJob
+    job = PredictionJob(
+        dataset_id=dataset_id,
+        model_id="embedding-worker",
+        created_by=current_user.id,
+        target="embedding",
+        org_id=org.id,
+        model_version="force" if force else None,
+        summary={"embed_model": embed_model},
+    )
+    if str(container.config().app.env) == "test":
+        from app.domain.types import JobStatus
 
-    # Count total samples
-    samples, total = await container.repository().list_samples(dataset_id, limit=100_000)
-
-    # Determine which samples need embedding via direct check
-    # (efficient: avoid loading full ORM objects where possible)
-    to_embed: list[str] = []
-    for s in samples:
-        feature = await container.repository().get_sample_feature(s.id)
-        if feature is None or feature.embed_model != embed_model or force:
-            to_embed.append(s.id)
-
-    async def _background_embed() -> None:
-        storage = container.artifact_storage()
-        embedding_svc = container.embedding_service()
-        repo = container.repository()
-        for sid in to_embed:
-            sample = await repo.get_sample(sid)
-            if sample is None or not sample.image_uris:
-                continue
-            uri = sample.image_uris[0]
-            try:
-                if uri.startswith("data:"):
-                    _, encoded = uri.split(",", 1)
-                    image_bytes = base64.b64decode(encoded)
-                else:
-                    image_bytes = await storage.get_bytes(uri)
-                embedding = await embedding_svc.embed_image(image_bytes, model_name=embed_model)
-                await repo.upsert_sample_feature(sid, embedding, embed_model)
-            except Exception:
-                pass  # Don't let one failure stop the batch
-
-    asyncio.create_task(_background_embed())
-
-    return {"status": "processing", "total_samples": total, "to_embed": len(to_embed)}
+        samples, total = await container.repository().list_samples(dataset_id, limit=100_000)
+        result = await container.feature_ops().extract_features(
+            samples=samples,
+            embed_model=embed_model,
+            force=force,
+            storage=container.artifact_storage(),
+        )
+        job.status = JobStatus.COMPLETED
+        job.summary = {
+            "status": result.get("status", "completed"),
+            "total_samples": total,
+            "processed": result.get("computed", 0),
+            "skipped": result.get("skipped", 0),
+            "embedding_model": result.get("embedding_model", embed_model),
+        }
+        persisted = await container.repository().create_prediction_job(job, org_id=org.id)
+        return _prediction_job_to_response(persisted).model_dump()
+    started = await container.prediction_orchestrator().start_job(job)
+    return _prediction_job_to_response(started).model_dump()
 
 
 @app.get("/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
@@ -774,8 +865,8 @@ async def selection_metrics(
     sample_ids = [s.id for s in samples]
     fs = container.feature_ops()
     return {
-        "uniqueness": fs.uniqueness_scores(sample_ids),
-        "representativeness": fs.representativeness_scores(sample_ids),
+        "uniqueness": await fs.uniqueness_scores(sample_ids, dataset_id=dataset_id),
+        "representativeness": await fs.representativeness_scores(sample_ids, dataset_id=dataset_id),
     }
 
 
@@ -787,7 +878,7 @@ async def uncovered_hints(
 ) -> dict:
     if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    return container.feature_ops().uncovered_cluster_hints(dataset_id)
+    return await container.feature_ops().uncovered_cluster_hints(dataset_id)
 
 
 @app.get("/api/v1/artifacts/{artifact_id}/download")
@@ -883,12 +974,37 @@ async def download_model(
     )
 
 
+@app.get("/api/v1/model-upload-templates", response_model=list[ModelUploadTemplateResponse])
+async def list_model_upload_templates(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[ModelUploadTemplateResponse]:
+    return [
+        ModelUploadTemplateResponse(
+            id=template.id,
+            name=template.name,
+            dataset_types=list(template.dataset_types),
+            task_types=list(template.task_types),
+            label_space_mode=template.label_space_mode,
+            requires_embedding_metadata=template.requires_embedding_metadata,
+            profiles=[
+                UploadTemplateProfileResponse(
+                    id=str(profile.get("id", "")),
+                    name=str(profile.get("name", "")),
+                    model_spec=profile.get("model_spec", {}) if isinstance(profile.get("model_spec", {}), dict) else {},
+                    default_prediction_targets=profile.get("default_prediction_targets", []),
+                )
+                for profile in template.profiles
+            ],
+        )
+        for template in UPLOAD_TEMPLATE_DEFINITIONS
+    ]
+
+
 @app.post("/api/v1/models/upload", response_model=ModelResponse)
 async def upload_model(
     file: UploadFile = File(...),
-    name: str = Query(...),
-    format: str = Query(...),
-    job_id: str = Query(...),
+    metadata: str = Form(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> ModelResponse:
@@ -896,9 +1012,7 @@ async def upload_model(
     model = await container.model_service().upload_model(
         file=file,
         org_id=org.id,
-        name=name,
-        format=format,
-        job_id=job_id,
+        metadata_json=metadata,
     )
     return _model_to_response(model)
 
@@ -1032,37 +1146,117 @@ def _prediction_result_to_response(result) -> PredictionResultResponse:
     )
 
 
-@app.post("/api/v1/predictions/run", response_model=BatchPredictionResponse)
+def _prediction_job_to_response(job) -> PredictionJobResponse:
+    status = job.status.value if hasattr(job.status, "value") else str(job.status)
+    return PredictionJobResponse(
+        id=job.id,
+        dataset_id=job.dataset_id,
+        model_id=job.model_id,
+        status=status,
+        created_by=job.created_by,
+        target=job.target,
+        model_version=job.model_version,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        external_job_id=job.external_job_id,
+        sample_ids=job.sample_ids,
+        summary=job.summary,
+    )
+
+
+@app.post("/api/v1/predictions/run", response_model=PredictionJobResponse, status_code=202)
 async def run_predictions(
     payload: RunPredictionRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> BatchPredictionResponse:
-    """Run batch predictions on a dataset using a trained model.
-    
-    Predictions are stored in Label Studio and can be viewed in the LS UI.
-    """
+) -> PredictionJobResponse:
+    """Create an async prediction job for dataset-scale inference."""
     try:
-        result = await container.prediction_service().run_prediction(
-            model_id=payload.model_id,
+        from app.domain.models import PredictionJob
+
+        job = PredictionJob(
             dataset_id=payload.dataset_id,
+            model_id=payload.model_id,
+            created_by=current_user.id,
+            target=payload.target,
+            model_version=payload.model_version,
             org_id=org.id,
             sample_ids=payload.sample_ids,
-            model_version=payload.model_version,
         )
-        return BatchPredictionResponse(
-            model_id=result.model_id,
-            dataset_id=result.dataset_id,
-            total_samples=result.total_samples,
-            successful=result.successful,
-            failed=result.failed,
-            predictions=[_prediction_result_to_response(p) for p in result.predictions],
-            started_at=result.started_at,
-            completed_at=result.completed_at,
-            model_version=result.model_version,
-        )
+        if str(container.config().app.env) == "test":
+            from app.domain.models import PredictionEvent
+            from app.domain.types import JobStatus
+
+            result = await container.prediction_service().run_prediction(
+                model_id=payload.model_id,
+                dataset_id=payload.dataset_id,
+                org_id=org.id,
+                sample_ids=payload.sample_ids,
+                model_version=payload.model_version,
+                target=payload.target,
+                prompt=payload.prompt,
+            )
+            job.status = JobStatus.COMPLETED
+            job.summary = result.model_dump(mode="json")
+            persisted = await container.repository().create_prediction_job(job, org_id=org.id)
+            await container.repository().add_prediction_event(
+                PredictionEvent(
+                    job_id=persisted.id,
+                    message="prediction completed in test mode",
+                    payload={"summary": persisted.summary},
+                )
+            )
+            return _prediction_job_to_response(persisted)
+        started = await container.prediction_orchestrator().start_job(job)
+        return _prediction_job_to_response(started)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/v1/prediction-jobs", response_model=list[PredictionJobResponse])
+async def list_prediction_jobs(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[PredictionJobResponse]:
+    jobs = await container.repository().list_prediction_jobs(org_id=org.id)
+    return [_prediction_job_to_response(job) for job in jobs]
+
+
+@app.get("/api/v1/prediction-jobs/{job_id}", response_model=PredictionJobResponse)
+async def get_prediction_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> PredictionJobResponse:
+    job = await container.repository().get_prediction_job(job_id, org_id=org.id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Prediction job not found")
+    return _prediction_job_to_response(job)
+
+
+@app.get("/api/v1/prediction-jobs/{job_id}/events", response_model=list[PredictionEventResponse])
+async def list_prediction_job_events(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[PredictionEventResponse]:
+    job = await container.repository().get_prediction_job(job_id, org_id=org.id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Prediction job not found")
+    events = await container.repository().list_prediction_events(job_id)
+    return [PredictionEventResponse(job_id=e.job_id, ts=e.ts, level=e.level, message=e.message, payload=e.payload) for e in events]
+
+
+@app.post("/api/v1/prediction-jobs/{job_id}/cancel")
+async def cancel_prediction_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    cancelled = await container.prediction_orchestrator().cancel_job(job_id, org_id=org.id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Prediction job not found or not cancellable")
+    return {"cancelled": True}
 
 
 @app.post("/api/v1/predictions/single", response_model=PredictionResultResponse)
@@ -1078,6 +1272,8 @@ async def predict_single(
             sample_id=payload.sample_id,
             org_id=org.id,
             model_version=payload.model_version,
+            target=payload.target,
+            prompt=payload.prompt,
         )
         return _prediction_result_to_response(result)
     except ValueError as e:
@@ -1098,6 +1294,267 @@ async def list_sample_predictions(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Prediction review endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/prediction-reviews", response_model=ReviewActionResponse, status_code=201)
+async def create_review_action(
+    payload: CreateReviewActionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ReviewActionResponse:
+    """Create a new prediction review session."""
+    try:
+        action = await container.prediction_service().create_review_action(
+            dataset_id=payload.dataset_id,
+            model_id=payload.model_id,
+            org_id=org.id,
+            created_by=current_user.id,
+            model_version=payload.model_version,
+        )
+        return ReviewActionResponse(
+            id=action.id,
+            dataset_id=action.dataset_id,
+            model_id=action.model_id,
+            model_version=action.model_version,
+            created_by=action.created_by,
+            created_at=action.created_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/v1/prediction-reviews", response_model=list[ReviewActionResponse])
+async def list_review_actions(
+    dataset_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[ReviewActionResponse]:
+    """List all prediction review actions for a dataset."""
+    actions = await container.repository().list_review_actions(dataset_id)
+    return [
+        ReviewActionResponse(
+            id=a.id,
+            dataset_id=a.dataset_id,
+            model_id=a.model_id,
+            model_version=a.model_version,
+            created_by=a.created_by,
+            created_at=a.created_at,
+        )
+        for a in actions
+    ]
+
+
+@app.get("/api/v1/prediction-reviews/{action_id}", response_model=ReviewActionResponse)
+async def get_review_action(
+    action_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ReviewActionResponse:
+    """Get a single prediction review action."""
+    action = await container.repository().get_review_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Review action not found")
+    return ReviewActionResponse(
+        id=action.id,
+        dataset_id=action.dataset_id,
+        model_id=action.model_id,
+        model_version=action.model_version,
+        created_by=action.created_by,
+        created_at=action.created_at,
+    )
+
+
+@app.delete("/api/v1/prediction-reviews/{action_id}", status_code=204)
+async def delete_review_action(
+    action_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    """Delete a prediction review action and its annotation versions."""
+    deleted = await container.repository().delete_review_action(action_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Review action not found")
+    return Response(status_code=204)
+
+
+@app.post(
+    "/api/v1/prediction-reviews/{action_id}/annotations",
+    response_model=SaveReviewAnnotationsResponse,
+)
+async def save_review_annotations(
+    action_id: str,
+    payload: SaveReviewAnnotationsRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SaveReviewAnnotationsResponse:
+    """Save reviewed predictions as annotations for a review action."""
+    try:
+        items = [item.model_dump() for item in payload.items]
+        _annotations, versions = await container.prediction_service().save_review_annotations(
+            review_action_id=action_id,
+            items=items,
+            created_by=current_user.id,
+        )
+        return SaveReviewAnnotationsResponse(
+            review_action_id=action_id,
+            created_count=len(versions),
+            annotation_versions=[
+                AnnotationVersionResponse(
+                    id=v.id,
+                    review_action_id=v.review_action_id,
+                    annotation_id=v.annotation_id,
+                    source_prediction_id=v.source_prediction_id,
+                    predicted_label=v.predicted_label,
+                    final_label=v.final_label,
+                    confidence=v.confidence,
+                    created_at=v.created_at,
+                )
+                for v in versions
+            ],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get(
+    "/api/v1/prediction-reviews/{action_id}/annotation-versions",
+    response_model=list[AnnotationVersionResponse],
+)
+async def list_annotation_versions(
+    action_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[AnnotationVersionResponse]:
+    """List annotation versions for a review action."""
+    action = await container.repository().get_review_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Review action not found")
+    versions = await container.repository().list_annotation_versions(action_id)
+    return [
+        AnnotationVersionResponse(
+            id=v.id,
+            review_action_id=v.review_action_id,
+            annotation_id=v.annotation_id,
+            source_prediction_id=v.source_prediction_id,
+            predicted_label=v.predicted_label,
+            final_label=v.final_label,
+            confidence=v.confidence,
+            created_at=v.created_at,
+        )
+        for v in versions
+    ]
+
+
+@app.get("/api/v1/export-formats", response_model=list[ExportFormatResponse])
+async def list_export_formats(
+    current_user: User = Depends(get_current_user),
+) -> list[ExportFormatResponse]:
+    """List all available annotation-version export formats."""
+    from app.services.artifacts import list_export_formats as _list_fmts
+    return [ExportFormatResponse(format_id=f["format_id"]) for f in _list_fmts()]
+
+
+@app.get("/api/v1/prediction-reviews/{action_id}/export")
+async def export_review_version(
+    action_id: str,
+    format_id: str = Query(default="annotation-version-full-context-v1"),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    """Preview (return JSON) an annotation-version export."""
+    from app.services.artifacts import get_export_builder
+
+    action = await container.repository().get_review_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Review action not found")
+
+    try:
+        builder = get_export_builder(format_id)
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Unknown export format: {format_id}")
+
+    repo = container.repository()
+    dataset = await repo.get_dataset(action.dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    versions = await repo.list_annotation_versions(action_id)
+    # Collect touched annotation IDs → fetch annotations → fetch samples
+    ann_ids = [v.annotation_id for v in versions]
+    annotations = []
+    sample_ids_set: set[str] = set()
+    for aid in ann_ids:
+        ann = await repo.get_annotation(aid)
+        if ann is not None:
+            annotations.append(ann)
+            sample_ids_set.add(ann.sample_id)
+
+    samples = []
+    for sid in sample_ids_set:
+        s = await repo.get_sample(sid)
+        if s is not None:
+            samples.append(s)
+
+    return builder(
+        review_action=action,
+        dataset=dataset,
+        samples=samples,
+        annotations=annotations,
+        versions=versions,
+    )
+
+
+@app.post("/api/v1/prediction-reviews/{action_id}/export/persist")
+async def persist_review_export(
+    action_id: str,
+    payload: VersionExportRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    """Persist an annotation-version export to artifact storage."""
+    action = await container.repository().get_review_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Review action not found")
+
+    repo = container.repository()
+    dataset = await repo.get_dataset(action.dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    versions = await repo.list_annotation_versions(action_id)
+    ann_ids = [v.annotation_id for v in versions]
+    annotations = []
+    sample_ids_set: set[str] = set()
+    for aid in ann_ids:
+        ann = await repo.get_annotation(aid)
+        if ann is not None:
+            annotations.append(ann)
+            sample_ids_set.add(ann.sample_id)
+
+    samples = []
+    for sid in sample_ids_set:
+        s = await repo.get_sample(sid)
+        if s is not None:
+            samples.append(s)
+
+    try:
+        uri = await container.artifacts().persist_version_export(
+            review_action=action,
+            dataset=dataset,
+            samples=samples,
+            annotations=annotations,
+            versions=versions,
+            format_id=payload.format_id,
+        )
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Unknown export format: {payload.format_id}")
+
+    return {"uri": uri, "format_id": payload.format_id}
 
 
 @app.patch("/api/v1/datasets/{dataset_id}/public")
@@ -1380,6 +1837,7 @@ async def get_dashboard(
     """Return runtime analytics: work pool status, job queue stats, recent jobs."""
     repo = container.repository()
     cfg = container.config()
+    service_health = container.service_health()
 
     # -- Job queue stats from local DB (scoped by org) --
     all_jobs = await repo.list_jobs(org_id=org.id)
@@ -1447,10 +1905,13 @@ async def get_dashboard(
             # Prefect not reachable — return dashboard without pool info
             pass
 
+    services = [ServiceStatus.model_validate(item.model_dump()) for item in await service_health.check_all()]
+
     return DashboardResponse(
         work_pool=work_pool,
         job_queue=stats,
         recent_jobs=recent,
+        services=services,
         prefect_connected=prefect_connected,
     )
 
