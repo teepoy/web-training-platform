@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile
 
 from app.domain.models import ArtifactRef, Model
+from app.services.compatibility import validate_upload_metadata
 
 if TYPE_CHECKING:
     from app.repositories.sql_repository import SqlRepository
@@ -92,12 +94,26 @@ class ModelService:
         self,
         file: UploadFile,
         org_id: str,
-        name: str,
-        format: str,
+        metadata_json: str,
         job_id: str | None = None,
         dataset_id: str | None = None,
     ) -> Model:
         """Upload an external model file."""
+        try:
+            raw_metadata = json.loads(metadata_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid upload metadata: {exc}")
+        if not isinstance(raw_metadata, dict):
+            raise HTTPException(status_code=400, detail="upload metadata must be a JSON object")
+
+        try:
+            upload_metadata = validate_upload_metadata(raw_metadata)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        name = str(upload_metadata.get("name", "")).strip()
+        format = str(upload_metadata.get("format", "")).strip()
+        job_id = str(upload_metadata.get("job_id", "")).strip() or job_id
+
         # Read file content
         content = await file.read()
         file_size = len(content)
@@ -134,7 +150,17 @@ class ModelService:
             file_hash=file_hash,
             format=format,
             created_at=datetime.now(UTC),
-            metadata={"uploaded": True, "original_filename": file.filename},
+            metadata={
+                "uploaded": True,
+                "original_filename": file.filename,
+                "template_id": upload_metadata.get("template_id"),
+                "profile_id": upload_metadata.get("profile_id"),
+                **upload_metadata.get("compatibility", {}),
+                "model_spec": upload_metadata.get("model_spec", {}),
+                "framework": str(upload_metadata.get("model_spec", {}).get("framework", "")),
+                "architecture": str(upload_metadata.get("model_spec", {}).get("architecture", "")),
+                "base_model": str(upload_metadata.get("model_spec", {}).get("base_model", "")),
+            },
         )
 
         await self.repository.add_artifacts(job_id, [artifact])

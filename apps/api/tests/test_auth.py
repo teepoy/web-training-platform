@@ -48,7 +48,7 @@ def _make_superadmin(client: TestClient, email: str, password: str, name: str) -
     """Register + promote to superadmin, return token."""
     _register(client, email, password, name)
     import asyncio
-    asyncio.get_event_loop().run_until_complete(_promote_superadmin(email))
+    asyncio.run(_promote_superadmin(email))
     resp = _login(client, email, password)
     return resp.json()["access_token"]
 

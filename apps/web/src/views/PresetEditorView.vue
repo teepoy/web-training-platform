@@ -8,9 +8,7 @@
     <template v-else>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Training Presets</n-h2>
-      <n-button type="primary" @click="showModal = true">
-        + Create Preset
-      </n-button>
+      <n-tag type="info" size="small">Read-only catalog</n-tag>
     </n-space>
 
     <n-spin :show="isLoading">
@@ -21,213 +19,144 @@
         :columns="columns"
         :data="presets ?? []"
         :bordered="false"
+        :row-props="rowProps"
       />
     </n-spin>
 
-    <!-- Create Preset Modal -->
-    <n-modal
-      v-model:show="showModal"
-      preset="card"
-      title="Create Preset"
-      style="width: 560px"
-      :mask-closable="false"
-      @after-leave="resetForm"
+    <!-- Preset Detail Drawer -->
+    <n-drawer
+      v-model:show="showDrawer"
+      :width="560"
+      placement="right"
     >
-      <n-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        label-placement="left"
-        label-width="130px"
-        require-mark-placement="right-hanging"
-      >
-        <!-- Name -->
-        <n-form-item label="Name" path="name">
-          <n-input
-            v-model:value="formData.name"
-            placeholder="e.g. resnet18-cls"
-            clearable
-          />
-        </n-form-item>
+      <n-drawer-content :title="selectedPreset?.name ?? 'Preset'" closable>
+        <template v-if="selectedPreset">
+          <n-descriptions bordered :column="1" label-placement="left" size="small" style="margin-bottom: 16px">
+            <n-descriptions-item label="ID">
+              <n-text code>{{ selectedPreset.id }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item label="Version">
+              {{ selectedPreset.version ?? '-' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="Description">
+              {{ selectedPreset.description || '-' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="Deprecated">
+              <n-tag v-if="selectedPreset.deprecated" type="warning" size="small">Yes</n-tag>
+              <span v-else>No</span>
+            </n-descriptions-item>
+          </n-descriptions>
 
-        <!-- Architecture -->
-        <n-form-item label="Architecture" path="architecture">
-          <n-select
-            v-model:value="formData.architecture"
-            :options="architectureOptions"
-            filterable
-            tag
-            placeholder="Select or type architecture"
-          />
-        </n-form-item>
+          <n-h3>Model</n-h3>
+          <n-descriptions bordered :column="1" label-placement="left" size="small" style="margin-bottom: 16px">
+            <n-descriptions-item label="Framework">
+              <n-tag type="info" size="small">{{ selectedPreset.model.framework }}</n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="Base Model">
+              {{ selectedPreset.model.base_model }}
+            </n-descriptions-item>
+            <n-descriptions-item v-if="selectedPreset.model.source" label="Source">
+              {{ selectedPreset.model.source }}
+            </n-descriptions-item>
+          </n-descriptions>
 
-        <!-- Num Classes -->
-        <n-form-item label="Num Classes" path="num_classes">
-          <n-input-number
-            v-model:value="formData.num_classes"
-            :min="2"
-            placeholder="e.g. 10"
-            style="width: 100%"
-          />
-        </n-form-item>
+          <n-h3>Training</n-h3>
+          <n-descriptions bordered :column="1" label-placement="left" size="small" style="margin-bottom: 16px">
+            <n-descriptions-item label="Process">
+              <n-text code>{{ selectedPreset.train.process }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="selectedPreset.train.dataloader" label="Dataloader">
+              <n-text code>{{ selectedPreset.train.dataloader.ref }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="selectedPreset.train.hyperparams" label="Hyperparams">
+              <n-text code>{{ JSON.stringify(selectedPreset.train.hyperparams, null, 2) }}</n-text>
+            </n-descriptions-item>
+          </n-descriptions>
 
-        <!-- OmegaConf YAML -->
-        <n-form-item label="OmegaConf YAML" path="omegaconf_yaml">
-          <n-input
-            v-model:value="formData.omegaconf_yaml"
-            type="textarea"
-            :rows="6"
-            placeholder="lr: 0.001&#10;batch_size: 32&#10;epochs: 10"
-          />
-        </n-form-item>
-
-        <!-- Dataloader Ref (optional) -->
-        <n-form-item label="Dataloader Ref" path="dataloader_ref">
-          <n-input
-            v-model:value="formData.dataloader_ref"
-            placeholder="e.g. custom.loader:build (optional)"
-            clearable
-          />
-        </n-form-item>
-      </n-form>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showModal = false">Cancel</n-button>
-          <n-button
-            type="primary"
-            :loading="createPresetMutation.isPending.value"
-            @click="onSubmit"
+          <n-h3>Prediction Targets</n-h3>
+          <n-descriptions
+            v-for="(target, key) in selectedPreset.predict.targets"
+            :key="key"
+            bordered
+            :column="1"
+            label-placement="left"
+            size="small"
+            style="margin-bottom: 8px"
+            :title="String(key)"
           >
-            Create
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
+            <n-descriptions-item label="Process">
+              <n-text code>{{ target.process }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="target.label_space" label="Label Space">
+              <n-space size="small">
+                <n-tag v-for="label in target.label_space" :key="label" size="small">{{ label }}</n-tag>
+              </n-space>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="target.threshold != null" label="Threshold">
+              {{ target.threshold }}
+            </n-descriptions-item>
+          </n-descriptions>
+
+          <template v-if="selectedPreset.runtime">
+            <n-h3>Runtime</n-h3>
+            <n-descriptions bordered :column="1" label-placement="left" size="small" style="margin-bottom: 16px">
+              <n-descriptions-item label="GPU">
+                {{ selectedPreset.runtime.gpu ? 'Required' : 'Not required' }}
+              </n-descriptions-item>
+              <n-descriptions-item v-if="selectedPreset.runtime.min_vram_gb" label="Min VRAM">
+                {{ selectedPreset.runtime.min_vram_gb }} GB
+              </n-descriptions-item>
+              <n-descriptions-item v-if="selectedPreset.runtime.queue" label="Queue">
+                <n-text code>{{ selectedPreset.runtime.queue }}</n-text>
+              </n-descriptions-item>
+            </n-descriptions>
+          </template>
+
+          <template v-if="selectedPreset.tags && selectedPreset.tags.length > 0">
+            <n-h3>Tags</n-h3>
+            <n-space size="small">
+              <n-tag v-for="tag in selectedPreset.tags" :key="tag" size="small" type="success">{{ tag }}</n-tag>
+            </n-space>
+          </template>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, h, computed } from "vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, type FormInst, type FormRules } from "naive-ui";
+import { useQuery } from "@tanstack/vue-query";
 import { NTag } from "naive-ui";
 import { api } from "../api";
 import type { TrainingPreset } from "../types";
 import { useOrgStore } from "../stores/org";
 
-// ─── message / query client ──────────────────────────────────────────────────
-const message = useMessage();
-const qc = useQueryClient();
 const orgStore = useOrgStore();
 
-// ─── query ───────────────────────────────────────────────────────────────────
+// ── query ───────────────────────────────────────────────────────────────────
 const { data: presets, isLoading, isError, error } = useQuery({
   queryKey: computed(() => ["presets", orgStore.currentOrgId]),
   queryFn: api.listPresets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
-// ─── mutation ────────────────────────────────────────────────────────────────
-const createPresetMutation = useMutation({
-  mutationFn: (data: {
-    name: string;
-    architecture: string;
-    num_classes: number;
-    omegaconf_yaml: string;
-    dataloader_ref: string;
-  }) =>
-    api.createPreset({
-      name: data.name,
-      model_spec: {
-        architecture: data.architecture,
-        num_classes: data.num_classes,
-      },
-      omegaconf_yaml: data.omegaconf_yaml,
-      dataloader_ref: data.dataloader_ref || undefined,
-    }),
-  onSuccess: () => {
-    message.success("Preset created");
-    qc.invalidateQueries({ queryKey: ["presets", orgStore.currentOrgId] });
-    showModal.value = false;
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to create preset");
-  },
-});
+// ── detail drawer ───────────────────────────────────────────────────────────
+const showDrawer = ref(false);
+const selectedPreset = ref<TrainingPreset | null>(null);
 
-// ─── modal / form ────────────────────────────────────────────────────────────
-const showModal = ref(false);
-const formRef = ref<FormInst | null>(null);
-
-const defaultFormData = () => ({
-  name: "",
-  architecture: null as string | null,
-  num_classes: null as number | null,
-  omegaconf_yaml: "",
-  dataloader_ref: "",
-});
-
-const formData = ref(defaultFormData());
-
-const architectureOptions = [
-  { label: "resnet18", value: "resnet18" },
-  { label: "resnet50", value: "resnet50" },
-  { label: "bert-base", value: "bert-base" },
-];
-
-const formRules: FormRules = {
-  name: [
-    {
-      required: true,
-      message: "Name is required",
-      trigger: "blur",
+function rowProps(row: TrainingPreset) {
+  return {
+    style: "cursor: pointer",
+    onClick: () => {
+      selectedPreset.value = row;
+      showDrawer.value = true;
     },
-  ],
-  architecture: [
-    {
-      required: true,
-      message: "Architecture is required",
-      trigger: ["blur", "change"],
-    },
-  ],
-  num_classes: [
-    {
-      required: true,
-      type: "number",
-      min: 2,
-      message: "Num classes must be at least 2",
-      trigger: ["blur", "change"],
-    },
-  ],
-  omegaconf_yaml: [
-    {
-      required: true,
-      message: "YAML config required",
-      trigger: ["blur", "input"],
-    },
-  ],
-};
-
-function resetForm() {
-  formData.value = defaultFormData();
+  };
 }
 
-function onSubmit() {
-  formRef.value?.validate((errors) => {
-    if (errors) return;
-    createPresetMutation.mutate({
-      name: formData.value.name,
-      architecture: formData.value.architecture!,
-      num_classes: formData.value.num_classes!,
-      omegaconf_yaml: formData.value.omegaconf_yaml,
-      dataloader_ref: formData.value.dataloader_ref,
-    });
-  });
-}
-
-// ─── table columns ────────────────────────────────────────────────────────────
+// ── table columns ───────────────────────────────────────────────────────────
 const columns = [
   {
     title: "Name",
@@ -236,26 +165,44 @@ const columns = [
       h("span", { style: "font-weight: 500" }, row.name),
   },
   {
-    title: "Architecture",
-    key: "architecture",
+    title: "Framework",
+    key: "framework",
     render: (row: TrainingPreset) =>
-      h(NTag, { type: "info", size: "small" }, { default: () => row.model_spec.architecture }),
+      h(NTag, { type: "info", size: "small" }, { default: () => row.model.framework }),
   },
   {
-    title: "Num Classes",
-    key: "num_classes",
+    title: "Base Model",
+    key: "base_model",
     render: (row: TrainingPreset) =>
-      h("span", {}, String(row.model_spec.num_classes)),
+      h("span", {}, row.model.base_model),
   },
   {
-    title: "Actions",
-    key: "actions",
-    render: (row: TrainingPreset) =>
-      h(
+    title: "Targets",
+    key: "targets",
+    render: (row: TrainingPreset) => {
+      const keys = Object.keys(row.predict?.targets ?? {});
+      return h(
         "span",
-        { style: "color: var(--n-text-color-3); font-size: 12px" },
-        row.id.slice(0, 8)
-      ),
+        {},
+        keys.map((k) => h(NTag, { size: "small", style: "margin-right: 4px" }, { default: () => k }))
+      );
+    },
+  },
+  {
+    title: "Version",
+    key: "version",
+    width: 100,
+    render: (row: TrainingPreset) =>
+      h("span", { style: "color: var(--n-text-color-3); font-size: 12px" }, row.version ?? "-"),
+  },
+  {
+    title: "Status",
+    key: "deprecated",
+    width: 100,
+    render: (row: TrainingPreset) =>
+      row.deprecated
+        ? h(NTag, { type: "warning", size: "small" }, { default: () => "Deprecated" })
+        : h(NTag, { type: "success", size: "small" }, { default: () => "Active" }),
   },
 ];
 </script>

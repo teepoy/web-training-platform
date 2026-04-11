@@ -1,0 +1,75 @@
+id: clip-zero-shot-v1
+name: CLIP Zero-Shot Classification (v1)
+version: "1.0.0"
+description: >
+  Zero-shot image classification using OpenAI CLIP.
+  No fine-tuning required — uses prompt-based classification.
+tags: [classification, clip, zero-shot, baseline]
+deprecated: false
+trainable: false
+
+model:
+  framework: pytorch
+  architecture: clip-vit-base-patch32
+  base_model: openai/clip-vit-base-patch32
+  input:
+    image_size: 224
+    normalization: clip
+
+train:
+  entrypoint: app.runtime.torch:TorchTrainer
+  config:
+    max_epochs: 0
+    description: "Inference-only preset. Training jobs are not supported."
+  dataloader:
+    ref: app.data.classification:build_train_loader
+    params:
+      batch_size: 32
+      num_workers: 4
+
+predict:
+  entrypoint: app.runtime.torch:TorchPredictor
+  config:
+    prompt_template: "a photo of {label}"
+  dataloader:
+    ref: app.data.classification:build_infer_loader
+    params:
+      batch_size: 128
+      num_workers: 4
+  targets:
+    image_classification:
+      entrypoint: app.runtime.torch:TorchPredictor
+      config:
+        prompt_template: "a photo of {label}"
+        return_probabilities: true
+    embedding:
+      entrypoint: app.runtime.torch:TorchPredictor
+      config:
+        output_dim: 512
+        normalize: true
+
+runtime:
+  environment: dev
+  device: auto
+  queue: predict-batch-cpu
+  resources:
+    cpu: "2"
+    memory: 4Gi
+    gpu: 0
+
+io:
+  adapter: app.data.classification:ImageClassificationAdapter
+  expected_sample_schema:
+    image_uris: "list[str]"
+
+compat:
+  min_api_version: "0.8.0"
+
+compatibility:
+  dataset_types: [image_classification]
+  task_types: [classification]
+  prediction_targets: [image_classification, embedding]
+
+ownership:
+  team: ml-platform
+  maintainer: ml-platform@example.com

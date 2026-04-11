@@ -272,8 +272,6 @@ const downloadingId = ref<string | null>(null);
 async function onDownload(artifactId: string, uri: string) {
   downloadingId.value = artifactId;
   try {
-    // api.downloadArtifact returns ArtifactRef (JSON); the actual bytes live at
-    // the download URL. Open the endpoint URL in a new tab for direct download.
     const downloadUrl = `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`;
     window.open(downloadUrl, "_blank");
   } catch (err) {

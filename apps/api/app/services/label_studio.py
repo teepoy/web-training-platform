@@ -487,6 +487,17 @@ class LabelStudioClient:
             "</View>"
         )
 
+    @staticmethod
+    def generate_vqa_config() -> str:
+        """Generate Label Studio XML config for VQA (image + question -> text answer)."""
+        return (
+            "<View>\n"
+            '  <Image name="image" value="$image"/>\n'
+            '  <Text name="question" value="$question"/>\n'
+            '  <TextArea name="answer" toName="image" perRegion="false" rows="4"/>\n'
+            "</View>"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Format conversion helpers
@@ -565,6 +576,18 @@ def platform_prediction_to_ls(
             "to_name": "image",
             "type": "choices",
             "value": {"choices": [label]},
+        }
+    ]
+
+
+def platform_text_prediction_to_ls(text: str) -> list[dict]:
+    """Convert generated text to Label Studio textarea prediction format."""
+    return [
+        {
+            "from_name": "answer",
+            "to_name": "image",
+            "type": "textarea",
+            "value": {"text": [text]},
         }
     ]
 

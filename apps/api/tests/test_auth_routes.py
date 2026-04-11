@@ -59,7 +59,7 @@ async def _get_user_id(email: str) -> str:
 def _make_superadmin_with_org(client: TestClient, email: str, password: str, name: str) -> tuple[str, str]:
     """Register + promote to superadmin, create org, return (token, org_id)."""
     _register(client, email, password, name).raise_for_status()
-    asyncio.get_event_loop().run_until_complete(_promote_superadmin(email))
+    asyncio.run(_promote_superadmin(email))
     token = _login(client, email, password)
     # Create an org
     org_resp = client.post(

@@ -1,0 +1,54 @@
+id: dspy-vqa-v1
+name: DSPy VQA (v1)
+version: "1.0.0"
+description: VQA optimization preset for image plus user question to text answer generation.
+tags: [dspy, vqa, multimodal]
+deprecated: false
+
+model:
+  framework: dspy
+  architecture: vqa-program
+  base_model: gpt-4o-mini
+
+train:
+  entrypoint: app.runtime.dspy:DspyVqaTrainer
+  config:
+    optimizer: bootstrap_fewshot
+    max_demos: 8
+    instruction: "Answer the question using only image evidence. If uncertain, say you are unsure."
+
+predict:
+  entrypoint: app.runtime.dspy:DspyVqaPredictor
+  config: {}
+  targets:
+    vqa:
+      entrypoint: app.runtime.dspy:DspyVqaPredictor
+      config: {}
+
+runtime:
+  environment: dev
+  device: cpu
+  queue: optimize-llm-cpu
+  resources:
+    cpu: "2"
+    memory: 4Gi
+    gpu: 0
+
+io:
+  adapter: app.data.vqa:VqaDatasetAdapter
+  expected_sample_schema:
+    image_uris: "list[str]"
+    metadata.question: "str"
+    metadata.answer: "str(optional)"
+
+compat:
+  min_api_version: "0.8.0"
+
+compatibility:
+  dataset_types: [image_vqa]
+  task_types: [vqa]
+  prediction_targets: [vqa]
+
+ownership:
+  team: llm-platform
+  maintainer: llm-platform@example.com

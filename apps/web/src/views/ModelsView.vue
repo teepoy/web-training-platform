@@ -49,6 +49,20 @@
           label-placement="left"
           label-width="auto"
         >
+          <n-form-item label="Template" path="templateId">
+            <n-select
+              v-model:value="uploadForm.templateId"
+              :options="templateOptions"
+              placeholder="Select upload template"
+            />
+          </n-form-item>
+          <n-form-item label="Profile" path="profileId">
+            <n-select
+              v-model:value="uploadForm.profileId"
+              :options="profileOptions"
+              placeholder="Select prefill profile"
+            />
+          </n-form-item>
           <n-form-item label="Model Name" path="name">
             <n-input v-model:value="uploadForm.name" placeholder="e.g. my-classifier-v1" />
           </n-form-item>
@@ -67,6 +81,24 @@
               placeholder="Select job to associate"
               filterable
             />
+          </n-form-item>
+          <n-form-item label="Framework" path="framework">
+            <n-input v-model:value="uploadForm.framework" placeholder="e.g. pytorch" />
+          </n-form-item>
+          <n-form-item label="Architecture" path="architecture">
+            <n-input v-model:value="uploadForm.architecture" placeholder="e.g. resnet50" />
+          </n-form-item>
+          <n-form-item label="Base Model" path="baseModel">
+            <n-input v-model:value="uploadForm.baseModel" placeholder="e.g. torchvision/resnet50" />
+          </n-form-item>
+          <n-form-item v-if="requiresLabelSpace" label="Label Space" path="labelSpace">
+            <n-dynamic-tags v-model:value="uploadForm.labelSpace" />
+          </n-form-item>
+          <n-form-item v-if="requiresEmbeddingMetadata" label="Embedding Dim" path="embeddingDimension">
+            <n-input-number v-model:value="uploadForm.embeddingDimension" :min="1" style="width: 100%" />
+          </n-form-item>
+          <n-form-item v-if="requiresEmbeddingMetadata" label="Normalized Output" path="normalizedOutput">
+            <n-switch v-model:value="uploadForm.normalizedOutput" />
           </n-form-item>
           <n-form-item label="Model File" path="file">
             <n-upload
@@ -107,12 +139,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from "vue";
+import { ref, computed, h, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption, UploadFileInfo } from "naive-ui";
 import { useMessage, NTag, NButton, NSpace } from "naive-ui";
 import { api, uploadModel, API_BASE } from "../api";
-import type { Model } from "../types";
+import type { Model, ModelUploadTemplate, UploadModelMetadata } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
 import PredictModal from "../components/PredictModal.vue";
@@ -150,6 +182,12 @@ const { data: jobs, isLoading: jobsLoading } = useQuery({
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
+const { data: uploadTemplates } = useQuery({
+  queryKey: ["model-upload-templates"],
+  queryFn: api.listModelUploadTemplates,
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
+
 // ---------------------------------------------------------------------------
 // Select options
 // ---------------------------------------------------------------------------
@@ -170,6 +208,21 @@ const formatOptions: SelectOption[] = [
   { label: "SafeTensors (.safetensors)", value: "safetensors" },
   { label: "Keras (.keras)", value: "keras" },
 ];
+
+const templateOptions = computed<SelectOption[]>(() =>
+  (uploadTemplates.value ?? []).map((template) => ({ label: template.name, value: template.id }))
+);
+
+const selectedTemplate = computed<ModelUploadTemplate | undefined>(() =>
+  (uploadTemplates.value ?? []).find((template) => template.id === uploadForm.value.templateId)
+);
+
+const profileOptions = computed<SelectOption[]>(() =>
+  (selectedTemplate.value?.profiles ?? []).map((profile) => ({ label: profile.name, value: profile.id }))
+);
+
+const requiresLabelSpace = computed(() => selectedTemplate.value?.label_space_mode === "required");
+const requiresEmbeddingMetadata = computed(() => selectedTemplate.value?.requires_embedding_metadata === true);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -281,16 +334,37 @@ const columns = computed<DataTableColumns<Model>>(() => [
 const showUploadModal = ref(false);
 const uploadFormRef = ref<FormInst | null>(null);
 const uploadForm = ref({
+  templateId: null as string | null,
+  profileId: "custom",
   name: "",
   format: null as string | null,
   jobId: null as string | null,
+  framework: "",
+  architecture: "",
+  baseModel: "",
+  labelSpace: [] as string[],
+  embeddingDimension: null as number | null,
+  normalizedOutput: true,
   file: null as File | null,
 });
 
 const uploadRules: FormRules = {
+  templateId: [{ required: true, message: "Please select an upload template", trigger: "change" }],
   name: [{ required: true, message: "Please enter a model name", trigger: "blur" }],
   format: [{ required: true, message: "Please select a format", trigger: "change" }],
   jobId: [{ required: true, message: "Please select a training job", trigger: "change" }],
+  framework: [{ required: true, message: "Please enter framework", trigger: "blur" }],
+  architecture: [{ required: true, message: "Please enter architecture", trigger: "blur" }],
+  baseModel: [{ required: true, message: "Please enter base model", trigger: "blur" }],
+  labelSpace: [{
+    validator: () => {
+      if (requiresLabelSpace.value && uploadForm.value.labelSpace.length === 0) {
+        return new Error("Label space is required for classifier uploads");
+      }
+      return true;
+    },
+    trigger: ["blur", "change"],
+  }],
 };
 
 function handleFileChange(data: { file: UploadFileInfo; fileList: UploadFileInfo[] }) {
@@ -299,14 +373,32 @@ function handleFileChange(data: { file: UploadFileInfo; fileList: UploadFileInfo
 
 const uploadMutation = useMutation({
   mutationFn: () => {
-    if (!uploadForm.value.file || !uploadForm.value.format || !uploadForm.value.jobId) {
+    if (!uploadForm.value.file || !uploadForm.value.format || !uploadForm.value.jobId || !uploadForm.value.templateId) {
       throw new Error("Missing required fields");
     }
+    const metadata: UploadModelMetadata = {
+      name: uploadForm.value.name,
+      format: uploadForm.value.format as UploadModelMetadata["format"],
+      job_id: uploadForm.value.jobId,
+      template_id: uploadForm.value.templateId,
+      profile_id: uploadForm.value.profileId,
+      model_spec: {
+        framework: uploadForm.value.framework,
+        architecture: uploadForm.value.architecture,
+        base_model: uploadForm.value.baseModel,
+      },
+      compatibility: {
+        dataset_types: selectedTemplate.value?.dataset_types ?? [],
+        task_types: selectedTemplate.value?.task_types ?? [],
+        prediction_targets: selectedProfileTargets.value,
+        label_space: uploadForm.value.labelSpace,
+        embedding_dimension: uploadForm.value.embeddingDimension,
+        normalized_output: requiresEmbeddingMetadata.value ? uploadForm.value.normalizedOutput : null,
+      },
+    };
     return uploadModel(
       uploadForm.value.file,
-      uploadForm.value.name,
-      uploadForm.value.format,
-      uploadForm.value.jobId
+      metadata,
     );
   },
   onSuccess: () => {
@@ -337,9 +429,51 @@ function onUploadCancel() {
 }
 
 function resetUploadForm() {
-  uploadForm.value = { name: "", format: null, jobId: null, file: null };
+  uploadForm.value = {
+    templateId: null,
+    profileId: "custom",
+    name: "",
+    format: null,
+    jobId: null,
+    framework: "",
+    architecture: "",
+    baseModel: "",
+    labelSpace: [],
+    embeddingDimension: null,
+    normalizedOutput: true,
+    file: null,
+  };
   uploadFormRef.value?.restoreValidation();
 }
+
+const selectedProfileTargets = computed(() => {
+  const template = selectedTemplate.value;
+  const profile = template?.profiles.find((item) => item.id === uploadForm.value.profileId);
+  return profile?.default_prediction_targets ?? [];
+});
+
+watch(
+  () => uploadForm.value.templateId,
+  (templateId) => {
+    const template = (uploadTemplates.value ?? []).find((item) => item.id === templateId);
+    uploadForm.value.profileId = template?.profiles[0]?.id ?? "custom";
+    if (template?.label_space_mode === "forbidden") {
+      uploadForm.value.labelSpace = [];
+    }
+  }
+);
+
+watch(
+  () => [uploadForm.value.templateId, uploadForm.value.profileId],
+  () => {
+    const template = selectedTemplate.value;
+    const profile = template?.profiles.find((item) => item.id === uploadForm.value.profileId);
+    const modelSpec = profile?.model_spec ?? {};
+    uploadForm.value.framework = modelSpec.framework ?? uploadForm.value.framework;
+    uploadForm.value.architecture = modelSpec.architecture ?? uploadForm.value.architecture;
+    uploadForm.value.baseModel = modelSpec.base_model ?? uploadForm.value.baseModel;
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Delete Modal

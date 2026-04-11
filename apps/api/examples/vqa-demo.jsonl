@@ -1,0 +1,3 @@
+{"image_uri":"memory://samples/vqa/1.jpg","question":"What color is the car?","answer":"red"}
+{"image_uri":"memory://samples/vqa/2.jpg","question":"How many people are visible?","answer":"two"}
+{"image_uri":"memory://samples/vqa/3.jpg","question":"Is it daytime or nighttime?","answer":"daytime"}

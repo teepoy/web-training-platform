@@ -20,4 +20,4 @@ RUN uv sync --frozen --package finetune-embedding
 
 WORKDIR /app/apps/embedding
 EXPOSE 50051
-CMD ["uv", "run", "python", "-m", "app"]
+CMD ["/app/.venv/bin/python", "-m", "app"]

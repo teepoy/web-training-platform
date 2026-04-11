@@ -1,0 +1,104 @@
+id: resnet50-cls-v1
+name: ResNet50 Classification (v1)
+version: "1.0.0"
+description: Standard image classification preset using torchvision ResNet50.
+tags: [classification, resnet, baseline]
+deprecated: false
+
+model:
+  framework: pytorch
+  architecture: resnet50
+  base_model: torchvision/resnet50
+  num_classes: 1000
+  input:
+    image_size: 224
+    normalization: imagenet
+
+train:
+  entrypoint: app.runtime.torch:TorchTrainer
+  config:
+    optimizer: adamw
+    learning_rate: 0.0003
+    weight_decay: 0.01
+    scheduler: cosine
+    max_epochs: 30
+    early_stopping_patience: 5
+    mixed_precision: fp16
+  dataloader:
+    ref: app.data.classification:build_train_loader
+    params:
+      batch_size: 64
+      num_workers: 4
+      shuffle: true
+
+predict:
+  entrypoint: app.runtime.torch:TorchPredictor
+  config:
+    top_k: 5
+    score_threshold: 0.2
+  dataloader:
+    ref: app.data.classification:build_infer_loader
+    params:
+      batch_size: 128
+      num_workers: 4
+  targets:
+    image_classification:
+      entrypoint: app.runtime.torch:TorchPredictor
+      config:
+        top_k: 5
+        score_threshold: 0.2
+    embedding:
+      entrypoint: app.runtime.torch:TorchPredictor
+      config:
+        output_dim: 2048
+        normalize: true
+
+test:
+  enabled: true
+  entrypoint: app.flows.evaluate:run_eval
+  metrics: [accuracy, f1_macro, precision, recall]
+  dataloader:
+    ref: app.data.classification:build_eval_loader
+    params:
+      batch_size: 128
+      num_workers: 4
+
+convert:
+  steps:
+    - name: pytorch-to-onnx
+      entrypoint: app.convert.torch_to_onnx:convert
+      input_format: pytorch
+      output_format: onnx
+      config:
+        opset_version: 17
+        dynamic_axes: true
+
+runtime:
+  environment: dev
+  device: auto
+  queue: train-gpu
+  resources:
+    cpu: "4"
+    memory: 8Gi
+    gpu: 0
+  retry:
+    max_attempts: 2
+    backoff_seconds: 30
+
+io:
+  adapter: app.data.classification:ImageClassificationAdapter
+  expected_sample_schema:
+    image_uris: "list[str]"
+    label: "str"
+
+compat:
+  min_api_version: "0.8.0"
+
+compatibility:
+  dataset_types: [image_classification]
+  task_types: [classification]
+  prediction_targets: [image_classification, embedding]
+
+ownership:
+  team: ml-platform
+  maintainer: ml-platform@example.com

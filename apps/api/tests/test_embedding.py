@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import unittest.mock as mock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -39,6 +40,7 @@ def _create_dataset_and_sample(c: TestClient, with_image: bool = False) -> tuple
     return dataset_id, sample.json()["id"]
 
 
+@pytest.mark.no_embedding_override
 def test_embed_sample_success() -> None:
     with mock.patch(
         "app.services.embedding.EmbeddingClient.embed_image",

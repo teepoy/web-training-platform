@@ -62,6 +62,23 @@ def _api(client: httpx.Client, method: str, path: str, **kwargs) -> httpx.Respon
     return resp
 
 
+def _wait_for_api_ready(client: httpx.Client, timeout_seconds: float = 120.0) -> None:
+    """Wait until the API responds successfully to /health."""
+    deadline = time.time() + timeout_seconds
+    last_error = ""
+    while time.time() < deadline:
+        try:
+            resp = client.get("/health")
+            if resp.status_code == 200:
+                return
+            last_error = f"unexpected status {resp.status_code}"
+        except httpx.HTTPError as exc:
+            last_error = str(exc)
+        time.sleep(2.0)
+    print(f"ERROR: API not ready after {timeout_seconds:.0f}s: {last_error}")
+    sys.exit(1)
+
+
 def _promote_superadmin(compose_file: str, email: str, password: str, name: str) -> None:
     """Promote user to superadmin via docker compose exec."""
     cmd = [
@@ -102,6 +119,10 @@ def main() -> None:
 
     api_url = args.api_url.rstrip("/")
     client = httpx.Client(base_url=api_url, timeout=30.0)
+
+    print("[0/7] Waiting for API readiness ...")
+    _wait_for_api_ready(client)
+    print("  API is ready.")
 
     # ------------------------------------------------------------------
     # Step 1: Register user

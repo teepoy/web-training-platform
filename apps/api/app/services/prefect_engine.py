@@ -12,15 +12,14 @@ Design notes
   ``execution.engine`` is set to ``prefect``.
 - ``stream_events`` polls the Prefect API every 2 seconds, yielding state
   transitions and new log lines until the run reaches a terminal state.
-- ``collect_artifacts`` returns placeholder S3 URIs matching the
-  ``LocalProcessEngine`` convention; extend this as needed once a real
-  artifact store is wired.
+- ``collect_artifacts`` reads artifact payload emitted by the flow run state.
 """
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 from app.domain.models import ArtifactRef, TrainingEvent, TrainingJob
 from app.domain.types import JobStatus
@@ -71,34 +70,55 @@ class PrefectWorkPoolEngine:
         flow_name: str,
         deployment_name: str = "train-job-deployment",
         concurrency_limit: int = 1,
+        preset_registry: Any = None,
     ) -> None:
         self._client = prefect_client
         self._pool_name = work_pool_name
         self._pool_type = work_pool_type
         self._flow_name = flow_name
-        self._deployment_name = deployment_name
+        self._default_deployment_name = deployment_name
         self._concurrency_limit = concurrency_limit
-        self._deployment_id: str | None = None
+        self._preset_registry = preset_registry
+        self._deployment_ids: dict[str, str] = {}
+        self._queue_to_deployment: dict[str, str] = {
+            "train-gpu": "train-job-torch-deployment",
+            "optimize-llm-cpu": "train-job-dspy-deployment",
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _ensure_deployment(self) -> str:
+    async def _ensure_deployment(self, deployment_name: str) -> str:
         """Resolve the deployment ID, caching it for subsequent calls.
         
         Raises HTTPException if deployment is not found.
         """
-        if self._deployment_id is None:
-            self._deployment_id = await self._client.resolve_deployment_id(self._deployment_name)
-            if self._deployment_id is None:
+        if deployment_name not in self._deployment_ids:
+            deployment_id = await self._client.resolve_deployment_id(deployment_name)
+            if deployment_id is None:
                 from fastapi import HTTPException
                 raise HTTPException(
                     status_code=503,
-                    detail=f"Deployment '{self._deployment_name}' not found. "
+                    detail=f"Deployment '{deployment_name}' not found. "
                            "The embedded Prefect runner may still be starting up.",
                 )
-        return self._deployment_id
+            self._deployment_ids[deployment_name] = deployment_id
+        return self._deployment_ids[deployment_name]
+
+    def _resolve_deployment_name(self, job: TrainingJob) -> str:
+        if self._preset_registry is None:
+            return self._default_deployment_name
+        try:
+            preset = self._preset_registry.get_preset(job.preset_id)
+        except Exception:
+            return self._default_deployment_name
+        if preset is None:
+            return self._default_deployment_name
+        queue_name = getattr(getattr(preset, "runtime", None), "queue", None)
+        if not queue_name:
+            return self._default_deployment_name
+        return self._queue_to_deployment.get(queue_name, self._default_deployment_name)
 
     # ------------------------------------------------------------------
     # TrainingExecutionEngine Protocol implementation
@@ -117,7 +137,8 @@ class PrefectWorkPoolEngine:
         str
             The Prefect flow-run UUID (used as ``external_job_id``).
         """
-        deployment_id = await self._ensure_deployment()
+        deployment_name = self._resolve_deployment_name(job)
+        deployment_id = await self._ensure_deployment(deployment_name)
 
         run = await self._client.create_flow_run_from_deployment(
             deployment_id=deployment_id,
@@ -240,8 +261,8 @@ class PrefectWorkPoolEngine:
     async def collect_artifacts(self, external_job_id: str) -> list[ArtifactRef]:
         """Return artifact references for a completed flow run.
 
-        Attempts to extract result information from the run state; falls back
-        to conventional placeholder S3 URIs when no artifact data is available.
+        Attempts to extract result information from the run state.
+        Returns an empty list when artifacts are unavailable.
 
         Parameters
         ----------
@@ -254,25 +275,17 @@ class PrefectWorkPoolEngine:
         """
         try:
             run = await self._client.get_flow_run(external_job_id)
-            # Attempt to find artifact URIs embedded in the run state data
             state_data = run.get("state", {}).get("data", {})
             if isinstance(state_data, dict) and state_data.get("artifacts"):
                 return [
-                    ArtifactRef(uri=a["uri"], kind=a.get("kind", "artifact"))
+                    ArtifactRef(
+                        uri=a["uri"],
+                        kind=a.get("kind", "artifact"),
+                        metadata=a.get("metadata", {}) if isinstance(a.get("metadata", {}), dict) else {},
+                    )
                     for a in state_data["artifacts"]
                     if isinstance(a, dict) and a.get("uri")
                 ]
         except Exception:
-            pass
-
-        # Fallback: conventional placeholder artifacts
-        return [
-            ArtifactRef(
-                uri=f"s3://artifacts/prefect/{external_job_id}/model",
-                kind="model",
-            ),
-            ArtifactRef(
-                uri=f"s3://artifacts/prefect/{external_job_id}/metrics.json",
-                kind="metrics",
-            ),
-        ]
+            return []
+        return []

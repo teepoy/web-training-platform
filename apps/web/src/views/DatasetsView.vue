@@ -9,9 +9,6 @@
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">Datasets</n-h2>
       <n-space>
-        <n-button @click="onCreatePreset" :loading="createPreset.isPending.value">
-          Create Default Preset
-        </n-button>
         <n-button type="primary" @click="showModal = true">
           + New Dataset
         </n-button>
@@ -52,15 +49,19 @@
           />
         </n-form-item>
 
-        <n-form-item label="Task Type" path="task_type">
+        <n-form-item label="Dataset Type" path="dataset_type">
           <n-select
-            v-model:value="formData.task_type"
-            :options="taskTypeOptions"
-            placeholder="Select task type"
+            v-model:value="formData.dataset_type"
+            :options="datasetTypeOptions"
+            placeholder="Select dataset type"
           />
         </n-form-item>
 
-        <n-form-item label="Label Space" path="label_space">
+        <n-form-item label="Task Type" path="task_type">
+          <n-input :value="formData.task_type ?? ''" disabled />
+        </n-form-item>
+
+        <n-form-item v-if="formData.dataset_type === 'image_classification'" label="Label Space" path="label_space">
           <n-dynamic-tags v-model:value="formData.label_space" />
         </n-form-item>
       </n-form>
@@ -83,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h, computed } from "vue";
+import { ref, h, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules, type DataTableRowKey } from "naive-ui";
@@ -109,9 +110,10 @@ const { data: datasets, isLoading } = useQuery({
 
 // ─── mutations ───────────────────────────────────────────────────────────────
 const createDataset = useMutation({
-  mutationFn: (body: { name: string; task_type: string; label_space: string[] }) =>
+  mutationFn: (body: { name: string; dataset_type: string; task_type: string; label_space: string[] }) =>
     api.createDataset({
       name: body.name,
+      dataset_type: body.dataset_type,
       task_spec: { task_type: body.task_type, label_space: body.label_space },
     }),
   onSuccess: () => {
@@ -122,22 +124,6 @@ const createDataset = useMutation({
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to create dataset");
-  },
-});
-
-const createPreset = useMutation({
-  mutationFn: () =>
-    api.createPreset({
-      name: "default-classification",
-      model_spec: { architecture: "resnet18", num_classes: 2 },
-      omegaconf_yaml: "trainer:\n  max_epochs: 3",
-      dataloader_ref: "custom.loader:build",
-    }),
-  onSuccess: () => {
-    message.success("Default preset created");
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to create preset");
   },
 });
 
@@ -158,16 +144,30 @@ const formRef = ref<FormInst | null>(null);
 
 const defaultFormData = () => ({
   name: "",
+  dataset_type: null as string | null,
   task_type: null as string | null,
   label_space: [] as string[],
 });
 
 const formData = ref(defaultFormData());
 
-const taskTypeOptions = [
-  { label: "Classification", value: "classification" },
-  { label: "Detection", value: "detection" },
+const datasetTypeOptions = [
+  { label: "Image Classification", value: "image_classification" },
+  { label: "Image VQA", value: "image_vqa" },
 ];
+
+function syncTaskType(datasetType: string | null) {
+  if (datasetType === "image_classification") {
+    formData.value.task_type = "classification";
+    return;
+  }
+  if (datasetType === "image_vqa") {
+    formData.value.task_type = "vqa";
+    formData.value.label_space = [];
+    return;
+  }
+  formData.value.task_type = null;
+}
 
 const formRules: FormRules = {
   name: [
@@ -178,10 +178,21 @@ const formRules: FormRules = {
       trigger: ["blur", "input"],
     },
   ],
-  task_type: [
+  dataset_type: [
     {
       required: true,
-      message: "Task type is required",
+      message: "Dataset type is required",
+      trigger: ["blur", "change"],
+    },
+  ],
+  label_space: [
+    {
+      validator: () => {
+        if (formData.value.dataset_type === "image_classification" && formData.value.label_space.length === 0) {
+          return new Error("Label space is required for image classification datasets");
+        }
+        return true;
+      },
       trigger: ["blur", "change"],
     },
   ],
@@ -196,15 +207,19 @@ function onSubmit() {
     if (errors) return;
     createDataset.mutate({
       name: formData.value.name,
+      dataset_type: formData.value.dataset_type!,
       task_type: formData.value.task_type!,
       label_space: formData.value.label_space,
     });
   });
 }
 
-function onCreatePreset() {
-  createPreset.mutate();
-}
+watch(
+  () => formData.value.dataset_type,
+  (datasetType) => {
+    syncTaskType(datasetType);
+  }
+);
 
 // ─── table ───────────────────────────────────────────────────────────────────
 const columns = [
@@ -225,6 +240,12 @@ const columns = [
       }
       return h("span", {}, nodes);
     },
+  },
+  {
+    title: "Dataset Type",
+    key: "dataset_type",
+    render: (row: Dataset) =>
+      h(NTag, { type: "default", size: "small" }, { default: () => row.dataset_type }),
   },
   {
     title: "Task Type",

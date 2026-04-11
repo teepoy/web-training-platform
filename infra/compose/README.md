@@ -13,3 +13,8 @@ This stack includes:
 - postgres
 - minio
 - api
+
+Notes:
+
+- Compose services run from the image's prebuilt `/app/.venv` and do not use `uv run` at container startup.
+- The embedding image installs `torch` during image build, not at container startup.

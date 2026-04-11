@@ -5,10 +5,12 @@ from enum import Enum
 
 class TaskType(str, Enum):
     CLASSIFICATION = "classification"
+    VQA = "vqa"
 
 
 class DatasetType(str, Enum):
     IMAGE_CLASSIFICATION = "image_classification"
+    IMAGE_VQA = "image_vqa"
 
 
 class ModelFramework(str, Enum):

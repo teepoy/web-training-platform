@@ -112,8 +112,23 @@ const datasetOptions = computed<SelectOption[]>(
   () => (datasets.value ?? []).map((d) => ({ label: d.name, value: d.id }))
 );
 
+const selectedDataset = computed(() =>
+  (datasets.value ?? []).find((d) => d.id === formModel.value.dataset_id)
+);
+
 const presetOptions = computed<SelectOption[]>(
-  () => (presets.value ?? []).map((p) => ({ label: p.name, value: p.id }))
+  () =>
+    (presets.value ?? [])
+      .filter((p) => {
+        if (p.trainable === false) return false;
+        const dataset = selectedDataset.value;
+        if (!dataset) return true;
+        const compatibility = p.compatibility;
+        if (!compatibility) return true;
+        return compatibility.dataset_types.includes(dataset.dataset_type)
+          && compatibility.task_types.includes(dataset.task_spec.task_type);
+      })
+      .map((p) => ({ label: p.name, value: p.id }))
 );
 
 // ---------------------------------------------------------------------------
@@ -179,10 +194,10 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     render: (row) => row.dataset_id.slice(0, 8) + "…",
   },
   {
-    title: "Preset ID",
+    title: "Preset",
     key: "preset_id",
     ellipsis: { tooltip: true },
-    render: (row) => row.preset_id.slice(0, 8) + "…",
+    render: (row) => row.preset_id,
   },
   {
     title: "Created At",

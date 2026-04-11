@@ -27,6 +27,7 @@ dependencies = [
   "grpcio>=1.68.0",
   "embedding-protos",
   "croniter>=2.0.0",
+  "pillow>=11.0.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +41,8 @@ embedding-protos = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+faulthandler_timeout = 60
+faulthandler_exit_on_timeout = true
 markers = [
     "no_auth_override: skip the global auth dependency override for this test",
 ]

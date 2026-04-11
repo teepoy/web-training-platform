@@ -288,3 +288,28 @@ def _ensure_preset_registry():
     if registry.count == 0:
         registry.load()
     yield
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _dispose_db_resources():
+    db_url = f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
+    os.environ["DATABASE_URL"] = db_url
+
+    from app.core.config import load_config
+    from app.main import container
+    import app.api.deps as _deps
+
+    load_config.cache_clear()
+    container.reset_singletons()
+    _deps._session_factory = None
+
+    yield
+
+    async def _dispose() -> None:
+        engine = container.db_engine()
+        await engine.dispose()
+
+    asyncio.run(_dispose())
+    load_config.cache_clear()
+    container.reset_singletons()
+    _deps._session_factory = None

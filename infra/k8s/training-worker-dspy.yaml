@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: training-worker
+  name: training-worker-dspy
   namespace: finetune
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: training-worker
+      app: training-worker-dspy
   template:
     metadata:
       labels:
-        app: training-worker
+        app: training-worker-dspy
     spec:
       containers:
-        - name: training-worker
+        - name: training-worker-dspy
           image: finetune-worker:latest
           imagePullPolicy: IfNotPresent
           command: ["uv", "run", "python", "-m", "app.flows.serve"]
@@ -27,3 +27,5 @@ spec:
               value: v2
             - name: WORK_POOL_NAME
               value: training-pool
+            - name: WORK_QUEUE_NAME
+              value: optimize-llm-cpu

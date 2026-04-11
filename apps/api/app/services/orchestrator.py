@@ -40,9 +40,28 @@ class TrainingOrchestrator:
 
         if terminal_event is not None:
             if terminal_status == "completed":
-                await self.repository.update_job_status(job_id, JobStatus.COMPLETED)
                 artifacts = await self.engine.collect_artifacts(external_id)
-                await self.artifact_service.persist_job_artifacts(job_id, artifacts)
+                if not artifacts:
+                    job = await self.repository.get_job(job_id)
+                    artifacts = list(job.artifact_refs) if job is not None else []
+                if not artifacts:
+                    await self.repository.update_job_status(job_id, JobStatus.FAILED)
+                    failure_event = TrainingEvent(
+                        job_id=job_id,
+                        message="training failed: execution completed without artifacts",
+                        payload={"status": "failed", "reason": "missing_artifacts"},
+                    )
+                    await self.repository.add_event(failure_event)
+                    self.notification_sink.notify_job_update(failure_event)
+                    terminal_event = failure_event
+                    terminal_status = "failed"
+                else:
+                    await self.repository.update_job_status(job_id, JobStatus.COMPLETED)
+                    job = await self.repository.get_job(job_id)
+                    existing_artifact_ids = {artifact.id for artifact in (job.artifact_refs if job is not None else [])}
+                    new_artifacts = [artifact for artifact in artifacts if artifact.id not in existing_artifact_ids]
+                    if new_artifacts:
+                        await self.artifact_service.persist_job_artifacts(job_id, new_artifacts)
             elif terminal_status == "failed":
                 await self.repository.update_job_status(job_id, JobStatus.FAILED)
             elif terminal_status == "cancelled":
