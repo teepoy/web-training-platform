@@ -21,6 +21,7 @@ from app.services.orchestrator import TrainingOrchestrator
 from app.services.prediction_service import PredictionService
 from app.services.prediction_orchestrator import PredictionOrchestrator
 from app.services.service_health import ServiceHealthService
+from app.services.task_tracker import TaskTrackerService
 from app.services.auth import AuthService
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 from app.db.ls_session import create_ls_engine, create_ls_session_factory
@@ -180,5 +181,11 @@ class Container(containers.DeclarativeContainer):
         config=config,
         prefect_client=prefect_client,
         embedding_client=embedding_service,
+    )
+    task_tracker = providers.Singleton(
+        TaskTrackerService,
+        repository=repository,
+        prefect_client=prefect_client,
+        config=config,
     )
     auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)

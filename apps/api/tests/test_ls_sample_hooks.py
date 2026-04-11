@@ -18,6 +18,14 @@ from fastapi.testclient import TestClient
 from app.main import app, container, _make_ls_image_url
 
 
+def _mock_config() -> MagicMock:
+    cfg = MagicMock()
+    cfg.db.auto_create = True
+    cfg.db.url = "sqlite+aiosqlite:///./finetune-test-ls-sample-hooks.db"
+    cfg.db.echo = False
+    return cfg
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -52,8 +60,7 @@ def _reset_container_overrides() -> None:
 
 def test_create_sample_with_ls_project() -> None:
     """Creating a sample with dataset linked to LS should set ls_task_id."""
-    mock_cfg = MagicMock()
-    mock_cfg.db.auto_create = True
+    mock_cfg = _mock_config()
 
     mock_ls = MagicMock()
     mock_ls.create_project = AsyncMock(return_value={"id": 7, "title": "sample-test-dataset"})
@@ -87,8 +94,7 @@ def test_create_sample_with_ls_project() -> None:
 
 def test_create_sample_no_ls_project_returns_500() -> None:
     """Sample creation on dataset without ls_project_id returns 500."""
-    mock_cfg = MagicMock()
-    mock_cfg.db.auto_create = True
+    mock_cfg = _mock_config()
 
     # create_project raises so dataset gets no ls_project_id
     mock_ls = MagicMock()
@@ -130,8 +136,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
         repo_mock = AsyncMock()
         repo_mock.get_dataset = AsyncMock(return_value=dataset_no_project)
 
-        mock_cfg2 = MagicMock()
-        mock_cfg2.db.auto_create = True
+        mock_cfg2 = _mock_config()
 
         with TestClient(app) as c:
             with patch.object(main_module.container, "config", return_value=mock_cfg2):

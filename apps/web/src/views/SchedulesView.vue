@@ -8,6 +8,7 @@
     <template v-else>
     <n-page-header title="Schedules">
       <template #extra>
+        <n-button style="margin-right: 8px" @click="router.push('/tasks')">Open Task Explorer</n-button>
         <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
       </template>
     </n-page-header>

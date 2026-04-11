@@ -9,6 +9,7 @@ export const router = createRouter({
     { path: '/login', component: () => import('./views/LoginView.vue') },
     { path: '/register', component: () => import('./views/RegisterView.vue') },
     { path: '/dashboard', component: () => import('./views/DashboardView.vue') },
+    { path: '/tasks', component: () => import('./views/TaskExplorerView.vue') },
     { path: '/datasets', component: () => import('./views/DatasetsView.vue') },
     { path: '/datasets/:id', component: () => import('./views/DatasetDetailView.vue') },
     { path: '/datasets/:id/classify', component: () => import('./views/ClassifyView.vue') },

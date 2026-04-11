@@ -10,6 +10,9 @@
         <template #subtitle>
           Run predictions, review and edit labels, save as annotation versions, and export.
         </template>
+        <template #extra>
+          <n-button @click="router.push('/tasks')">Open Task Explorer</n-button>
+        </template>
       </n-page-header>
 
       <!-- Step 1: Setup -->
@@ -200,6 +203,7 @@
 
 <script setup lang="ts">
 import { ref, computed, h, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, SelectOption } from "naive-ui";
 import { useMessage, NButton, NSpace, NTag, NSelect } from "naive-ui";
@@ -218,6 +222,7 @@ import { useOrgStore } from "../stores/org";
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const router = useRouter();
 
 // ---------------------------------------------------------------------------
 // Setup state

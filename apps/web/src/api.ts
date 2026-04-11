@@ -25,6 +25,8 @@ import type {
   Schedule,
   ScheduleRun,
   SyncResult,
+  TaskTrackerDetail,
+  TaskTrackerSummary,
   TrainingJob,
   TrainingPreset,
   UploadResponse,
@@ -531,6 +533,18 @@ export const api = {
   // ---- Dashboard ----
   getDashboard: () => req<DashboardResponse>('/dashboard'),
 
+  // ---- Task Tracker ----
+  listTrackedTasks: (kind?: 'training' | 'prediction') => {
+    const qs = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+    return req<TaskTrackerSummary[]>(`/task-tracker/tasks${qs}`);
+  },
+
+  getTrackedTask: (id: string) => req<TaskTrackerDetail>(`/task-tracker/tasks/${id}`),
+
+  cancelTrackedTask: (id: string) => req<{ cancelled: boolean }>(`/task-tracker/tasks/${id}/cancel`, {
+    method: 'POST',
+  }),
+
   // ---- Predictions ----
   runPredictions: (request: RunPredictionRequest) =>
     req<PredictionJob>('/predictions/run', {
@@ -700,4 +714,17 @@ export function buildJobEventSource(jobId: string): EventSource {
     /* ignore */
   }
   return new EventSource(`${API_BASE}/training-jobs/${jobId}/events${tokenParam}`);
+}
+
+export function buildTrackedTaskEventSource(taskId: string): EventSource {
+  let tokenParam = "";
+  try {
+    const authStore = useAuthStore();
+    if (authStore.token) {
+      tokenParam = `?token=${encodeURIComponent(authStore.token)}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return new EventSource(`${API_BASE}/task-tracker/tasks/${taskId}/stream${tokenParam}`);
 }

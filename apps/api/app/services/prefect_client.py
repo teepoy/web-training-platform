@@ -281,6 +281,49 @@ class PrefectClient:
             return result[0]["id"]
         return None
 
+    async def get_deployment(self, deployment_id: str) -> dict:
+        """Fetch a single deployment by ID."""
+        return await self._request(
+            "GET",
+            f"/deployments/{deployment_id}",
+            resource_label="deployment",
+        )
+
+    async def list_work_queues(self, work_pool_name: str | None = None) -> list[dict]:
+        """Return work queues, optionally filtered by work pool name."""
+        body: dict[str, Any] = {"limit": 200}
+        if work_pool_name is not None:
+            body["work_pools"] = {"name": {"any_": [work_pool_name]}}
+        result = await self._request(
+            "POST",
+            "/work_queues/filter",
+            json=body,
+            resource_label="work queues",
+        )
+        return result if isinstance(result, list) else []
+
+    async def get_work_queue_by_name(
+        self,
+        name: str,
+        work_pool_name: str | None = None,
+    ) -> dict | None:
+        """Return the first matching work queue by name."""
+        body: dict[str, Any] = {
+            "work_queues": {"name": {"any_": [name]}},
+            "limit": 1,
+        }
+        if work_pool_name is not None:
+            body["work_pools"] = {"name": {"any_": [work_pool_name]}}
+        result = await self._request(
+            "POST",
+            "/work_queues/filter",
+            json=body,
+            resource_label="work queue",
+        )
+        if isinstance(result, list) and result:
+            return result[0]
+        return None
+
     async def create_flow_run_from_deployment(
         self,
         deployment_id: str,
@@ -429,6 +472,8 @@ class PrefectClient:
     async def filter_flow_runs(
         self,
         work_pool_name: str | None = None,
+        work_queue_name: str | None = None,
+        deployment_id: str | None = None,
         state_types: list[str] | None = None,
         limit: int = 50,
     ) -> list[dict]:
@@ -452,6 +497,10 @@ class PrefectClient:
         flow_runs_filter: dict[str, Any] = {}
         if work_pool_name is not None:
             flow_runs_filter["work_pool_name"] = {"any_": [work_pool_name]}
+        if work_queue_name is not None:
+            flow_runs_filter["work_queue_name"] = {"any_": [work_queue_name]}
+        if deployment_id is not None:
+            flow_runs_filter["deployment_id"] = {"any_": [deployment_id]}
         if state_types is not None:
             flow_runs_filter["state"] = {"type": {"any_": state_types}}
 
