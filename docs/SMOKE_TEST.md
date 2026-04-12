@@ -36,6 +36,8 @@ Services should be running:
 - [ ] Login with registered credentials
 - [ ] Verify redirect to datasets page
 - [ ] Verify user avatar appears in header
+- [ ] Refresh the page on a protected route and verify the session stays logged in
+- [ ] Wait less than 60 minutes, refresh again, and verify the session is still valid
 
 ### 1.3 Logout
 - [ ] Click avatar dropdown → Logout
@@ -93,7 +95,9 @@ Services should be running:
 - [ ] Click on a job to view details
 - [ ] Verify SSE connection status shows "open" (not "error")
 - [ ] Verify events stream as job progresses
-- [ ] Verify training chart updates
+- [ ] Verify the Training Progress card shows real metrics content for the job
+- [ ] If the runtime emits only aggregate metrics, verify summary stats render from the `metrics` artifact instead of showing an empty placeholder
+- [ ] If the runtime emits epoch/loss events, verify the line chart updates
 
 ### 5.3 Job Completion
 - [ ] Wait for job to complete or fail
@@ -138,16 +142,21 @@ Services should be running:
 - [ ] Create training job with preset `dspy-vqa-v1`
 - [ ] Wait for completion and verify model artifact `optimized_program.json` exists
 - [ ] Call `POST /api/v1/predictions/single` with `target: "vqa"` and `prompt`
-- [ ] Verify prediction is stored in Label Studio as `textarea` result
+- [ ] Verify the response returns a platform prediction row with `id`
 
 ## 9. ImageNet Prediction Review
 
-- [ ] Run `make seed-imagenet-dev` against a healthy dev stack
+- [ ] Run `make seed-imagenet-poc` against a healthy dev stack for a fast 64-sample proof of concept, or `make seed-imagenet-mock` for the offline synthetic dataset
+- [ ] Open http://localhost:5173/dashboard and verify `prediction-worker` is healthy before running predictions
 - [ ] Open http://localhost:5173/prediction-review
-- [ ] Select dataset `ImageNet-1K` and the seeded compatible model
+- [ ] Select dataset `ImageNet-1K Real` for POC/full runs or `ImageNet-1K Mock` for offline runs, then choose the seeded compatible model
 - [ ] Click `Run Predictions`
 - [ ] Verify the job is accepted instead of returning `API 400: Prediction deployment is not registered`
 - [ ] Verify predictions complete and become reviewable
+- [ ] Verify the Progress column reflects real sample counts for completed jobs and does not fall back to `0/0` when the job has `sample_ids`
+- [ ] Click `Load` for a completed job and verify review rows populate even if the job summary does not embed a `predictions` array
+- [ ] Click `Sync Selection to Label Studio` and verify a sync tag is shown in the page
+- [ ] In Label Studio, filter predictions by that sync tag inside the same dataset project
 
 Hybrid automation note:
 - The current Playwright suite in `apps/web/e2e/` mocks API responses with `page.route(...)`, so it does not validate live seeded data or Prefect deployment availability.
@@ -156,11 +165,32 @@ Hybrid automation note:
 
 ## 9.1 Batch Dev Smoke
 
-- [ ] Run `make seed-imagenet-dev` against a healthy dev stack
+- [ ] Run `make seed-imagenet-mock` against a healthy dev stack
 - [ ] Run `make smoke-dev-batch`
 - [ ] Verify the script finds the seeded ImageNet dataset and model
 - [ ] Verify batch prediction completes successfully
-- [ ] Verify feature extraction completes successfully
+- [ ] Verify the bounded prediction smoke completes successfully on the seeded dataset
+
+## 9.2 Training Dev Smoke
+
+- [ ] Run `make smoke-dev-training`
+- [ ] Verify the script creates a tiny labeled dataset and starts a real training job
+- [ ] Verify the training job reaches `completed`
+- [ ] Verify returned training artifacts use shared `s3://` URIs
+- [ ] Verify those artifacts exist in the shared MinIO bucket
+
+## 9.3 Prediction Dev Smoke
+
+- [ ] Run `make smoke-dev-prediction`
+- [ ] Verify the script creates a tiny labeled dataset and trains a temporary model
+- [ ] Verify the real prediction job reaches `completed`
+- [ ] Verify prediction summary reports processed and successful samples
+- [ ] Verify completed prediction jobs keep a non-empty summary instead of being overwritten with `{}` when Prefect terminal state data is null
+
+## 9.4 Runtime Smoke Bundle
+
+- [ ] Run `make smoke-dev-runtime`
+- [ ] Verify both training and prediction smoke checks pass in sequence
 
 ## 10. Dashboard
 

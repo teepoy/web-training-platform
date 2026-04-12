@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.main import container
 from tests.conftest import PRESET_ID
 
 
@@ -43,6 +44,38 @@ def test_get_dataset_detail_not_found() -> None:
         r = c.get("/api/v1/datasets/nonexistent-id-12345")
         assert r.status_code == 404
         assert r.json()["detail"] == "Dataset not found"
+
+
+def test_delete_dataset_removes_dataset_and_models() -> None:
+    with TestClient(app) as c:
+        created = c.post(
+            "/api/v1/datasets",
+            json={"name": "delete-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["x", "y"]}},
+        )
+        assert created.status_code == 200
+        dataset_id = created.json()["id"]
+
+        sample = c.post(f"/api/v1/datasets/{dataset_id}/samples", json={"image_uris": ["memory://delete-ds/img-1.png"]})
+        assert sample.status_code == 200
+
+        job = c.post(
+            "/api/v1/training-jobs",
+            json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "deleter"},
+        )
+        assert job.status_code == 200
+        job_id = job.json()["id"]
+
+        deleted = c.delete(f"/api/v1/datasets/{dataset_id}")
+        assert deleted.status_code == 204
+
+        get_dataset = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert get_dataset.status_code == 404
+
+        models = c.get(f"/api/v1/models?dataset_id={dataset_id}")
+        assert models.status_code == 200
+        assert models.json() == []
+
+        container.label_studio_client().delete_project.assert_awaited_once()
 
 
 def test_update_label_space() -> None:

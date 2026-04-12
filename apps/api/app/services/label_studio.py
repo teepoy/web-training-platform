@@ -199,6 +199,13 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
+    async def delete_project(self, project_id: int) -> None:
+        """Delete a Label Studio project by ID."""
+        try:
+            await asyncio.to_thread(self._client.projects.delete, id=project_id)
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
     # ------------------------------------------------------------------
     # Tasks
     # ------------------------------------------------------------------

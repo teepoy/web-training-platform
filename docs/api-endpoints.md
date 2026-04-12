@@ -16,7 +16,7 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 ## Authentication and org context
 
 - `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/login` (returns a JWT access token; default expiry is 60 minutes via backend config)
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/tokens`
 - `GET /api/v1/auth/tokens`
@@ -37,7 +37,11 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 
 - `POST /api/v1/predictions/run` (supports `target` and optional `prompt`)
 - `POST /api/v1/predictions/single` (supports `target` and optional `prompt`)
-- `GET /api/v1/samples/{sample_id}/predictions`
+- `GET /api/v1/samples/{sample_id}/predictions` (platform prediction rows, optional `model_version` filter)
+- `GET /api/v1/prediction-jobs/{job_id}/predictions`
+- `POST /api/v1/prediction-collections` — Create a named platform prediction collection
+- `GET /api/v1/prediction-collections?dataset_id=` — List prediction collections for a dataset
+- `POST /api/v1/prediction-collections/{collection_id}/sync-label-studio` — Materialize a collection into the dataset's LS project with a sync tag
 
 ## Schedules and dashboard
 
@@ -65,11 +69,11 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 
 ## Prediction review and annotation versioning
 
-- `POST /api/v1/prediction-reviews` — Create a review action (requires `dataset_id`, `model_id`, optional `model_version`)
+- `POST /api/v1/prediction-reviews` — Create a review action (requires `dataset_id`, `model_id`, optional `model_version`, optional `collection_id`, optional `sync_tag`)
 - `GET /api/v1/prediction-reviews?dataset_id=` — List review actions for a dataset
 - `GET /api/v1/prediction-reviews/{action_id}` — Get a single review action
 - `DELETE /api/v1/prediction-reviews/{action_id}` — Delete a review action (cascades to annotation versions)
-- `POST /api/v1/prediction-reviews/{action_id}/annotations` — Save reviewed predictions as annotations
+- `POST /api/v1/prediction-reviews/{action_id}/annotations` — Save reviewed predictions as annotations using platform `prediction_id` provenance
 - `GET /api/v1/prediction-reviews/{action_id}/annotation-versions` — List annotation versions for a review action
 - `GET /api/v1/export-formats` — List available export format IDs
 - `GET /api/v1/prediction-reviews/{action_id}/export?format_id=` — Preview annotation version export as JSON

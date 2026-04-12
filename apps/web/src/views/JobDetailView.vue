@@ -40,7 +40,7 @@
     <template v-else-if="job">
       <!-- Training chart -->
       <n-card title="Training Progress" :bordered="true">
-        <TrainingChart :events="events" />
+        <TrainingChart :events="events" :metrics-artifact="metricsArtifact" />
       </n-card>
 
       <!-- Event log -->
@@ -93,12 +93,15 @@ import { api, API_BASE } from "../api";
 import type { JobStatus, TrainingEvent } from "../types";
 import { useJobEvents } from "../composables/useJobEvents";
 import TrainingChart from "../components/TrainingChart.vue";
+import { getStoredToken } from "../stores/auth";
+import { useOrgStore } from "../stores/org";
 
 const route = useRoute();
 const router = useRouter();
 const dialog = useDialog();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 // ---------------------------------------------------------------------------
 // Route param — reactive so useJobEvents can watch it
@@ -119,6 +122,39 @@ const {
   queryKey: computed(() => ["jobs", id.value]),
   queryFn: () => api.getJob(id.value),
   refetchInterval: 5000,
+});
+
+const metricsArtifactRef = computed(() =>
+  job.value?.artifact_refs.find((artifact) => artifact.kind === "metrics") ?? null,
+);
+
+const { data: metricsArtifact } = useQuery({
+  queryKey: computed(() => ["job-metrics-artifact", id.value, metricsArtifactRef.value?.id ?? null]),
+  queryFn: async () => {
+    const artifact = metricsArtifactRef.value;
+    if (!artifact) {
+      return null;
+    }
+
+    const token = getStoredToken();
+    const headers: Record<string, string> = {
+      ...(orgStore.currentOrgId ? { "X-Organization-ID": orgStore.currentOrgId } : {}),
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/artifacts/${encodeURIComponent(artifact.id)}/download`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Metrics artifact fetch failed: ${response.status}`);
+    }
+
+    return (await response.json()) as Record<string, unknown>;
+  },
+  enabled: computed(() => !!metricsArtifactRef.value?.id && !!orgStore.currentOrgId),
 });
 
 // ---------------------------------------------------------------------------

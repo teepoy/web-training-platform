@@ -17,6 +17,13 @@ class ServiceCheckResult(BaseModel):
 
 
 class ServiceHealthService:
+    _WORKER_DEPLOYMENTS = {
+        "training-worker-gpu": "train-job-torch-deployment",
+        "training-worker-dspy": "train-job-dspy-deployment",
+        "prediction-worker": "predict-job-batch-deployment",
+        "embedding-worker": "embed-job-batch-deployment",
+    }
+
     def __init__(self, config: Any, prefect_client: Any, embedding_client: Any) -> None:
         self._config = config
         self._prefect_client = prefect_client
@@ -32,6 +39,7 @@ class ServiceHealthService:
             await self._check_training_worker("training-worker-gpu"),
             await self._check_training_worker("training-worker-dspy"),
             await self._check_training_worker("prediction-worker"),
+            await self._check_training_worker("embedding-worker"),
             await self._check_inference_worker(),
         ]
 
@@ -91,7 +99,33 @@ class ServiceHealthService:
             return ServiceCheckResult(name="embedding", kind="worker", status="down", detail=str(exc), endpoint=endpoint)
 
     async def _check_training_worker(self, worker_name: str) -> ServiceCheckResult:
-        return ServiceCheckResult(name=worker_name, kind="worker", status="healthy", detail="worker expected to be attached to Prefect queue")
+        endpoint = str(self._config.prefect.api_url)
+        deployment_name = self._WORKER_DEPLOYMENTS.get(worker_name)
+        if not deployment_name:
+            return ServiceCheckResult(name=worker_name, kind="worker", status="down", detail="no deployment mapped for worker", endpoint=endpoint)
+        start = time.perf_counter()
+        try:
+            deployment_id = await self._prefect_client.resolve_deployment_id(deployment_name)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if deployment_id is None:
+                return ServiceCheckResult(
+                    name=worker_name,
+                    kind="worker",
+                    status="down",
+                    detail=f"Prefect deployment is not registered: {deployment_name}",
+                    latency_ms=latency_ms,
+                    endpoint=endpoint,
+                )
+            return ServiceCheckResult(
+                name=worker_name,
+                kind="worker",
+                status="healthy",
+                detail=f"Prefect deployment registered: {deployment_name}",
+                latency_ms=latency_ms,
+                endpoint=endpoint,
+            )
+        except Exception as exc:
+            return ServiceCheckResult(name=worker_name, kind="worker", status="down", detail=str(exc), endpoint=endpoint)
 
     async def _check_inference_worker(self) -> ServiceCheckResult:
         endpoint = str(getattr(self._config.inference, "base_url", "")).rstrip("/")

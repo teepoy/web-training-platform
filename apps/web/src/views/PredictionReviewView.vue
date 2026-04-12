@@ -68,8 +68,8 @@
           </n-space>
           <n-text v-if="activePredictionJob" depth="3">
             Active job: {{ activePredictionJob.id }} ({{ activePredictionJob.status }})
-            <template v-if="activePredictionJob.summary.total_samples">
-              · {{ Number(activePredictionJob.summary.processed || 0) }}/{{ Number(activePredictionJob.summary.total_samples || 0) }} processed
+            <template v-if="formatPredictionJobProgress(activePredictionJob)">
+              · {{ formatPredictionJobProgress(activePredictionJob) }} processed
             </template>
           </n-text>
         </n-space>
@@ -103,6 +103,13 @@
           <n-space justify="end">
             <n-button @click="resetEdits">Reset All Edits</n-button>
             <n-button
+              :disabled="predictions.length === 0"
+              :loading="syncCollectionMutation.isPending.value"
+              @click="onSyncCollectionToLs"
+            >
+              Sync Selection to Label Studio
+            </n-button>
+            <n-button
               type="primary"
               :disabled="predictions.length === 0"
               :loading="saveAnnotationsMutation.isPending.value"
@@ -111,6 +118,9 @@
               Save as Annotation Version ({{ predictions.length }} items)
             </n-button>
           </n-space>
+          <n-text v-if="syncedCollectionTag" depth="3">
+            Current LS sync tag: {{ syncedCollectionTag }}
+          </n-text>
         </n-space>
       </n-card>
 
@@ -211,6 +221,7 @@ import { api } from "../api";
 import type {
   Model,
   Dataset,
+  PredictionCollection,
   PredictionResult,
   PredictionJob,
   ReviewAction,
@@ -289,17 +300,18 @@ const predictionTarget = computed(() => {
 
 interface ReviewRow {
   key: string;
+  prediction_id: string | null;
   sample_id: string;
-  ls_task_id: number | null;
   predicted_label: string;
   final_label: string;
   confidence: number | null;
-  ls_prediction_id: number | null;
 }
 
 const predictions = ref<ReviewRow[]>([]);
 const activePredictionJob = ref<PredictionJob | null>(null);
 const pollingPredictionJob = ref(false);
+const syncedCollection = ref<PredictionCollection | null>(null);
+const syncedCollectionTag = ref<string | null>(null);
 
 const { data: predictionJobsData } = useQuery({
   queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId]),
@@ -311,6 +323,68 @@ const { data: predictionJobsData } = useQuery({
 const predictionJobs = computed(() =>
   (predictionJobsData.value ?? []).filter((job) => job.target === predictionTarget.value).slice(0, 10)
 );
+
+function predictionResultToReviewRow(p: PredictionResult): ReviewRow {
+  return {
+    key: p.id ?? p.sample_id,
+    prediction_id: p.id,
+    sample_id: p.sample_id,
+    predicted_label: p.predicted_label,
+    final_label: p.predicted_label,
+    confidence: p.confidence,
+  };
+}
+
+async function loadReviewRowsFromJob(job: PredictionJob): Promise<ReviewRow[]> {
+  const summaryPredictions = ((job.summary.predictions as PredictionResult[] | undefined) ?? [])
+    .filter((p) => !p.error)
+    .map(predictionResultToReviewRow);
+
+  if (summaryPredictions.length > 0) {
+    return summaryPredictions;
+  }
+  const predictionsForJob = await api.listPredictionJobPredictions(job.id);
+  return predictionsForJob.filter((item) => !item.error).map(predictionResultToReviewRow);
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function getPredictionJobProgress(job: PredictionJob): { processed: number; total: number } | null {
+  const status = job.status.toLowerCase();
+  const total = asNumber(job.summary.total_samples)
+    ?? asNumber(job.summary.total)
+    ?? asNumber(job.sample_ids?.length)
+    ?? null;
+  const processed = asNumber(job.summary.processed)
+    ?? asNumber(job.summary.successful)
+    ?? asNumber(job.summary.completed)
+    ?? (status === "completed" ? total : 0);
+
+  if (total === null || processed === null || total <= 0) {
+    return null;
+  }
+
+  return {
+    processed,
+    total,
+  };
+}
+
+function formatPredictionJobProgress(job: PredictionJob): string {
+  const progress = getPredictionJobProgress(job);
+  return progress ? `${progress.processed}/${progress.total}` : "-";
+}
 
 const editedCount = computed(
   () => predictions.value.filter((r) => r.final_label !== r.predicted_label).length
@@ -383,6 +457,8 @@ function onDatasetChange() {
   selectedModelId.value = null;
   predictions.value = [];
   activePredictionJob.value = null;
+  syncedCollection.value = null;
+  syncedCollectionTag.value = null;
 }
 
 async function pollPredictionJob(jobId: string) {
@@ -393,17 +469,7 @@ async function pollPredictionJob(jobId: string) {
       activePredictionJob.value = job;
       const status = job.status.toLowerCase();
       if (status === "completed") {
-        const rows = ((job.summary.predictions as PredictionResult[] | undefined) ?? [])
-          .filter((p) => !p.error)
-          .map((p) => ({
-            key: p.sample_id,
-            sample_id: p.sample_id,
-            ls_task_id: p.ls_task_id,
-            predicted_label: p.predicted_label,
-            final_label: p.predicted_label,
-            confidence: p.confidence,
-            ls_prediction_id: p.ls_prediction_id,
-          }));
+        const rows = await loadReviewRowsFromJob(job);
         predictions.value = rows;
         message.success(`${rows.length} predictions ready for review`);
         return;
@@ -493,7 +559,7 @@ const predictionJobColumns = computed<DataTableColumns<PredictionJob>>(() => [
     title: "Progress",
     key: "progress",
     width: 140,
-    render: (row) => `${Number(row.summary.processed || 0)}/${Number(row.summary.total_samples || 0)}`,
+    render: (row) => formatPredictionJobProgress(row),
   },
   {
     title: "Actions",
@@ -514,6 +580,36 @@ const predictionJobColumns = computed<DataTableColumns<PredictionJob>>(() => [
 
 const currentReviewActionId = ref<string | null>(null);
 
+const syncCollectionMutation = useMutation({
+  mutationFn: async () => {
+    if (!selectedDatasetId.value || !selectedModelId.value || predictions.value.length === 0) {
+      throw new Error("Predictions are required before syncing to Label Studio");
+    }
+    const collection = await api.createPredictionCollection({
+      name: `review-${new Date().toISOString()}`,
+      dataset_id: selectedDatasetId.value,
+      model_id: selectedModelId.value,
+      prediction_ids: predictions.value.map((row) => row.prediction_id).filter((id): id is string => !!id),
+      model_version: modelVersionTag.value || null,
+      target: predictionTarget.value,
+      source_job_id: activePredictionJob.value?.id ?? null,
+    });
+    const syncResult = await api.syncPredictionCollection(collection.id);
+    syncedCollection.value = collection;
+    syncedCollectionTag.value = syncResult.sync_tag;
+    return syncResult;
+  },
+  onSuccess: (data) => {
+    message.success(`Synced ${data.synced_count} predictions to Label Studio`);
+    if (data.failed_count > 0) {
+      message.warning(`${data.failed_count} predictions were skipped during sync`);
+    }
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to sync predictions to Label Studio");
+  },
+});
+
 const saveAnnotationsMutation = useMutation({
   mutationFn: async () => {
     if (!selectedDatasetId.value || !selectedModelId.value) {
@@ -524,6 +620,8 @@ const saveAnnotationsMutation = useMutation({
       selectedDatasetId.value,
       selectedModelId.value,
       modelVersionTag.value || null,
+      syncedCollection.value?.id ?? null,
+      syncedCollectionTag.value,
     );
     currentReviewActionId.value = action.id;
 
@@ -533,7 +631,7 @@ const saveAnnotationsMutation = useMutation({
       predicted_label: r.predicted_label,
       final_label: r.final_label,
       confidence: r.confidence,
-      source_prediction_id: r.ls_prediction_id,
+      prediction_id: r.prediction_id,
     }));
     return api.saveReviewAnnotations(action.id, items);
   },
@@ -552,6 +650,10 @@ const saveAnnotationsMutation = useMutation({
 
 function onSaveAnnotations() {
   saveAnnotationsMutation.mutate();
+}
+
+function onSyncCollectionToLs() {
+  syncCollectionMutation.mutate();
 }
 
 // ---------------------------------------------------------------------------

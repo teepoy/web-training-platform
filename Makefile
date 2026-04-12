@@ -96,25 +96,47 @@ ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
 # Seed data
 # ──────────────────────────────────────────────
 
-.PHONY: seed
-seed: ## Seed Oxford Flowers 102 dataset (requires running compose stack)
-	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run scripts/seed_oxford_flowers.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
-
-.PHONY: seed-imagenet-dev
-seed-imagenet-dev: ## Seed ImageNet-1K with synthetic samples + fake model (no extra deps)
+.PHONY: seed-imagenet-mock
+seed-imagenet-mock: ## Seed ImageNet-1K mock data with 1000 offline synthetic samples
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
 	uv run python scripts/seed_imagenet_dev.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
-.PHONY: seed-imagenet-real
-seed-imagenet-real: ## Seed ImageNet-1K with real HF images + pretrained ResNet-50
+.PHONY: imagenet-mock
+imagenet-mock: seed-imagenet-mock ## Alias for seed-imagenet-mock
+
+.PHONY: seed-imagenet-poc
+seed-imagenet-poc: ## Seed ImageNet-1K proof-of-concept with 64 real dev-bucket samples
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_imagenet_real.py --api-url $(API_URL) --compose-file $(COMPOSE) --max-samples 64 $(ARGS)
+
+.PHONY: imagenet-poc
+imagenet-poc: seed-imagenet-poc ## Alias for seed-imagenet-poc
+
+.PHONY: seed-imagenet-full
+seed-imagenet-full: ## Seed ImageNet-1K full real dataset from the real bucket/source
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
 	uv run python scripts/seed_imagenet_real.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: imagenet-full
+imagenet-full: seed-imagenet-full ## Alias for seed-imagenet-full
 
 .PHONY: smoke-dev-batch
 smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
 	uv run python scripts/smoke_dev_batch.py $(ARGS)
+
+.PHONY: smoke-dev-training
+smoke-dev-training: ## Run training dev smoke test against local stack
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/smoke_dev_training.py $(ARGS)
+
+.PHONY: smoke-dev-prediction
+smoke-dev-prediction: ## Run prediction dev smoke test against local stack
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/smoke_dev_prediction.py $(ARGS)
+
+.PHONY: smoke-dev-runtime
+smoke-dev-runtime: smoke-dev-training smoke-dev-prediction ## Run core runtime smoke tests against local stack
 
 
 # ──────────────────────────────────────────────
@@ -123,6 +145,10 @@ smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 .PHONY: build
 build:
 	docker compose -f $(COMPOSE) build
+
+.PHONY: export-bundle
+export-bundle: ## Export source snapshot and docker images to a tar bundle
+	bash scripts/export_bundle.sh $(ARGS)
 
 .PHONY: up
 up: ## Start Compose stack (Postgres + MinIO + API)

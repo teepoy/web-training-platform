@@ -45,7 +45,56 @@
           <n-collapse-item v-for="stage in activeDetail?.derived.stages || []" :key="stage.key" :name="stage.key" :title="stage.label">
             <n-space vertical>
               <n-text depth="3">{{ stage.summary }}</n-text>
-              <n-steps vertical size="small" :current="currentStep(stage.nodes)" status="process">
+              <div v-if="stage.key === 'execution_flow'">
+                <n-empty v-if="waterfallRows(stage.nodes).length === 0" description="No execution timing available" />
+                <div v-else class="waterfall-shell">
+                  <svg :viewBox="`0 0 ${waterfallWidth} ${waterfallHeight(stage.nodes)}`" width="100%" :height="waterfallHeight(stage.nodes)">
+                    <g>
+                      <line
+                        v-for="tick in waterfallTicks(stage.nodes)"
+                        :key="tick.x"
+                        :x1="tick.x"
+                        :x2="tick.x"
+                        y1="28"
+                        :y2="waterfallHeight(stage.nodes) - 12"
+                        stroke="rgba(255,255,255,0.12)"
+                        stroke-width="1"
+                      />
+                      <text
+                        v-for="tick in waterfallTicks(stage.nodes)"
+                        :key="tick.label + tick.x"
+                        :x="tick.x + 4"
+                        y="18"
+                        fill="rgba(255,255,255,0.72)"
+                        font-size="11"
+                      >{{ tick.label }}</text>
+                    </g>
+                    <g v-for="row in waterfallRows(stage.nodes)" :key="row.key">
+                      <text
+                        x="12"
+                        :y="row.y + 16"
+                        fill="rgba(255,255,255,0.92)"
+                        font-size="12"
+                      >{{ row.label }}</text>
+                      <rect
+                        :x="row.barX"
+                        :y="row.y"
+                        :width="row.barWidth"
+                        height="22"
+                        rx="4"
+                        :fill="row.color"
+                      />
+                      <text
+                        :x="row.barX + 8"
+                        :y="row.y + 15"
+                        fill="rgba(255,255,255,0.95)"
+                        font-size="11"
+                      >{{ row.caption }}</text>
+                    </g>
+                  </svg>
+                </div>
+              </div>
+              <n-steps v-else vertical size="small" :current="currentStep(stage.nodes)" status="process">
                 <n-step v-for="node in stage.nodes" :key="node.key" :title="node.label" :description="node.detail" />
               </n-steps>
             </n-space>
@@ -98,7 +147,7 @@ import { computed, ref, watch } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
 import { api } from '../api'
-import type { TaskTrackerSummary } from '../types'
+import type { TaskTrackerNode, TaskTrackerSummary } from '../types'
 import { useTaskStream } from '../composables/useTaskHandoff'
 import { useOrgStore } from '../stores/org'
 
@@ -198,4 +247,100 @@ function checkType(status?: string) {
   if (status === 'passed') return 'success'
   return 'default'
 }
+
+const waterfallWidth = 920
+const waterfallLabelWidth = 180
+const waterfallRightPadding = 24
+const waterfallTopOffset = 36
+const waterfallRowHeight = 34
+const waterfallBarHeight = 22
+
+function waterfallRows(nodes: TaskTrackerNode[]) {
+  const rows = nodes
+    .map((node) => {
+      const start = node.started_at || node.expected_start_at
+      const end = node.ended_at || node.started_at || node.expected_start_at
+      if (!start || !end) return null
+      const startMs = Date.parse(start)
+      const endMs = Date.parse(end)
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) return null
+      return {
+        key: node.key,
+        label: node.label,
+        status: node.status,
+        startMs,
+        endMs: Math.max(endMs, startMs + 1000),
+      }
+    })
+    .filter((row): row is { key: string; label: string; status: string; startMs: number; endMs: number } => row !== null)
+
+  if (rows.length === 0) return []
+
+  const minMs = Math.min(...rows.map((row) => row.startMs))
+  const maxMs = Math.max(...rows.map((row) => row.endMs))
+  const domain = Math.max(1000, maxMs - minMs)
+  const plotWidth = waterfallWidth - waterfallLabelWidth - waterfallRightPadding
+
+  return rows.map((row, index) => {
+    const barX = waterfallLabelWidth + ((row.startMs - minMs) / domain) * plotWidth
+    const barWidth = Math.max(10, ((row.endMs - row.startMs) / domain) * plotWidth)
+    return {
+      ...row,
+      y: waterfallTopOffset + index * waterfallRowHeight,
+      barX,
+      barWidth,
+      color: waterfallColor(row.status),
+      caption: formatDuration(row.endMs - row.startMs),
+    }
+  })
+}
+
+function waterfallTicks(nodes: TaskTrackerNode[]) {
+  const rows = waterfallRows(nodes)
+  if (rows.length === 0) return []
+  const minMs = Math.min(...rows.map((row) => row.startMs))
+  const maxMs = Math.max(...rows.map((row) => row.endMs))
+  const plotWidth = waterfallWidth - waterfallLabelWidth - waterfallRightPadding
+  const tickCount = Math.min(8, Math.max(3, rows.length + 1))
+  const step = Math.max(1, tickCount - 1)
+  const domain = Math.max(1000, maxMs - minMs)
+
+  return Array.from({ length: tickCount }, (_, index) => {
+    const ratio = index / step
+    const ts = minMs + domain * ratio
+    return {
+      x: waterfallLabelWidth + plotWidth * ratio,
+      label: new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }),
+    }
+  })
+}
+
+function waterfallHeight(nodes: TaskTrackerNode[]) {
+  return Math.max(120, waterfallTopOffset + waterfallRows(nodes).length * waterfallRowHeight + 18)
+}
+
+function waterfallColor(status: string) {
+  if (status === 'completed') return '#22c55e'
+  if (status === 'failed') return '#ef4444'
+  if (status === 'active') return '#3b82f6'
+  return '#a78bfa'
+}
+
+function formatDuration(durationMs: number) {
+  const seconds = Math.max(1, Math.round(durationMs / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remSeconds = seconds % 60
+  return remSeconds === 0 ? `${minutes}m` : `${minutes}m ${remSeconds}s`
+}
 </script>
+
+<style scoped>
+.waterfall-shell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #1a1d24;
+  overflow-x: auto;
+  padding: 8px;
+}
+</style>

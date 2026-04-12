@@ -18,7 +18,7 @@ The API exposes:
 
 ### `annotation-version-full-context-v1`
 
-Full-context JSON with review action metadata, dataset info, touched samples, and annotations with version details plus Label Studio context.
+Full-context JSON with review action metadata, dataset info, touched samples, and annotations with version details plus platform prediction context.
 
 ```json
 {
@@ -29,8 +29,8 @@ Full-context JSON with review action metadata, dataset info, touched samples, an
   "annotations": [
     {
       "annotation": { "id", "sample_id", "label", "created_by", "created_at" },
-      "version": { "id", "review_action_id", "annotation_id", "source_prediction_id", "predicted_label", "final_label", "confidence", "created_at" },
-      "ls_context": { "prediction_id", "predicted_label" }
+      "version": { "id", "review_action_id", "annotation_id", "prediction_id", "predicted_label", "final_label", "confidence", "created_at" },
+      "prediction_context": { "prediction_id", "predicted_label" }
     }
   ]
 }

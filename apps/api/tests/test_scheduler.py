@@ -67,6 +67,12 @@ def svc() -> SchedulerService:
     return SchedulerService(prefect_api_url="http://prefect-test/api")
 
 
+@pytest.fixture()
+def repo_backed_svc() -> tuple[SchedulerService, AsyncMock]:
+    repository = AsyncMock()
+    return SchedulerService(prefect_api_url="http://prefect-test/api", repository=repository), repository
+
+
 # ---------------------------------------------------------------------------
 # list_schedules
 # ---------------------------------------------------------------------------
@@ -364,3 +370,97 @@ async def test_trigger_run_defaults_empty_parameters(svc: SchedulerService) -> N
 
     body = mock_req.call_args[1]["json"]
     assert body["parameters"] == {}
+
+
+@pytest.mark.asyncio
+async def test_create_schedule_persists_locally_when_prefect_is_unavailable(
+    repo_backed_svc: tuple[SchedulerService, AsyncMock],
+) -> None:
+    svc, repository = repo_backed_svc
+    created_row = MagicMock(
+        id="local-schedule-1",
+        name="test-schedule",
+        flow_name="drain-dataset",
+        cron="*/5 * * * *",
+        parameters={"k": "v"},
+        description="local only",
+        is_schedule_active=True,
+        prefect_deployment_id=None,
+        org_id="org-1",
+        created_by="user-1",
+        created_at=None,
+        updated_at=None,
+    )
+    repository.create_schedule.return_value = created_row
+
+    with patch.object(svc, "_request", new_callable=AsyncMock) as request:
+        request.side_effect = HTTPException(status_code=503, detail="Prefect server unavailable")
+        result = await svc.create_schedule(
+            org_id="org-1",
+            created_by="user-1",
+            name="test-schedule",
+            flow_name="drain-dataset",
+            cron="*/5 * * * *",
+            parameters={"k": "v"},
+            description="local only",
+        )
+
+    repository.create_schedule.assert_awaited_once()
+    assert result["id"] == "local-schedule-1"
+    assert result["prefect_deployment_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_schedule_updates_local_record_even_when_prefect_patch_fails(
+    repo_backed_svc: tuple[SchedulerService, AsyncMock],
+) -> None:
+    svc, repository = repo_backed_svc
+    updated_row = MagicMock(
+        id="local-schedule-1",
+        name="test-schedule",
+        flow_name="drain-dataset",
+        cron="0 * * * *",
+        parameters={"k": "v"},
+        description="updated",
+        is_schedule_active=False,
+        prefect_deployment_id="prefect-dep-1",
+        org_id="org-1",
+        created_by="user-1",
+        created_at=None,
+        updated_at=None,
+    )
+    repository.update_schedule.return_value = updated_row
+
+    with patch.object(svc, "_request", new_callable=AsyncMock) as request:
+        request.side_effect = HTTPException(status_code=503, detail="Prefect server unavailable")
+        result = await svc.update_schedule(
+            "local-schedule-1",
+            {
+                "paused": True,
+                "description": "updated",
+                "schedules": [{"schedule": {"cron": "0 * * * *"}, "active": False}],
+            },
+        )
+
+    repository.update_schedule.assert_awaited_once_with(
+        "local-schedule-1",
+        is_schedule_active=False,
+        description="updated",
+        cron="0 * * * *",
+    )
+    assert result["id"] == "local-schedule-1"
+    assert result["is_schedule_active"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_schedule_removes_local_record_before_best_effort_prefect_delete(
+    repo_backed_svc: tuple[SchedulerService, AsyncMock],
+) -> None:
+    svc, repository = repo_backed_svc
+    repository.get_schedule.return_value = MagicMock(prefect_deployment_id="prefect-dep-1")
+
+    with patch.object(svc, "_request", new_callable=AsyncMock) as request:
+        request.side_effect = HTTPException(status_code=503, detail="Prefect server unavailable")
+        await svc.delete_schedule("local-schedule-1")
+
+    repository.delete_schedule.assert_awaited_once_with("local-schedule-1")

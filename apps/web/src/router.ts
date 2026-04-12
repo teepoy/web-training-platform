@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { getStoredToken } from './stores/auth'
 
 const AUTH_ROUTES = ['/login', '/register']
 
@@ -25,7 +26,7 @@ export const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('auth_token')
+  const token = getStoredToken()
   const isAuthRoute = AUTH_ROUTES.includes(to.path)
 
   if (isAuthRoute && token) {

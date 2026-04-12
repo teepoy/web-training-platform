@@ -218,6 +218,17 @@ const importDataset = useMutation({
   },
 });
 
+const deleteDataset = useMutation({
+  mutationFn: (datasetId: string) => api.deleteDataset(datasetId),
+  onSuccess: () => {
+    message.success("Dataset deleted");
+    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to delete dataset");
+  },
+});
+
 // ─── modal / form ────────────────────────────────────────────────────────────
 const showModal = ref(false);
 const showImportModal = ref(false);
@@ -375,6 +386,13 @@ function onImportDataset() {
   });
 }
 
+function onDeleteDataset(row: Dataset) {
+  if (!window.confirm(`Delete dataset '${row.name}'? This removes its local jobs, samples, models, and Label Studio project.`)) {
+    return;
+  }
+  deleteDataset.mutate(row.id);
+}
+
 // ─── table ───────────────────────────────────────────────────────────────────
 const columns = [
   {
@@ -443,6 +461,21 @@ const columns = [
               },
             },
             { default: () => (row.is_public ? "Make Private" : "Make Public") }
+          )
+        );
+        nodes.push(
+          h(
+            NButton,
+            {
+              size: "small",
+              type: "error",
+              style: "margin-left: 6px",
+              onClick: (e: MouseEvent) => {
+                e.stopPropagation();
+                onDeleteDataset(row);
+              },
+            },
+            { default: () => "Delete" }
           )
         );
       }

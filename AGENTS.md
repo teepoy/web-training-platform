@@ -34,9 +34,10 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | New migration | `make db-revision MSG="add column"` | autogenerate |
 | Reset app data | `make reset-app-data` | Drops and recreates app tables in the configured DB |
 | SDK CLI | `make ftctl ARGS="jobs ls"` | Wraps `ftctl` |
-| Seed ImageNet dev | `make seed-imagenet-dev` | Health-checks `API_URL` first; uses bundled `resnet50-cls-v1` preset |
-| Seed ImageNet real | `make seed-imagenet-real` | Health-checks `API_URL` first; uses bundled `resnet50-cls-v1` preset |
-| Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-dev`; verifies seeded batch prediction and feature extraction |
+| Seed ImageNet mock | `make seed-imagenet-mock` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Mock` with 1000 offline synthetic samples |
+| Seed ImageNet POC | `make seed-imagenet-poc` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
+| Seed ImageNet full | `make seed-imagenet-full` | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path |
+| Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability |
 | Compose up/down | `make up` / `make down` | Postgres + MinIO + API |
 
 Raw single-test (when Make is unavailable):
@@ -44,7 +45,7 @@ Raw single-test (when Make is unavailable):
 cd apps/api && uv run --extra dev pytest tests/test_datasets.py::test_create_dataset -v
 ```
 
-`make seed`, `make seed-imagenet-dev`, and `make seed-imagenet-real` now check `$(API_URL)/api/v1/health` before running. Override with `API_URL=http://localhost:9000` when needed.
+`make seed-imagenet-mock`, `make seed-imagenet-poc`, and `make seed-imagenet-full` now check `$(API_URL)/health` before running. Override with `API_URL=http://localhost:9000` when needed.
 
 ## CODE STYLE — PYTHON
 
@@ -115,10 +116,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 ### Label Studio (LS)
 - Dataset = LS project. Every dataset has a mandatory `ls_project_id` (NOT NULL).
 - `ls_project_url` is computed at response time from config — never stored.
-- Don't add platform-side prediction CRUD — predictions live in Label Studio only.
+- Platform predictions live in the API DB. Label Studio is only a temporary manual-annotation surface for synced prediction collections.
 - Don't use `cfg.label_studio.enabled` — it was removed. LS is always required; check `cfg.label_studio.url`.
 - Don't re-add the "link to LS" manual flow — it was intentionally removed.
 - VQA predictions are stored as Label Studio `textarea` results, not classification choices.
+- Prediction collection sync to LS is one-way and manual. Do not treat LS prediction IDs as durable platform provenance.
 
 ### Code Quality
 - Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.
@@ -146,6 +148,13 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - After completing any non-trivial task, either:
   1) update the relevant docs in `docs/` and/or `AGENTS.md`, or
   2) explicitly ask the user whether they want docs updated in this change.
+
+## TEST RULE
+- Always run `make test` after modify code files and resolve any error.
+
+## LOCAL ENV RULE
+- Keep the local dev environment newest after code or config changes.
+- If changes require rebuilding assets, restarting dev servers, or recreating compose services to take effect, do it proactively without waiting for the user to ask.
 
 ## SMOKE TEST REMINDER
 

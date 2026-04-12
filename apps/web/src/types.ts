@@ -321,7 +321,7 @@ export interface UserWithOrgs extends User {
 
 export interface LoginResponse {
   access_token: string;
-  token_type: string;
+  user: User;
 }
 
 export interface PersonalAccessToken {
@@ -413,11 +413,15 @@ export interface Model {
 // ---------------------------------------------------------------------------
 
 export interface PredictionResult {
+  id: string | null;
   sample_id: string;
-  ls_task_id: number | null;
   predicted_label: string;
   confidence: number | null;
-  ls_prediction_id: number | null;
+  model_id: string | null;
+  target: string | null;
+  model_version: string | null;
+  job_id: string | null;
+  created_at: string | null;
   error: string | null;
 }
 
@@ -482,6 +486,8 @@ export interface ReviewAction {
   dataset_id: string;
   model_id: string;
   model_version: string | null;
+  collection_id: string | null;
+  sync_tag: string | null;
   created_by: string;
   created_at: string;
 }
@@ -490,7 +496,7 @@ export interface AnnotationVersion {
   id: string;
   review_action_id: string;
   annotation_id: string;
-  source_prediction_id: number | null;
+  prediction_id: string | null;
   predicted_label: string;
   final_label: string;
   confidence: number | null;
@@ -502,7 +508,39 @@ export interface SaveReviewAnnotationItem {
   predicted_label: string;
   final_label: string;
   confidence: number | null;
-  source_prediction_id: number | null;
+  prediction_id: string | null;
+}
+
+export interface PredictionCollection {
+  id: string;
+  name: string;
+  dataset_id: string;
+  model_id: string;
+  model_version: string | null;
+  target: string;
+  source_job_id: string | null;
+  sync_tag: string | null;
+  created_by: string;
+  created_at: string;
+  prediction_ids: string[];
+}
+
+export interface CreatePredictionCollectionRequest {
+  name: string;
+  dataset_id: string;
+  model_id: string;
+  prediction_ids: string[];
+  model_version?: string | null;
+  target?: string;
+  source_job_id?: string | null;
+}
+
+export interface SyncPredictionCollectionResponse {
+  collection_id: string;
+  sync_tag: string;
+  synced_count: number;
+  failed_count: number;
+  errors: string[];
 }
 
 export interface SaveReviewAnnotationsResponse {
@@ -539,6 +577,9 @@ export interface TaskTrackerNode {
   label: string;
   status: string;
   detail: string;
+  expected_start_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
 }
 
 export interface TaskTrackerStage {

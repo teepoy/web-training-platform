@@ -67,8 +67,8 @@ def build_full_context_export(
         entries.append({
             "annotation": ann.model_dump(mode="json"),
             "version": v.model_dump(mode="json"),
-            "ls_context": {
-                "prediction_id": v.source_prediction_id,
+            "prediction_context": {
+                "prediction_id": v.prediction_id,
                 "predicted_label": v.predicted_label,
             },
         })

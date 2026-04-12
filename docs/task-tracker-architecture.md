@@ -47,6 +47,7 @@ For prediction jobs, `target=embedding` is shown as an embedding batch execution
 Prefect is the runtime truth source for:
 
 - flow run state
+- task run execution order and state
 - queue name
 - work pool name
 - deployment metadata
@@ -61,13 +62,16 @@ Platform persistence remains the source for:
 
 ## Work Pool And Queue Semantics
 
-The current topology uses a single work pool and a few specialized queues.
+The current topology uses dedicated work pools for runtime isolation and queue-level priority control.
 
-- work pool: `training-pool`
-- queues:
-  - `train-gpu`
-  - `optimize-llm-cpu`
-  - `predict-batch`
+- work pools and queues:
+  - `training-pool`
+    - `train-gpu`
+    - `optimize-llm-cpu`
+  - `predict-pool`
+    - `predict-batch`
+  - `embed-pool`
+    - `embed-batch`
 
 Queue priority is displayed as read-only metadata from Prefect work queue objects.
 
@@ -88,7 +92,17 @@ Every tracked task is rendered through three standard stages:
 2. `execution_flow`
 3. `validation_output`
 
-Training and prediction tasks use different node labels inside the same stage skeleton.
+`execution_flow` is derived dynamically from Prefect task runs when a flow run is available.
+
+This lets the inspect view render a waterfall-style runtime sequence from the actual Prefect run instead of backend hardcoded node definitions.
+
+Each execution node now includes optional timing fields:
+
+- `expected_start_at`
+- `started_at`
+- `ended_at`
+
+If Prefect task runs are unavailable, the API falls back to a minimal single-node execution stage so the UI can still render a stable detail view.
 
 ## Checks
 
@@ -104,6 +118,13 @@ The web app exposes:
 - `TaskInsightModal` for per-task detail
 
 Existing training and prediction pages link into the explorer instead of duplicating tracker logic.
+
+The inspect modal uses Prefect deep links derived from a browser-facing Prefect URL.
+
+- prefer `prefect.ui_url` when configured
+- otherwise normalize `prefect.api_url` by stripping `.../api` or `.../api/v1`
+
+This avoids leaking internal service names such as `prefect-server` into browser links.
 
 ## Handoff
 

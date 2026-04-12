@@ -45,7 +45,6 @@ WORK_QUEUE_NAME     — Work queue name for V2 mode (required for specialized wo
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 import os
 import subprocess
@@ -63,10 +62,26 @@ from app.services.prefect_client import PrefectClient
 _GPU_QUEUE = "train-gpu"
 _DSPY_QUEUE = "optimize-llm-cpu"
 _PREDICT_QUEUE = "predict-batch"
-_DEPLOYMENT_ROOT = str(Path(__file__).resolve().parents[2])
+_EMBED_QUEUE = "embed-batch"
+_DEPLOYMENT_ROOT = "/app/apps/api"
 _FLOW_ENTRYPOINT = "app/flows/train_job.py:train_job"
 _DRAIN_ENTRYPOINT = "app/flows/drain_dataset.py:drain_dataset"
 _PREDICT_ENTRYPOINT = "app/flows/predict_job.py:predict_job"
+
+_QUEUE_POOLS = {
+    _GPU_QUEUE: "training-pool",
+    _DSPY_QUEUE: "training-pool",
+    _PREDICT_QUEUE: "predict-pool",
+    _EMBED_QUEUE: "embed-pool",
+}
+
+
+def _deployment_entrypoint(deployment_name: str) -> str:
+    if deployment_name == "drain-dataset-deployment":
+        return _DRAIN_ENTRYPOINT
+    if deployment_name in {"predict-job-deployment", "predict-job-batch-deployment", "embed-job-batch-deployment"}:
+        return _PREDICT_ENTRYPOINT
+    return _FLOW_ENTRYPOINT
 
 
 async def _ensure_work_pool(pool_name: str) -> None:
@@ -83,7 +98,8 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
     deployment: Any | None = None
     deployment_name = ""
 
-    await _ensure_work_pool(pool_name)
+    effective_pool_name = _QUEUE_POOLS.get(queue_name, pool_name)
+    await _ensure_work_pool(effective_pool_name)
     cfg = load_config()
     client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
 
@@ -92,7 +108,7 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
         deployment = await train_job.ato_deployment(
             name=deployment_name,
             description="Torch runtime deployment for train-job flow (managed by delegated worker)",
-            work_pool_name=pool_name,
+            work_pool_name=effective_pool_name,
             work_queue_name=queue_name,
         )
     elif queue_name == _DSPY_QUEUE:
@@ -100,7 +116,7 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
         deployment = await train_job.ato_deployment(
             name=deployment_name,
             description="DSPy runtime deployment for train-job flow (managed by delegated worker)",
-            work_pool_name=pool_name,
+            work_pool_name=effective_pool_name,
             work_queue_name=queue_name,
         )
     elif queue_name == _PREDICT_QUEUE:
@@ -108,22 +124,30 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
         deployment = await predict_job.ato_deployment(
             name=deployment_name,
             description="Prediction runtime deployment for predict-job flow (managed by delegated worker)",
-            work_pool_name=pool_name,
+            work_pool_name=effective_pool_name,
+            work_queue_name=queue_name,
+        )
+    elif queue_name == _EMBED_QUEUE:
+        deployment_name = "embed-job-batch-deployment"
+        deployment = await predict_job.ato_deployment(
+            name=deployment_name,
+            description="Embedding runtime deployment for predict-job flow (managed by delegated worker)",
+            work_pool_name=effective_pool_name,
             work_queue_name=queue_name,
         )
 
     if deployment is None:
         raise RuntimeError(
-            f"Unsupported WORK_QUEUE_NAME '{queue_name}'. Expected one of: {_GPU_QUEUE}, {_DSPY_QUEUE}, {_PREDICT_QUEUE}."
+            f"Unsupported WORK_QUEUE_NAME '{queue_name}'. Expected one of: {_GPU_QUEUE}, {_DSPY_QUEUE}, {_PREDICT_QUEUE}, {_EMBED_QUEUE}."
         )
 
-    await deployment.aapply(work_pool_name=pool_name)
+    await deployment.aapply(work_pool_name=effective_pool_name)
     deployment_id = await client.resolve_deployment_id(deployment_name)
     if deployment_id is not None:
         await client._request(
             "PATCH",
             f"/deployments/{deployment_id}",
-            json={"entrypoint": _FLOW_ENTRYPOINT, "path": _DEPLOYMENT_ROOT},
+            json={"entrypoint": _deployment_entrypoint(deployment_name), "path": _DEPLOYMENT_ROOT},
             expect_json=False,
             resource_label="deployment",
         )
@@ -170,12 +194,12 @@ async def main() -> None:
     cfg = load_config()
     client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
     for deployment_name, entrypoint in (
-        ("drain-dataset-deployment", _DRAIN_ENTRYPOINT),
-        ("train-job-deployment", _FLOW_ENTRYPOINT),
-        ("predict-job-deployment", _PREDICT_ENTRYPOINT),
-        ("predict-job-batch-deployment", _PREDICT_ENTRYPOINT),
-        ("train-job-torch-deployment", _FLOW_ENTRYPOINT),
-        ("train-job-dspy-deployment", _FLOW_ENTRYPOINT),
+        ("drain-dataset-deployment", _deployment_entrypoint("drain-dataset-deployment")),
+        ("train-job-deployment", _deployment_entrypoint("train-job-deployment")),
+        ("predict-job-deployment", _deployment_entrypoint("predict-job-deployment")),
+        ("predict-job-batch-deployment", _deployment_entrypoint("predict-job-batch-deployment")),
+        ("train-job-torch-deployment", _deployment_entrypoint("train-job-torch-deployment")),
+        ("train-job-dspy-deployment", _deployment_entrypoint("train-job-dspy-deployment")),
     ):
         deployment_id = await client.resolve_deployment_id(deployment_name)
         if deployment_id is not None:

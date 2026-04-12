@@ -45,6 +45,7 @@ oauth:
 
 prefect:
   api_url: "http://localhost:4200/api"
+  ui_url: "http://localhost:4200"
   work_pool_name: "training-pool"
   work_pool_type: "process"
   flow_name: "train-job"

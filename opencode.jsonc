@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "prefect": {
+      "type": "local",
+      "command": ["uvx", "--from", "prefect-mcp", "prefect-mcp-server"],
+      "enabled": true,
+      "timeout": 10000,
+      "environment": {
+        "PREFECT_API_URL": "{env:PREFECT_API_URL:http://localhost:4200/api}",
+        // "PREFECT_API_AUTH_STRING": "{env:PREFECT_API_AUTH_STRING}"
+      },
+    },
+  },
+}

@@ -9,7 +9,7 @@
 #     "torchvision",
 # ]
 # ///
-"""Seed the platform with default ImageNet-1K assets (REAL mode).
+"""Seed the platform with default ImageNet-1K real-data assets.
 
 Requires ``datasets``, ``Pillow``, ``torch``, ``torchvision``, and
 ``HF_TOKEN`` env var with an accepted HuggingFace license for
@@ -17,10 +17,11 @@ Requires ``datasets``, ``Pillow``, ``torch``, ``torchvision``, and
 
 Usage::
 
-    HF_TOKEN=hf_... make seed-imagenet-real ARGS="--max-samples 200"
+    HF_TOKEN=hf_... make seed-imagenet-poc
+    HF_TOKEN=hf_... make seed-imagenet-full ARGS="--max-samples 200"
 
 Creates:
-  1. Dataset "ImageNet-1K" with full 1000-class label space.
+  1. Dataset "ImageNet-1K Real" with full 1000-class label space.
   2. Uses bundled preset ``resnet50-cls-v1``.
   3. Real images streamed from HuggingFace ``ILSVRC/imagenet-1k``
      (validation split).
@@ -29,8 +30,8 @@ Creates:
 
 Fully idempotent — re-running skips assets that already exist.
 
-For lightweight dev/testing without extra deps, use
-``scripts/seed_imagenet_dev.py`` (``make seed-imagenet-dev``).
+For lightweight offline/testing without extra deps, use
+``scripts/seed_imagenet_dev.py`` (``make seed-imagenet-mock``).
 """
 
 from __future__ import annotations
@@ -55,9 +56,12 @@ ORG_NAME = "Default Org"
 ORG_SLUG = "default-org"
 COMPOSE_FILE = "infra/compose/docker-compose.yaml"
 
-DATASET_NAME = "ImageNet-1K"
+DATASET_NAME = "ImageNet-1K Real"
+LEGACY_DATASET_NAME = "ImageNet-1K"
 PRESET_ID = "resnet50-cls-v1"
 PRESET_NAME = "ResNet50 Classification (v1)"
+REAL_MODEL_NAME = "imagenet-real-resnet50"
+SEED_MODE = "real"
 
 # Full ImageNet-1K class list (ILSVRC 2012, 1000 classes)
 # Source: https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt
@@ -299,6 +303,16 @@ def _find_by_name(items: list[dict], name: str) -> dict | None:
     return None
 
 
+def _delete_model(client: httpx.Client, model_id: str) -> None:
+    r = _api(client, "delete", f"/api/v1/models/{model_id}")
+    if r.status_code != 204:
+        raise RuntimeError(f"failed to delete existing model {model_id}: {r.status_code} {r.text}")
+
+
+def _find_conflicting_legacy_dataset(items: list[dict]) -> dict | None:
+    return _find_by_name(items, LEGACY_DATASET_NAME)
+
+
 def _image_to_data_uri(img) -> str:
     """Convert a PIL Image to a JPEG data URI (used in --real mode)."""
     buf = io.BytesIO()
@@ -463,7 +477,7 @@ def _upload_real_resnet50(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Seed default ImageNet-1K dataset, preset, and model (real mode)",
+        description="Seed ImageNet-1K real dataset, preset, and model",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -485,7 +499,7 @@ Examples:
     max_samples = args.max_samples
     total_steps = 7 if not args.no_samples else 6
     print(f"\n{'=' * 50}")
-    print(f"  ImageNet-1K Seed Script (real mode)")
+    print(f"  ImageNet-1K Real Seed Script")
     print(f"{'=' * 50}\n")
 
     api_url = args.api_url.rstrip("/")
@@ -561,16 +575,23 @@ Examples:
     # ------------------------------------------------------------------
     # Step 5: Create or find dataset
     # ------------------------------------------------------------------
-    print(f"\n[5/{total_steps}] Creating/finding ImageNet-1K dataset ...")
+        print(f"\n[5/{total_steps}] Creating/finding {DATASET_NAME} dataset ...")
 
     r = _api(client, "get", "/api/v1/datasets")
     existing_datasets = r.json() if r.status_code == 200 else []
+    legacy_dataset = _find_conflicting_legacy_dataset(existing_datasets)
+    if legacy_dataset is not None:
+        print(
+            f"  ERROR: legacy dataset '{LEGACY_DATASET_NAME}' still exists ({legacy_dataset['id']}). "
+            f"Remove or rename it before seeding {DATASET_NAME}."
+        )
+        return 1
     dataset = _find_by_name(existing_datasets, DATASET_NAME)
     dataset_id: str
 
     if dataset:
         dataset_id = dataset["id"]
-        print(f"  Dataset already exists: {dataset_id}")
+        print(f"  Dataset already exists for real seed: {dataset_id}")
         current_labels = dataset.get("task_spec", {}).get("label_space", [])
         if len(current_labels) != len(IMAGENET_LABELS):
             print(f"  Updating label space ({len(current_labels)} -> {len(IMAGENET_LABELS)} labels) ...")
@@ -584,6 +605,7 @@ Examples:
     else:
         r = _api(client, "post", "/api/v1/datasets", json={
             "name": DATASET_NAME,
+            "dataset_type": "image_classification",
             "task_spec": {
                 "task_type": "classification",
                 "label_space": IMAGENET_LABELS,
@@ -647,24 +669,22 @@ Examples:
     else:
         print("\n[model] Creating training job + model artifact ...")
 
-        # Check if a model already exists for this dataset
+        # Replace any previous real-seed models for this dataset so reruns converge
         r = _api(client, "get", f"/api/v1/models?dataset_id={dataset_id}")
-        if r.status_code == 200 and r.json():
-            existing_model = r.json()[0]
-            model_id = existing_model["id"]
-            print(f"  Model already exists: {model_id} (name: {existing_model.get('name', 'n/a')})")
-        else:
-            # Need a training job first (model upload requires job_id)
-            job_id, fake_model_id = _create_model_via_training_job(
-                client, dataset_id, preset_id, args.job_timeout,
-            )
+        existing_models = r.json() if r.status_code == 200 else []
+        for existing_model in existing_models:
+            print(f"  Deleting existing real model: {existing_model['id']} ({existing_model.get('name', 'n/a')})")
+            _delete_model(client, existing_model["id"])
+        job_id, fake_model_id = _create_model_via_training_job(
+            client, dataset_id, preset_id, args.job_timeout,
+        )
 
-            if job_id:
-                # Upload real pretrained ResNet-50 weights (replaces the fake model)
-                real_model_id = _upload_real_resnet50(client, job_id)
-                model_id = real_model_id or fake_model_id
-            else:
-                model_id = fake_model_id
+        if job_id:
+            # Upload real pretrained ResNet-50 weights (replaces the fake model)
+            real_model_id = _upload_real_resnet50(client, job_id)
+            model_id = real_model_id or fake_model_id
+        else:
+            model_id = fake_model_id
 
     # ------------------------------------------------------------------
     # Summary

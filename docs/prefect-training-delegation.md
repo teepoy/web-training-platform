@@ -149,6 +149,7 @@ Bootstrap behavior:
 - GPU worker registers `train-job-torch-deployment`
 - DSPy worker registers `train-job-dspy-deployment`
 - API remains the owner of `drain-dataset-deployment` and `train-job-deployment`
+- deployment metadata must use the container-stable API workspace path (`/app/apps/api` in compose images), not a host path, so Prefect workers can load flows inside containers and spawned flow-run processes resolve `app/flows/*.py` correctly
 
 ## Verification Checklist
 

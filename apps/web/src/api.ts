@@ -7,6 +7,7 @@ import type {
   BulkAnnotationResponse,
   DashboardResponse,
   Dataset,
+  CreatePredictionCollectionRequest,
   ExportFormat,
   LoginResponse,
   Model,
@@ -14,6 +15,7 @@ import type {
   Organization,
   PaginatedResponse,
   PredictionEvent,
+  PredictionCollection,
   PredictionJob,
   PredictionResult,
   PredictSingleRequest,
@@ -27,6 +29,7 @@ import type {
   Schedule,
   ScheduleRun,
   SyncResult,
+  SyncPredictionCollectionResponse,
   TaskTrackerDetail,
   TaskTrackerSummary,
   TrainingJob,
@@ -39,7 +42,7 @@ import type {
   VersionExportResponse,
 } from "./types";
 import type { ApiError as ApiErrorType } from "./types";
-import { useAuthStore } from "./stores/auth";
+import { getStoredToken, useAuthStore } from "./stores/auth";
 
 export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 
@@ -71,10 +74,13 @@ async function req<T>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let authHeader: Record<string, string> = {};
+  let hasAuthToken = false;
   try {
     const authStore = useAuthStore();
-    if (authStore.token) {
-      authHeader["Authorization"] = `Bearer ${authStore.token}`;
+    const token = authStore.token ?? getStoredToken();
+    if (token) {
+      authHeader["Authorization"] = `Bearer ${token}`;
+      hasAuthToken = true;
     }
   } catch {
   }
@@ -100,7 +106,7 @@ async function req<T>(
     });
 
     if (!r.ok) {
-      if (r.status === 401) {
+      if (r.status === 401 && hasAuthToken) {
         try {
           const authStore = useAuthStore();
           authStore.logout();
@@ -144,8 +150,9 @@ export async function uploadSampleImage(sampleId: string, file: File): Promise<U
   const uploadHeaders: Record<string, string> = {};
   try {
     const authStore = useAuthStore();
-    if (authStore.token) {
-      uploadHeaders["Authorization"] = `Bearer ${authStore.token}`;
+    const token = authStore.token ?? getStoredToken();
+    if (token) {
+      uploadHeaders["Authorization"] = `Bearer ${token}`;
     }
   } catch {
     /* ignore */
@@ -361,6 +368,8 @@ export const api = {
       }),
     }),
 
+  deleteDataset: (id: string) => req<void>(`/datasets/${id}`, { method: "DELETE" }),
+
   getDataset: (id: string) => req<Dataset>(`/datasets/${id}`),
 
   updateLabelSpace: (datasetId: string, labelSpace: string[]) =>
@@ -564,6 +573,8 @@ export const api = {
 
   getPredictionJob: (id: string) => req<PredictionJob>(`/prediction-jobs/${id}`),
 
+  listPredictionJobPredictions: (id: string) => req<PredictionResult[]>(`/prediction-jobs/${id}/predictions`),
+
   listPredictionJobEvents: (id: string) => req<PredictionEvent[]>(`/prediction-jobs/${id}/events`),
 
   cancelPredictionJob: (id: string) => req<{ cancelled: boolean }>(`/prediction-jobs/${id}/cancel`, {
@@ -576,17 +587,42 @@ export const api = {
       body: JSON.stringify(request),
     }),
 
-  listSamplePredictions: (sampleId: string) =>
-    req<Record<string, unknown>[]>(`/samples/${sampleId}/predictions`),
+  listSamplePredictions: (sampleId: string, modelVersion?: string | null) => {
+    const qs = modelVersion ? `?model_version=${encodeURIComponent(modelVersion)}` : '';
+    return req<PredictionResult[]>(`/samples/${sampleId}/predictions${qs}`);
+  },
+
+  createPredictionCollection: (request: CreatePredictionCollectionRequest) =>
+    req<PredictionCollection>('/prediction-collections', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }),
+
+  listPredictionCollections: (datasetId: string) =>
+    req<PredictionCollection[]>(`/prediction-collections?dataset_id=${encodeURIComponent(datasetId)}`),
+
+  syncPredictionCollection: (collectionId: string, syncTag?: string | null) =>
+    req<SyncPredictionCollectionResponse>(`/prediction-collections/${collectionId}/sync-label-studio`, {
+      method: 'POST',
+      body: JSON.stringify(syncTag ? { sync_tag: syncTag } : {}),
+    }),
 
   // ---- Prediction Reviews ----
-  createReviewAction: (datasetId: string, modelId: string, modelVersion?: string | null) =>
+  createReviewAction: (
+    datasetId: string,
+    modelId: string,
+    modelVersion?: string | null,
+    collectionId?: string | null,
+    syncTag?: string | null,
+  ) =>
     req<ReviewAction>('/prediction-reviews', {
       method: 'POST',
       body: JSON.stringify({
         dataset_id: datasetId,
         model_id: modelId,
         ...(modelVersion ? { model_version: modelVersion } : {}),
+        ...(collectionId ? { collection_id: collectionId } : {}),
+        ...(syncTag ? { sync_tag: syncTag } : {}),
       }),
     }),
 
@@ -715,8 +751,9 @@ export function buildJobEventSource(jobId: string): EventSource {
   let tokenParam = "";
   try {
     const authStore = useAuthStore();
-    if (authStore.token) {
-      tokenParam = `?token=${encodeURIComponent(authStore.token)}`;
+    const token = authStore.token ?? getStoredToken();
+    if (token) {
+      tokenParam = `?token=${encodeURIComponent(token)}`;
     }
   } catch {
     /* ignore */
@@ -728,8 +765,9 @@ export function buildTrackedTaskEventSource(taskId: string): EventSource {
   let tokenParam = "";
   try {
     const authStore = useAuthStore();
-    if (authStore.token) {
-      tokenParam = `?token=${encodeURIComponent(authStore.token)}`;
+    const token = authStore.token ?? getStoredToken();
+    if (token) {
+      tokenParam = `?token=${encodeURIComponent(token)}`;
     }
   } catch {
     /* ignore */

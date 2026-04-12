@@ -450,11 +450,15 @@ class RunPredictionRequest(BaseModel):
 
 class PredictionResultResponse(BaseModel):
     """Result of a single sample prediction."""
+    id: str | None = None
     sample_id: str
-    ls_task_id: int | None = None
     predicted_label: str
     confidence: float | None = None
-    ls_prediction_id: int | None = None
+    model_id: str | None = None
+    target: str | None = None
+    model_version: str | None = None
+    job_id: str | None = None
+    created_at: datetime | None = None
     error: str | None = None
 
 
@@ -500,6 +504,9 @@ class TaskTrackerNode(BaseModel):
     label: str
     status: str
     detail: str = ""
+    expected_start_at: datetime | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
 
 class TaskTrackerStage(BaseModel):
@@ -621,6 +628,8 @@ class CreateReviewActionRequest(BaseModel):
     """Request to start a prediction review session."""
     dataset_id: str = Field(description="ID of the dataset")
     model_id: str = Field(description="ID of the model used for predictions")
+    collection_id: str | None = Field(default=None, description="Optional prediction collection used for manual sync")
+    sync_tag: str | None = Field(default=None, description="Optional LS sync tag for the temporary manual annotation batch")
     model_version: str | None = Field(
         default=None,
         description="Version tag used when running predictions",
@@ -633,6 +642,8 @@ class ReviewActionResponse(BaseModel):
     dataset_id: str
     model_id: str
     model_version: str | None = None
+    collection_id: str | None = None
+    sync_tag: str | None = None
     created_by: str
     created_at: datetime
 
@@ -643,7 +654,7 @@ class SaveReviewAnnotationItem(BaseModel):
     predicted_label: str
     final_label: str
     confidence: float | None = None
-    source_prediction_id: int | None = None
+    prediction_id: str | None = None
 
 
 class SaveReviewAnnotationsRequest(BaseModel):
@@ -656,11 +667,47 @@ class AnnotationVersionResponse(BaseModel):
     id: str
     review_action_id: str
     annotation_id: str
-    source_prediction_id: int | None = None
+    prediction_id: str | None = None
     predicted_label: str
     final_label: str
     confidence: float | None = None
     created_at: datetime
+
+
+class PredictionCollectionRequest(BaseModel):
+    name: str
+    dataset_id: str
+    model_id: str
+    prediction_ids: list[str] = Field(default_factory=list)
+    model_version: str | None = None
+    target: str = "image_classification"
+    source_job_id: str | None = None
+
+
+class PredictionCollectionResponse(BaseModel):
+    id: str
+    name: str
+    dataset_id: str
+    model_id: str
+    model_version: str | None = None
+    target: str
+    source_job_id: str | None = None
+    sync_tag: str | None = None
+    created_by: str
+    created_at: datetime
+    prediction_ids: list[str] = Field(default_factory=list)
+
+
+class SyncPredictionCollectionRequest(BaseModel):
+    sync_tag: str | None = None
+
+
+class SyncPredictionCollectionResponse(BaseModel):
+    collection_id: str
+    sync_tag: str
+    synced_count: int
+    failed_count: int
+    errors: list[str] = Field(default_factory=list)
 
 
 class SaveReviewAnnotationsResponse(BaseModel):

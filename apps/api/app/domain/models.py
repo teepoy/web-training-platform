@@ -103,6 +103,7 @@ class TrainingJob(BaseModel):
     is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    external_job_id: str | None = None
     artifact_refs: list[ArtifactRef] = Field(default_factory=list)
 
 
@@ -142,7 +143,46 @@ class PredictionReviewAction(BaseModel):
     dataset_id: str
     model_id: str
     model_version: str | None = None
+    collection_id: str | None = None
+    sync_tag: str | None = None
     created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlatformPrediction(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    org_id: str
+    dataset_id: str
+    sample_id: str
+    model_id: str
+    target: str = "image_classification"
+    job_id: str | None = None
+    model_version: str | None = None
+    predicted_label: str
+    confidence: float | None = None
+    all_scores: dict[str, float] | None = None
+    error: str | None = None
+    created_by: str = "system"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionCollection(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    org_id: str
+    dataset_id: str
+    model_id: str
+    name: str
+    model_version: str | None = None
+    target: str = "image_classification"
+    source_job_id: str | None = None
+    sync_tag: str | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionCollectionItem(BaseModel):
+    collection_id: str
+    prediction_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -150,7 +190,7 @@ class AnnotationVersion(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     review_action_id: str
     annotation_id: str
-    source_prediction_id: int | None = None
+    prediction_id: str | None = None
     predicted_label: str
     final_label: str
     confidence: float | None = None

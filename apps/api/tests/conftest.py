@@ -197,6 +197,7 @@ def _mock_ls_client(request):
     _mock_ls = MagicMock()
     _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
     _mock_ls.update_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.delete_project = AsyncMock(return_value=None)
     _mock_ls.create_task = AsyncMock(return_value={"id": 1})
     _mock_ls.import_tasks = AsyncMock(side_effect=lambda project_id, tasks, return_task_ids=True: {
         "task_ids": list(range(1, len(tasks) + 1)),

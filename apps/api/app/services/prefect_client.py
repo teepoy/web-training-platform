@@ -443,6 +443,38 @@ class PrefectClient:
         )
         return result if isinstance(result, list) else []
 
+    async def list_task_runs(
+        self,
+        flow_run_id: str,
+        limit: int = 200,
+    ) -> list[dict]:
+        """Retrieve task runs for a flow run.
+
+        Parameters
+        ----------
+        flow_run_id:
+            Prefect flow-run UUID.
+        limit:
+            Maximum number of task runs to return (default 200).
+
+        Returns
+        -------
+        list[dict]
+            Task-run objects ordered by expected start time ascending.
+        """
+        body: dict[str, Any] = {
+            "task_runs": {"flow_run_id": {"any_": [flow_run_id]}},
+            "limit": limit,
+            "sort": "EXPECTED_START_TIME_ASC",
+        }
+        result = await self._request(
+            "POST",
+            "/task_runs/filter",
+            json=body,
+            resource_label="task runs",
+        )
+        return result if isinstance(result, list) else []
+
     async def set_flow_run_state(
         self,
         flow_run_id: str,
@@ -495,8 +527,6 @@ class PrefectClient:
             Flow-run objects ordered by expected start time descending.
         """
         flow_runs_filter: dict[str, Any] = {}
-        if work_pool_name is not None:
-            flow_runs_filter["work_pool_name"] = {"any_": [work_pool_name]}
         if work_queue_name is not None:
             flow_runs_filter["work_queue_name"] = {"any_": [work_queue_name]}
         if deployment_id is not None:
@@ -509,6 +539,8 @@ class PrefectClient:
             "limit": limit,
             "sort": "EXPECTED_START_TIME_DESC",
         }
+        if work_pool_name is not None:
+            body["work_pools"] = {"name": {"any_": [work_pool_name]}}
         result = await self._request(
             "POST", "/flow_runs/filter", json=body, resource_label="flow runs"
         )

@@ -6,9 +6,14 @@ These tests validate the response shape without requiring a live Prefect server.
 """
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
+from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.main import container
+from app.services.service_health import ServiceHealthService
 from tests.conftest import PRESET_ID
 
 
@@ -84,3 +89,61 @@ def test_dashboard_response_shape() -> None:
         for service in body["services"]:
             for field in ("name", "kind", "status", "detail", "latency_ms", "endpoint"):
                 assert field in service
+
+
+def test_dashboard_reports_prediction_worker_down_when_batch_deployment_missing() -> None:
+    prefect_client = AsyncMock()
+    prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
+
+    async def _resolve_deployment_id(name: str) -> str | None:
+        if name == "predict-job-batch-deployment":
+            return None
+        return f"deployment-for-{name}"
+
+    prefect_client.resolve_deployment_id.side_effect = _resolve_deployment_id
+    embedding_client = AsyncMock()
+    embedding_client.health.return_value = True
+    service_health = ServiceHealthService(
+        config=container.config(),
+        prefect_client=prefect_client,
+        embedding_client=embedding_client,
+    )
+
+    container.service_health.override(providers.Object(service_health))
+    try:
+        with TestClient(app) as c:
+            r = c.get("/api/v1/dashboard")
+        assert r.status_code == 200
+        services = {service["name"]: service for service in r.json()["services"]}
+        assert services["prediction-worker"]["status"] == "down"
+        assert "predict-job-batch-deployment" in services["prediction-worker"]["detail"]
+        assert services["training-worker-gpu"]["status"] == "healthy"
+        assert services["training-worker-dspy"]["status"] == "healthy"
+        assert services["embedding-worker"]["status"] == "healthy"
+    finally:
+        container.service_health.reset_override()
+
+
+def test_dashboard_reports_prediction_worker_healthy_when_batch_deployment_exists() -> None:
+    prefect_client = AsyncMock()
+    prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
+    prefect_client.resolve_deployment_id.side_effect = lambda name: f"deployment-for-{name}"
+    embedding_client = AsyncMock()
+    embedding_client.health.return_value = True
+    service_health = ServiceHealthService(
+        config=container.config(),
+        prefect_client=prefect_client,
+        embedding_client=embedding_client,
+    )
+
+    container.service_health.override(providers.Object(service_health))
+    try:
+        with TestClient(app) as c:
+            r = c.get("/api/v1/dashboard")
+        assert r.status_code == 200
+        services = {service["name"]: service for service in r.json()["services"]}
+        assert services["prediction-worker"]["status"] == "healthy"
+        assert "predict-job-batch-deployment" in services["prediction-worker"]["detail"]
+        assert services["embedding-worker"]["status"] == "healthy"
+    finally:
+        container.service_health.reset_override()

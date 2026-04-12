@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prediction-worker
+  name: embedding-worker
   namespace: finetune
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: prediction-worker
+      app: embedding-worker
   template:
     metadata:
       labels:
-        app: prediction-worker
+        app: embedding-worker
     spec:
       containers:
-        - name: prediction-worker
+        - name: embedding-worker
           image: finetune-worker:latest
           imagePullPolicy: IfNotPresent
           command: ["uv", "run", "python", "-m", "app.flows.serve"]
@@ -26,9 +26,9 @@ spec:
             - name: WORKER_MODE
               value: v2
             - name: WORK_POOL_NAME
-              value: predict-pool
+              value: embed-pool
             - name: WORK_QUEUE_NAME
-              value: predict-batch
+              value: embed-batch
           envFrom:
             - configMapRef:
                 name: finetune-config

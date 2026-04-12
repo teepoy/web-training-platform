@@ -84,7 +84,6 @@ async def persist_chunk_results(
     if model is None:
         raise ValueError(f"Model not found: {model_id}")
     version_tag = model_version or f"model-{model_id[:8]}"
-    ls_client = svc._get_ls_client()
     worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
     successful = 0
     failed = 0
@@ -97,8 +96,9 @@ async def persist_chunk_results(
         result = await svc._prediction_result_from_worker(
             sample=sample,
             worker_result=worker_by_sample.get(sample.id, {"sample_id": sample.id, "error": "missing worker result"}),
+            model_id=model.id,
+            org_id=org_id,
             model_version=version_tag,
-            ls_client=ls_client,
             target=target,
         )
         predictions.append(result.model_dump(mode="json"))

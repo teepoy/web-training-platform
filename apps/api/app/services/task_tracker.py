@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from app.domain.types import JobStatus
@@ -203,6 +204,7 @@ class TaskTrackerService:
     async def _build_detail(self, task: _TaskRecord) -> TaskTrackerDetailResponse:
         flow_run = None
         deployment = None
+        task_runs: list[dict[str, Any]] = []
         work_queue = None
         work_pool = None
         logs: list[dict[str, Any]] = []
@@ -237,8 +239,12 @@ class TaskTrackerService:
                     logs = await self._prefect.get_flow_run_logs(task.external_job_id, limit=80)
                 except Exception:
                     logs = []
+                try:
+                    task_runs = await self._prefect.list_task_runs(task.external_job_id, limit=200)
+                except Exception:
+                    task_runs = []
 
-        derived = await self._derive(task, flow_run, deployment, work_queue, work_pool, logs)
+        derived = await self._derive(task, flow_run, deployment, task_runs, work_queue, work_pool, logs)
         return TaskTrackerDetailResponse(
             id=task.platform_job.id,
             task_kind=task.task_kind,
@@ -266,6 +272,7 @@ class TaskTrackerService:
         task: _TaskRecord,
         flow_run: dict[str, Any] | None,
         deployment: dict[str, Any] | None,
+        task_runs: list[dict[str, Any]],
         work_queue: dict[str, Any] | None,
         work_pool: dict[str, Any] | None,
         logs: list[dict[str, Any]],
@@ -297,7 +304,7 @@ class TaskTrackerService:
             queue_depth_ahead=queue_depth,
             pool_concurrency_limit=pool_limit,
             pool_slots_used=pool_slots,
-            stages=self._stages(task, stage, prefect_state),
+            stages=self._stages(task, active_stage=stage, prefect_state=prefect_state, task_runs=task_runs),
             scorecard=scorecard,
             summary_metrics=summary_metrics,
             artifacts=artifacts,
@@ -399,8 +406,7 @@ class TaskTrackerService:
         flow_run: dict[str, Any] | None,
         deployment: dict[str, Any] | None,
     ) -> TaskTrackerDeepLinks:
-        api_url = str(getattr(self._config.prefect, "api_url", "") or "").rstrip("/")
-        ui_base = api_url[:-4] if api_url.endswith("/api") else (api_url or None)
+        ui_base = self._prefect_ui_base_url()
         flow_run_id = self._string_or_none(flow_run, "id")
         deployment_id = self._string_or_none(deployment, "id")
         return TaskTrackerDeepLinks(
@@ -408,6 +414,18 @@ class TaskTrackerService:
             prefect_deployment_url=None if ui_base is None or deployment_id is None else f"{ui_base}/deployments/deployment/{deployment_id}",
             platform_job_url=f"/jobs/{task.platform_job.id}" if task.task_kind == "training" else None,
         )
+
+    def _prefect_ui_base_url(self) -> str | None:
+        explicit_ui_url = str(getattr(self._config.prefect, "ui_url", "") or "").rstrip("/")
+        if explicit_ui_url:
+            return explicit_ui_url
+        api_url = str(getattr(self._config.prefect, "api_url", "") or "").rstrip("/")
+        if not api_url:
+            return None
+        for suffix in ("/api/v1", "/api"):
+            if api_url.endswith(suffix):
+                return api_url[: -len(suffix)] or None
+        return api_url
 
     def _display_name(self, task: _TaskRecord) -> str:
         if task.task_kind == "training":
@@ -463,47 +481,209 @@ class TaskTrackerService:
             return "execute"
         return "output"
 
-    def _stages(self, task: _TaskRecord, active_stage: str, prefect_state: str | None) -> list[TaskTrackerStage]:
-        if task.task_kind == "training":
-            defs = [
-                ("queue_allocation", "Queue & Allocation", [("queue", "Queue", "waiting for worker"), ("dispatch", "Dispatch", "worker selection")]),
-                ("execution_flow", "Execution Flow", [("prepare", "Prepare", "load preset and dataset"), ("train", "Train / Optimize", "runtime execution"), ("persist", "Persist Artifacts", "store outputs")]),
-                ("validation_output", "Validation & Output", [("validate", "Validate", "check artifacts"), ("output", "Output", "artifacts available")]),
-            ]
-        elif task.task_kind == "prediction":
-            exec_label = "Embed Batch" if getattr(task.platform_job, "target", "prediction") == "embedding" else "Predict Batch"
-            defs = [
-                ("queue_allocation", "Queue & Allocation", [("queue", "Queue", "waiting for worker"), ("dispatch", "Dispatch", "routing to prediction queue")]),
-                ("execution_flow", "Execution Flow", [("fetch", "Fetch Samples", "collect inputs"), ("execute", exec_label, "worker execution"), ("persist", "Persist Results", "save outputs")]),
-                ("validation_output", "Validation & Output", [("validate", "Validate", "summarize output"), ("output", "Output", "results ready")]),
-            ]
-        else:
-            defs = [
-                ("queue_allocation", "Queue & Allocation", [("queue", "Queue", "scheduled deployment run"), ("dispatch", "Dispatch", "Prefect deployment dispatch")]),
-                ("execution_flow", "Execution Flow", [("execute", "Execute Flow", "scheduled run execution"), ("logs", "Logs", "runtime logs")]),
-                ("validation_output", "Validation & Output", [("validate", "Validate", "terminal state"), ("output", "Output", "run summary")]),
-            ]
-        stages = []
-        for stage_key, label, nodes in defs:
-            stage_status = self._stage_status(stage_key, active_stage)
-            stages.append(
-                TaskTrackerStage(
-                    key=stage_key,
-                    label=label,
-                    status=stage_status,
-                    summary=self._stage_summary(stage_key, task, prefect_state),
-                    nodes=[
-                        TaskTrackerNode(
-                            key=node_key,
-                            label=node_label,
-                            status=self._node_status(stage_key, active_stage, stage_status, node_key),
-                            detail=detail,
-                        )
-                        for node_key, node_label, detail in nodes
-                    ],
+    def _stages(
+        self,
+        task: _TaskRecord,
+        active_stage: str,
+        prefect_state: str | None,
+        task_runs: list[dict[str, Any]],
+    ) -> list[TaskTrackerStage]:
+        queue_stage = TaskTrackerStage(
+            key="queue_allocation",
+            label="Queue & Allocation",
+            status=self._stage_status("queue_allocation", active_stage),
+            summary=self._stage_summary("queue_allocation", task, prefect_state),
+            nodes=self._queue_nodes(active_stage, prefect_state),
+        )
+        execution_stage = TaskTrackerStage(
+            key="execution_flow",
+            label="Execution Flow",
+            status=self._stage_status("execution_flow", active_stage),
+            summary=self._execution_summary(task_runs, prefect_state),
+            nodes=self._execution_nodes(task, task_runs, active_stage, prefect_state),
+        )
+        validation_stage = TaskTrackerStage(
+            key="validation_output",
+            label="Validation & Output",
+            status=self._stage_status("validation_output", active_stage),
+            summary=self._stage_summary("validation_output", task, prefect_state),
+            nodes=self._validation_nodes(task, active_stage, prefect_state),
+        )
+        return [queue_stage, execution_stage, validation_stage]
+
+    def _queue_nodes(self, active_stage: str, prefect_state: str | None) -> list[TaskTrackerNode]:
+        stage_status = self._stage_status("queue_allocation", active_stage)
+        return [
+            TaskTrackerNode(
+                key="queue",
+                label="Queue",
+                status=self._node_status("queue_allocation", active_stage, stage_status, "queue"),
+                detail="waiting for worker" if prefect_state in _QUEUE_STATES or prefect_state is None else "queue cleared",
+                expected_start_at=None,
+                started_at=None,
+                ended_at=None,
+            ),
+            TaskTrackerNode(
+                key="dispatch",
+                label="Dispatch",
+                status=self._node_status("queue_allocation", active_stage, stage_status, "dispatch"),
+                detail="worker selection and handoff",
+                expected_start_at=None,
+                started_at=None,
+                ended_at=None,
+            ),
+        ]
+
+    def _execution_nodes(
+        self,
+        task: _TaskRecord,
+        task_runs: list[dict[str, Any]],
+        active_stage: str,
+        prefect_state: str | None,
+    ) -> list[TaskTrackerNode]:
+        stage_status = self._stage_status("execution_flow", active_stage)
+        if task_runs:
+            nodes = [
+                TaskTrackerNode(
+                    key=self._string_or_none(run, "id") or f"task-run-{index}",
+                    label=self._task_run_label(run, index=index),
+                    status=self._task_run_status(run, stage_status),
+                    detail=self._task_run_detail(run),
+                    expected_start_at=self._task_run_timestamp(run, "expected_start_time"),
+                    started_at=self._task_run_timestamp(run, "start_time"),
+                    ended_at=self._task_run_timestamp(run, "end_time"),
                 )
+                for index, run in enumerate(task_runs, start=1)
+            ]
+            return nodes
+
+        fallback_detail = self._fallback_execution_detail(task)
+        return [
+            TaskTrackerNode(
+                key="execute",
+                label=self._fallback_execution_label(task),
+                status=self._node_status("execution_flow", active_stage, stage_status, "execute") if prefect_state else stage_status,
+                detail=fallback_detail,
+                expected_start_at=None,
+                started_at=None,
+                ended_at=None,
             )
-        return stages
+        ]
+
+    def _validation_nodes(self, task: _TaskRecord, active_stage: str, prefect_state: str | None) -> list[TaskTrackerNode]:
+        stage_status = self._stage_status("validation_output", active_stage)
+        if task.task_kind == "training":
+            validate_detail = "check artifacts"
+            output_detail = "artifacts available"
+        elif task.task_kind == "prediction":
+            validate_detail = "summarize output"
+            output_detail = "results ready"
+        else:
+            validate_detail = "terminal state"
+            output_detail = "run summary"
+        if prefect_state not in _TERMINAL_STATES:
+            output_detail = "awaiting completion"
+        return [
+            TaskTrackerNode(
+                key="validate",
+                label="Validate",
+                status=self._node_status("validation_output", active_stage, stage_status, "validate"),
+                detail=validate_detail,
+                expected_start_at=None,
+                started_at=None,
+                ended_at=None,
+            ),
+            TaskTrackerNode(
+                key="output",
+                label="Output",
+                status=self._node_status("validation_output", active_stage, stage_status, "output"),
+                detail=output_detail,
+                expected_start_at=None,
+                started_at=None,
+                ended_at=None,
+            ),
+        ]
+
+    def _execution_summary(self, task_runs: list[dict[str, Any]], prefect_state: str | None) -> str:
+        if task_runs:
+            completed = sum(1 for run in task_runs if self._task_run_state_type(run) == "COMPLETED")
+            total = len(task_runs)
+            active = next((self._task_run_name(run) for run in task_runs if self._task_run_state_type(run) in _RUNNING_STATES), None)
+            if active:
+                return f"{completed}/{total} task runs completed, active: {active}"
+            if prefect_state in _TERMINAL_STATES:
+                return f"{completed}/{total} task runs completed"
+            return f"{completed}/{total} task runs ready"
+        return "Task is actively progressing" if prefect_state in _RUNNING_STATES else "Execution not active"
+
+    def _task_run_label(self, task_run: dict[str, Any], index: int) -> str:
+        name = self._task_run_name(task_run)
+        if name:
+            return name
+        task_key = self._string_or_none(task_run, "task_key")
+        if task_key:
+            return task_key
+        return f"Task {index}"
+
+    def _task_run_name(self, task_run: dict[str, Any]) -> str | None:
+        for key in ("name", "task_key"):
+            value = self._string_or_none(task_run, key)
+            if value:
+                return value
+        return None
+
+    def _task_run_state_type(self, task_run: dict[str, Any]) -> str | None:
+        return self._nested_string(task_run, "state", "type") or self._string_or_none(task_run, "state_type")
+
+    def _task_run_status(self, task_run: dict[str, Any], default_status: str) -> str:
+        state_type = self._task_run_state_type(task_run)
+        if state_type in _TERMINAL_STATES:
+            return "completed" if state_type == "COMPLETED" else "failed"
+        if state_type in _RUNNING_STATES:
+            return "active"
+        if state_type in _QUEUE_STATES:
+            return "pending"
+        return default_status
+
+    def _task_run_detail(self, task_run: dict[str, Any]) -> str:
+        state_name = self._nested_string(task_run, "state", "name") or self._string_or_none(task_run, "state_name")
+        start = self._string_or_none(task_run, "start_time") or self._string_or_none(task_run, "expected_start_time")
+        end = self._string_or_none(task_run, "end_time")
+        parts = []
+        if state_name:
+            parts.append(state_name)
+        if start:
+            parts.append(f"start {start}")
+        if end:
+            parts.append(f"end {end}")
+        return " | ".join(parts) if parts else "Prefect task run"
+
+    def _task_run_timestamp(self, task_run: dict[str, Any], key: str) -> datetime | None:
+        value = self._string_or_none(task_run, key)
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def _fallback_execution_label(self, task: _TaskRecord) -> str:
+        if task.task_kind == "training":
+            return "Train / Optimize"
+        if task.task_kind == "schedule_run":
+            return "Execute Flow"
+        if getattr(task.platform_job, "target", "prediction") == "embedding":
+            return "Embed Batch"
+        return "Predict Batch"
+
+    def _fallback_execution_detail(self, task: _TaskRecord) -> str:
+        if task.task_kind == "training":
+            return "runtime execution"
+        if task.task_kind == "schedule_run":
+            return "scheduled run execution"
+        if getattr(task.platform_job, "target", "prediction") == "embedding":
+            return "embedding worker execution"
+        return "prediction worker execution"
 
     def _stage_status(self, stage_key: str, active_stage: str) -> str:
         order = ["queue_allocation", "execution_flow", "validation_output"]
@@ -518,7 +698,7 @@ class TaskTrackerService:
     def _node_status(self, stage_key: str, active_stage: str, stage_status: str, node_key: str) -> str:
         if stage_key != active_stage:
             return stage_status
-        if node_key in {"dispatch", "persist", "output"} and stage_status == "active":
+        if node_key in {"dispatch", "output"} and stage_status == "active":
             return "active"
         return stage_status
 

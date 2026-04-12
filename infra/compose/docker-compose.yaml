@@ -101,6 +101,7 @@ services:
       APP_CONFIG_PROFILE: dev
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
       PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_UI_URL: http://localhost:4200
       EMBEDDING_GRPC_TARGET: embedding:50051
       INFERENCE_BASE_URL: http://inference-worker:8010
       LABEL_STUDIO_URL: "http://label-studio:8080"
@@ -221,8 +222,38 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: finetune-artifacts
       WORKER_MODE: v2
-      WORK_POOL_NAME: training-pool
+      WORK_POOL_NAME: predict-pool
       WORK_QUEUE_NAME: predict-batch
+    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
+    restart: on-failure
+
+  embedding-worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+      inference-worker:
+        condition: service_healthy
+    environment:
+      APP_CONFIG_PROFILE: dev
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PLATFORM_API_URL: http://api:8000
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      EMBEDDING_GRPC_TARGET: embedding:50051
+      INFERENCE_BASE_URL: http://inference-worker:8010
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      WORKER_MODE: v2
+      WORK_POOL_NAME: embed-pool
+      WORK_QUEUE_NAME: embed-batch
     command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
     restart: on-failure
 

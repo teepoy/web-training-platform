@@ -11,13 +11,41 @@ class PredictionOrchestrator:
     def __init__(self, prefect_client, repository) -> None:
         self._prefect_client = prefect_client
         self._repository = repository
-        self._deployment_name = "predict-job-batch-deployment"
+
+    @staticmethod
+    def _deployment_name_for_target(target: str) -> str:
+        if target == "embedding":
+            return "embed-job-batch-deployment"
+        return "predict-job-batch-deployment"
+
+    @staticmethod
+    def _extract_summary_from_run(run: dict | None) -> dict:
+        if not isinstance(run, dict):
+            return {}
+
+        state = run.get("state", {})
+        if not isinstance(state, dict):
+            return {}
+
+        data = state.get("data")
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            return {}
+        if hasattr(data, "model_dump"):
+            dumped = data.model_dump()
+            return dumped if isinstance(dumped, dict) else {}
+        if hasattr(data, "dict"):
+            dumped = data.dict()
+            return dumped if isinstance(dumped, dict) else {}
+        return {}
 
     async def start_job(self, job: PredictionJob) -> PredictionJob:
         await self._repository.create_prediction_job(job)
-        deployment_id = await self._prefect_client.resolve_deployment_id(self._deployment_name)
+        deployment_name = self._deployment_name_for_target(str(job.target))
+        deployment_id = await self._prefect_client.resolve_deployment_id(deployment_name)
         if deployment_id is None:
-            raise ValueError("Prediction deployment is not registered")
+            raise ValueError(f"Prediction deployment is not registered: {deployment_name}")
         run = await self._prefect_client.create_flow_run_from_deployment(
             deployment_id=deployment_id,
             parameters={
@@ -83,8 +111,11 @@ class PredictionOrchestrator:
 
         run = await self._prefect_client.get_flow_run(external_id)
         state = str(run.get("state", {}).get("type", "FAILED"))
-        result_data = run.get("state", {}).get("data", {})
-        summary = result_data if isinstance(result_data, dict) else {}
+        summary = self._extract_summary_from_run(run)
+        if not summary:
+            existing_job = await self._repository.get_prediction_job(job_id)
+            if existing_job is not None and isinstance(existing_job.summary, dict):
+                summary = existing_job.summary
         if state == "COMPLETED":
             await self._repository.update_prediction_job_status(job_id, JobStatus.COMPLETED, summary=summary)
             status = "completed"

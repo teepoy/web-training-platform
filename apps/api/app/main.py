@@ -23,6 +23,8 @@ from app.api.schemas import (
     CreateDatasetRequest,
     CreateOrgRequest,
     CreateReviewActionRequest,
+    PredictionCollectionRequest,
+    PredictionCollectionResponse,
     CreateSampleRequest,
     CreateScheduleRequest,
     CreateTokenRequest,
@@ -60,6 +62,8 @@ from app.api.schemas import (
     TaskTrackerSummaryResponse,
     TokenCreatedResponse,
     TokenResponse,
+    SyncPredictionCollectionRequest,
+    SyncPredictionCollectionResponse,
     UpdateAnnotationRequest,
     UpdateEmbedConfigRequest,
     UpdateLabelSpaceRequest,
@@ -72,7 +76,7 @@ from app.api.schemas import (
     VersionExportRequest,
     WorkPoolStatus,
 )
-from app.api.deps import get_current_org, get_current_user, require_superadmin
+from app.api.deps import get_current_org, get_current_user, require_admin, require_superadmin
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.db.models import DatasetORM, OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, TrainingJobORM, UserORM
@@ -85,7 +89,7 @@ from app.services.compatibility import (
     validate_dataset_contract,
     validate_dataset_preset_training,
 )
-from app.services.label_studio import platform_annotation_to_ls
+from app.services.label_studio import LabelStudioNotFoundError, platform_annotation_to_ls
 _logger = logging.getLogger(__name__)
 
 
@@ -236,6 +240,32 @@ async def get_dataset(
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return _with_ls_url(dataset)
+
+
+@app.delete("/api/v1/datasets/{dataset_id}", status_code=204)
+async def delete_dataset(
+    dataset_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    await require_admin(request, current_user=current_user, org=org)
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if dataset.ls_project_id:
+        try:
+            await container.label_studio_client().delete_project(int(dataset.ls_project_id))
+        except LabelStudioNotFoundError:
+            pass
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to delete Label Studio project: {exc}")
+
+    deleted = await container.repository().delete_dataset(dataset_id, org_id=org.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return Response(status_code=204)
 
 
 @app.patch("/api/v1/datasets/{dataset_id}/label-space", response_model=Dataset)
@@ -1292,12 +1322,32 @@ async def update_embed_config(
 def _prediction_result_to_response(result) -> PredictionResultResponse:
     """Convert domain PredictionResult to API response."""
     return PredictionResultResponse(
+        id=result.id,
         sample_id=result.sample_id,
-        ls_task_id=result.ls_task_id,
         predicted_label=result.predicted_label,
         confidence=result.confidence,
-        ls_prediction_id=result.ls_prediction_id,
+        model_id=result.model_id,
+        target=result.target,
+        model_version=result.model_version,
+        job_id=result.job_id,
+        created_at=result.created_at,
         error=result.error,
+    )
+
+
+def _prediction_collection_to_response(collection, prediction_ids: list[str]) -> PredictionCollectionResponse:
+    return PredictionCollectionResponse(
+        id=collection.id,
+        name=collection.name,
+        dataset_id=collection.dataset_id,
+        model_id=collection.model_id,
+        model_version=collection.model_version,
+        target=collection.target,
+        source_job_id=collection.source_job_id,
+        sync_tag=collection.sync_tag,
+        created_by=collection.created_by,
+        created_at=collection.created_at,
+        prediction_ids=prediction_ids,
     )
 
 
@@ -1389,6 +1439,19 @@ async def get_prediction_job(
     return _prediction_job_to_response(job)
 
 
+@app.get("/api/v1/prediction-jobs/{job_id}/predictions", response_model=list[PredictionResultResponse])
+async def list_prediction_job_predictions(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[PredictionResultResponse]:
+    job = await container.repository().get_prediction_job(job_id, org_id=org.id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Prediction job not found")
+    predictions = await container.prediction_service().list_predictions_for_job(job_id, org_id=org.id)
+    return [_prediction_result_to_response(item) for item in predictions]
+
+
 @app.get("/api/v1/prediction-jobs/{job_id}/events", response_model=list[PredictionEventResponse])
 async def list_prediction_job_events(
     job_id: str,
@@ -1438,17 +1501,84 @@ async def predict_single(
 @app.get("/api/v1/samples/{sample_id}/predictions")
 async def list_sample_predictions(
     sample_id: str,
+    model_version: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> list[dict]:
-    """List all predictions for a sample from Label Studio."""
+) -> list[PredictionResultResponse]:
+    """List all platform predictions for a sample."""
     try:
-        return await container.prediction_service().list_predictions_for_sample(
+        predictions = await container.prediction_service().list_predictions_for_sample(
             sample_id=sample_id,
             org_id=org.id,
+            model_version=model_version,
         )
+        return [_prediction_result_to_response(item) for item in predictions]
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/v1/prediction-collections", response_model=PredictionCollectionResponse, status_code=201)
+async def create_prediction_collection(
+    payload: PredictionCollectionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> PredictionCollectionResponse:
+    try:
+        collection = await container.prediction_service().create_prediction_collection(
+            dataset_id=payload.dataset_id,
+            model_id=payload.model_id,
+            org_id=org.id,
+            created_by=current_user.id,
+            prediction_ids=payload.prediction_ids,
+            name=payload.name,
+            model_version=payload.model_version,
+            target=payload.target,
+            source_job_id=payload.source_job_id,
+        )
+        return _prediction_collection_to_response(collection, payload.prediction_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/v1/prediction-collections", response_model=list[PredictionCollectionResponse])
+async def list_prediction_collections(
+    dataset_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> list[PredictionCollectionResponse]:
+    collections = await container.prediction_service().list_prediction_collections(dataset_id, org_id=org.id)
+    responses: list[PredictionCollectionResponse] = []
+    for collection in collections:
+        predictions = await container.repository().list_prediction_collection_predictions(collection.id, org.id)
+        responses.append(_prediction_collection_to_response(collection, [item.id for item in predictions]))
+    return responses
+
+
+@app.post(
+    "/api/v1/prediction-collections/{collection_id}/sync-label-studio",
+    response_model=SyncPredictionCollectionResponse,
+)
+async def sync_prediction_collection_to_label_studio(
+    collection_id: str,
+    payload: SyncPredictionCollectionRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SyncPredictionCollectionResponse:
+    try:
+        collection, synced_count, failed_count, errors = await container.prediction_service().sync_prediction_collection_to_label_studio(
+            collection_id=collection_id,
+            org_id=org.id,
+            sync_tag=payload.sync_tag,
+        )
+        return SyncPredictionCollectionResponse(
+            collection_id=collection.id,
+            sync_tag=collection.sync_tag or payload.sync_tag or "",
+            synced_count=synced_count,
+            failed_count=failed_count,
+            errors=errors,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -1470,12 +1600,16 @@ async def create_review_action(
             org_id=org.id,
             created_by=current_user.id,
             model_version=payload.model_version,
+            collection_id=payload.collection_id,
+            sync_tag=payload.sync_tag,
         )
         return ReviewActionResponse(
             id=action.id,
             dataset_id=action.dataset_id,
             model_id=action.model_id,
             model_version=action.model_version,
+            collection_id=action.collection_id,
+            sync_tag=action.sync_tag,
             created_by=action.created_by,
             created_at=action.created_at,
         )
@@ -1497,6 +1631,8 @@ async def list_review_actions(
             dataset_id=a.dataset_id,
             model_id=a.model_id,
             model_version=a.model_version,
+            collection_id=a.collection_id,
+            sync_tag=a.sync_tag,
             created_by=a.created_by,
             created_at=a.created_at,
         )
@@ -1519,6 +1655,8 @@ async def get_review_action(
         dataset_id=action.dataset_id,
         model_id=action.model_id,
         model_version=action.model_version,
+        collection_id=action.collection_id,
+        sync_tag=action.sync_tag,
         created_by=action.created_by,
         created_at=action.created_at,
     )
@@ -1563,7 +1701,7 @@ async def save_review_annotations(
                     id=v.id,
                     review_action_id=v.review_action_id,
                     annotation_id=v.annotation_id,
-                    source_prediction_id=v.source_prediction_id,
+                    prediction_id=v.prediction_id,
                     predicted_label=v.predicted_label,
                     final_label=v.final_label,
                     confidence=v.confidence,
@@ -1595,7 +1733,7 @@ async def list_annotation_versions(
             id=v.id,
             review_action_id=v.review_action_id,
             annotation_id=v.annotation_id,
-            source_prediction_id=v.source_prediction_id,
+            prediction_id=v.prediction_id,
             predicted_label=v.predicted_label,
             final_label=v.final_label,
             confidence=v.confidence,

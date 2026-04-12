@@ -5,17 +5,17 @@
 #     "httpx",
 # ]
 # ///
-"""Seed the platform with default ImageNet-1K assets (DEV mode).
+"""Seed the platform with default ImageNet-1K mock assets.
 
 No extra dependencies beyond ``httpx``.  No HuggingFace account required.
 
 Usage::
 
-    make seed-imagenet-dev
-    make seed-imagenet-dev ARGS="--max-samples 50"
+    make seed-imagenet-mock
+    make seed-imagenet-mock ARGS="--max-samples 50"
 
 Creates:
-  1. Dataset "ImageNet-1K" with full 1000-class label space.
+  1. Dataset "ImageNet-1K Mock" with full 1000-class label space.
   2. Preset "imagenet-resnet50".
   3. Synthetic placeholder samples (coloured squares, one per class by
      default, capped by ``--max-samples``).
@@ -23,8 +23,8 @@ Creates:
 
 Fully idempotent — re-running skips assets that already exist.
 
-For real HuggingFace images + pretrained ResNet-50, use
-``scripts/seed_imagenet_real.py`` (``make seed-imagenet-real``).
+For real ImageNet data, use
+``scripts/seed_imagenet_real.py`` (``make seed-imagenet-poc`` or ``make seed-imagenet-full``).
 """
 
 from __future__ import annotations
@@ -51,10 +51,12 @@ ORG_NAME = "Default Org"
 ORG_SLUG = "default-org"
 COMPOSE_FILE = "infra/compose/docker-compose.yaml"
 
-DATASET_NAME = "ImageNet-1K"
+DATASET_NAME = "ImageNet-1K Mock"
+LEGACY_DATASET_NAME = "ImageNet-1K"
 PRESET_ID = "resnet50-cls-v1"
 PRESET_NAME = "ResNet50 Classification (v1)"
-PLACEHOLDER_MODEL_NAME = "imagenet-dev-placeholder"
+PLACEHOLDER_MODEL_NAME = "imagenet-mock-placeholder"
+SEED_MODE = "mock"
 
 # Full ImageNet-1K class list (ILSVRC 2012, 1000 classes)
 # Source: https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt
@@ -296,6 +298,16 @@ def _find_by_name(items: list[dict], name: str) -> dict | None:
     return None
 
 
+def _delete_model(client: httpx.Client, model_id: str) -> None:
+    r = _api(client, "delete", f"/api/v1/models/{model_id}")
+    if r.status_code != 204:
+        raise RuntimeError(f"failed to delete existing model {model_id}: {r.status_code} {r.text}")
+
+
+def _find_conflicting_legacy_dataset(items: list[dict]) -> dict | None:
+    return _find_by_name(items, LEGACY_DATASET_NAME)
+
+
 def _is_image_classification_compatible(model: dict) -> bool:
     metadata = model.get("metadata") if isinstance(model.get("metadata"), dict) else {}
     dataset_types = metadata.get("dataset_types") if isinstance(metadata.get("dataset_types"), list) else []
@@ -450,6 +462,7 @@ def _upload_placeholder_model(
         label_prototypes[label] = vec
     metadata = {
         "name": PLACEHOLDER_MODEL_NAME,
+        "seed_mode": SEED_MODE,
         "format": "pytorch",
         "job_id": job_id,
         "template_id": "image-classifier",
@@ -471,7 +484,7 @@ def _upload_placeholder_model(
         "architecture": "resnet50",
         "label_space": label_space,
         "label_prototypes": label_prototypes,
-        "source": "seed-imagenet-dev-placeholder",
+        "source": "seed-imagenet-mock-placeholder",
     }
     files = {
         "file": (
@@ -497,7 +510,7 @@ def _upload_placeholder_model(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Seed default ImageNet-1K dataset, preset, and model (dev mode)",
+        description="Seed ImageNet-1K mock dataset, preset, and model",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -522,7 +535,7 @@ Examples:
     max_samples = args.max_samples
     total_steps = 7 if not args.no_samples else 6
     print(f"\n{'=' * 50}")
-    print(f"  ImageNet-1K Seed Script (dev mode)")
+    print(f"  ImageNet-1K Mock Seed Script")
     print(f"{'=' * 50}\n")
 
     api_url = args.api_url.rstrip("/")
@@ -598,16 +611,23 @@ Examples:
     # ------------------------------------------------------------------
     # Step 5: Create or find dataset
     # ------------------------------------------------------------------
-    print(f"\n[5/{total_steps}] Creating/finding ImageNet-1K dataset ...")
+        print(f"\n[5/{total_steps}] Creating/finding {DATASET_NAME} dataset ...")
 
     r = _api(client, "get", "/api/v1/datasets")
     existing_datasets = r.json() if r.status_code == 200 else []
+    legacy_dataset = _find_conflicting_legacy_dataset(existing_datasets)
+    if legacy_dataset is not None:
+        print(
+            f"  ERROR: legacy dataset '{LEGACY_DATASET_NAME}' still exists ({legacy_dataset['id']}). "
+            f"Remove or rename it before seeding {DATASET_NAME}."
+        )
+        return 1
     dataset = _find_by_name(existing_datasets, DATASET_NAME)
     dataset_id: str
 
     if dataset:
         dataset_id = dataset["id"]
-        print(f"  Dataset already exists: {dataset_id}")
+        print(f"  Dataset already exists for mock seed: {dataset_id}")
         current_labels = dataset.get("task_spec", {}).get("label_space", [])
         if len(current_labels) != len(IMAGENET_LABELS):
             print(f"  Updating label space ({len(current_labels)} -> {len(IMAGENET_LABELS)} labels) ...")
@@ -685,30 +705,27 @@ Examples:
     else:
         print("\n[model] Creating training job + model artifact ...")
 
-        # Check if a model already exists for this dataset
+        # Replace any previous mock-seed models for this dataset so reruns converge
         r = _api(client, "get", f"/api/v1/models?dataset_id={dataset_id}")
         if r.status_code == 200:
             compatible_models = [model for model in r.json() if _is_image_classification_compatible(model)]
         else:
             compatible_models = []
-        if compatible_models:
-            existing_model = compatible_models[0]
-            model_id = existing_model["id"]
-            print(f"  Model already exists: {model_id} (name: {existing_model.get('name', 'n/a')})")
-        else:
-            # Local engine training job produces a fake model artifact
-            job_id, model_id = _create_model_via_training_job(
-                client, dataset_id, preset_id, args.job_timeout,
-            )
-            if model_id is None and job_id is not None:
-                print("  Training job failed in dev mode; uploading placeholder image-classifier model instead ...")
-                model_id = _upload_placeholder_model(client, job_id, IMAGENET_LABELS)
+        for existing_model in compatible_models:
+            print(f"  Deleting existing mock model: {existing_model['id']} ({existing_model.get('name', 'n/a')})")
+            _delete_model(client, existing_model["id"])
+        job_id, model_id = _create_model_via_training_job(
+            client, dataset_id, preset_id, args.job_timeout,
+        )
+        if model_id is None and job_id is not None:
+            print("  Training job failed in dev mode; uploading placeholder image-classifier model instead ...")
+            model_id = _upload_placeholder_model(client, job_id, IMAGENET_LABELS)
 
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
     print(f"\n{'=' * 50}")
-    print(f"  Seed Summary (dev mode)")
+    print(f"  Seed Summary (mock mode)")
     print(f"{'=' * 50}")
     print(f"  Dataset:    {DATASET_NAME}")
     print(f"  Dataset ID: {dataset_id}")

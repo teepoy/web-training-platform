@@ -53,6 +53,9 @@ class _RepoStub:
             ls_project_id="1",
         )
 
+    async def create_platform_prediction(self, prediction):
+        return prediction
+
 
 def _load_vqa_preset():
     registry = PresetRegistry("presets", strict=True)
@@ -199,7 +202,7 @@ async def test_dspy_vqa_predictor_loads_program_and_answers() -> None:
 @pytest.mark.asyncio
 async def test_prediction_prompt_override_for_vqa() -> None:
     svc = PredictionService(
-        repository=None,
+        repository=_RepoStub(),
         artifact_storage=InMemoryArtifactStorage(),
         config=SimpleNamespace(label_studio=SimpleNamespace(url="", api_key="")),
     )
@@ -211,11 +214,6 @@ async def test_prediction_prompt_override_for_vqa() -> None:
         ls_task_id=1,
     )
     fake_predictor = _FakePredictor()
-    fake_ls = SimpleNamespace(create_prediction=lambda **_: {"id": 1})
-    async def _create_prediction(*args, **kwargs):
-        return {"id": 1}
-    fake_ls.create_prediction = _create_prediction
-
     preset = _load_vqa_preset()
     ctx = PredictContext(
         job_id="job-vqa-3",
@@ -228,8 +226,9 @@ async def test_prediction_prompt_override_for_vqa() -> None:
         sample=sample,
         predictor=fake_predictor,
         predict_ctx=ctx,
+        model_id="model-vqa",
+        org_id="org-vqa",
         model_version="model-vqa",
-        ls_client=fake_ls,
         target="vqa",
         prompt="override question",
     )

@@ -88,6 +88,9 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     prefect_api_url = os.getenv("PREFECT_API_URL")
     if prefect_api_url:
         cfg.prefect.api_url = prefect_api_url
+    prefect_ui_url = os.getenv("PREFECT_UI_URL")
+    if prefect_ui_url:
+        cfg.prefect.ui_url = prefect_ui_url
     embedding_target = os.getenv("EMBEDDING_GRPC_TARGET")
     if embedding_target:
         cfg.embedding.grpc_target = embedding_target
