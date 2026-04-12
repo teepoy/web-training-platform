@@ -69,7 +69,7 @@
           <n-text v-if="activePredictionJob" depth="3">
             Active job: {{ activePredictionJob.id }} ({{ activePredictionJob.status }})
             <template v-if="formatPredictionJobProgress(activePredictionJob)">
-              · {{ formatPredictionJobProgress(activePredictionJob) }} processed
+              &middot; {{ formatPredictionJobProgress(activePredictionJob) }} processed
             </template>
           </n-text>
         </n-space>
@@ -79,9 +79,62 @@
         <n-data-table :columns="predictionJobColumns" :data="predictionJobs" :bordered="true" :max-height="260" />
       </n-card>
 
-      <!-- Step 2: Review predictions -->
+      <!-- Step 2: Review Predictions (grid gallery for classification datasets) -->
       <n-card
-        v-if="predictions.length > 0"
+        v-if="reviewGridItems.length > 0 && isClassificationDataset"
+        title="2. Review Predictions"
+        size="small"
+      >
+        <template #header-extra>
+          <n-space>
+            <n-text depth="3">{{ reviewGridItems.length }} predictions</n-text>
+            <n-text depth="3">{{ editedCount }} edited</n-text>
+          </n-space>
+        </template>
+
+        <div class="pr-review-body" :style="themeStyleVars">
+          <AnnotationGrid
+            ref="gridRef"
+            :items="reviewGridItems"
+            :total-count="reviewGridItems.length"
+            :label-space="labelSpace"
+            :thumb-size="160"
+            :is-loading="false"
+            :submitting="saveAnnotationsMutation.isPending.value"
+            :show-add-label="false"
+            @select="onGridSelect"
+            @apply-label="onGridApplyLabel"
+            @submit="onSaveAnnotations"
+            @load-more="() => {}"
+          >
+            <template #bar-left>
+              <n-button
+                size="tiny"
+                :loading="syncCollectionMutation.isPending.value"
+                @click="onSyncCollectionToLs"
+              >
+                Sync to LS
+              </n-button>
+              <n-button size="tiny" @click="resetEdits">Reset Edits</n-button>
+            </template>
+          </AnnotationGrid>
+
+          <!-- Sidebar -->
+          <ClassifySidebar
+            :panels="reviewSidebarPanels"
+            :context="dashboardContext"
+            v-model:collapsed="sidebarCollapsed"
+          />
+        </div>
+
+        <n-text v-if="syncedCollectionTag" depth="3" style="margin-top: 8px; display: block;">
+          Current LS sync tag: {{ syncedCollectionTag }}
+        </n-text>
+      </n-card>
+
+      <!-- Step 2 fallback: table for non-classification (VQA, etc.) -->
+      <n-card
+        v-else-if="predictions.length > 0 && !isClassificationDataset"
         title="2. Review Predictions"
         size="small"
       >
@@ -207,33 +260,67 @@
       >
         <p>Are you sure you want to delete this review action and all its annotation versions?</p>
       </n-modal>
+
+      <!-- Task Insight Modal (auto-opened for active prediction jobs) -->
+      <TaskInsightModal
+        :show="showTaskModal"
+        :task="activeTaskSummary"
+        :handoff-enabled="taskHandoffEnabled"
+        @update:show="showTaskModal = $event"
+        @toggle-handoff="taskHandoffEnabled = $event"
+      />
     </template>
   </n-space>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, watch } from "vue";
+import { ref, computed, h, watch, provide, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, SelectOption } from "naive-ui";
-import { useMessage, NButton, NSpace, NTag, NSelect } from "naive-ui";
-import { api } from "../api";
+import { useMessage, useThemeVars, NButton, NSpace, NTag, NSelect } from "naive-ui";
+import { api, listSamplesWithLabels } from "../api";
 import type {
   Model,
   Dataset,
+  AnnotationGridItem,
   PredictionCollection,
   PredictionResult,
   PredictionJob,
   ReviewAction,
+  SampleWithLabels,
   SaveReviewAnnotationItem,
   ExportFormat,
+  TaskTrackerSummary,
 } from "../types";
+import { resolveImageUris } from "../utils/imageAdapters";
 import { useOrgStore } from "../stores/org";
+import { useAuthStore } from "../stores/auth";
+import AnnotationGrid from "../components/annotation/AnnotationGrid.vue";
+import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
+import { mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
+import { useClassifyDashboard } from "../composables/useClassifyDashboard";
+import TaskInsightModal from "../components/TaskInsightModal.vue";
 
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
 const router = useRouter();
+const themeVars = useThemeVars();
+
+const themeStyleVars = computed(() => ({
+  '--cv-bg': themeVars.value.bodyColor,
+  '--cv-card-bg': themeVars.value.cardColor,
+  '--cv-text': themeVars.value.textColor1,
+  '--cv-text-secondary': themeVars.value.textColor3,
+  '--cv-text-disabled': themeVars.value.textColorDisabled,
+  '--cv-border': themeVars.value.borderColor,
+  '--cv-divider': themeVars.value.dividerColor,
+  '--cv-hover': themeVars.value.hoverColor,
+  '--cv-primary': themeVars.value.primaryColor,
+  '--cv-primary-hover': themeVars.value.primaryColorHover,
+}))
 
 // ---------------------------------------------------------------------------
 // Setup state
@@ -403,6 +490,176 @@ const labelOptions = computed<SelectOption[]>(() =>
   labelSpace.value.map((l) => ({ label: l, value: l }))
 );
 
+const isClassificationDataset = computed(() =>
+  selectedDataset.value?.task_spec?.task_type === "classification"
+);
+
+// ---------------------------------------------------------------------------
+// Step 2 grid mode — AnnotationGrid items
+// ---------------------------------------------------------------------------
+
+// Samples fetched for building grid items alongside prediction rows
+const reviewSamples = ref<SampleWithLabels[]>([]);
+
+// Draft labels (user corrections in grid mode)
+const reviewDraftLabels = ref<Record<string, string>>({});
+
+const reviewGridItems = computed<AnnotationGridItem[]>(() => {
+  if (!isClassificationDataset.value || predictions.value.length === 0) return [];
+  const sampleMap = new Map(reviewSamples.value.map((s) => [s.id, s]));
+  return predictions.value.map((row) => {
+    const sample = sampleMap.get(row.sample_id);
+    return {
+      id: row.sample_id,
+      imageSrcs: resolveImageUris(sample?.image_uris ?? []),
+      currentLabel: sample?.latest_annotation?.label ?? null,
+      draftLabel: reviewDraftLabels.value[row.sample_id] ?? null,
+      predictionLabel: row.predicted_label,
+      predictionConfidence: row.confidence,
+      predictionId: row.prediction_id,
+      metadata: sample?.metadata ?? {},
+    };
+  });
+});
+
+// Provide grid items for PredictionSummaryWidget
+provide<Ref<AnnotationGridItem[]>>('pr-grid-items', reviewGridItems);
+
+function onGridSelect(ids: Set<string>) {
+  // Selection tracking (for potential future use)
+  void ids;
+}
+
+function onGridApplyLabel(payload: { ids: string[]; label: string }) {
+  const draft = { ...reviewDraftLabels.value };
+  payload.ids.forEach((id) => { draft[id] = payload.label; });
+  reviewDraftLabels.value = draft;
+  // Sync back to review rows
+  payload.ids.forEach((id) => {
+    const row = predictions.value.find((r) => r.sample_id === id);
+    if (row) row.final_label = payload.label;
+  });
+}
+
+const gridRef = ref<InstanceType<typeof AnnotationGrid> | null>(null);
+
+// Sidebar for review mode
+const sidebarCollapsed = ref(false);
+
+const reviewDraftCount = computed(() =>
+  Object.keys(reviewDraftLabels.value).length
+);
+
+const reviewSelectedCount = ref(0);
+
+const dashboardContext = useClassifyDashboard(
+  computed(() => selectedDatasetId.value ?? ''),
+  reviewDraftCount,
+  reviewSelectedCount as Ref<number>,
+  labelSpace,
+);
+
+// Sidebar panels for review mode (includes prediction summary widget)
+const reviewStaticPanels: SidebarPanelDescriptor[] = [
+  {
+    id: 'prediction-summary',
+    component: 'prediction-summary',
+    title: 'Prediction Summary',
+    props: {},
+    order: 5,
+  },
+  {
+    id: 'annotation-progress',
+    component: 'annotation-progress',
+    title: 'Annotation Progress',
+    props: {
+      chartType: 'donut',
+      showCounts: true,
+      showPercent: true,
+      includeDrafts: true,
+      showLabelBreakdown: true,
+    },
+    order: 10,
+  },
+];
+
+const reviewSidebarPanels = computed(() =>
+  mergePanels(reviewStaticPanels, [])
+);
+
+// Load samples when predictions are loaded (for grid images)
+watch(predictions, async (rows) => {
+  if (rows.length === 0 || !selectedDatasetId.value) {
+    reviewSamples.value = [];
+    return;
+  }
+  try {
+    // Fetch all samples in batches to get images
+    const allSamples: SampleWithLabels[] = [];
+    const pageSize = 200;
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const result = await listSamplesWithLabels(selectedDatasetId.value!, offset, pageSize);
+      allSamples.push(...result.items);
+      total = result.total;
+      offset += pageSize;
+      if (result.items.length === 0) break;
+    }
+    reviewSamples.value = allSamples;
+  } catch {
+    reviewSamples.value = [];
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task Insight Modal (auto-open for active prediction jobs) — T4
+// ---------------------------------------------------------------------------
+
+const showTaskModal = ref(false);
+const taskHandoffEnabled = ref(true);
+
+const activeTaskSummary = computed<TaskTrackerSummary | null>(() => {
+  const job = activePredictionJob.value;
+  if (!job) return null;
+  const status = job.status.toLowerCase();
+  if (!['queued', 'running'].includes(status)) return null;
+  // Build a TaskTrackerSummary from the prediction job (the backend
+  // uses the same ID for both, so the modal can fetch full detail by ID)
+  return {
+    id: job.id,
+    task_kind: 'prediction',
+    execution_kind: 'prefect',
+    display_name: `Prediction: ${job.dataset_id.slice(0, 8)}...`,
+    display_status: status,
+    stage: status === 'queued' ? 'queued' : 'running',
+    dataset_id: job.dataset_id,
+    model_id: job.model_id,
+    preset_id: null,
+    created_by: job.created_by,
+    created_at: job.created_at,
+    updated_at: job.updated_at,
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: 'none',
+    queue_depth_ahead: null,
+    capacity_status: 'unknown',
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
+});
+
+// Auto-open modal when a prediction job becomes active; auto-close when done
+watch(activeTaskSummary, (task) => {
+  if (task) {
+    showTaskModal.value = true;
+  } else {
+    showTaskModal.value = false;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Run predictions
 // ---------------------------------------------------------------------------
@@ -422,6 +679,7 @@ const runPredictionsMutation = useMutation({
   onSuccess: (data) => {
     activePredictionJob.value = data;
     predictions.value = [];
+    reviewDraftLabels.value = {};
     message.success(`Prediction job submitted: ${data.id}`);
     void pollPredictionJob(data.id);
   },
@@ -456,6 +714,7 @@ function onCancelPredictionJob() {
 function onDatasetChange() {
   selectedModelId.value = null;
   predictions.value = [];
+  reviewDraftLabels.value = {};
   activePredictionJob.value = null;
   syncedCollection.value = null;
   syncedCollectionTag.value = null;
@@ -467,10 +726,21 @@ async function pollPredictionJob(jobId: string) {
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const job = await api.getPredictionJob(jobId);
       activePredictionJob.value = job;
+
+      // Ensure dataset/model context matches the loaded job so the
+      // correct Step 2 renderer (grid vs. fallback table) is used.
+      if (job.dataset_id && selectedDatasetId.value !== job.dataset_id) {
+        selectedDatasetId.value = job.dataset_id;
+      }
+      if (job.model_id && selectedModelId.value !== job.model_id) {
+        selectedModelId.value = job.model_id;
+      }
+
       const status = job.status.toLowerCase();
       if (status === "completed") {
         const rows = await loadReviewRowsFromJob(job);
         predictions.value = rows;
+        reviewDraftLabels.value = {};
         message.success(`${rows.length} predictions ready for review`);
         return;
       }
@@ -487,6 +757,7 @@ async function pollPredictionJob(jobId: string) {
 }
 
 function resetEdits() {
+  reviewDraftLabels.value = {};
   predictions.value = predictions.value.map((r) => ({
     ...r,
     final_label: r.predicted_label,
@@ -494,7 +765,7 @@ function resetEdits() {
 }
 
 // ---------------------------------------------------------------------------
-// Review table columns
+// Review table columns (for VQA / non-classification fallback)
 // ---------------------------------------------------------------------------
 
 const reviewColumns = computed<DataTableColumns<ReviewRow>>(() => [
@@ -625,11 +896,11 @@ const saveAnnotationsMutation = useMutation({
     );
     currentReviewActionId.value = action.id;
 
-    // Save annotations
+    // Save annotations — use draft labels from grid if in classification mode
     const items: SaveReviewAnnotationItem[] = predictions.value.map((r) => ({
       sample_id: r.sample_id,
       predicted_label: r.predicted_label,
-      final_label: r.final_label,
+      final_label: reviewDraftLabels.value[r.sample_id] ?? r.final_label,
       confidence: r.confidence,
       prediction_id: r.prediction_id,
     }));
@@ -638,6 +909,7 @@ const saveAnnotationsMutation = useMutation({
   onSuccess: (data) => {
     message.success(`Saved ${data.created_count} annotations to version`);
     predictions.value = [];
+    reviewDraftLabels.value = {};
     // Refresh review actions if viewing the same dataset
     if (exportDatasetId.value === selectedDatasetId.value) {
       qc.invalidateQueries({ queryKey: ["reviewActions", exportDatasetId.value] });
@@ -844,3 +1116,12 @@ function confirmDeleteAction() {
   return false;
 }
 </script>
+
+<style scoped>
+.pr-review-body {
+  display: flex;
+  min-height: 400px;
+  max-height: 70vh;
+  gap: 0;
+}
+</style>

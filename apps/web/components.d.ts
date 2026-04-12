@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AgentChatDrawer: typeof import('./src/components/AgentChatDrawer.vue')['default']
+    AnnotationGrid: typeof import('./src/components/annotation/AnnotationGrid.vue')['default']
     AnnotationProgressWidget: typeof import('./src/components/classify/widgets/AnnotationProgressWidget.vue')['default']
     ClassifySidebar: typeof import('./src/components/classify/ClassifySidebar.vue')['default']
     DataTableWidget: typeof import('./src/components/classify/widgets/DataTableWidget.vue')['default']
@@ -75,6 +76,7 @@ declare module 'vue' {
     NText: typeof import('naive-ui')['NText']
     NUpload: typeof import('naive-ui')['NUpload']
     OrgSelector: typeof import('./src/components/OrgSelector.vue')['default']
+    PredictionSummaryWidget: typeof import('./src/components/classify/widgets/PredictionSummaryWidget.vue')['default']
     PredictModal: typeof import('./src/components/PredictModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

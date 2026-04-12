@@ -75,6 +75,9 @@ export const WIDGET_COMPONENTS: Record<string, Component> = {
   'sample-viewer': defineAsyncComponent(
     () => import('./widgets/SampleViewerWidget.vue'),
   ),
+  'prediction-summary': defineAsyncComponent(
+    () => import('./widgets/PredictionSummaryWidget.vue'),
+  ),
 }
 
 // ---------------------------------------------------------------------------

@@ -766,3 +766,26 @@ export interface MetricCardItem {
   value: string;
   color?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Annotation Grid item (shared by ClassifyView & PredictionReview Step 2)
+// ---------------------------------------------------------------------------
+
+export interface AnnotationGridItem {
+  /** Sample ID (unique key) */
+  id: string;
+  /** Resolved image src strings (already passed through resolveImageUris) */
+  imageSrcs: string[];
+  /** Current persisted label (from latest_annotation) */
+  currentLabel: string | null;
+  /** Draft label assigned in-session but not yet submitted */
+  draftLabel: string | null;
+  /** Prediction label (only in prediction-review mode) */
+  predictionLabel: string | null;
+  /** Prediction confidence 0-1 (only in prediction-review mode) */
+  predictionConfidence: number | null;
+  /** Prediction ID for review submission */
+  predictionId: string | null;
+  /** Arbitrary metadata shown on hover / detail */
+  metadata: Record<string, unknown>;
+}

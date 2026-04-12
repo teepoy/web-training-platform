@@ -6,7 +6,7 @@
  * data object.
  */
 
-import { computed, type Ref } from 'vue'
+import { computed, isRef, ref, type Ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { api } from '../api'
 import type { DatasetAnnotationStats } from '../types'
@@ -39,14 +39,17 @@ export interface ClassifyDashboardContext {
 // ---------------------------------------------------------------------------
 
 export function useClassifyDashboard(
-  datasetId: string,
+  datasetId: string | Ref<string>,
   draftCount: Ref<number>,
   selectedCount: Ref<number>,
   labelSpace: Ref<string[]>,
 ): ClassifyDashboardContext {
+  const resolvedId = isRef(datasetId) ? datasetId : ref(datasetId)
+
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['annotation-stats', datasetId],
-    queryFn: () => api.getAnnotationStats(datasetId),
+    queryKey: computed(() => ['annotation-stats', resolvedId.value]),
+    queryFn: () => api.getAnnotationStats(resolvedId.value),
+    enabled: computed(() => resolvedId.value !== ''),
     refetchInterval: 15_000,
     retry: 1,
   })
