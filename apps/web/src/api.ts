@@ -7,6 +7,7 @@ import type {
   BulkAnnotationResponse,
   DashboardResponse,
   Dataset,
+  DatasetAnnotationStats,
   CreatePredictionCollectionRequest,
   ExportFormat,
   LoginResponse,
@@ -95,14 +96,15 @@ async function req<T>(
   }
 
   try {
+    const { headers: initHeaders, ...restInit } = init ?? {};
     const r = await fetch(`${API_BASE}${path}`, {
+      ...restInit,
       headers: {
         "Content-Type": "application/json",
         ...authHeader,
-        ...(init?.headers ?? {}),
+        ...((initHeaders as Record<string, string>) ?? {}),
       },
       signal: controller.signal,
-      ...init,
     });
 
     if (!r.ok) {
@@ -377,6 +379,9 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ label_space: labelSpace }),
     }),
+
+  getAnnotationStats: (datasetId: string) =>
+    req<DatasetAnnotationStats>(`/datasets/${datasetId}/annotation-stats`),
 
   // ---- Samples ----
   listSamples: (datasetId: string, offset?: number, limit?: number) => {
@@ -773,4 +778,168 @@ export function buildTrackedTaskEventSource(taskId: string): EventSource {
     /* ignore */
   }
   return new EventSource(`${API_BASE}/task-tracker/tasks/${taskId}/stream${tokenParam}`);
+}
+
+// ---------------------------------------------------------------------------
+// Agent / Display Surface API
+// ---------------------------------------------------------------------------
+
+export async function getSurfaceState(
+  sessionId: string,
+  surfaceId: string
+): Promise<import("./types").SurfaceStateDocument> {
+  return req(`/sessions/${sessionId}/surfaces/${surfaceId}`);
+}
+
+export async function setSurfacePanel(
+  sessionId: string,
+  surfaceId: string,
+  panel: import("./types").AgentPanelDescriptor
+): Promise<import("./types").SurfaceStateDocument> {
+  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/panels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ panel }),
+  });
+}
+
+export async function removeSurfacePanel(
+  sessionId: string,
+  surfaceId: string,
+  panelId: string
+): Promise<import("./types").SurfaceStateDocument> {
+  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/panels/${panelId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function exportSurfaceState(
+  sessionId: string,
+  surfaceId: string
+): Promise<import("./types").SurfaceStateDocument> {
+  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/export`);
+}
+
+export async function importSurfaceState(
+  sessionId: string,
+  surfaceId: string,
+  doc: import("./types").SurfaceStateDocument
+): Promise<import("./types").SurfaceStateDocument> {
+  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(doc),
+  });
+}
+
+export async function queryDatasetData(
+  datasetId: string,
+  queryType: string,
+  params: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  return req(`/datasets/${datasetId}/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query_type: queryType, params }),
+  });
+}
+
+/**
+ * Send a chat message to the agent and return an EventSource for SSE streaming.
+ * The caller must close the EventSource when done.
+ */
+export function sendAgentChat(
+  datasetId: string,
+  message: string
+): { eventSource: EventSource; abort: () => void } {
+  // Use fetch + ReadableStream for POST-based SSE (EventSource only supports GET).
+  // We fake an EventSource-like interface using a custom approach.
+  const controller = new AbortController();
+  const token = (() => {
+    try {
+      const authStore = useAuthStore();
+      return authStore.token ?? getStoredToken();
+    } catch {
+      return getStoredToken();
+    }
+  })();
+
+  const url = `${API_BASE}/datasets/${datasetId}/agent/chat`;
+
+  // We return a minimal object; the composable will use fetch directly
+  // because EventSource doesn't support POST.
+  return {
+    eventSource: null as unknown as EventSource, // not used
+    abort: () => controller.abort(),
+  };
+}
+
+/**
+ * POST-based SSE streaming for agent chat.
+ * Returns an async generator of parsed SSE events.
+ */
+export async function* streamAgentChat(
+  datasetId: string,
+  userMessage: string,
+  signal?: AbortSignal
+): AsyncGenerator<{ event: string; data: string }> {
+  const token = (() => {
+    try {
+      const authStore = useAuthStore();
+      return authStore.token ?? getStoredToken();
+    } catch {
+      return getStoredToken();
+    }
+  })();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const resp = await fetch(`${API_BASE}/datasets/${datasetId}/agent/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message: userMessage }),
+    signal,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new ApiError(text || resp.statusText, resp.status);
+  }
+
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE frames from buffer
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    let currentEvent = "message";
+    let currentData = "";
+
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        currentData = line.slice(6);
+      } else if (line === "") {
+        // End of SSE frame
+        if (currentData) {
+          yield { event: currentEvent, data: currentData };
+        }
+        currentEvent = "message";
+        currentData = "";
+      }
+    }
+  }
 }

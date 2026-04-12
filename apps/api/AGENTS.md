@@ -16,6 +16,9 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Tests | `tests/` | Smoke integration only |
 | Add/manage cron schedules | `app/services/scheduler.py` | `SchedulerService` — pure httpx Prefect REST client, no SDK |
 | Register Prefect flows | `app/flows/` | `drain_dataset.py` flow definition + `serve.py` serve entrypoint |
+| Agent runtime | `app/agent/` | Surface store, metadata inference, prompt assembler, tools, runtime loop |
+| Agent routes | `app/main.py` (bottom) | Surface CRUD, data query, agent chat SSE endpoints |
+| Agent tests | `tests/test_agent.py` | 37 tests covering surface store, inference, assembler, routes, chat |
 
 ## STRUCTURE
 ```text
@@ -28,6 +31,7 @@ apps/api/
 ├── app/services/    # orchestrator, engines, notifications, artifacts
 ├── app/services/scheduler.py  # Prefect REST API client wrapper (httpx, no SDK)
 ├── app/flows/       # Prefect flow definitions and serve entrypoint
+├── app/agent/       # AI agent: surface store, metadata inference, prompt assembly, tool-calling runtime
 ├── config/          # base/dev/prod/test profiles
 ├── alembic/         # migrations
 └── tests/           # pytest smoke flows
@@ -62,3 +66,4 @@ uv run --extra dev pytest
 - `main.py` allows all CORS origins right now.
 - SSE endpoint polls repository state every 0.5s per client.
 - `config/base.yaml` contains placeholder/insecure defaults; real deployments must override via env or secrets.
+- Per-sample predictions now live in the API DB (`platform_predictions`) instead of Label Studio. Label Studio prediction sync is a manual, one-way export of selected prediction collections for annotation use.

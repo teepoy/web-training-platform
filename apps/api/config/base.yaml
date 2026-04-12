@@ -74,6 +74,11 @@ presets:
   dir: "presets"
   strict: false
 
+agent:
+  enabled: true
+  max_panels: 8
+  metadata_sample_size: 100
+
 auth:
   jwt_secret_key: "replace-me-in-production"
   jwt_algorithm: "HS256"

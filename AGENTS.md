@@ -11,6 +11,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
 ├── apps/worker/        # placeholder (not implemented)
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
+├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
 ├── infra/k8s/          # minikube/kubeflow manifests
 ├── infra/compose/      # docker compose smoke stack
 └── docs/               # architecture and endpoint notes
@@ -92,6 +93,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Frontend views | `apps/web/src/views/` + `apps/web/src/router.ts` |
 | Prefect flows | `apps/api/app/flows/` |
 | Schedule service | `apps/api/app/services/scheduler.py` |
+| Agent runtime | `apps/api/app/agent/` |
+| Agent display protocol | `docs/agent-display-protocol.md` |
+| MCP server | `libs/mcp-server/` |
 
 ## CODE MAP
 | Symbol | Type | Location | Role |
@@ -100,6 +104,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `Container` | DI | `apps/api/app/container.py` | Wires engine/storage/repo |
 | `TrainingOrchestrator` | service | `apps/api/app/services/orchestrator.py` | Job persistence + notifications |
 | `SchedulerService` | service | `apps/api/app/services/scheduler.py` | Prefect REST client |
+| `SurfaceStore` | service | `apps/api/app/agent/surface_store.py` | In-memory agent panel state |
+| `ClassifyAgent` | service | `apps/api/app/agent/runtime.py` | LLM tool-calling loop for classify sidebar |
+| `PlatformClient` | MCP | `libs/mcp-server/finetune_mcp/client.py` | HTTP client for MCP server |
 | `router` | Vue Router | `apps/web/src/router.ts` | `/datasets`, `/jobs`, `/schedules` |
 | `FinetuneClient` | SDK | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |
 
@@ -151,6 +158,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 
 ## TEST RULE
 - Always run `make test` after modify code files and resolve any error.
+
+## COMMIT RULE
+- After completing code changes, remind the user to ask you to commit. Do not commit automatically — wait for the user to explicitly request it.
 
 ## LOCAL ENV RULE
 - Keep the local dev environment newest after code or config changes.

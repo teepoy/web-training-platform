@@ -391,6 +391,77 @@ class SqlRepository:
 
             return result, total
 
+    async def get_annotation_stats(self, dataset_id: str) -> dict:
+        """Return aggregate annotation statistics for a dataset.
+
+        Returns a dict with keys: total_samples, annotated_samples,
+        unlabeled_samples, label_counts.
+        """
+        from sqlalchemy import alias, and_, case
+
+        async with self.session_factory() as session:
+            # Subquery: latest annotation per sample (max created_at)
+            latest_ann_subq = (
+                select(
+                    AnnotationORM.sample_id.label("sample_id"),
+                    func.max(AnnotationORM.created_at).label("max_created_at"),
+                )
+                .group_by(AnnotationORM.sample_id)
+                .subquery("latest_ann_time")
+            )
+
+            AnnAlias = alias(AnnotationORM.__table__, name="ann_stats")
+
+            # Base: all samples in dataset LEFT JOIN to latest annotation
+            base = (
+                select(
+                    SampleORM.id.label("sample_id"),
+                    AnnAlias.c.label.label("ann_label"),
+                )
+                .where(SampleORM.dataset_id == dataset_id)
+                .outerjoin(
+                    latest_ann_subq,
+                    latest_ann_subq.c.sample_id == SampleORM.id,
+                )
+                .outerjoin(
+                    AnnAlias,
+                    and_(
+                        AnnAlias.c.sample_id == SampleORM.id,
+                        AnnAlias.c.created_at == latest_ann_subq.c.max_created_at,
+                    ),
+                )
+                .subquery("base_stats")
+            )
+
+            # Total samples
+            total_stmt = select(func.count()).select_from(base)
+            total_samples = await session.scalar(total_stmt) or 0
+
+            # Annotated samples (ann_label IS NOT NULL)
+            annotated_stmt = select(func.count()).select_from(
+                select(base.c.sample_id).where(base.c.ann_label.isnot(None)).subquery()
+            )
+            annotated_samples = await session.scalar(annotated_stmt) or 0
+
+            # Label counts
+            label_count_stmt = (
+                select(
+                    base.c.ann_label,
+                    func.count().label("cnt"),
+                )
+                .where(base.c.ann_label.isnot(None))
+                .group_by(base.c.ann_label)
+            )
+            label_rows = (await session.execute(label_count_stmt)).all()
+            label_counts = {row[0]: row[1] for row in label_rows}
+
+            return {
+                "total_samples": total_samples,
+                "annotated_samples": annotated_samples,
+                "unlabeled_samples": total_samples - annotated_samples,
+                "label_counts": label_counts,
+            }
+
     async def create_annotation(self, annotation: Annotation, user_id: str | None = None) -> Annotation:
         async with self.session_factory() as session:
             session.add(
@@ -1728,6 +1799,141 @@ class SqlRepository:
                 )
                 for r in rows
             ]
+
+    # ------------------------------------------------------------------
+    # Agent data queries
+    # ------------------------------------------------------------------
+
+    async def get_random_samples(
+        self, dataset_id: str, limit: int = 100
+    ) -> list[dict]:
+        """Return up to *limit* random samples from a dataset (metadata only)."""
+        async with self.session_factory() as session:
+            # SQLite uses RANDOM(), Postgres uses RANDOM() too
+            stmt = (
+                select(SampleORM)
+                .where(SampleORM.dataset_id == dataset_id)
+                .order_by(func.random())
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                {
+                    "id": r.id,
+                    "dataset_id": r.dataset_id,
+                    "image_uris": r.image_uris,
+                    "metadata": r.metadata_json,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ]
+
+    async def metadata_histogram(
+        self, dataset_id: str, key: str
+    ) -> dict:
+        """Return value counts for a single metadata JSON key.
+
+        Uses SQLAlchemy ``func.json_extract`` for SQLite and
+        ``->>`` operator for Postgres.
+        """
+        async with self.session_factory() as session:
+            # Detect dialect
+            dialect = session.bind.dialect.name if session.bind else "sqlite"
+
+            if dialect == "postgresql":
+                val_col = SampleORM.metadata_json[key].astext.label("val")
+            else:
+                # SQLite json_extract
+                val_col = func.json_extract(
+                    SampleORM.metadata_json, f"$.{key}"
+                ).label("val")
+
+            stmt = (
+                select(val_col, func.count().label("cnt"))
+                .where(SampleORM.dataset_id == dataset_id)
+                .where(val_col.isnot(None))
+                .group_by(val_col)
+                .order_by(func.count().desc())
+                .limit(200)
+            )
+            rows = (await session.execute(stmt)).all()
+            return {
+                "key": key,
+                "histogram": [{"value": r[0], "count": r[1]} for r in rows],
+                "total_non_null": sum(r[1] for r in rows),
+            }
+
+    async def recent_annotations(
+        self, dataset_id: str, limit: int = 20
+    ) -> dict:
+        """Return the most recent annotations for samples in a dataset."""
+        async with self.session_factory() as session:
+            stmt = (
+                select(
+                    AnnotationORM.id,
+                    AnnotationORM.sample_id,
+                    AnnotationORM.label,
+                    AnnotationORM.created_by,
+                    AnnotationORM.created_at,
+                )
+                .join(SampleORM, SampleORM.id == AnnotationORM.sample_id)
+                .where(SampleORM.dataset_id == dataset_id)
+                .order_by(AnnotationORM.created_at.desc())
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).all()
+            return {
+                "entries": [
+                    {
+                        "id": r[0],
+                        "sample_id": r[1],
+                        "label": r[2],
+                        "created_by": r[3],
+                        "created_at": r[4].isoformat() if r[4] else None,
+                    }
+                    for r in rows
+                ]
+            }
+
+    async def prediction_summary(self, dataset_id: str) -> dict:
+        """Aggregate prediction stats for a dataset."""
+        async with self.session_factory() as session:
+            total_stmt = (
+                select(func.count())
+                .select_from(PlatformPredictionORM)
+                .where(PlatformPredictionORM.dataset_id == dataset_id)
+            )
+            total = await session.scalar(total_stmt) or 0
+
+            model_stmt = (
+                select(
+                    PlatformPredictionORM.model_id,
+                    func.count().label("cnt"),
+                )
+                .where(PlatformPredictionORM.dataset_id == dataset_id)
+                .group_by(PlatformPredictionORM.model_id)
+            )
+            model_rows = (await session.execute(model_stmt)).all()
+
+            label_stmt = (
+                select(
+                    PlatformPredictionORM.predicted_label,
+                    func.count().label("cnt"),
+                )
+                .where(PlatformPredictionORM.dataset_id == dataset_id)
+                .group_by(PlatformPredictionORM.predicted_label)
+                .order_by(func.count().desc())
+                .limit(50)
+            )
+            label_rows = (await session.execute(label_stmt)).all()
+
+            return {
+                "total_predictions": total,
+                "models": [
+                    {"model_id": r[0], "count": r[1]} for r in model_rows
+                ],
+                "label_distribution": {r[0]: r[1] for r in label_rows},
+            }
 
     async def get_annotation_version(self, version_id: str) -> AnnotationVersion | None:
         async with self.session_factory() as session:

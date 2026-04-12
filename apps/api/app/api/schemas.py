@@ -223,6 +223,13 @@ class ServiceStatus(BaseModel):
     endpoint: str | None = None
 
 
+class DatasetAnnotationStats(BaseModel):
+    total_samples: int = 0
+    annotated_samples: int = 0
+    unlabeled_samples: int = 0
+    label_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class DashboardResponse(BaseModel):
     work_pool: WorkPoolStatus | None = None
     job_queue: JobQueueStats = Field(default_factory=JobQueueStats)
@@ -728,3 +735,109 @@ class VersionExportRequest(BaseModel):
         default="annotation-version-full-context-v1",
         description="Export format identifier",
     )
+
+
+# ---------------------------------------------------------------------------
+# Agent / Display Surface schemas
+# ---------------------------------------------------------------------------
+
+class MetadataKeyInfo(BaseModel):
+    """Describes a single metadata key discovered by scanning sample data."""
+    type: str = Field(description="Polars-inferred type name, e.g. 'Utf8', 'Int64'")
+    null_count: int = 0
+    n_unique: int = 0
+    sample_values: list = Field(default_factory=list, description="Up to 5 example values")
+    min: float | int | None = None
+    max: float | int | None = None
+
+
+class DeclaredMetadataKey(BaseModel):
+    """Human-declared metadata key description (stored in task_spec.metadata_schema)."""
+    type: str = Field(description="Expected type, e.g. 'string', 'integer', 'float'")
+    description: str = Field(default="", description="Human-readable description of this key")
+
+
+class DataSourceApi(BaseModel):
+    """Data source that fetches from a backend API endpoint."""
+    kind: str = Field(default="api", pattern="^api$")
+    endpoint: str
+    params: dict[str, str] = Field(default_factory=dict)
+    refresh_interval: int = Field(default=0, ge=0, description="Auto-refresh in ms; 0 = off")
+
+
+class DataSourceContext(BaseModel):
+    """Data source that reads from an injected Vue provide/inject context."""
+    kind: str = Field(default="context", pattern="^context$")
+    key: str
+    path: str | None = None
+
+
+class AgentPanelDescriptor(BaseModel):
+    """Describes a single panel that the agent wants to render on a display surface."""
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9\-]*$", max_length=80)
+    component: str = Field(description="Key into the WIDGET_COMPONENTS registry")
+    title: str = Field(max_length=120)
+    order: int = Field(default=50, ge=0)
+    collapsed: bool = False
+    size: str = Field(default="normal", pattern="^(compact|normal|large)$")
+    data: dict | None = Field(default=None, description="Inline data payload: {inline: <payload>}")
+    data_source: DataSourceApi | DataSourceContext | None = Field(default=None, description="Reference to a data source")
+    config: dict = Field(default_factory=dict, description="Widget-specific config props")
+    ephemeral: bool = Field(default=False, description="Auto-remove on next agent turn if not re-sent")
+    ttl: int | None = Field(default=None, ge=1, description="Auto-remove after N seconds")
+
+
+class SurfaceLayout(BaseModel):
+    """Layout settings for a display surface."""
+    width: int = Field(default=280, ge=100, le=800)
+    position: str = Field(default="right", pattern="^(right|left)$")
+
+
+class SurfaceStateDocument(BaseModel):
+    """Complete serialisable state of a display surface."""
+    version: int = Field(default=1)
+    surface_id: str
+    panels: list[AgentPanelDescriptor] = Field(default_factory=list)
+    layout: SurfaceLayout = Field(default_factory=SurfaceLayout)
+    exported_at: str | None = None
+    metadata: dict = Field(default_factory=dict, description="Optional provenance: created_by, description")
+
+
+class SetPanelRequest(BaseModel):
+    """Request body for adding / replacing a panel on a surface."""
+    panel: AgentPanelDescriptor
+
+
+class ChatRequest(BaseModel):
+    """User message sent to the agent."""
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class AgentEventMessage(BaseModel):
+    """Agent text response event."""
+    type: str = Field(default="message")
+    content: str
+
+
+class AgentEventAction(BaseModel):
+    """Agent tool-call action event."""
+    type: str = Field(default="action")
+    tool: str
+    summary: str
+    result: dict | None = None
+
+
+class WidgetManifest(BaseModel):
+    """Describes a widget type available on a surface."""
+    key: str
+    description: str
+    config_schema: dict = Field(default_factory=dict, description="JSON Schema for config props")
+    data_schema: dict = Field(default_factory=dict, description="JSON Schema for inline data")
+
+
+class QueryDataRequest(BaseModel):
+    """Structured data query from the agent."""
+    query_type: str = Field(
+        description="One of: annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary"
+    )
+    params: dict = Field(default_factory=dict)

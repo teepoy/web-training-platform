@@ -289,6 +289,13 @@ export interface DashboardResponse {
   prefect_connected: boolean
 }
 
+export interface DatasetAnnotationStats {
+  total_samples: number
+  annotated_samples: number
+  unlabeled_samples: number
+  label_counts: Record<string, number>
+}
+
 export type OrgRole = "admin" | "member";
 
 export interface User {
@@ -665,4 +672,97 @@ export interface TaskTrackerDetail {
   meta: Record<string, unknown>;
   raw: TaskTrackerRawPayload;
   derived: TaskTrackerDerived;
+}
+
+// ---------------------------------------------------------------------------
+// Agent / Display Surface types
+// ---------------------------------------------------------------------------
+
+export interface AgentPanelDescriptor {
+  id: string;
+  component: string;
+  title: string;
+  order: number;
+  collapsed: boolean;
+  size: "compact" | "normal" | "large";
+  data: Record<string, unknown> | null;
+  data_source: AgentDataSourceApi | AgentDataSourceContext | null;
+  config: Record<string, unknown>;
+  ephemeral: boolean;
+  ttl: number | null;
+}
+
+export interface AgentDataSourceApi {
+  kind: "api";
+  endpoint: string;
+  params: Record<string, string>;
+  refresh_interval: number;
+}
+
+export interface AgentDataSourceContext {
+  kind: "context";
+  key: string;
+  path: string | null;
+}
+
+export interface SurfaceLayout {
+  width: number;
+  position: "right" | "left";
+}
+
+export interface SurfaceStateDocument {
+  version: number;
+  surface_id: string;
+  panels: AgentPanelDescriptor[];
+  layout: SurfaceLayout;
+  exported_at: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface AgentChatEvent {
+  type: "agent-message" | "agent-action" | "sidebar-update" | "done";
+}
+
+export interface AgentMessageEvent extends AgentChatEvent {
+  type: "agent-message";
+  content: string;
+}
+
+export interface AgentActionEvent extends AgentChatEvent {
+  type: "agent-action";
+  tool: string;
+  summary: string;
+}
+
+export interface AgentSidebarUpdateEvent extends AgentChatEvent {
+  type: "sidebar-update";
+  surface_id: string;
+  panels: AgentPanelDescriptor[];
+}
+
+export interface AgentDoneEvent extends AgentChatEvent {
+  type: "done";
+}
+
+/** A single entry in the chat history shown to the user. */
+export interface ChatEntry {
+  id: string;
+  role: "user" | "assistant" | "action";
+  content: string;
+  tool?: string;
+  timestamp: number;
+}
+
+// Widget inline data shapes
+
+export interface MarkdownLogEntry {
+  ts: string;
+  level: string;
+  message: string;
+}
+
+export interface MetricCardItem {
+  label: string;
+  value: string;
+  color?: string;
 }

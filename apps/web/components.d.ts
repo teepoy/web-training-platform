@@ -11,6 +11,14 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AgentChatDrawer: typeof import('./src/components/AgentChatDrawer.vue')['default']
+    AnnotationProgressWidget: typeof import('./src/components/classify/widgets/AnnotationProgressWidget.vue')['default']
+    ClassifySidebar: typeof import('./src/components/classify/ClassifySidebar.vue')['default']
+    DataTableWidget: typeof import('./src/components/classify/widgets/DataTableWidget.vue')['default']
+    GenericEChartsWidget: typeof import('./src/components/classify/widgets/GenericEChartsWidget.vue')['default']
+    LabelDistributionWidget: typeof import('./src/components/classify/widgets/LabelDistributionWidget.vue')['default']
+    MarkdownLogWidget: typeof import('./src/components/classify/widgets/MarkdownLogWidget.vue')['default']
+    MetricCardsWidget: typeof import('./src/components/classify/widgets/MetricCardsWidget.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NBackTop: typeof import('naive-ui')['NBackTop']
@@ -72,7 +80,9 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     RunLogViewer: typeof import('./src/components/RunLogViewer.vue')['default']
     SampleDetailDrawer: typeof import('./src/components/SampleDetailDrawer.vue')['default']
+    SampleViewerWidget: typeof import('./src/components/classify/widgets/SampleViewerWidget.vue')['default']
     TaskInsightModal: typeof import('./src/components/TaskInsightModal.vue')['default']
     TrainingChart: typeof import('./src/components/TrainingChart.vue')['default']
+    WidgetErrorBoundary: typeof import('./src/components/classify/widgets/WidgetErrorBoundary.vue')['default']
   }
 }

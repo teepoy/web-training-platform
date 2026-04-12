@@ -23,3 +23,8 @@ label_studio:
 
 oauth:
   enabled: false
+
+agent:
+  enabled: true
+  max_panels: 8
+  metadata_sample_size: 50

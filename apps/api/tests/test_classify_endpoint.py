@@ -217,3 +217,73 @@ def test_samples_with_labels_latest_annotation_wins() -> None:
         # Should return the latest annotation
         assert s1_item["latest_annotation"] is not None
         assert s1_item["latest_annotation"]["label"] == "dog"
+
+
+# ---------------------------------------------------------------------------
+# Test 7: Annotation stats — aggregate counts
+# ---------------------------------------------------------------------------
+
+
+def test_annotation_stats_happy_path() -> None:
+    """3 samples: 2 annotated (cat, dog) + 1 unlabeled → correct stats."""
+    with TestClient(app) as c:
+        dataset_id = _create_dataset(c, name="stats-test-ds")
+
+        s1 = _create_sample(c, dataset_id)
+        s2 = _create_sample(c, dataset_id)
+        _create_sample(c, dataset_id)  # s3 unlabeled
+
+        _create_annotation(c, s1, "cat")
+        _create_annotation(c, s2, "dog")
+
+        resp = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        assert body["total_samples"] == 3
+        assert body["annotated_samples"] == 2
+        assert body["unlabeled_samples"] == 1
+        assert body["label_counts"]["cat"] == 1
+        assert body["label_counts"]["dog"] == 1
+
+
+def test_annotation_stats_empty_dataset() -> None:
+    """No samples → all zeros."""
+    with TestClient(app) as c:
+        dataset_id = _create_dataset(c, name="stats-empty-ds")
+
+        resp = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        assert body["total_samples"] == 0
+        assert body["annotated_samples"] == 0
+        assert body["unlabeled_samples"] == 0
+        assert body["label_counts"] == {}
+
+
+def test_annotation_stats_not_found() -> None:
+    """Nonexistent dataset → 404."""
+    with TestClient(app) as c:
+        resp = c.get("/api/v1/datasets/nonexistent-xyz/annotation-stats")
+        assert resp.status_code == 404
+
+
+def test_annotation_stats_multiple_annotations_latest_wins() -> None:
+    """Multiple annotations on same sample → only latest label counted."""
+    with TestClient(app) as c:
+        dataset_id = _create_dataset(c, name="stats-latest-ds")
+
+        s1 = _create_sample(c, dataset_id)
+        _create_annotation(c, s1, "cat")
+        _create_annotation(c, s1, "dog")  # newer → should win
+
+        resp = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        assert body["total_samples"] == 1
+        assert body["annotated_samples"] == 1
+        assert body["unlabeled_samples"] == 0
+        # latest annotation is "dog"
+        assert body["label_counts"] == {"dog": 1}

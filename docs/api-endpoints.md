@@ -11,6 +11,7 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `POST /api/v1/datasets/{dataset_id}/samples/import` (bulk sample import via Label Studio `import_tasks`; each item may include optional `label`, and `null` means unlabeled task/sample)
 - `POST /api/v1/datasets/{dataset_id}/samples/import-vqa` (JSONL bulk import for VQA datasets)
 - `GET /api/v1/datasets/{dataset_id}/samples`
+- `GET /api/v1/datasets/{dataset_id}/annotation-stats` (aggregate annotation progress: total/annotated/unannotated counts and per-label distribution)
 - `POST /api/v1/annotations`
 
 ## Authentication and org context
@@ -57,6 +58,16 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `GET /api/v1/schedules/{schedule_id}/runs`
 - `GET /api/v1/runs/{run_id}`
 - `GET /api/v1/runs/{run_id}/logs`
+
+## Agent and display surfaces
+
+- `GET /api/v1/sessions/{session_id}/surfaces/{surface_id}` — Get current surface state
+- `POST /api/v1/sessions/{session_id}/surfaces/{surface_id}/panels` — Add or replace a panel
+- `DELETE /api/v1/sessions/{session_id}/surfaces/{surface_id}/panels/{panel_id}` — Remove a panel
+- `GET /api/v1/sessions/{session_id}/surfaces/{surface_id}/export` — Export surface state document
+- `POST /api/v1/sessions/{session_id}/surfaces/{surface_id}/import` — Import surface state document
+- `POST /api/v1/datasets/{dataset_id}/query` — Structured data query (annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary)
+- `POST /api/v1/datasets/{dataset_id}/agent/chat` — Agent chat (SSE stream response)
 
 ## Export and advanced sample-selection ops
 

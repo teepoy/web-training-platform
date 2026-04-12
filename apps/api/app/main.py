@@ -14,11 +14,13 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
+    AgentPanelDescriptor,
     AnnotationVersionResponse,
     BatchPredictionResponse,
     BulkAnnotationRequest,
     BulkCreateSampleRequest,
     BulkCreateSampleResponse,
+    ChatRequest,
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateOrgRequest,
@@ -30,6 +32,7 @@ from app.api.schemas import (
     CreateTokenRequest,
     CreateTrainingJobRequest,
     DashboardResponse,
+    DatasetAnnotationStats,
     ExportFormatResponse,
     ImportVqaJsonlResponse,
     JobQueueStats,
@@ -46,6 +49,7 @@ from app.api.schemas import (
     PredictionJobResponse,
     PredictionResultResponse,
     PredictSingleRequest,
+    QueryDataRequest,
     RecentJobSummary,
     RegisterRequest,
     ReviewActionResponse,
@@ -57,7 +61,9 @@ from app.api.schemas import (
     ScheduleResponse,
     ServiceStatus,
     SampleWithLabels,
+    SetPanelRequest,
     SetPublicRequest,
+    SurfaceStateDocument,
     TaskTrackerDetailResponse,
     TaskTrackerSummaryResponse,
     TokenCreatedResponse,
@@ -515,6 +521,19 @@ async def list_samples_with_labels_endpoint(
         order_by=order_by,
     )
     return PaginatedResponse(items=[SampleWithLabels(**item) for item in items], total=total)
+
+
+@app.get("/api/v1/datasets/{dataset_id}/annotation-stats", response_model=DatasetAnnotationStats)
+async def get_annotation_stats(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> DatasetAnnotationStats:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    stats = await container.repository().get_annotation_stats(dataset_id)
+    return DatasetAnnotationStats(**stats)
 
 
 @app.get("/api/v1/samples/{sample_id}", response_model=Sample)
@@ -2422,3 +2441,169 @@ async def get_run_logs(
 ) -> list[RunLogResponse]:
     raws = await svc.get_run_logs(run_id, limit=limit)
     return [_log_to_response(r) for r in raws]
+
+
+# ---------------------------------------------------------------------------
+# Agent / Display Surface endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/sessions/{session_id}/surfaces/{surface_id}")
+async def get_surface_state(
+    session_id: str,
+    surface_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SurfaceStateDocument:
+    return await container.surface_store().get_state(session_id, surface_id)
+
+
+@app.post("/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels")
+async def set_surface_panel(
+    session_id: str,
+    surface_id: str,
+    body: SetPanelRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SurfaceStateDocument:
+    return await container.surface_store().set_panel(session_id, surface_id, body.panel)
+
+
+@app.delete("/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels/{panel_id}")
+async def remove_surface_panel(
+    session_id: str,
+    surface_id: str,
+    panel_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SurfaceStateDocument:
+    doc = await container.surface_store().remove_panel(session_id, surface_id, panel_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    return doc
+
+
+@app.post("/api/v1/sessions/{session_id}/surfaces/{surface_id}/import")
+async def import_surface_state(
+    session_id: str,
+    surface_id: str,
+    body: SurfaceStateDocument,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SurfaceStateDocument:
+    return await container.surface_store().import_state(session_id, surface_id, body)
+
+
+@app.get("/api/v1/sessions/{session_id}/surfaces/{surface_id}/export")
+async def export_surface_state(
+    session_id: str,
+    surface_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SurfaceStateDocument:
+    return await container.surface_store().export_state(session_id, surface_id)
+
+
+@app.post("/api/v1/datasets/{dataset_id}/query")
+async def query_dataset_data(
+    dataset_id: str,
+    body: QueryDataRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    from app.agent.tools import execute_query_data
+    return await execute_query_data(
+        query_type=body.query_type,
+        params=body.params,
+        dataset_id=dataset_id,
+        repository=container.repository(),
+    )
+
+
+@app.post("/api/v1/datasets/{dataset_id}/agent/chat")
+async def agent_chat(
+    dataset_id: str,
+    body: ChatRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+):
+    """Send a message to the classify agent.  Returns SSE stream of events."""
+    cfg = container.config()
+
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Check LLM is configured
+    if not cfg.llm.base_url or not cfg.llm.api_key:
+        raise HTTPException(status_code=503, detail="LLM not configured. Set llm.base_url and llm.api_key in config.")
+
+    # Build agent session
+    session_id = f"user-{current_user.id}-{dataset_id}"
+    surface_id = "classify-sidebar"
+
+    # Assemble system prompt
+    repo = container.repository()
+    annotation_stats = await repo.get_annotation_stats(dataset_id)
+    random_samples = await repo.get_random_samples(
+        dataset_id,
+        limit=int(cfg.agent.metadata_sample_size) if hasattr(cfg, "agent") else 100,
+    )
+    metadata_dicts = [s.get("metadata", {}) for s in random_samples if s.get("metadata")]
+
+    task_spec = dataset.task_spec or {}
+    declared_metadata = task_spec.get("metadata_schema") if isinstance(task_spec, dict) else None
+    label_space = task_spec.get("label_space", []) if isinstance(task_spec, dict) else []
+
+    # Check for predictions and embeddings
+    pred_summary = await repo.prediction_summary(dataset_id)
+    has_predictions = pred_summary.get("total_predictions", 0) > 0
+    has_embeddings = False  # Could check SampleFeature table if needed
+
+    from app.agent.assembler import assemble_prompt
+    from app.agent.runtime import ClassifyAgent, AgentAction, AgentDone, AgentMessage, AgentSidebarUpdate
+
+    system_prompt = assemble_prompt(
+        dataset_name=dataset.name,
+        dataset_type=dataset.dataset_type or "unknown",
+        sample_count=annotation_stats.get("total_samples", 0),
+        label_space=label_space,
+        annotation_stats=annotation_stats,
+        metadata_dicts=metadata_dicts,
+        declared_metadata=declared_metadata,
+        has_predictions=has_predictions,
+        has_embeddings=has_embeddings,
+    )
+
+    # Get or create agent for this session
+    # For now, create a fresh agent per request (stateless chat).
+    # TODO: session persistence for multi-turn conversations
+    agent = ClassifyAgent(
+        system_prompt=system_prompt,
+        llm_base_url=cfg.llm.base_url,
+        llm_api_key=cfg.llm.api_key,
+        llm_model=cfg.llm.model,
+        dataset_id=dataset_id,
+        session_id=session_id,
+        surface_id=surface_id,
+        surface_store=container.surface_store(),
+        repository=repo,
+    )
+
+    async def event_stream():
+        async for event in agent.handle_message(body.message):
+            if isinstance(event, AgentMessage):
+                yield f"event: agent-message\ndata: {json.dumps({'content': event.content})}\n\n"
+            elif isinstance(event, AgentAction):
+                yield f"event: agent-action\ndata: {json.dumps({'tool': event.tool, 'summary': event.summary})}\n\n"
+            elif isinstance(event, AgentSidebarUpdate):
+                yield f"event: sidebar-update\ndata: {json.dumps({'surface_id': event.surface_id, 'panels': event.panels})}\n\n"
+            elif isinstance(event, AgentDone):
+                yield f"event: done\ndata: {{}}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

@@ -14,6 +14,9 @@
       </n-text>
     </div>
 
+    <!-- Body: main content + sidebar -->
+    <div class="classify-body">
+      <div class="classify-main">
     <!-- Toolbar row -->
     <div class="classify-toolbar">
       <div style="display: flex; align-items: center; gap: 12px; flex: 1; flex-wrap: wrap">
@@ -271,13 +274,31 @@
         </div>
       </div>
     </DnDProvider>
+      </div><!-- /.classify-main -->
+
+      <!-- Sidebar -->
+      <ClassifySidebar
+        :panels="mergedPanels"
+        :context="dashboardContext"
+        v-model:collapsed="sidebarCollapsed"
+      />
+    </div><!-- /.classify-body -->
+
+    <!-- Agent Chat Drawer -->
+    <AgentChatDrawer
+      :messages="agentChat.messages.value"
+      :status="agentChat.status.value"
+      @send="agentChat.send"
+      @abort="agentChat.abort"
+      @clear="agentChat.clearHistory"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuery, useMutation } from '@tanstack/vue-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import {
   useVueTable,
   getCoreRowModel,
@@ -292,6 +313,13 @@ import { NButton, NText, NSlider, NDivider, NSelect, NModal, NInput, useMessage,
 import { listSamplesWithLabels, api, bulkCreateAnnotations, syncAnnotationsToLs } from '../api'
 import type { SampleWithLabels, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult, Dataset } from '../types'
 import { resolveImageUris } from '../utils/imageAdapters'
+import ClassifySidebar from '../components/classify/ClassifySidebar.vue'
+import { defaultPanels, mergePanels } from '../components/classify/sidebarConfig'
+import { useClassifyDashboard } from '../composables/useClassifyDashboard'
+import { useAgentSurface } from '../composables/useAgentSurface'
+import { useAgentChat } from '../composables/useAgentChat'
+import AgentChatDrawer from '../components/AgentChatDrawer.vue'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -299,6 +327,7 @@ const datasetId = route.params.id as string
 const message = useMessage()
 const dialog = useDialog()
 const themeVars = useThemeVars()
+const queryClient = useQueryClient()
 
 const themeStyleVars = computed(() => ({
   '--cv-bg': themeVars.value.bodyColor,
@@ -392,6 +421,33 @@ const orderOptions = [
 
 const draftCount = computed(() =>
   Object.keys(labelDraft.value).filter((k) => labelDraft.value[k]).length
+)
+
+// ─── Classify sidebar dashboard ────────────────────────────────────────────────
+
+const sidebarCollapsed = ref(false)
+const selectedCount = computed(() => selectedIds.value.size)
+
+const dashboardContext = useClassifyDashboard(
+  datasetId,
+  draftCount,
+  selectedCount,
+  labelSpace,
+)
+
+// ─── Agent display surface + chat ──────────────────────────────────────────────
+
+const authStore = useAuthStore()
+const agentSessionId = computed(() => `user-${authStore.user?.id ?? 'anon'}-${datasetId}`)
+const agentSurfaceId = 'classify-sidebar'
+
+const agentSurface = useAgentSurface(agentSessionId.value, agentSurfaceId)
+const agentChat = useAgentChat(datasetId, {
+  onSidebarUpdate: (panels) => agentSurface.applyPanelsUpdate(panels),
+})
+
+const mergedPanels = computed(() =>
+  mergePanels(defaultPanels, agentSurface.agentPanels.value)
 )
 
 // ─── Fetching logic ────────────────────────────────────────────────────────────
@@ -833,6 +889,8 @@ const bulkAnnotateMutation = useMutation({
     labelDraft.value = {}
     selectedIds.value = new Set()
     resetAndFetch()
+    // Refresh sidebar stats
+    queryClient.invalidateQueries({ queryKey: ['annotation-stats', datasetId] })
   },
   onError: (err: Error) => {
     message.error(err.message ?? 'Failed to create annotations')
@@ -912,6 +970,20 @@ onUnmounted(() => {
   padding: 12px;
   box-sizing: border-box;
   color: var(--cv-text);
+}
+
+.classify-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.classify-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .classify-header {

@@ -199,7 +199,18 @@ Hybrid automation note:
 - [ ] Verify recent items display
 - [ ] Verify service health table shows postgres, object storage, prefect, label studio, embedding, training workers, and inference worker
 
-## 10. API Health
+## 10.1 Agent Chat (requires LLM config)
+
+- [ ] Navigate to classify view for a seeded dataset
+- [ ] Verify the floating chat FAB button appears in the bottom-right
+- [ ] Click the FAB to open the chat drawer
+- [ ] Type a message like "Show me annotation stats" and send
+- [ ] If LLM is configured: verify SSE events stream (action badges, text reply, sidebar panels)
+- [ ] If LLM is NOT configured: verify a 503 error message appears in the chat
+- [ ] Verify agent-created panels appear in the sidebar with an "AI" badge
+- [ ] Close and reopen the drawer — verify conversation history persists within the session
+
+## 10.2 API Health
 
 ```bash
 # Health check

@@ -1,0 +1,18 @@
+[project]
+name = "finetune-mcp"
+version = "0.1.0"
+description = "MCP server for the Finetune platform — exposes dataset query and display-surface tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.0.0",
+  "httpx>=0.28.0",
+  "pydantic>=2.0",
+]
+
+[project.scripts]
+finetune-mcp = "finetune_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

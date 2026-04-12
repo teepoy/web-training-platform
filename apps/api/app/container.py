@@ -27,6 +27,7 @@ from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStor
 from app.db.ls_session import create_ls_engine, create_ls_session_factory
 from app.repositories.ls_read_repository import LsReadRepository
 from app.presets.registry import PresetRegistry
+from app.agent.surface_store import SurfaceStore
 
 
 class Container(containers.DeclarativeContainer):
@@ -189,3 +190,4 @@ class Container(containers.DeclarativeContainer):
         config=config,
     )
     auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
+    surface_store: providers.Singleton[SurfaceStore] = providers.Singleton(SurfaceStore)

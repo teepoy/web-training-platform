@@ -28,6 +28,13 @@
 - Storage is selected by config, but `memory` is test-only. Dev/prod use MinIO/S3-compatible storage.
 - `ArtifactService` persists exported dataset payloads and job artifacts to storage, then records metadata/checksum in DB.
 
+## Prediction storage and review
+
+- Per-sample predictions are persisted in the API database as platform-owned rows.
+- Batch prediction jobs store aggregate progress in `prediction_jobs.summary_json`, while detailed results are read from the prediction table.
+- Label Studio is not the prediction source of truth. It is used as a temporary manual-annotation surface when a user syncs a selected prediction collection into the dataset's existing LS project.
+- Review provenance points at platform prediction IDs, not LS prediction IDs.
+
 ## Config + DI
 
 - OmegaConf files in `apps/api/config/` hold centralized settings.
