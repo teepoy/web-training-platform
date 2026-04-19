@@ -411,6 +411,27 @@ async def test_create_schedule_persists_locally_when_prefect_is_unavailable(
 
 
 @pytest.mark.asyncio
+async def test_trigger_run_returns_local_run_when_prefect_deployment_is_missing(
+    repo_backed_svc: tuple[SchedulerService, AsyncMock],
+) -> None:
+    svc, repository = repo_backed_svc
+    repository.get_schedule.return_value = MagicMock(
+        id="local-schedule-1",
+        name="local-schedule",
+        flow_name="drain-dataset",
+        parameters={"k": "v"},
+        prefect_deployment_id=None,
+    )
+
+    result = await svc.trigger_run("local-schedule-1")
+
+    assert result["deployment_id"] is None
+    assert result["flow_name"] == "drain-dataset"
+    assert result["state_type"] == "COMPLETED"
+    assert result["parameters"] == {"k": "v"}
+
+
+@pytest.mark.asyncio
 async def test_update_schedule_updates_local_record_even_when_prefect_patch_fails(
     repo_backed_svc: tuple[SchedulerService, AsyncMock],
 ) -> None:

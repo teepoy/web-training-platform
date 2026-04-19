@@ -4,41 +4,50 @@ The agent display protocol defines how an AI agent controls dynamic UI panels on
 
 ## Architecture
 
+There are two agent runtimes:
+
+1. **ClassifyAgent** (Phase 1) — A classify-page-specific agent that controls the sidebar and answers data queries. Accessed via `POST /datasets/{id}/agent/chat`.
+2. **GlobalAgent** (Phase 2) — A platform-wide agent available on every authenticated page. Has full read/write access to the platform (datasets, jobs, predictions, schedules) plus sidebar control when on the classify page. Accessed via `POST /api/v1/agent/chat`.
+
 ```
                        +-------------------+
-                       |  Agent Chat UI    |  (AgentChatDrawer.vue)
+                       |  Agent Chat UI    |  (AgentChatDrawer.vue in App.vue)
                        |  Floating drawer  |
                        +--------+----------+
                                 |
-                   POST /datasets/{id}/agent/chat
+                   POST /api/v1/agent/chat
                        (SSE response stream)
                                 |
                        +--------v----------+
-                       |  ClassifyAgent    |  (runtime.py)
+                       |  GlobalAgent      |  (global_runtime.py)
                        |  Tool-calling     |
                        |  loop             |
                        +--------+----------+
                                 |
-              +-----------------+-----------------+
-              |                                   |
-    +---------v---------+              +----------v---------+
-    |  query_data       |              |  set_panel         |
-    |  (read-only DB)   |              |  remove_panel      |
-    +-------------------+              |  get_surface_state |
-                                       +----------+---------+
-                                                  |
-                                       +----------v---------+
-                                       |  SurfaceStore      |
-                                       |  (in-memory)       |
-                                       +----------+---------+
-                                                  |
-                                         SSE: sidebar-update
-                                                  |
-                                       +----------v---------+
-                                       |  ClassifySidebar   |
-                                       |  (Vue component)   |
-                                       +--------------------+
+          +----------+----------+----------+---------+
+          |          |          |          |         |
+  +-------v--+ +----v----+ +--v---+ +----v---+ +---v--------+
+  |list_*    | |create_* | |query | |sidebar | |cancel_*   |
+  |get_*     | |start_*  | |_data | |tools   | |delete_*   |
+  |(read)    | |run_*    | |      | |        | |            |
+  +----------+ |(write)  | +------+ +---+----+ +------------+
+               +---------+              |
+                                +-------v--------+
+                                |  SurfaceStore  |
+                                |  (in-memory)   |
+                                +-------+--------+
+                                        |
+                                  SSE: sidebar-update
+                                        |
+                                +-------v--------+
+                                | ClassifySidebar|
+                                | (Vue component)|
+                                +----------------+
 ```
+
+### Session Persistence
+
+The GlobalAgent uses a `SessionStore` (in-memory, TTL-based) to persist conversation history across requests within a session. Sessions are keyed by `session_id` (derived from user ID on the frontend). The classify-page ClassifyAgent does not persist sessions across requests.
 
 ## Concepts
 
@@ -130,17 +139,34 @@ Supported `query_type` values:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/datasets/{id}/agent/chat` | Send message, receive SSE stream |
+| POST | `/datasets/{id}/agent/chat` | Classify agent — send message, receive SSE stream |
+| POST | `/api/v1/agent/chat` | Global agent — send message with context, receive SSE stream |
 
-Request body: `{"message": "string"}`
+Classify agent request body: `{"message": "string"}`
 
-SSE event types in the response stream:
+Global agent request body:
+```json
+{
+  "message": "string",
+  "context": {
+    "page": "/datasets/abc/classify",
+    "dataset_id": "abc",
+    "job_id": null,
+    "schedule_id": null
+  },
+  "session_id": "global-user123"
+}
+```
+
+SSE event types in the response stream (same for both agents):
 - `agent-message` — `{"content": "text response"}`
 - `agent-action` — `{"tool": "tool_name", "summary": "description"}`
 - `sidebar-update` — `{"surface_id": "...", "panels": [...]}`
 - `done` — `{}`
 
 ## Agent Runtime
+
+### ClassifyAgent (Phase 1)
 
 The `ClassifyAgent` (in `app/agent/runtime.py`) implements a tool-calling loop:
 
@@ -150,6 +176,30 @@ The `ClassifyAgent` (in `app/agent/runtime.py`) implements a tool-calling loop:
 4. If LLM returns tool calls, they are executed and results fed back
 5. Steps 3-4 repeat until LLM returns a text response (max 10 iterations)
 6. Events are yielded as SSE frames throughout the loop
+
+### GlobalAgent (Phase 2)
+
+The `GlobalAgent` (in `app/agent/global_runtime.py`) extends the pattern:
+
+1. User message arrives via `POST /api/v1/agent/chat` with context (page, dataset_id, job_id, etc.)
+2. Session history is loaded from `SessionStore` (or created fresh)
+3. System prompt is assembled from global context (available resources, current page, entity details)
+4. LLM is called with conversation history + 18 tool definitions (10 read + 5 write + 3 sidebar when on classify)
+5. Tool calls are executed with full service access (repository, orchestrator, prediction_orchestrator, scheduler_service, etc.)
+6. Steps 4-5 repeat until text response (max 10 iterations)
+7. Session history is persisted back to `SessionStore`
+8. Events yielded as SSE frames
+
+#### Global Agent Tools
+
+**Read tools** (always available):
+`list_datasets`, `get_dataset`, `list_training_jobs`, `get_training_job`, `list_presets`, `list_models`, `list_prediction_jobs`, `list_schedules`, `get_dashboard`, `query_data`
+
+**Write tools** (always available, with user confirmation in system prompt):
+`create_dataset`, `start_training_job`, `run_predictions`, `create_schedule`, `cancel_training_job`
+
+**Sidebar tools** (only on classify page):
+`set_panel`, `remove_panel`, `get_surface_state`
 
 ### Metadata Discovery
 
@@ -161,13 +211,19 @@ The metadata block is assembled at session start and included in the system prom
 
 ## MCP Server
 
-The `libs/mcp-server/` package exposes the same tools via the Model Context Protocol for external agent access:
+The `libs/mcp-server/` package exposes platform tools via the Model Context Protocol for external agent access:
 
 ```bash
 FINETUNE_API_URL=http://localhost:8000/api/v1 finetune-mcp
 ```
 
-Tools: `list_datasets`, `get_dataset`, `query_data`, `get_surface_state`, `set_panel`, `remove_panel`, `export_surface`, `import_surface`.
+**Read tools:** `list_datasets`, `get_dataset`, `query_data`, `list_jobs`, `get_job`, `list_presets`, `list_models`, `list_prediction_jobs`, `list_schedules`
+
+**Write tools:** `create_dataset`, `create_job`, `cancel_job`, `run_predictions`, `create_schedule`, `delete_schedule`
+
+**Agent tools:** `agent_chat` — send a message to the platform's built-in global AI agent and receive its response. Supports `session_id` for conversation continuity and `context` for page-aware responses.
+
+**Surface tools:** `get_surface_state`, `set_panel`, `remove_panel`, `export_surface`, `import_surface`
 
 ## Constraints
 

@@ -5,7 +5,7 @@
   action button.  Contains a scrollable message list and an input bar.
 -->
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import type { ChatEntry } from '../types'
 import type { AgentChatStatus } from '../composables/useAgentChat'
 
@@ -23,6 +23,59 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const inputText = ref('')
 const scrollRef = ref<HTMLElement | null>(null)
+
+// ── Resize state ──
+const MIN_W = 300
+const MAX_W = 700
+const MIN_H = 300
+const MAX_H_RATIO = 0.85 // fraction of viewport height
+
+const drawerW = ref(380)
+const drawerH = ref(520)
+const isResizing = ref(false)
+
+type Edge = 'top' | 'left' | 'corner'
+let resizeEdge: Edge = 'top'
+let startX = 0
+let startY = 0
+let startW = 0
+let startH = 0
+
+function onResizePointerDown(edge: Edge, e: PointerEvent) {
+  e.preventDefault()
+  resizeEdge = edge
+  startX = e.clientX
+  startY = e.clientY
+  startW = drawerW.value
+  startH = drawerH.value
+  isResizing.value = true
+  document.addEventListener('pointermove', onResizePointerMove)
+  document.addEventListener('pointerup', onResizePointerUp)
+}
+
+function onResizePointerMove(e: PointerEvent) {
+  const maxH = Math.round(window.innerHeight * MAX_H_RATIO)
+  const dx = startX - e.clientX  // positive = moved left = wider
+  const dy = startY - e.clientY  // positive = moved up   = taller
+
+  if (resizeEdge === 'left' || resizeEdge === 'corner') {
+    drawerW.value = Math.min(MAX_W, Math.max(MIN_W, startW + dx))
+  }
+  if (resizeEdge === 'top' || resizeEdge === 'corner') {
+    drawerH.value = Math.min(maxH, Math.max(MIN_H, startH + dy))
+  }
+}
+
+function onResizePointerUp() {
+  isResizing.value = false
+  document.removeEventListener('pointermove', onResizePointerMove)
+  document.removeEventListener('pointerup', onResizePointerUp)
+}
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointermove', onResizePointerMove)
+  document.removeEventListener('pointerup', onResizePointerUp)
+})
 
 function toggle() {
   isOpen.value = !isOpen.value
@@ -76,7 +129,25 @@ function formatTime(ts: number): string {
 
   <!-- Drawer panel -->
   <Transition name="acd-slide">
-    <div v-if="isOpen" class="acd">
+    <div
+      v-if="isOpen"
+      class="acd"
+      :class="{ 'acd--resizing': isResizing }"
+      :style="{ width: drawerW + 'px', height: drawerH + 'px' }"
+    >
+      <!-- Resize handles (top, left, corner) -->
+      <div
+        class="acd-resize acd-resize--top"
+        @pointerdown="onResizePointerDown('top', $event)"
+      />
+      <div
+        class="acd-resize acd-resize--left"
+        @pointerdown="onResizePointerDown('left', $event)"
+      />
+      <div
+        class="acd-resize acd-resize--corner"
+        @pointerdown="onResizePointerDown('corner', $event)"
+      />
       <!-- Header -->
       <div class="acd-header">
         <span class="acd-header__title">Agent Chat</span>
@@ -121,6 +192,11 @@ function formatTime(ts: number): string {
             <span></span><span></span><span></span>
           </div>
         </div>
+      </div>
+
+      <!-- Disclaimer -->
+      <div class="acd-disclaimer">
+        AI responses may be inaccurate. Please verify important information.
       </div>
 
       <!-- Input bar -->
@@ -191,8 +267,6 @@ function formatTime(ts: number): string {
   bottom: 24px;
   right: 24px;
   z-index: 1001;
-  width: 380px;
-  max-height: 520px;
   display: flex;
   flex-direction: column;
   background: #1e1e2e;
@@ -200,6 +274,36 @@ function formatTime(ts: number): string {
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+}
+.acd--resizing {
+  user-select: none;
+}
+
+/* Resize handles — invisible 6px strips on top/left edges + corner */
+.acd-resize {
+  position: absolute;
+  z-index: 2;
+}
+.acd-resize--top {
+  top: 0;
+  left: 12px;
+  right: 0;
+  height: 6px;
+  cursor: n-resize;
+}
+.acd-resize--left {
+  top: 12px;
+  left: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: w-resize;
+}
+.acd-resize--corner {
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
 }
 
 /* Slide transition */
@@ -353,6 +457,16 @@ function formatTime(ts: number): string {
 @keyframes acd-dot-bounce {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-4px); }
+}
+
+/* Disclaimer */
+.acd-disclaimer {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.25);
+  text-align: center;
+  padding: 4px 12px 0;
+  flex-shrink: 0;
+  line-height: 1.3;
 }
 
 /* Input bar */

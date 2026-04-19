@@ -88,19 +88,11 @@
       </template>
     </n-modal>
 
-    <!-- Agent Chat Drawer -->
-    <AgentChatDrawer
-      :messages="agentChat.messages.value"
-      :status="agentChat.status.value"
-      @send="agentChat.send"
-      @abort="agentChat.abort"
-      @clear="agentChat.clearHistory"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { NButton, NText, NSlider, NDivider, NSelect, NModal, NInput, useMessage, useDialog, useThemeVars } from 'naive-ui'
@@ -112,10 +104,7 @@ import AnnotationGrid from '../components/annotation/AnnotationGrid.vue'
 import ClassifySidebar from '../components/classify/ClassifySidebar.vue'
 import { defaultPanels, mergePanels } from '../components/classify/sidebarConfig'
 import { useClassifyDashboard } from '../composables/useClassifyDashboard'
-import { useAgentSurface } from '../composables/useAgentSurface'
-import { useAgentChat } from '../composables/useAgentChat'
-import AgentChatDrawer from '../components/AgentChatDrawer.vue'
-import { useAuthStore } from '../stores/auth'
+import { GLOBAL_AGENT_PANELS_KEY } from '../composables/useGlobalAgent'
 
 const route = useRoute()
 const router = useRouter()
@@ -238,17 +227,11 @@ const dashboardContext = useClassifyDashboard(
   labelSpace,
 )
 
-const authStore = useAuthStore()
-const agentSessionId = computed(() => `user-${authStore.user?.id ?? 'anon'}-${datasetId}`)
-const agentSurfaceId = 'classify-sidebar'
-
-const agentSurface = useAgentSurface(agentSessionId.value, agentSurfaceId)
-const agentChat = useAgentChat(datasetId, {
-  onSidebarUpdate: (panels) => agentSurface.applyPanelsUpdate(panels),
-})
+// Inject agent panels from the global agent (provided in App.vue)
+const globalAgentPanels = inject(GLOBAL_AGENT_PANELS_KEY, ref([]))
 
 const mergedPanels = computed(() =>
-  mergePanels(defaultPanels, agentSurface.agentPanels.value)
+  mergePanels(defaultPanels, globalAgentPanels.value)
 )
 
 // ---------------------------------------------------------------------------

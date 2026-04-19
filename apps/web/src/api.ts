@@ -10,6 +10,7 @@ import type {
   DatasetAnnotationStats,
   CreatePredictionCollectionRequest,
   ExportFormat,
+  GlobalChatRequest,
   LoginResponse,
   Model,
   ModelUploadTemplate,
@@ -46,6 +47,7 @@ import type { ApiError as ApiErrorType } from "./types";
 import { getStoredToken, useAuthStore } from "./stores/auth";
 
 export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
+export const HEALTH_URL = import.meta.env.VITE_HEALTH_URL || "/health";
 
 // ---------------------------------------------------------------------------
 // Typed error class
@@ -59,6 +61,22 @@ export class ApiError extends Error implements ApiErrorType {
     super(`API ${status}: ${detail}`);
     this.detail = detail;
     this.status = status;
+  }
+}
+
+function getAuthContext(): { token: string | null; authEnabled: boolean } {
+  try {
+    const authStore = useAuthStore();
+    const authEnabled = authStore.authEnabled;
+    return {
+      token: authEnabled ? authStore.token ?? getStoredToken() : null,
+      authEnabled,
+    };
+  } catch {
+    return {
+      token: getStoredToken(),
+      authEnabled: true,
+    };
   }
 }
 
@@ -76,9 +94,10 @@ async function req<T>(
 
   let authHeader: Record<string, string> = {};
   let hasAuthToken = false;
+  let authEnabled = true;
   try {
-    const authStore = useAuthStore();
-    const token = authStore.token ?? getStoredToken();
+    const { token, authEnabled: currentAuthEnabled } = getAuthContext();
+    authEnabled = currentAuthEnabled;
     if (token) {
       authHeader["Authorization"] = `Bearer ${token}`;
       hasAuthToken = true;
@@ -108,7 +127,7 @@ async function req<T>(
     });
 
     if (!r.ok) {
-      if (r.status === 401 && hasAuthToken) {
+      if (r.status === 401 && hasAuthToken && authEnabled) {
         try {
           const authStore = useAuthStore();
           authStore.logout();
@@ -151,8 +170,7 @@ export async function uploadSampleImage(sampleId: string, file: File): Promise<U
   form.append("file", file);
   const uploadHeaders: Record<string, string> = {};
   try {
-    const authStore = useAuthStore();
-    const token = authStore.token ?? getStoredToken();
+    const { token } = getAuthContext();
     if (token) {
       uploadHeaders["Authorization"] = `Bearer ${token}`;
     }
@@ -196,9 +214,9 @@ export async function uploadModel(
   form.append("file", file);
   const uploadHeaders: Record<string, string> = {};
   try {
-    const authStore = useAuthStore();
-    if (authStore.token) {
-      uploadHeaders["Authorization"] = `Bearer ${authStore.token}`;
+    const { token } = getAuthContext();
+    if (token) {
+      uploadHeaders["Authorization"] = `Bearer ${token}`;
     }
   } catch {
     /* ignore */
@@ -695,6 +713,14 @@ export async function fetchOrganizations(): Promise<Organization[]> {
   return req<Organization[]>('/organizations');
 }
 
+export async function fetchHealthStatus(): Promise<{ status: string; auth_enabled: boolean }> {
+  const r = await fetch(HEALTH_URL);
+  if (!r.ok) {
+    throw new ApiError(`health failed: ${r.status}`, r.status);
+  }
+  return r.json() as Promise<{ status: string; auth_enabled: boolean }>;
+}
+
 // ---------------------------------------------------------------------------
 // Auth functions
 // ---------------------------------------------------------------------------
@@ -733,9 +759,10 @@ export async function authRegister(name: string, email: string, password: string
   return r.json() as Promise<User>;
 }
 
-export async function authMe(token: string): Promise<UserWithOrgs> {
+export async function authMe(token?: string | null): Promise<UserWithOrgs> {
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
   const r = await fetch(`${API_BASE}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
   });
   if (!r.ok) {
     let detail = `auth/me failed: ${r.status}`;
@@ -755,8 +782,7 @@ export async function authMe(token: string): Promise<UserWithOrgs> {
 export function buildJobEventSource(jobId: string): EventSource {
   let tokenParam = "";
   try {
-    const authStore = useAuthStore();
-    const token = authStore.token ?? getStoredToken();
+    const { token } = getAuthContext();
     if (token) {
       tokenParam = `?token=${encodeURIComponent(token)}`;
     }
@@ -769,8 +795,7 @@ export function buildJobEventSource(jobId: string): EventSource {
 export function buildTrackedTaskEventSource(taskId: string): EventSource {
   let tokenParam = "";
   try {
-    const authStore = useAuthStore();
-    const token = authStore.token ?? getStoredToken();
+    const { token } = getAuthContext();
     if (token) {
       tokenParam = `?token=${encodeURIComponent(token)}`;
     }
@@ -855,14 +880,7 @@ export function sendAgentChat(
   // Use fetch + ReadableStream for POST-based SSE (EventSource only supports GET).
   // We fake an EventSource-like interface using a custom approach.
   const controller = new AbortController();
-  const token = (() => {
-    try {
-      const authStore = useAuthStore();
-      return authStore.token ?? getStoredToken();
-    } catch {
-      return getStoredToken();
-    }
-  })();
+  const { token } = getAuthContext();
 
   const url = `${API_BASE}/datasets/${datasetId}/agent/chat`;
 
@@ -883,14 +901,7 @@ export async function* streamAgentChat(
   userMessage: string,
   signal?: AbortSignal
 ): AsyncGenerator<{ event: string; data: string }> {
-  const token = (() => {
-    try {
-      const authStore = useAuthStore();
-      return authStore.token ?? getStoredToken();
-    } catch {
-      return getStoredToken();
-    }
-  })();
+  const { token } = getAuthContext();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -934,6 +945,66 @@ export async function* streamAgentChat(
         currentData = line.slice(6);
       } else if (line === "") {
         // End of SSE frame
+        if (currentData) {
+          yield { event: currentEvent, data: currentData };
+        }
+        currentEvent = "message";
+        currentData = "";
+      }
+    }
+  }
+}
+
+/**
+ * POST-based SSE streaming for the global agent chat.
+ * Returns an async generator of parsed SSE events.
+ */
+export async function* streamGlobalAgentChat(
+  request: GlobalChatRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<{ event: string; data: string }> {
+  const { token } = getAuthContext();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const resp = await fetch(`${API_BASE}/agent/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new ApiError(text || resp.statusText, resp.status);
+  }
+
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    let currentEvent = "message";
+    let currentData = "";
+
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        currentData = line.slice(6);
+      } else if (line === "") {
         if (currentData) {
           yield { event: currentEvent, data: currentData };
         }

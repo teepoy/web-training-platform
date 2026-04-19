@@ -179,6 +179,11 @@ export interface ApiError {
   status: number;
 }
 
+export interface HealthStatus {
+  status: string;
+  auth_enabled: boolean;
+}
+
 export interface UploadResponse {
   uri: string;
   sample_id: string;
@@ -788,4 +793,24 @@ export interface AnnotationGridItem {
   predictionId: string | null;
   /** Arbitrary metadata shown on hover / detail */
   metadata: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Global Agent types
+// ---------------------------------------------------------------------------
+
+/** Context sent to the global agent to describe where the user is. */
+export interface AgentContext {
+  page: string;
+  dataset_id?: string | null;
+  job_id?: string | null;
+  schedule_id?: string | null;
+  extra?: Record<string, unknown>;
+}
+
+/** Request body for the global agent chat endpoint. */
+export interface GlobalChatRequest {
+  message: string;
+  context: AgentContext;
+  session_id?: string | null;
 }

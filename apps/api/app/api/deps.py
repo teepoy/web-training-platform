@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import load_config
 from app.db.models import OrgMembershipORM, OrganizationORM, PersonalAccessTokenORM, UserORM
@@ -16,6 +17,9 @@ from app.services.auth import decode_access_token, verify_personal_access_token
 # ---------------------------------------------------------------------------
 
 _session_factory = None
+_DEV_USER_ID = "00000000-0000-0000-0000-000000000002"
+_DEV_ORG_ID = "00000000-0000-0000-0000-000000000001"
+_DEV_ORG_SLUG = "dev-no-auth"
 
 
 def _get_session_factory():
@@ -25,6 +29,11 @@ def _get_session_factory():
         engine = create_engine(str(cfg.db.url))
         _session_factory = create_session_factory(engine)
     return _session_factory
+
+
+def _auth_enabled() -> bool:
+    cfg = load_config()
+    return bool(getattr(cfg.auth, "enabled", True))
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +59,66 @@ def _orm_to_org(orm: OrganizationORM) -> Organization:
         slug=orm.slug,
         created_at=orm.created_at,
     )
+
+
+async def _ensure_dev_auth_context() -> tuple[User, Organization]:
+    session_factory = _get_session_factory()
+    async with session_factory() as session:
+        org_result = await session.execute(
+            select(OrganizationORM).where(OrganizationORM.id == _DEV_ORG_ID)
+        )
+        org_orm = org_result.scalar_one_or_none()
+        if org_orm is None:
+            org_orm = OrganizationORM(
+                id=_DEV_ORG_ID,
+                name="Dev No Auth",
+                slug=_DEV_ORG_SLUG,
+            )
+            session.add(org_orm)
+
+        user_result = await session.execute(
+            select(UserORM).where(UserORM.id == _DEV_USER_ID)
+        )
+        user_orm = user_result.scalar_one_or_none()
+        if user_orm is None:
+            user_orm = UserORM(
+                id=_DEV_USER_ID,
+                email="dev-no-auth@local",
+                name="Dev No Auth",
+                hashed_password="auth-disabled",
+                is_superadmin=True,
+                is_active=True,
+            )
+            session.add(user_orm)
+        else:
+            user_orm.is_superadmin = True
+            user_orm.is_active = True
+
+        membership_result = await session.execute(
+            select(OrgMembershipORM).where(
+                OrgMembershipORM.user_id == _DEV_USER_ID,
+                OrgMembershipORM.org_id == _DEV_ORG_ID,
+            )
+        )
+        membership = membership_result.scalar_one_or_none()
+        if membership is None:
+            session.add(
+                OrgMembershipORM(
+                    user_id=_DEV_USER_ID,
+                    org_id=_DEV_ORG_ID,
+                    role="admin",
+                )
+            )
+        else:
+            membership.role = "admin"
+
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            return await _ensure_dev_auth_context()
+
+    return _orm_to_user(user_orm), _orm_to_org(org_orm)
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +190,10 @@ async def get_current_user(request: Request) -> User:
     2. ``?token=`` query parameter (for EventSource / SSE clients)
     3. If the resolved token starts with ``ftp_``, treat as a Personal Access Token.
     """
+    if not _auth_enabled():
+        dev_user, _ = await _ensure_dev_auth_context()
+        return dev_user
+
     token: str | None = None
 
     auth_header = request.headers.get("Authorization", "")
@@ -151,6 +224,22 @@ async def get_current_org(
     3. Return 400 (ambiguous) if the user has multiple orgs and no header.
     4. Return 400 (no org) if the user has zero orgs and no header.
     """
+    if not _auth_enabled():
+        _, dev_org = await _ensure_dev_auth_context()
+        org_id_header = request.headers.get("X-Organization-ID")
+        if not org_id_header:
+            return dev_org
+
+        session_factory = _get_session_factory()
+        async with session_factory() as session:
+            org_result = await session.execute(
+                select(OrganizationORM).where(OrganizationORM.id == org_id_header)
+            )
+            org_orm = org_result.scalar_one_or_none()
+        if org_orm is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        return _orm_to_org(org_orm)
+
 
     session_factory = _get_session_factory()
     org_id_header = request.headers.get("X-Organization-ID")

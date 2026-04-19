@@ -8,3 +8,4 @@ def test_health() -> None:
         res = client.get("/health")
         assert res.status_code == 200
         assert res.json()["status"] == "ok"
+        assert isinstance(res.json()["auth_enabled"], bool)

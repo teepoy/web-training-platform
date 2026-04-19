@@ -41,40 +41,45 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
     base_url = os.getenv("LLM_BASE_URL", "").rstrip("/")
     api_key = os.getenv("LLM_API_KEY", "")
     model = os.getenv("LLM_MODEL", "")
-    if not base_url:
-        raise ValueError("LLM base_url is not configured")
     if not api_key:
         raise ValueError("LLM api_key is not configured")
     if not model:
         raise ValueError("LLM model is not configured")
+
+    import litellm
+    litellm.suppress_debug_info = True
+
     data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
-    payload = {
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": question},
+                {"type": "image_url", "image_url": {"url": data_uri}},
+            ],
+        },
+    ]
+
+    kwargs: dict[str, Any] = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                ],
-            },
-        ],
+        "messages": messages,
         "temperature": 0.2,
+        "timeout": 30.0,
+        "api_key": api_key,
     }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
-    if resp.status_code >= 400:
-        raise ValueError(f"LLM request failed ({resp.status_code}): {resp.text}")
-    body = resp.json()
-    choices = body.get("choices", [])
+    if base_url:
+        kwargs["api_base"] = base_url
+
+    try:
+        response = await litellm.acompletion(**kwargs)
+    except Exception as exc:
+        raise ValueError(f"LLM request failed: {exc}") from exc
+
+    choices = response.choices  # type: ignore[union-attr]
     if not choices:
         raise ValueError("LLM response has no choices")
-    content = choices[0].get("message", {}).get("content")
+    content = choices[0].message.content
     if not isinstance(content, str) or not content.strip():
         raise ValueError("LLM response content is empty")
     return content.strip()

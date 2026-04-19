@@ -25,6 +25,7 @@ from app.api.schemas import (
     CreateDatasetRequest,
     CreateOrgRequest,
     CreateReviewActionRequest,
+    GlobalChatRequest,
     PredictionCollectionRequest,
     PredictionCollectionResponse,
     CreateSampleRequest,
@@ -182,8 +183,12 @@ def _with_ls_url(dataset: Dataset) -> Dataset:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, str | bool]:
+    cfg = container.config()
+    return {
+        "status": "ok",
+        "auth_enabled": bool(getattr(cfg.auth, "enabled", True)),
+    }
 
 
 @app.post("/api/v1/datasets", response_model=Dataset)
@@ -2540,8 +2545,8 @@ async def agent_chat(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     # Check LLM is configured
-    if not cfg.llm.base_url or not cfg.llm.api_key:
-        raise HTTPException(status_code=503, detail="LLM not configured. Set llm.base_url and llm.api_key in config.")
+    if not cfg.llm.api_key:
+        raise HTTPException(status_code=503, detail="LLM not configured. Set llm.api_key and llm.model in config.")
 
     # Build agent session
     session_id = f"user-{current_user.id}-{dataset_id}"
@@ -2597,6 +2602,87 @@ async def agent_chat(
 
     async def event_stream():
         async for event in agent.handle_message(body.message):
+            if isinstance(event, AgentMessage):
+                yield f"event: agent-message\ndata: {json.dumps({'content': event.content})}\n\n"
+            elif isinstance(event, AgentAction):
+                yield f"event: agent-action\ndata: {json.dumps({'tool': event.tool, 'summary': event.summary})}\n\n"
+            elif isinstance(event, AgentSidebarUpdate):
+                yield f"event: sidebar-update\ndata: {json.dumps({'surface_id': event.surface_id, 'panels': event.panels})}\n\n"
+            elif isinstance(event, AgentDone):
+                yield f"event: done\ndata: {{}}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Global Agent Chat (platform-wide)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/agent/chat", tags=["agent"])
+async def global_agent_chat(
+    body: GlobalChatRequest,
+    current_user: UserORM = Depends(get_current_user),
+):
+    """Platform-wide agent chat.
+
+    Streams SSE events as the agent processes the message.  The agent is
+    context-aware: when on the classify page it has sidebar tools available;
+    everywhere else it has full read/write platform tools.
+
+    Session persistence is handled by ``SessionStore``; pass the same
+    ``session_id`` to continue a conversation.
+    """
+    cfg = container.config()
+
+    # Check LLM is configured
+    if not cfg.llm.api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM not configured. Set llm.api_key and llm.model in config.",
+        )
+
+    # Resolve session ID
+    session_id = body.session_id or f"global-{current_user.id}"
+
+    # Resolve org (use default for now)
+    org_id = DEFAULT_ORG_ID
+    org_name = "Default"
+
+    # Get scheduler service for agent
+    repo = container.repository()
+    from app.services.scheduler import SchedulerService as _SchedulerService
+    prefect_api_url = cfg.prefect.api_url if hasattr(cfg, "prefect") else "http://localhost:4200/api"
+    scheduler_svc = _SchedulerService(prefect_api_url=prefect_api_url, repository=repo)
+
+    from app.agent.global_runtime import GlobalAgent
+    from app.agent.runtime import AgentAction, AgentDone, AgentMessage, AgentSidebarUpdate
+
+    agent = GlobalAgent(
+        llm_base_url=cfg.llm.base_url,
+        llm_api_key=cfg.llm.api_key,
+        llm_model=cfg.llm.model,
+        session_store=container.session_store(),
+        surface_store=container.surface_store(),
+        repository=repo,
+        orchestrator=container.orchestrator(),
+        prediction_orchestrator=container.prediction_orchestrator(),
+        scheduler_service=scheduler_svc,
+        model_service=container.model_service(),
+        preset_registry=container.preset_registry(),
+        label_studio_client=container.label_studio_client(),
+    )
+
+    async def event_stream():
+        async for event in agent.handle_message(
+            session_id=session_id,
+            user_id=str(current_user.id),
+            user_email=current_user.email,
+            org_id=org_id,
+            org_name=org_name,
+            context=body.context,
+            user_message=body.message,
+        ):
             if isinstance(event, AgentMessage):
                 yield f"event: agent-message\ndata: {json.dumps({'content': event.content})}\n\n"
             elif isinstance(event, AgentAction):

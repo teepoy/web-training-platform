@@ -97,9 +97,6 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     inference_base_url = os.getenv("INFERENCE_BASE_URL")
     if inference_base_url:
         cfg.inference.base_url = inference_base_url
-    llm_provider = os.getenv("LLM_PROVIDER")
-    if llm_provider:
-        cfg.llm.provider = llm_provider
     llm_base_url = os.getenv("LLM_BASE_URL")
     if llm_base_url:
         cfg.llm.base_url = llm_base_url

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from './stores/auth'
+import { useAuthStore } from './stores/auth'
 
 const AUTH_ROUTES = ['/login', '/register']
 
@@ -25,19 +26,25 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to) => {
+  const authStore = useAuthStore()
   const token = getStoredToken()
   const isAuthRoute = AUTH_ROUTES.includes(to.path)
 
+  if (!authStore.authEnabled) {
+    if (isAuthRoute) {
+      return '/datasets'
+    }
+    return true
+  }
+
   if (isAuthRoute && token) {
-    next('/datasets')
-    return
+    return '/datasets'
   }
 
   if (!isAuthRoute && !token) {
-    next('/login')
-    return
+    return '/login'
   }
 
-  next()
+  return true
 })

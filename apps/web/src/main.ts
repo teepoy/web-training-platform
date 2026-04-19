@@ -21,8 +21,14 @@ const queryClient = new QueryClient({
   },
 });
 
-app.use(pinia);
-useAuthStore(pinia).hydrateFromStorage();
-app.use(router);
-app.use(VueQueryPlugin, { queryClient });
-app.mount("#app");
+async function bootstrap(): Promise<void> {
+  app.use(pinia);
+  const authStore = useAuthStore(pinia);
+  authStore.hydrateFromStorage();
+  await authStore.initAuthMode();
+  app.use(router);
+  app.use(VueQueryPlugin, { queryClient });
+  app.mount("#app");
+}
+
+void bootstrap();

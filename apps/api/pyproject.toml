@@ -28,6 +28,7 @@ dependencies = [
   "embedding-protos",
   "croniter>=2.0.0",
   "pillow>=11.0.0",
+  "litellm>=1.30.0",
 ]
 
 [project.optional-dependencies]

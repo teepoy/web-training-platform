@@ -58,10 +58,15 @@ inference:
   base_url: "http://localhost:8010"
 
 llm:
-  provider: "openai-compatible"
+  # litellm-backed.  Model string controls provider routing:
+  #   "gpt-4o-mini"             → OpenAI
+  #   "qwen/qwen-max"           → Alibaba Qwen
+  #   "gemini/gemini-2.0-flash" → Google Gemini
+  #   "anthropic/claude-sonnet" → Anthropic
+  # Set base_url only for custom/self-hosted OpenAI-compatible endpoints.
   base_url: ""
   api_key: ""
-  model: "gpt-4o-mini"
+  model: "qwen/qwen-max"
   timeout_seconds: 30
 
 label_studio:
@@ -80,6 +85,7 @@ agent:
   metadata_sample_size: 100
 
 auth:
+  enabled: true
   jwt_secret_key: "replace-me-in-production"
   jwt_algorithm: "HS256"
   access_token_expire_minutes: 60

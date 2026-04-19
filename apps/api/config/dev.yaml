@@ -1,6 +1,9 @@
 execution:
   engine: prefect
 
+auth:
+  enabled: false
+
 db:
   url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"
   echo: false

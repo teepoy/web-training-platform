@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import type { User } from "../types";
-import { authLogin, authRegister, authMe } from "../api";
+import { authLogin, authRegister, authMe, fetchHealthStatus } from "../api";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
@@ -64,11 +64,29 @@ export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: parseStoredUser(),
     token: getStoredToken(),
+    authEnabled: true,
   }),
   getters: {
-    isAuthenticated: (state) => state.token !== null,
+    isAuthenticated: (state) => (state.authEnabled ? state.token !== null : state.user !== null),
   },
   actions: {
+    setAuthEnabled(authEnabled: boolean) {
+      this.authEnabled = authEnabled;
+      if (!authEnabled) {
+        this.token = null;
+        localStorage.removeItem(TOKEN_KEY);
+      }
+    },
+
+    async initAuthMode() {
+      try {
+        const health = await fetchHealthStatus();
+        this.setAuthEnabled(health.auth_enabled);
+      } catch {
+        this.setAuthEnabled(true);
+      }
+    },
+
     async login(email: string, password: string) {
       const resp = await authLogin(email, password);
       const token = resp.access_token;
@@ -91,12 +109,25 @@ export const useAuthStore = defineStore("auth", {
     },
 
     hydrateFromStorage() {
-      this.token = getStoredToken();
-      this.user = this.token ? parseStoredUser() : null;
+      this.token = this.authEnabled ? getStoredToken() : null;
+      this.user = parseStoredUser();
     },
 
     async initFromStorage() {
       this.hydrateFromStorage();
+      if (!this.authEnabled) {
+        try {
+          const userWithOrgs = await authMe();
+          this.token = null;
+          this.user = userWithOrgs;
+          localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+        } catch {
+          this.user = null;
+          localStorage.removeItem(USER_KEY);
+        }
+        return;
+      }
+
       const token = this.token;
       if (!token) return;
       try {

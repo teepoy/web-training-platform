@@ -105,7 +105,10 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `TrainingOrchestrator` | service | `apps/api/app/services/orchestrator.py` | Job persistence + notifications |
 | `SchedulerService` | service | `apps/api/app/services/scheduler.py` | Prefect REST client |
 | `SurfaceStore` | service | `apps/api/app/agent/surface_store.py` | In-memory agent panel state |
+| `SessionStore` | service | `apps/api/app/agent/session_store.py` | In-memory conversation persistence (TTL-based) |
 | `ClassifyAgent` | service | `apps/api/app/agent/runtime.py` | LLM tool-calling loop for classify sidebar |
+| `GlobalAgent` | service | `apps/api/app/agent/global_runtime.py` | Platform-wide LLM agent (read/write/sidebar) |
+| `useGlobalAgent` | composable | `apps/web/src/composables/useGlobalAgent.ts` | Global agent chat + panel injection |
 | `PlatformClient` | MCP | `libs/mcp-server/finetune_mcp/client.py` | HTTP client for MCP server |
 | `router` | Vue Router | `apps/web/src/router.ts` | `/datasets`, `/jobs`, `/schedules` |
 | `FinetuneClient` | SDK | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |

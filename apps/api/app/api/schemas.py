@@ -841,3 +841,27 @@ class QueryDataRequest(BaseModel):
         description="One of: annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary"
     )
     params: dict = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Global Agent schemas
+# ---------------------------------------------------------------------------
+
+class AgentContext(BaseModel):
+    """Client-provided context for the global agent.
+
+    Tells the agent what page the user is on and what entity they are
+    looking at, so the system prompt can be enriched accordingly.
+    """
+    page: str = Field(default="", description="Current route path, e.g. '/datasets/abc/classify'")
+    dataset_id: str | None = Field(default=None, description="Active dataset ID if on a dataset page")
+    job_id: str | None = Field(default=None, description="Active job ID if on a job page")
+    schedule_id: str | None = Field(default=None, description="Active schedule ID if on a schedule page")
+    extra: dict = Field(default_factory=dict, description="Arbitrary extra context from the frontend")
+
+
+class GlobalChatRequest(BaseModel):
+    """User message sent to the global agent."""
+    message: str = Field(min_length=1, max_length=4000)
+    context: AgentContext = Field(default_factory=AgentContext)
+    session_id: str | None = Field(default=None, description="Resume existing session; omit for auto-generated")

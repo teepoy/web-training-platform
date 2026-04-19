@@ -63,6 +63,14 @@
                 <n-back-top />
               </n-layout-content>
             </n-layout>
+            <!-- Global Agent Chat Drawer (available on all authenticated pages) -->
+            <AgentChatDrawer
+              :messages="globalAgent.messages.value"
+              :status="globalAgent.status.value"
+              @send="globalAgent.send"
+              @abort="globalAgent.abort"
+              @clear="globalAgent.clearHistory"
+            />
           </n-layout>
         </n-dialog-provider>
       </n-notification-provider>
@@ -80,7 +88,9 @@ import { useAuthStore } from './stores/auth'
 import { useOrgStore } from './stores/org'
 import { useTaskHandoff, syncWatchedTaskIds } from './composables/useTaskHandoff'
 import { useTaskHandoffState } from './composables/taskHandoffState'
+import { useGlobalAgent } from './composables/useGlobalAgent'
 import OrgSelector from './components/OrgSelector.vue'
+import AgentChatDrawer from './components/AgentChatDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,6 +100,7 @@ const orgStore = useOrgStore()
 const queryClient = useQueryClient()
 const { watchedTaskIds } = useTaskHandoffState()
 const { watchTask, syncTask } = useTaskHandoff()
+const globalAgent = useGlobalAgent()
 
 const AUTH_PATHS = ['/login', '/register']
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))
@@ -134,12 +145,17 @@ const userInitials = computed(() =>
   authStore.user?.name?.slice(0, 2).toUpperCase() ?? 'LU'
 )
 
-const avatarDropdownOptions = computed(() => [
-  { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
-  { type: 'divider', key: 'd1' },
-  { label: 'Profile', key: 'profile', disabled: true },
-  { label: 'Logout', key: 'logout' },
-])
+const avatarDropdownOptions = computed(() => {
+  const options = [
+    { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
+    { type: 'divider' as const, key: 'd1' },
+    { label: 'Profile', key: 'profile', disabled: true },
+  ]
+  if (authStore.authEnabled) {
+    options.push({ label: 'Logout', key: 'logout', disabled: false })
+  }
+  return options
+})
 
 function handleAvatarSelect(key: string) {
   if (key === 'logout') {

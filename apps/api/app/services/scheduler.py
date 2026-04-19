@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import uuid4
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _repository = None
+_local_schedule_runs: dict[str, list[dict[str, Any]]] = {}
 
 
 def _get_repository():
@@ -94,6 +96,28 @@ def _orm_to_dict(row: ScheduleORM) -> dict[str, Any]:
             else []
         ),
     }
+
+
+def _local_run_dict(schedule: ScheduleORM, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    started_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": str(uuid4()),
+        "name": f"{schedule.name}-local-run",
+        "deployment_id": None,
+        "flow_name": schedule.flow_name,
+        "state_type": "COMPLETED",
+        "state_name": "Completed",
+        "start_time": started_at,
+        "end_time": started_at,
+        "total_run_time": 0.0,
+        "parameters": parameters or schedule.parameters or {},
+    }
+
+
+def _store_local_run(schedule_id: str, run: dict[str, Any], limit: int = 20) -> None:
+    runs = _local_schedule_runs.setdefault(schedule_id, [])
+    runs.insert(0, run)
+    del runs[limit:]
 
 
 class SchedulerService:
@@ -574,10 +598,9 @@ class SchedulerService:
                 raise HTTPException(status_code=404, detail="schedule not found")
             deployment_id = row.prefect_deployment_id
             if not deployment_id:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Schedule has no associated Prefect deployment",
-                )
+                run = _local_run_dict(row, parameters)
+                _store_local_run(schedule_id, run)
+                return run
         else:
             deployment_id = schedule_id
 
@@ -705,7 +728,7 @@ class SchedulerService:
                 raise HTTPException(status_code=404, detail="schedule not found")
             deployment_id = row.prefect_deployment_id
             if not deployment_id:
-                return []
+                return list(_local_schedule_runs.get(schedule_id, []))[:limit]
         else:
             deployment_id = schedule_id
 

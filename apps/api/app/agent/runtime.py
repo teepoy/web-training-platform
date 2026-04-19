@@ -13,8 +13,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
-import httpx
-
 from app.agent.assembler import assemble_prompt
 from app.agent.surface_store import SurfaceStore
 from app.agent.tools import (
@@ -66,39 +64,9 @@ AgentEvent = AgentMessage | AgentAction | AgentSidebarUpdate | AgentDone
 # LLM client wrapper
 # ---------------------------------------------------------------------------
 
-
-async def _call_llm(
-    *,
-    base_url: str,
-    api_key: str,
-    model: str,
-    system_prompt: str,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-    timeout: float = 60.0,
-) -> dict[str, Any]:
-    """Call an OpenAI-compatible chat/completions endpoint."""
-    url = f"{base_url.rstrip('/')}/chat/completions"
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": [{"role": "system", "content": system_prompt}] + messages,
-        "temperature": 0.3,
-    }
-    if tools:
-        payload["tools"] = tools
-        payload["tool_choice"] = "auto"
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-
-    if resp.status_code >= 400:
-        raise RuntimeError(f"LLM API error ({resp.status_code}): {resp.text[:500]}")
-
-    return resp.json()
+# Re-export so existing test patches against ``app.agent.runtime._call_llm``
+# continue to work without changes.
+from app.services.llm import call_llm as _call_llm  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
