@@ -149,6 +149,12 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 
+## SERVICE BOUNDARY TESTING
+- Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.
+- Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
+- When adding a new external service integration, add the mock fixture FIRST, then write the flow/service code.
+- Flow tasks that create their own `Container()` (e.g. `predict_job.py`) need `unittest.mock.patch` on the Container import in tests to share the app container's DB and storage. See `test_prediction_flow.py:_use_app_container()` for the pattern.
+
 ## NOTES
 - No linter, formatter, or CI pipeline is configured. Conventions are enforced manually.
 - Test coverage is backend-only; frontend, SDK, and worker are untested.

@@ -766,7 +766,12 @@ async def create_training_job(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     job = TrainingJob(dataset_id=payload.dataset_id, preset_id=payload.preset_id, created_by=current_user.id, org_id=org.id)
-    return await container.orchestrator().start_job(job)
+    try:
+        return await container.orchestrator().start_job(job)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to start training job: {exc}")
 
 
 @app.get("/api/v1/training-jobs", response_model=list[TrainingJob])
@@ -795,7 +800,12 @@ async def cancel_job(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> dict[str, bool]:
-    ok = await container.orchestrator().cancel_job(job_id)
+    try:
+        ok = await container.orchestrator().cancel_job(job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to cancel job: {exc}")
     return {"cancelled": ok}
 
 
@@ -1042,7 +1052,12 @@ async def extract_features(
         }
         persisted = await container.repository().create_prediction_job(job, org_id=org.id)
         return _prediction_job_to_response(persisted).model_dump()
-    started = await container.prediction_orchestrator().start_job(job)
+    try:
+        started = await container.prediction_orchestrator().start_job(job)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to start feature extraction: {exc}")
     return _prediction_job_to_response(started).model_dump()
 
 
@@ -1436,7 +1451,12 @@ async def run_predictions(
                 )
             )
             return _prediction_job_to_response(persisted)
-        started = await container.prediction_orchestrator().start_job(job)
+        try:
+            started = await container.prediction_orchestrator().start_job(job)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to start prediction job: {exc}")
         return _prediction_job_to_response(started)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
