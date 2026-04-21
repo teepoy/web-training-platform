@@ -12,35 +12,38 @@
   as props and are wrapped in a WidgetErrorBoundary.
 -->
 <script setup lang="ts">
-import { provide, ref, computed, type Component } from 'vue'
-import { WIDGET_COMPONENTS, type SidebarPanelDescriptor } from './sidebarConfig'
-import type { ClassifyDashboardContext } from '../../composables/useClassifyDashboard'
+import { provide, ref, computed, type Component } from "vue";
+import {
+  WIDGET_COMPONENTS,
+  type SidebarPanelDescriptor,
+} from "./sidebarConfig";
+import type { ClassifyDashboardContext } from "../../composables/useClassifyDashboard";
 import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetInteractionContext,
-} from './widgetContract'
-import WidgetErrorBoundary from './widgets/WidgetErrorBoundary.vue'
+} from "./widgetContract";
+import WidgetErrorBoundary from "./widgets/WidgetErrorBoundary.vue";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 const props = defineProps<{
-  panels: SidebarPanelDescriptor[]
-  context: ClassifyDashboardContext
-  interaction?: SidebarWidgetInteractionContext
-  collapsed?: boolean
-}>()
+  panels: SidebarPanelDescriptor[];
+  context: ClassifyDashboardContext;
+  interaction?: SidebarWidgetInteractionContext;
+  collapsed?: boolean;
+}>();
 
 const emit = defineEmits<{
-  'update:collapsed': [value: boolean]
-}>()
+  "update:collapsed": [value: boolean];
+}>();
 
 // ---------------------------------------------------------------------------
 // Provide context to widgets
 // ---------------------------------------------------------------------------
 
-provide('classifyDashboard', props.context)
+provide("classifyDashboard", props.context);
 
 const fallbackInteraction = computed<SidebarWidgetInteractionContext>(() => ({
   state: {
@@ -48,27 +51,29 @@ const fallbackInteraction = computed<SidebarWidgetInteractionContext>(() => ({
     selectedLabels: [],
   },
   dispatch: () => undefined,
-}))
+}));
 
-const interactionContext = computed(() => props.interaction ?? fallbackInteraction.value)
+const interactionContext = computed(
+  () => props.interaction ?? fallbackInteraction.value,
+);
 
-provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionContext)
+provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionContext);
 
 // ---------------------------------------------------------------------------
 // Panel collapse state (per panel)
 // ---------------------------------------------------------------------------
 
-const panelCollapsed = ref<Record<string, boolean>>({})
+const panelCollapsed = ref<Record<string, boolean>>({});
 
 function isPanelCollapsed(panel: SidebarPanelDescriptor): boolean {
-  return panelCollapsed.value[panel.id] ?? panel.collapsed ?? false
+  return panelCollapsed.value[panel.id] ?? panel.collapsed ?? false;
 }
 
 function togglePanel(panel: SidebarPanelDescriptor): void {
   panelCollapsed.value = {
     ...panelCollapsed.value,
     [panel.id]: !isPanelCollapsed(panel),
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -76,22 +81,26 @@ function togglePanel(panel: SidebarPanelDescriptor): void {
 // ---------------------------------------------------------------------------
 
 function resolveComponent(key: string): Component | null {
-  return WIDGET_COMPONENTS[key] ?? null
+  return WIDGET_COMPONENTS[key] ?? null;
 }
 
 // Sidebar-level collapse toggle
 const sidebarCollapsed = computed({
   get: () => props.collapsed ?? false,
-  set: (v) => emit('update:collapsed', v),
-})
+  set: (v) => emit("update:collapsed", v),
+});
 </script>
 
 <template>
   <aside class="cs" :class="{ 'cs--collapsed': sidebarCollapsed }">
     <div class="cs-header">
       <span v-if="!sidebarCollapsed" class="cs-header__title">Dashboard</span>
-      <button class="cs-header__toggle" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
-        {{ sidebarCollapsed ? '&#9664;' : '&#9654;' }}
+      <button
+        class="cs-header__toggle"
+        @click="sidebarCollapsed = !sidebarCollapsed"
+        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      >
+        {{ sidebarCollapsed ? "&#9664;" : "&#9654;" }}
       </button>
     </div>
 
@@ -105,7 +114,11 @@ const sidebarCollapsed = computed({
         <div class="cs-panel__header" @click="togglePanel(panel)">
           <span class="cs-panel__title">{{ panel.title }}</span>
           <span v-if="panel._agentOwned" class="cs-panel__agent-badge">AI</span>
-          <span class="cs-panel__chevron" :class="{ 'cs-panel__chevron--open': !isPanelCollapsed(panel) }">&#9660;</span>
+          <span
+            class="cs-panel__chevron"
+            :class="{ 'cs-panel__chevron--open': !isPanelCollapsed(panel) }"
+            >&#9660;</span
+          >
         </div>
 
         <div v-show="!isPanelCollapsed(panel)" class="cs-panel__body">
@@ -137,7 +150,9 @@ const sidebarCollapsed = computed({
   border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
   overflow-y: auto;
-  transition: width 0.2s, min-width 0.2s;
+  transition:
+    width 0.2s,
+    min-width 0.2s;
 }
 
 .cs--collapsed {

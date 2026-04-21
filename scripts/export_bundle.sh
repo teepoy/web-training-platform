@@ -158,7 +158,11 @@ cp "$AVAILABLE_LIST_FILE" "$BUNDLE_DIR/manifests/images-saved.txt"
 cp "$MISSING_LIST_FILE" "$BUNDLE_DIR/manifests/images-missing.txt"
 
 if [[ -s "$AVAILABLE_LIST_FILE" ]]; then
-    mapfile -t available_images < "$AVAILABLE_LIST_FILE"
+    available_images=()
+    while IFS= read -r image_ref; do
+        [[ -z "$image_ref" ]] && continue
+        available_images+=("$image_ref")
+    done < "$AVAILABLE_LIST_FILE"
     docker save -o "$BUNDLE_DIR/docker-images.tar" "${available_images[@]}"
 else
     tar --create --file "$BUNDLE_DIR/docker-images.tar" --files-from /dev/null
