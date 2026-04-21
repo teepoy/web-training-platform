@@ -64,6 +64,7 @@
       <ClassifySidebar
         :panels="mergedPanels"
         :context="dashboardContext"
+        :interaction="sidebarInteraction"
         v-model:collapsed="sidebarCollapsed"
       />
     </div>
@@ -92,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { NButton, NText, NSlider, NDivider, NSelect, NModal, NInput, useMessage, useDialog, useThemeVars } from 'naive-ui'
@@ -103,6 +104,11 @@ import { useSampleLoader } from '../composables/useSampleLoader'
 import AnnotationGrid from '../components/annotation/AnnotationGrid.vue'
 import ClassifySidebar from '../components/classify/ClassifySidebar.vue'
 import { defaultPanels, mergePanels } from '../components/classify/sidebarConfig'
+import {
+  reduceLabelFilterIntent,
+  type SidebarWidgetIntent,
+  type SidebarWidgetInteractionContext,
+} from '../components/classify/widgetContract'
 import { useClassifyDashboard } from '../composables/useClassifyDashboard'
 import { GLOBAL_AGENT_PANELS_KEY } from '../composables/useGlobalAgent'
 
@@ -214,6 +220,11 @@ function onGridApplyLabel(payload: { ids: string[]; label: string }) {
   labelDraft.value = draft
 }
 
+watch(labelFilter, () => {
+  selectedCount.value = 0
+  gridRef.value?.clearSelection()
+})
+
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
@@ -233,6 +244,18 @@ const globalAgentPanels = inject(GLOBAL_AGENT_PANELS_KEY, ref([]))
 const mergedPanels = computed(() =>
   mergePanels(defaultPanels, globalAgentPanels.value)
 )
+
+function handleSidebarIntent(intent: SidebarWidgetIntent): void {
+  labelFilter.value = reduceLabelFilterIntent(labelFilter.value, intent)
+}
+
+const sidebarInteraction = computed<SidebarWidgetInteractionContext>(() => ({
+  state: {
+    activeLabelFilter: labelFilter.value,
+    selectedLabels: labelFilter.value ? [labelFilter.value] : [],
+  },
+  dispatch: handleSidebarIntent,
+}))
 
 // ---------------------------------------------------------------------------
 // Mutations

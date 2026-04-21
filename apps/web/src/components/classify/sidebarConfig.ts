@@ -21,6 +21,10 @@
 
 import { defineAsyncComponent, type Component } from 'vue'
 import type { AgentPanelDescriptor } from '../../types'
+import {
+  defineSidebarWidget,
+  type SidebarWidgetDefinition,
+} from './widgetContract'
 
 // ---------------------------------------------------------------------------
 // Descriptor shape
@@ -52,33 +56,245 @@ export interface SidebarPanelDescriptor {
 // Component registry — maps `component` keys to lazy Vue components
 // ---------------------------------------------------------------------------
 
-export const WIDGET_COMPONENTS: Record<string, Component> = {
-  'annotation-progress': defineAsyncComponent(
-    () => import('./widgets/AnnotationProgressWidget.vue'),
-  ),
-  'label-distribution': defineAsyncComponent(
-    () => import('./widgets/LabelDistributionWidget.vue'),
-  ),
-  // Agent-provided generic widgets
-  'echarts-generic': defineAsyncComponent(
-    () => import('./widgets/GenericEChartsWidget.vue'),
-  ),
-  'markdown-log': defineAsyncComponent(
-    () => import('./widgets/MarkdownLogWidget.vue'),
-  ),
-  'data-table': defineAsyncComponent(
-    () => import('./widgets/DataTableWidget.vue'),
-  ),
-  'metric-cards': defineAsyncComponent(
-    () => import('./widgets/MetricCardsWidget.vue'),
-  ),
-  'sample-viewer': defineAsyncComponent(
-    () => import('./widgets/SampleViewerWidget.vue'),
-  ),
-  'prediction-summary': defineAsyncComponent(
-    () => import('./widgets/PredictionSummaryWidget.vue'),
-  ),
+export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
+  'annotation-progress': defineSidebarWidget({
+    key: 'annotation-progress',
+    component: defineAsyncComponent(
+      () => import('./widgets/AnnotationProgressWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Annotation Progress',
+      description: 'Shows annotation totals, drafts, selected counts, and label breakdowns.',
+      acceptsProps: ['chartType', 'showCounts', 'showPercent', 'includeDrafts', 'showLabelBreakdown'],
+      capabilities: {
+        reads: ['classify-dashboard'],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders dashboard metrics',
+          objective: 'Verify the widget renders shared dashboard stats and selection counts.',
+          steps: [
+            'Provide annotation stats with non-zero totals and selectedCount in the shared context.',
+            'Render the widget with showCounts enabled.',
+          ],
+          expected: [
+            'Metric values are visible for annotated, remaining, total, and selected counts when present.',
+            'The widget renders without requiring agent-only data.',
+          ],
+        },
+      ],
+    },
+  }),
+  'label-distribution': defineSidebarWidget({
+    key: 'label-distribution',
+    component: defineAsyncComponent(
+      () => import('./widgets/LabelDistributionWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Label Distribution',
+      description: 'Displays label counts and now supports click-to-filter behavior for the classify surface.',
+      acceptsProps: ['orientation', 'showValues', 'maxBars'],
+      capabilities: {
+        reads: ['classify-dashboard', 'interaction-state'],
+        emits: ['select-labels', 'clear-selection'],
+      },
+      selfTests: [
+        {
+          name: 'renders sorted labels',
+          objective: 'Verify label counts render and overflow labels can be grouped.',
+          steps: [
+            'Provide more labels than maxBars in the shared dashboard stats.',
+            'Render the widget in horizontal orientation.',
+          ],
+          expected: [
+            'The widget renders without errors.',
+            'The chart can group remaining labels into an Other bucket.',
+          ],
+        },
+        {
+          name: 'click to filter',
+          objective: 'Verify a chart click can update the shared label filter state.',
+          steps: [
+            'Provide a shared interaction-state with no activeLabelFilter.',
+            'Click a concrete label bar in the chart.',
+          ],
+          expected: [
+            'The widget emits a select-labels intent through the shared interaction context.',
+            'The active label is visually emphasized once the interaction state updates.',
+          ],
+        },
+      ],
+    },
+  }),
+  'echarts-generic': defineSidebarWidget({
+    key: 'echarts-generic',
+    component: defineAsyncComponent(
+      () => import('./widgets/GenericEChartsWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Generic ECharts',
+      description: 'Renders generic ECharts option payloads for static or agent-driven panels.',
+      acceptsProps: ['data', 'config', 'size'],
+      capabilities: {
+        reads: [],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders minimal chart payload',
+          objective: 'Verify the widget accepts a minimal chart option payload.',
+          steps: [
+            'Render the widget with a minimal ECharts option object in panel data.',
+          ],
+          expected: [
+            'The widget renders a chart container without contract validation failures.',
+          ],
+        },
+      ],
+    },
+  }),
+  'markdown-log': defineSidebarWidget({
+    key: 'markdown-log',
+    component: defineAsyncComponent(
+      () => import('./widgets/MarkdownLogWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Markdown Log',
+      description: 'Displays log entries or markdown updates in a scrollable widget.',
+      acceptsProps: ['data', 'config', 'size'],
+      capabilities: {
+        reads: [],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders markdown rows',
+          objective: 'Verify one or more markdown entries can be shown without layout errors.',
+          steps: [
+            'Render the widget with a small list of timestamped log entries.',
+          ],
+          expected: [
+            'The widget renders log content without requiring extra shared context.',
+          ],
+        },
+      ],
+    },
+  }),
+  'data-table': defineSidebarWidget({
+    key: 'data-table',
+    component: defineAsyncComponent(
+      () => import('./widgets/DataTableWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Data Table',
+      description: 'Renders columns and rows from static or agent-supplied data.',
+      acceptsProps: ['data', 'config', 'size'],
+      capabilities: {
+        reads: [],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders a table row',
+          objective: 'Verify the widget handles a minimal columns-and-rows payload.',
+          steps: [
+            'Render the widget with one column and one row.',
+          ],
+          expected: [
+            'The first row is visible and the widget does not crash on a small dataset.',
+          ],
+        },
+      ],
+    },
+  }),
+  'metric-cards': defineSidebarWidget({
+    key: 'metric-cards',
+    component: defineAsyncComponent(
+      () => import('./widgets/MetricCardsWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Metric Cards',
+      description: 'Displays a compact grid of key metric values.',
+      acceptsProps: ['data', 'config', 'size'],
+      capabilities: {
+        reads: [],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders metric cards',
+          objective: 'Verify metric labels and values appear for a minimal card set.',
+          steps: [
+            'Render the widget with at least one metric card payload.',
+          ],
+          expected: [
+            'Metric labels and values are visible without requiring additional context.',
+          ],
+        },
+      ],
+    },
+  }),
+  'sample-viewer': defineSidebarWidget({
+    key: 'sample-viewer',
+    component: defineAsyncComponent(
+      () => import('./widgets/SampleViewerWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Sample Viewer',
+      description: 'Shows sample thumbnails or item previews inside the sidebar.',
+      acceptsProps: ['data', 'config', 'size'],
+      capabilities: {
+        reads: ['classify-dashboard'],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders a sample preview',
+          objective: 'Verify at least one sample can be shown from panel data.',
+          steps: [
+            'Render the widget with one valid sample payload.',
+          ],
+          expected: [
+            'A preview element is visible and the widget renders without extra agent wiring.',
+          ],
+        },
+      ],
+    },
+  }),
+  'prediction-summary': defineSidebarWidget({
+    key: 'prediction-summary',
+    component: defineAsyncComponent(
+      () => import('./widgets/PredictionSummaryWidget.vue'),
+    ),
+    contract: {
+      displayName: 'Prediction Summary',
+      description: 'Summarizes totals, edited rows, accepted rows, and confidence in prediction review.',
+      acceptsProps: [],
+      capabilities: {
+        reads: ['prediction-grid-items'],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: 'renders review totals',
+          objective: 'Verify accepted and edited counts reflect injected review grid items.',
+          steps: [
+            'Provide prediction-grid-items containing accepted and edited items.',
+            'Render the widget without additional props.',
+          ],
+          expected: [
+            'Total, Accepted, and Edited values are computed from injected grid items.',
+          ],
+        },
+      ],
+    },
+  }),
 }
+
+export const WIDGET_COMPONENTS: Record<string, Component> = Object.fromEntries(
+  Object.entries(SIDEBAR_WIDGETS).map(([key, definition]) => [key, definition.component as Component]),
+)
 
 // ---------------------------------------------------------------------------
 // Merge static panels with agent-controlled panels

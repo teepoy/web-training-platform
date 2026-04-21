@@ -15,6 +15,10 @@
 import { provide, ref, computed, type Component } from 'vue'
 import { WIDGET_COMPONENTS, type SidebarPanelDescriptor } from './sidebarConfig'
 import type { ClassifyDashboardContext } from '../../composables/useClassifyDashboard'
+import {
+  SIDEBAR_WIDGET_INTERACTION_KEY,
+  type SidebarWidgetInteractionContext,
+} from './widgetContract'
 import WidgetErrorBoundary from './widgets/WidgetErrorBoundary.vue'
 
 // ---------------------------------------------------------------------------
@@ -24,6 +28,7 @@ import WidgetErrorBoundary from './widgets/WidgetErrorBoundary.vue'
 const props = defineProps<{
   panels: SidebarPanelDescriptor[]
   context: ClassifyDashboardContext
+  interaction?: SidebarWidgetInteractionContext
   collapsed?: boolean
 }>()
 
@@ -36,6 +41,18 @@ const emit = defineEmits<{
 // ---------------------------------------------------------------------------
 
 provide('classifyDashboard', props.context)
+
+const fallbackInteraction = computed<SidebarWidgetInteractionContext>(() => ({
+  state: {
+    activeLabelFilter: null,
+    selectedLabels: [],
+  },
+  dispatch: () => undefined,
+}))
+
+const interactionContext = computed(() => props.interaction ?? fallbackInteraction.value)
+
+provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionContext)
 
 // ---------------------------------------------------------------------------
 // Panel collapse state (per panel)

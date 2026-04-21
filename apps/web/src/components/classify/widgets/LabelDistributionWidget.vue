@@ -19,7 +19,12 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
+import type { ECElementEvent } from 'echarts/core'
 import type { ClassifyDashboardContext } from '../../../composables/useClassifyDashboard'
+import {
+  SIDEBAR_WIDGET_INTERACTION_KEY,
+  type SidebarWidgetIntent,
+} from '../widgetContract'
 
 use([CanvasRenderer, GridComponent, BarChart, TooltipComponent])
 
@@ -42,6 +47,7 @@ const props = withDefaults(defineProps<{
 // ---------------------------------------------------------------------------
 
 const ctx = inject<ClassifyDashboardContext>('classifyDashboard')!
+const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null)
 
 // ---------------------------------------------------------------------------
 // Colours
@@ -76,6 +82,40 @@ const totalLabeled = computed(() =>
   labelItems.value.reduce((s, i) => s + i.count, 0),
 )
 
+const activeLabelFilter = computed(() =>
+  interaction?.value.state.activeLabelFilter ?? null,
+)
+
+function dispatchIntent(intent: SidebarWidgetIntent): void {
+  interaction?.value.dispatch(intent)
+}
+
+function onChartClick(params: ECElementEvent): void {
+  const label = typeof params.name === 'string' ? params.name : null
+  if (!label || label === 'Other') {
+    return
+  }
+
+  const originalEvent = params.event?.event as MouseEvent | undefined
+  const operation = originalEvent?.metaKey || originalEvent?.ctrlKey ? 'toggle' : 'replace'
+
+  dispatchIntent({
+    type: 'select-labels',
+    operation,
+    values: [label],
+    sourcePanelId: 'label-distribution',
+  })
+}
+
+function clearActiveFilter(): void {
+  dispatchIntent({
+    type: 'clear-selection',
+    operation: 'clear',
+    values: [],
+    sourcePanelId: 'label-distribution',
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Chart height — dynamic based on number of bars
 // ---------------------------------------------------------------------------
@@ -97,7 +137,12 @@ const chartOption = computed<EChartsOption>(() => {
   const labels = items.map((i) => i.label)
   const values = items.map((i, idx) => ({
     value: i.count,
-    itemStyle: { color: BAR_COLORS[idx % BAR_COLORS.length] },
+    itemStyle: {
+      color: BAR_COLORS[idx % BAR_COLORS.length],
+      opacity: activeLabelFilter.value == null || activeLabelFilter.value === i.label ? 1 : 0.3,
+      borderColor: activeLabelFilter.value === i.label ? '#ffffff' : 'transparent',
+      borderWidth: activeLabelFilter.value === i.label ? 2 : 0,
+    },
   }))
 
   if (props.orientation === 'horizontal') {
@@ -224,8 +269,15 @@ const chartOption = computed<EChartsOption>(() => {
     <!-- Bar chart -->
     <template v-else>
       <div class="ldw-chart" :style="{ height: chartHeight + 'px' }">
-        <VChart class="ldw-chart__plot" :option="chartOption" autoresize />
+        <VChart class="ldw-chart__plot" :option="chartOption" autoresize @click="onChartClick" />
       </div>
+      <button
+        v-if="activeLabelFilter != null"
+        class="ldw-filter-chip"
+        @click="clearActiveFilter"
+      >
+        Filtered by {{ activeLabelFilter }} · Clear
+      </button>
       <div class="ldw-summary">
         {{ labelItems.length }} label{{ labelItems.length === 1 ? '' : 's' }} &middot; {{ totalLabeled }} sample{{ totalLabeled === 1 ? '' : 's' }}
       </div>
@@ -281,6 +333,21 @@ const chartOption = computed<EChartsOption>(() => {
 .ldw-chart__plot {
   width: 100%;
   height: 100%;
+}
+
+.ldw-filter-chip {
+  align-self: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.ldw-filter-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .ldw-summary {
