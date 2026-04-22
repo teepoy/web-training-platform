@@ -9,6 +9,8 @@ The frontend sidebar widget system now has an explicit author contract.
 
 `widgetContract.ts` defines the shared type vocabulary. `sidebarConfig.ts` remains the registry, but each widget entry now carries author-facing metadata as well as the component reference.
 
+For the general collection and row interaction model used by interactive tables and linked widgets, see `docs/table-widget-interaction-protocol.md`.
+
 ## Required widget contract fields
 
 Each registered widget must define:
@@ -68,6 +70,8 @@ The first live interaction path is now in `LabelDistributionWidget.vue` on the c
 - the widget dims non-active labels and shows a clear chip when a filter is active
 
 This is intentionally limited to a single active server-backed label filter, because the current sample loader and backend query shape only support one label at a time.
+
+The broader table-oriented interaction protocol is documented separately so it can be implemented incrementally without overloading the current label-filter-only reducer.
 
 Minimum author checklist:
 

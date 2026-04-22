@@ -13,6 +13,7 @@
     totalCount       — number                (total items, for "loaded X of Y")
     labelSpace       — string[]              (available labels)
     thumbSize        — number                (card image height, default 160)
+    layout           — "grid" | "list"      (gallery or one-row-per-sample list)
     isLoading        — boolean               (show loading indicator)
     submitting       — boolean               (submit button loading state)
     showAddLabel     — boolean               (show "+ Add label" in panel, default true)
@@ -73,7 +74,7 @@
         >
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
-            :key="vRow.index"
+            :key="`${layout}-${vRow.index}`"
             :style="{
               position: 'absolute',
               top: 0,
@@ -83,7 +84,7 @@
               transform: `translateY(${vRow.start}px)`,
             }"
           >
-            <div class="ag-card-row">
+            <div v-if="layout === 'grid'" class="ag-card-row">
               <div
                 v-for="item in getRowItems(vRow.index)"
                 :key="item.id"
@@ -94,8 +95,15 @@
                 }"
                 :style="{ width: cardWidth + 'px' }"
                 :data-item-id="item.id"
-                @click.stop="onCardClick(item.id, $event)"
+                @click.stop="onItemClick(item.id, $event)"
               >
+                <label class="ag-select-box" @mousedown.stop @click.stop>
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.has(item.id)"
+                    @change="toggleSelection(item.id)"
+                  />
+                </label>
                 <div class="ag-card-images" :style="{ height: thumbSize + 'px' }">
                   <img
                     v-for="(src, imgIdx) in item.imageSrcs"
@@ -119,6 +127,58 @@
                     class="ag-confidence"
                   >{{ (item.predictionConfidence * 100).toFixed(0) }}%</span>
                 </div>
+              </div>
+            </div>
+            <div
+              v-else-if="getListItem(vRow.index)"
+              :key="getListItem(vRow.index)!.id"
+              class="ag-list-row"
+              :class="{
+                'ag-list-row--selected': selectedIds.has(getListItem(vRow.index)!.id),
+                'ag-list-row--draft': !!(getListItem(vRow.index)!.draftLabel || getListItem(vRow.index)!.predictionLabel),
+              }"
+              :data-item-id="getListItem(vRow.index)!.id"
+              @click.stop="onItemClick(getListItem(vRow.index)!.id, $event)"
+            >
+              <div class="ag-list-select">
+                <label class="ag-select-box ag-select-box--inline" @mousedown.stop @click.stop>
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.has(getListItem(vRow.index)!.id)"
+                    @change="toggleSelection(getListItem(vRow.index)!.id)"
+                  />
+                </label>
+              </div>
+              <div class="ag-list-images" :style="{ minHeight: thumbSize + 'px' }">
+                <img
+                  v-for="(src, imgIdx) in getListItem(vRow.index)!.imageSrcs"
+                  :key="imgIdx"
+                  :src="src"
+                  loading="lazy"
+                  alt=""
+                  class="ag-list-img"
+                  :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }"
+                />
+                <div v-if="getListItem(vRow.index)!.imageSrcs.length === 0" class="ag-list-empty">
+                  No image
+                </div>
+              </div>
+              <div class="ag-list-main">
+                <div class="ag-list-head">
+                  <span class="ag-list-id">{{ getListItem(vRow.index)!.id }}</span>
+                  <span
+                    v-if="effectiveLabel(getListItem(vRow.index)!)"
+                    class="ag-badge"
+                    :style="{ background: labelColor(effectiveLabel(getListItem(vRow.index)!)!) }"
+                  >{{ effectiveLabel(getListItem(vRow.index)!) }}</span>
+                  <span v-else class="ag-badge ag-badge--empty">&mdash;</span>
+                  <span class="ag-list-image-count">{{ getListItem(vRow.index)!.imageSrcs.length }} image{{ getListItem(vRow.index)!.imageSrcs.length === 1 ? '' : 's' }}</span>
+                  <span
+                    v-if="getListItem(vRow.index)!.predictionConfidence != null"
+                    class="ag-confidence"
+                  >{{ (getListItem(vRow.index)!.predictionConfidence! * 100).toFixed(0) }}%</span>
+                </div>
+                <div class="ag-list-meta">{{ metadataPreview(getListItem(vRow.index)!.metadata) }}</div>
               </div>
             </div>
           </div>
@@ -163,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import type { AnnotationGridItem } from '../../types'
 
@@ -176,11 +236,13 @@ const props = withDefaults(defineProps<{
   totalCount: number
   labelSpace: string[]
   thumbSize?: number
+  layout?: 'grid' | 'list'
   isLoading?: boolean
   submitting?: boolean
   showAddLabel?: boolean
 }>(), {
   thumbSize: 160,
+  layout: 'grid',
   isLoading: false,
   submitting: false,
   showAddLabel: true,
@@ -213,6 +275,12 @@ function effectiveLabel(item: AnnotationGridItem): string | null {
   return item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? null
 }
 
+function metadataPreview(metadata: Record<string, unknown>): string {
+  const preview = JSON.stringify(metadata)
+  if (!preview || preview === '{}') return 'No metadata'
+  return preview.length > 180 ? `${preview.slice(0, 180)}...` : preview
+}
+
 // ---------------------------------------------------------------------------
 // Label panel
 // ---------------------------------------------------------------------------
@@ -234,10 +302,15 @@ const containerWidth = ref(800)
 const cardWidth = computed(() => props.thumbSize + 20)
 const cardsPerRow = computed(() => Math.max(1, Math.floor(containerWidth.value / cardWidth.value)))
 const rowCount = computed(() => Math.ceil(props.items.length / cardsPerRow.value))
+const layout = computed(() => props.layout)
 
 function getRowItems(rowIndex: number): AnnotationGridItem[] {
   const start = rowIndex * cardsPerRow.value
   return props.items.slice(start, start + cardsPerRow.value)
+}
+
+function getListItem(index: number): AnnotationGridItem | undefined {
+  return props.items[index]
 }
 
 // ---------------------------------------------------------------------------
@@ -250,17 +323,26 @@ const draftCount = computed(() =>
   props.items.filter((item) => item.draftLabel != null).length
 )
 
-function onCardClick(id: string, e: MouseEvent) {
+function emitSelection() {
+  emit('select', selectedIds.value)
+}
+
+function toggleSelection(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+  emitSelection()
+}
+
+function onItemClick(id: string, e: MouseEvent) {
   if (wasDragging) return
   if (e.ctrlKey || e.metaKey) {
-    const next = new Set(selectedIds.value)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    selectedIds.value = next
+    toggleSelection(id)
   } else {
     selectedIds.value = new Set([id])
+    emitSelection()
   }
-  emit('select', selectedIds.value)
 }
 
 function applyLabelToSelection(label: string) {
@@ -294,10 +376,13 @@ function onKeyDown(e: KeyboardEvent) {
 // Virtualizer
 // ---------------------------------------------------------------------------
 
-const rowHeight = computed(() => props.thumbSize + 48)
+const rowHeight = computed(() => {
+  if (layout.value === 'list') return props.thumbSize + 56
+  return props.thumbSize + 48
+})
 
 const virtualizer = useVirtualizer({
-  get count() { return rowCount.value },
+  get count() { return layout.value === 'list' ? props.items.length : rowCount.value },
   getScrollElement: () => scrollRef.value,
   estimateSize: () => rowHeight.value,
   overscan: 3,
@@ -318,7 +403,8 @@ watch(
   (items) => {
     if (!items.length) return
     const lastItem = items[items.length - 1]
-    if (lastItem && lastItem.index >= rowCount.value - 2) {
+    const threshold = layout.value === 'list' ? props.items.length - 2 : rowCount.value - 2
+    if (lastItem && lastItem.index >= threshold) {
       emit('load-more')
     }
   },
@@ -418,7 +504,7 @@ function updateRubberBandSelection() {
   } else {
     selectedIds.value = new Set(intersecting)
   }
-  emit('select', selectedIds.value)
+  emitSelection()
 }
 
 // Auto-scroll when drag reaches viewport edges
@@ -478,7 +564,10 @@ onUnmounted(() => {
 
 defineExpose({
   selectedIds,
-  clearSelection: () => { selectedIds.value = new Set() },
+  clearSelection: () => {
+    selectedIds.value = new Set()
+    emitSelection()
+  },
 })
 </script>
 
@@ -596,6 +685,7 @@ defineExpose({
 }
 
 .ag-card {
+  position: relative;
   flex-shrink: 0;
   border: 2px solid transparent;
   border-radius: 6px;
@@ -607,6 +697,31 @@ defineExpose({
 
 .ag-card:hover {
   border-color: var(--cv-border, rgba(255,255,255,0.2));
+}
+
+.ag-select-box {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cv-card-bg, #1e1e2e) 88%, black);
+  z-index: 2;
+}
+
+.ag-select-box--inline {
+  position: static;
+  background: transparent;
+  width: auto;
+  height: auto;
+}
+
+.ag-select-box input {
+  margin: 0;
 }
 
 .ag-card--selected {
@@ -656,6 +771,93 @@ defineExpose({
   font-size: 10px;
   color: var(--cv-text-secondary, rgba(255,255,255,0.5));
   flex-shrink: 0;
+}
+
+.ag-list-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, auto) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border-radius: 10px;
+  background: var(--cv-card-bg, #1e1e2e);
+  cursor: pointer;
+}
+
+.ag-list-row--selected {
+  border-color: var(--cv-primary, #4098fc);
+  box-shadow: 0 0 0 1px var(--cv-primary, #4098fc);
+}
+
+.ag-list-select {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.ag-list-images {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.ag-list-img {
+  object-fit: cover;
+  border-radius: 8px;
+  background: #111;
+  flex-shrink: 0;
+}
+
+.ag-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  min-height: 80px;
+  border: 1px dashed var(--cv-border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  font-size: 12px;
+}
+
+.ag-list-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ag-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ag-list-id {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--cv-text, #fff);
+  word-break: break-all;
+}
+
+.ag-list-image-count {
+  font-size: 11px;
+  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+}
+
+.ag-list-meta {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Rubber band */
@@ -721,5 +923,15 @@ defineExpose({
   text-align: center;
   font-size: 12px;
   color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+}
+
+@media (max-width: 900px) {
+  .ag-list-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .ag-list-main {
+    grid-column: 1 / -1;
+  }
 }
 </style>

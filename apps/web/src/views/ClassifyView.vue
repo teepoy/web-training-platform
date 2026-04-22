@@ -15,6 +15,11 @@
       <div
         style="margin-left: auto; display: flex; align-items: center; gap: 12px"
       >
+        <n-text depth="3" style="white-space: nowrap">View</n-text>
+        <n-radio-group v-model:value="viewMode" size="small">
+          <n-radio-button value="grid">Grid</n-radio-button>
+          <n-radio-button value="list">List</n-radio-button>
+        </n-radio-group>
         <n-text depth="3" style="white-space: nowrap">Image size</n-text>
         <n-slider
           v-model:value="thumbSize"
@@ -35,6 +40,7 @@
         :total-count="totalCount"
         :label-space="labelSpace"
         :thumb-size="thumbSize"
+        :layout="viewMode"
         :is-loading="isLoading"
         :submitting="bulkAnnotateMutation.isPending.value"
         :show-add-label="true"
@@ -109,6 +115,8 @@ import {
   NSelect,
   NModal,
   NInput,
+  NRadioGroup,
+  NRadioButton,
   useMessage,
   useDialog,
   useThemeVars,
@@ -178,6 +186,7 @@ const labelSpace = computed<string[]>(
 // ---------------------------------------------------------------------------
 
 const thumbSize = ref(128);
+const viewMode = ref<"grid" | "list">("grid");
 const labelFilter = ref<string | null>(null);
 const orderBy = ref<string>("id");
 

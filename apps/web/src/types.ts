@@ -772,6 +772,35 @@ export interface MetricCardItem {
   color?: string;
 }
 
+export type TableWidgetEntity = "sample" | "prediction" | "row";
+
+export type TableWidgetFilterMode = "all" | "selected-only";
+
+export interface TableWidgetInteractionConfig {
+  collection: string;
+  entity: TableWidgetEntity;
+  emitSelection?: boolean;
+  followSelection?: boolean;
+  filterFromSelection?: boolean;
+  clearFilterOnEmptySelection?: boolean;
+}
+
+export interface TableWidgetColumn {
+  key: string;
+  label: string;
+}
+
+export interface TableWidgetRow {
+  id: string;
+  cells: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InteractiveTableWidgetData {
+  columns: TableWidgetColumn[];
+  rows: TableWidgetRow[];
+}
+
 // ---------------------------------------------------------------------------
 // Annotation Grid item (shared by ClassifyView & PredictionReview Step 2)
 // ---------------------------------------------------------------------------

@@ -40,6 +40,8 @@ The classify page (`/datasets/:id/classify`) has a collapsible sidebar that rend
 
 The composable result is injected into widgets via Vue `provide`/`inject` (key: `classifyDashboard`), so widgets don't need individual prop drilling for stats data.
 
+General row and collection interaction rules for future interactive table widgets are documented in `docs/table-widget-interaction-protocol.md`.
+
 ## AGENT DISPLAY SURFACE ARCHITECTURE
 The classify page includes an AI agent sidebar system and floating chat drawer:
 

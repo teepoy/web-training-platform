@@ -20,17 +20,64 @@ export type SidebarWidgetOperation =
   | "toggle"
   | "clear";
 
+export type SidebarWidgetCollectionEntity = "sample" | "prediction" | "row";
+
+export type SidebarWidgetSource = "scatter" | "table" | "grid" | "external";
+
+export type SidebarWidgetIntentTarget = "selection" | "filter" | "both";
+
+export type SidebarWidgetFilterMode = "all" | "selected-only";
+
+export interface SidebarWidgetIntentMetadata {
+  collection?: string;
+  entity?: SidebarWidgetCollectionEntity;
+  sourceWidget?: SidebarWidgetSource;
+  target?: SidebarWidgetIntentTarget;
+  filterMode?: SidebarWidgetFilterMode;
+  revision?: number;
+  [key: string]: unknown;
+}
+
 export interface SidebarWidgetIntent {
   type: SidebarWidgetIntentType;
   operation: SidebarWidgetOperation;
   values: string[];
   sourcePanelId?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: SidebarWidgetIntentMetadata;
+}
+
+export interface SidebarWidgetCollectionSelectionState {
+  ids: string[];
+  sourcePanelId: string | null;
+  revision: number;
+}
+
+export interface SidebarWidgetCollectionFilterState {
+  ids: string[];
+  mode: SidebarWidgetFilterMode;
+  sourcePanelId: string | null;
+  revision: number;
+}
+
+export interface SidebarWidgetCollectionState {
+  entity: SidebarWidgetCollectionEntity;
+  selection: SidebarWidgetCollectionSelectionState;
+  filter: SidebarWidgetCollectionFilterState;
 }
 
 export interface SidebarWidgetInteractionState {
   activeLabelFilter: string | null;
   selectedLabels: string[];
+  collections?: Record<string, SidebarWidgetCollectionState>;
+}
+
+export interface SidebarWidgetInteractionConfig {
+  collection: string;
+  entity: SidebarWidgetCollectionEntity;
+  emitSelection?: boolean;
+  followSelection?: boolean;
+  filterFromSelection?: boolean;
+  clearFilterOnEmptySelection?: boolean;
 }
 
 export interface SidebarWidgetInteractionContext {
