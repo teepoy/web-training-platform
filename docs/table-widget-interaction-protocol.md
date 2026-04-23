@@ -341,13 +341,13 @@ When building an interactive table widget later:
 
 ## Current Status
 
-This protocol is documented but not implemented in the runtime today.
+This protocol is now partially implemented in the classify runtime.
 
 At the time of writing:
 
-- `label-distribution` is the only live interactive sidebar widget
-- `data-table` is display-only
-- `echarts-generic` is display-only
-- `interaction-state` currently carries label filter state only
+- `label-distribution` remains interactive for label filtering
+- `data-table` supports interactive row-object mode with collection-linked selection/filter behavior
+- `wafer-map` supports high-density scatter interaction with brush or click selection
+- `interaction-state` now carries both label state and optional collection state
 
-Implementation should extend the existing typed interaction system rather than introducing a separate event bus.
+The runtime still relies on the same typed interaction system and does not use a separate event bus.

@@ -17,6 +17,7 @@
     "@tanstack/vue-virtual": "^3.13.23",
     "@vue-dnd-kit/core": "^2.4.4",
     "echarts": "^6.0.0",
+    "kdbush": "^4.0.2",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.1",
     "unplugin-vue-components": "^32.0.0",
@@ -25,8 +26,8 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.1",
     "@playwright/test": "^1.55.0",
+    "@types/node": "^22.13.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "katex": "^0.16.44",
     "tsup": "^8.5.1",

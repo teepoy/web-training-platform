@@ -139,8 +139,10 @@ import {
   mergePanels,
 } from "../components/classify/sidebarConfig";
 import {
+  reduceCollectionIntent,
   reduceLabelFilterIntent,
   type SidebarWidgetIntent,
+  type SidebarWidgetInteractionState,
   type SidebarWidgetInteractionContext,
 } from "../components/classify/widgetContract";
 import { useClassifyDashboard } from "../composables/useClassifyDashboard";
@@ -294,14 +296,34 @@ const mergedPanels = computed(() =>
 );
 
 function handleSidebarIntent(intent: SidebarWidgetIntent): void {
-  labelFilter.value = reduceLabelFilterIntent(labelFilter.value, intent);
+  interactionState.value = {
+    ...interactionState.value,
+    activeLabelFilter: reduceLabelFilterIntent(
+      interactionState.value.activeLabelFilter,
+      intent,
+    ),
+    collections: reduceCollectionIntent(interactionState.value.collections, intent),
+  };
+
+  labelFilter.value = interactionState.value.activeLabelFilter;
 }
 
+const interactionState = ref<SidebarWidgetInteractionState>({
+  activeLabelFilter: labelFilter.value,
+  selectedLabels: labelFilter.value ? [labelFilter.value] : [],
+  collections: {},
+});
+
+watch(labelFilter, (nextLabel) => {
+  interactionState.value = {
+    ...interactionState.value,
+    activeLabelFilter: nextLabel,
+    selectedLabels: nextLabel ? [nextLabel] : [],
+  };
+});
+
 const sidebarInteraction = computed<SidebarWidgetInteractionContext>(() => ({
-  state: {
-    activeLabelFilter: labelFilter.value,
-    selectedLabels: labelFilter.value ? [labelFilter.value] : [],
-  },
+  state: interactionState.value,
   dispatch: handleSidebarIntent,
 }));
 

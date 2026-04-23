@@ -180,6 +180,122 @@ export function reduceLabelFilterIntent(
   return currentLabelFilter;
 }
 
+function applyIdsOperation(
+  currentIds: string[],
+  values: string[],
+  operation: SidebarWidgetOperation,
+): string[] {
+  const current = new Set(currentIds);
+  const incoming = values.filter((value) => value.trim().length > 0);
+
+  if (operation === "clear") {
+    return [];
+  }
+
+  if (operation === "replace") {
+    return [...new Set(incoming)];
+  }
+
+  if (operation === "add") {
+    incoming.forEach((value) => current.add(value));
+    return Array.from(current);
+  }
+
+  if (operation === "remove") {
+    incoming.forEach((value) => current.delete(value));
+    return Array.from(current);
+  }
+
+  if (operation === "toggle") {
+    incoming.forEach((value) => {
+      if (current.has(value)) {
+        current.delete(value);
+      } else {
+        current.add(value);
+      }
+    });
+    return Array.from(current);
+  }
+
+  return currentIds;
+}
+
+export function reduceCollectionIntent(
+  currentCollections: Record<string, SidebarWidgetCollectionState> | undefined,
+  intent: SidebarWidgetIntent,
+): Record<string, SidebarWidgetCollectionState> | undefined {
+  const collectionKey = intent.metadata?.collection;
+  if (!collectionKey || collectionKey.trim().length === 0) {
+    return currentCollections;
+  }
+
+  const collection = collectionKey.trim();
+  const existing = currentCollections?.[collection];
+  const entity = intent.metadata?.entity ?? existing?.entity ?? "row";
+  const revision = Number(intent.metadata?.revision ?? 0);
+  const sourcePanelId = intent.sourcePanelId ?? null;
+
+  const nextSelection = {
+    ids: existing?.selection.ids ?? [],
+    sourcePanelId: existing?.selection.sourcePanelId ?? null,
+    revision: existing?.selection.revision ?? 0,
+  };
+
+  const nextFilter = {
+    ids: existing?.filter.ids ?? [],
+    mode: existing?.filter.mode ?? "all",
+    sourcePanelId: existing?.filter.sourcePanelId ?? null,
+    revision: existing?.filter.revision ?? 0,
+  };
+
+  if (
+    intent.type === "select-samples" ||
+    intent.type === "select-predictions" ||
+    intent.type === "select-labels"
+  ) {
+    nextSelection.ids = applyIdsOperation(
+      nextSelection.ids,
+      intent.values,
+      intent.operation,
+    );
+    nextSelection.sourcePanelId = sourcePanelId;
+    nextSelection.revision = revision > 0 ? revision : nextSelection.revision + 1;
+  }
+
+  if (intent.type === "apply-filter") {
+    nextFilter.ids = applyIdsOperation(nextFilter.ids, intent.values, intent.operation);
+    nextFilter.mode = intent.metadata?.filterMode ?? nextFilter.mode;
+    nextFilter.sourcePanelId = sourcePanelId;
+    nextFilter.revision = revision > 0 ? revision : nextFilter.revision + 1;
+  }
+
+  if (intent.type === "clear-selection" || intent.operation === "clear") {
+    const target = intent.metadata?.target ?? "both";
+    if (target === "selection" || target === "both") {
+      nextSelection.ids = [];
+      nextSelection.sourcePanelId = sourcePanelId;
+      nextSelection.revision = revision > 0 ? revision : nextSelection.revision + 1;
+    }
+    if (target === "filter" || target === "both") {
+      nextFilter.ids = [];
+      nextFilter.mode = "all";
+      nextFilter.sourcePanelId = sourcePanelId;
+      nextFilter.revision = revision > 0 ? revision : nextFilter.revision + 1;
+    }
+  }
+
+  const nextCollection: SidebarWidgetCollectionState = {
+    entity,
+    selection: nextSelection,
+    filter: nextFilter,
+  };
+
+  return {
+    ...(currentCollections ?? {}),
+    [collection]: nextCollection,
+  };
+}
+
 export function runSidebarWidgetSelfTest(
   definition: SidebarWidgetDefinition,
 ): SidebarWidgetSelfTestResult {

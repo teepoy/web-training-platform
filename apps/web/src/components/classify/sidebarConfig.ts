@@ -204,11 +204,11 @@ export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
     contract: {
       displayName: "Data Table",
       description:
-        "Renders columns and rows from static or agent-supplied data.",
+        "Renders columns and rows from static or agent-supplied data, including linked interactive table mode.",
       acceptsProps: ["data", "config", "size"],
       capabilities: {
-        reads: [],
-        emits: [],
+        reads: ["interaction-state"],
+        emits: ["select-samples", "select-predictions", "apply-filter", "clear-selection"],
       },
       selfTests: [
         {
@@ -218,6 +218,19 @@ export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
           steps: ["Render the widget with one column and one row."],
           expected: [
             "The first row is visible and the widget does not crash on a small dataset.",
+          ],
+        },
+        {
+          name: "interactive row selection",
+          objective:
+            "Verify row click can emit linked intents and follow shared collection selection state.",
+          steps: [
+            "Render the widget with object columns, row ids, and config.interaction.collection.",
+            "Click a row and inspect emitted intent metadata.",
+          ],
+          expected: [
+            "The widget emits select-* intents with metadata.collection.",
+            "Rows in shared selection state are highlighted when followSelection is enabled.",
           ],
         },
       ],
@@ -300,6 +313,35 @@ export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
           ],
           expected: [
             "Total, Accepted, and Edited values are computed from injected grid items.",
+          ],
+        },
+      ],
+    },
+  }),
+  "wafer-map": defineSidebarWidget({
+    key: "wafer-map",
+    component: defineAsyncComponent(() => import("./widgets/WaferMapWidget.vue")),
+    contract: {
+      displayName: "Wafer Map",
+      description:
+        "Renders high-density wafer scatter points and can emit linked selection/filter intents.",
+      acceptsProps: ["data", "config", "size"],
+      capabilities: {
+        reads: ["interaction-state"],
+        emits: ["select-samples", "select-predictions", "apply-filter", "clear-selection"],
+      },
+      selfTests: [
+        {
+          name: "brush updates linked collection",
+          objective:
+            "Verify brush selection emits collection-scoped intents so linked tables can filter.",
+          steps: [
+            "Render the widget with inline points and config.interaction.collection set.",
+            "Brush-select a point subset in the wafer map.",
+          ],
+          expected: [
+            "The widget emits select-* and apply-filter intents with metadata.collection.",
+            "A linked data-table widget on the same collection can reduce to selected rows.",
           ],
         },
       ],

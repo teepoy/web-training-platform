@@ -85,6 +85,7 @@ declare module 'vue' {
     SampleViewerWidget: typeof import('./src/components/classify/widgets/SampleViewerWidget.vue')['default']
     TaskInsightModal: typeof import('./src/components/TaskInsightModal.vue')['default']
     TrainingChart: typeof import('./src/components/TrainingChart.vue')['default']
+    WaferMapWidget: typeof import('./src/components/classify/widgets/WaferMapWidget.vue')['default']
     WidgetErrorBoundary: typeof import('./src/components/classify/widgets/WidgetErrorBoundary.vue')['default']
   }
 }
