@@ -15,12 +15,12 @@ The manifests mirror the docker-compose stack so both environments run the same 
 | `minio.yaml` | MinIO (API :9000, console :9001) |
 | `prefect-server.yaml` | Prefect 3 server (:4200) |
 | `embedding.yaml` | Embedding gRPC service (:50051) |
-| `inference-worker.yaml` | Prediction/embedding inference worker (:8010) |
+| `inference-worker.yaml` | HTTP inference service for prediction/embedding (:8010) |
 | `label-studio.yaml` | Label Studio (:8080) |
 | `api-deployment.yaml` | Platform API (:8000) |
 | `training-worker-gpu.yaml` | GPU training worker (Prefect V2 work-pool mode) |
 | `training-worker-dspy.yaml` | DSPy training worker (Prefect V2 work-pool mode) |
-| `prediction-worker.yaml` | Batch prediction worker (Prefect V2 work-pool mode) |
+| `prediction-worker.yaml` | Batch prediction flow worker (Prefect V2 work-pool mode) |
 | `pytorchjob-smoke.yaml` | Manual Kubeflow smoke job |
 | `kustomization.yaml` | Kustomize entrypoint — applies all base resources |
 
@@ -31,11 +31,11 @@ postgres (:5432)          — shared by API, Prefect, Label Studio
 minio (:9000, :9001)      — artifact storage
 prefect-server (:4200)    — Prefect control plane
 embedding (:50051)        — embedding gRPC service
-inference-worker (:8010)  — prediction/embedding worker
+inference-worker (:8010)  — HTTP prediction/embedding inference service
 label-studio (:8080)      — annotation UI
 finetune-api (:8000)      — platform API
 training-worker           — GPU worker (no exposed port)
-prediction-worker         — batch prediction worker (no exposed port)
+prediction-worker         — batch prediction flow worker (no exposed port)
 ```
 
 ## Apply

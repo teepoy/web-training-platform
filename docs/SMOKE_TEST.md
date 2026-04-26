@@ -5,7 +5,7 @@ Run this checklist after making significant changes to verify core functionality
 ## Prerequisites
 
 ```bash
-# Start the full stack
+# Start the full stack (or use `make updev` alias)
 make up
 
 # Wait for all services to be healthy
@@ -22,7 +22,7 @@ Services should be running:
 - `compose-training-worker-gpu-1` - GPU delegated worker
 - `compose-training-worker-dspy-1` - DSPy delegated worker
 - `compose-embedding-1` - Embedding service (port 50051)
-- `compose-inference-worker-1` - Inference worker (port 8010)
+- `compose-inference-worker-1` - HTTP inference service (port 8010)
 
 ## 1. Authentication
 
@@ -243,7 +243,7 @@ See [`docs/issues/`](./issues/) for tracked issues:
 
 For a quick verification:
 
-1. `make up` - Start stack
+1. `make up` (or `make updev`) - Start stack
 2. Open http://localhost:5173/login - Verify page loads
 3. Register/login - Verify auth works
 4. Create dataset - Verify LS integration

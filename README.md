@@ -4,7 +4,7 @@ Monorepo for an online finetune platform with:
 
 - Vue 3 frontend (`apps/web`)
 - FastAPI backend (`apps/api`)
-- Worker scaffold (`apps/worker`)
+- Prefect flow-worker package (`apps/worker`)
 - Python SDK + CLI (`libs/python-sdk`)
 
 Current implementation focuses on extensible interfaces, classification-first types,

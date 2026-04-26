@@ -9,7 +9,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
 ├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
-├── apps/worker/        # placeholder (not implemented)
+├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
 ├── infra/k8s/          # minikube/kubeflow manifests
@@ -32,6 +32,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | **Run test file** | `make test-api ARGS="tests/test_vqa_runtime.py -v"` | Verbose single file |
 | Build frontend | `make build-web` | vue-tsc + vite build |
 | Alembic migrate | `make db-migrate` | `upgrade head` |
+| Compose Alembic migrate | `make db-migrate-compose` | Runs `alembic upgrade head` in Compose API container |
 | New migration | `make db-revision MSG="add column"` | autogenerate |
 | Reset app data | `make reset-app-data` | Drops and recreates app tables in the configured DB |
 | SDK CLI | `make ftctl ARGS="jobs ls"` | Wraps `ftctl` |
@@ -39,7 +40,8 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Seed ImageNet POC | `make seed-imagenet-poc` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
 | Seed ImageNet full | `make seed-imagenet-full` | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path |
 | Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability |
-| Compose up/down | `make up` / `make down` | Postgres + MinIO + API |
+| Compose up/down | `make up` / `make down` | Full Compose stack (dev profile) |
+| Compose dev alias | `make updev` | Alias for `make up` |
 
 Raw single-test (when Make is unavailable):
 ```bash
@@ -118,7 +120,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 ### Architecture
 - Don't add route-level persistence; keep handlers thin, push logic into services/repository.
 - Don't change ORM models without a corresponding Alembic migration.
-- `apps/worker` is the Prefect training-worker package; keep API, training workers, and inference worker separated in dev/prod.
+- `apps/worker` is the Prefect flow-worker package; keep API, flow workers, and the inference service separated in dev/prod.
 - Don't assume Kubeflow/MinIO are live; smoke paths degrade gracefully.
 - Don't hardcode new backend URLs; the existing `localhost:8000` hardcode is a known debt.
 - Don't reuse example secrets (`postgres`, `minioadmin`) outside smoke.

@@ -4,8 +4,8 @@
 
 - `apps/api`: FastAPI backend with extensible domain interfaces and orchestration APIs
 - `apps/web`: Vue 3 frontend for datasets and jobs
-- `apps/worker`: worker image/package used for delegated Prefect training workers
-- `apps/inference`: long-lived inference worker for prediction and embedding execution
+- `apps/worker`: Prefect flow-worker package for delegated training and batch flow execution
+- `apps/inference`: long-lived HTTP inference service for prediction and embedding execution
 - `libs/python-sdk`: Python SDK and CLI for automation and agent tool-calling
 
 ## Core design choices
@@ -44,4 +44,4 @@
 ## Prefect Delegation
 
 - Prefect-based training delegation is documented in `docs/prefect-training-delegation.md`.
-- The target model separates API orchestration from training workers and the inference worker.
+- The target model separates API orchestration from Prefect flow workers and the inference service.
