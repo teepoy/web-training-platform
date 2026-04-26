@@ -79,12 +79,20 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async initAuthMode() {
-      try {
-        const health = await fetchHealthStatus();
-        this.setAuthEnabled(health.auth_enabled);
-      } catch {
-        this.setAuthEnabled(true);
+      for (let attempt = 1; attempt <= 10; attempt += 1) {
+        try {
+          const health = await fetchHealthStatus();
+          this.setAuthEnabled(health.auth_enabled);
+          return;
+        } catch {
+          if (attempt < 10) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+        }
       }
+
+      this.setAuthEnabled(true);
     },
 
     async login(email: string, password: string) {

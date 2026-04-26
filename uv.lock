@@ -1200,6 +1200,11 @@ dev = [
     { name = "pytest-asyncio" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "omegaconf" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
@@ -1230,6 +1235,9 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "omegaconf", specifier = ">=2.3.0" }]
 
 [[package]]
 name = "finetune-embedding"

@@ -157,8 +157,15 @@ export-bundle: ## Export source snapshot and docker images to a tar bundle
 	bash scripts/export_bundle.sh $(ARGS)
 
 .PHONY: up
-up: ## Start Compose stack (Postgres + MinIO + API)
+up: ## Start full Compose stack (dev profile, detached)
 	docker compose -f $(COMPOSE) up -d
+
+.PHONY: updev
+updev: up ## Alias for Compose dev stack entrypoint
+
+.PHONY: db-migrate-compose
+db-migrate-compose: ## Run Alembic migrations inside Compose API container
+	docker compose -f $(COMPOSE) run --rm api /bin/sh -lc 'cd /app/apps/api && /app/.venv/bin/alembic upgrade head'
 
 .PHONY: down
 down: ## Stop Compose stack

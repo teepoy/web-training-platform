@@ -122,14 +122,9 @@ services:
       - ../../libs/python-sdk:/app/libs/python-sdk
     command:
       [
-        "/app/.venv/bin/python",
-        "-m",
-        "uvicorn",
-        "app.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
+        "/bin/sh",
+        "-lc",
+        "cd /app/apps/api && /app/.venv/bin/alembic upgrade head && /app/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
       ]
     healthcheck:
       test:
@@ -268,8 +263,6 @@ services:
       - api
     ports:
       - "5173:80"
-    volumes:
-      - ../../apps/web/dist:/usr/share/nginx/html:ro
     restart: on-failure
 
   inference-worker:

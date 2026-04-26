@@ -39,6 +39,20 @@ interface RawPointObject {
 
 type RawPointTuple = [string, number, number, number?];
 
+interface WaferPoint {
+  id: string;
+  x: number;
+  y: number;
+  value: number;
+}
+
+interface WaferBenchmarkConfig {
+  enabled?: boolean;
+  pointCount?: number;
+  queryIterations?: number;
+  queryBoxSize?: number;
+}
+
 const props = defineProps<{
   data?: Record<string, unknown> | null;
   config?: Record<string, unknown>;
@@ -65,6 +79,17 @@ const perf = ref({
   truncated: false,
 });
 
+const benchmark = ref({
+  enabled: false,
+  pointCount: 0,
+  generationMs: 0,
+  iterations: 0,
+  queryAvgMs: 0,
+  queryP95Ms: 0,
+  queryMaxMs: 0,
+  avgSelected: 0,
+});
+
 const interactionConfig = computed<SidebarWidgetInteractionConfig | null>(() => {
   const raw = props.config?.interaction;
   if (!raw || typeof raw !== "object") {
@@ -83,7 +108,69 @@ const maxEmitIds = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 50000;
 });
 
-const normalizedPoints = computed<Array<{ id: string; x: number; y: number; value: number }>>(() => {
+const benchmarkConfig = computed<WaferBenchmarkConfig>(() => {
+  const raw = props.config?.benchmark;
+  if (!raw || typeof raw !== "object") {
+    return { enabled: false };
+  }
+  return raw as WaferBenchmarkConfig;
+});
+
+const generatedPoints = ref<WaferPoint[] | null>(null);
+
+function generateBenchmarkPoints(count: number): WaferPoint[] {
+  const safeCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 1_000_000;
+  const points: WaferPoint[] = new Array(safeCount);
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < safeCount; i += 1) {
+    const ratio = (i + 0.5) / safeCount;
+    const radius = Math.sqrt(ratio);
+    const theta = i * goldenAngle;
+    points[i] = {
+      id: `bench-${i}`,
+      x: radius * Math.cos(theta),
+      y: radius * Math.sin(theta),
+      value: 1,
+    };
+  }
+
+  return points;
+}
+
+watch(
+  benchmarkConfig,
+  (cfg) => {
+    const enabled = Boolean(cfg.enabled);
+    if (!enabled) {
+      generatedPoints.value = null;
+      benchmark.value = {
+        ...benchmark.value,
+        enabled: false,
+        pointCount: 0,
+        generationMs: 0,
+      };
+      return;
+    }
+
+    const pointCount = Number(cfg.pointCount ?? 1_000_000);
+    const start = performance.now();
+    generatedPoints.value = generateBenchmarkPoints(pointCount);
+    benchmark.value = {
+      ...benchmark.value,
+      enabled: true,
+      pointCount: generatedPoints.value.length,
+      generationMs: Number((performance.now() - start).toFixed(2)),
+    };
+  },
+  { immediate: true, deep: true },
+);
+
+const normalizedPoints = computed<WaferPoint[]>(() => {
+  if (benchmarkConfig.value.enabled && generatedPoints.value) {
+    return generatedPoints.value;
+  }
+
   if (!props.data) {
     return [];
   }
@@ -98,7 +185,7 @@ const normalizedPoints = computed<Array<{ id: string; x: number; y: number; valu
     return [];
   }
 
-  const parsed: Array<{ id: string; x: number; y: number; value: number }> = [];
+  const parsed: WaferPoint[] = [];
   const limit = maxPoints.value;
 
   for (let i = 0; i < points.length; i += 1) {
@@ -169,6 +256,60 @@ watch(
   },
   { immediate: true },
 );
+
+function runIndexQueryBenchmark(): void {
+  const index = pointIndex.value;
+  const cfg = benchmarkConfig.value;
+  if (!index || !benchmark.value.enabled) {
+    return;
+  }
+
+  const iterationsRaw = Number(cfg.queryIterations ?? 16);
+  const iterations = Number.isFinite(iterationsRaw) && iterationsRaw > 0
+    ? Math.floor(iterationsRaw)
+    : 16;
+  const boxSizeRaw = Number(cfg.queryBoxSize ?? 0.22);
+  const boxSize = Math.min(0.95, Math.max(0.01, Number.isFinite(boxSizeRaw) ? boxSizeRaw : 0.22));
+  const half = boxSize / 2;
+
+  const times: number[] = [];
+  let selectedTotal = 0;
+
+  for (let i = 0; i < iterations; i += 1) {
+    const cx = -1 + (2 * (i + 0.5)) / iterations;
+    const cy = -1 + (2 * (((i * 7) % iterations) + 0.5)) / iterations;
+    const minX = Math.max(-1, cx - half);
+    const maxX = Math.min(1, cx + half);
+    const minY = Math.max(-1, cy - half);
+    const maxY = Math.min(1, cy + half);
+
+    const start = performance.now();
+    const matches = index.range(minX, minY, maxX, maxY);
+    const elapsed = performance.now() - start;
+    times.push(elapsed);
+    selectedTotal += matches.length;
+  }
+
+  times.sort((a, b) => a - b);
+  const avg = times.reduce((sum, time) => sum + time, 0) / times.length;
+  const p95 = times[Math.max(0, Math.floor(times.length * 0.95) - 1)] ?? 0;
+  const max = times[times.length - 1] ?? 0;
+
+  benchmark.value = {
+    ...benchmark.value,
+    iterations,
+    queryAvgMs: Number(avg.toFixed(2)),
+    queryP95Ms: Number(p95.toFixed(2)),
+    queryMaxMs: Number(max.toFixed(2)),
+    avgSelected: Math.round(selectedTotal / iterations),
+  };
+}
+
+watch([pointIndex, benchmarkConfig], () => {
+  if (benchmarkConfig.value.enabled && pointIndex.value) {
+    runIndexQueryBenchmark();
+  }
+}, { immediate: true, deep: true });
 
 const selectedIds = computed(() => {
   const cfg = interactionConfig.value;
@@ -569,6 +710,13 @@ const selectionRectStyle = computed(() => {
         <span v-if="perf.selectedTotal > 0">{{ perf.emittedTotal }}/{{ perf.selectedTotal }} emitted</span>
         <span v-if="perf.truncated" class="wmw-perf--warn">truncated</span>
       </div>
+      <div v-if="benchmark.enabled" class="wmw-benchmark">
+        <span>{{ benchmark.pointCount }} pts</span>
+        <span>gen {{ benchmark.generationMs.toFixed(2) }}ms</span>
+        <span>q(avg/p95/max) {{ benchmark.queryAvgMs.toFixed(2) }}/{{ benchmark.queryP95Ms.toFixed(2) }}/{{ benchmark.queryMaxMs.toFixed(2) }}ms</span>
+        <span>{{ benchmark.avgSelected }} avg hits</span>
+        <button class="wmw-run" @click="runIndexQueryBenchmark">Run benchmark</button>
+      </div>
     </template>
   </div>
 </template>
@@ -637,5 +785,29 @@ const selectionRectStyle = computed(() => {
 
 .wmw-perf--warn {
   color: rgba(255, 200, 120, 0.95);
+}
+
+.wmw-benchmark {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  flex-wrap: wrap;
+}
+
+.wmw-run {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.wmw-run:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 </style>

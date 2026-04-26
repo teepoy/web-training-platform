@@ -47,7 +47,7 @@ import type { ApiError as ApiErrorType } from "./types";
 import { getStoredToken, useAuthStore } from "./stores/auth";
 
 export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
-export const HEALTH_URL = import.meta.env.VITE_HEALTH_URL || "/health";
+export const HEALTH_URL = import.meta.env.VITE_HEALTH_URL || "/api/v1/health";
 
 // ---------------------------------------------------------------------------
 // Typed error class
