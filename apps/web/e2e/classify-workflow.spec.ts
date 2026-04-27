@@ -6,7 +6,7 @@ const datasetId = 'dataset-review-1'
 const modelId = 'model-review-1'
 const predictionJobId = 'prediction-job-1'
 
-async function mockPredictionReviewApi(page: Page) {
+async function mockClassifyWorkflowApi(page: Page) {
   let predictionJobPolls = 0
 
   await Promise.all([
@@ -75,6 +75,64 @@ async function mockPredictionReviewApi(page: Page) {
         ]),
       })
     }),
+    page.route(`**/api/v1/datasets/${datasetId}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: datasetId,
+          name: 'flowers-dataset',
+          dataset_type: 'image_classification',
+          task_spec: {
+            task_type: 'classification',
+            label_space: ['rose', 'tulip'],
+          },
+          created_at: '2026-01-01T00:00:00Z',
+          org_id: orgId,
+          org_name: 'E2E Org',
+          is_public: false,
+          ls_project_id: '100',
+          ls_project_url: 'http://localhost:8080/projects/100',
+        }),
+      })
+    }),
+    page.route(`**/api/v1/datasets/${datasetId}/samples-with-labels**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              id: 'sample-review-1',
+              dataset_id: datasetId,
+              image_uris: ['memory://sample-1.png'],
+              metadata: { split: 'val' },
+              latest_annotation: null,
+            },
+            {
+              id: 'sample-review-2',
+              dataset_id: datasetId,
+              image_uris: ['memory://sample-2.png'],
+              metadata: { split: 'val' },
+              latest_annotation: null,
+            },
+          ],
+          total: 2,
+        }),
+      })
+    }),
+    page.route(`**/api/v1/datasets/${datasetId}/annotation-stats`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          total_samples: 2,
+          annotated_samples: 0,
+          unlabeled_samples: 2,
+          label_counts: {},
+        }),
+      })
+    }),
     page.route('**/api/v1/models', async (route) => {
       await route.fulfill({
         status: 200,
@@ -113,6 +171,69 @@ async function mockPredictionReviewApi(page: Page) {
         return
       }
       await route.continue()
+    }),
+    page.route('**/api/v1/training-jobs', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+    }),
+    page.route('**/api/v1/training-presets', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'preset-e2e-1',
+            name: 'resnet50-cls-v1',
+            trainable: true,
+            compatibility: {
+              dataset_types: ['image_classification'],
+              task_types: ['classification'],
+            },
+          },
+        ]),
+      })
+    }),
+    page.route('**/api/v1/task-tracker/tasks/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: predictionJobId,
+          task_kind: 'prediction',
+          meta: {},
+          raw: {
+            platform_job: {},
+            flow_run: null,
+            deployment: null,
+            work_queue: null,
+            work_pool: null,
+            logs: [],
+          },
+          derived: {
+            task_kind: 'prediction',
+            execution_kind: 'prefect',
+            display_status: 'running',
+            prefect_state: null,
+            stage: 'running',
+            active_node: null,
+            capacity_status: 'unknown',
+            queue_priority: null,
+            queue_priority_label: 'none',
+            queue_depth_ahead: null,
+            pool_concurrency_limit: null,
+            pool_slots_used: null,
+            stages: [],
+            scorecard: { errors: 0, warnings: 0, checks: [] },
+            summary_metrics: {},
+            artifacts: [],
+            dynamic_console_lines: [],
+            deep_links: {},
+          },
+        }),
+      })
     }),
     page.route('**/api/v1/export-formats', async (route) => {
       await route.fulfill({
@@ -212,33 +333,44 @@ async function mockPredictionReviewApi(page: Page) {
   ])
 }
 
-test('runs predictions from prediction review and loads results', async ({ page }) => {
-  await mockPredictionReviewApi(page)
+test('runs prediction review flow from /datasets/:id/classify', async ({ page }) => {
+  await mockClassifyWorkflowApi(page)
 
-  await page.goto('/login')
-  await page.getByPlaceholder('you@example.com').fill('e2e@example.com')
-  await page.getByPlaceholder('Password').fill('password123')
-  await page.getByRole('button', { name: 'Sign In' }).click()
-  await expect(page).toHaveURL(/\/datasets$/)
+  await page.addInitScript(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    window.localStorage.setItem('auth_token', 'e2e-token')
+    window.localStorage.setItem('auth_user', JSON.stringify({
+      id: 'user-e2e-1',
+      email: 'e2e@example.com',
+      name: 'E2E User',
+      is_superadmin: false,
+      is_active: true,
+      created_at: '2026-01-01T00:00:00Z',
+      organizations: [
+        {
+          id: 'membership-e2e-1',
+          user_id: 'user-e2e-1',
+          org_id: 'org-e2e-1',
+          role: 'admin',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+    }))
+  })
 
-  await page.goto('/prediction-review')
-  await expect(page.locator('.n-page-header__title', { hasText: 'Prediction Review' })).toBeVisible()
+  await page.goto(`/datasets/${datasetId}/classify`)
+  await expect(page.getByRole('button', { name: 'Run Predictions' })).toBeVisible()
 
-  const setupCard = page.locator('.n-card').filter({ hasText: '1. Setup' })
-
-  await setupCard.locator('.n-base-selection').filter({ hasText: 'Select dataset' }).click()
-  await page.locator('.n-base-select-option').filter({ hasText: 'flowers-dataset' }).click()
-
-  await setupCard.locator('.n-base-selection').filter({ hasText: 'Select model' }).click()
+  await page.locator('.n-base-selection').filter({ hasText: 'Select model' }).first().click()
   await page.locator('.n-base-select-option').filter({ hasText: /flower-classifier/ }).click()
 
   await page.getByRole('button', { name: 'Run Predictions' }).click()
 
-  const reviewCard = page.locator('.n-card').filter({ hasText: '2. Review Predictions' })
-
   await expect(page.getByText(/Prediction job submitted:/)).toBeVisible()
   await expect(page.getByText('2 predictions ready for review')).toBeVisible()
-  await expect(reviewCard).toContainText('rose')
-  await expect(reviewCard).toContainText('tulip')
-  await expect(page.getByRole('button', { name: /Save as Annotation Version/ })).toBeVisible()
+  await expect(page.getByText('Prediction Review Mode')).toBeVisible()
+  await expect(page.locator('.ag').first()).toContainText('rose')
+  await expect(page.locator('.ag').first()).toContainText('tulip')
+  await expect(page.getByRole('button', { name: 'Submit 2' })).toBeVisible()
 })

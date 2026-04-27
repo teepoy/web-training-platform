@@ -136,7 +136,6 @@ const menuOptions = [
   { label: 'Datasets', key: '/datasets' },
   { label: 'Training Jobs', key: '/jobs' },
   { label: 'Models', key: '/models' },
-  { label: 'Prediction Review', key: '/prediction-review' },
   { label: 'Preset Catalog', key: '/presets' },
   { label: 'Schedules', key: '/schedules' },
 ]

@@ -54,7 +54,7 @@
           size="small"
           @click="router.push(`/datasets/${dataset.id}/classify`)"
         >
-          Classify
+          Open Workflow
         </n-button>
       </div>
 

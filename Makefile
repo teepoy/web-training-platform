@@ -160,8 +160,16 @@ export-bundle: ## Export source snapshot and docker images to a tar bundle
 up: ## Start full Compose stack (dev profile, detached)
 	docker compose -f $(COMPOSE) up -d
 
+.PHONY: wait-api
+wait-api: ## Wait for API health endpoint to respond
+	@python3 scripts/run_with_timeout.py --timeout 120 -- bash -lc 'until curl --fail --silent --show-error "$(API_URL)/health" >/dev/null; do sleep 2; done'
+
+.PHONY: ensure-mock-datasets
+ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mode
+	$(MAKE) seed-imagenet-mock ARGS="--no-model"
+
 .PHONY: updev
-updev: up ## Alias for Compose dev stack entrypoint
+updev: up ensure-mock-datasets ## Start dev stack and ensure mock datasets exist
 
 .PHONY: db-migrate-compose
 db-migrate-compose: ## Run Alembic migrations inside Compose API container

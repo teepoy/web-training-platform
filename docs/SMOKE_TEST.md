@@ -144,11 +144,11 @@ Services should be running:
 - [ ] Call `POST /api/v1/predictions/single` with `target: "vqa"` and `prompt`
 - [ ] Verify the response returns a platform prediction row with `id`
 
-## 9. ImageNet Prediction Review
+## 9. ImageNet Classification Workflow (Annotate + Train + Predict + Review)
 
 - [ ] Run `make seed-imagenet-poc` against a healthy dev stack for a fast 64-sample proof of concept, or `make seed-imagenet-mock` for the offline synthetic dataset
 - [ ] Open http://localhost:5173/dashboard and verify `prediction-worker` is healthy before running predictions
-- [ ] Open http://localhost:5173/prediction-review
+- [ ] Open http://localhost:5173/datasets and navigate to the target dataset, then click `Open Workflow`
 - [ ] Select dataset `ImageNet-1K Real` for POC/full runs or `ImageNet-1K Mock` for offline runs, then choose the seeded compatible model
 - [ ] Click `Run Predictions`
 - [ ] Verify the job is accepted instead of returning `API 400: Prediction deployment is not registered`

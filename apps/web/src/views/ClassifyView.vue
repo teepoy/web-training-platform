@@ -1,6 +1,5 @@
 <template>
   <div class="classify-view" :style="themeStyleVars">
-    <!-- Header bar -->
     <div class="classify-header">
       <n-button text @click="router.push(`/datasets/${datasetId}`)">
         <template #icon>
@@ -12,63 +11,128 @@
       <n-text tag="h2" style="margin: 0; font-size: 18px; font-weight: 600">
         {{ datasetQuery.data.value?.name ?? datasetId }}
       </n-text>
-      <div
-        style="margin-left: auto; display: flex; align-items: center; gap: 12px"
-      >
+      <n-tag v-if="isReviewMode" type="warning" size="small">Prediction Review Mode</n-tag>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 12px">
         <n-text depth="3" style="white-space: nowrap">View</n-text>
         <n-radio-group v-model:value="viewMode" size="small">
           <n-radio-button value="grid">Grid</n-radio-button>
           <n-radio-button value="list">List</n-radio-button>
         </n-radio-group>
         <n-text depth="3" style="white-space: nowrap">Image size</n-text>
-        <n-slider
-          v-model:value="thumbSize"
-          :min="64"
-          :max="256"
-          :step="8"
-          style="width: 160px"
-        />
+        <n-slider v-model:value="thumbSize" :min="64" :max="256" :step="8" style="width: 160px" />
         <n-text depth="3" style="white-space: nowrap">{{ thumbSize }}px</n-text>
       </div>
     </div>
 
-    <!-- Body: grid + sidebar -->
+    <n-grid :cols="2" :x-gap="12" class="workflow-grid">
+      <n-gi>
+        <n-card title="Training" size="small">
+          <n-space vertical>
+            <n-select
+              v-model:value="selectedPresetId"
+              :options="presetOptions"
+              placeholder="Select training preset"
+              filterable
+            />
+            <n-space>
+              <n-button
+                type="primary"
+                :disabled="!selectedPresetId"
+                :loading="startTrainingMutation.isPending.value"
+                @click="startTraining"
+              >
+                Start Training
+              </n-button>
+              <n-button @click="router.push('/tasks')">Open Task Explorer</n-button>
+            </n-space>
+            <n-text v-if="activeTrainingJob" depth="3">
+              Active training: {{ activeTrainingJob.id }} ({{ activeTrainingJob.status }})
+            </n-text>
+          </n-space>
+        </n-card>
+      </n-gi>
+      <n-gi>
+        <n-card title="Prediction Review" size="small">
+          <n-space vertical>
+            <n-select
+              v-model:value="selectedModelId"
+              :options="modelOptions"
+              placeholder="Select model"
+              filterable
+            />
+            <n-input v-model:value="modelVersionTag" placeholder="Optional model version" />
+            <n-space>
+              <n-button
+                type="primary"
+                :disabled="!selectedModelId"
+                :loading="runPredictionsMutation.isPending.value"
+                @click="runPredictions"
+              >
+                Run Predictions
+              </n-button>
+              <n-button
+                v-if="activePredictionJob && ['queued', 'running'].includes(activePredictionJob.status.toLowerCase())"
+                type="warning"
+                :loading="cancelPredictionMutation.isPending.value"
+                @click="cancelPrediction"
+              >
+                Cancel
+              </n-button>
+            </n-space>
+            <n-text v-if="activePredictionJob" depth="3">
+              Active prediction: {{ activePredictionJob.id }} ({{ activePredictionJob.status }})
+              <template v-if="formatPredictionJobProgress(activePredictionJob)">
+                &middot; {{ formatPredictionJobProgress(activePredictionJob) }} processed
+              </template>
+            </n-text>
+          </n-space>
+        </n-card>
+      </n-gi>
+    </n-grid>
+
+    <n-card v-if="predictionJobs.length > 0" title="Recent Prediction Jobs" size="small" class="jobs-card">
+      <n-data-table :columns="predictionJobColumns" :data="predictionJobs" :bordered="true" :max-height="220" />
+    </n-card>
+
     <div class="classify-body">
       <AnnotationGrid
         ref="gridRef"
-        :items="gridItems"
-        :total-count="totalCount"
+        :items="activeGridItems"
+        :total-count="activeTotalCount"
         :label-space="labelSpace"
         :thumb-size="thumbSize"
         :layout="viewMode"
-        :is-loading="isLoading"
-        :submitting="bulkAnnotateMutation.isPending.value"
-        :show-add-label="true"
+        :is-loading="activeGridLoading"
+        :submitting="isReviewMode ? saveAnnotationsMutation.isPending.value : bulkAnnotateMutation.isPending.value"
+        :show-add-label="!isReviewMode"
         @select="onGridSelect"
         @apply-label="onGridApplyLabel"
-        @submit="submitAnnotations"
-        @load-more="loadMore"
+        @submit="submitFromGrid"
+        @load-more="onGridLoadMore"
         @add-label="showAddLabelModal = true"
       >
         <template #bar-left>
-          <n-select
-            v-model:value="labelFilter"
-            :options="filterOptions"
-            placeholder="Filter by label"
-            size="tiny"
-            clearable
-            style="width: 160px"
-          />
-          <n-select
-            v-model:value="orderBy"
-            :options="orderOptions"
-            size="tiny"
-            style="width: 130px"
-          />
+          <template v-if="isReviewMode">
+            <n-button size="tiny" :loading="syncCollectionMutation.isPending.value" @click="syncCollectionToLs">
+              Sync to LS
+            </n-button>
+            <n-button size="tiny" @click="resetReviewEdits">Reset Edits</n-button>
+            <n-button size="tiny" @click="clearPredictionReview">Back to Annotation</n-button>
+          </template>
+          <template v-else>
+            <n-select
+              v-model:value="labelFilter"
+              :options="filterOptions"
+              placeholder="Filter by label"
+              size="tiny"
+              clearable
+              style="width: 160px"
+            />
+            <n-select v-model:value="orderBy" :options="orderOptions" size="tiny" style="width: 130px" />
+          </template>
         </template>
       </AnnotationGrid>
 
-      <!-- Sidebar -->
       <ClassifySidebar
         :panels="mergedPanels"
         :context="dashboardContext"
@@ -77,17 +141,8 @@
       />
     </div>
 
-    <!-- Add Label Modal -->
-    <n-modal
-      v-model:show="showAddLabelModal"
-      preset="dialog"
-      title="Add New Label"
-    >
-      <n-input
-        v-model:value="newLabelName"
-        placeholder="Enter label name"
-        @keyup.enter="addNewLabel"
-      />
+    <n-modal v-model:show="showAddLabelModal" preset="dialog" title="Add New Label">
+      <n-input v-model:value="newLabelName" placeholder="Enter label name" @keyup.enter="addNewLabel" />
       <template #action>
         <n-button @click="showAddLabelModal = false">Cancel</n-button>
         <n-button
@@ -100,15 +155,26 @@
         </n-button>
       </template>
     </n-modal>
+
+    <TaskInsightModal
+      :show="showTaskModal"
+      :task="activeTaskSummary"
+      :handoff-enabled="taskHandoffEnabled"
+      @update:show="showTaskModal = $event"
+      @toggle-handoff="taskHandoffEnabled = $event"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, watch } from "vue";
+import { ref, computed, inject, onMounted, watch, provide, h, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
+import type { DataTableColumns, SelectOption } from "naive-ui";
 import {
   NButton,
+  NSpace,
+  NTag,
   NText,
   NSlider,
   NDivider,
@@ -121,40 +187,57 @@ import {
   useDialog,
   useThemeVars,
 } from "naive-ui";
-import { api, bulkCreateAnnotations, syncAnnotationsToLs } from "../api";
+import { api, bulkCreateAnnotations, listSamplesWithLabels, syncAnnotationsToLs } from "../api";
 import type {
-  SampleWithLabels,
+  AnnotationGridItem,
   BulkAnnotationRequest,
   BulkAnnotationResponse,
-  SyncResult,
   Dataset,
-  AnnotationGridItem,
+  JobStatus,
+  Model,
+  PredictionCollection,
+  PredictionJob,
+  PredictionResult,
+  SampleWithLabels,
+  SaveReviewAnnotationItem,
+  SyncResult,
+  TaskTrackerSummary,
+  TrainingJob,
 } from "../types";
 import { resolveImageUris } from "../utils/imageAdapters";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import AnnotationGrid from "../components/annotation/AnnotationGrid.vue";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
-import {
-  defaultPanels,
-  mergePanels,
-} from "../components/classify/sidebarConfig";
+import TaskInsightModal from "../components/TaskInsightModal.vue";
+import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
 import {
   reduceCollectionIntent,
   reduceLabelFilterIntent,
   type SidebarWidgetIntent,
-  type SidebarWidgetInteractionState,
   type SidebarWidgetInteractionContext,
+  type SidebarWidgetInteractionState,
 } from "../components/classify/widgetContract";
 import { useClassifyDashboard } from "../composables/useClassifyDashboard";
 import { GLOBAL_AGENT_PANELS_KEY } from "../composables/useGlobalAgent";
+import { useOrgStore } from "../stores/org";
+
+interface ReviewRow {
+  key: string;
+  prediction_id: string | null;
+  sample_id: string;
+  predicted_label: string;
+  final_label: string;
+  confidence: number | null;
+}
 
 const route = useRoute();
 const router = useRouter();
-const datasetId = route.params.id as string;
+const datasetId = computed(() => route.params.id as string);
 const message = useMessage();
 const dialog = useDialog();
 const themeVars = useThemeVars();
 const queryClient = useQueryClient();
+const orgStore = useOrgStore();
 
 const themeStyleVars = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -169,52 +252,37 @@ const themeStyleVars = computed(() => ({
   "--cv-primary-hover": themeVars.value.primaryColorHover,
 }));
 
-// ---------------------------------------------------------------------------
-// Dataset query
-// ---------------------------------------------------------------------------
-
 const datasetQuery = useQuery({
-  queryKey: ["dataset", datasetId],
-  queryFn: () => api.getDataset(datasetId),
+  queryKey: computed(() => ["dataset", datasetId.value]),
+  queryFn: () => api.getDataset(datasetId.value),
   retry: false,
 });
 
-const labelSpace = computed<string[]>(
-  () => datasetQuery.data.value?.task_spec?.label_space ?? [],
-);
+const selectedDataset = computed<Dataset | undefined>(() => datasetQuery.data.value);
 
-// ---------------------------------------------------------------------------
-// Sample loading
-// ---------------------------------------------------------------------------
+const labelSpace = computed<string[]>(() => selectedDataset.value?.task_spec?.label_space ?? []);
 
 const thumbSize = ref(128);
 const viewMode = ref<"grid" | "list">("grid");
 const labelFilter = ref<string | null>(null);
 const orderBy = ref<string>("id");
 
-const filterOptions = computed(
-  () =>
-    [
-      { label: "All", value: null as string | null },
-      { label: "Unlabeled", value: "__unlabeled__" as string | null },
-      ...labelSpace.value.map((l) => ({ label: l, value: l as string | null })),
-    ] as any,
+const filterOptions = computed(() =>
+  [
+    { label: "All", value: null as string | null },
+    { label: "Unlabeled", value: "__unlabeled__" as string | null },
+    ...labelSpace.value.map((l) => ({ label: l, value: l as string | null })),
+  ] as SelectOption[],
 );
 
 const orderOptions = [
   { label: "Default (id)", value: "id" },
   { label: "By Label", value: "label" },
   { label: "Newest First", value: "created_at" },
-] as any;
+] as SelectOption[];
 
-const {
-  samples,
-  totalCount,
-  isLoading,
-  loadMore,
-  reset: resetLoader,
-} = useSampleLoader({
-  datasetId,
+const { samples, totalCount, isLoading, loadMore, reset: resetLoader } = useSampleLoader({
+  datasetId: datasetId.value,
   pageSize: 100,
   labelFilter,
   orderBy,
@@ -224,27 +292,16 @@ onMounted(() => {
   resetLoader();
 });
 
-// ---------------------------------------------------------------------------
-// Draft labels
-// ---------------------------------------------------------------------------
-
-const labelDraft = ref<Record<string, string>>({});
+const annotationDraft = ref<Record<string, string>>({});
+const reviewDraftLabels = ref<Record<string, string>>({});
 const gridRef = ref<InstanceType<typeof AnnotationGrid> | null>(null);
 
-const draftCount = computed(
-  () => Object.keys(labelDraft.value).filter((k) => labelDraft.value[k]).length,
-);
-
-// ---------------------------------------------------------------------------
-// Grid items (map SampleWithLabels → AnnotationGridItem)
-// ---------------------------------------------------------------------------
-
-const gridItems = computed<AnnotationGridItem[]>(() =>
+const annotationGridItems = computed<AnnotationGridItem[]>(() =>
   samples.value.map((s) => ({
     id: s.id,
     imageSrcs: resolveImageUris(s.image_uris ?? []),
     currentLabel: s.latest_annotation?.label ?? null,
-    draftLabel: labelDraft.value[s.id] ?? null,
+    draftLabel: annotationDraft.value[s.id] ?? null,
     predictionLabel: null,
     predictionConfidence: null,
     predictionId: null,
@@ -252,9 +309,459 @@ const gridItems = computed<AnnotationGridItem[]>(() =>
   })),
 );
 
-// ---------------------------------------------------------------------------
-// Grid event handlers
-// ---------------------------------------------------------------------------
+const selectedModelId = ref<string | null>(null);
+const modelVersionTag = ref("");
+const predictions = ref<ReviewRow[]>([]);
+const activePredictionJob = ref<PredictionJob | null>(null);
+const pollingPredictionJob = ref(false);
+const reviewSamples = ref<SampleWithLabels[]>([]);
+const syncedCollection = ref<PredictionCollection | null>(null);
+const syncedCollectionTag = ref<string | null>(null);
+
+const isReviewMode = computed(() => predictions.value.length > 0);
+
+const reviewGridItems = computed<AnnotationGridItem[]>(() => {
+  if (!isReviewMode.value) return [];
+  const sampleMap = new Map(reviewSamples.value.map((s) => [s.id, s]));
+  return predictions.value.map((row) => {
+    const sample = sampleMap.get(row.sample_id);
+    return {
+      id: row.sample_id,
+      imageSrcs: resolveImageUris(sample?.image_uris ?? []),
+      currentLabel: sample?.latest_annotation?.label ?? null,
+      draftLabel: reviewDraftLabels.value[row.sample_id] ?? row.final_label,
+      predictionLabel: row.predicted_label,
+      predictionConfidence: row.confidence,
+      predictionId: row.prediction_id,
+      metadata: sample?.metadata ?? {},
+    };
+  });
+});
+
+const activeGridItems = computed<AnnotationGridItem[]>(() =>
+  isReviewMode.value ? reviewGridItems.value : annotationGridItems.value,
+);
+
+const activeTotalCount = computed(() =>
+  isReviewMode.value ? reviewGridItems.value.length : totalCount.value,
+);
+
+const activeGridLoading = computed(() =>
+  isReviewMode.value ? pollingPredictionJob.value : isLoading.value,
+);
+
+const { data: models } = useQuery({
+  queryKey: computed(() => ["models", orgStore.currentOrgId]),
+  queryFn: () => api.listModels(),
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
+
+const modelOptions = computed<SelectOption[]>(() => {
+  const allModels = models.value ?? [];
+  const dataset = selectedDataset.value;
+  const filtered = dataset
+    ? allModels.filter((m) => {
+        const metadata = m.metadata ?? {};
+        const datasetTypes = Array.isArray(metadata.dataset_types) ? (metadata.dataset_types as string[]) : [];
+        const taskTypes = Array.isArray(metadata.task_types) ? (metadata.task_types as string[]) : [];
+        return datasetTypes.includes(dataset.dataset_type) && taskTypes.includes(dataset.task_spec.task_type);
+      })
+    : allModels;
+  const source = filtered.length > 0 ? filtered : allModels;
+  return source.map((m) => ({
+    label: `${m.name || `${m.id.slice(0, 12)}...`} (${m.dataset_name})`,
+    value: m.id,
+  }));
+});
+
+const selectedModel = computed<Model | undefined>(() =>
+  (models.value ?? []).find((m) => m.id === selectedModelId.value),
+);
+
+const predictionTarget = computed(() => {
+  const targets = selectedModel.value?.metadata?.prediction_targets;
+  if (Array.isArray(targets) && typeof targets[0] === "string") {
+    return targets[0];
+  }
+  return "image_classification";
+});
+
+const { data: predictionJobsData } = useQuery({
+  queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId]),
+  queryFn: api.listPredictionJobs,
+  enabled: computed(() => !!orgStore.currentOrgId),
+  refetchInterval: 3000,
+});
+
+const predictionJobs = computed(() =>
+  (predictionJobsData.value ?? [])
+    .filter((job) => job.dataset_id === datasetId.value)
+    .slice(0, 10),
+);
+
+function predictionResultToReviewRow(item: PredictionResult): ReviewRow {
+  return {
+    key: item.id ?? item.sample_id,
+    prediction_id: item.id,
+    sample_id: item.sample_id,
+    predicted_label: item.predicted_label,
+    final_label: item.predicted_label,
+    confidence: item.confidence,
+  };
+}
+
+async function loadReviewRowsFromJob(job: PredictionJob): Promise<ReviewRow[]> {
+  const summaryPredictions = ((job.summary.predictions as PredictionResult[] | undefined) ?? [])
+    .filter((item) => !item.error)
+    .map(predictionResultToReviewRow);
+  if (summaryPredictions.length > 0) {
+    return summaryPredictions;
+  }
+  const fetched = await api.listPredictionJobPredictions(job.id);
+  return fetched.filter((item) => !item.error).map(predictionResultToReviewRow);
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function getPredictionJobProgress(job: PredictionJob): { processed: number; total: number } | null {
+  const status = job.status.toLowerCase();
+  const total =
+    asNumber(job.summary.total_samples) ?? asNumber(job.summary.total) ?? asNumber(job.sample_ids?.length) ?? null;
+  const processed =
+    asNumber(job.summary.processed) ??
+    asNumber(job.summary.successful) ??
+    asNumber(job.summary.completed) ??
+    (status === "completed" ? total : 0);
+  if (total === null || processed === null || total <= 0) return null;
+  return { processed, total };
+}
+
+function formatPredictionJobProgress(job: PredictionJob): string {
+  const progress = getPredictionJobProgress(job);
+  return progress ? `${progress.processed}/${progress.total}` : "-";
+}
+
+watch(predictions, async (rows) => {
+  if (rows.length === 0) {
+    reviewSamples.value = [];
+    return;
+  }
+  try {
+    const all: SampleWithLabels[] = [];
+    const pageSize = 200;
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const result = await listSamplesWithLabels(datasetId.value, offset, pageSize);
+      all.push(...result.items);
+      total = result.total;
+      offset += pageSize;
+      if (result.items.length === 0) break;
+    }
+    reviewSamples.value = all;
+  } catch {
+    reviewSamples.value = [];
+  }
+});
+
+const runPredictionsMutation = useMutation({
+  mutationFn: () => {
+    if (!selectedModelId.value) {
+      throw new Error("Model is required");
+    }
+    return api.runPredictions({
+      model_id: selectedModelId.value,
+      dataset_id: datasetId.value,
+      model_version: modelVersionTag.value || null,
+      target: predictionTarget.value,
+    });
+  },
+  onSuccess: (job) => {
+    activePredictionJob.value = job;
+    predictions.value = [];
+    reviewDraftLabels.value = {};
+    taskModalSource.value = "prediction";
+    showTaskModal.value = true;
+    message.success(`Prediction job submitted: ${job.id}`);
+    void pollPredictionJob(job.id);
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to run predictions");
+  },
+});
+
+const cancelPredictionMutation = useMutation({
+  mutationFn: () => {
+    if (!activePredictionJob.value) {
+      throw new Error("No active prediction job");
+    }
+    return api.cancelPredictionJob(activePredictionJob.value.id);
+  },
+  onSuccess: () => {
+    message.warning("Prediction cancellation requested");
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to cancel prediction job");
+  },
+});
+
+async function pollPredictionJob(jobId: string) {
+  pollingPredictionJob.value = true;
+  try {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const job = await api.getPredictionJob(jobId);
+      activePredictionJob.value = job;
+      const status = job.status.toLowerCase();
+      if (status === "completed") {
+        const rows = await loadReviewRowsFromJob(job);
+        predictions.value = rows;
+        reviewDraftLabels.value = {};
+        message.success(`${rows.length} predictions ready for review`);
+        return;
+      }
+      if (status === "failed" || status === "cancelled") {
+        message.error(`Prediction job ${status}`);
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+    message.warning("Prediction job is still running. Refresh later to load results.");
+  } finally {
+    pollingPredictionJob.value = false;
+  }
+}
+
+const syncCollectionMutation = useMutation({
+  mutationFn: async () => {
+    if (!selectedModelId.value || predictions.value.length === 0) {
+      throw new Error("Predictions are required before syncing to Label Studio");
+    }
+    const collection = await api.createPredictionCollection({
+      name: `review-${new Date().toISOString()}`,
+      dataset_id: datasetId.value,
+      model_id: selectedModelId.value,
+      prediction_ids: predictions.value.map((row) => row.prediction_id).filter((id): id is string => !!id),
+      model_version: modelVersionTag.value || null,
+      target: predictionTarget.value,
+      source_job_id: activePredictionJob.value?.id ?? null,
+    });
+    const syncResult = await api.syncPredictionCollection(collection.id);
+    syncedCollection.value = collection;
+    syncedCollectionTag.value = syncResult.sync_tag;
+    return syncResult;
+  },
+  onSuccess: (data) => {
+    message.success(`Synced ${data.synced_count} predictions to Label Studio`);
+    if (data.failed_count > 0) {
+      message.warning(`${data.failed_count} predictions were skipped during sync`);
+    }
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to sync predictions to Label Studio");
+  },
+});
+
+const saveAnnotationsMutation = useMutation({
+  mutationFn: async () => {
+    if (!selectedModelId.value) {
+      throw new Error("Model is required");
+    }
+    const action = await api.createReviewAction(
+      datasetId.value,
+      selectedModelId.value,
+      modelVersionTag.value || null,
+      syncedCollection.value?.id ?? null,
+      syncedCollectionTag.value,
+    );
+    const items: SaveReviewAnnotationItem[] = predictions.value.map((row) => ({
+      sample_id: row.sample_id,
+      predicted_label: row.predicted_label,
+      final_label: reviewDraftLabels.value[row.sample_id] ?? row.final_label,
+      confidence: row.confidence,
+      prediction_id: row.prediction_id,
+    }));
+    return api.saveReviewAnnotations(action.id, items);
+  },
+  onSuccess: (data) => {
+    message.success(`Saved ${data.created_count} reviewed annotations`);
+    clearPredictionReview();
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to save reviewed annotations");
+  },
+});
+
+function runPredictions() {
+  runPredictionsMutation.mutate();
+}
+
+function cancelPrediction() {
+  cancelPredictionMutation.mutate();
+}
+
+function syncCollectionToLs() {
+  syncCollectionMutation.mutate();
+}
+
+function resetReviewEdits() {
+  reviewDraftLabels.value = {};
+  predictions.value = predictions.value.map((row) => ({
+    ...row,
+    final_label: row.predicted_label,
+  }));
+}
+
+function clearPredictionReview() {
+  predictions.value = [];
+  reviewDraftLabels.value = {};
+  syncedCollection.value = null;
+  syncedCollectionTag.value = null;
+}
+
+const { data: trainingJobs } = useQuery({
+  queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
+  queryFn: api.listJobs,
+  refetchInterval: 5000,
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
+
+const { data: presets } = useQuery({
+  queryKey: computed(() => ["presets", orgStore.currentOrgId]),
+  queryFn: api.listPresets,
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
+
+const presetOptions = computed<SelectOption[]>(() =>
+  (presets.value ?? [])
+    .filter((p) => {
+      if (p.trainable === false) return false;
+      const dataset = selectedDataset.value;
+      if (!dataset) return true;
+      const compatibility = p.compatibility;
+      if (!compatibility) return true;
+      return compatibility.dataset_types.includes(dataset.dataset_type) && compatibility.task_types.includes(dataset.task_spec.task_type);
+    })
+    .map((p) => ({ label: p.name, value: p.id })),
+);
+
+const selectedPresetId = ref<string | null>(null);
+const activeTrainingJobId = ref<string | null>(null);
+const activeTrainingJob = computed<TrainingJob | null>(() => {
+  if (!activeTrainingJobId.value) return null;
+  return (trainingJobs.value ?? []).find((job) => job.id === activeTrainingJobId.value) ?? null;
+});
+
+const startTrainingMutation = useMutation({
+  mutationFn: () => {
+    if (!selectedPresetId.value) {
+      throw new Error("Preset is required");
+    }
+    return api.createJob(datasetId.value, selectedPresetId.value);
+  },
+  onSuccess: (job) => {
+    activeTrainingJobId.value = job.id;
+    taskModalSource.value = "training";
+    showTaskModal.value = true;
+    message.success(`Training job started: ${job.id}`);
+    void queryClient.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
+  },
+  onError: (err: Error) => {
+    message.error(err.message ?? "Failed to start training job");
+  },
+});
+
+function startTraining() {
+  startTrainingMutation.mutate();
+}
+
+type TaskSource = "training" | "prediction" | null;
+
+const taskModalSource = ref<TaskSource>(null);
+const showTaskModal = ref(false);
+const taskHandoffEnabled = ref(true);
+
+function toTrainingTaskSummary(job: TrainingJob): TaskTrackerSummary {
+  return {
+    id: job.id,
+    task_kind: "training",
+    execution_kind: "prefect",
+    display_name: `Training: ${job.preset_id}`,
+    display_status: job.status,
+    stage: job.status,
+    dataset_id: job.dataset_id,
+    model_id: null,
+    preset_id: job.preset_id,
+    created_by: job.created_by,
+    created_at: job.created_at,
+    updated_at: job.updated_at,
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: "none",
+    queue_depth_ahead: null,
+    capacity_status: "unknown",
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
+}
+
+function toPredictionTaskSummary(job: PredictionJob): TaskTrackerSummary {
+  const status = job.status.toLowerCase();
+  return {
+    id: job.id,
+    task_kind: "prediction",
+    execution_kind: "prefect",
+    display_name: `Prediction: ${job.dataset_id.slice(0, 8)}...`,
+    display_status: status,
+    stage: status,
+    dataset_id: job.dataset_id,
+    model_id: job.model_id,
+    preset_id: null,
+    created_by: job.created_by,
+    created_at: job.created_at,
+    updated_at: job.updated_at,
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: "none",
+    queue_depth_ahead: null,
+    capacity_status: "unknown",
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
+}
+
+const activeTaskSummary = computed<TaskTrackerSummary | null>(() => {
+  if (taskModalSource.value === "training" && activeTrainingJob.value) {
+    if (["queued", "running"].includes(activeTrainingJob.value.status)) {
+      return toTrainingTaskSummary(activeTrainingJob.value);
+    }
+    return null;
+  }
+  if (taskModalSource.value === "prediction" && activePredictionJob.value) {
+    const status = activePredictionJob.value.status.toLowerCase();
+    if (["queued", "running"].includes(status)) {
+      return toPredictionTaskSummary(activePredictionJob.value);
+    }
+    return null;
+  }
+  return null;
+});
+
+watch(activeTaskSummary, (task) => {
+  if (!task) {
+    showTaskModal.value = false;
+  }
+});
 
 const selectedCount = ref(0);
 
@@ -263,11 +770,28 @@ function onGridSelect(ids: Set<string>) {
 }
 
 function onGridApplyLabel(payload: { ids: string[]; label: string }) {
-  const draft = { ...labelDraft.value };
+  if (isReviewMode.value) {
+    const next = { ...reviewDraftLabels.value };
+    payload.ids.forEach((id) => {
+      next[id] = payload.label;
+      const row = predictions.value.find((item) => item.sample_id === id);
+      if (row) {
+        row.final_label = payload.label;
+      }
+    });
+    reviewDraftLabels.value = next;
+    return;
+  }
+  const next = { ...annotationDraft.value };
   payload.ids.forEach((id) => {
-    draft[id] = payload.label;
+    next[id] = payload.label;
   });
-  labelDraft.value = draft;
+  annotationDraft.value = next;
+}
+
+function onGridLoadMore() {
+  if (isReviewMode.value) return;
+  loadMore();
 }
 
 watch(labelFilter, () => {
@@ -275,37 +799,59 @@ watch(labelFilter, () => {
   gridRef.value?.clearSelection();
 });
 
-// ---------------------------------------------------------------------------
-// Sidebar
-// ---------------------------------------------------------------------------
+const annotationDraftCount = computed(() =>
+  Object.keys(annotationDraft.value).filter((key) => annotationDraft.value[key]).length,
+);
+
+const reviewEditedCount = computed(() =>
+  predictions.value.filter((row) => (reviewDraftLabels.value[row.sample_id] ?? row.final_label) !== row.predicted_label).length,
+);
+
+const dashboardDraftCount = computed(() =>
+  isReviewMode.value ? reviewEditedCount.value : annotationDraftCount.value,
+);
+
+provide<Ref<AnnotationGridItem[]>>(
+  "pr-grid-items",
+  computed(() => (isReviewMode.value ? reviewGridItems.value : [])),
+);
 
 const sidebarCollapsed = ref(false);
 
 const dashboardContext = useClassifyDashboard(
   datasetId,
-  draftCount,
+  dashboardDraftCount,
   selectedCount,
   labelSpace,
 );
 
-// Inject agent panels from the global agent (provided in App.vue)
 const globalAgentPanels = inject(GLOBAL_AGENT_PANELS_KEY, ref([]));
 
+const reviewPanel: SidebarPanelDescriptor = {
+  id: "prediction-summary",
+  component: "prediction-summary",
+  title: "Prediction Summary",
+  props: {},
+  order: 5,
+};
+
+const staticPanels = computed(() =>
+  isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels,
+);
+
 const mergedPanels = computed(() =>
-  mergePanels(defaultPanels, globalAgentPanels.value),
+  mergePanels(staticPanels.value, globalAgentPanels.value),
 );
 
 function handleSidebarIntent(intent: SidebarWidgetIntent): void {
   interactionState.value = {
     ...interactionState.value,
-    activeLabelFilter: reduceLabelFilterIntent(
-      interactionState.value.activeLabelFilter,
-      intent,
-    ),
+    activeLabelFilter: reduceLabelFilterIntent(interactionState.value.activeLabelFilter, intent),
     collections: reduceCollectionIntent(interactionState.value.collections, intent),
   };
-
-  labelFilter.value = interactionState.value.activeLabelFilter;
+  if (!isReviewMode.value) {
+    labelFilter.value = interactionState.value.activeLabelFilter;
+  }
 }
 
 const interactionState = ref<SidebarWidgetInteractionState>({
@@ -327,12 +873,8 @@ const sidebarInteraction = computed<SidebarWidgetInteractionContext>(() => ({
   dispatch: handleSidebarIntent,
 }));
 
-// ---------------------------------------------------------------------------
-// Mutations
-// ---------------------------------------------------------------------------
-
 const syncToLsMutation = useMutation({
-  mutationFn: () => syncAnnotationsToLs(datasetId),
+  mutationFn: () => syncAnnotationsToLs(datasetId.value),
   onSuccess: (data: SyncResult) => {
     message.success(`Synced ${data.synced_count} annotations to Label Studio`);
   },
@@ -342,27 +884,28 @@ const syncToLsMutation = useMutation({
 });
 
 const bulkAnnotateMutation = useMutation({
-  mutationFn: (body: BulkAnnotationRequest) =>
-    bulkCreateAnnotations(datasetId, body),
+  mutationFn: (body: BulkAnnotationRequest) => bulkCreateAnnotations(datasetId.value, body),
   onSuccess: (data: BulkAnnotationResponse) => {
     message.success(`Created ${data.created} annotations`);
     if (datasetQuery.data.value?.ls_project_id) {
       syncToLsMutation.mutate();
     }
-    labelDraft.value = {};
+    annotationDraft.value = {};
     gridRef.value?.clearSelection();
     resetLoader();
-    queryClient.invalidateQueries({
-      queryKey: ["annotation-stats", datasetId],
-    });
+    void queryClient.invalidateQueries({ queryKey: ["annotation-stats", datasetId.value] });
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to create annotations");
   },
 });
 
-function submitAnnotations() {
-  const entries = Object.entries(labelDraft.value).filter(([, label]) => label);
+function submitFromGrid() {
+  if (isReviewMode.value) {
+    saveAnnotationsMutation.mutate();
+    return;
+  }
+  const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
   if (entries.length === 0) {
     message.warning("No annotations to submit");
     return;
@@ -384,9 +927,31 @@ function submitAnnotations() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Add Label
-// ---------------------------------------------------------------------------
+const predictionJobColumns = computed<DataTableColumns<PredictionJob>>(() => [
+  { title: "Job", key: "id", width: 180, render: (row) => `${row.id.slice(0, 16)}...` },
+  { title: "Status", key: "status", width: 120 },
+  {
+    title: "Progress",
+    key: "progress",
+    width: 120,
+    render: (row) => formatPredictionJobProgress(row),
+  },
+  {
+    title: "Actions",
+    key: "actions",
+    width: 100,
+    render: (row) =>
+      h(
+        NButton,
+        {
+          size: "small",
+          disabled: row.status.toLowerCase() !== "completed",
+          onClick: () => void pollPredictionJob(row.id),
+        },
+        { default: () => "Load" },
+      ),
+  },
+]);
 
 const showAddLabelModal = ref(false);
 const newLabelName = ref("");
@@ -397,13 +962,13 @@ const addLabelMutation = useMutation({
     if (currentLabels.includes(newLabel)) {
       throw new Error(`Label "${newLabel}" already exists`);
     }
-    return api.updateLabelSpace(datasetId, [...currentLabels, newLabel]);
+    return api.updateLabelSpace(datasetId.value, [...currentLabels, newLabel]);
   },
   onSuccess: () => {
     message.success(`Added label "${newLabelName.value}"`);
     showAddLabelModal.value = false;
     newLabelName.value = "";
-    datasetQuery.refetch();
+    void datasetQuery.refetch();
   },
   onError: (err: Error) => {
     message.error(err.message ?? "Failed to add label");
@@ -415,6 +980,21 @@ function addNewLabel() {
   if (!trimmed) return;
   addLabelMutation.mutate(trimmed);
 }
+
+watch(datasetId, () => {
+  annotationDraft.value = {};
+  clearPredictionReview();
+  selectedModelId.value = null;
+  modelVersionTag.value = "";
+  selectedPresetId.value = null;
+  activePredictionJob.value = null;
+  activeTrainingJobId.value = null;
+  labelFilter.value = null;
+  orderBy.value = "id";
+  selectedCount.value = 0;
+  gridRef.value?.clearSelection();
+  resetLoader();
+});
 </script>
 
 <style scoped>
@@ -425,13 +1005,21 @@ function addNewLabel() {
   padding: 12px;
   box-sizing: border-box;
   color: var(--cv-text);
+  gap: 10px;
 }
 
 .classify-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.workflow-grid {
+  flex-shrink: 0;
+}
+
+.jobs-card {
   flex-shrink: 0;
 }
 
@@ -440,5 +1028,11 @@ function addNewLabel() {
   flex: 1;
   min-height: 0;
   gap: 0;
+}
+
+@media (max-width: 1100px) {
+  .workflow-grid {
+    display: block;
+  }
 }
 </style>

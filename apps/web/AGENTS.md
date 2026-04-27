@@ -17,14 +17,14 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Schedule list | `src/views/SchedulesView.vue` | CRUD + create modal + pause/resume/delete |
 | Schedule detail | `src/views/ScheduleDetailView.vue` | Config display, run history table, Trigger Now, Prefect deep link |
 | Run log viewer | `src/components/RunLogViewer.vue` | Reusable; props: `runId: string`; shows level badges |
-| Classify view | `src/views/ClassifyView.vue` | Annotation table + sidebar; uses TanStack Table/Virtual for virtualized infinite scroll |
+| Classify view | `src/views/ClassifyView.vue` | Unified annotate + train + predict + review workflow with shared grid/sidebar |
 | Classify sidebar | `src/components/classify/` | Widget registry, sidebar shell, widget components; see Classify Sidebar Architecture section |
 | Agent chat drawer | `src/components/AgentChatDrawer.vue` | Floating chat UI for agent interaction |
 | Agent widgets | `src/components/classify/widgets/` | GenericECharts, MarkdownLog, DataTable, MetricCards, SampleViewer, WidgetErrorBoundary |
 | Agent composables | `src/composables/useAgentSurface.ts`, `src/composables/useAgentChat.ts` | Surface state management, chat SSE streaming |
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
-The classify page (`/datasets/:id/classify`) has a collapsible sidebar that renders dashboard widgets dynamically from a typed config.
+The classify page (`/datasets/:id/classify`) is the one-stop classification workflow and has a collapsible sidebar that renders dashboard widgets dynamically from a typed config.
 
 | Piece | Location | Role |
 |-------|----------|------|
@@ -88,6 +88,6 @@ pnpm preview
 ## GOTCHAS
 - `JobsView.vue` appends raw SSE payload strings to local state; there is no reconnection or typed event parsing.
 - There are no frontend tests or test scripts in `package.json`.
-- Prediction review is now platform-prediction-first. The UI reads prediction rows from the API DB and only syncs selected prediction collections to Label Studio manually.
+- Prediction review now lives inside `ClassifyView.vue` (route: `/datasets/:id/classify`) as review mode. It reads prediction rows from the API DB and only syncs selected prediction collections to Label Studio manually.
 - `src/api.ts` may need to read the persisted token directly during startup, because Vue Query requests can fire before async auth validation finishes.
 - Current runtimes usually persist aggregate metrics in a downloadable `metrics` artifact rather than streaming per-epoch `loss` events, so the job detail metrics card should not assume a line chart is always available.
