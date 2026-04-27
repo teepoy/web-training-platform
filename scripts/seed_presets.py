@@ -13,17 +13,28 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 
 import httpx
+from seed_common import (
+    DEFAULT_COMPOSE_FILE,
+    DEFAULT_ORG_NAME,
+    DEFAULT_ORG_SLUG,
+    DEFAULT_SEED_EMAIL,
+    DEFAULT_SEED_NAME,
+    DEFAULT_SEED_PASSWORD,
+    login_seed_user,
+    promote_superadmin,
+    register_seed_user,
+    resolve_or_create_org,
+)
 
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
-SEED_NAME = "Seed Admin"
-ORG_NAME = "Default Org"
-ORG_SLUG = "default-org"
-COMPOSE_FILE = "infra/compose/docker-compose.yaml"
+SEED_EMAIL = DEFAULT_SEED_EMAIL
+SEED_PASSWORD = DEFAULT_SEED_PASSWORD
+SEED_NAME = DEFAULT_SEED_NAME
+ORG_NAME = DEFAULT_ORG_NAME
+ORG_SLUG = DEFAULT_ORG_SLUG
+COMPOSE_FILE = DEFAULT_COMPOSE_FILE
 
 # Default presets to seed
 PRESETS = [
@@ -142,9 +153,15 @@ scheduler:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed training presets")
-    parser.add_argument("--api-url", default="http://localhost:8000", help="Platform API base URL")
-    parser.add_argument("--compose-file", default=COMPOSE_FILE, help="Docker compose file path")
-    parser.add_argument("--no-promote", action="store_true", help="Skip superadmin promotion")
+    parser.add_argument(
+        "--api-url", default="http://localhost:8000", help="Platform API base URL"
+    )
+    parser.add_argument(
+        "--compose-file", default=COMPOSE_FILE, help="Docker compose file path"
+    )
+    parser.add_argument(
+        "--no-promote", action="store_true", help="Skip superadmin promotion"
+    )
     args = parser.parse_args()
 
     api_url = args.api_url.rstrip("/")
@@ -152,11 +169,7 @@ def main() -> int:
 
     # 1. Register user (ignore if already exists)
     print(f"Registering user {SEED_EMAIL}...")
-    r = client.post("/api/v1/auth/register", json={
-        "email": SEED_EMAIL,
-        "password": SEED_PASSWORD,
-        "name": SEED_NAME,
-    })
+    r = register_seed_user(client, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
     if r.status_code == 201:
         print("  User created.")
     elif r.status_code == 409:
@@ -167,29 +180,11 @@ def main() -> int:
     # 2. Promote to superadmin via docker compose exec
     if not args.no_promote:
         print("Promoting user to superadmin...")
-        try:
-            subprocess.run(
-                [
-                    "docker", "compose", "-f", args.compose_file,
-                    "exec", "-T", "api",
-                    "uv", "run", "python", "-m", "app.cli", "create-superadmin",
-                    f"--email={SEED_EMAIL}",
-                    f"--password={SEED_PASSWORD}",
-                    f"--name={SEED_NAME}",
-                ],
-                check=True,
-                capture_output=True,
-            )
-            print("  Superadmin promotion complete.")
-        except subprocess.CalledProcessError as e:
-            print(f"  Warning: promotion failed: {e.stderr.decode()}")
+        promote_superadmin(args.compose_file, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
 
     # 3. Login
     print("Logging in...")
-    r = client.post("/api/v1/auth/login", json={
-        "email": SEED_EMAIL,
-        "password": SEED_PASSWORD,
-    })
+    r = login_seed_user(client, SEED_EMAIL, SEED_PASSWORD)
     if r.status_code != 200:
         print(f"Login failed: {r.status_code} {r.text}")
         return 1
@@ -199,26 +194,13 @@ def main() -> int:
 
     # 4. Get or create organization
     print(f"Getting/creating organization '{ORG_NAME}'...")
-    r = client.get("/api/v1/organizations")
-    orgs = r.json() if r.status_code == 200 else []
-    org_id = None
-    for org in orgs:
-        if org.get("slug") == ORG_SLUG or org.get("name") == ORG_NAME:
-            org_id = org["id"]
-            print(f"  Found existing org: {org_id}")
-            break
-    
-    if not org_id:
-        r = client.post("/api/v1/organizations", json={"name": ORG_NAME, "slug": ORG_SLUG})
-        if r.status_code == 200:
-            org_id = r.json()["id"]
-            print(f"  Created org: {org_id}")
-        else:
-            print(f"  Warning: could not create org: {r.status_code} {r.text}")
-            # Try to use the first available org
-            if orgs:
-                org_id = orgs[0]["id"]
-                print(f"  Using first available org: {org_id}")
+    org_id = resolve_or_create_org(client, ORG_NAME, ORG_SLUG)
+    if org_id:
+        print(f"  Using org: {org_id}")
+    else:
+        print(
+            "  Warning: could not resolve organization; continuing without X-Organization-ID"
+        )
 
     if org_id:
         client.headers["X-Organization-ID"] = org_id
@@ -240,7 +222,7 @@ def main() -> int:
             print(f"  Skipping '{preset['name']}' (already exists)")
             skipped += 1
             continue
-        
+
         print(f"  Creating preset '{preset['name']}'...")
         r = client.post("/api/v1/training-presets", json=preset)
         if r.status_code == 200:

@@ -34,19 +34,28 @@ from __future__ import annotations
 import argparse
 import base64
 import io
-import subprocess
 import sys
-import time
 
 import httpx
+from seed_common import (
+    DEFAULT_COMPOSE_FILE,
+    DEFAULT_SEED_EMAIL,
+    DEFAULT_SEED_NAME,
+    DEFAULT_SEED_PASSWORD,
+    api_request,
+    login_seed_user,
+    promote_superadmin,
+    register_seed_user,
+    wait_for_api_ready,
+)
 
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
-SEED_NAME = "Seed Admin"
+SEED_EMAIL = DEFAULT_SEED_EMAIL
+SEED_PASSWORD = DEFAULT_SEED_PASSWORD
+SEED_NAME = DEFAULT_SEED_NAME
 ORG_NAME = "Flowers Lab"
 ORG_SLUG = "flowers-lab"
 DATASET_NAME = "Oxford Flowers 102"
-COMPOSE_FILE = "infra/compose/docker-compose.yaml"
+COMPOSE_FILE = DEFAULT_COMPOSE_FILE
 
 
 def _image_to_data_uri(img) -> str:
@@ -57,55 +66,25 @@ def _image_to_data_uri(img) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
-def _api(client: httpx.Client, method: str, path: str, **kwargs) -> httpx.Response:
-    resp = getattr(client, method)(path, **kwargs)
-    return resp
-
-
-def _wait_for_api_ready(client: httpx.Client, timeout_seconds: float = 120.0) -> None:
-    """Wait until the API responds successfully to /health."""
-    deadline = time.time() + timeout_seconds
-    last_error = ""
-    while time.time() < deadline:
-        try:
-            resp = client.get("/health")
-            if resp.status_code == 200:
-                return
-            last_error = f"unexpected status {resp.status_code}"
-        except httpx.HTTPError as exc:
-            last_error = str(exc)
-        time.sleep(2.0)
-    print(f"ERROR: API not ready after {timeout_seconds:.0f}s: {last_error}")
-    sys.exit(1)
-
-
-def _promote_superadmin(compose_file: str, email: str, password: str, name: str) -> None:
-    """Promote user to superadmin via docker compose exec."""
-    cmd = [
-        "docker", "compose", "-f", compose_file,
-        "exec", "-T", "api",
-        "uv", "run", "python", "-m", "app.cli",
-        "create-superadmin",
-        f"--email={email}",
-        f"--password={password}",
-        f"--name={name}",
-    ]
-    print(f"  Promoting {email} to superadmin via docker exec ...")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"  WARNING: promote failed (rc={result.returncode}): {result.stderr.strip()}")
-        print("  If running locally (not compose), use: make create-superadmin EMAIL=seed@example.com PASSWORD=seed1234 NAME='Seed Admin'")
-    else:
-        print(f"  {result.stdout.strip()}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Oxford Flowers 102 dataset")
-    parser.add_argument("--api-url", default="http://localhost:8000", help="Platform API base URL")
-    parser.add_argument("--no-promote", action="store_true", help="Skip superadmin promotion (assume already done)")
-    parser.add_argument("--compose-file", default=COMPOSE_FILE, help="Docker compose file path")
-    parser.add_argument("--max-samples", type=int, default=0, help="Limit samples (0 = all)")
-    parser.add_argument("--batch-report", type=int, default=100, help="Report progress every N samples")
+    parser.add_argument(
+        "--api-url", default="http://localhost:8000", help="Platform API base URL"
+    )
+    parser.add_argument(
+        "--no-promote",
+        action="store_true",
+        help="Skip superadmin promotion (assume already done)",
+    )
+    parser.add_argument(
+        "--compose-file", default=COMPOSE_FILE, help="Docker compose file path"
+    )
+    parser.add_argument(
+        "--max-samples", type=int, default=0, help="Limit samples (0 = all)"
+    )
+    parser.add_argument(
+        "--batch-report", type=int, default=100, help="Report progress every N samples"
+    )
     args = parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -114,25 +93,27 @@ def main() -> None:
     try:
         from datasets import load_dataset  # type: ignore[import-untyped]
     except ImportError:
-        print("ERROR: 'datasets' package not found. Install with: uv pip install datasets Pillow")
+        print(
+            "ERROR: 'datasets' package not found. Install with: uv pip install datasets Pillow"
+        )
         sys.exit(1)
 
     api_url = args.api_url.rstrip("/")
     client = httpx.Client(base_url=api_url, timeout=30.0)
 
     print("[0/7] Waiting for API readiness ...")
-    _wait_for_api_ready(client)
+    try:
+        wait_for_api_ready(client)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
     print("  API is ready.")
 
     # ------------------------------------------------------------------
     # Step 1: Register user
     # ------------------------------------------------------------------
     print("[1/7] Registering seed user ...")
-    resp = _api(client, "post", "/api/v1/auth/register", json={
-        "email": SEED_EMAIL,
-        "password": SEED_PASSWORD,
-        "name": SEED_NAME,
-    })
+    resp = register_seed_user(client, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
     if resp.status_code == 201:
         print(f"  Created user: {resp.json()['email']}")
     elif resp.status_code == 409:
@@ -148,16 +129,13 @@ def main() -> None:
     if args.no_promote:
         print("  Skipped (--no-promote).")
     else:
-        _promote_superadmin(args.compose_file, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
+        promote_superadmin(args.compose_file, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
 
     # ------------------------------------------------------------------
     # Step 3: Login
     # ------------------------------------------------------------------
     print("[3/7] Logging in ...")
-    resp = _api(client, "post", "/api/v1/auth/login", json={
-        "email": SEED_EMAIL,
-        "password": SEED_PASSWORD,
-    })
+    resp = login_seed_user(client, SEED_EMAIL, SEED_PASSWORD)
     if resp.status_code != 200:
         print(f"  ERROR login: {resp.status_code} {resp.text}")
         sys.exit(1)
@@ -169,16 +147,21 @@ def main() -> None:
     # Step 4: Create organization
     # ------------------------------------------------------------------
     print("[4/7] Creating organization ...")
-    resp = _api(client, "post", "/api/v1/organizations", json={
-        "name": ORG_NAME,
-        "slug": ORG_SLUG,
-    })
+    resp = api_request(
+        client,
+        "post",
+        "/api/v1/organizations",
+        json={
+            "name": ORG_NAME,
+            "slug": ORG_SLUG,
+        },
+    )
     if resp.status_code == 201:
         org_id = resp.json()["id"]
         print(f"  Created org: {org_id}")
     elif resp.status_code == 409:
         # Already exists — fetch it
-        resp = _api(client, "get", "/api/v1/organizations")
+        resp = api_request(client, "get", "/api/v1/organizations")
         orgs = resp.json()
         org_id = next((o["id"] for o in orgs if o["slug"] == ORG_SLUG), None)
         if org_id is None:
@@ -207,13 +190,18 @@ def main() -> None:
     # Step 6: Create dataset
     # ------------------------------------------------------------------
     print("[6/7] Creating dataset ...")
-    resp = _api(client, "post", "/api/v1/datasets", json={
-        "name": DATASET_NAME,
-        "task_spec": {
-            "task_type": "classification",
-            "label_space": label_names,
+    resp = api_request(
+        client,
+        "post",
+        "/api/v1/datasets",
+        json={
+            "name": DATASET_NAME,
+            "task_spec": {
+                "task_type": "classification",
+                "label_space": label_names,
+            },
         },
-    })
+    )
     if resp.status_code == 200:
         dataset_id = resp.json()["id"]
         ls_project_id = resp.json().get("ls_project_id")
@@ -249,7 +237,11 @@ def main() -> None:
             data_uri = _image_to_data_uri(image)
 
             # Metadata includes the label index and flower name
-            label_name = label_names[label_idx] if label_idx < len(label_names) else f"class_{label_idx}"
+            label_name = (
+                label_names[label_idx]
+                if label_idx < len(label_names)
+                else f"class_{label_idx}"
+            )
             metadata = {
                 "split": split_name,
                 "label_index": label_idx,
@@ -257,20 +249,31 @@ def main() -> None:
                 "hf_index": i,
             }
 
-            batch.append({
-                "image_uris": [data_uri],
-                "metadata": metadata,
-                "label": label_name,
-            })
+            batch.append(
+                {
+                    "image_uris": [data_uri],
+                    "metadata": metadata,
+                    "label": label_name,
+                }
+            )
 
-            if len(batch) >= batch_size or (args.max_samples > 0 and total_created + len(batch) >= max_samples):
-                resp = _api(client, "post", f"/api/v1/datasets/{dataset_id}/samples/import", json={"items": batch})
+            if len(batch) >= batch_size or (
+                args.max_samples > 0 and total_created + len(batch) >= max_samples
+            ):
+                resp = api_request(
+                    client,
+                    "post",
+                    f"/api/v1/datasets/{dataset_id}/samples/import",
+                    json={"items": batch},
+                )
                 if resp.status_code == 200:
                     total_created += int(resp.json().get("imported", 0))
                 else:
                     total_skipped += len(batch)
                     if total_skipped <= batch_size * 3:
-                        print(f"    WARN batch ending at sample {i}: {resp.status_code} {resp.text[:120]}")
+                        print(
+                            f"    WARN batch ending at sample {i}: {resp.status_code} {resp.text[:120]}"
+                        )
                 batch = []
 
             if total_created % args.batch_report == 0 and total_created > 0:
@@ -282,7 +285,9 @@ def main() -> None:
             break
 
     elapsed = time.time() - t0
-    print(f"\nDone! Created {total_created} samples, skipped {total_skipped} in {elapsed:.1f}s")
+    print(
+        f"\nDone! Created {total_created} samples, skipped {total_skipped} in {elapsed:.1f}s"
+    )
     print(f"Dataset ID: {dataset_id}")
     print(f"LS Project: {ls_project_id}")
 
