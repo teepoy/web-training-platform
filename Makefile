@@ -126,6 +126,14 @@ seed-imagenet-full: ## Seed ImageNet-1K full real dataset from the real bucket/s
 .PHONY: imagenet-full
 imagenet-full: seed-imagenet-full ## Alias for seed-imagenet-full
 
+.PHONY: seed-multi-image-scatter
+seed-multi-image-scatter: ## Seed multi-image samples with scatter coordinates for interactive demo
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_multi_image_scatter.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: multi-image-scatter
+multi-image-scatter: seed-multi-image-scatter ## Alias for seed-multi-image-scatter
+
 .PHONY: smoke-dev-batch
 smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
@@ -160,6 +168,10 @@ export-bundle: ## Export source snapshot and docker images to a tar bundle
 up: ## Start full Compose stack (dev profile, detached)
 	docker compose -f $(COMPOSE) up -d
 
+.PHONY: up-stack
+up-stack: ## Start compose stack without the baked web container
+	docker compose -f $(COMPOSE) up -d --scale web=0
+
 .PHONY: wait-api
 wait-api: ## Wait for API health endpoint to respond
 	@python3 scripts/run_with_timeout.py --timeout 120 -- bash -lc 'until curl --fail --silent --show-error "$(API_URL)/health" >/dev/null; do sleep 2; done'
@@ -169,7 +181,13 @@ ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mod
 	$(MAKE) seed-imagenet-mock ARGS="--no-model"
 
 .PHONY: updev
-updev: up ensure-mock-datasets ## Start dev stack and ensure mock datasets exist
+
+updev: ## Start compose backend + local Vite frontend with hot reload
+	@trap 'kill 0' EXIT; \
+	$(MAKE) up-stack && \
+	$(MAKE) ensure-mock-datasets && \
+	$(MAKE) dev-web & \
+	wait
 
 .PHONY: db-migrate-compose
 db-migrate-compose: ## Run Alembic migrations inside Compose API container

@@ -15,6 +15,11 @@ make up
 make updev
 ```
 
+`make updev` is the recommended interactive dev entrypoint. It starts the
+compose backend stack without the baked `web` container, ensures the default
+mock dataset exists, and then runs the local Vite dev server on `:5173` for
+hot reload and stable `/api` proxying to `localhost:8000`.
+
 This stack includes:
 
 - postgres
@@ -26,3 +31,4 @@ Notes:
 - Compose services run from the image's prebuilt `/app/.venv` and do not use `uv run` at container startup.
 - The embedding image installs `torch` during image build, not at container startup.
 - The `web` service serves assets baked into the image; it does not bind-mount `apps/web/dist`.
+- Prefer `make updev` over the baked `web` container during daily development.

@@ -27,6 +27,7 @@ class ArtifactRef(BaseModel):
 
 class Model(ArtifactRef):
     """A trained model artifact with additional context."""
+
     job_id: str
     dataset_id: str | None = None
     dataset_name: str | None = None
@@ -37,6 +38,7 @@ class Model(ArtifactRef):
 class TaskSpec(BaseModel):
     task_type: TaskType = TaskType.CLASSIFICATION
     label_space: list[str] = Field(default_factory=list)
+    metadata_schema: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class Dataset(BaseModel):

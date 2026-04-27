@@ -254,7 +254,11 @@ export async function uploadModel(
 export interface CreateDatasetBody {
   name: string;
   dataset_type: string;
-  task_spec?: { task_type: string; label_space: string[] };
+  task_spec?: {
+    task_type: string;
+    label_space: string[];
+    metadata_schema?: Record<string, { type: string; description: string }>;
+  };
 }
 
 export interface CreateSampleBody {

@@ -5,7 +5,7 @@ Run this checklist after making significant changes to verify core functionality
 ## Prerequisites
 
 ```bash
-# Start the full stack (or use `make updev` alias)
+# Start the full stack, or use `make updev` for compose backend + local Vite
 make up
 
 # Wait for all services to be healthy
@@ -14,7 +14,7 @@ docker compose -f infra/compose/docker-compose.yaml ps
 
 Services should be running:
 - `compose-api-1` - API server (port 8000)
-- `compose-web-1` - Web frontend (port 5173)
+- `compose-web-1` - Web frontend (port 5173, only when using `make up`)
 - `compose-postgres-1` - PostgreSQL (port 5432)
 - `compose-minio-1` - MinIO storage (ports 9000, 9001)
 - `compose-prefect-server-1` - Prefect server (port 4200)
@@ -23,6 +23,9 @@ Services should be running:
 - `compose-training-worker-dspy-1` - DSPy delegated worker
 - `compose-embedding-1` - Embedding service (port 50051)
 - `compose-inference-worker-1` - HTTP inference service (port 8010)
+
+When using `make updev`, expect the frontend to run as a local Vite process on
+`:5173` instead of `compose-web-1`.
 
 ## 1. Authentication
 
@@ -178,6 +181,14 @@ Hybrid automation note:
 - [ ] Verify the training job reaches `completed`
 - [ ] Verify returned training artifacts use shared `s3://` URIs
 - [ ] Verify those artifacts exist in the shared MinIO bucket
+
+## 9.2.1 Multi-Image Scatter Demo Seed
+
+- [ ] Run `make seed-multi-image-scatter` against a healthy dev stack
+- [ ] Open dataset `Scatter Demo - Multi Image Samples`
+- [ ] Verify each sample contains multiple `image_uris`
+- [ ] Verify sample metadata includes numeric `scatter_x` and `scatter_y`
+- [ ] Verify the interactive scatter component can plot the seeded coordinates and drill into the linked sample viewer
 
 ## 9.3 Prediction Dev Smoke
 

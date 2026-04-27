@@ -10,11 +10,21 @@ from tests.conftest import PRESET_ID
 
 def test_dataset_and_job_flow() -> None:
     with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json={"name": "d1", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["a", "b"]}})
+        ds = c.post(
+            "/api/v1/datasets",
+            json={
+                "name": "d1",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+            },
+        )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
 
-        job = c.post("/api/v1/training-jobs", json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "u1"})
+        job = c.post(
+            "/api/v1/training-jobs",
+            json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "u1"},
+        )
         assert job.status_code == 200
         job_id = job.json()["id"]
 
@@ -26,7 +36,11 @@ def test_get_dataset_detail() -> None:
     with TestClient(app) as c:
         created = c.post(
             "/api/v1/datasets",
-            json={"name": "detail-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["x", "y"]}},
+            json={
+                "name": "detail-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["x", "y"]},
+            },
         )
         assert created.status_code == 200
         dataset_id = created.json()["id"]
@@ -37,6 +51,42 @@ def test_get_dataset_detail() -> None:
         assert body["id"] == dataset_id
         assert body["name"] == "detail-ds"
         assert body["task_spec"]["label_space"] == ["x", "y"]
+
+
+def test_dataset_detail_preserves_metadata_schema() -> None:
+    with TestClient(app) as c:
+        created = c.post(
+            "/api/v1/datasets",
+            json={
+                "name": "detail-ds-with-metadata-schema",
+                "dataset_type": "image_classification",
+                "task_spec": {
+                    "task_type": "classification",
+                    "label_space": ["x", "y"],
+                    "metadata_schema": {
+                        "scatter_x": {
+                            "type": "float",
+                            "description": "X coordinate for scatter plotting",
+                        },
+                        "scatter_y": {
+                            "type": "float",
+                            "description": "Y coordinate for scatter plotting",
+                        },
+                    },
+                },
+            },
+        )
+        assert created.status_code == 200
+        dataset_id = created.json()["id"]
+
+        r = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task_spec"]["metadata_schema"]["scatter_x"]["type"] == "float"
+        assert (
+            body["task_spec"]["metadata_schema"]["scatter_y"]["description"]
+            == "Y coordinate for scatter plotting"
+        )
 
 
 def test_get_dataset_detail_not_found() -> None:
@@ -50,17 +100,28 @@ def test_delete_dataset_removes_dataset_and_models() -> None:
     with TestClient(app) as c:
         created = c.post(
             "/api/v1/datasets",
-            json={"name": "delete-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["x", "y"]}},
+            json={
+                "name": "delete-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["x", "y"]},
+            },
         )
         assert created.status_code == 200
         dataset_id = created.json()["id"]
 
-        sample = c.post(f"/api/v1/datasets/{dataset_id}/samples", json={"image_uris": ["memory://delete-ds/img-1.png"]})
+        sample = c.post(
+            f"/api/v1/datasets/{dataset_id}/samples",
+            json={"image_uris": ["memory://delete-ds/img-1.png"]},
+        )
         assert sample.status_code == 200
 
         job = c.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "deleter"},
+            json={
+                "dataset_id": dataset_id,
+                "preset_id": PRESET_ID,
+                "created_by": "deleter",
+            },
         )
         assert job.status_code == 200
         job_id = job.json()["id"]
@@ -83,7 +144,14 @@ def test_update_label_space() -> None:
         # Create dataset with initial labels
         created = c.post(
             "/api/v1/datasets",
-            json={"name": "label-update-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["cat", "dog"]}},
+            json={
+                "name": "label-update-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {
+                    "task_type": "classification",
+                    "label_space": ["cat", "dog"],
+                },
+            },
         )
         assert created.status_code == 200
         dataset_id = created.json()["id"]
@@ -145,14 +213,21 @@ def test_samples_pagination() -> None:
         # Create a dataset
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "paginate-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["a", "b"]}},
+            json={
+                "name": "paginate-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+            },
         )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
 
         # Create 3 samples
         for i in range(3):
-            r = c.post(f"/api/v1/datasets/{dataset_id}/samples", json={"image_uris": [f"s3://bucket/img{i}.jpg"]})
+            r = c.post(
+                f"/api/v1/datasets/{dataset_id}/samples",
+                json={"image_uris": [f"s3://bucket/img{i}.jpg"]},
+            )
             assert r.status_code == 200
 
         # limit=2, offset=0 → 2 items, total=3
@@ -194,9 +269,18 @@ def test_bulk_sample_import() -> None:
             f"/api/v1/datasets/{dataset_id}/samples/import",
             json={
                 "items": [
-                    {"image_uris": ["memory://samples/1.jpg"], "metadata": {"index": 1}},
-                    {"image_uris": ["memory://samples/2.jpg"], "metadata": {"index": 2}},
-                    {"image_uris": ["memory://samples/3.jpg"], "metadata": {"index": 3}},
+                    {
+                        "image_uris": ["memory://samples/1.jpg"],
+                        "metadata": {"index": 1},
+                    },
+                    {
+                        "image_uris": ["memory://samples/2.jpg"],
+                        "metadata": {"index": 2},
+                    },
+                    {
+                        "image_uris": ["memory://samples/3.jpg"],
+                        "metadata": {"index": 3},
+                    },
                 ]
             },
         )
@@ -219,14 +303,22 @@ def test_events_history_pagination() -> None:
         # Set up dataset + job
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "event-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["a", "b"]}},
+            json={
+                "name": "event-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+            },
         )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
 
         job = c.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "tester"},
+            json={
+                "dataset_id": dataset_id,
+                "preset_id": PRESET_ID,
+                "created_by": "tester",
+            },
         )
         assert job.status_code == 200
         job_id = job.json()["id"]
@@ -239,7 +331,9 @@ def test_events_history_pagination() -> None:
         assert "total" in body
         assert isinstance(body["items"], list)
         assert isinstance(body["total"], int)
-        assert body["total"] == len(body["items"])  # default limit=50 fetches all for a new job
+        assert body["total"] == len(
+            body["items"]
+        )  # default limit=50 fetches all for a new job
 
         # Query with explicit offset/limit
         r = c.get(f"/api/v1/training-jobs/{job_id}/events/history?offset=0&limit=2")
@@ -258,14 +352,25 @@ def test_create_training_job_rejects_inference_only_preset() -> None:
     with TestClient(app) as c:
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "clip-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["cat", "dog"]}},
+            json={
+                "name": "clip-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {
+                    "task_type": "classification",
+                    "label_space": ["cat", "dog"],
+                },
+            },
         )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
 
         r = c.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": "clip-zero-shot-v1", "created_by": "tester"},
+            json={
+                "dataset_id": dataset_id,
+                "preset_id": "clip-zero-shot-v1",
+                "created_by": "tester",
+            },
         )
         assert r.status_code == 422
         assert "inference-only" in r.json()["detail"]
@@ -276,7 +381,11 @@ def test_extract_features_runs_sync() -> None:
         data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/4gkAAAAASUVORK5CYII="
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "feature-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["cat"]}},
+            json={
+                "name": "feature-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["cat"]},
+            },
         )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
@@ -299,7 +408,11 @@ def test_create_prediction_job_async() -> None:
     with TestClient(app) as c:
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "pred-ds", "dataset_type": "image_classification", "task_spec": {"task_type": "classification", "label_space": ["a", "b"]}},
+            json={
+                "name": "pred-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+            },
         )
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
@@ -313,9 +426,17 @@ def test_create_prediction_job_async() -> None:
 
         upload = c.post(
             "/api/v1/models/upload",
-            files={"file": ("model.json", io.BytesIO(b'{"label_prototypes":{"a":[1.0],"b":[0.0]}}'), "application/json")},
+            files={
+                "file": (
+                    "model.json",
+                    io.BytesIO(b'{"label_prototypes":{"a":[1.0],"b":[0.0]}}'),
+                    "application/json",
+                )
+            },
             data={
-                "metadata": '{"name":"uploaded-model","job_id":"' + job_id + '","template_id":"image-classifier","profile_id":"resnet50-cls-v1","format":"pytorch","model_spec":{"framework":"pytorch","architecture":"resnet50","base_model":"torchvision/resnet50"},"compatibility":{"dataset_types":["image_classification"],"task_types":["classification"],"prediction_targets":["image_classification"],"label_space":["a","b"]}}',
+                "metadata": '{"name":"uploaded-model","job_id":"'
+                + job_id
+                + '","template_id":"image-classifier","profile_id":"resnet50-cls-v1","format":"pytorch","model_spec":{"framework":"pytorch","architecture":"resnet50","base_model":"torchvision/resnet50"},"compatibility":{"dataset_types":["image_classification"],"task_types":["classification"],"prediction_targets":["image_classification"],"label_space":["a","b"]}}',
             },
         )
         assert upload.status_code == 200
@@ -323,7 +444,11 @@ def test_create_prediction_job_async() -> None:
 
         r = c.post(
             "/api/v1/predictions/run",
-            json={"model_id": model_id, "dataset_id": dataset_id, "target": "image_classification"},
+            json={
+                "model_id": model_id,
+                "dataset_id": dataset_id,
+                "target": "image_classification",
+            },
         )
         assert r.status_code == 202
         body = r.json()
@@ -375,12 +500,20 @@ def test_create_training_job_rejects_incompatible_dataset_and_preset() -> None:
     with TestClient(app) as c:
         ds = c.post(
             "/api/v1/datasets",
-            json={"name": "vqa-train", "dataset_type": "image_vqa", "task_spec": {"task_type": "vqa", "label_space": []}},
+            json={
+                "name": "vqa-train",
+                "dataset_type": "image_vqa",
+                "task_spec": {"task_type": "vqa", "label_space": []},
+            },
         )
         assert ds.status_code == 200
         r = c.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": ds.json()["id"], "preset_id": PRESET_ID, "created_by": "tester"},
+            json={
+                "dataset_id": ds.json()["id"],
+                "preset_id": PRESET_ID,
+                "created_by": "tester",
+            },
         )
         assert r.status_code == 422
         assert "does not support dataset_type" in r.json()["detail"]

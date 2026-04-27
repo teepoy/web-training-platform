@@ -6,6 +6,7 @@ export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancell
 export interface TaskSpec {
   task_type: TaskType;
   label_space: string[];
+  metadata_schema?: Record<string, { type: string; description: string }>;
 }
 
 export interface Dataset {

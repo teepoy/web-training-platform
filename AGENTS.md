@@ -40,9 +40,10 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Seed ImageNet POC | `make seed-imagenet-poc` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
 | Seed ImageNet full | `make seed-imagenet-full` | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path |
 | Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability |
-| Compose up/down | `make up` / `make down` | Full Compose stack (dev profile) |
+| Compose up/down | `make up` / `make down` | Full Compose stack (dev profile, includes baked web container) |
+| Compose backend only | `make up-stack` | Compose stack without the baked web container |
 | Ensure mock datasets | `make ensure-mock-datasets` | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation) |
-| Compose dev entrypoint | `make updev` | Starts compose stack and ensures mock datasets exist |
+| Compose dev entrypoint | `make updev` | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server |
 
 Raw single-test (when Make is unavailable):
 ```bash
