@@ -342,6 +342,8 @@ const activeGridItems = computed<AnnotationGridItem[]>(() =>
   isReviewMode.value ? reviewGridItems.value : annotationGridItems.value,
 );
 
+provide<Ref<AnnotationGridItem[]>>("classify-grid-items", activeGridItems);
+
 const activeTotalCount = computed(() =>
   isReviewMode.value ? reviewGridItems.value.length : totalCount.value,
 );
@@ -835,9 +837,88 @@ const reviewPanel: SidebarPanelDescriptor = {
   order: 5,
 };
 
-const staticPanels = computed(() =>
-  isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels,
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = metadata[key];
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+const scatterPoints = computed(() =>
+  activeGridItems.value
+    .map((item) => {
+      const x = metadataNumber(item.metadata, "scatter_x");
+      const y = metadataNumber(item.metadata, "scatter_y");
+      if (x == null || y == null) {
+        return null;
+      }
+      return {
+        id: item.id,
+        x,
+        y,
+        label:
+          item.draftLabel ??
+          item.predictionLabel ??
+          item.currentLabel ??
+          metadataString(item.metadata, "point_label"),
+        title:
+          metadataString(item.metadata, "sample_title") ??
+          metadataString(item.metadata, "title") ??
+          item.id,
+        imageSrc: item.imageSrcs[0] ?? null,
+      };
+    })
+    .filter((point) => point !== null),
 );
+
+const selectedSidebarSampleIds = computed(() => {
+  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
+  if (filterIds.length > 0) {
+    return filterIds;
+  }
+  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
+});
+
+const staticPanels = computed(() => {
+  const basePanels = isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels;
+  return basePanels.map((panel) => {
+    if (panel.id === "interactive-scatter") {
+      return {
+        ...panel,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              points: scatterPoints.value,
+            },
+          },
+        },
+      };
+    }
+
+    if (panel.id === "selected-samples") {
+      return {
+        ...panel,
+        collapsed: selectedSidebarSampleIds.value.length === 0,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              sampleIds: selectedSidebarSampleIds.value,
+              mode: "grid",
+            },
+          },
+        },
+      };
+    }
+
+    return panel;
+  });
+});
 
 const mergedPanels = computed(() =>
   mergePanels(staticPanels.value, globalAgentPanels.value),

@@ -79,6 +79,13 @@ When using `make updev`, expect the frontend to run as a local Vite process on
 - [ ] Apply a label annotation
 - [ ] Verify annotation is saved
 
+### 3.3 Classify Sidebar Scatter
+- [ ] Open a dataset whose samples include numeric `metadata.scatter_x` and `metadata.scatter_y`
+- [ ] Verify the `Interactive Scatter` panel appears in the classify sidebar and renders points
+- [ ] Click one scatter point and verify the `Selected Samples` panel shows the linked sample preview
+- [ ] Cmd/Ctrl-click another point and verify sidebar selection expands
+- [ ] Click `Clear` in the scatter panel and verify the linked sample preview resets
+
 ## 4. Training Presets
 
 ### 4.1 List Presets

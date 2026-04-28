@@ -11,8 +11,9 @@
     thumbSize — thumbnail size in px (default 80)
 -->
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, type Ref } from 'vue'
 import { resolveImageUris } from '../../../utils/imageAdapters'
+import type { AnnotationGridItem } from '../../../types'
 
 const props = defineProps<{
   data?: Record<string, unknown> | null
@@ -26,8 +27,17 @@ interface SampleViewerData {
   sampleIds: string[]
   mode: 'grid' | 'list'
   /** Optional pre-fetched sample objects with image_uris */
-  samples?: Array<{ id: string; image_uris: string[]; label?: string }>
+  samples?: Array<{ id: string; image_uris?: string[]; image_srcs?: string[]; label?: string }>
 }
+
+interface SamplePreview {
+  id: string
+  image_uris?: string[]
+  image_srcs?: string[]
+  label?: string
+}
+
+const classifyItems = inject<Ref<AnnotationGridItem[]>>("classify-grid-items", computed(() => []))
 
 const viewerData = computed<SampleViewerData | null>(() => {
   if (!props.data) return null
@@ -43,18 +53,38 @@ const viewerData = computed<SampleViewerData | null>(() => {
   }
 })
 
-const samples = computed(() => {
+const samples = computed<SamplePreview[]>(() => {
   if (!viewerData.value) return []
   // If pre-fetched samples are provided, use them
   if (viewerData.value.samples && viewerData.value.samples.length > 0) {
-    return viewerData.value.samples
+    return viewerData.value.samples.filter((sample): sample is SamplePreview => sample != null)
+  }
+  const allItems = classifyItems.value ?? []
+  const byId = new Map(allItems.map((item) => [item.id, item]))
+  const selected: SamplePreview[] = []
+  viewerData.value.sampleIds.forEach((id) => {
+    const item = byId.get(id)
+    if (!item) {
+      return
+    }
+    selected.push({
+        id,
+        image_srcs: item.imageSrcs,
+        label: item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? undefined,
+    })
+  })
+  if (selected.length > 0) {
+    return selected
   }
   // Otherwise just show IDs as placeholders
   return viewerData.value.sampleIds.map(id => ({ id, image_uris: [] as string[], label: undefined }))
 })
 
-function resolveThumb(uris: string[]): string {
-  if (!uris || uris.length === 0) return ''
+function resolveThumb(sample: SamplePreview): string {
+  const direct = sample.image_srcs ?? []
+  if (direct.length > 0) return direct[0] || ''
+  const uris = sample.image_uris ?? []
+  if (uris.length === 0) return ''
   const resolved = resolveImageUris(uris)
   return resolved[0] || ''
 }
@@ -70,8 +100,8 @@ function resolveThumb(uris: string[]): string {
         class="svw-item"
       >
         <img
-          v-if="resolveThumb(s.image_uris)"
-          :src="resolveThumb(s.image_uris)"
+          v-if="resolveThumb(s)"
+          :src="resolveThumb(s)"
           :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }"
           class="svw-img"
         />

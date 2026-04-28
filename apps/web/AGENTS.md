@@ -20,7 +20,7 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Classify view | `src/views/ClassifyView.vue` | Unified annotate + train + predict + review workflow with shared grid/sidebar |
 | Classify sidebar | `src/components/classify/` | Widget registry, sidebar shell, widget components; see Classify Sidebar Architecture section |
 | Agent chat drawer | `src/components/AgentChatDrawer.vue` | Floating chat UI for agent interaction |
-| Agent widgets | `src/components/classify/widgets/` | GenericECharts, MarkdownLog, DataTable, MetricCards, SampleViewer, WidgetErrorBoundary |
+| Agent widgets | `src/components/classify/widgets/` | GenericECharts, InteractiveScatter, MarkdownLog, DataTable, MetricCards, SampleViewer, WidgetErrorBoundary |
 | Agent composables | `src/composables/useAgentSurface.ts`, `src/composables/useAgentChat.ts` | Surface state management, chat SSE streaming |
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
@@ -31,6 +31,8 @@ The classify page (`/datasets/:id/classify`) is the one-stop classification work
 | Widget registry & config | `src/components/classify/sidebarConfig.ts` | `SidebarPanelDescriptor` type, `WIDGET_COMPONENTS` map, `defaultPanels` array |
 | Sidebar shell | `src/components/classify/ClassifySidebar.vue` | Renders panels from config; per-panel collapse; sidebar collapse; injects context via `provide` |
 | Donut chart widget | `src/components/classify/widgets/AnnotationProgressWidget.vue` | Donut chart (annotated/remaining/drafts), metric grid, label breakdown |
+| Interactive scatter widget | `src/components/classify/widgets/InteractiveScatterWidget.vue` | Metadata-driven scatter plot from `scatter_x` / `scatter_y`; emits linked sample selection/filter intents |
+| Sample preview widget | `src/components/classify/widgets/SampleViewerWidget.vue` | Renders sidebar-linked sample previews from the live classify grid selection |
 | Data composable | `src/composables/useClassifyDashboard.ts` | Vue Query fetch of `/annotation-stats`, merged with local transient state (drafts, selection) |
 
 **How to add a new widget:**
@@ -39,6 +41,10 @@ The classify page (`/datasets/:id/classify`) is the one-stop classification work
 3. Add a `SidebarPanelDescriptor` entry to `defaultPanels` (or a custom panels array) with the matching `widget` key and any `props`.
 
 The composable result is injected into widgets via Vue `provide`/`inject` (key: `classifyDashboard`), so widgets don't need individual prop drilling for stats data.
+
+The classify view also provides the live grid items under `classify-grid-items` so linked widgets such as the sidebar scatter plot and sample preview can resolve selected sample IDs without a second API fetch.
+
+The default sidebar now includes an `Interactive Scatter` panel when samples expose numeric `metadata.scatter_x` and `metadata.scatter_y`. Clicking a point updates the shared `classify-samples` collection state and the adjacent `Selected Samples` panel narrows to those sample IDs.
 
 General row and collection interaction rules for future interactive table widgets are documented in `docs/table-widget-interaction-protocol.md`.
 
@@ -52,10 +58,11 @@ The classify page includes an AI agent sidebar system and floating chat drawer:
 | Chat composable | `src/composables/useAgentChat.ts` | SSE streaming, conversation state, sidebar update emission |
 | Widget error boundary | `src/components/classify/widgets/WidgetErrorBoundary.vue` | Catches widget render errors |
 | Generic ECharts | `src/components/classify/widgets/GenericEChartsWidget.vue` | Any ECharts chart from inline option object |
+| Interactive scatter | `src/components/classify/widgets/InteractiveScatterWidget.vue` | Metadata-driven sample scatter plot with linked sidebar selection |
 | Markdown log | `src/components/classify/widgets/MarkdownLogWidget.vue` | Scrollable timestamped log entries |
 | Data table | `src/components/classify/widgets/DataTableWidget.vue` | Sortable table from columns/rows |
 | Metric cards | `src/components/classify/widgets/MetricCardsWidget.vue` | KPI card grid |
-| Sample viewer | `src/components/classify/widgets/SampleViewerWidget.vue` | Sample image grid/list by ID |
+| Sample viewer | `src/components/classify/widgets/SampleViewerWidget.vue` | Sample image grid/list by ID; can resolve classify-grid-backed sample previews |
 
 **Agent panels** are merged with static dashboard panels via `mergePanels()` in `sidebarConfig.ts`. Agent panels are visually distinguished with a left border accent and "AI" badge.
 

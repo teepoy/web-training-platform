@@ -17,6 +17,7 @@ declare module 'vue' {
     ClassifySidebar: typeof import('./src/components/classify/ClassifySidebar.vue')['default']
     DataTableWidget: typeof import('./src/components/classify/widgets/DataTableWidget.vue')['default']
     GenericEChartsWidget: typeof import('./src/components/classify/widgets/GenericEChartsWidget.vue')['default']
+    InteractiveScatterWidget: typeof import('./src/components/classify/widgets/InteractiveScatterWidget.vue')['default']
     LabelDistributionWidget: typeof import('./src/components/classify/widgets/LabelDistributionWidget.vue')['default']
     MarkdownLogWidget: typeof import('./src/components/classify/widgets/MarkdownLogWidget.vue')['default']
     MetricCardsWidget: typeof import('./src/components/classify/widgets/MetricCardsWidget.vue')['default']

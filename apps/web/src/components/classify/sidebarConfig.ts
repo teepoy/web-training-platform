@@ -347,6 +347,35 @@ export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
       ],
     },
   }),
+  "interactive-scatter": defineSidebarWidget({
+    key: "interactive-scatter",
+    component: defineAsyncComponent(() => import("./widgets/InteractiveScatterWidget.vue")),
+    contract: {
+      displayName: "Interactive Scatter",
+      description:
+        "Renders metadata-driven scatter points and emits linked sample selection/filter intents.",
+      acceptsProps: ["data", "config", "size"],
+      capabilities: {
+        reads: ["interaction-state"],
+        emits: ["select-samples", "apply-filter", "clear-selection"],
+      },
+      selfTests: [
+        {
+          name: "point click updates linked sample selection",
+          objective:
+            "Verify clicking a plotted point emits sample-selection intents for the shared collection.",
+          steps: [
+            "Render the widget with inline points and config.interaction.collection set.",
+            "Click one scatter point.",
+          ],
+          expected: [
+            "The widget emits select-samples for the clicked point.",
+            "When filterFromSelection is enabled, the linked sample-viewer can reduce to the selected sample ids.",
+          ],
+        },
+      ],
+    },
+  }),
 };
 
 export const WIDGET_COMPONENTS: Record<string, Component> = Object.fromEntries(
@@ -439,6 +468,48 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
       showValues: true,
       /** Max labels to show before grouping remainder as "Other" */
       maxBars: 20,
+    },
+  },
+  {
+    id: "interactive-scatter",
+    component: "interactive-scatter",
+    title: "Interactive Scatter",
+    order: 15,
+    size: "normal",
+    props: {
+      data: {
+        inline: {
+          points: [],
+        },
+      },
+      config: {
+        interaction: {
+          collection: "classify-samples",
+          entity: "sample",
+          emitSelection: true,
+          followSelection: true,
+          filterFromSelection: true,
+        },
+        maxPoints: 3000,
+      },
+    },
+  },
+  {
+    id: "selected-samples",
+    component: "sample-viewer",
+    title: "Selected Samples",
+    order: 16,
+    size: "normal",
+    props: {
+      data: {
+        inline: {
+          sampleIds: [],
+          mode: "grid",
+        },
+      },
+      config: {
+        thumbSize: 88,
+      },
     },
   },
 ];
