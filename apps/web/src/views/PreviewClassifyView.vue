@@ -3,17 +3,22 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
-  NImage, NButton, NSpace, NSpin, NAlert, NModal, NRadioGroup, NRadio,
-  NCard, NDivider, NTag, NImageGroup
+  NButton, NSpace, NSpin, NAlert, NModal, NRadioGroup, NRadio, NRadioButton
 } from 'naive-ui'
 import { getPreviewSession, startPreviewPersist } from '../api'
 import { usePreviewLoader } from '../composables/usePreviewLoader'
-import type { PreviewSession, PreviewPersistScope, PreviewItem } from '../types'
+import type { PreviewSession, PreviewPersistScope, PreviewItem, BrowserItem } from '../types'
 import PreviewItemDrawer from '../components/preview/PreviewItemDrawer.vue'
+
+import SampleBrowser from '../components/sample-browser/SampleBrowser.vue'
+import BrowserSidebar from '../components/sample-browser/BrowserSidebar.vue'
+import { previewPanels } from '../components/classify/sidebarConfig'
+import { useSampleBrowserPrefs } from '../stores/sampleBrowser'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const prefs = useSampleBrowserPrefs()
 
 const sessionId = computed(() => route.params.sessionId as string)
 
@@ -29,6 +34,21 @@ const isPersisting = ref(false)
 
 const selectedItem = ref<PreviewItem | null>(null)
 const showDrawer = ref(false)
+
+const browserItems = computed<BrowserItem[]>(() => {
+  return loader.items.value.map(item => ({
+    id: item.upstream_item_id,
+    imageSrcs: item.image_uris,
+    metadata: item.metadata || {},
+    sourceKind: 'preview',
+    currentLabel: null,
+    draftLabel: null,
+    predictionLabel: null,
+    predictionConfidence: null,
+    predictionId: null,
+    activationLabel: null,
+  }))
+})
 
 function selectItem(item: PreviewItem) {
   selectedItem.value = item
@@ -73,75 +93,55 @@ async function handlePersist() {
 
     <!-- Main workspace -->
     <template v-else>
+      <!-- Toolbar -->
+      <div class="preview-toolbar">
+        <NRadioGroup v-model:value="prefs.layout" size="small">
+          <NRadioButton value="grid">Grid</NRadioButton>
+          <NRadioButton value="list">List</NRadioButton>
+        </NRadioGroup>
+      </div>
+
+      <!-- Optional: notice about classification disabled -->
+      <div v-if="!session?.classification_enabled" class="preview-notice-bar">
+        <NAlert type="info" :show-icon="false" style="margin: 8px 16px;">
+          Classification disabled until dataset is persisted.
+        </NAlert>
+      </div>
+
       <div class="preview-layout">
         <!-- Image grid -->
-        <div class="preview-main">
-          <div class="preview-grid">
-            <NImageGroup>
-              <div
-                v-for="item in loader.items.value"
-                :key="item.upstream_item_id"
-                class="preview-grid-item"
-                @click="selectItem(item)"
-                style="cursor: pointer"
-              >
-                <NImage
-                  :src="item.image_uris[0]"
-                  object-fit="cover"
-                  width="160"
-                  height="120"
-                  lazy
-                />
-              </div>
-            </NImageGroup>
-          </div>
+        <SampleBrowser
+          :items="browserItems"
+          :total-count="loader.estimatedTotal.value ?? loader.loadedCount.value"
+          :thumb-size="prefs.thumbSize"
+          :layout="prefs.layout"
+          :is-loading="loader.isLoading.value"
+          :selection-enabled="false"
+          :show-checkboxes="false"
+          :show-label-rail="false"
+          :show-bottom-bar="false"
+          activation-mode="open"
+          @open-item="(id) => selectItem(loader.items.value.find(i => i.upstream_item_id === id)!)"
+          @load-more="loader.loadMore()"
+        />
 
-          <div v-if="loader.hasMore.value" class="preview-load-more">
-            <NButton
-              :loading="loader.isLoading.value"
-              @click="loader.loadMore()"
-            >
-              Load More
+        <!-- Sidebar area -->
+        <div class="preview-sidebar-container" :class="{ 'collapsed': prefs.sidebarCollapsed }">
+          <div class="preview-sidebar-actions">
+            <NButton type="primary" block @click="showPersistModal = true">
+              Persist Dataset
             </NButton>
           </div>
-          <div v-else-if="loader.initialized.value" class="preview-load-more">
-            <span style="color: var(--n-text-color-3); font-size: 13px;">All items loaded</span>
+          <!-- BrowserSidebar provides its own borders, we wrap it just to add the persist button above -->
+          <div style="flex: 1; min-height: 0; display: flex;">
+            <BrowserSidebar
+              :panels="previewPanels"
+              :context="{ totalLoaded: loader.loadedCount.value, filteredCount: loader.loadedCount.value } as unknown as Record<string, unknown>"
+              :collapsed="prefs.sidebarCollapsed"
+              @update:collapsed="prefs.setSidebarCollapsed"
+              style="border-left: none; width: 100%; min-width: 0;"
+            />
           </div>
-        </div>
-
-        <!-- Sidebar -->
-        <div class="preview-sidebar">
-          <NCard size="small">
-            <NSpace vertical>
-              <div>
-                <div class="sidebar-label">Collection</div>
-                <div class="sidebar-value">{{ session?.collection_ref }}</div>
-              </div>
-              <div>
-                <div class="sidebar-label">Loaded</div>
-                <div class="sidebar-value">
-                  {{ loader.loadedCount.value }}
-                  <span v-if="session?.estimated_total"> / ~{{ session.estimated_total }}</span>
-                </div>
-              </div>
-              <NDivider style="margin: 8px 0" />
-              <NAlert
-                v-if="!session?.classification_enabled"
-                type="info"
-                :show-icon="false"
-                style="font-size: 12px;"
-              >
-                Classification disabled until dataset is persisted.
-              </NAlert>
-              <NButton
-                type="primary"
-                block
-                @click="showPersistModal = true"
-              >
-                Persist Dataset
-              </NButton>
-            </NSpace>
-          </NCard>
         </div>
       </div>
     </template>
@@ -171,6 +171,13 @@ async function handlePersist() {
 </template>
 
 <style scoped>
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
+  flex-shrink: 0;
+}
 .preview-workspace {
   height: 100%;
   display: flex;
@@ -182,45 +189,33 @@ async function handlePersist() {
   align-items: center;
   height: 300px;
 }
-.preview-layout {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  height: 100%;
-  overflow: hidden;
-}
-.preview-main {
-  flex: 1;
-  overflow-y: auto;
-}
-.preview-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.preview-grid-item {
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--n-color-modal);
-}
-.preview-load-more {
-  display: flex;
-  justify-content: center;
-  padding: 16px 0;
-}
-.preview-sidebar {
-  width: 260px;
+.preview-notice-bar {
   flex-shrink: 0;
 }
-.sidebar-label {
-  font-size: 11px;
-  color: var(--n-text-color-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 2px;
+.preview-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
-.sidebar-value {
-  font-size: 14px;
-  font-weight: 500;
+.preview-sidebar-container {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
+  background: var(--cv-card-bg, #1e1e2e);
+  transition: width 0.2s, min-width 0.2s;
+  width: 280px;
+  min-width: 280px;
+}
+.preview-sidebar-container.collapsed {
+  width: 36px;
+  min-width: 36px;
+}
+.preview-sidebar-actions {
+  padding: 12px;
+  border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.08));
+}
+.preview-sidebar-container.collapsed .preview-sidebar-actions {
+  display: none;
 }
 </style>

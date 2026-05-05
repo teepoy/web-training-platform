@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, watch, type Ref } from 'vue'
 import { listPreviewItems } from '../api'
 import type { PreviewItem } from '../types'
 
@@ -53,6 +53,10 @@ export function usePreviewLoader(options: UsePreviewLoaderOptions) {
     initialized.value = false
     void loadMore()
   }
+
+  watch(resolvedId, () => {
+    reset()
+  }, { immediate: false })
 
   return {
     items,

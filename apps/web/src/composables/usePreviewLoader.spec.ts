@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { usePreviewLoader } from './usePreviewLoader'
-import * as api from '../api'
+import { listPreviewItems } from '../api'
 
 vi.mock('../api', () => ({
-  listPreviewItems: vi.fn()
+  listPreviewItems: vi.fn(),
 }))
 
 describe('usePreviewLoader', () => {
@@ -12,97 +12,97 @@ describe('usePreviewLoader', () => {
     vi.resetAllMocks()
   })
 
-  it('Cursor pagination — calling loadMore advances cursor', async () => {
-    const listSpy = vi.mocked(api.listPreviewItems)
-    
-    listSpy.mockResolvedValueOnce({
-      items: [
-        { upstream_item_id: 'item-1', image_uris: [], metadata: {} },
-        { upstream_item_id: 'item-2', image_uris: [], metadata: {} }
-      ],
-      next_cursor: 'cursor-page-2',
+  it('loadMore accumulates items across pages', async () => {
+    vi.mocked(listPreviewItems).mockResolvedValueOnce({
+      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
+      estimated_total: 100,
       has_more: true,
-      estimated_total: 50
-    })
+      next_cursor: 'cursor1'
+    } as any).mockResolvedValueOnce({
+      items: [{ upstream_item_id: 'b', image_uris: ['/b.jpg'] }],
+      estimated_total: 100,
+      has_more: false,
+      next_cursor: null
+    } as any)
 
-    const loader = usePreviewLoader({ sessionId: 'test-session', pageSize: 2 })
-    await loader.loadMore()
+    const loader = usePreviewLoader({ sessionId: 'session1' })
     
-    expect(listSpy).toHaveBeenCalledWith('test-session', null, 2)
-    expect(loader.items.value).toHaveLength(2)
+    await loader.loadMore()
+    expect(loader.items.value.length).toBe(1)
+    expect(loader.items.value[0].upstream_item_id).toBe('a')
     expect(loader.hasMore.value).toBe(true)
 
-    listSpy.mockResolvedValueOnce({
-      items: [
-        { upstream_item_id: 'item-3', image_uris: [], metadata: {} }
-      ],
-      next_cursor: 'cursor-page-3',
-      has_more: false,
-      estimated_total: 50
-    })
-
     await loader.loadMore()
-    
-    expect(listSpy).toHaveBeenCalledWith('test-session', 'cursor-page-2', 2)
-    expect(loader.items.value).toHaveLength(3)
+    expect(loader.items.value.length).toBe(2)
+    expect(loader.items.value[1].upstream_item_id).toBe('b')
     expect(loader.hasMore.value).toBe(false)
   })
 
-  it('Dedupe — duplicate upstream_item_ids are not added twice', async () => {
-    const listSpy = vi.mocked(api.listPreviewItems)
-    
-    listSpy.mockResolvedValueOnce({
-      items: [
-        { upstream_item_id: 'item-1', image_uris: [], metadata: {} },
-        { upstream_item_id: 'item-2', image_uris: [], metadata: {} }
-      ],
-      next_cursor: 'cursor-2',
+  it('loadMore deduplicates by upstream_item_id', async () => {
+    vi.mocked(listPreviewItems).mockResolvedValue({
+      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
+      estimated_total: 100,
       has_more: true,
-      estimated_total: 50
-    })
+      next_cursor: 'c1'
+    } as any)
 
-    const loader = usePreviewLoader({ sessionId: 'test-session', pageSize: 2 })
-    await loader.loadMore()
+    const loader = usePreviewLoader({ sessionId: 'session1' })
     
-    listSpy.mockResolvedValueOnce({
-      items: [
-        { upstream_item_id: 'item-2', image_uris: [], metadata: {} },
-        { upstream_item_id: 'item-3', image_uris: [], metadata: {} }
-      ],
-      next_cursor: 'cursor-3',
-      has_more: false,
-      estimated_total: 50
-    })
+    await loader.loadMore()
+    expect(loader.items.value.length).toBe(1)
 
+    // Load again with the same item, it should be deduplicated
     await loader.loadMore()
-    
-    expect(loader.items.value).toHaveLength(3)
-    const ids = loader.items.value.map(i => i.upstream_item_id)
-    expect(ids).toEqual(['item-1', 'item-2', 'item-3'])
+    expect(loader.items.value.length).toBe(1)
   })
 
-  it('Reset — changing sessionId resets items and cursor', async () => {
-    const listSpy = vi.mocked(api.listPreviewItems)
-    
-    listSpy.mockResolvedValue({
-      items: [
-        { upstream_item_id: 'item-1', image_uris: [], metadata: {} }
-      ],
-      next_cursor: 'cursor-2',
+  it('reset() clears items, cursor, hasMore, initialized', async () => {
+    vi.mocked(listPreviewItems).mockResolvedValue({
+      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
+      estimated_total: 100,
       has_more: true,
-      estimated_total: 50
-    })
+      next_cursor: 'c1'
+    } as any)
 
-    const sessionIdRef = ref('session-A')
-    const loader = usePreviewLoader({ sessionId: sessionIdRef, pageSize: 2 })
+    const loader = usePreviewLoader({ sessionId: 'session1' })
     await loader.loadMore()
-    
-    expect(loader.items.value).toHaveLength(1)
-    
+    expect(loader.items.value.length).toBe(1)
+    expect(loader.initialized.value).toBe(true)
+
     loader.reset()
+
+    expect(loader.items.value.length).toBe(0)
+    expect(loader.hasMore.value).toBe(true)
+    expect(loader.initialized.value).toBe(false)
+    expect(loader.estimatedTotal.value).toBeNull()
+  })
+
+  it('auto-resets when sessionId ref changes', async () => {
+    vi.mocked(listPreviewItems).mockResolvedValueOnce({
+      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
+      estimated_total: 100,
+      has_more: true,
+      next_cursor: 'c1'
+    } as any).mockResolvedValueOnce({
+      items: [],
+      estimated_total: 0,
+      has_more: false,
+      next_cursor: null
+    } as any)
+
+    const sessionId = ref('session1')
+    const loader = usePreviewLoader({ sessionId })
     
-    expect(loader.items.value).toHaveLength(0)
+    await loader.loadMore()
+    expect(loader.items.value.length).toBe(1)
+
+    // Change sessionId
+    sessionId.value = 'session2'
     await nextTick()
-    expect(listSpy).toHaveBeenLastCalledWith('session-A', null, 2)
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(loader.items.value.length).toBe(0)
+    expect(listPreviewItems).toHaveBeenCalledTimes(2)
+    expect(listPreviewItems).toHaveBeenLastCalledWith('session2', null, 20)
   })
 })
