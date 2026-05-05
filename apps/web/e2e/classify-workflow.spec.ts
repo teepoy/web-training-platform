@@ -362,6 +362,15 @@ test('runs prediction review flow from /datasets/:id/classify', async ({ page })
   await page.goto(`/datasets/${datasetId}/classify`)
   await expect(page.getByRole('button', { name: 'Run Predictions' })).toBeVisible()
 
+  await expect(page.getByRole('radio', { name: 'Grid' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: 'List' })).toBeVisible()
+
+  await expect(page.locator('.cs-header__toggle')).toBeVisible()
+
+  await page.waitForSelector('[data-sb-item]')
+  const itemCount = await page.locator('[data-sb-item]').count()
+  expect(itemCount).toBeGreaterThan(0)
+
   await page.locator('.n-base-selection').filter({ hasText: 'Select model' }).first().click()
   await page.locator('.n-base-select-option').filter({ hasText: /flower-classifier/ }).click()
 

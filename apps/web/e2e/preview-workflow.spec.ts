@@ -200,14 +200,26 @@ test('runs preview launch and workspace flow', async ({ page }) => {
   
   await page.waitForURL(`**/preview/${sessionId}`)
 
-  await expect(page.getByText(collectionRef)).toBeVisible()
-  
-  await expect(page.locator('.preview-grid-item')).toHaveCount(2)
-  
-  await page.getByRole('button', { name: 'Load More' }).click()
-  await expect(page.locator('.preview-grid-item')).toHaveCount(3)
+  await expect(page.getByRole('button', { name: 'Persist Dataset' })).toBeVisible()
+  await expect.poll(async () => page.locator('[data-sb-item]').count()).toBeGreaterThan(0)
+
+  await expect(page.getByRole('radio', { name: 'Grid' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: 'List' })).toBeVisible()
+
+  await expect(page.locator('.cs-header__toggle')).toBeVisible()
 
   await expect(page.getByRole('button', { name: /Submit/ })).toHaveCount(0)
+
+  await page.waitForSelector('[data-sb-item]')
+  const itemCount = await page.locator('[data-sb-item]').count()
+  expect(itemCount).toBeGreaterThan(0)
+
+  await page.locator('.n-radio__label', { hasText: 'List' }).click()
+  const firstListImage = page.locator('[data-sb-item] img, .sb-list-img').first()
+  await expect(firstListImage).toBeVisible()
+  await expect
+    .poll(async () => firstListImage.evaluate((el) => el.getBoundingClientRect().width))
+    .toBeGreaterThanOrEqual(100)
 
   await page.getByRole('button', { name: 'Persist Dataset' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()

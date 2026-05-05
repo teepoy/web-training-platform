@@ -39,6 +39,8 @@
                 }"
                 :style="{ width: cardWidth + 'px' }"
                 :data-item-id="item.id"
+                data-sb-item
+                :data-sb-id="item.id"
                 @click.stop="onItemClick(item.id, $event)"
               >
                 <label v-if="showCheckboxes" class="sb-select-box" @mousedown.stop @click.stop>
@@ -80,8 +82,11 @@
               :class="{
                 'sb-list-row--selected': selectedIds.has(getListItem(vRow.index)!.id),
                 'sb-list-row--draft': !!(getListItem(vRow.index)!.draftLabel || getListItem(vRow.index)!.predictionLabel),
+                'sb-list-row--no-checkbox': !showCheckboxes
               }"
               :data-item-id="getListItem(vRow.index)!.id"
+              data-sb-item
+              :data-sb-id="getListItem(vRow.index)!.id"
               @click.stop="onItemClick(getListItem(vRow.index)!.id, $event)"
             >
               <div v-if="showCheckboxes" class="sb-list-select">
@@ -626,6 +631,10 @@ defineExpose({
   cursor: pointer;
 }
 
+.sb-list-row--no-checkbox {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+}
+
 .sb-list-row--selected {
   border-color: var(--cv-primary, #4098fc);
   box-shadow: 0 0 0 1px var(--cv-primary, #4098fc);
@@ -749,6 +758,10 @@ defineExpose({
 @media (max-width: 900px) {
   .sb-list-row {
     grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .sb-list-row--no-checkbox {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sb-list-main {
