@@ -9,6 +9,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
 ├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
+├── apps/web/src/components/sample-browser/ # Shared browser core and sidebar shell
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
@@ -105,9 +106,13 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Preview item drawer | `apps/web/src/components/preview/PreviewItemDrawer.vue` | |
 | Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts` | |
 | Preview domain models | `apps/api/app/domain/preview.py` | |
-| Preview service | `apps/api/app/services/preview_service.py` | |
-| Preview TTL store | `apps/api/app/services/preview_store.py` | |
-| Upstream adapter | `apps/api/app/services/preview_upstream.py` | |
+| Preview service | `apps/api/app/services/preview_service.py` | Session lifecycle, item pagination, persist handoff |
+| Preview TTL store | `apps/api/app/services/preview_store.py` | In-memory TTL session store |
+| Upstream adapter | `apps/api/app/services/preview_upstream.py` | 50-item mock upstream; replace with real adapter |
+| Shared browser core | `apps/web/src/components/sample-browser/` | Shared virtualized browser and sidebar shell |
+| Browser preferences | `apps/web/src/stores/sampleBrowser.ts` | Presentation persistence (layout, thumbSize) |
+| Browser filter | `apps/web/src/composables/useBrowserFilter.ts` | Browser-scope item filter pipeline |
+| Browser architecture | `docs/sample-browser-architecture.md` | Shared browser architecture doc |
 
 ## CODE MAP
 | Symbol | Type | Location | Role |

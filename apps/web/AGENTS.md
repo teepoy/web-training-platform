@@ -22,18 +22,25 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Agent chat drawer | `src/components/AgentChatDrawer.vue` | Floating chat UI for agent interaction |
 | Agent widgets | `src/components/classify/widgets/` | GenericECharts, InteractiveScatter, MarkdownLog, DataTable, MetricCards, SampleViewer, WidgetErrorBoundary |
 | Agent composables | `src/composables/useAgentSurface.ts`, `src/composables/useAgentChat.ts` | Surface state management, chat SSE streaming |
+| Shared browser core | `src/components/sample-browser/SampleBrowser.vue` | Shared virtualized browser core |
+| Sidebar shell | `src/components/sample-browser/BrowserSidebar.vue` | Neutral sidebar shell used by all surfaces |
+| Browser preferences | `src/stores/sampleBrowser.ts` | Shared browser presentation preferences |
+| Browser filter | `src/composables/useBrowserFilter.ts` | Browser-scope item filter pipeline |
+| Sidebar config | `src/components/classify/sidebarConfig.ts` | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels` |
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 The classify page (`/datasets/:id/classify`) is the one-stop classification workflow and has a collapsible sidebar that renders dashboard widgets dynamically from a typed config.
 
 | Piece | Location | Role |
 |-------|----------|------|
-| Widget registry & config | `src/components/classify/sidebarConfig.ts` | `SidebarPanelDescriptor` type, `WIDGET_COMPONENTS` map, `defaultPanels` array |
-| Sidebar shell | `src/components/classify/ClassifySidebar.vue` | Renders panels from config; per-panel collapse; sidebar collapse; injects context via `provide` |
+| Widget registry & config | `src/components/classify/sidebarConfig.ts` | `SidebarPanelDescriptor` type, `WIDGET_COMPONENTS` map, `defaultPanels`, `datasetPanels`, `previewPanels` |
+| Sidebar shell | `src/components/sample-browser/BrowserSidebar.vue` | Neutral shell used by all surfaces; renders panels from config; per-panel collapse; sidebar collapse; injects context via `provide` |
+| Classify sidebar wrapper | `src/components/classify/ClassifySidebar.vue` | Thin wrapper around `BrowserSidebar.vue` for the classify view |
 | Donut chart widget | `src/components/classify/widgets/AnnotationProgressWidget.vue` | Donut chart (annotated/remaining/drafts), metric grid, label breakdown |
-| Interactive scatter widget | `src/components/classify/widgets/InteractiveScatterWidget.vue` | Metadata-driven scatter plot from `scatter_x` / `scatter_y`; emits linked sample selection/filter intents |
-| Sample preview widget | `src/components/classify/widgets/SampleViewerWidget.vue` | Renders sidebar-linked sample previews from the live classify grid selection |
-| Data composable | `src/composables/useClassifyDashboard.ts` | Vue Query fetch of `/annotation-stats`, merged with local transient state (drafts, selection) |
+| Interactive scatter widget | `src/components/classify/widgets/InteractiveScatterWidget.vue` | Metadata-driven scatter plot; emits linked selection/filter intents |
+| Browser summary widget | `src/components/classify/widgets/BrowserSummaryWidget.vue` | Read-only item counts (showing X of Y) for filtered views |
+| Sample preview widget | `src/components/classify/widgets/SampleViewerWidget.vue` | Renders sidebar-linked sample previews |
+| Data composable | `src/composables/useClassifyDashboard.ts` | Vue Query fetch of `/annotation-stats` |
 
 **How to add a new widget:**
 1. Create a `.vue` component in `src/components/classify/widgets/`.
@@ -90,11 +97,13 @@ pnpm install
 pnpm dev
 pnpm build
 pnpm preview
+pnpm run test:widgets   # Vitest: widget, composable, store specs
+pnpm run test:e2e       # Playwright: E2E browser flows
 ```
 
 ## GOTCHAS
 - `JobsView.vue` appends raw SSE payload strings to local state; there is no reconnection or typed event parsing.
-- There are no frontend tests or test scripts in `package.json`.
+- Vitest widget tests and Playwright E2E tests are available via `pnpm run test:widgets` and `pnpm run test:e2e`.
 - Prediction review now lives inside `ClassifyView.vue` (route: `/datasets/:id/classify`) as review mode. It reads prediction rows from the API DB and only syncs selected prediction collections to Label Studio manually.
 - `src/api.ts` may need to read the persisted token directly during startup, because Vue Query requests can fire before async auth validation finishes.
 - Current runtimes usually persist aggregate metrics in a downloadable `metrics` artifact rather than streaming per-epoch `loss` events, so the job detail metrics card should not assume a line chart is always available.
