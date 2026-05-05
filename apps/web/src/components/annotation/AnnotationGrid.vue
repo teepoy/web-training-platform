@@ -31,7 +31,7 @@
 <template>
   <div class="ag" @keydown="onKeyDown" tabindex="-1">
     <!-- Label panel (left) -->
-    <div class="ag-label-panel">
+    <div v-if="!readOnly" class="ag-label-panel">
       <input
         v-model="labelSearch"
         class="ag-label-search"
@@ -201,7 +201,7 @@
       </div>
 
       <!-- Floating bottom bar -->
-      <div class="ag-bottom-bar">
+      <div v-if="!readOnly" class="ag-bottom-bar">
         <div class="ag-bar-left">
           <slot name="bar-left" />
         </div>
@@ -240,12 +240,14 @@ const props = withDefaults(defineProps<{
   isLoading?: boolean
   submitting?: boolean
   showAddLabel?: boolean
+  readOnly?: boolean
 }>(), {
   thumbSize: 160,
   layout: 'grid',
   isLoading: false,
   submitting: false,
   showAddLabel: true,
+  readOnly: false,
 })
 
 const emit = defineEmits<{

@@ -79,6 +79,7 @@ declare module 'vue' {
     OrgSelector: typeof import('./src/components/OrgSelector.vue')['default']
     PredictionSummaryWidget: typeof import('./src/components/classify/widgets/PredictionSummaryWidget.vue')['default']
     PredictModal: typeof import('./src/components/PredictModal.vue')['default']
+    PreviewItemDrawer: typeof import('./src/components/preview/PreviewItemDrawer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RunLogViewer: typeof import('./src/components/RunLogViewer.vue')['default']

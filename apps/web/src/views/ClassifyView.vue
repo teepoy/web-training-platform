@@ -290,6 +290,11 @@ const { samples, totalCount, isLoading, loadMore, reset: resetLoader } = useSamp
 
 onMounted(() => {
   resetLoader();
+  
+  if (route.query.previewPersistSession) {
+    message.success('Dataset imported from preview session.');
+    router.replace({ query: { ...route.query, previewPersistSession: undefined } });
+  }
 });
 
 const annotationDraft = ref<Record<string, string>>({});
