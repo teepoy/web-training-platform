@@ -83,6 +83,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RunLogViewer: typeof import('./src/components/RunLogViewer.vue')['default']
+    SampleBrowser: typeof import('./src/components/sample-browser/SampleBrowser.vue')['default']
     SampleDetailDrawer: typeof import('./src/components/SampleDetailDrawer.vue')['default']
     SampleViewerWidget: typeof import('./src/components/classify/widgets/SampleViewerWidget.vue')['default']
     TaskInsightModal: typeof import('./src/components/TaskInsightModal.vue')['default']
