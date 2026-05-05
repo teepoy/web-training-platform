@@ -14,13 +14,13 @@
       <n-tag v-if="isReviewMode" type="warning" size="small">Prediction Review Mode</n-tag>
       <div style="margin-left: auto; display: flex; align-items: center; gap: 12px">
         <n-text depth="3" style="white-space: nowrap">View</n-text>
-        <n-radio-group v-model:value="viewMode" size="small">
+        <n-radio-group v-model:value="prefs.layout" size="small">
           <n-radio-button value="grid">Grid</n-radio-button>
           <n-radio-button value="list">List</n-radio-button>
         </n-radio-group>
         <n-text depth="3" style="white-space: nowrap">Image size</n-text>
-        <n-slider v-model:value="thumbSize" :min="64" :max="256" :step="8" style="width: 160px" />
-        <n-text depth="3" style="white-space: nowrap">{{ thumbSize }}px</n-text>
+        <n-slider v-model:value="prefs.thumbSize" :min="64" :max="256" :step="8" style="width: 160px" />
+        <n-text depth="3" style="white-space: nowrap">{{ prefs.thumbSize }}px</n-text>
       </div>
     </div>
 
@@ -95,49 +95,82 @@
     </n-card>
 
     <div class="classify-body">
-      <AnnotationGrid
-        ref="gridRef"
-        :items="activeGridItems"
-        :total-count="activeTotalCount"
-        :label-space="labelSpace"
-        :thumb-size="thumbSize"
-        :layout="viewMode"
-        :is-loading="activeGridLoading"
-        :submitting="isReviewMode ? saveAnnotationsMutation.isPending.value : bulkAnnotateMutation.isPending.value"
-        :show-add-label="!isReviewMode"
-        @select="onGridSelect"
-        @apply-label="onGridApplyLabel"
-        @submit="submitFromGrid"
-        @load-more="onGridLoadMore"
-        @add-label="showAddLabelModal = true"
-      >
-        <template #bar-left>
-          <template v-if="isReviewMode">
-            <n-button size="tiny" :loading="syncCollectionMutation.isPending.value" @click="syncCollectionToLs">
-              Sync to LS
-            </n-button>
-            <n-button size="tiny" @click="resetReviewEdits">Reset Edits</n-button>
-            <n-button size="tiny" @click="clearPredictionReview">Back to Annotation</n-button>
+      <div ref="browserShellRef" class="classify-browser-shell" tabindex="-1" @keydown="onKeyDown">
+        <SampleBrowser
+          ref="gridRef"
+          :items="browserItems"
+          :total-count="activeTotalCount"
+          :thumb-size="prefs.thumbSize"
+          :layout="prefs.layout"
+          :is-loading="activeGridLoading"
+          :selection-enabled="true"
+          :show-checkboxes="true"
+          :show-label-rail="true"
+          :show-bottom-bar="true"
+          activation-mode="select"
+          @select="onBrowserSelect"
+          @load-more="onGridLoadMore"
+        >
+          <template #label-rail>
+            <div class="classify-label-panel">
+              <input
+                v-model="labelSearch"
+                class="classify-label-search"
+                placeholder="Search labels..."
+                @keydown.stop
+              />
+              <div class="classify-label-list">
+                <div
+                  v-for="(label, idx) in filteredLabels"
+                  :key="label"
+                  class="classify-label-item"
+                  @click="applyLabelToSelection(label)"
+                  :title="label"
+                >
+                  <span class="classify-label-dot" :style="{ background: labelColor(label) }" />
+                  <span class="classify-label-name">{{ label }}</span>
+                  <span v-if="idx < 9" class="classify-label-shortcut">{{ idx + 1 }}</span>
+                </div>
+              </div>
+              <button v-if="!isReviewMode" class="classify-label-add" @click="showAddLabelModal = true">
+                + Add label
+              </button>
+            </div>
           </template>
-          <template v-else>
-            <n-select
-              v-model:value="labelFilter"
-              :options="filterOptions"
-              placeholder="Filter by label"
-              size="tiny"
-              clearable
-              style="width: 160px"
-            />
-            <n-select v-model:value="orderBy" :options="orderOptions" size="tiny" style="width: 130px" />
+          <template #bar-left>
+            <template v-if="isReviewMode">
+              <n-button size="tiny" :loading="syncCollectionMutation.isPending.value" @click="syncCollectionToLs">
+                Sync to LS
+              </n-button>
+              <n-button size="tiny" @click="resetReviewEdits">Reset Edits</n-button>
+              <n-button size="tiny" @click="clearPredictionReview">Back to Annotation</n-button>
+            </template>
+            <template v-else>
+              <n-select
+                v-model:value="labelFilter"
+                :options="filterOptions"
+                placeholder="Filter by label"
+                size="tiny"
+                clearable
+                style="width: 160px"
+              />
+              <n-select v-model:value="orderBy" :options="orderOptions" size="tiny" style="width: 130px" />
+            </template>
           </template>
-        </template>
-      </AnnotationGrid>
+          <template #bar-right>
+            <button class="classify-submit-btn" :disabled="isSubmitting || browserSubmitCount === 0" @click="submitFromGrid">
+              {{ isSubmitting ? "Submitting..." : `Submit ${browserSubmitCount}` }}
+            </button>
+          </template>
+        </SampleBrowser>
+      </div>
 
       <ClassifySidebar
         :panels="mergedPanels"
         :context="dashboardContext"
         :interaction="sidebarInteraction"
-        v-model:collapsed="sidebarCollapsed"
+        :collapsed="prefs.sidebarCollapsed"
+        @update:collapsed="prefs.setSidebarCollapsed"
       />
     </div>
 
@@ -190,6 +223,7 @@ import {
 import { api, bulkCreateAnnotations, listSamplesWithLabels, syncAnnotationsToLs } from "../api";
 import type {
   AnnotationGridItem,
+  BrowserItem,
   BulkAnnotationRequest,
   BulkAnnotationResponse,
   Dataset,
@@ -206,7 +240,7 @@ import type {
 } from "../types";
 import { resolveImageUris } from "../utils/imageAdapters";
 import { useSampleLoader } from "../composables/useSampleLoader";
-import AnnotationGrid from "../components/annotation/AnnotationGrid.vue";
+import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
 import TaskInsightModal from "../components/TaskInsightModal.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
@@ -220,6 +254,7 @@ import {
 import { useClassifyDashboard } from "../composables/useClassifyDashboard";
 import { GLOBAL_AGENT_PANELS_KEY } from "../composables/useGlobalAgent";
 import { useOrgStore } from "../stores/org";
+import { useSampleBrowserPrefs } from "../stores/sampleBrowser";
 
 interface ReviewRow {
   key: string;
@@ -238,6 +273,7 @@ const dialog = useDialog();
 const themeVars = useThemeVars();
 const queryClient = useQueryClient();
 const orgStore = useOrgStore();
+const prefs = useSampleBrowserPrefs();
 
 const themeStyleVars = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -262,8 +298,6 @@ const selectedDataset = computed<Dataset | undefined>(() => datasetQuery.data.va
 
 const labelSpace = computed<string[]>(() => selectedDataset.value?.task_spec?.label_space ?? []);
 
-const thumbSize = ref(128);
-const viewMode = ref<"grid" | "list">("grid");
 const labelFilter = ref<string | null>(null);
 const orderBy = ref<string>("id");
 
@@ -295,11 +329,41 @@ onMounted(() => {
     message.success('Dataset imported from preview session.');
     router.replace({ query: { ...route.query, previewPersistSession: undefined } });
   }
+
+  browserShellRef.value?.focus();
 });
 
 const annotationDraft = ref<Record<string, string>>({});
 const reviewDraftLabels = ref<Record<string, string>>({});
-const gridRef = ref<InstanceType<typeof AnnotationGrid> | null>(null);
+const gridRef = ref<InstanceType<typeof SampleBrowser> | null>(null);
+const browserShellRef = ref<HTMLElement | null>(null);
+const selectedIds = ref<Set<string>>(new Set());
+const labelSearch = ref("");
+
+const LABEL_COLORS = [
+  "#4CAF50",
+  "#2196F3",
+  "#FF9800",
+  "#E91E63",
+  "#9C27B0",
+  "#00BCD4",
+  "#FF5722",
+  "#795548",
+  "#607D8B",
+  "#CDDC39",
+];
+
+function labelColor(label: string): string {
+  const idx = labelSpace.value.indexOf(label);
+  if (idx === -1) return "#9E9E9E";
+  return LABEL_COLORS[idx % LABEL_COLORS.length];
+}
+
+const filteredLabels = computed(() => {
+  if (!labelSearch.value) return labelSpace.value;
+  const query = labelSearch.value.toLowerCase();
+  return labelSpace.value.filter((label) => label.toLowerCase().includes(query));
+});
 
 const annotationGridItems = computed<AnnotationGridItem[]>(() =>
   samples.value.map((s) => ({
@@ -345,6 +409,21 @@ const reviewGridItems = computed<AnnotationGridItem[]>(() => {
 
 const activeGridItems = computed<AnnotationGridItem[]>(() =>
   isReviewMode.value ? reviewGridItems.value : annotationGridItems.value,
+);
+
+const browserItems = computed<BrowserItem[]>(() =>
+  activeGridItems.value.map((item) => ({
+    id: item.id,
+    imageSrcs: item.imageSrcs,
+    metadata: item.metadata as Record<string, unknown>,
+    sourceKind: "classify-review" as const,
+    currentLabel: item.currentLabel ?? null,
+    draftLabel: item.draftLabel ?? null,
+    predictionLabel: item.predictionLabel ?? null,
+    predictionConfidence: item.predictionConfidence ?? null,
+    predictionId: item.predictionId ?? null,
+    activationLabel: null,
+  })),
 );
 
 provide<Ref<AnnotationGridItem[]>>("classify-grid-items", activeGridItems);
@@ -772,11 +851,20 @@ watch(activeTaskSummary, (task) => {
 
 const selectedCount = ref(0);
 
-function onGridSelect(ids: Set<string>) {
+const browserSubmitCount = computed(() => activeGridItems.value.filter((item) => item.draftLabel != null).length);
+
+const isSubmitting = computed(() =>
+  isReviewMode.value ? saveAnnotationsMutation.isPending.value : bulkAnnotateMutation.isPending.value,
+);
+
+function onBrowserSelect(ids: Set<string>) {
+  selectedIds.value = ids;
   selectedCount.value = ids.size;
 }
 
-function onGridApplyLabel(payload: { ids: string[]; label: string }) {
+function applyLabelToSelection(label: string) {
+  if (selectedIds.value.size === 0) return;
+  const payload = { ids: [...selectedIds.value], label };
   if (isReviewMode.value) {
     const next = { ...reviewDraftLabels.value };
     payload.ids.forEach((id) => {
@@ -803,6 +891,7 @@ function onGridLoadMore() {
 
 watch(labelFilter, () => {
   selectedCount.value = 0;
+  selectedIds.value = new Set();
   gridRef.value?.clearSelection();
 });
 
@@ -822,8 +911,6 @@ provide<Ref<AnnotationGridItem[]>>(
   "pr-grid-items",
   computed(() => (isReviewMode.value ? reviewGridItems.value : [])),
 );
-
-const sidebarCollapsed = ref(false);
 
 const dashboardContext = useClassifyDashboard(
   datasetId,
@@ -977,6 +1064,7 @@ const bulkAnnotateMutation = useMutation({
       syncToLsMutation.mutate();
     }
     annotationDraft.value = {};
+    selectedIds.value = new Set();
     gridRef.value?.clearSelection();
     resetLoader();
     void queryClient.invalidateQueries({ queryKey: ["annotation-stats", datasetId.value] });
@@ -1067,6 +1155,26 @@ function addNewLabel() {
   addLabelMutation.mutate(trimmed);
 }
 
+function onKeyDown(e: KeyboardEvent) {
+  const el = document.activeElement;
+  if (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLSelectElement ||
+    el instanceof HTMLTextAreaElement ||
+    (el instanceof HTMLElement && el.isContentEditable)
+  ) {
+    return;
+  }
+
+  const num = Number.parseInt(e.key, 10);
+  if (Number.isNaN(num) || num < 1 || num > 9) return;
+  const label = labelSpace.value[num - 1];
+  if (!label) return;
+  if (selectedIds.value.size === 0) return;
+  e.preventDefault();
+  applyLabelToSelection(label);
+}
+
 watch(datasetId, () => {
   annotationDraft.value = {};
   clearPredictionReview();
@@ -1075,11 +1183,20 @@ watch(datasetId, () => {
   selectedPresetId.value = null;
   activePredictionJob.value = null;
   activeTrainingJobId.value = null;
+  labelSearch.value = "";
   labelFilter.value = null;
   orderBy.value = "id";
+  selectedIds.value = new Set();
   selectedCount.value = 0;
   gridRef.value?.clearSelection();
   resetLoader();
+});
+
+watch(isReviewMode, () => {
+  selectedIds.value = new Set();
+  selectedCount.value = 0;
+  gridRef.value?.clearSelection();
+  browserShellRef.value?.focus();
 });
 </script>
 
@@ -1114,6 +1231,113 @@ watch(datasetId, () => {
   flex: 1;
   min-height: 0;
   gap: 0;
+}
+
+.classify-browser-shell {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  outline: none;
+}
+
+.classify-label-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.classify-label-search {
+  margin: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cv-text, #fff);
+  font-size: 12px;
+  outline: none;
+}
+
+.classify-label-search::placeholder {
+  color: var(--cv-text-disabled, rgba(255,255,255,0.3));
+}
+
+.classify-label-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+.classify-label-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--cv-text, #fff);
+}
+
+.classify-label-item:hover {
+  background: var(--cv-hover, rgba(255,255,255,0.08));
+}
+
+.classify-label-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.classify-label-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classify-label-shortcut {
+  font-size: 10px;
+  color: var(--cv-text-disabled, rgba(255,255,255,0.3));
+  flex-shrink: 0;
+}
+
+.classify-label-add {
+  margin: 4px 8px 8px;
+  padding: 6px;
+  border: 1px dashed var(--cv-border, rgba(255,255,255,0.12));
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.classify-label-add:hover {
+  border-color: var(--cv-primary, #4098fc);
+  color: var(--cv-primary, #4098fc);
+}
+
+.classify-submit-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--cv-primary, #4098fc);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.classify-submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.classify-submit-btn:not(:disabled):hover {
+  background: var(--cv-primary-hover, #3080e0);
 }
 
 @media (max-width: 1100px) {
