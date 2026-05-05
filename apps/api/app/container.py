@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingImports=false
 
 from dependency_injector import containers, providers
 
@@ -29,6 +30,9 @@ from app.repositories.ls_read_repository import LsReadRepository
 from app.presets.registry import PresetRegistry
 from app.agent.session_store import SessionStore
 from app.agent.surface_store import SurfaceStore
+from app.services.preview_service import PreviewService
+from app.services.preview_store import PreviewStore
+from app.services.preview_upstream import MockUpstreamAdapter
 
 
 class Container(containers.DeclarativeContainer):
@@ -193,3 +197,10 @@ class Container(containers.DeclarativeContainer):
     auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
     surface_store: providers.Singleton[SurfaceStore] = providers.Singleton(SurfaceStore)
     session_store: providers.Singleton[SessionStore] = providers.Singleton(SessionStore)
+    preview_upstream: providers.Singleton[MockUpstreamAdapter] = providers.Singleton(MockUpstreamAdapter)
+    preview_store: providers.Singleton[PreviewStore] = providers.Singleton(PreviewStore)
+    preview_service: providers.Singleton[PreviewService] = providers.Singleton(
+        PreviewService,
+        store=preview_store,
+        upstream=preview_upstream,
+    )

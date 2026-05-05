@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
@@ -865,3 +865,45 @@ class GlobalChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     context: AgentContext = Field(default_factory=AgentContext)
     session_id: str | None = Field(default=None, description="Resume existing session; omit for auto-generated")
+
+
+# --- Preview session schemas ---
+
+class CreatePreviewSessionRequest(BaseModel):
+    collection_ref: str
+
+
+class PreviewItemResponse(BaseModel):
+    upstream_item_id: str
+    image_uris: list[str]
+    metadata: dict[str, Any] = {}
+
+
+class PreviewSessionResponse(BaseModel):
+    session_id: str
+    collection_ref: str
+    classification_enabled: bool  # always False in preview (read-only flag for frontend)
+    estimated_total: int | None
+    loaded_count: int
+    next_cursor: str | None
+    has_more: bool
+
+
+class PreviewItemsResponse(BaseModel):
+    items: list[PreviewItemResponse]
+    next_cursor: str | None
+    has_more: bool
+    estimated_total: int | None
+
+
+class StartPersistRequest(BaseModel):
+    scope: str = "entire_collection"
+
+
+class PersistStatusResponse(BaseModel):
+    dataset_id: str
+    persist_session_id: str
+    status: str
+    imported_count: int
+    remaining_count: int
+    error: str | None
