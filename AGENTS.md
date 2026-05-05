@@ -98,8 +98,16 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Prefect flows | `apps/api/app/flows/` |
 | Schedule service | `apps/api/app/services/scheduler.py` |
 | Agent runtime | `apps/api/app/agent/` |
-| Agent display protocol | `docs/agent-display-protocol.md` |
-| MCP server | `libs/mcp-server/` |
+| Agent display protocol | `docs/agent-display-protocol.md` | |
+| MCP server | `libs/mcp-server/` | |
+| Preview launch form | `apps/web/src/views/PreviewLaunchView.vue` | |
+| Preview workspace | `apps/web/src/views/PreviewClassifyView.vue` | |
+| Preview item drawer | `apps/web/src/components/preview/PreviewItemDrawer.vue` | |
+| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts` | |
+| Preview domain models | `apps/api/app/domain/preview.py` | |
+| Preview service | `apps/api/app/services/preview_service.py` | |
+| Preview TTL store | `apps/api/app/services/preview_store.py` | |
+| Upstream adapter | `apps/api/app/services/preview_upstream.py` | |
 
 ## CODE MAP
 | Symbol | Type | Location | Role |
@@ -116,6 +124,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PlatformClient` | MCP | `libs/mcp-server/finetune_mcp/client.py` | HTTP client for MCP server |
 | `router` | Vue Router | `apps/web/src/router.ts` | `/datasets`, `/jobs`, `/schedules` |
 | `FinetuneClient` | SDK | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |
+| `PreviewService` | service | `apps/api/app/services/preview_service.py` | Session lifecycle, item pagination, persist handoff |
+| `PreviewStore` | service | `apps/api/app/services/preview_store.py` | In-memory TTL session store |
+| `MockUpstreamAdapter` | service | `apps/api/app/services/preview_upstream.py` | 50-item mock upstream; replace with real adapter |
+| `usePreviewLoader` | composable | `apps/web/src/composables/usePreviewLoader.ts` | Cursor-based preview item loader |
+| `PreviewClassifyView` | view | `apps/web/src/views/PreviewClassifyView.vue` | Preview workspace with grid + persist flow |
 
 ## ANTI-PATTERNS — DO NOT
 
