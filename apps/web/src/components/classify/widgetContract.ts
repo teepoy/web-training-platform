@@ -3,7 +3,9 @@ import type { ComputedRef, InjectionKey } from "vue";
 export type SidebarWidgetContextKey =
   | "classify-dashboard"
   | "interaction-state"
-  | "prediction-grid-items";
+  | "prediction-grid-items"
+  | "browser-dashboard"
+  | "browser-items";
 
 export type SidebarWidgetIntentType =
   | "select-samples"
@@ -123,6 +125,8 @@ export interface SidebarWidgetSelfTestResult {
   checks: SidebarWidgetSelfTestCheck[];
 }
 
+export const BROWSER_DASHBOARD_KEY: InjectionKey<Record<string, unknown>> = Symbol("browserDashboard");
+
 export const SIDEBAR_WIDGET_INTERACTION_KEY: InjectionKey<
   ComputedRef<SidebarWidgetInteractionContext>
 > = Symbol("sidebarWidgetInteraction");
@@ -131,6 +135,8 @@ const VALID_CONTEXT_KEYS: SidebarWidgetContextKey[] = [
   "classify-dashboard",
   "interaction-state",
   "prediction-grid-items",
+  "browser-dashboard",
+  "browser-items",
 ];
 
 const VALID_INTENT_TYPES: SidebarWidgetIntentType[] = [
