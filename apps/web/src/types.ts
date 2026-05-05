@@ -825,6 +825,29 @@ export interface AnnotationGridItem {
   metadata: Record<string, unknown>;
 }
 
+export interface BrowserItem {
+  /** Sample or upstream item ID (unique key within a browser surface) */
+  id: string;
+  /** Resolved image src strings */
+  imageSrcs: string[];
+  /** Arbitrary metadata shown on hover / detail */
+  metadata: Record<string, unknown>;
+  /** Which surface this item came from — filled in by surface adapters */
+  sourceKind?: "dataset" | "preview" | "classify-review";
+  /** Current persisted label */
+  currentLabel: string | null;
+  /** Draft label assigned in-session but not yet submitted */
+  draftLabel: string | null;
+  /** Prediction label */
+  predictionLabel: string | null;
+  /** Prediction confidence 0–1 */
+  predictionConfidence: number | null;
+  /** Prediction ID for review submission */
+  predictionId: string | null;
+  /** Activation label (the label most recently activated/highlighted in the browser) */
+  activationLabel: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Global Agent types
 // ---------------------------------------------------------------------------
