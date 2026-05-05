@@ -376,6 +376,37 @@ export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
       ],
     },
   }),
+  "browser-summary": defineSidebarWidget({
+    key: "browser-summary",
+    component: defineAsyncComponent(
+      () => import("./widgets/BrowserSummaryWidget.vue"),
+    ),
+    contract: {
+      displayName: "Browser Summary",
+      description:
+        "Compact read-only widget showing loaded item count, visible (filtered) count, and active filter label.",
+      acceptsProps: ["totalLoaded", "filteredCount"],
+      capabilities: {
+        reads: ["browser-dashboard"],
+        emits: [],
+      },
+      selfTests: [
+        {
+          name: "renders item counts",
+          objective:
+            "Verify the widget shows loaded and filtered counts from injected browser dashboard context.",
+          steps: [
+            "Provide browser-dashboard context with totalLoaded and filteredCount values.",
+            "Render the widget without additional props.",
+          ],
+          expected: [
+            "The widget displays 'Showing X of Y items' without errors.",
+            "When context is absent the widget degrades gracefully showing '—'.",
+          ],
+        },
+      ],
+    },
+  }),
 };
 
 export const WIDGET_COMPONENTS: Record<string, Component> = Object.fromEntries(
@@ -511,5 +542,116 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
         thumbSize: 88,
       },
     },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Dataset browser panel preset — filtering-only, no classify-only widgets
+// ---------------------------------------------------------------------------
+
+/**
+ * Panels shown in the dataset browser sidebar.
+ *
+ * Excludes classify-only widgets (`annotation-progress`, `sample-viewer`,
+ * `selected-samples`).  The scatter widget has selection emission disabled
+ * because dataset browsing is read-only.
+ */
+export const datasetPanels: SidebarPanelDescriptor[] = [
+  {
+    id: "label-distribution",
+    component: "label-distribution",
+    title: "Label Distribution",
+    props: {
+      orientation: "horizontal",
+      showValues: true,
+      maxBars: 20,
+    },
+  },
+  {
+    id: "interactive-scatter",
+    component: "interactive-scatter",
+    title: "Interactive Scatter",
+    order: 15,
+    size: "normal",
+    props: {
+      data: {
+        inline: {
+          points: [],
+        },
+      },
+      config: {
+        interaction: {
+          collection: "browser-items",
+          entity: "sample",
+          emitSelection: false,
+          followSelection: false,
+          filterFromSelection: false,
+        },
+        maxPoints: 3000,
+      },
+    },
+  },
+  {
+    id: "browser-summary",
+    component: "browser-summary",
+    title: "Browser Summary",
+    order: 20,
+    size: "compact",
+    props: {},
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Preview browser panel preset — identical to datasetPanels for v1
+// ---------------------------------------------------------------------------
+
+/**
+ * Panels shown in the preview browser sidebar.
+ *
+ * Identical to `datasetPanels` for v1.  Preview items may not always carry
+ * label data; `BrowserSummaryWidget` degrades gracefully when context is absent.
+ */
+export const previewPanels: SidebarPanelDescriptor[] = [
+  {
+    id: "label-distribution",
+    component: "label-distribution",
+    title: "Label Distribution",
+    props: {
+      orientation: "horizontal",
+      showValues: true,
+      maxBars: 20,
+    },
+  },
+  {
+    id: "interactive-scatter",
+    component: "interactive-scatter",
+    title: "Interactive Scatter",
+    order: 15,
+    size: "normal",
+    props: {
+      data: {
+        inline: {
+          points: [],
+        },
+      },
+      config: {
+        interaction: {
+          collection: "browser-items",
+          entity: "sample",
+          emitSelection: false,
+          followSelection: false,
+          filterFromSelection: false,
+        },
+        maxPoints: 3000,
+      },
+    },
+  },
+  {
+    id: "browser-summary",
+    component: "browser-summary",
+    title: "Browser Summary",
+    order: 20,
+    size: "compact",
+    props: {},
   },
 ];
