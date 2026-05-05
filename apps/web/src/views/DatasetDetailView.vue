@@ -64,29 +64,35 @@
         <!-- TAB 1: Samples -->
         <!-- ============================================================ -->
         <n-tab-pane name="samples" tab="Samples">
-          <div style="margin-bottom: 12px; display: flex; justify-content: flex-end">
+          <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
+            <n-radio-group v-model:value="prefs.layout" size="small">
+              <n-radio-button value="grid">Grid</n-radio-button>
+              <n-radio-button value="list">List</n-radio-button>
+            </n-radio-group>
             <n-button type="primary" @click="showAddSampleModal = true">Add Sample</n-button>
           </div>
 
-          <n-spin :show="samplesQuery.isLoading.value">
-            <n-data-table
-              :columns="sampleColumns"
-              :data="samples"
-              :bordered="true"
-              :single-line="false"
-              :row-key="(row: Sample) => row.id"
-              :row-props="rowProps"
+          <div class="ds-samples-layout">
+            <SampleBrowser
+              :items="filteredSamples"
+              :total-count="sampleLoader.totalCount.value"
+              :thumb-size="prefs.thumbSize"
+              :layout="prefs.layout"
+              :is-loading="sampleLoader.isLoading.value"
+              :selection-enabled="false"
+              :show-checkboxes="false"
+              :show-label-rail="false"
+              :show-bottom-bar="false"
+              activation-mode="open"
+              @open-item="openSampleDetail"
+              @load-more="sampleLoader.loadMore()"
             />
-          </n-spin>
-
-          <div style="margin-top: 16px; display: flex; justify-content: flex-end">
-            <n-pagination
-              v-model:page="samplePage"
-              :page-size="samplePageSize"
-              :item-count="samplesTotal"
-              show-size-picker
-              :page-sizes="[10, 20, 50]"
-              @update:page-size="onSamplePageSizeChange"
+            <BrowserSidebar
+              :panels="datasetPanels"
+              :context="browserSidebarContext as unknown as Record<string, unknown>"
+              :interaction="datasetInteraction"
+              :collapsed="prefs.sidebarCollapsed"
+              @update:collapsed="prefs.setSidebarCollapsed"
             />
           </div>
 
@@ -307,14 +313,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, watch } from "vue";
+import { ref, computed, h, watch, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, type FormInst, type FormRules, type DataTableColumns, NImage, NImageGroup, NTag } from "naive-ui";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMessage, type FormInst, type FormRules, type DataTableColumns } from "naive-ui";
 import { api } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
-import type { Sample, Dataset } from "../types";
+import type { BrowserItem, Dataset } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
+import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
+import BrowserSidebar from "../components/sample-browser/BrowserSidebar.vue";
+import { datasetPanels } from "../components/classify/sidebarConfig";
+import { useSampleBrowserPrefs } from "../stores/sampleBrowser";
+import { useSampleLoader } from "../composables/useSampleLoader";
+import { useBrowserFilter } from "../composables/useBrowserFilter";
+import {
+  reduceCollectionIntent,
+  reduceLabelFilterIntent,
+  type SidebarWidgetInteractionContext,
+  type SidebarWidgetInteractionState,
+} from "../components/classify/widgetContract";
 import type { DatasetExport, ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 
 // ---------------------------------------------------------------------------
@@ -324,6 +342,7 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const prefs = useSampleBrowserPrefs();
 
 const id = computed(() => String(route.params.id));
 
@@ -347,117 +366,103 @@ const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
 // ---------------------------------------------------------------------------
 // Samples tab
 // ---------------------------------------------------------------------------
-const samplePage = ref(1);
-const samplePageSize = ref(10);
+const sampleLoader = useSampleLoader({ datasetId: id });
 
-const sampleOffset = computed(() => (samplePage.value - 1) * samplePageSize.value);
+const browserSamples = computed<BrowserItem[]>(() =>
+  sampleLoader.samples.value.map((sample) => ({
+    id: sample.id,
+    imageSrcs: resolveImageUris(sample.image_uris),
+    metadata: sample.metadata ?? {},
+    sourceKind: "dataset",
+    currentLabel: sample.latest_annotation?.label ?? null,
+    draftLabel: null,
+    predictionLabel: null,
+    predictionConfidence: null,
+    predictionId: null,
+    activationLabel: null,
+  }))
+);
 
-const samplesQuery = useQuery({
-  queryKey: computed(() => ["samples", id.value, sampleOffset.value, samplePageSize.value]),
-  queryFn: () => api.listSamples(id.value, sampleOffset.value, samplePageSize.value),
+const datasetInteractionState = ref<SidebarWidgetInteractionState>({
+  activeLabelFilter: null,
+  selectedLabels: [],
+  collections: {},
+});
+
+const datasetInteraction = computed<SidebarWidgetInteractionContext>(() => ({
+  state: datasetInteractionState.value,
+  dispatch: (intent) => {
+    datasetInteractionState.value = {
+      ...datasetInteractionState.value,
+      activeLabelFilter: reduceLabelFilterIntent(datasetInteractionState.value.activeLabelFilter, intent),
+      collections: reduceCollectionIntent(datasetInteractionState.value.collections, intent),
+    };
+  },
+}));
+
+const { filteredItems: filteredSamples } = useBrowserFilter(browserSamples, datasetInteractionState);
+
+const browserSidebarStats = computed(() => {
+  const labelCounts: Record<string, number> = {};
+  let annotatedSamples = 0;
+
+  for (const sample of sampleLoader.samples.value) {
+    const label = sample.latest_annotation?.label ?? null;
+    if (!label) {
+      continue;
+    }
+    annotatedSamples += 1;
+    labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+  }
+
+  return {
+    total_samples: sampleLoader.totalCount.value,
+    annotated_samples: annotatedSamples,
+    unlabeled_samples: Math.max(sampleLoader.totalCount.value - annotatedSamples, 0),
+    label_counts: labelCounts,
+  };
+});
+
+const browserSidebarDashboard = {
+  get stats() {
+    return browserSidebarStats.value;
+  },
+  get isLoading() {
+    return sampleLoader.isLoading.value && sampleLoader.samples.value.length === 0;
+  },
+  get isError() {
+    return false;
+  },
+  get errorMessage() {
+    return null;
+  },
+  get draftCount() {
+    return 0;
+  },
+  get selectedCount() {
+    return 0;
+  },
+  get labelSpace() {
+    return labelSpace.value;
+  },
+  refetch: () => sampleLoader.reset(),
+};
+
+provide("classifyDashboard", browserSidebarDashboard);
+
+const browserSidebarContext = computed(() => ({
+  totalLoaded: sampleLoader.samples.value.length,
+  filteredCount: filteredSamples.value.length,
+}));
+
+const featureSamplesQuery = useQuery({
+  queryKey: computed(() => ["feature-samples", id.value]),
+  queryFn: () => api.listSamples(id.value, 0, 100),
   enabled: computed(() => !!id.value),
 });
 
-const samples = computed(() => samplesQuery.data.value?.items ?? []);
-const samplesTotal = computed(() => samplesQuery.data.value?.total ?? 0);
-
-function onSamplePageSizeChange(newSize: number) {
-  samplePageSize.value = newSize;
-  samplePage.value = 1;
-}
-
-// Sample table columns
-const sampleColumns = computed<DataTableColumns<Sample>>(() => [
-  {
-    title: "Preview",
-    key: "preview",
-    width: 72,
-    render: (row) => {
-      const srcs = resolveImageUris(row.image_uris);
-      if (srcs.length === 1) {
-        return h(NImage, {
-          src: srcs[0],
-          width: 48,
-          height: 48,
-          objectFit: "cover",
-          style: "border-radius: 4px; cursor: pointer",
-        });
-      }
-      return h(NImageGroup, null, {
-        default: () =>
-          srcs.map((src, i) =>
-            h(NImage, {
-              key: i,
-              src,
-              width: 48,
-              height: 48,
-              objectFit: "cover",
-              style: i === 0
-                ? "border-radius: 4px; cursor: pointer"
-                : "display: none",
-            })
-          ),
-      });
-    },
-  },
-  {
-    title: "ID",
-    key: "id",
-    width: 100,
-    ellipsis: { tooltip: true },
-    render: (row) => h("span", { style: "font-family: monospace; font-size: 11px" }, row.id.slice(0, 8) + "…"),
-  },
-  {
-    title: "LS Task",
-    key: "ls_task_id",
-    width: 80,
-    render: (row) => {
-      if (row.ls_task_id != null) {
-        return h(NTag, { size: "small", type: "info" }, { default: () => `#${row.ls_task_id}` });
-      }
-      return h("span", { style: "color: #999; font-size: 11px" }, "—");
-    },
-  },
-  {
-    title: "Images",
-    key: "image_uris",
-    ellipsis: { tooltip: true },
-    render: (row) => {
-      const count = row.image_uris.length;
-      const first = row.image_uris[0] ?? "";
-      const label = first.length > 30 ? first.slice(0, 30) + "…" : first;
-      return h(
-        "span",
-        { style: "font-family: monospace; font-size: 12px; word-break: break-all" },
-        count > 1 ? `[${count}] ${label}` : label
-      );
-    },
-  },
-  {
-    title: "Metadata",
-    key: "metadata",
-    width: 200,
-    render: (row) => {
-      const preview = JSON.stringify(row.metadata);
-      return h(
-        "span",
-        { style: "font-size: 11px; color: #888" },
-        preview.length > 40 ? preview.slice(0, 40) + "…" : preview
-      );
-    },
-  },
-]);
-
 // Add Sample form
 const showAddSampleModal = ref(false);
-
-// Row props for clickable sample rows
-const rowProps = (row: Sample) => ({
-  style: "cursor: pointer",
-  onClick: () => {
-    selectedSampleId.value = row.id;
-  },
-});
 const sampleFormRef = ref<FormInst | null>(null);
 const sampleForm = ref({ image_uris: "", metadata_raw: "" });
 
@@ -482,20 +487,6 @@ function onFileChange(e: Event) {
     uploadPreviewUrl.value = URL.createObjectURL(file);
   }
 }
-
-const createSampleMutation = useMutation({
-  mutationFn: (vars: { image_uris: string[]; metadata: Record<string, unknown> }) =>
-    api.createSample(id.value, vars),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["samples", id.value] });
-    message.success("Sample created");
-    showAddSampleModal.value = false;
-    sampleForm.value = { image_uris: "", metadata_raw: "" };
-  },
-  onError: (e: Error) => {
-    message.error(`Failed to create sample: ${e.message}`);
-  },
-});
 
 function submitSample() {
   sampleFormRef.value?.validate(async (errors) => {
@@ -523,7 +514,8 @@ function submitSample() {
         }
       }
 
-      qc.invalidateQueries({ queryKey: ["samples", id.value] });
+      sampleLoader.reset();
+      qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
       message.success("Sample created");
       showAddSampleModal.value = false;
       sampleForm.value = { image_uris: "", metadata_raw: "" };
@@ -536,6 +528,10 @@ function submitSample() {
       message.error(`Failed to create sample: ${(e as Error).message}`);
     }
   });
+}
+
+function openSampleDetail(sampleId: string) {
+  selectedSampleId.value = sampleId;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,9 +573,12 @@ async function doPersistExport() {
 // ---------------------------------------------------------------------------
 const activeTab = ref("samples");
 
-// Reset page on dataset change
+onMounted(() => {
+  void sampleLoader.loadMore();
+});
+
+// Reset export state on dataset change
 watch(id, () => {
-  samplePage.value = 1;
   exportData.value = null;
 });
 
@@ -635,7 +634,7 @@ const similaritySampleId = ref<string | null>(null);
 const similarityResult = ref<SimilarityResponse | null>(null);
 
 const sampleSelectOptions = computed(() =>
-  (samplesQuery.data.value?.items ?? []).map((s: Sample) => ({
+  (featureSamplesQuery.data.value?.items ?? []).map((s) => ({
     label: `${s.id.slice(0, 8)}… — ${s.image_uris.length} image(s)`,
     value: s.id,
   }))
@@ -754,3 +753,12 @@ async function doUncoveredClusters() {
 }
 
 </script>
+
+<style scoped>
+.ds-samples-layout {
+  display: flex;
+  height: 600px;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>
