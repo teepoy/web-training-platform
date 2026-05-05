@@ -41,14 +41,23 @@ async function handlePreview() {
           :disabled="isLoading"
           @keyup.enter="handlePreview"
         />
-        <NButton
-          type="primary"
-          :loading="isLoading"
-          :disabled="!collectionRef.trim()"
-          @click="handlePreview"
-        >
-          Preview
-        </NButton>
+        <NSpace>
+          <NButton
+            type="primary"
+            :loading="isLoading"
+            :disabled="!collectionRef.trim()"
+            @click="handlePreview"
+          >
+            Preview
+          </NButton>
+          <NButton
+            secondary
+            :disabled="isLoading"
+            @click="collectionRef = 'imagenet-1k-sample'"
+          >
+            Use mock
+          </NButton>
+        </NSpace>
       </NSpace>
     </NCard>
   </div>

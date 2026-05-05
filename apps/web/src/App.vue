@@ -134,6 +134,7 @@ const menuOptions = [
   { label: 'Dashboard', key: '/dashboard' },
   { label: 'Task Explorer', key: '/tasks' },
   { label: 'Datasets', key: '/datasets' },
+  { label: 'Preview', key: '/preview' },
   { label: 'Training Jobs', key: '/jobs' },
   { label: 'Models', key: '/models' },
   { label: 'Preset Catalog', key: '/presets' },
