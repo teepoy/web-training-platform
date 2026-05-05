@@ -21,6 +21,8 @@ export const router = createRouter({
     { path: '/presets', component: () => import('./views/PresetEditorView.vue') },
     { path: '/schedules', component: () => import('./views/SchedulesView.vue') },
     { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },
+    { path: '/preview', name: 'preview-launch', component: () => import('./views/PreviewLaunchView.vue') },
+    { path: '/preview/:sessionId', name: 'preview-classify', component: () => import('./views/PreviewClassifyView.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./views/NotFoundView.vue') },
   ],
 })
