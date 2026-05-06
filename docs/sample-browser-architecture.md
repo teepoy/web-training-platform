@@ -37,19 +37,27 @@ The core component handles high-performance rendering and common interaction pat
 
 User presentation choices are persisted to `localStorage` across all surfaces via the `sampleBrowser` Pinia store:
 
-- **Persisted**: `layout`, `thumbSize`, `sidebarCollapsed`.
+- **Persisted**: `layout`, `thumbSize`, `sidebarCollapsed`, `sidebarWidth`.
+- **Sidebar width key**: `sample_browser.sidebar_width` stores the intended expanded width (clamped: MIN=200, MAX=520, DEFAULT=280).
+- **Pointer-resize**: The shell uses `setPointerCapture` on the resize handle (`data-testid="browser-sidebar-resize-handle"`) to provide fluid width adjustment.
 - **Volatile**: Filters, current selection, and scroll position (reset on navigation).
 
 ## Sidebar Shell & Panel Presets
 
-The `BrowserSidebar.vue` component provides a neutral shell for dashboard widgets. It injects a `BROWSER_DASHBOARD_KEY` context that widgets use to resolve stats.
+The `BrowserSidebar.vue` component provides a neutral shell for dashboard widgets. It injects a `BROWSER_DASHBOARD_KEY` context that widgets use to resolve stats. It responds to the `sample_browser.sidebar_width` preference and handles collapse/restore logic internally.
 
 ### Panel Presets (`sidebarConfig.ts`)
 | Preset | Surface | Purpose | Included Widgets |
 |--------|---------|---------|------------------|
-| `defaultPanels` | Classify | Full annotation workflow | progress, scatter, viewer, distribution, summary |
-| `datasetPanels` | Dataset | Read-only exploration | distribution, scatter (read-only), summary |
-| `previewPanels` | Preview | Remote data inspection | distribution, scatter (read-only), summary |
+| `defaultPanels` | Classify | Full annotation workflow | progress, **wafer-map**, viewer, distribution, summary |
+| `datasetPanels` | Dataset | Read-only exploration | distribution, **wafer-map**, summary |
+| `previewPanels` | Preview | Remote data inspection | distribution, **wafer-map**, summary |
+
+*Note: All surfaces use `wafer-map` for spatial metadata visualization (wafer_x, wafer_y). Classify and Dataset surfaces resolve points via the dataset-level `queryWaferPoints` API, while Preview resolves points from session-loaded item metadata.*
+
+### Wafer coordinate convention
+
+Wafer coordinates (`metadata.wafer_x`, `metadata.wafer_y`) are stored and rendered in **nanometers**, with the wafer disk anchored at the origin and a default radius of `150_000_000 nm` (300 mm wafer). The widget enforces a fixed 1:1 square plotting area at `±150_000_000 nm` on both axes regardless of container aspect ratio, so brush math and the wafer edge stay aligned after sidebar resize. The widget exposes a `waferRadiusNm` config override for non-default wafer geometries; the seed script `scripts/seed_wafer_demo.py` emits coordinates within the default disk via rejection sampling.
 
 ## Surface Responsibilities
 

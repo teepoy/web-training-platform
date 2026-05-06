@@ -79,12 +79,23 @@ When using `make updev`, expect the frontend to run as a local Vite process on
 - [ ] Apply a label annotation
 - [ ] Verify annotation is saved
 
-### 3.3 Classify Sidebar Scatter
-- [ ] Open a dataset whose samples include numeric `metadata.scatter_x` and `metadata.scatter_y`
-- [ ] Verify the `Interactive Scatter` panel appears in the classify sidebar and renders points
-- [ ] Click one scatter point and verify the `Selected Samples` panel shows the linked sample preview
-- [ ] Cmd/Ctrl-click another point and verify sidebar selection expands
-- [ ] Click `Clear` in the scatter panel and verify the linked sample preview resets
+### 3.3 Classify Sidebar Wafer Map
+- [ ] Open a dataset whose samples include numeric `metadata.wafer_x` and `metadata.wafer_y`
+- [ ] Verify the `Wafer Map` panel appears in the classify sidebar and renders points
+- [ ] Click one point and verify the `Selected Samples` panel shows the linked sample preview
+- [ ] Brush-select a region and verify sidebar selection expands
+- [ ] Click `Clear` in the wafer map panel and verify the linked sample preview resets
+
+## 3.4 Dataset Detail Wafer Map
+- [ ] Navigate to the dataset detail page for a wafer dataset
+- [ ] Verify the `Wafer Map` panel appears in the sidebar and renders points
+- [ ] Verify selection emission is disabled (dataset browsing is read-only)
+
+## 3.5 Remote Preview Wafer Map
+- [ ] Launch a preview session (e.g., via `PreviewLaunchView.vue`) for data with wafer metadata
+- [ ] Verify the `Wafer Map` panel appears in the preview workspace
+- [ ] Verify points are rendered from session-loaded metadata (no dataset ID required)
+- [ ] If no wafer metadata is present, verify the panel shows "No wafer points" empty state
 
 ## 4. Training Presets
 
@@ -196,6 +207,19 @@ Hybrid automation note:
 - [ ] Verify each sample contains multiple `image_uris`
 - [ ] Verify sample metadata includes numeric `scatter_x` and `scatter_y`
 - [ ] Verify the interactive scatter component can plot the seeded coordinates and drill into the linked sample viewer
+
+## 9.2.2 Wafer Map Demo (High-Volume Spatial)
+
+This demo tests the virtualization and spatial indexing capabilities with 200k+ points. It is isolated from ImageNet mock flows.
+
+- [ ] Run `make seed-wafer-demo ARGS="--samples 200000 --batch-size 5000 --reset"` against a healthy dev stack.
+    - *Note: Rerunning without `--reset` is idempotent.*
+- [ ] Open the "Classify" view for the "Wafer Demo" dataset.
+- [ ] Verify the **Wafer Map** panel (`data-testid="wafer-map-panel"`) appears in the sidebar.
+- [ ] Repeat verification for the **Dataset Detail** view and **Remote Preview** workspace.
+- [ ] Drag a region on the wafer map in Classify view to select points.
+- [ ] Verify the "Selected Samples" panel updates and displays thumbnails for the selected region.
+    - *Note: Previews are bounded by `PREVIEW_HYDRATION_CAP = 50`.*
 
 ## 9.3 Prediction Dev Smoke
 
