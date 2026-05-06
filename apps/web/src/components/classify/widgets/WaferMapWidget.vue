@@ -1,6 +1,10 @@
 <!--
   WaferMapWidget — high-density scatter map constrained to a wafer circle.
 
+  Coordinate domain: nanometers, fixed to ±WAFER_RADIUS_NM on both axes.
+  The plotting area is rendered as a square regardless of container aspect
+  so brush math and the wafer edge stay 1:1 even after sidebar resize.
+
   Inline data shape:
     {
       inline: {
@@ -9,11 +13,12 @@
     }
 
   Config props:
-    interaction  SidebarWidgetInteractionConfig  — enables linked selection/filter intents
-    maxPoints    number                          — optional hard cap for rendered points
+    interaction    SidebarWidgetInteractionConfig  — enables linked selection/filter intents
+    maxPoints      number                          — optional hard cap for rendered points
+    waferRadiusNm  number                          — overrides default 150_000_000 nm radius
 -->
 <script setup lang="ts">
-import { computed, inject, ref, shallowRef, watch } from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import type { EChartsOption } from "echarts";
@@ -29,6 +34,10 @@ import {
 } from "../widgetContract";
 
 use([LineChart, ScatterChart, GridComponent, TooltipComponent, CanvasRenderer]);
+
+const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
+const MIN_VIEWPORT_FRACTION = 0.001;
+const GRID_BREATHING_PX = 8;
 
 interface RawPointObject {
   id: string;
@@ -63,6 +72,8 @@ const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
 
 const chartRootRef = ref<HTMLElement | null>(null);
 
+const containerSize = ref({ w: 1, h: 1 });
+
 const dragState = ref({
   active: false,
   startX: 0,
@@ -88,6 +99,11 @@ const benchmark = ref({
   queryP95Ms: 0,
   queryMaxMs: 0,
   avgSelected: 0,
+});
+
+const waferRadius = computed(() => {
+  const parsed = Number(props.config?.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WAFER_RADIUS_NM;
 });
 
 const interactionConfig = computed<SidebarWidgetInteractionConfig | null>(() => {
@@ -118,19 +134,19 @@ const benchmarkConfig = computed<WaferBenchmarkConfig>(() => {
 
 const generatedPoints = ref<WaferPoint[] | null>(null);
 
-function generateBenchmarkPoints(count: number): WaferPoint[] {
+function generateBenchmarkPoints(count: number, radius: number): WaferPoint[] {
   const safeCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 1_000_000;
   const points: WaferPoint[] = new Array(safeCount);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
 
   for (let i = 0; i < safeCount; i += 1) {
     const ratio = (i + 0.5) / safeCount;
-    const radius = Math.sqrt(ratio);
+    const r = Math.sqrt(ratio) * radius;
     const theta = i * goldenAngle;
     points[i] = {
       id: `bench-${i}`,
-      x: radius * Math.cos(theta),
-      y: radius * Math.sin(theta),
+      x: r * Math.cos(theta),
+      y: r * Math.sin(theta),
       value: 1,
     };
   }
@@ -139,8 +155,8 @@ function generateBenchmarkPoints(count: number): WaferPoint[] {
 }
 
 watch(
-  benchmarkConfig,
-  (cfg) => {
+  [benchmarkConfig, waferRadius],
+  ([cfg, radius]) => {
     const enabled = Boolean(cfg.enabled);
     if (!enabled) {
       generatedPoints.value = null;
@@ -155,7 +171,7 @@ watch(
 
     const pointCount = Number(cfg.pointCount ?? 1_000_000);
     const start = performance.now();
-    generatedPoints.value = generateBenchmarkPoints(pointCount);
+    generatedPoints.value = generateBenchmarkPoints(pointCount, radius);
     benchmark.value = {
       ...benchmark.value,
       enabled: true,
@@ -187,6 +203,7 @@ const normalizedPoints = computed<WaferPoint[]>(() => {
 
   const parsed: WaferPoint[] = [];
   const limit = maxPoints.value;
+  const radiusSquared = waferRadius.value * waferRadius.value;
 
   for (let i = 0; i < points.length; i += 1) {
     if (limit != null && parsed.length >= limit) {
@@ -203,7 +220,7 @@ const normalizedPoints = computed<WaferPoint[]>(() => {
       if (!id || !Number.isFinite(x) || !Number.isFinite(y)) {
         continue;
       }
-      if (x * x + y * y > 1) {
+      if (x * x + y * y > radiusSquared) {
         continue;
       }
       parsed.push({ id, x, y, value: Number.isFinite(value) ? value : 1 });
@@ -222,7 +239,7 @@ const normalizedPoints = computed<WaferPoint[]>(() => {
     if (!id || !Number.isFinite(x) || !Number.isFinite(y)) {
       continue;
     }
-    if (x * x + y * y > 1) {
+    if (x * x + y * y > radiusSquared) {
       continue;
     }
     parsed.push({ id, x, y, value: Number.isFinite(value) ? value : 1 });
@@ -239,7 +256,7 @@ watch(
   normalizedPoints,
   (points) => {
     const start = performance.now();
-    const index = new KDBush(points.length, 64, Float32Array);
+    const index = new KDBush(points.length, 64, Float64Array);
     for (let i = 0; i < points.length; i += 1) {
       index.add(points[i].x, points[i].y);
     }
@@ -268,20 +285,21 @@ function runIndexQueryBenchmark(): void {
   const iterations = Number.isFinite(iterationsRaw) && iterationsRaw > 0
     ? Math.floor(iterationsRaw)
     : 16;
+  const radius = waferRadius.value;
   const boxSizeRaw = Number(cfg.queryBoxSize ?? 0.22);
-  const boxSize = Math.min(0.95, Math.max(0.01, Number.isFinite(boxSizeRaw) ? boxSizeRaw : 0.22));
-  const half = boxSize / 2;
+  const fraction = Math.min(0.95, Math.max(0.01, Number.isFinite(boxSizeRaw) ? boxSizeRaw : 0.22));
+  const half = (fraction * radius);
 
   const times: number[] = [];
   let selectedTotal = 0;
 
   for (let i = 0; i < iterations; i += 1) {
-    const cx = -1 + (2 * (i + 0.5)) / iterations;
-    const cy = -1 + (2 * (((i * 7) % iterations) + 0.5)) / iterations;
-    const minX = Math.max(-1, cx - half);
-    const maxX = Math.min(1, cx + half);
-    const minY = Math.max(-1, cy - half);
-    const maxY = Math.min(1, cy + half);
+    const cx = -radius + (2 * radius * (i + 0.5)) / iterations;
+    const cy = -radius + (2 * radius * (((i * 7) % iterations) + 0.5)) / iterations;
+    const minX = Math.max(-radius, cx - half);
+    const maxX = Math.min(radius, cx + half);
+    const minY = Math.max(-radius, cy - half);
+    const maxY = Math.min(radius, cy + half);
 
     const start = performance.now();
     const matches = index.range(minX, minY, maxX, maxY);
@@ -336,11 +354,12 @@ const selectedPoints = computed(() => {
 });
 
 const waferBoundaryPoints = computed(() => {
+  const radius = waferRadius.value;
   const points: Array<[number, number]> = [];
   const steps = 180;
   for (let i = 0; i <= steps; i += 1) {
     const theta = (Math.PI * 2 * i) / steps;
-    points.push([Math.cos(theta), Math.sin(theta)]);
+    points.push([radius * Math.cos(theta), radius * Math.sin(theta)]);
   }
   return points;
 });
@@ -430,18 +449,54 @@ function clearSelectionAndFilter(): void {
   });
 }
 
-function toDataX(localX: number, width: number): number {
-  if (width <= 0) {
-    return 0;
-  }
-  return (localX / width) * 2 - 1;
-}
+const viewport = ref({
+  minX: -DEFAULT_WAFER_RADIUS_NM,
+  maxX: DEFAULT_WAFER_RADIUS_NM,
+  minY: -DEFAULT_WAFER_RADIUS_NM,
+  maxY: DEFAULT_WAFER_RADIUS_NM,
+});
 
-function toDataY(localY: number, height: number): number {
-  if (height <= 0) {
-    return 0;
-  }
-  return 1 - (localY / height) * 2;
+watch(
+  waferRadius,
+  (radius) => {
+    viewport.value = { minX: -radius, maxX: radius, minY: -radius, maxY: radius };
+  },
+  { immediate: true },
+);
+
+const gridInsets = computed(() => {
+  const w = Math.max(1, containerSize.value.w);
+  const h = Math.max(1, containerSize.value.h);
+  const side = Math.max(1, Math.min(w, h) - GRID_BREATHING_PX * 2);
+  const left = (w - side) / 2;
+  const top = (h - side) / 2;
+  return {
+    left: Math.max(0, left),
+    right: Math.max(0, w - left - side),
+    top: Math.max(0, top),
+    bottom: Math.max(0, h - top - side),
+  };
+});
+
+function getDataCoords(localX: number, localY: number): [number, number] {
+  const insets = gridInsets.value;
+  const w = Math.max(1, containerSize.value.w);
+  const h = Math.max(1, containerSize.value.h);
+
+  const gridWidth = Math.max(1, w - insets.left - insets.right);
+  const gridHeight = Math.max(1, h - insets.top - insets.bottom);
+
+  const gridX = localX - insets.left;
+  const gridY = localY - insets.top;
+
+  const fracX = Math.max(0, Math.min(1, gridX / gridWidth));
+  const fracY = Math.max(0, Math.min(1, 1 - gridY / gridHeight));
+
+  const { minX, maxX, minY, maxY } = viewport.value;
+  return [
+    minX + fracX * (maxX - minX),
+    minY + fracY * (maxY - minY),
+  ];
 }
 
 function rangeSelectionFromDrag(): string[] {
@@ -451,17 +506,18 @@ function rangeSelectionFromDrag(): string[] {
     return [];
   }
 
-  const width = root.clientWidth;
-  const height = root.clientHeight;
-  const x0 = Math.min(dragState.value.startX, dragState.value.endX);
-  const y0 = Math.min(dragState.value.startY, dragState.value.endY);
-  const x1 = Math.max(dragState.value.startX, dragState.value.endX);
-  const y1 = Math.max(dragState.value.startY, dragState.value.endY);
+  const x0 = dragState.value.startX;
+  const y0 = dragState.value.startY;
+  const x1 = dragState.value.endX;
+  const y1 = dragState.value.endY;
 
-  const minX = toDataX(x0, width);
-  const maxX = toDataX(x1, width);
-  const maxY = toDataY(y0, height);
-  const minY = toDataY(y1, height);
+  const [dataX0, dataY0] = getDataCoords(x0, y0);
+  const [dataX1, dataY1] = getDataCoords(x1, y1);
+
+  const minX = Math.min(dataX0, dataX1);
+  const maxX = Math.max(dataX0, dataX1);
+  const minY = Math.min(dataY0, dataY1);
+  const maxY = Math.max(dataY0, dataY1);
 
   const queryStart = performance.now();
   const pointIndexes = index.range(minX, minY, maxX, maxY);
@@ -560,6 +616,71 @@ const chartHeight = computed(() => {
   }
 });
 
+const isZoomed = computed(() => {
+  const radius = waferRadius.value;
+  const { minX, maxX, minY, maxY } = viewport.value;
+  return minX > -radius || maxX < radius || minY > -radius || maxY < radius;
+});
+
+function resetZoom() {
+  const radius = waferRadius.value;
+  viewport.value = { minX: -radius, maxX: radius, minY: -radius, maxY: radius };
+}
+
+function onWheel(event: WheelEvent) {
+  event.preventDefault();
+  const root = chartRootRef.value;
+  if (!root) return;
+
+  const radius = waferRadius.value;
+  const rect = root.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+
+  const zoomFactor = event.deltaY > 0 ? 1.15 : 1 / 1.15;
+  const [dataX, dataY] = getDataCoords(localX, localY);
+
+  const width = viewport.value.maxX - viewport.value.minX;
+  const height = viewport.value.maxY - viewport.value.minY;
+
+  const minSpan = MIN_VIEWPORT_FRACTION * radius;
+  const maxSpan = 2 * radius;
+  const newWidth = Math.max(minSpan, Math.min(maxSpan, width * zoomFactor));
+  const newHeight = Math.max(minSpan, Math.min(maxSpan, height * zoomFactor));
+
+  const fracX = (dataX - viewport.value.minX) / width;
+  const fracY = (dataY - viewport.value.minY) / height;
+
+  let nextMinX = dataX - newWidth * fracX;
+  let nextMaxX = dataX + newWidth * (1 - fracX);
+  let nextMinY = dataY - newHeight * fracY;
+  let nextMaxY = dataY + newHeight * (1 - fracY);
+
+  if (nextMinX < -radius) {
+    nextMaxX = Math.min(radius, nextMaxX + (-radius - nextMinX));
+    nextMinX = -radius;
+  }
+  if (nextMaxX > radius) {
+    nextMinX = Math.max(-radius, nextMinX - (nextMaxX - radius));
+    nextMaxX = radius;
+  }
+  if (nextMinY < -radius) {
+    nextMaxY = Math.min(radius, nextMaxY + (-radius - nextMinY));
+    nextMinY = -radius;
+  }
+  if (nextMaxY > radius) {
+    nextMinY = Math.max(-radius, nextMinY - (nextMaxY - radius));
+    nextMaxY = radius;
+  }
+
+  viewport.value = {
+    minX: nextMinX,
+    maxX: nextMaxX,
+    minY: nextMinY,
+    maxY: nextMaxY,
+  };
+}
+
 const chartOption = computed<EChartsOption>(() => {
   const series: Extract<EChartsOption["series"], unknown[]> = [
     {
@@ -567,11 +688,8 @@ const chartOption = computed<EChartsOption>(() => {
       type: "line",
       data: waferBoundaryPoints.value,
       lineStyle: {
-        width: 1,
-        color: "rgba(120, 180, 220, 0.55)",
-      },
-      areaStyle: {
-        color: "rgba(120, 180, 220, 0.06)",
+        width: 1.5,
+        color: "#000000",
       },
       symbol: "none",
       silent: true,
@@ -587,11 +705,11 @@ const chartOption = computed<EChartsOption>(() => {
       symbolSize: 2,
       data: normalizedPoints.value.map((point) => [point.x, point.y, point.id, point.value]),
       itemStyle: {
-        color: "rgba(147, 204, 255, 0.55)",
+        color: "#d83a3a",
       },
       emphasis: {
         itemStyle: {
-          color: "#f7c948",
+          color: "#7a1f1f",
         },
       },
       z: 2,
@@ -606,6 +724,8 @@ const chartOption = computed<EChartsOption>(() => {
       symbolSize: 4,
       itemStyle: {
         color: "#f7c948",
+        borderColor: "#7a5c00",
+        borderWidth: 1,
       },
       silent: true,
       z: 3,
@@ -613,13 +733,13 @@ const chartOption = computed<EChartsOption>(() => {
   }
 
   return {
-    backgroundColor: "transparent",
+    backgroundColor: "#ffffff",
     animation: false,
     grid: {
-      left: 12,
-      right: 12,
-      top: 12,
-      bottom: 12,
+      left: gridInsets.value.left,
+      right: gridInsets.value.right,
+      top: gridInsets.value.top,
+      bottom: gridInsets.value.bottom,
       containLabel: false,
     },
     tooltip: {
@@ -636,21 +756,21 @@ const chartOption = computed<EChartsOption>(() => {
           return "Point";
         }
         const id = typeof row[2] === "string" ? row[2] : "n/a";
-        const x = typeof row[0] === "number" ? row[0].toFixed(4) : "n/a";
-        const y = typeof row[1] === "number" ? row[1].toFixed(4) : "n/a";
-        return `id: <b>${id}</b><br/>x: ${x}<br/>y: ${y}`;
+        const x = typeof row[0] === "number" ? row[0].toFixed(0) : "n/a";
+        const y = typeof row[1] === "number" ? row[1].toFixed(0) : "n/a";
+        return `id: <b>${id}</b><br/>x: ${x} nm<br/>y: ${y} nm`;
       },
     },
     xAxis: {
       type: "value",
-      min: -1,
-      max: 1,
+      min: viewport.value.minX,
+      max: viewport.value.maxX,
       show: false,
     },
     yAxis: {
       type: "value",
-      min: -1,
-      max: 1,
+      min: viewport.value.minY,
+      max: viewport.value.maxY,
       show: false,
     },
     series,
@@ -674,6 +794,34 @@ const selectionRectStyle = computed(() => {
     height: `${height}px`,
   };
 });
+
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  const root = chartRootRef.value;
+  if (!root) return;
+
+  containerSize.value = { w: root.clientWidth || 1, h: root.clientHeight || 1 };
+
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        containerSize.value = {
+          w: entry.contentRect.width || 1,
+          h: entry.contentRect.height || 1,
+        };
+      }
+    });
+    resizeObserver.observe(root);
+  }
+});
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+});
 </script>
 
 <template>
@@ -689,6 +837,7 @@ const selectionRectStyle = computed(() => {
         @pointerup="onDragEnd"
         @pointercancel="onDragEnd"
         @pointerleave="onDragEnd"
+        @wheel="onWheel"
       >
         <VChart
           class="wmw-chart"
@@ -703,6 +852,7 @@ const selectionRectStyle = computed(() => {
         <span>{{ normalizedPoints.length }} point{{ normalizedPoints.length === 1 ? "" : "s" }}</span>
         <span v-if="selectedCount > 0">{{ selectedCount }} selected</span>
         <button v-if="selectedCount > 0" class="wmw-clear" @click="clearSelectionAndFilter">Clear</button>
+        <button v-if="isZoomed" class="wmw-clear" @click="resetZoom">Reset Zoom</button>
       </div>
       <div class="wmw-perf">
         <span>index {{ perf.indexMs.toFixed(2) }}ms</span>
@@ -728,7 +878,7 @@ const selectionRectStyle = computed(() => {
 
 .wmw-empty {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
+  color: #888;
   padding: 12px 0;
   text-align: center;
 }
@@ -740,13 +890,15 @@ const selectionRectStyle = computed(() => {
 .wmw-chart-wrap {
   position: relative;
   width: 100%;
+  background: #ffffff;
+  border-radius: 4px;
   touch-action: none;
 }
 
 .wmw-selection-rect {
   position: absolute;
-  border: 1px solid rgba(247, 201, 72, 0.85);
-  background: rgba(247, 201, 72, 0.18);
+  border: 1px solid rgba(122, 92, 0, 0.95);
+  background: rgba(247, 201, 72, 0.25);
   pointer-events: none;
 }
 
@@ -757,21 +909,21 @@ const selectionRectStyle = computed(() => {
   gap: 10px;
   margin-top: 6px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: #555;
 }
 
 .wmw-clear {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.16);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.85);
+  color: #333;
   font-size: 10px;
   padding: 2px 8px;
   cursor: pointer;
 }
 
 .wmw-clear:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .wmw-perf {
@@ -780,11 +932,11 @@ const selectionRectStyle = computed(() => {
   gap: 8px;
   margin-top: 4px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: #777;
 }
 
 .wmw-perf--warn {
-  color: rgba(255, 200, 120, 0.95);
+  color: #b45309;
 }
 
 .wmw-benchmark {
@@ -793,21 +945,21 @@ const selectionRectStyle = computed(() => {
   gap: 8px;
   margin-top: 4px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.72);
+  color: #555;
   flex-wrap: wrap;
 }
 
 .wmw-run {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.16);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.9);
+  color: #333;
   font-size: 10px;
   padding: 2px 8px;
   cursor: pointer;
 }
 
 .wmw-run:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.08);
 }
 </style>
