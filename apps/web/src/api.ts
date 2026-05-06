@@ -46,6 +46,7 @@ import type {
   PreviewItemsPage,
   PreviewPersistScope,
   PreviewPersistStatus,
+  WaferPointsQueryResponse,
 } from "./types";
 import type { ApiError as ApiErrorType } from "./types";
 import { getStoredToken, useAuthStore } from "./stores/auth";
@@ -865,16 +866,54 @@ export async function importSurfaceState(
   });
 }
 
-export async function queryDatasetData(
+export async function queryDatasetData<T = Record<string, unknown>>(
   datasetId: string,
   queryType: string,
   params: Record<string, unknown> = {}
-): Promise<Record<string, unknown>> {
-  return req(`/datasets/${datasetId}/query`, {
+): Promise<T> {
+  return req<T>(`/datasets/${datasetId}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query_type: queryType, params }),
   });
+}
+
+export async function queryWaferPoints(datasetId: string): Promise<WaferPointsQueryResponse> {
+  return queryDatasetData<WaferPointsQueryResponse>(datasetId, "wafer-points");
+}
+
+export interface FetchSampleSliceOptions {
+  offset?: number;
+  limit?: number;
+  label?: string | null;
+  orderBy?: string;
+  sampleIds?: string[] | null;
+}
+
+export async function fetchSampleSlice(
+  datasetId: string,
+  options: FetchSampleSliceOptions = {}
+): Promise<PaginatedResponse<SampleWithLabels>> {
+  const params: Record<string, unknown> = {};
+  if (options.offset !== undefined) params.offset = options.offset;
+  if (options.limit !== undefined) params.limit = options.limit;
+  if (options.label !== undefined && options.label !== null) params.label = options.label;
+  if (options.orderBy !== undefined) params.order_by = options.orderBy;
+  if (options.sampleIds !== undefined && options.sampleIds !== null) {
+    params.sample_ids = options.sampleIds;
+  }
+
+  const response = await queryDatasetData<{
+    items: SampleWithLabels[];
+    total: number;
+    error?: string;
+  }>(datasetId, "sample-slice", params);
+
+  if (response && typeof response === "object" && "error" in response && response.error) {
+    throw new ApiError(String(response.error), 400);
+  }
+
+  return { items: response.items ?? [], total: response.total ?? 0 };
 }
 
 /**

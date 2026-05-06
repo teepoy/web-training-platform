@@ -30,6 +30,18 @@ export interface Sample {
   ls_task_id?: number | null;
 }
 
+export interface WaferPoint {
+  id: string;
+  x: number;
+  y: number;
+  value?: number;
+}
+
+export interface WaferPointsQueryResponse {
+  points: WaferPoint[];
+  total: number;
+}
+
 export interface BulkCreateSampleItem {
   image_uris: string[];
   metadata: Record<string, unknown>;
