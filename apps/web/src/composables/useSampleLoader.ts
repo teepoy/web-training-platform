@@ -1,22 +1,27 @@
 /**
  * useSampleLoader — paginated sample fetching composable.
  *
- * Provides an infinite-scroll–friendly API: call `loadMore()` to fetch the
+ * Provides an infinite-scroll-friendly API: call `loadMore()` to fetch the
  * next page; the composable merges pages into a single reactive array.
  *
- * Supports optional label filter and sort order.  Call `reset()` to start
- * over from page 0 (e.g. when filters change).
+ * Supports optional label filter, sort order, and an optional `sampleIds`
+ * scope. When `sampleIds` is non-empty the loader switches from the default
+ * paginated samples-with-labels path to the POST `/datasets/{id}/query`
+ * sample-slice path so callers (e.g. a wafer-map brush) can render samples
+ * that live outside the currently loaded page. When `sampleIds` is null or
+ * empty the default pagination behaviour is preserved.
  */
 
 import { ref, computed, type Ref, watch, isRef } from 'vue'
-import { listSamplesWithLabels } from '../api'
-import type { SampleWithLabels } from '../types'
+import { fetchSampleSlice, listSamplesWithLabels } from '../api'
+import type { PaginatedResponse, SampleWithLabels } from '../types'
 
 export interface UseSampleLoaderOptions {
   datasetId: string | Ref<string>
   pageSize?: number
   labelFilter?: Ref<string | null>
   orderBy?: Ref<string>
+  sampleIds?: Ref<string[] | null>
 }
 
 export function useSampleLoader(options: UseSampleLoaderOptions) {
@@ -30,6 +35,31 @@ export function useSampleLoader(options: UseSampleLoaderOptions) {
 
   const hasMore = computed(() => !initialized.value || samples.value.length < totalCount.value)
 
+  function activeSampleIds(): string[] | null {
+    const ids = options.sampleIds?.value
+    return ids && ids.length > 0 ? ids : null
+  }
+
+  async function fetchPage(offset: number): Promise<PaginatedResponse<SampleWithLabels>> {
+    const ids = activeSampleIds()
+    if (ids) {
+      return fetchSampleSlice(resolvedId.value, {
+        offset,
+        limit: pageSize,
+        label: options.labelFilter?.value ?? null,
+        orderBy: options.orderBy?.value ?? 'id',
+        sampleIds: ids,
+      })
+    }
+    return listSamplesWithLabels(
+      resolvedId.value,
+      offset,
+      pageSize,
+      options.labelFilter?.value ?? undefined,
+      options.orderBy?.value ?? 'id',
+    )
+  }
+
   async function loadMore() {
     if (!resolvedId.value) return
     if (initialized.value && !hasMore.value) return
@@ -37,13 +67,7 @@ export function useSampleLoader(options: UseSampleLoaderOptions) {
 
     isLoading.value = true
     try {
-      const result = await listSamplesWithLabels(
-        resolvedId.value,
-        samples.value.length,
-        pageSize,
-        options.labelFilter?.value ?? undefined,
-        options.orderBy?.value ?? 'id',
-      )
+      const result = await fetchPage(samples.value.length)
       totalCount.value = result.total
       samples.value = [...samples.value, ...result.items]
       initialized.value = true
@@ -59,15 +83,23 @@ export function useSampleLoader(options: UseSampleLoaderOptions) {
     void loadMore()
   }
 
-  // Re-fetch when filters change
   if (options.labelFilter) {
     watch(options.labelFilter, () => reset())
   }
   if (options.orderBy) {
     watch(options.orderBy, () => reset())
   }
+  if (options.sampleIds) {
+    watch(
+      () => options.sampleIds?.value ?? null,
+      (next, prev) => {
+        const a = (next ?? []).join(',')
+        const b = (prev ?? []).join(',')
+        if (a !== b) reset()
+      },
+    )
+  }
 
-  // Re-fetch when datasetId changes (for Ref<string> case)
   if (isRef(options.datasetId)) {
     watch(options.datasetId, (newId) => {
       if (newId) reset()

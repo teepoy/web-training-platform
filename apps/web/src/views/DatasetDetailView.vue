@@ -88,7 +88,7 @@
               @load-more="sampleLoader.loadMore()"
             />
             <BrowserSidebar
-              :panels="datasetPanels"
+              :panels="datasetSidebarPanels"
               :context="browserSidebarContext as unknown as Record<string, unknown>"
               :interaction="datasetInteraction"
               :collapsed="prefs.sidebarCollapsed"
@@ -317,9 +317,9 @@ import { ref, computed, h, watch, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type FormInst, type FormRules, type DataTableColumns } from "naive-ui";
-import { api } from "../api";
+import { api, queryWaferPoints } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
-import type { BrowserItem, Dataset } from "../types";
+import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
 import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
 import BrowserSidebar from "../components/sample-browser/BrowserSidebar.vue";
@@ -366,7 +366,19 @@ const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
 // ---------------------------------------------------------------------------
 // Samples tab
 // ---------------------------------------------------------------------------
-const sampleLoader = useSampleLoader({ datasetId: id });
+const datasetInteractionState = ref<SidebarWidgetInteractionState>({
+  activeLabelFilter: null,
+  selectedLabels: [],
+  collections: {},
+});
+
+const waferFilterIds = computed<string[] | null>(() => {
+  const collection = datasetInteractionState.value.collections?.["browser-items"];
+  if (!collection || collection.filter.mode !== "selected-only") return null;
+  return collection.filter.ids.length > 0 ? collection.filter.ids : null;
+});
+
+const sampleLoader = useSampleLoader({ datasetId: id, sampleIds: waferFilterIds });
 
 const browserSamples = computed<BrowserItem[]>(() =>
   sampleLoader.samples.value.map((sample) => ({
@@ -383,12 +395,6 @@ const browserSamples = computed<BrowserItem[]>(() =>
   }))
 );
 
-const datasetInteractionState = ref<SidebarWidgetInteractionState>({
-  activeLabelFilter: null,
-  selectedLabels: [],
-  collections: {},
-});
-
 const datasetInteraction = computed<SidebarWidgetInteractionContext>(() => ({
   state: datasetInteractionState.value,
   dispatch: (intent) => {
@@ -401,6 +407,60 @@ const datasetInteraction = computed<SidebarWidgetInteractionContext>(() => ({
 }));
 
 const { filteredItems: filteredSamples } = useBrowserFilter(browserSamples, datasetInteractionState);
+
+const waferPointsQuery = useQuery({
+  queryKey: computed(() => ["dataset", id.value, "wafer-points"]),
+  queryFn: () => queryWaferPoints(id.value),
+  retry: false,
+});
+
+function normalizeWaferPoint(point: WaferPoint): WaferPoint | null {
+  if (typeof point.id !== "string" || point.id.trim().length === 0) {
+    return null;
+  }
+
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  const value = Number(point.value);
+
+  return {
+    id: point.id,
+    x,
+    y,
+    ...(Number.isFinite(value) ? { value } : {}),
+  };
+}
+
+const waferPoints = computed<WaferPoint[]>(() => {
+  const points = waferPointsQuery.data.value?.points ?? [];
+  return points
+    .map((point) => normalizeWaferPoint(point))
+    .filter((point): point is WaferPoint => point !== null);
+});
+
+const datasetSidebarPanels = computed(() =>
+  datasetPanels.map((panel) => {
+    if (panel.id !== "wafer-map") {
+      return panel;
+    }
+
+    return {
+      ...panel,
+      props: {
+        ...panel.props,
+        data: {
+          inline: {
+            points: waferPoints.value,
+          },
+        },
+      },
+    };
+  })
+);
 
 const browserSidebarStats = computed(() => {
   const labelCounts: Record<string, number> = {};
