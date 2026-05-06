@@ -524,6 +524,21 @@ defineExpose({
   padding: 8px;
 }
 
+.sb-scroll-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.sb-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sb-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.sb-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .sb-card-row {
   display: flex;
   gap: 8px;

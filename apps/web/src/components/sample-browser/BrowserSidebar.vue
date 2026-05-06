@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, ref, computed, type Component } from "vue";
+import { provide, ref, computed, watch, type Component } from "vue";
 import {
   WIDGET_COMPONENTS,
   type SidebarPanelDescriptor,
@@ -10,6 +10,13 @@ import {
   type SidebarWidgetInteractionContext,
 } from "../../components/classify/widgetContract";
 import WidgetErrorBoundary from "../../components/classify/widgets/WidgetErrorBoundary.vue";
+import {
+  useSampleBrowserPrefs,
+  MIN_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  COLLAPSED_SIDEBAR_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH
+} from "../../stores/sampleBrowser";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -76,10 +83,72 @@ const sidebarCollapsed = computed({
   get: () => props.collapsed ?? false,
   set: (v) => emit("update:collapsed", v),
 });
+
+// ---------------------------------------------------------------------------
+// Resize logic
+// ---------------------------------------------------------------------------
+
+const prefs = useSampleBrowserPrefs();
+const isResizing = ref(false);
+const visualWidth = ref(prefs.sidebarWidth);
+
+watch(() => prefs.sidebarWidth, (val) => {
+  if (!isResizing.value) {
+    visualWidth.value = val;
+  }
+});
+
+let startX = 0;
+let startWidth = 0;
+
+function onResizeStart(e: PointerEvent) {
+  if (e.currentTarget instanceof Element) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  isResizing.value = true;
+  startX = e.clientX;
+  startWidth = prefs.sidebarWidth;
+  visualWidth.value = prefs.sidebarWidth;
+}
+
+function onResizeMove(e: PointerEvent) {
+  if (!isResizing.value) return;
+  // Since the sidebar is on the right, dragging left increases width
+  const dx = startX - e.clientX;
+  const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, startWidth + dx));
+  visualWidth.value = newWidth;
+}
+
+function onResizeEnd(e: PointerEvent) {
+  if (!isResizing.value) return;
+  isResizing.value = false;
+  if (e.currentTarget instanceof Element) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+  prefs.setSidebarWidth(visualWidth.value);
+}
+
+const currentWidth = computed(() => {
+  return sidebarCollapsed.value ? COLLAPSED_SIDEBAR_WIDTH : visualWidth.value;
+});
 </script>
 
 <template>
-  <aside class="cs" :class="{ 'cs--collapsed': sidebarCollapsed }">
+  <aside 
+    class="cs" 
+    :class="{ 'cs--collapsed': sidebarCollapsed, 'cs--resizing': isResizing }"
+    :style="{ width: currentWidth + 'px', minWidth: currentWidth + 'px' }"
+    data-testid="browser-sidebar"
+  >
+    <div
+      v-if="!sidebarCollapsed"
+      data-testid="browser-sidebar-resize-handle"
+      class="sidebar-resize-handle"
+      @pointerdown="onResizeStart"
+      @pointermove="onResizeMove"
+      @pointerup="onResizeEnd"
+      @pointercancel="onResizeEnd"
+    />
     <div class="cs-header">
       <span v-if="!sidebarCollapsed" class="cs-header__title">Dashboard</span>
       <button
@@ -97,6 +166,7 @@ const sidebarCollapsed = computed({
         :key="panel.id"
         class="cs-panel"
         :class="{ 'cs-panel--agent': panel._agentOwned }"
+        :data-testid="panel.id === 'wafer-map' ? 'wafer-map-panel' : undefined"
       >
         <div class="cs-panel__header" @click="togglePanel(panel)">
           <span class="cs-panel__title">{{ panel.title }}</span>
@@ -132,8 +202,7 @@ const sidebarCollapsed = computed({
 .cs {
   display: flex;
   flex-direction: column;
-  width: 280px;
-  min-width: 280px;
+  position: relative;
   border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
   overflow-y: auto;
@@ -142,9 +211,44 @@ const sidebarCollapsed = computed({
     min-width 0.2s;
 }
 
+.cs::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cs::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cs::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.cs::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .cs--collapsed {
-  width: 36px;
-  min-width: 36px;
+  /* collapsed width is handled by inline style */
+}
+
+.cs--resizing {
+  transition: none !important;
+  user-select: none;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+}
+.sidebar-resize-handle:hover,
+.cs--resizing .sidebar-resize-handle {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .cs-header {
