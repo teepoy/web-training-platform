@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 from app.agent.surface_store import SurfaceStore
-from app.api.schemas import AgentPanelDescriptor
+from app.api.schemas import AgentPanelDescriptor, WaferPointsResponse
 
 
 # ---------------------------------------------------------------------------
@@ -22,11 +22,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "query_data",
-            "description": (
-                "Run a read-only data query against the current dataset. "
-                "Supported query_type: annotation-stats, sample-slice, "
-                "metadata-histogram, recent-annotations, prediction-summary."
-            ),
+                "description": (
+                    "Run a read-only data query against the current dataset. "
+                    "Supported query_type: annotation-stats, sample-slice, "
+                    "metadata-histogram, recent-annotations, prediction-summary, "
+                    "wafer-points."
+                ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -38,6 +39,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "metadata-histogram",
                             "recent-annotations",
                             "prediction-summary",
+                            "wafer-points",
                         ],
                     },
                     "params": {
@@ -135,12 +137,23 @@ async def execute_query_data(
         limit = min(int(params.get("limit", 50)), 200)
         label = params.get("label")
         order_by = params.get("order_by", "id")
+        sample_ids_raw = params.get("sample_ids")
+        sample_ids: list[str] | None = None
+        if sample_ids_raw is not None:
+            if not isinstance(sample_ids_raw, list):
+                return {"error": "params.sample_ids must be a list of strings"}
+            sample_ids = [
+                str(value).strip()
+                for value in sample_ids_raw
+                if isinstance(value, (str, int)) and str(value).strip()
+            ]
         items, total = await repository.list_samples_with_labels(
             dataset_id=dataset_id,
             offset=offset,
             limit=limit,
             label_filter=label,
             order_by=order_by,
+            sample_ids=sample_ids,
         )
         return {"items": items, "total": total}
 
@@ -156,6 +169,10 @@ async def execute_query_data(
 
     elif query_type == "prediction-summary":
         return await repository.prediction_summary(dataset_id)
+
+    elif query_type == "wafer-points":
+        points = await repository.list_wafer_points(dataset_id)
+        return WaferPointsResponse(points=points, total=len(points)).model_dump()
 
     else:
         return {"error": f"Unknown query_type: {query_type}"}

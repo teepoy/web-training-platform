@@ -182,6 +182,17 @@ class SampleWithLabels(BaseModel):
     latest_annotation: LatestAnnotation | None = None
 
 
+class WaferPoint(BaseModel):
+    id: str
+    x: float
+    y: float
+
+
+class WaferPointsResponse(BaseModel):
+    points: list[WaferPoint]
+    total: int
+
+
 # ---------------------------------------------------------------------------
 # Dashboard schemas
 # ---------------------------------------------------------------------------
@@ -838,7 +849,7 @@ class WidgetManifest(BaseModel):
 class QueryDataRequest(BaseModel):
     """Structured data query from the agent."""
     query_type: str = Field(
-        description="One of: annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary"
+        description="One of: annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary, wafer-points"
     )
     params: dict = Field(default_factory=dict)
 

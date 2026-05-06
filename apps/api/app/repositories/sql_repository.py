@@ -266,6 +266,28 @@ class SqlRepository:
                 for r in rows
             ], total or 0
 
+    async def list_wafer_points(self, dataset_id: str) -> list[dict[str, object]]:
+        async with self.session_factory() as session:
+            rows = await session.execute(
+                select(SampleORM.id, SampleORM.metadata_json).where(SampleORM.dataset_id == dataset_id)
+            )
+
+            points: list[dict[str, object]] = []
+            for sample_id, metadata_json in rows.all():
+                metadata = metadata_json if isinstance(metadata_json, dict) else {}
+                wafer_x = metadata.get("wafer_x")
+                wafer_y = metadata.get("wafer_y")
+                if wafer_x is None or wafer_y is None:
+                    continue
+                try:
+                    x = float(wafer_x)
+                    y = float(wafer_y)
+                except (TypeError, ValueError):
+                    continue
+                points.append({"id": sample_id, "x": x, "y": y})
+
+            return points
+
     async def get_sample(self, sample_id: str) -> Sample | None:
         async with self.session_factory() as session:
             row = await session.get(SampleORM, sample_id)
@@ -286,6 +308,7 @@ class SqlRepository:
         limit: int = 50,
         label_filter: str | None = None,
         order_by: str = "id",
+        sample_ids: list[str] | None = None,
     ) -> tuple[list[dict], int]:
         """Return samples enriched with latest annotation.
 
@@ -293,8 +316,13 @@ class SqlRepository:
 
         label_filter="__unlabeled__" → WHERE latest_annotation IS NULL
         label_filter="cat" → WHERE latest_annotation.label == "cat"
+        sample_ids=["a","b"] → WHERE SampleORM.id IN (...) (in addition to dataset/label filters)
+        sample_ids=[] → returns ([], 0) without hitting the database
         """
         from sqlalchemy import alias, and_
+
+        if sample_ids is not None and len(sample_ids) == 0:
+            return [], 0
 
         async with self.session_factory() as session:
             # Subquery: latest annotation per sample (max created_at)
@@ -343,6 +371,9 @@ class SqlRepository:
                 stmt = stmt.where(AnnAlias.c.id.is_(None))
             elif label_filter is not None:
                 stmt = stmt.where(AnnAlias.c.label == label_filter)
+
+            if sample_ids is not None:
+                stmt = stmt.where(SampleORM.id.in_(sample_ids))
 
             # Count total (before pagination)
             count_stmt = select(func.count()).select_from(stmt.subquery("filtered"))
