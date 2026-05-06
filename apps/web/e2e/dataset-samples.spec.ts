@@ -164,6 +164,24 @@ async function mockDatasetSamplesApi(page: Page) {
     page.route('**/api/v1/training-presets', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) })
     }),
+    page.route(`**/api/v1/datasets/${datasetId}/query`, async (route) => {
+      const body = route.request().postDataJSON()
+      if (body?.query_type === 'wafer-points') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            query_type: 'wafer-points',
+            points: [
+              { id: 'sample-ds-1', x: 0.1, y: 0.2 },
+              { id: 'sample-ds-2', x: -0.3, y: 0.5 },
+            ],
+          }),
+        })
+      } else {
+        await route.continue()
+      }
+    }),
   ])
 }
 
@@ -206,4 +224,8 @@ test('dataset Samples tab shows shared browser controls and opens Sample Detail'
 
   await page.locator('[data-sb-item]').first().click()
   await expect(page.getByText('Sample Detail')).toBeVisible()
+
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).toBeVisible()
+  await expect(page.locator('[data-testid="wafer-map-panel"] canvas')).toBeVisible()
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).not.toContainText('No wafer points')
 })

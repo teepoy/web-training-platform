@@ -55,12 +55,21 @@ describe('sampleBrowserPreferences', () => {
     expect(localStorage.getItem('sample_browser.sidebar_collapsed')).toBe('true')
   })
 
+  it('persists sidebar width to localStorage', () => {
+    const store = useSampleBrowserPrefs()
+
+    store.setSidebarWidth(312)
+
+    expect(localStorage.getItem('sample_browser.sidebar_width')).toBe('312')
+  })
+
   it('uses default values when localStorage is empty', () => {
     const store = useSampleBrowserPrefs()
 
     expect(store.layout).toBe('grid')
     expect(store.thumbSize).toBe(128)
     expect(store.sidebarCollapsed).toBe(false)
+    expect(store.sidebarWidth).toBe(280)
   })
 
   it('does not include filter, selection, or cursor state', () => {
@@ -78,6 +87,7 @@ describe('sampleBrowserPreferences', () => {
     firstStore.setLayout('list')
     firstStore.setThumbSize(192)
     firstStore.setSidebarCollapsed(true)
+    firstStore.setSidebarWidth(336)
 
     // Fresh Pinia — state is re-read from localStorage
     setActivePinia(createPinia())
@@ -86,5 +96,73 @@ describe('sampleBrowserPreferences', () => {
     expect(secondStore.layout).toBe('list')
     expect(secondStore.thumbSize).toBe(192)
     expect(secondStore.sidebarCollapsed).toBe(true)
+    expect(secondStore.sidebarWidth).toBe(336)
+  })
+
+  it('hydrates a valid stored sidebar width', () => {
+    localStorage.setItem('sample_browser.sidebar_width', '344')
+
+    const store = useSampleBrowserPrefs()
+
+    expect(store.sidebarWidth).toBe(344)
+  })
+
+  it('clamps an over-max stored sidebar width', () => {
+    localStorage.setItem('sample_browser.sidebar_width', '999')
+
+    const store = useSampleBrowserPrefs()
+
+    expect(store.sidebarWidth).toBe(520)
+    expect(localStorage.getItem('sample_browser.sidebar_width')).toBe('520')
+  })
+
+  it('clamps an under-min stored sidebar width', () => {
+    localStorage.setItem('sample_browser.sidebar_width', '120')
+
+    const store = useSampleBrowserPrefs()
+
+    expect(store.sidebarWidth).toBe(200)
+    expect(localStorage.getItem('sample_browser.sidebar_width')).toBe('200')
+  })
+
+  it.each(['missing', 'null', 'undefined'])('falls back to default for %s stored sidebar width', (value) => {
+    if (value === 'missing') {
+      localStorage.removeItem('sample_browser.sidebar_width')
+    } else {
+      localStorage.setItem('sample_browser.sidebar_width', value)
+    }
+
+    const store = useSampleBrowserPrefs()
+
+    expect(store.sidebarWidth).toBe(280)
+    expect(localStorage.getItem('sample_browser.sidebar_width')).toBeNull()
+  })
+
+  it.each(['NaN', 'abc'])('falls back to default for non-numeric sidebar width %s', (value) => {
+    localStorage.setItem('sample_browser.sidebar_width', value)
+
+    const store = useSampleBrowserPrefs()
+
+    expect(store.sidebarWidth).toBe(280)
+    expect(localStorage.getItem('sample_browser.sidebar_width')).toBeNull()
+  })
+
+  it('collapse does not change sidebar width', () => {
+    const store = useSampleBrowserPrefs()
+
+    store.setSidebarWidth(304)
+    store.setSidebarCollapsed(true)
+
+    expect(store.sidebarWidth).toBe(304)
+  })
+
+  it('retains sidebar width after collapse then expand', () => {
+    const store = useSampleBrowserPrefs()
+
+    store.setSidebarWidth(352)
+    store.setSidebarCollapsed(true)
+    store.setSidebarCollapsed(false)
+
+    expect(store.sidebarWidth).toBe(352)
   })
 })

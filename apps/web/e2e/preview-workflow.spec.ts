@@ -4,6 +4,7 @@ const orgId = 'org-e2e-1'
 const authToken = 'e2e-token'
 const datasetId = 'dataset-preview-1'
 const sessionId = 'sess-123'
+const sessionIdWafer = 'sess-wafer'
 const collectionRef = 'test-collection'
 
 async function mockPreviewWorkflowApi(page: Page) {
@@ -84,6 +85,22 @@ async function mockPreviewWorkflowApi(page: Page) {
       })
     }),
 
+    page.route(`**/api/v1/preview-sessions/${sessionIdWafer}/items*`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            { upstream_item_id: 'item-w1', image_uris: ['memory://item-w1.png'], metadata: { wafer_x: 0.1, wafer_y: 0.2 } },
+            { upstream_item_id: 'item-w2', image_uris: ['memory://item-w2.png'], metadata: { wafer_x: -0.3, wafer_y: 0.5 } }
+          ],
+          next_cursor: null,
+          has_more: false,
+          estimated_total: 2
+        }),
+      })
+    }),
+
     page.route(`**/api/v1/preview-sessions/${sessionId}/items?limit=**&cursor=cursor-2`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -139,6 +156,22 @@ async function mockPreviewWorkflowApi(page: Page) {
           loaded_count: 20,
           next_cursor: 'cursor-20',
           has_more: true
+        }),
+      })
+    }),
+
+    page.route(`**/api/v1/preview-sessions/${sessionIdWafer}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          session_id: sessionIdWafer,
+          collection_ref: 'wafer-collection',
+          classification_enabled: true,
+          estimated_total: 2,
+          loaded_count: 2,
+          next_cursor: null,
+          has_more: false
         }),
       })
     }),
@@ -214,6 +247,9 @@ test('runs preview launch and workspace flow', async ({ page }) => {
   const itemCount = await page.locator('[data-sb-item]').count()
   expect(itemCount).toBeGreaterThan(0)
 
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).toBeVisible()
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).toContainText('No wafer points')
+
   await page.locator('.n-radio__label', { hasText: 'List' }).click()
   const firstListImage = page.locator('[data-sb-item] img, .sb-list-img').first()
   await expect(firstListImage).toBeVisible()
@@ -242,4 +278,24 @@ test('shows error for expired session', async ({ page }) => {
 
   await page.goto('/preview/expired-session')
   await expect(page.getByText('Preview session not found or expired.')).toBeVisible()
+})
+
+test('renders wafer map with session-loaded metadata points', async ({ page }) => {
+  await mockPreviewWorkflowApi(page)
+  
+  await page.addInitScript(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    window.localStorage.setItem('auth_token', 'e2e-token')
+  })
+
+  await page.goto(`/preview/${sessionIdWafer}`)
+  
+  await page.waitForSelector('[data-sb-item]')
+  
+  const locator = page.locator('[data-testid="wafer-map-panel"]')
+  
+  await expect(locator).toBeVisible()
+  await expect(locator).not.toContainText('No wafer points')
+  await expect(page.locator('[data-testid="wafer-map-panel"] canvas')).toBeVisible()
 })

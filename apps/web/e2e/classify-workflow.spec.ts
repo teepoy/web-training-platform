@@ -245,6 +245,24 @@ async function mockClassifyWorkflowApi(page: Page) {
         ]),
       })
     }),
+    page.route(`**/api/v1/datasets/${datasetId}/query`, async (route) => {
+      const body = route.request().postDataJSON()
+      if (body?.query_type === 'wafer-points') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            query_type: 'wafer-points',
+            points: [
+              { id: 'sample-review-1', x: 0.1, y: 0.2 },
+              { id: 'sample-review-2', x: -0.3, y: 0.5 },
+            ],
+          }),
+        })
+      } else {
+        await route.continue()
+      }
+    }),
     page.route('**/api/v1/predictions/run', async (route) => {
       const body = route.request().postDataJSON()
       expect(body).toMatchObject({
@@ -370,6 +388,10 @@ test('runs prediction review flow from /datasets/:id/classify', async ({ page })
   await page.waitForSelector('[data-sb-item]')
   const itemCount = await page.locator('[data-sb-item]').count()
   expect(itemCount).toBeGreaterThan(0)
+
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).toBeVisible()
+  await expect(page.locator('[data-testid="wafer-map-panel"] canvas')).toBeVisible()
+  await expect(page.locator('[data-testid="wafer-map-panel"]')).not.toContainText('No wafer points')
 
   await page.locator('.n-base-selection').filter({ hasText: 'Select model' }).first().click()
   await page.locator('.n-base-select-option').filter({ hasText: /flower-classifier/ }).click()

@@ -9,7 +9,8 @@ import type { BrowserItem } from "../types";
 import type { SidebarWidgetInteractionState } from "../components/classify/widgetContract";
 
 const CLASSIFY_ONLY = ["annotation-progress", "sample-viewer", "selected-samples"];
-const REQUIRED_IN_BROWSER = ["label-distribution", "interactive-scatter", "browser-summary"];
+const REQUIRED_IN_DATASET_BROWSER = ["label-distribution", "wafer-map", "browser-summary"];
+const REQUIRED_IN_PREVIEW_BROWSER = ["label-distribution", "wafer-map", "browser-summary"];
 
 describe("datasetPanels preset", () => {
   it("does not include classify-only widgets", () => {
@@ -21,9 +22,23 @@ describe("datasetPanels preset", () => {
 
   it("includes required browser widgets", () => {
     const ids = datasetPanels.map((p) => p.id);
-    for (const required of REQUIRED_IN_BROWSER) {
+    for (const required of REQUIRED_IN_DATASET_BROWSER) {
       expect(ids).toContain(required);
     }
+  });
+
+  it("enables wafer-map linked filtering for browser-items", () => {
+    const waferMapPanel = datasetPanels.find((panel) => panel.id === "wafer-map");
+    expect(waferMapPanel).toBeDefined();
+    expect(waferMapPanel?.props.config).toMatchObject({
+      interaction: {
+        collection: "browser-items",
+        entity: "sample",
+        emitSelection: true,
+        followSelection: true,
+        filterFromSelection: true,
+      },
+    });
   });
 });
 
@@ -37,7 +52,7 @@ describe("previewPanels preset", () => {
 
   it("includes required browser widgets", () => {
     const ids = previewPanels.map((p) => p.id);
-    for (const required of REQUIRED_IN_BROWSER) {
+    for (const required of REQUIRED_IN_PREVIEW_BROWSER) {
       expect(ids).toContain(required);
     }
   });
@@ -139,5 +154,26 @@ describe("useBrowserFilter", () => {
     );
     const { filteredItems } = useBrowserFilter(items, state);
     expect(filteredItems.value).toHaveLength(2);
+  });
+
+  it("filters by custom collection key when provided", () => {
+    const items = ref([
+      makeBrowserItem("a"),
+      makeBrowserItem("b"),
+      makeBrowserItem("c"),
+    ]);
+    const state = ref(
+      makeInteractionState({
+        collections: {
+          "classify-samples": {
+            entity: "sample",
+            selection: { ids: [], sourcePanelId: null, revision: 0 },
+            filter: { ids: ["b", "c"], mode: "selected-only", sourcePanelId: null, revision: 1 },
+          },
+        },
+      }),
+    );
+    const { filteredItems } = useBrowserFilter(items, state, "classify-samples");
+    expect(filteredItems.value.map((i) => i.id)).toEqual(["b", "c"]);
   });
 });
