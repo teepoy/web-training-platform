@@ -502,9 +502,9 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
     },
   },
   {
-    id: "interactive-scatter",
-    component: "interactive-scatter",
-    title: "Interactive Scatter",
+    id: "wafer-map",
+    component: "wafer-map",
+    title: "Wafer Map",
     order: 15,
     size: "normal",
     props: {
@@ -521,7 +521,8 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
           followSelection: true,
           filterFromSelection: true,
         },
-        maxPoints: 3000,
+        dataKey: "wafer-points",
+        maxPoints: 100000,
       },
     },
   },
@@ -553,8 +554,9 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
  * Panels shown in the dataset browser sidebar.
  *
  * Excludes classify-only widgets (`annotation-progress`, `sample-viewer`,
- * `selected-samples`).  The scatter widget has selection emission disabled
- * because dataset browsing is read-only.
+ * `selected-samples`). The wafer map still emits browser-scoped selection and
+ * filter intents so box selection can narrow the visible sample set without
+ * enabling classify-only editing flows.
  */
 export const datasetPanels: SidebarPanelDescriptor[] = [
   {
@@ -568,9 +570,9 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
     },
   },
   {
-    id: "interactive-scatter",
-    component: "interactive-scatter",
-    title: "Interactive Scatter",
+    id: "wafer-map",
+    component: "wafer-map",
+    title: "Wafer Map",
     order: 15,
     size: "normal",
     props: {
@@ -583,11 +585,12 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
         interaction: {
           collection: "browser-items",
           entity: "sample",
-          emitSelection: false,
-          followSelection: false,
-          filterFromSelection: false,
+          emitSelection: true,
+          followSelection: true,
+          filterFromSelection: true,
         },
-        maxPoints: 3000,
+        dataKey: "wafer-points",
+        maxPoints: 100000,
       },
     },
   },
@@ -602,14 +605,14 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Preview browser panel preset — identical to datasetPanels for v1
+// Preview browser panel preset — session-scoped browser widgets
 // ---------------------------------------------------------------------------
 
 /**
  * Panels shown in the preview browser sidebar.
  *
- * Identical to `datasetPanels` for v1.  Preview items may not always carry
- * label data; `BrowserSummaryWidget` degrades gracefully when context is absent.
+ * Preview uses session-loaded wafer points inline, so it ships the wafer-map
+ * widget directly instead of the dataset browser scatter preset.
  */
 export const previewPanels: SidebarPanelDescriptor[] = [
   {
@@ -623,9 +626,9 @@ export const previewPanels: SidebarPanelDescriptor[] = [
     },
   },
   {
-    id: "interactive-scatter",
-    component: "interactive-scatter",
-    title: "Interactive Scatter",
+    id: "wafer-map",
+    component: "wafer-map",
+    title: "Wafer Map",
     order: 15,
     size: "normal",
     props: {
@@ -642,7 +645,7 @@ export const previewPanels: SidebarPanelDescriptor[] = [
           followSelection: false,
           filterFromSelection: false,
         },
-        maxPoints: 3000,
+        maxPoints: 100000,
       },
     },
   },
