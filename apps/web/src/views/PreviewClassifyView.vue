@@ -7,7 +7,7 @@ import {
 } from 'naive-ui'
 import { getPreviewSession, startPreviewPersist } from '../api'
 import { usePreviewLoader } from '../composables/usePreviewLoader'
-import type { PreviewSession, PreviewPersistScope, PreviewItem, BrowserItem } from '../types'
+import type { PreviewSession, PreviewPersistScope, PreviewItem, BrowserItem, WaferPoint } from '../types'
 import PreviewItemDrawer from '../components/preview/PreviewItemDrawer.vue'
 
 import SampleBrowser from '../components/sample-browser/SampleBrowser.vue'
@@ -48,6 +48,50 @@ const browserItems = computed<BrowserItem[]>(() => {
     predictionId: null,
     activationLabel: null,
   }))
+})
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = Number(metadata[key])
+  return Number.isFinite(value) ? value : null
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key]
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+const previewWaferPoints = computed<WaferPoint[]>(() => {
+  return loader.items.value.flatMap((item) => {
+    const x = metadataNumber(item.metadata, 'wafer_x')
+    const y = metadataNumber(item.metadata, 'wafer_y')
+    if (x == null || y == null) {
+      return []
+    }
+    return [{
+      id: metadataString(item.metadata, 'point_id') ?? item.upstream_item_id,
+      x,
+      y,
+    }]
+  })
+})
+
+const previewSidebarPanels = computed(() => {
+  return previewPanels.map((panel) => {
+    if (panel.id !== 'wafer-map') {
+      return panel
+    }
+    return {
+      ...panel,
+      props: {
+        ...panel.props,
+        data: {
+          inline: {
+            points: previewWaferPoints.value,
+          },
+        },
+      },
+    }
+  })
 })
 
 function selectItem(item: PreviewItem) {
@@ -135,11 +179,11 @@ async function handlePersist() {
           <!-- BrowserSidebar provides its own borders, we wrap it just to add the persist button above -->
           <div style="flex: 1; min-height: 0; display: flex;">
             <BrowserSidebar
-              :panels="previewPanels"
+              :panels="previewSidebarPanels"
               :context="{ totalLoaded: loader.loadedCount.value, filteredCount: loader.loadedCount.value } as unknown as Record<string, unknown>"
               :collapsed="prefs.sidebarCollapsed"
               @update:collapsed="prefs.setSidebarCollapsed"
-              style="border-left: none; width: 100%; min-width: 0;"
+              style="border-left: none;"
             />
           </div>
         </div>
@@ -204,12 +248,6 @@ async function handlePersist() {
   border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
   transition: width 0.2s, min-width 0.2s;
-  width: 280px;
-  min-width: 280px;
-}
-.preview-sidebar-container.collapsed {
-  width: 36px;
-  min-width: 36px;
 }
 .preview-sidebar-actions {
   padding: 12px;

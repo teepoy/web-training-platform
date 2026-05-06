@@ -98,7 +98,7 @@
       <div ref="browserShellRef" class="classify-browser-shell" tabindex="-1" @keydown="onKeyDown">
         <SampleBrowser
           ref="gridRef"
-          :items="browserItems"
+          :items="filteredBrowserItems"
           :total-count="activeTotalCount"
           :thumb-size="prefs.thumbSize"
           :layout="prefs.layout"
@@ -220,7 +220,13 @@ import {
   useDialog,
   useThemeVars,
 } from "naive-ui";
-import { api, bulkCreateAnnotations, listSamplesWithLabels, syncAnnotationsToLs } from "../api";
+import {
+  api,
+  bulkCreateAnnotations,
+  listSamplesWithLabels,
+  queryWaferPoints,
+  syncAnnotationsToLs,
+} from "../api";
 import type {
   AnnotationGridItem,
   BrowserItem,
@@ -232,14 +238,17 @@ import type {
   PredictionCollection,
   PredictionJob,
   PredictionResult,
+  Sample,
   SampleWithLabels,
   SaveReviewAnnotationItem,
   SyncResult,
   TaskTrackerSummary,
   TrainingJob,
+  WaferPoint,
 } from "../types";
 import { resolveImageUris } from "../utils/imageAdapters";
 import { useSampleLoader } from "../composables/useSampleLoader";
+import { useBrowserFilter } from "../composables/useBrowserFilter";
 import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
 import TaskInsightModal from "../components/TaskInsightModal.vue";
@@ -265,6 +274,10 @@ interface ReviewRow {
   confidence: number | null;
 }
 
+type HydratedSample = Sample & {
+  latest_annotation?: { label?: string | null } | null;
+};
+
 const route = useRoute();
 const router = useRouter();
 const datasetId = computed(() => route.params.id as string);
@@ -274,6 +287,7 @@ const themeVars = useThemeVars();
 const queryClient = useQueryClient();
 const orgStore = useOrgStore();
 const prefs = useSampleBrowserPrefs();
+const PREVIEW_HYDRATION_CAP = 50;
 
 const themeStyleVars = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -411,6 +425,87 @@ const activeGridItems = computed<AnnotationGridItem[]>(() =>
   isReviewMode.value ? reviewGridItems.value : annotationGridItems.value,
 );
 
+function toAnnotationGridItem(sample: HydratedSample): AnnotationGridItem {
+  return {
+    id: sample.id,
+    imageSrcs: resolveImageUris(sample.image_uris ?? []),
+    currentLabel: sample.latest_annotation?.label ?? null,
+    draftLabel: null,
+    predictionLabel: null,
+    predictionConfidence: null,
+    predictionId: null,
+    metadata: sample.metadata ?? {},
+  };
+}
+
+const interactionState = ref<SidebarWidgetInteractionState>({
+  activeLabelFilter: labelFilter.value,
+  selectedLabels: labelFilter.value ? [labelFilter.value] : [],
+  collections: {},
+});
+
+watch(labelFilter, (nextLabel) => {
+  interactionState.value = {
+    ...interactionState.value,
+    activeLabelFilter: nextLabel,
+    selectedLabels: nextLabel ? [nextLabel] : [],
+  };
+});
+
+const selectedSidebarSampleIds = computed(() => {
+  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
+  if (filterIds.length > 0) {
+    return filterIds;
+  }
+  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
+});
+
+const selectedSidebarSampleHydrationIds = computed(() => {
+  const selectedIds = selectedSidebarSampleIds.value;
+  if (selectedIds.length === 0 || selectedIds.length > PREVIEW_HYDRATION_CAP) {
+    return [] as string[];
+  }
+  const activeIds = new Set(activeGridItems.value.map((item) => item.id));
+  return selectedIds.filter((id) => !activeIds.has(id));
+});
+
+const selectedSidebarHydrationQuery = useQuery({
+  queryKey: computed(() => [
+    "dataset",
+    datasetId.value,
+    "selected-sample-hydration",
+    selectedSidebarSampleHydrationIds.value.join(","),
+  ]),
+  queryFn: async () => {
+    const samples = await Promise.all(
+      selectedSidebarSampleHydrationIds.value.map((sampleId) => api.getSample(sampleId)),
+    );
+    return samples;
+  },
+  enabled: computed(() => selectedSidebarSampleHydrationIds.value.length > 0),
+  retry: false,
+});
+
+const hydratedGridItems = computed<AnnotationGridItem[]>(() => {
+  if (selectedSidebarSampleHydrationIds.value.length === 0) {
+    return [];
+  }
+  return (selectedSidebarHydrationQuery.data.value ?? []).map((sample) => toAnnotationGridItem(sample));
+});
+
+const providedGridItems = computed<AnnotationGridItem[]>(() => {
+  if (hydratedGridItems.value.length === 0) {
+    return activeGridItems.value;
+  }
+  const merged = new Map(activeGridItems.value.map((item) => [item.id, item] as const));
+  hydratedGridItems.value.forEach((item) => {
+    if (!merged.has(item.id)) {
+      merged.set(item.id, item);
+    }
+  });
+  return Array.from(merged.values());
+});
+
 const browserItems = computed<BrowserItem[]>(() =>
   activeGridItems.value.map((item) => ({
     id: item.id,
@@ -426,7 +521,13 @@ const browserItems = computed<BrowserItem[]>(() =>
   })),
 );
 
-provide<Ref<AnnotationGridItem[]>>("classify-grid-items", activeGridItems);
+const { filteredItems: filteredBrowserItems } = useBrowserFilter(
+  browserItems,
+  interactionState,
+  "classify-samples"
+);
+
+provide<Ref<AnnotationGridItem[]>>("classify-grid-items", providedGridItems);
 
 const activeTotalCount = computed(() =>
   isReviewMode.value ? reviewGridItems.value.length : totalCount.value,
@@ -919,6 +1020,12 @@ const dashboardContext = useClassifyDashboard(
   labelSpace,
 );
 
+const waferPointsQuery = useQuery({
+  queryKey: computed(() => ["dataset", datasetId.value, "wafer-points"]),
+  queryFn: () => queryWaferPoints(datasetId.value),
+  retry: false,
+});
+
 const globalAgentPanels = inject(GLOBAL_AGENT_PANELS_KEY, ref([]));
 
 const reviewPanel: SidebarPanelDescriptor = {
@@ -940,68 +1047,47 @@ function metadataString(metadata: Record<string, unknown>, key: string): string 
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-const scatterPoints = computed(() =>
-  activeGridItems.value
-    .map((item) => {
-      const x = metadataNumber(item.metadata, "scatter_x");
-      const y = metadataNumber(item.metadata, "scatter_y");
-      if (x == null || y == null) {
-        return null;
-      }
-      return {
-        id: item.id,
-        x,
-        y,
-        label:
-          item.draftLabel ??
-          item.predictionLabel ??
-          item.currentLabel ??
-          metadataString(item.metadata, "point_label"),
-        title:
-          metadataString(item.metadata, "sample_title") ??
-          metadataString(item.metadata, "title") ??
-          item.id,
-        imageSrc: item.imageSrcs[0] ?? null,
-      };
-    })
-    .filter((point) => point !== null),
-);
-
-const selectedSidebarSampleIds = computed(() => {
-  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
-  if (filterIds.length > 0) {
-    return filterIds;
+function normalizeWaferPoint(point: WaferPoint): WaferPoint | null {
+  if (typeof point.id !== "string" || point.id.trim().length === 0) {
+    return null;
   }
-  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
+
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  const value = Number(point.value);
+
+  return {
+    id: point.id,
+    x,
+    y,
+    ...(Number.isFinite(value) ? { value } : {}),
+  };
+}
+
+const waferPoints = computed<WaferPoint[]>(() => {
+  const points = waferPointsQuery.data.value?.points ?? [];
+  return points
+    .map((point) => normalizeWaferPoint(point))
+    .filter((point): point is WaferPoint => point !== null);
 });
+
+
 
 const staticPanels = computed(() => {
   const basePanels = isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels;
   return basePanels.map((panel) => {
-    if (panel.id === "interactive-scatter") {
+    if (panel.id === "wafer-map") {
       return {
         ...panel,
         props: {
           ...panel.props,
           data: {
             inline: {
-              points: scatterPoints.value,
-            },
-          },
-        },
-      };
-    }
-
-    if (panel.id === "selected-samples") {
-      return {
-        ...panel,
-        collapsed: selectedSidebarSampleIds.value.length === 0,
-        props: {
-          ...panel.props,
-          data: {
-            inline: {
-              sampleIds: selectedSidebarSampleIds.value,
-              mode: "grid",
+              points: waferPoints.value,
             },
           },
         },
@@ -1027,19 +1113,7 @@ function handleSidebarIntent(intent: SidebarWidgetIntent): void {
   }
 }
 
-const interactionState = ref<SidebarWidgetInteractionState>({
-  activeLabelFilter: labelFilter.value,
-  selectedLabels: labelFilter.value ? [labelFilter.value] : [],
-  collections: {},
-});
 
-watch(labelFilter, (nextLabel) => {
-  interactionState.value = {
-    ...interactionState.value,
-    activeLabelFilter: nextLabel,
-    selectedLabels: nextLabel ? [nextLabel] : [],
-  };
-});
 
 const sidebarInteraction = computed<SidebarWidgetInteractionContext>(() => ({
   state: interactionState.value,

@@ -5,6 +5,7 @@ import type { SidebarWidgetInteractionState } from "../components/classify/widge
 export function useBrowserFilter(
   items: Ref<BrowserItem[]>,
   interactionState: Ref<SidebarWidgetInteractionState>,
+  collectionKey: string = "browser-items"
 ): { filteredItems: ComputedRef<BrowserItem[]> } {
   const filteredItems = computed<BrowserItem[]>(() => {
     const state = interactionState.value;
@@ -17,7 +18,7 @@ export function useBrowserFilter(
       );
     }
 
-    const browserCollection = state.collections?.["browser-items"];
+    const browserCollection = state.collections?.[collectionKey];
     if (
       browserCollection &&
       browserCollection.filter.mode === "selected-only" &&
