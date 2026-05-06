@@ -495,6 +495,61 @@ class TestQueryDataRoute:
             body = r.json()
             assert body["total_predictions"] == 0
 
+    def test_wafer_points_query(self) -> None:
+        with TestClient(app) as c:
+            dataset_id = _create_dataset(c, name="query-wafer-ds")
+            included_ids = [
+                _create_sample(c, dataset_id, metadata={"wafer_x": 1.25, "wafer_y": 2.5}),
+                _create_sample(c, dataset_id, metadata={"wafer_x": "3.75", "wafer_y": 4}),
+            ]
+            _create_sample(c, dataset_id, metadata={"wafer_x": 9.0})
+            _create_sample(c, dataset_id, metadata={"wafer_y": 8.0})
+            _create_sample(c, dataset_id, metadata={"other": "value"})
+
+            r = c.post(
+                f"/api/v1/datasets/{dataset_id}/query",
+                json={"query_type": "wafer-points"},
+            )
+            assert r.status_code == 200
+            body = r.json()
+            assert body["total"] == 2
+            assert len(body["points"]) == 2
+            assert {point["id"] for point in body["points"]} == set(included_ids)
+            for point in body["points"]:
+                assert set(point.keys()) == {"id", "x", "y"}
+                assert isinstance(point["x"], float)
+                assert isinstance(point["y"], float)
+
+    def test_execute_query_data_wafer_points(self) -> None:
+        import asyncio
+        from app.agent.tools import execute_query_data
+
+        repository = MagicMock()
+        repository.list_wafer_points = AsyncMock(
+            return_value=[
+                {"id": "sample-1", "x": 10.0, "y": 20.0},
+                {"id": "sample-2", "x": 30.0, "y": 40.0},
+            ]
+        )
+
+        async def _run():
+            result = await execute_query_data(
+                query_type="wafer-points",
+                params=None,
+                dataset_id="ds1",
+                repository=repository,
+            )
+            repository.list_wafer_points.assert_awaited_once_with("ds1")
+            assert result == {
+                "points": [
+                    {"id": "sample-1", "x": 10.0, "y": 20.0},
+                    {"id": "sample-2", "x": 30.0, "y": 40.0},
+                ],
+                "total": 2,
+            }
+
+        asyncio.run(_run())
+
     def test_unknown_query_type(self) -> None:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="query-unknown-ds")
