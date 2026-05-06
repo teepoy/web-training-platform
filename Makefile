@@ -134,6 +134,14 @@ seed-multi-image-scatter: ## Seed multi-image samples with scatter coordinates f
 .PHONY: multi-image-scatter
 multi-image-scatter: seed-multi-image-scatter ## Alias for seed-multi-image-scatter
 
+.PHONY: seed-wafer-demo
+seed-wafer-demo: ## Seed deterministic Wafer Demo data with batched wafer coordinates
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_wafer_demo.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: wafer-demo
+wafer-demo: seed-wafer-demo ## Alias for seed-wafer-demo
+
 .PHONY: smoke-dev-batch
 smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
