@@ -127,8 +127,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                           |
 | Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                         | Explicit registration of all plugins before app mount          |
 | Frontend sidebar plugins  | `apps/web/src/plugins/sidebar-*/`                       | One directory per sidebar widget plugin                       |
-| Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`)                    |
+| Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
 | Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`) |
+| Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                       | Preview launcher plugins (e.g. `preview-upstream`)  |
+| Plugin flow modal         | `apps/web/src/components/PluginFlowModal.vue`          | 2-step modal: select type, then execute component  |
+| Plugin type selector      | `apps/web/src/components/PluginTypeSelector.vue`        | Card grid for selecting a plugin type               |
 | Backend plugin registry  | `apps/api/app/plugins/registry.py`                    | Explicit list of backend plugin routers                        |
 | Backend plugin routes    | `apps/api/app/plugins/*/router.py`                      | One FastAPI router per backend plugin                         |
 | MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`            |
@@ -161,6 +164,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `defineImportPlugin`   | factory    | `libs/plugin-sdk/src/importer.ts`                | Declares an import flow plugin                       |
 | `defineExportPlugin`   | factory    | `libs/plugin-sdk/src/exporter.ts`                | Declares an export flow plugin                       |
 | `defineAgentSkill`     | factory    | `libs/plugin-sdk/src/agent.ts`                   | Declares an agent skill plugin                       |
+| `definePreviewPlugin`  | factory    | `libs/plugin-sdk/src/preview.ts`                  | Declares a preview launcher plugin                   |
+| `PluginFlowModal`     | component  | `apps/web/src/components/PluginFlowModal.vue`     | 2-step modal: select type, then execute component    |
+| `PluginTypeSelector`  | component  | `apps/web/src/components/PluginTypeSelector.vue`  | Card grid for selecting a plugin type                 |
 | `PLUGIN_ROUTERS`     | list       | `apps/api/app/plugins/registry.py`                | Explicit list of all backend plugin routers      |
 | `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules |
 
@@ -190,6 +196,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't bypass `pluginRegistry` for sidebar rendering — `BrowserSidebar.vue` uses `pluginRegistry.getSidebarComponent(key)`.
 - Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineSidebarPlugin` instead.
 - Don't import from `widgetContract.ts` for new plugin code — import from `@platform/plugin-sdk` directly; the shim is kept only for backward compatibility.
+- Don't add hardcoded import/export/preview modals to views — use `PluginFlowModal` and `PluginTypeSelector` for the 2-step plugin selection flow.
 - Backend plugin routes must live under `apps/api/app/plugins/<name>/router.py`; they must be added to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py` — don't manually import them in `main.py`.
 - MCP plugin modules must export `TOOLS: list[dict]` and `dispatch(name, args)` — the loader merges these automatically.
 
@@ -211,6 +218,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 - Plugin SDK (`@platform/plugin-sdk`) is a workspace TypeScript package in `libs/plugin-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/plugin-sdk → ../../libs/plugin-sdk/src/index.ts`) and built with `tsup`.
 - To add a new sidebar widget: create `apps/web/src/plugins/sidebar-<name>/index.ts`, export a named descriptor via `defineSidebarPlugin({...})`, then import and register it in `apps/web/src/plugins/index.ts`. See `docs/plugin-extension-guide.md`.
+- To add a new importer: create `apps/web/src/plugins/import-<name>/index.ts`, export a named descriptor via `defineImportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Importers use `PluginFlowModal` with `kind="import"` for a 2-step type-selection flow.
+- To add a new exporter: create `apps/web/src/plugins/export-<name>/index.ts`, export a named descriptor via `defineExportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Exporters use `PluginFlowModal` with `kind="export"`.
+- To add a new preview launcher: create `apps/web/src/plugins/preview-<name>/index.ts`, export a named descriptor via `definePreviewPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Preview launchers use `PluginTypeSelector` for a 2-step flow.
 - To add a new backend plugin route: create `apps/api/app/plugins/<name>/router.py` with an `APIRouter` named `router`, then add it to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py`.
 
 ## SERVICE BOUNDARY TESTING

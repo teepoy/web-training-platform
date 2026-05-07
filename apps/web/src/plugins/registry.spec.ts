@@ -16,13 +16,17 @@ describe("plugin registration", () => {
     }
   });
 
-  it("registers dataset importers and exporters explicitly", () => {
+  it("registers dataset importers, exporters, and preview launchers explicitly", () => {
     expect(pluginRegistry.getImporters("dataset").map((plugin) => plugin.id)).toEqual([
       "import-manual",
+      "import-dataset-manual",
     ]);
     expect(pluginRegistry.getExporters("dataset").map((plugin) => plugin.id)).toEqual([
       "export-preview",
       "export-persist",
+    ]);
+    expect(pluginRegistry.getPreviewLaunchers("dataset-list").map((plugin) => plugin.id)).toEqual([
+      "preview-upstream",
     ]);
   });
 });

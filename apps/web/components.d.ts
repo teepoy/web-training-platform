@@ -72,6 +72,8 @@ declare module 'vue' {
     NText: typeof import('naive-ui')['NText']
     NUpload: typeof import('naive-ui')['NUpload']
     OrgSelector: typeof import('./src/components/OrgSelector.vue')['default']
+    PluginFlowModal: typeof import('./src/components/PluginFlowModal.vue')['default']
+    PluginTypeSelector: typeof import('./src/components/PluginTypeSelector.vue')['default']
     PredictModal: typeof import('./src/components/PredictModal.vue')['default']
     PreviewItemDrawer: typeof import('./src/components/preview/PreviewItemDrawer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

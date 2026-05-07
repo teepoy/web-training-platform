@@ -11,7 +11,7 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Routes | `src/router.ts` | `/datasets`, `/jobs` |
 | API + SSE | `src/api.ts` | Hardcoded `API_BASE`, EventSource helper |
 | Shared types | `src/types.ts` + `src/contracts.ts` | Classification-first shapes |
-| Dataset workflow | `src/views/DatasetsView.vue` | Create dataset, create default preset |
+| Dataset workflow | `src/views/DatasetsView.vue` | Import dataset via `PluginFlowModal` |
 | Job workflow | `src/views/JobsView.vue` | Start job, consume SSE |
 | Job detail metrics | `src/views/JobDetailView.vue` + `src/components/TrainingChart.vue` | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present |
 | Schedule list | `src/views/SchedulesView.vue` | CRUD + create modal + pause/resume/delete |

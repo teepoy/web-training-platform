@@ -6,6 +6,7 @@ export const manualImportPlugin = defineImportPlugin({
   label: "Manual Sample Entry",
   description:
     "Create one sample at a time with URI, metadata, or uploaded image.",
+  icon: "✏️",
   surfaces: ["dataset"],
   component: defineAsyncComponent(() => import("./ManualImporter.vue")),
 });

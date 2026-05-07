@@ -6,6 +6,7 @@ export const previewExportPlugin = defineExportPlugin({
   label: "Preview Export",
   description:
     "Generate and inspect dataset export payload without persisting.",
+  icon: "👁️",
   surfaces: ["dataset"],
   component: defineAsyncComponent(() => import("./PreviewExportPlugin.vue")),
 });

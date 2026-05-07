@@ -26,18 +26,11 @@ export type ImportPluginSurface = "dataset" | "preview";
 // ---------------------------------------------------------------------------
 
 export interface ImportPluginDescriptor {
-  /**
-   * Unique plugin ID.
-   * Convention: kebab-case, e.g. "huggingface-importer"
-   */
   id: string;
-  /** Human-readable label shown in the import dropdown. */
   label: string;
-  /** Short description shown as dropdown item subtitle. */
   description?: string;
-  /** Which surfaces this importer appears on. */
+  icon?: string;
   surfaces: ImportPluginSurface[];
-  /** The Vue component that renders the import workflow UI. */
   component: Component;
 }
 

@@ -69,17 +69,9 @@
               <n-radio-button value="grid">Grid</n-radio-button>
               <n-radio-button value="list">List</n-radio-button>
             </n-radio-group>
-            <div style="display: flex; align-items: center; gap: 8px">
-              <n-select
-                v-model:value="selectedImporterId"
-                :options="importerOptions"
-                style="width: 260px"
-                placeholder="Select importer"
-              />
-              <n-button type="primary" :disabled="!activeImporter" @click="openImporterModal">
-                Add Sample
-              </n-button>
-            </div>
+            <n-button type="primary" @click="showImportFlow = true">
+              Add Sample
+            </n-button>
           </div>
 
           <div class="ds-samples-layout">
@@ -105,55 +97,16 @@
               @update:collapsed="prefs.setSidebarCollapsed"
             />
           </div>
-
-          <n-modal
-            v-model:show="showImporterModal"
-            preset="dialog"
-            :title="activeImporter?.label ?? 'Import Samples'"
-            style="width: 560px"
-          >
-            <component
-              :is="activeImporter?.component"
-              v-if="activeImporter"
-              :dataset-id="id"
-              :on-complete="handleImporterComplete"
-              :on-cancel="closeImporterModal"
-            />
-          </n-modal>
         </n-tab-pane>
 
         <!-- ============================================================ -->
         <!-- TAB 2: Export -->
         <!-- ============================================================ -->
         <n-tab-pane name="export" tab="Export">
-          <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center">
-            <n-select
-              v-model:value="selectedExporterId"
-              :options="exporterOptions"
-              style="width: 260px"
-              placeholder="Select exporter"
-            />
-            <n-button type="primary" :disabled="!activeExporter" @click="showExporterModal = true">
-              Open Exporter
-            </n-button>
+          <n-empty v-if="exporterPlugins.length === 0" description="No export plugins available." style="margin-top: 24px" />
+          <div v-else style="display: flex; justify-content: center; padding: 24px 0">
+            <n-button type="primary" @click="showExportFlow = true">Export Dataset</n-button>
           </div>
-
-          <n-empty v-if="!activeExporter" description="Select an exporter plugin to continue." style="margin-top: 24px" />
-
-          <n-modal
-            v-model:show="showExporterModal"
-            preset="dialog"
-            :title="activeExporter?.label ?? 'Export'"
-            style="width: 700px"
-          >
-            <component
-              :is="activeExporter?.component"
-              v-if="activeExporter"
-              :dataset-id="id"
-              :on-complete="handleExporterComplete"
-              :on-cancel="() => { showExporterModal = false }"
-            />
-          </n-modal>
         </n-tab-pane>
 
         <!-- ============================================================ -->
@@ -313,12 +266,30 @@
         @close="selectedSampleId = null"
         @select-sample="(sid: string) => { selectedSampleId = sid }"
       />
+
+      <PluginFlowModal
+        v-model:show="showImportFlow"
+        :plugins="importerPlugins"
+        kind="import"
+        title="Import Samples"
+        :dataset-id="id"
+        @complete="handleImporterComplete"
+      />
+
+      <PluginFlowModal
+        v-model:show="showExportFlow"
+        :plugins="exporterPlugins"
+        kind="export"
+        title="Export Dataset"
+        :dataset-id="id"
+        @complete="handleExporterComplete"
+      />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, watch, onMounted, provide } from "vue";
+import { ref, computed, h, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
@@ -340,6 +311,8 @@ import {
 } from "../components/classify/widgetContract";
 import type { ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import { pluginRegistry } from "../core/registry";
+import PluginFlowModal from "../components/PluginFlowModal.vue";
+import type { PluginCard } from "../components/PluginTypeSelector.vue";
 
 // ---------------------------------------------------------------------------
 // Route / Router
@@ -527,39 +500,32 @@ const featureSamplesQuery = useQuery({
   enabled: computed(() => !!id.value),
 });
 
-// Import plugin launcher
-const datasetImporters = computed(() => pluginRegistry.getImporters("dataset"));
-const selectedImporterId = ref<string | null>(null);
-const showImporterModal = ref(false);
+// Import/Export plugin flow modals
+const showImportFlow = ref(false);
+const showExportFlow = ref(false);
 
-const importerOptions = computed(() =>
-  datasetImporters.value.map((plugin) => ({
-    label: plugin.label,
-    value: plugin.id,
-  })),
+const importerPlugins = computed<PluginCard[]>(() =>
+  pluginRegistry.getImporters("dataset").map((p) => ({
+    id: p.id,
+    label: p.label,
+    description: p.description,
+    icon: p.icon,
+    component: p.component,
+  }))
 );
 
-watch(datasetImporters, (plugins) => {
-  if (!selectedImporterId.value || !plugins.some((plugin) => plugin.id === selectedImporterId.value)) {
-    selectedImporterId.value = plugins[0]?.id ?? null;
-  }
-}, { immediate: true });
-
-const activeImporter = computed(() =>
-  datasetImporters.value.find((plugin) => plugin.id === selectedImporterId.value) ?? null,
+const exporterPlugins = computed<PluginCard[]>(() =>
+  pluginRegistry.getExporters("dataset").map((p) => ({
+    id: p.id,
+    label: p.label,
+    description: p.description,
+    icon: p.icon,
+    component: p.component,
+  }))
 );
-
-function openImporterModal() {
-  if (!activeImporter.value) return;
-  showImporterModal.value = true;
-}
-
-function closeImporterModal() {
-  showImporterModal.value = false;
-}
 
 function handleImporterComplete() {
-  showImporterModal.value = false;
+  showImportFlow.value = false;
   sampleLoader.reset();
   qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
 }
@@ -568,32 +534,9 @@ function openSampleDetail(sampleId: string) {
   selectedSampleId.value = sampleId;
 }
 
-// ---------------------------------------------------------------------------
-// Export tab
-// ---------------------------------------------------------------------------
-const datasetExporters = computed(() => pluginRegistry.getExporters("dataset"));
-const selectedExporterId = ref<string | null>(null);
-const showExporterModal = ref(false);
-
-const exporterOptions = computed(() =>
-  datasetExporters.value.map((plugin) => ({
-    label: plugin.label,
-    value: plugin.id,
-  })),
-);
-
-watch(datasetExporters, (plugins) => {
-  if (!selectedExporterId.value || !plugins.some((plugin) => plugin.id === selectedExporterId.value)) {
-    selectedExporterId.value = plugins[0]?.id ?? null;
-  }
-}, { immediate: true });
-
-const activeExporter = computed(() =>
-  datasetExporters.value.find((plugin) => plugin.id === selectedExporterId.value) ?? null,
-);
-
-function handleExporterComplete(payload?: { url?: string; message?: string }) {
-  showExporterModal.value = false;
+function handleExporterComplete(result: unknown) {
+  showExportFlow.value = false;
+  const payload = result as { url?: string; message?: string } | undefined;
   if (payload?.message) {
     message.success(payload.message);
   }

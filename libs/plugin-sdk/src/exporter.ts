@@ -18,6 +18,7 @@ export interface ExportPluginDescriptor {
   id: string;
   label: string;
   description?: string;
+  icon?: string;
   surfaces: ExportPluginSurface[];
   component: Component;
 }

@@ -5,6 +5,7 @@ import {
   defineImportPlugin,
   defineExportPlugin,
   defineAgentSkill,
+  definePreviewPlugin,
   createPluginRegistry,
   reduceLabelFilterIntent,
   reduceCollectionIntent,
@@ -141,6 +142,44 @@ describe("defineAgentSkill", () => {
 });
 
 // ---------------------------------------------------------------------------
+// definePreviewPlugin
+// ---------------------------------------------------------------------------
+
+describe("definePreviewPlugin", () => {
+  it("validates successfully", () => {
+    const d = definePreviewPlugin({
+      id: "upstream-preview",
+      label: "Upstream",
+      surfaces: ["preview"],
+      component: StubComponent,
+    });
+    expect(d.id).toBe("upstream-preview");
+  });
+
+  it("throws when id is empty", () => {
+    expect(() =>
+      definePreviewPlugin({
+        id: "",
+        label: "X",
+        surfaces: ["preview"],
+        component: StubComponent,
+      }),
+    ).toThrow("id must not be empty");
+  });
+
+  it("throws when surfaces is empty", () => {
+    expect(() =>
+      definePreviewPlugin({
+        id: "test",
+        label: "X",
+        surfaces: [],
+        component: StubComponent,
+      }),
+    ).toThrow("surfaces must not be empty");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PluginRegistry
 // ---------------------------------------------------------------------------
 
@@ -225,6 +264,57 @@ describe("createPluginRegistry", () => {
     expect(registry.getAgentSkillByToolName("global_tool")?.toolName).toBe(
       "global_tool",
     );
+  });
+
+  it("registers and filters preview launchers by surface", () => {
+    const registry = createPluginRegistry();
+    registry.registerPreviewLauncher(
+      definePreviewPlugin({
+        id: "upstream-preview",
+        label: "Upstream",
+        surfaces: ["dataset-list", "preview"],
+        component: StubComponent,
+      }),
+    );
+    registry.registerPreviewLauncher(
+      definePreviewPlugin({
+        id: "local-preview",
+        label: "Local",
+        surfaces: ["preview"],
+        component: StubComponent,
+      }),
+    );
+    expect(registry.getPreviewLaunchers("dataset-list").map((d) => d.id)).toEqual([
+      "upstream-preview",
+    ]);
+    expect(registry.getPreviewLaunchers("preview").map((d) => d.id)).toEqual([
+      "upstream-preview",
+      "local-preview",
+    ]);
+  });
+
+  it("warns and overwrites duplicate preview launcher", () => {
+    const registry = createPluginRegistry();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    registry.registerPreviewLauncher(
+      definePreviewPlugin({
+        id: "dup",
+        label: "D1",
+        surfaces: ["preview"],
+        component: StubComponent,
+      }),
+    );
+    registry.registerPreviewLauncher(
+      definePreviewPlugin({
+        id: "dup",
+        label: "D2",
+        surfaces: ["preview"],
+        component: StubComponent,
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(registry.getPreviewLaunchers("preview")[0].label).toBe("D2");
+    warnSpy.mockRestore();
   });
 });
 

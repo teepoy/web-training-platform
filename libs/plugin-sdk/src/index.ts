@@ -65,6 +65,16 @@ export type {
 
 export { defineAgentSkill } from "./agent";
 
+// Preview launcher contracts
+export type {
+  PreviewLauncherDescriptor,
+  PreviewLauncherSurface,
+  PreviewLauncherRequiredProps,
+  PreviewLauncherResult,
+} from "./preview";
+
+export { definePreviewPlugin } from "./preview";
+
 // Registry
 export type { PluginRegistry } from "./registry";
 export { createPluginRegistry } from "./registry";
