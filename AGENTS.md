@@ -10,6 +10,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
 ├── apps/api/app/plugins/  # Backend plugin routes — explicit registry.py
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
+├── apps/web/.storybook/ # Storybook config + mock helpers
 ├── apps/web/src/components/sample-browser/ # Shared browser core and sidebar shell
 ├── apps/web/src/core/  # Singleton plugin registry
 ├── apps/web/src/plugins/  # Frontend plugin descriptors (one subdirectory per plugin)
@@ -54,6 +55,8 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Plugin SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/plugin-sdk/` (20 tests) |
 | Plugin integration tests | `pnpm test:plugins` | vitest for plugin registrations |
 | Build plugin SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/plugin-sdk` |
+| **Storybook** | `pnpm storybook` | Plugin component stories on port 6006 |
+| Build Storybook | `pnpm build-storybook` | Static build of Storybook |
 
 Raw single-test (when Make is unavailable):
 ```bash
@@ -137,6 +140,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`            |
 | Plugin extension guide    | `docs/plugin-extension-guide.md`                        | Step-by-step guide for all 4 plugin types                     |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`    | Re-exports SDK types; kept for backward compatibility         |
+| Storybook config          | `apps/web/.storybook/`                                  | Storybook main.ts, preview.ts, mock helpers                  |
+| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts`                  | One story file per plugin component                           |
 
 ## CODE MAP
 | Symbol                 | Type       | Location                                         | Role                                                 |
@@ -169,6 +174,10 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PluginTypeSelector`  | component  | `apps/web/src/components/PluginTypeSelector.vue`  | Card grid for selecting a plugin type                 |
 | `PLUGIN_ROUTERS`     | list       | `apps/api/app/plugins/registry.py`                | Explicit list of all backend plugin routers      |
 | `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules |
+| `providePluginContext`  | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`              | Storybook decorator providing sidebar-widget injection keys  |
+| `mockImportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                | Storybook mock factory for import plugin props              |
+| `mockExportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                | Storybook mock factory for export plugin props              |
+| `mockPreviewProps`      | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                | Storybook mock factory for preview launcher props           |
 
 ## ANTI-PATTERNS — DO NOT
 

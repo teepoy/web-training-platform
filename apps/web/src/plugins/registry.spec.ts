@@ -20,10 +20,12 @@ describe("plugin registration", () => {
     expect(pluginRegistry.getImporters("dataset").map((plugin) => plugin.id)).toEqual([
       "import-manual",
       "import-dataset-manual",
+      "import-parquet",
     ]);
     expect(pluginRegistry.getExporters("dataset").map((plugin) => plugin.id)).toEqual([
       "export-preview",
       "export-persist",
+      "export-parquet",
     ]);
     expect(pluginRegistry.getPreviewLaunchers("dataset-list").map((plugin) => plugin.id)).toEqual([
       "preview-upstream",

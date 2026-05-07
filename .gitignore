@@ -17,6 +17,7 @@ ENV/
 # Node
 node_modules/
 apps/web/dist/
+apps/web/storybook-static/
 
 # Compiled JS alongside TS/Vue source (build artifacts)
 apps/web/src/**/*.js
