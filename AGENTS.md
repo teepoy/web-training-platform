@@ -8,11 +8,16 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ./
 ├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
 ├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
+├── apps/api/app/plugins/  # Backend plugin routes — explicit registry.py
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
 ├── apps/web/src/components/sample-browser/ # Shared browser core and sidebar shell
+├── apps/web/src/core/  # Singleton plugin registry
+├── apps/web/src/plugins/  # Frontend plugin descriptors (one subdirectory per plugin)
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
+├── libs/plugin-sdk/    # @platform/plugin-sdk — TypeScript plugin contract types & factories
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
+├── libs/mcp-server/finetune_mcp/plugins/  # MCP tool plugins — auto-discovered by loader.py
 ├── infra/k8s/          # minikube/kubeflow manifests
 ├── infra/compose/      # docker compose smoke stack
 └── docs/               # architecture and endpoint notes
@@ -22,29 +27,33 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 
 **Prefer `make` targets over raw commands.** Run from repo root.
 
-| What | Command | Notes |
-|------|---------|-------|
-| Install all | `make install` | uv sync + pnpm install |
-| Start API + Web | `make dev` | Parallel; Ctrl-C stops both |
-| Start API only | `make dev-api` | `API_PORT=9000` to override |
-| Start Web only | `make dev-web` | `WEB_PORT=3000` to override |
-| **Run all tests** | `make test` | API tests only (no frontend tests) |
-| **Run single test** | `make test-api ARGS="-k test_health"` | pytest `-k` filter |
-| **Run test file** | `make test-api ARGS="tests/test_vqa_runtime.py -v"` | Verbose single file |
-| Build frontend | `make build-web` | vue-tsc + vite build |
-| Alembic migrate | `make db-migrate` | `upgrade head` |
-| Compose Alembic migrate | `make db-migrate-compose` | Runs `alembic upgrade head` in Compose API container |
-| New migration | `make db-revision MSG="add column"` | autogenerate |
-| Reset app data | `make reset-app-data` | Drops and recreates app tables in the configured DB |
-| SDK CLI | `make ftctl ARGS="jobs ls"` | Wraps `ftctl` |
-| Seed ImageNet mock | `make seed-imagenet-mock` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Mock` with 1000 offline synthetic samples |
-| Seed ImageNet POC | `make seed-imagenet-poc` | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
-| Seed ImageNet full | `make seed-imagenet-full` | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path |
-| Batch dev smoke | `make smoke-dev-batch` | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability |
-| Compose up/down | `make up` / `make down` | Full Compose stack (dev profile, includes baked web container) |
-| Compose backend only | `make up-stack` | Compose stack without the baked web container |
-| Ensure mock datasets | `make ensure-mock-datasets` | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation) |
-| Compose dev entrypoint | `make updev` | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server |
+| What                    | Command                                             | Notes                                                                                                                  |
+| ----------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Install all             | `make install`                                      | uv sync + pnpm install                                                                                                 |
+| Start API + Web         | `make dev`                                          | Parallel; Ctrl-C stops both                                                                                            |
+| Start API only          | `make dev-api`                                      | `API_PORT=9000` to override                                                                                            |
+| Start Web only          | `make dev-web`                                      | `WEB_PORT=3000` to override                                                                                            |
+| **Run all tests**       | `make test`                                         | API tests only (no frontend tests)                                                                                     |
+| **Run single test**     | `make test-api ARGS="-k test_health"`               | pytest `-k` filter                                                                                                     |
+| **Run test file**       | `make test-api ARGS="tests/test_vqa_runtime.py -v"` | Verbose single file                                                                                                    |
+| Build frontend          | `make build-web`                                    | vue-tsc + vite build                                                                                                   |
+| Alembic migrate         | `make db-migrate`                                   | `upgrade head`                                                                                                         |
+| Compose Alembic migrate | `make db-migrate-compose`                           | Runs `alembic upgrade head` in Compose API container                                                                   |
+| New migration           | `make db-revision MSG="add column"`                 | autogenerate                                                                                                           |
+| Reset app data          | `make reset-app-data`                               | Drops and recreates app tables in the configured DB                                                                    |
+| SDK CLI                 | `make ftctl ARGS="jobs ls"`                         | Wraps `ftctl`                                                                                                          |
+| Seed ImageNet mock      | `make seed-imagenet-mock`                           | Health-checks `API_URL` first; creates dataset `ImageNet-1K Mock` with 1000 offline synthetic samples                  |
+| Seed ImageNet POC       | `make seed-imagenet-poc`                            | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
+| Seed ImageNet full      | `make seed-imagenet-full`                           | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path            |
+| Batch dev smoke         | `make smoke-dev-batch`                              | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability         |
+| Compose up/down         | `make up` / `make down`                             | Full Compose stack (dev profile, includes baked web container)                                                         |
+| Compose backend only    | `make up-stack`                                     | Compose stack without the baked web container                                                                          |
+| Ensure mock datasets    | `make ensure-mock-datasets`                         | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation)                    |
+| Compose dev entrypoint  | `make updev`                                        | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server                               |
+
+| Plugin SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/plugin-sdk/` (20 tests) |
+| Plugin integration tests | `pnpm test:plugins` | vitest for plugin registrations |
+| Build plugin SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/plugin-sdk` |
 
 Raw single-test (when Make is unavailable):
 ```bash
@@ -88,52 +97,72 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - **Markers**: `no_auth_override` — defined in `apps/api/pyproject.toml`.
 
 ## WHERE TO LOOK
-| Task | Location |
-|------|----------|
-| API routes | `apps/api/app/main.py` |
-| Runtime DI wiring | `apps/api/app/container.py` |
-| Config profiles | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`) |
-| DB schema changes | `apps/api/app/db/models.py` + `apps/api/alembic/` |
-| Frontend API calls | `apps/web/src/api.ts` |
-| Frontend views | `apps/web/src/views/` + `apps/web/src/router.ts` |
-| Prefect flows | `apps/api/app/flows/` |
-| Schedule service | `apps/api/app/services/scheduler.py` |
-| Agent runtime | `apps/api/app/agent/` |
-| Agent display protocol | `docs/agent-display-protocol.md` | |
-| MCP server | `libs/mcp-server/` | |
-| Preview launch form | `apps/web/src/views/PreviewLaunchView.vue` | |
-| Preview workspace | `apps/web/src/views/PreviewClassifyView.vue` | |
-| Preview item drawer | `apps/web/src/components/preview/PreviewItemDrawer.vue` | |
-| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts` | |
-| Preview domain models | `apps/api/app/domain/preview.py` | |
-| Preview service | `apps/api/app/services/preview_service.py` | Session lifecycle, item pagination, persist handoff |
-| Preview TTL store | `apps/api/app/services/preview_store.py` | In-memory TTL session store |
-| Upstream adapter | `apps/api/app/services/preview_upstream.py` | 50-item mock upstream; replace with real adapter |
-| Shared browser core | `apps/web/src/components/sample-browser/` | Shared virtualized browser and sidebar shell |
-| Browser preferences | `apps/web/src/stores/sampleBrowser.ts` | Presentation persistence (layout, thumbSize) |
-| Browser filter | `apps/web/src/composables/useBrowserFilter.ts` | Browser-scope item filter pipeline |
-| Browser architecture | `docs/sample-browser-architecture.md` | Shared browser architecture doc |
+| Task                      | Location                                                |
+| ------------------------- | ------------------------------------------------------- |
+| API routes                | `apps/api/app/main.py`                                  |
+| Runtime DI wiring         | `apps/api/app/container.py`                             |
+| Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)         |
+| DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`       |
+| Frontend API calls        | `apps/web/src/api.ts`                                   |
+| Frontend views            | `apps/web/src/views/` + `apps/web/src/router.ts`        |
+| Prefect flows             | `apps/api/app/flows/`                                   |
+| Schedule service          | `apps/api/app/services/scheduler.py`                    |
+| Agent runtime             | `apps/api/app/agent/`                                   |
+| Agent display protocol    | `docs/agent-display-protocol.md`                        |                                                               |
+| MCP server                | `libs/mcp-server/`                                      |                                                               |
+| Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`              |                                                               |
+| Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`            |                                                               |
+| Preview item drawer       | `apps/web/src/components/preview/PreviewItemDrawer.vue` |                                                               |
+| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`          |                                                               |
+| Preview domain models     | `apps/api/app/domain/preview.py`                        |                                                               |
+| Preview service           | `apps/api/app/services/preview_service.py`              | Session lifecycle, item pagination, persist handoff           |
+| Preview TTL store         | `apps/api/app/services/preview_store.py`                | In-memory TTL session store                                   |
+| Upstream adapter          | `apps/api/app/services/preview_upstream.py`             | 50-item mock upstream; replace with real adapter              |
+| Shared browser core       | `apps/web/src/components/sample-browser/`               | Shared virtualized browser and sidebar shell                  |
+| Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                  | Presentation persistence (layout, thumbSize)                  |
+| Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`          | Browser-scope item filter pipeline                            |
+| Browser architecture      | `docs/sample-browser-architecture.md`                   | Shared browser architecture doc                               |
+| Plugin SDK contracts      | `libs/plugin-sdk/src/`                                  | TypeScript plugin type definitions and factories              |
+| Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                        | Copy-paste starter templates for new plugins                  |
+| Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                           |
+| Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                         | Explicit registration of all plugins before app mount          |
+| Frontend sidebar plugins  | `apps/web/src/plugins/sidebar-*/`                       | One directory per sidebar widget plugin                       |
+| Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`)                    |
+| Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`) |
+| Backend plugin registry  | `apps/api/app/plugins/registry.py`                    | Explicit list of backend plugin routers                        |
+| Backend plugin routes    | `apps/api/app/plugins/*/router.py`                      | One FastAPI router per backend plugin                         |
+| MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`            |
+| Plugin extension guide    | `docs/plugin-extension-guide.md`                        | Step-by-step guide for all 4 plugin types                     |
+| Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`    | Re-exports SDK types; kept for backward compatibility         |
 
 ## CODE MAP
-| Symbol | Type | Location | Role |
-|--------|------|----------|------|
-| `app` | FastAPI | `apps/api/app/main.py` | HTTP/SSE entrypoint |
-| `Container` | DI | `apps/api/app/container.py` | Wires engine/storage/repo |
-| `TrainingOrchestrator` | service | `apps/api/app/services/orchestrator.py` | Job persistence + notifications |
-| `SchedulerService` | service | `apps/api/app/services/scheduler.py` | Prefect REST client |
-| `SurfaceStore` | service | `apps/api/app/agent/surface_store.py` | In-memory agent panel state |
-| `SessionStore` | service | `apps/api/app/agent/session_store.py` | In-memory conversation persistence (TTL-based) |
-| `ClassifyAgent` | service | `apps/api/app/agent/runtime.py` | LLM tool-calling loop for classify sidebar |
-| `GlobalAgent` | service | `apps/api/app/agent/global_runtime.py` | Platform-wide LLM agent (read/write/sidebar) |
-| `useGlobalAgent` | composable | `apps/web/src/composables/useGlobalAgent.ts` | Global agent chat + panel injection |
-| `PlatformClient` | MCP | `libs/mcp-server/finetune_mcp/client.py` | HTTP client for MCP server |
-| `router` | Vue Router | `apps/web/src/router.ts` | `/datasets`, `/jobs`, `/schedules` |
-| `FinetuneClient` | SDK | `libs/python-sdk/ftsdk/client.py` | Sync HTTP wrapper |
-| `PreviewService` | service | `apps/api/app/services/preview_service.py` | Session lifecycle, item pagination, persist handoff |
-| `PreviewStore` | service | `apps/api/app/services/preview_store.py` | In-memory TTL session store |
-| `MockUpstreamAdapter` | service | `apps/api/app/services/preview_upstream.py` | 50-item mock upstream; replace with real adapter |
-| `usePreviewLoader` | composable | `apps/web/src/composables/usePreviewLoader.ts` | Cursor-based preview item loader |
-| `PreviewClassifyView` | view | `apps/web/src/views/PreviewClassifyView.vue` | Preview workspace with grid + persist flow |
+| Symbol                 | Type       | Location                                         | Role                                                 |
+| ---------------------- | ---------- | ------------------------------------------------ | ---------------------------------------------------- |
+| `app`                  | FastAPI    | `apps/api/app/main.py`                           | HTTP/SSE entrypoint                                  |
+| `Container`            | DI         | `apps/api/app/container.py`                      | Wires engine/storage/repo                            |
+| `TrainingOrchestrator` | service    | `apps/api/app/services/orchestrator.py`          | Job persistence + notifications                      |
+| `SchedulerService`     | service    | `apps/api/app/services/scheduler.py`             | Prefect REST client                                  |
+| `SurfaceStore`         | service    | `apps/api/app/agent/surface_store.py`            | In-memory agent panel state                          |
+| `SessionStore`         | service    | `apps/api/app/agent/session_store.py`            | In-memory conversation persistence (TTL-based)       |
+| `ClassifyAgent`        | service    | `apps/api/app/agent/runtime.py`                  | LLM tool-calling loop for classify sidebar           |
+| `GlobalAgent`          | service    | `apps/api/app/agent/global_runtime.py`           | Platform-wide LLM agent (read/write/sidebar)         |
+| `useGlobalAgent`       | composable | `apps/web/src/composables/useGlobalAgent.ts`     | Global agent chat + panel injection                  |
+| `PlatformClient`       | MCP        | `libs/mcp-server/finetune_mcp/client.py`         | HTTP client for MCP server                           |
+| `router`               | Vue Router | `apps/web/src/router.ts`                         | `/datasets`, `/jobs`, `/schedules`                   |
+| `FinetuneClient`       | SDK        | `libs/python-sdk/ftsdk/client.py`                | Sync HTTP wrapper                                    |
+| `PreviewService`       | service    | `apps/api/app/services/preview_service.py`       | Session lifecycle, item pagination, persist handoff  |
+| `PreviewStore`         | service    | `apps/api/app/services/preview_store.py`         | In-memory TTL session store                          |
+| `MockUpstreamAdapter`  | service    | `apps/api/app/services/preview_upstream.py`      | 50-item mock upstream; replace with real adapter     |
+| `usePreviewLoader`     | composable | `apps/web/src/composables/usePreviewLoader.ts`   | Cursor-based preview item loader                     |
+| `PreviewClassifyView`  | view       | `apps/web/src/views/PreviewClassifyView.vue`     | Preview workspace with grid + persist flow           |
+| `pluginRegistry`       | singleton  | `apps/web/src/core/registry.ts`                  | Runtime registry of all frontend plugins             |
+| `createPluginRegistry` | factory    | `libs/plugin-sdk/src/registry.ts`                | Creates the `PluginRegistry` instance                |
+| `defineSidebarPlugin`  | factory    | `libs/plugin-sdk/src/sidebar.ts`                 | Declares a sidebar widget plugin                     |
+| `defineImportPlugin`   | factory    | `libs/plugin-sdk/src/importer.ts`                | Declares an import flow plugin                       |
+| `defineExportPlugin`   | factory    | `libs/plugin-sdk/src/exporter.ts`                | Declares an export flow plugin                       |
+| `defineAgentSkill`     | factory    | `libs/plugin-sdk/src/agent.ts`                   | Declares an agent skill plugin                       |
+| `PLUGIN_ROUTERS`     | list       | `apps/api/app/plugins/registry.py`                | Explicit list of all backend plugin routers      |
+| `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules |
 
 ## ANTI-PATTERNS — DO NOT
 
@@ -154,6 +183,16 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - VQA predictions are stored as Label Studio `textarea` results, not classification choices.
 - Prediction collection sync to LS is one-way and manual. Do not treat LS prediction IDs as durable platform provenance.
 
+### Plugin Architecture
+- Don't register plugins directly in `main.ts`, `BrowserSidebar.vue`, or `DatasetDetailView.vue` — always add to `apps/web/src/plugins/index.ts`.
+- Each plugin `index.ts` exports a named descriptor; the barrel file does the registration. Don't call `pluginRegistry.register*()` inside plugin modules.
+- Don't import widget `.vue` files statically in plugin `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
+- Don't bypass `pluginRegistry` for sidebar rendering — `BrowserSidebar.vue` uses `pluginRegistry.getSidebarComponent(key)`.
+- Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineSidebarPlugin` instead.
+- Don't import from `widgetContract.ts` for new plugin code — import from `@platform/plugin-sdk` directly; the shim is kept only for backward compatibility.
+- Backend plugin routes must live under `apps/api/app/plugins/<name>/router.py`; they must be added to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py` — don't manually import them in `main.py`.
+- MCP plugin modules must export `TOOLS: list[dict]` and `dispatch(name, args)` — the loader merges these automatically.
+
 ### Code Quality
 - Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.
 - Don't weaken `strict: true` in tsconfig.
@@ -170,6 +209,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
+- Plugin SDK (`@platform/plugin-sdk`) is a workspace TypeScript package in `libs/plugin-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/plugin-sdk → ../../libs/plugin-sdk/src/index.ts`) and built with `tsup`.
+- To add a new sidebar widget: create `apps/web/src/plugins/sidebar-<name>/index.ts`, export a named descriptor via `defineSidebarPlugin({...})`, then import and register it in `apps/web/src/plugins/index.ts`. See `docs/plugin-extension-guide.md`.
+- To add a new backend plugin route: create `apps/api/app/plugins/<name>/router.py` with an `APIRouter` named `router`, then add it to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py`.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.

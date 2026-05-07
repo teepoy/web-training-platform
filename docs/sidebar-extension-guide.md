@@ -9,8 +9,9 @@ BrowserSidebar.vue              ← neutral shell: resize, collapse, panel itera
   └── WidgetErrorBoundary.vue   ← per-panel crash fence
         └── <YourWidget>.vue    ← Vue component resolved by component key
 
-sidebarConfig.ts                ← widget registry + per-surface panel presets
-widgetContract.ts               ← shared types: intents, interaction context, injection keys
+src/plugins/index.ts            ← explicit widget registration barrel
+sidebarConfig.ts                ← per-surface panel presets
+@platform/plugin-sdk            ← shared types: intents, interaction context, injection keys
 ```
 
 The sidebar is data-agnostic. It receives two things from the owning view:
@@ -25,7 +26,7 @@ The sidebar is data-agnostic. It receives two things from the owning view:
 
 ## Step 1 — Create the Widget Component
 
-Create `apps/web/src/components/classify/widgets/MyWidget.vue`.
+Create `apps/web/src/plugins/sidebar-my-widget/MyWidget.vue`.
 
 ### Minimal template
 
@@ -41,7 +42,7 @@ Create `apps/web/src/components/classify/widgets/MyWidget.vue`.
 -->
 <script setup lang="ts">
 import { inject } from 'vue'
-import { BROWSER_DASHBOARD_KEY } from '../widgetContract'
+import { BROWSER_DASHBOARD_KEY } from '@platform/plugin-sdk'
 
 const props = withDefaults(defineProps<{
   myProp?: string
@@ -70,7 +71,7 @@ If your widget needs to know the active label filter or react to spatial selecti
 
 ```ts
 import { inject, computed } from 'vue'
-import { SIDEBAR_WIDGET_INTERACTION_KEY } from '../widgetContract'
+import { SIDEBAR_WIDGET_INTERACTION_KEY } from '@platform/plugin-sdk'
 
 const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY)
 const activeLabel = computed(() => interactionRef?.value.state.activeLabelFilter ?? null)
@@ -106,42 +107,44 @@ function handleClick(id: string) {
 
 ---
 
-## Step 2 — Register in the Widget Registry
+## Step 2 — Export and Register the Plugin Descriptor
 
-Open `apps/web/src/components/classify/sidebarConfig.ts` and add an entry to `SIDEBAR_WIDGETS`:
+Create `apps/web/src/plugins/sidebar-my-widget/index.ts`:
 
 ```ts
-import { defineSidebarWidget } from './widgetContract'
 import { defineAsyncComponent } from 'vue'
+import { defineSidebarPlugin } from '@platform/plugin-sdk'
 
-export const SIDEBAR_WIDGETS: Record<string, SidebarWidgetDefinition> = {
-  // ... existing entries ...
-
-  'my-widget': defineSidebarWidget({
-    key: 'my-widget',
-    component: defineAsyncComponent(() => import('./widgets/MyWidget.vue')),
-    contract: {
-      displayName: 'My Widget',
-      description: 'One-line description of what it shows.',
-      acceptsProps: ['myProp'],          // prop names the panel descriptor may set
-      capabilities: {
-        reads: ['browser-dashboard'],    // SidebarWidgetContextKey[]
-        emits: [],                       // SidebarWidgetIntentType[]
-      },
-      selfTests: [
-        {
-          name: 'renders with minimal props',
-          objective: 'Verify the widget shows up without crashing.',
-          steps: ['Render without extra props.'],
-          expected: ['Widget mounts without errors.'],
-        },
-      ],
+export const myWidgetPlugin = defineSidebarPlugin({
+  key: 'my-widget',
+  component: defineAsyncComponent(() => import('./MyWidget.vue')),
+  contract: {
+    displayName: 'My Widget',
+    description: 'One-line description of what it shows.',
+    acceptsProps: ['myProp'],
+    capabilities: {
+      reads: ['browser-dashboard'],
+      emits: [],
     },
-  }),
-}
+    selfTests: [
+      {
+        name: 'renders with minimal props',
+        objective: 'Verify the widget shows up without crashing.',
+        steps: ['Render without extra props.'],
+        expected: ['Widget mounts without errors.'],
+      },
+    ],
+  },
+})
 ```
 
-`WIDGET_COMPONENTS` is derived from `SIDEBAR_WIDGETS` automatically — no further wiring needed.
+Then import and register the descriptor in `apps/web/src/plugins/index.ts`:
+
+```ts
+import { myWidgetPlugin } from './sidebar-my-widget'
+
+pluginRegistry.registerSidebarWidget(myWidgetPlugin)
+```
 
 ---
 
@@ -160,7 +163,7 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
   // ... existing panels ...
   {
     id: 'my-panel',             // unique per surface; reused as collapse key
-    component: 'my-widget',     // must match the key in SIDEBAR_WIDGETS
+    component: 'my-widget',     // must match the registered plugin key
     title: 'My Panel',
     order: 30,                  // lower = higher in the sidebar; default 50
     size: 'compact',            // 'compact' | 'normal' | 'large' — hint for agent panels
@@ -449,7 +452,8 @@ const sidebarContext = computed(() => ({
 ## Checklist
 
 - [ ] Widget `.vue` file created in `./widgets/`
-- [ ] Entry added to `SIDEBAR_WIDGETS` in `sidebarConfig.ts`
+- [ ] Descriptor exported from `src/plugins/sidebar-<name>/index.ts`
+- [ ] Descriptor registered in `src/plugins/index.ts`
 - [ ] `defineSidebarWidget` used (validates contract shape)
 - [ ] `contract.capabilities.reads` and `contract.capabilities.emits` accurately declared
 - [ ] At least one `selfTests` entry written
