@@ -5,6 +5,9 @@
   "packageManager": "pnpm@10.5.0",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
-    "build:web": "pnpm --filter web build"
+    "build:web": "pnpm --filter web build",
+    "test:web": "pnpm --filter web test:all",
+    "test:plugins": "pnpm --filter web test:plugins",
+    "test:plugin-sdk": "pnpm --filter @platform/plugin-sdk test"
   }
 }

@@ -10,6 +10,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@platform/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"]
+    },
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
