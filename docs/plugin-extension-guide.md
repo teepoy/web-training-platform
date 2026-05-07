@@ -7,6 +7,7 @@ This document describes the current extension model for the web app and API.
 - Sidebar widgets: `apps/web/src/plugins/sidebar-*/index.ts`
 - Importers: `apps/web/src/plugins/import-*/index.ts`
 - Exporters: `apps/web/src/plugins/export-*/index.ts`
+- Preview launchers: `apps/web/src/plugins/preview-*/index.ts`
 - Registry singleton: `apps/web/src/core/registry.ts`
 - Registration barrel (loaded before mount): `apps/web/src/plugins/index.ts`
 
@@ -15,6 +16,7 @@ Each plugin directory exports a named descriptor using SDK helpers:
 - `defineSidebarPlugin`
 - `defineImportPlugin`
 - `defineExportPlugin`
+- `definePreviewPlugin`
 - `defineAgentSkill`
 
 Descriptors are imported and registered in `apps/web/src/plugins/index.ts`.
@@ -45,24 +47,36 @@ To add a widget:
 
 ## Import plugins (Dataset view)
 
-Dataset import UI is plugin-driven in `apps/web/src/views/DatasetDetailView.vue`:
+Dataset import UI is plugin-driven using a 2-step flow via `PluginFlowModal`:
 
-- Importers are discovered with `pluginRegistry.getImporters("dataset")`
-- Selected importer component is mounted in a modal
-- Plugin receives `ImportPluginRequiredProps`:
+- Step 1: `PluginTypeSelector` shows available importers as selectable cards
+- Step 2: Selected importer component is mounted inside the modal
+
+Importers are discovered with `pluginRegistry.getImporters("dataset")`.
+
+- `DatasetsView.vue` uses `PluginFlowModal` with `kind="import"` for dataset-creation importers (surface: `"dataset"`)
+- `DatasetDetailView.vue` uses `PluginFlowModal` with `kind="import"` for sample-level importers (surface: `"dataset"`)
+
+Plugin receives `ImportPluginRequiredProps`:
   - `datasetId`
   - `onComplete`
   - `onCancel`
 
-Example plugin: `apps/web/src/plugins/import-manual/`.
+Examples:
+
+- `apps/web/src/plugins/import-manual/` — single-sample manual entry (surface: `"dataset"`)
+- `apps/web/src/plugins/import-dataset-manual/` — JSON bulk import creating a new dataset (surface: `"dataset"`)
 
 ## Export plugins (Dataset view)
 
-Dataset export UI is plugin-driven in `apps/web/src/views/DatasetDetailView.vue`:
+Dataset export UI is plugin-driven using a 2-step flow via `PluginFlowModal`:
 
-- Exporters are discovered with `pluginRegistry.getExporters("dataset")`
-- Selected exporter component is mounted in a modal
-- Plugin receives `ExportPluginRequiredProps`:
+- Step 1: `PluginTypeSelector` shows available exporters as selectable cards
+- Step 2: Selected exporter component is mounted inside the modal
+
+Exporters are discovered with `pluginRegistry.getExporters("dataset")`.
+
+Plugin receives `ExportPluginRequiredProps`:
   - `datasetId`
   - `onComplete`
   - `onCancel`
@@ -71,6 +85,23 @@ Examples:
 
 - `apps/web/src/plugins/export-preview/`
 - `apps/web/src/plugins/export-persist/`
+
+## Preview launcher plugins (Preview Dataset)
+
+Preview creation is plugin-driven using a 2-step flow in `PreviewLaunchView.vue`:
+
+- Step 1: `PluginTypeSelector` shows available preview launchers as selectable cards
+- Step 2: Selected launcher component renders inline
+
+Launchers are discovered with `pluginRegistry.getPreviewLaunchers("preview")` or `getPreviewLaunchers("dataset-list")`.
+
+Plugin receives `PreviewLauncherRequiredProps`:
+  - `onComplete(result: { sessionId: string })`
+  - `onCancel`
+
+On `onComplete`, the host navigates to `/preview/:sessionId`.
+
+Example: `apps/web/src/plugins/preview-upstream/`
 
 ## Backend API plugin routes
 

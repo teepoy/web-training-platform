@@ -17,30 +17,30 @@ import type { SidebarPluginDescriptor } from "./sidebar";
 import type { ImportPluginDescriptor, ImportPluginSurface } from "./importer";
 import type { ExportPluginDescriptor, ExportPluginSurface } from "./exporter";
 import type { AgentSkillDescriptor, AgentSkillSurface } from "./agent";
+import type { PreviewLauncherDescriptor, PreviewLauncherSurface } from "./preview";
 
 // ---------------------------------------------------------------------------
 // Registry interface
 // ---------------------------------------------------------------------------
 
 export interface PluginRegistry {
-  // --- Sidebar widgets ---
   registerSidebarWidget(descriptor: SidebarPluginDescriptor): void;
   getSidebarWidget(key: string): SidebarPluginDescriptor | undefined;
   getSidebarComponent(key: string): Component | undefined;
   getAllSidebarWidgets(): SidebarPluginDescriptor[];
 
-  // --- Importers ---
   registerImporter(descriptor: ImportPluginDescriptor): void;
   getImporters(surface: ImportPluginSurface): ImportPluginDescriptor[];
 
-  // --- Exporters ---
   registerExporter(descriptor: ExportPluginDescriptor): void;
   getExporters(surface: ExportPluginSurface): ExportPluginDescriptor[];
 
-  // --- Agent skills ---
   registerAgentSkill(descriptor: AgentSkillDescriptor): void;
   getAgentSkills(surface: AgentSkillSurface): AgentSkillDescriptor[];
   getAgentSkillByToolName(toolName: string): AgentSkillDescriptor | undefined;
+
+  registerPreviewLauncher(descriptor: PreviewLauncherDescriptor): void;
+  getPreviewLaunchers(surface: PreviewLauncherSurface): PreviewLauncherDescriptor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -52,10 +52,9 @@ export function createPluginRegistry(): PluginRegistry {
   const importers: ImportPluginDescriptor[] = [];
   const exporters: ExportPluginDescriptor[] = [];
   const agentSkills = new Map<string, AgentSkillDescriptor>();
+  const previewLaunchers: PreviewLauncherDescriptor[] = [];
 
   return {
-    // --- Sidebar widgets ---
-
     registerSidebarWidget(descriptor) {
       if (sidebarWidgets.has(descriptor.key)) {
         console.warn(
@@ -77,8 +76,6 @@ export function createPluginRegistry(): PluginRegistry {
       return [...sidebarWidgets.values()];
     },
 
-    // --- Importers ---
-
     registerImporter(descriptor) {
       const existing = importers.findIndex((d) => d.id === descriptor.id);
       if (existing !== -1) {
@@ -95,8 +92,6 @@ export function createPluginRegistry(): PluginRegistry {
       return importers.filter((d) => d.surfaces.includes(surface));
     },
 
-    // --- Exporters ---
-
     registerExporter(descriptor) {
       const existing = exporters.findIndex((d) => d.id === descriptor.id);
       if (existing !== -1) {
@@ -112,8 +107,6 @@ export function createPluginRegistry(): PluginRegistry {
     getExporters(surface) {
       return exporters.filter((d) => d.surfaces.includes(surface));
     },
-
-    // --- Agent skills ---
 
     registerAgentSkill(descriptor) {
       if (agentSkills.has(descriptor.toolName)) {
@@ -132,6 +125,22 @@ export function createPluginRegistry(): PluginRegistry {
 
     getAgentSkillByToolName(toolName) {
       return agentSkills.get(toolName);
+    },
+
+    registerPreviewLauncher(descriptor) {
+      const existing = previewLaunchers.findIndex((d) => d.id === descriptor.id);
+      if (existing !== -1) {
+        console.warn(
+          `[plugin-registry] Preview launcher "${descriptor.id}" is already registered. Overwriting.`,
+        );
+        previewLaunchers.splice(existing, 1, descriptor);
+      } else {
+        previewLaunchers.push(descriptor);
+      }
+    },
+
+    getPreviewLaunchers(surface) {
+      return previewLaunchers.filter((d) => d.surfaces.includes(surface));
     },
   };
 }

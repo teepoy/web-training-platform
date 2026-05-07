@@ -19,9 +19,12 @@ import { interactiveScatterPlugin } from "./sidebar-interactive-scatter";
 import { browserSummaryPlugin } from "./sidebar-browser-summary";
 
 import { manualImportPlugin } from "./import-manual";
+import { importDatasetManualPlugin } from "./import-dataset-manual";
 
 import { previewExportPlugin } from "./export-preview";
 import { persistExportPlugin } from "./export-persist";
+
+import { upstreamPreviewPlugin } from "./preview-upstream";
 
 pluginRegistry.registerSidebarWidget(annotationProgressPlugin);
 pluginRegistry.registerSidebarWidget(labelDistributionPlugin);
@@ -36,6 +39,9 @@ pluginRegistry.registerSidebarWidget(interactiveScatterPlugin);
 pluginRegistry.registerSidebarWidget(browserSummaryPlugin);
 
 pluginRegistry.registerImporter(manualImportPlugin);
+pluginRegistry.registerImporter(importDatasetManualPlugin);
 
 pluginRegistry.registerExporter(previewExportPlugin);
 pluginRegistry.registerExporter(persistExportPlugin);
+
+pluginRegistry.registerPreviewLauncher(upstreamPreviewPlugin);
