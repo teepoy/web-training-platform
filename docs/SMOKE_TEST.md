@@ -83,6 +83,7 @@ When using `make updev`, expect the frontend to run as a local Vite process on
 - [ ] Open a dataset whose samples include numeric `metadata.wafer_x` and `metadata.wafer_y`
 - [ ] Verify the `Wafer Map` panel appears in the classify sidebar and renders points
 - [ ] Click one point and verify the `Selected Samples` panel shows the linked sample preview
+- [ ] Cmd/Ctrl-click additional points and verify linked filtering reflects the toggled selection set
 - [ ] Brush-select a region and verify sidebar selection expands
 - [ ] Click `Clear` in the wafer map panel and verify the linked sample preview resets
 
@@ -220,6 +221,7 @@ This demo tests the virtualization and spatial indexing capabilities with 200k+ 
 - [ ] Drag a region on the wafer map in Classify view to select points.
 - [ ] Verify the "Selected Samples" panel updates and displays thumbnails for the selected region.
     - *Note: Previews are bounded by `PREVIEW_HYDRATION_CAP = 50`.*
+- [ ] Cmd/Ctrl-click a point to toggle it off and verify linked filtering updates without requiring a replace click.
 
 ## 9.3 Prediction Dev Smoke
 

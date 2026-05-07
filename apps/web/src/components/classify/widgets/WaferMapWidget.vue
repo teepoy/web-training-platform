@@ -368,6 +368,46 @@ function emitIntent(intent: SidebarWidgetIntent): void {
   interaction?.value.dispatch(intent);
 }
 
+function applyIdsOperation(
+  currentIds: string[],
+  values: string[],
+  operation: SidebarWidgetIntent["operation"],
+): string[] {
+  const current = new Set(currentIds);
+  const incoming = values.filter((value) => value.trim().length > 0);
+
+  if (operation === "clear") {
+    return [];
+  }
+
+  if (operation === "replace") {
+    return [...new Set(incoming)];
+  }
+
+  if (operation === "add") {
+    incoming.forEach((value) => current.add(value));
+    return Array.from(current);
+  }
+
+  if (operation === "remove") {
+    incoming.forEach((value) => current.delete(value));
+    return Array.from(current);
+  }
+
+  if (operation === "toggle") {
+    incoming.forEach((value) => {
+      if (current.has(value)) {
+        current.delete(value);
+      } else {
+        current.add(value);
+      }
+    });
+    return Array.from(current);
+  }
+
+  return currentIds;
+}
+
 function selectionIntentType(entity: SidebarWidgetInteractionConfig["entity"]): SidebarWidgetIntent["type"] {
   if (entity === "prediction") {
     return "select-predictions";
@@ -390,6 +430,7 @@ function emitSelection(ids: string[], operation: SidebarWidgetIntent["operation"
       collection: cfg.collection,
       entity: cfg.entity,
       target: "selection",
+      sourceWidget: "scatter",
     },
   });
 }
@@ -410,6 +451,7 @@ function emitFilter(ids: string[], operation: SidebarWidgetIntent["operation"]):
       entity: cfg.entity,
       target: "filter",
       filterMode: ids.length > 0 ? "selected-only" : "all",
+      sourceWidget: "scatter",
     },
   });
 }
@@ -426,8 +468,9 @@ function onPointClick(params: ECElementEvent): void {
     mouseEvent?.metaKey || mouseEvent?.ctrlKey ? "toggle" : "replace";
 
   emitSelection([pointId], operation);
-  if (operation === "replace") {
-    emitFilter([pointId], "replace");
+  if (interactionConfig.value?.filterFromSelection) {
+    const nextSelection = applyIdsOperation(Array.from(selectedIds.value), [pointId], operation);
+    emitFilter(nextSelection, "replace");
   }
 }
 
@@ -445,6 +488,7 @@ function clearSelectionAndFilter(): void {
       collection: cfg.collection,
       entity: cfg.entity,
       target: "both",
+      sourceWidget: "scatter",
     },
   });
 }
@@ -585,6 +629,19 @@ function onDragStart(event: PointerEvent): void {
   };
 }
 
+let dragMoveRaf = 0;
+let pendingDragX = 0;
+let pendingDragY = 0;
+
+function flushDragMove(): void {
+  dragMoveRaf = 0;
+  if (!dragState.value.active) {
+    return;
+  }
+  dragState.value.endX = pendingDragX;
+  dragState.value.endY = pendingDragY;
+}
+
 function onDragMove(event: PointerEvent): void {
   if (!dragState.value.active) {
     return;
@@ -594,8 +651,11 @@ function onDragMove(event: PointerEvent): void {
     return;
   }
   const rect = root.getBoundingClientRect();
-  dragState.value.endX = event.clientX - rect.left;
-  dragState.value.endY = event.clientY - rect.top;
+  pendingDragX = event.clientX - rect.left;
+  pendingDragY = event.clientY - rect.top;
+  if (dragMoveRaf === 0) {
+    dragMoveRaf = requestAnimationFrame(flushDragMove);
+  }
 }
 
 function onDragEnd(): void {
@@ -627,17 +687,21 @@ function resetZoom() {
   viewport.value = { minX: -radius, maxX: radius, minY: -radius, maxY: radius };
 }
 
-function onWheel(event: WheelEvent) {
-  event.preventDefault();
+let wheelRaf = 0;
+let wheelDeltaY = 0;
+let wheelLocalX = 0;
+let wheelLocalY = 0;
+
+function applyWheelZoom(): void {
+  wheelRaf = 0;
   const root = chartRootRef.value;
   if (!root) return;
 
   const radius = waferRadius.value;
-  const rect = root.getBoundingClientRect();
-  const localX = event.clientX - rect.left;
-  const localY = event.clientY - rect.top;
+  const localX = wheelLocalX;
+  const localY = wheelLocalY;
 
-  const zoomFactor = event.deltaY > 0 ? 1.15 : 1 / 1.15;
+  const zoomFactor = wheelDeltaY > 0 ? 1.15 : 1 / 1.15;
   const [dataX, dataY] = getDataCoords(localX, localY);
 
   const width = viewport.value.maxX - viewport.value.minX;
@@ -681,6 +745,25 @@ function onWheel(event: WheelEvent) {
   };
 }
 
+function onWheel(event: WheelEvent) {
+  event.preventDefault();
+  const root = chartRootRef.value;
+  if (!root) {
+    return;
+  }
+  const rect = root.getBoundingClientRect();
+  wheelDeltaY = event.deltaY;
+  wheelLocalX = event.clientX - rect.left;
+  wheelLocalY = event.clientY - rect.top;
+  if (wheelRaf === 0) {
+    wheelRaf = requestAnimationFrame(applyWheelZoom);
+  }
+}
+
+const waferScatterData = computed<Array<[number, number, string, number]>>(() =>
+  normalizedPoints.value.map((point) => [point.x, point.y, point.id, point.value]),
+);
+
 const chartOption = computed<EChartsOption>(() => {
   const series: Extract<EChartsOption["series"], unknown[]> = [
     {
@@ -703,7 +786,7 @@ const chartOption = computed<EChartsOption>(() => {
       progressive: 20000,
       progressiveThreshold: 30000,
       symbolSize: 2,
-      data: normalizedPoints.value.map((point) => [point.x, point.y, point.id, point.value]),
+      data: waferScatterData.value,
       itemStyle: {
         color: "#d83a3a",
       },
@@ -817,6 +900,14 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (dragMoveRaf !== 0) {
+    cancelAnimationFrame(dragMoveRaf);
+    dragMoveRaf = 0;
+  }
+  if (wheelRaf !== 0) {
+    cancelAnimationFrame(wheelRaf);
+    wheelRaf = 0;
+  }
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;

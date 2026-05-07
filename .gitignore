@@ -61,3 +61,9 @@ Thumbs.db
 
 # MinIO data
 minio-data/
+
+# Playwright
+.playwright-mcp/
+apps/web/test-results/
+apps/web/evidence-*.png
+classify-*.png
