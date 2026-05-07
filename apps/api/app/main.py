@@ -106,6 +106,7 @@ from app.api.deps import (
 )
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
+from app.plugins.registry import PLUGIN_ROUTERS
 from app.db.models import (
     DatasetORM,
     OrgMembershipORM,
@@ -204,6 +205,9 @@ app.add_middleware(
 )
 
 container = Container()
+
+for plugin_router in PLUGIN_ROUTERS:
+    app.include_router(plugin_router)
 
 
 def _make_ls_image_url(uri: str) -> str:
@@ -3047,7 +3051,9 @@ async def get_preview_session(
 ) -> PreviewSessionResponse:
     session = await container.preview_service().get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="preview session expired or not found")
+        raise HTTPException(
+            status_code=404, detail="preview session expired or not found"
+        )
     return PreviewSessionResponse(
         session_id=session.session_id,
         collection_ref=session.collection_ref,
@@ -3059,7 +3065,9 @@ async def get_preview_session(
     )
 
 
-@app.get("/api/v1/preview-sessions/{session_id}/items", response_model=PreviewItemsResponse)
+@app.get(
+    "/api/v1/preview-sessions/{session_id}/items", response_model=PreviewItemsResponse
+)
 async def list_preview_items(
     session_id: str,
     cursor: str | None = Query(default=None),
@@ -3069,11 +3077,17 @@ async def list_preview_items(
 ) -> PreviewItemsResponse:
     session = await container.preview_service().get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="preview session expired or not found")
+        raise HTTPException(
+            status_code=404, detail="preview session expired or not found"
+        )
     try:
-        page = await container.preview_service().fetch_next_page(session_id, cursor, limit)
+        page = await container.preview_service().fetch_next_page(
+            session_id, cursor, limit
+        )
     except KeyError:
-        raise HTTPException(status_code=404, detail="preview session expired or not found")
+        raise HTTPException(
+            status_code=404, detail="preview session expired or not found"
+        )
     return PreviewItemsResponse(
         items=[
             PreviewItemResponse(
@@ -3089,7 +3103,10 @@ async def list_preview_items(
     )
 
 
-@app.post("/api/v1/preview-sessions/{session_id}/persist", response_model=PersistStatusResponse)
+@app.post(
+    "/api/v1/preview-sessions/{session_id}/persist",
+    response_model=PersistStatusResponse,
+)
 async def start_preview_persist(
     session_id: str,
     payload: StartPersistRequest,
@@ -3098,8 +3115,11 @@ async def start_preview_persist(
 ) -> PersistStatusResponse:
     session = await container.preview_service().get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="preview session expired or not found")
+        raise HTTPException(
+            status_code=404, detail="preview session expired or not found"
+        )
     from app.domain.preview import PreviewPersistScope
+
     valid_scopes = ("entire_collection", "loaded_items_only")
     if payload.scope not in valid_scopes:
         raise HTTPException(status_code=422, detail=f"invalid scope: {payload.scope}")
@@ -3120,7 +3140,10 @@ async def start_preview_persist(
     )
 
 
-@app.get("/api/v1/preview-sessions/{session_id}/persist-status", response_model=PersistStatusResponse)
+@app.get(
+    "/api/v1/preview-sessions/{session_id}/persist-status",
+    response_model=PersistStatusResponse,
+)
 async def get_preview_persist_status(
     session_id: str,
     current_user: User = Depends(get_current_user),
@@ -3128,7 +3151,9 @@ async def get_preview_persist_status(
 ) -> PersistStatusResponse:
     status = await container.preview_service().get_persist_status(session_id)
     if status is None:
-        raise HTTPException(status_code=404, detail="no persist operation found for this session")
+        raise HTTPException(
+            status_code=404, detail="no persist operation found for this session"
+        )
     return PersistStatusResponse(
         dataset_id=status.dataset_id,
         persist_session_id=status.persist_session_id,
