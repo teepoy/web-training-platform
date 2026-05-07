@@ -17,11 +17,11 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
-import type { ClassifyDashboardContext } from "../../../composables/useClassifyDashboard";
+import type { ClassifyDashboardContext } from "../../composables/useClassifyDashboard";
 import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetIntent,
-} from "../widgetContract";
+} from "@platform/plugin-sdk";
 
 use([CanvasRenderer, GridComponent, BarChart, TooltipComponent]);
 

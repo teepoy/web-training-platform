@@ -1,103 +1,55 @@
-import type { ComputedRef, InjectionKey } from "vue";
+/**
+ * widgetContract.ts — backward-compatible re-export shim.
+ *
+ * All shared types and injection keys are now authoritative in @platform/plugin-sdk.
+ * This file re-exports them so existing imports keep working without change.
+ * New code should import directly from @platform/plugin-sdk.
+ */
 
-export type SidebarWidgetContextKey =
-  | "classify-dashboard"
-  | "interaction-state"
-  | "prediction-grid-items"
-  | "browser-dashboard"
-  | "browser-items";
+// ---------------------------------------------------------------------------
+// Re-export from SDK — injection keys MUST be the same Symbol instances so that
+// provide() in BrowserSidebar and inject() in widgets resolve to the same slot.
+// ---------------------------------------------------------------------------
 
-export type SidebarWidgetIntentType =
-  | "select-samples"
-  | "select-labels"
-  | "select-predictions"
-  | "apply-filter"
-  | "clear-selection"
-  | "focus-item";
+export {
+  BROWSER_DASHBOARD_KEY,
+  SIDEBAR_WIDGET_INTERACTION_KEY,
+  reduceCollectionIntent,
+  reduceLabelFilterIntent,
+} from "@platform/plugin-sdk";
 
-export type SidebarWidgetOperation =
-  | "replace"
-  | "add"
-  | "remove"
-  | "toggle"
-  | "clear";
+export type {
+  SidebarWidgetContextKey,
+  SidebarWidgetIntentType,
+  SidebarWidgetOperation,
+  SidebarWidgetCollectionEntity,
+  SidebarWidgetSource,
+  SidebarWidgetIntentTarget,
+  SidebarWidgetFilterMode,
+  SidebarWidgetIntentMetadata,
+  SidebarWidgetIntent,
+  SidebarWidgetCollectionSelectionState,
+  SidebarWidgetCollectionFilterState,
+  SidebarWidgetCollectionState,
+  SidebarWidgetInteractionState,
+  SidebarWidgetInteractionConfig,
+  SidebarWidgetInteractionContext,
+  SidebarWidgetCapability,
+  SidebarWidgetSelfTestScenario,
+} from "@platform/plugin-sdk";
 
-export type SidebarWidgetCollectionEntity = "sample" | "prediction" | "row";
+// ---------------------------------------------------------------------------
+// App-local legacy types kept for backward compat with sidebarConfig.ts
+// and the existing widget self-test infrastructure.
+// These will be removed once all widgets are migrated to SidebarPluginDescriptor.
+// ---------------------------------------------------------------------------
 
-export type SidebarWidgetSource = "scatter" | "table" | "grid" | "external";
-
-export type SidebarWidgetIntentTarget = "selection" | "filter" | "both";
-
-export type SidebarWidgetFilterMode = "all" | "selected-only";
-
-export interface SidebarWidgetIntentMetadata {
-  collection?: string;
-  entity?: SidebarWidgetCollectionEntity;
-  sourceWidget?: SidebarWidgetSource;
-  target?: SidebarWidgetIntentTarget;
-  filterMode?: SidebarWidgetFilterMode;
-  revision?: number;
-  [key: string]: unknown;
-}
-
-export interface SidebarWidgetIntent {
-  type: SidebarWidgetIntentType;
-  operation: SidebarWidgetOperation;
-  values: string[];
-  sourcePanelId?: string;
-  metadata?: SidebarWidgetIntentMetadata;
-}
-
-export interface SidebarWidgetCollectionSelectionState {
-  ids: string[];
-  sourcePanelId: string | null;
-  revision: number;
-}
-
-export interface SidebarWidgetCollectionFilterState {
-  ids: string[];
-  mode: SidebarWidgetFilterMode;
-  sourcePanelId: string | null;
-  revision: number;
-}
-
-export interface SidebarWidgetCollectionState {
-  entity: SidebarWidgetCollectionEntity;
-  selection: SidebarWidgetCollectionSelectionState;
-  filter: SidebarWidgetCollectionFilterState;
-}
-
-export interface SidebarWidgetInteractionState {
-  activeLabelFilter: string | null;
-  selectedLabels: string[];
-  collections?: Record<string, SidebarWidgetCollectionState>;
-}
-
-export interface SidebarWidgetInteractionConfig {
-  collection: string;
-  entity: SidebarWidgetCollectionEntity;
-  emitSelection?: boolean;
-  followSelection?: boolean;
-  filterFromSelection?: boolean;
-  clearFilterOnEmptySelection?: boolean;
-}
-
-export interface SidebarWidgetInteractionContext {
-  state: SidebarWidgetInteractionState;
-  dispatch: (intent: SidebarWidgetIntent) => void;
-}
-
-export interface SidebarWidgetCapability {
-  reads: SidebarWidgetContextKey[];
-  emits: SidebarWidgetIntentType[];
-}
-
-export interface SidebarWidgetSelfTestScenario {
-  name: string;
-  objective: string;
-  steps: string[];
-  expected: string[];
-}
+import type {
+  SidebarWidgetContextKey,
+  SidebarWidgetIntentType,
+  SidebarWidgetCapability,
+  SidebarWidgetSelfTestScenario,
+} from "@platform/plugin-sdk";
 
 export interface SidebarWidgetAuthorContract {
   displayName: string;
@@ -113,6 +65,16 @@ export interface SidebarWidgetDefinition {
   contract: SidebarWidgetAuthorContract;
 }
 
+export function defineSidebarWidget(
+  definition: SidebarWidgetDefinition,
+): SidebarWidgetDefinition {
+  return definition;
+}
+
+// ---------------------------------------------------------------------------
+// Self-test runner (app-local — not in SDK)
+// ---------------------------------------------------------------------------
+
 export interface SidebarWidgetSelfTestCheck {
   name: string;
   passed: boolean;
@@ -124,12 +86,6 @@ export interface SidebarWidgetSelfTestResult {
   passed: boolean;
   checks: SidebarWidgetSelfTestCheck[];
 }
-
-export const BROWSER_DASHBOARD_KEY: InjectionKey<Record<string, unknown>> = Symbol("browserDashboard");
-
-export const SIDEBAR_WIDGET_INTERACTION_KEY: InjectionKey<
-  ComputedRef<SidebarWidgetInteractionContext>
-> = Symbol("sidebarWidgetInteraction");
 
 const VALID_CONTEXT_KEYS: SidebarWidgetContextKey[] = [
   "classify-dashboard",
@@ -147,160 +103,6 @@ const VALID_INTENT_TYPES: SidebarWidgetIntentType[] = [
   "clear-selection",
   "focus-item",
 ];
-
-export function defineSidebarWidget(
-  definition: SidebarWidgetDefinition,
-): SidebarWidgetDefinition {
-  return definition;
-}
-
-export function reduceLabelFilterIntent(
-  currentLabelFilter: string | null,
-  intent: SidebarWidgetIntent,
-): string | null {
-  if (intent.type === "clear-selection" || intent.operation === "clear") {
-    return null;
-  }
-
-  if (intent.type !== "select-labels" && intent.type !== "apply-filter") {
-    return currentLabelFilter;
-  }
-
-  const nextLabel = intent.values[0] ?? null;
-  if (!nextLabel) {
-    return null;
-  }
-
-  if (intent.operation === "toggle") {
-    return currentLabelFilter === nextLabel ? null : nextLabel;
-  }
-
-  if (intent.operation === "remove") {
-    return currentLabelFilter === nextLabel ? null : currentLabelFilter;
-  }
-
-  if (intent.operation === "add" || intent.operation === "replace") {
-    return nextLabel;
-  }
-
-  return currentLabelFilter;
-}
-
-function applyIdsOperation(
-  currentIds: string[],
-  values: string[],
-  operation: SidebarWidgetOperation,
-): string[] {
-  const current = new Set(currentIds);
-  const incoming = values.filter((value) => value.trim().length > 0);
-
-  if (operation === "clear") {
-    return [];
-  }
-
-  if (operation === "replace") {
-    return [...new Set(incoming)];
-  }
-
-  if (operation === "add") {
-    incoming.forEach((value) => current.add(value));
-    return Array.from(current);
-  }
-
-  if (operation === "remove") {
-    incoming.forEach((value) => current.delete(value));
-    return Array.from(current);
-  }
-
-  if (operation === "toggle") {
-    incoming.forEach((value) => {
-      if (current.has(value)) {
-        current.delete(value);
-      } else {
-        current.add(value);
-      }
-    });
-    return Array.from(current);
-  }
-
-  return currentIds;
-}
-
-export function reduceCollectionIntent(
-  currentCollections: Record<string, SidebarWidgetCollectionState> | undefined,
-  intent: SidebarWidgetIntent,
-): Record<string, SidebarWidgetCollectionState> | undefined {
-  const collectionKey = intent.metadata?.collection;
-  if (!collectionKey || collectionKey.trim().length === 0) {
-    return currentCollections;
-  }
-
-  const collection = collectionKey.trim();
-  const existing = currentCollections?.[collection];
-  const entity = intent.metadata?.entity ?? existing?.entity ?? "row";
-  const revision = Number(intent.metadata?.revision ?? 0);
-  const sourcePanelId = intent.sourcePanelId ?? null;
-
-  const nextSelection = {
-    ids: existing?.selection.ids ?? [],
-    sourcePanelId: existing?.selection.sourcePanelId ?? null,
-    revision: existing?.selection.revision ?? 0,
-  };
-
-  const nextFilter = {
-    ids: existing?.filter.ids ?? [],
-    mode: existing?.filter.mode ?? "all",
-    sourcePanelId: existing?.filter.sourcePanelId ?? null,
-    revision: existing?.filter.revision ?? 0,
-  };
-
-  if (
-    intent.type === "select-samples" ||
-    intent.type === "select-predictions" ||
-    intent.type === "select-labels"
-  ) {
-    nextSelection.ids = applyIdsOperation(
-      nextSelection.ids,
-      intent.values,
-      intent.operation,
-    );
-    nextSelection.sourcePanelId = sourcePanelId;
-    nextSelection.revision = revision > 0 ? revision : nextSelection.revision + 1;
-  }
-
-  if (intent.type === "apply-filter") {
-    nextFilter.ids = applyIdsOperation(nextFilter.ids, intent.values, intent.operation);
-    nextFilter.mode = intent.metadata?.filterMode ?? nextFilter.mode;
-    nextFilter.sourcePanelId = sourcePanelId;
-    nextFilter.revision = revision > 0 ? revision : nextFilter.revision + 1;
-  }
-
-  if (intent.type === "clear-selection" || intent.operation === "clear") {
-    const target = intent.metadata?.target ?? "both";
-    if (target === "selection" || target === "both") {
-      nextSelection.ids = [];
-      nextSelection.sourcePanelId = sourcePanelId;
-      nextSelection.revision = revision > 0 ? revision : nextSelection.revision + 1;
-    }
-    if (target === "filter" || target === "both") {
-      nextFilter.ids = [];
-      nextFilter.mode = "all";
-      nextFilter.sourcePanelId = sourcePanelId;
-      nextFilter.revision = revision > 0 ? revision : nextFilter.revision + 1;
-    }
-  }
-
-  const nextCollection: SidebarWidgetCollectionState = {
-    entity,
-    selection: nextSelection,
-    filter: nextFilter,
-  };
-
-  return {
-    ...(currentCollections ?? {}),
-    [collection]: nextCollection,
-  };
-}
 
 export function runSidebarWidgetSelfTest(
   definition: SidebarWidgetDefinition,

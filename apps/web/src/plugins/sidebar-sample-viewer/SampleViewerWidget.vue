@@ -12,8 +12,8 @@
 -->
 <script setup lang="ts">
 import { computed, inject, type Ref } from 'vue'
-import { resolveImageUris } from '../../../utils/imageAdapters'
-import type { AnnotationGridItem } from '../../../types'
+import { resolveImageUris } from '../../utils/imageAdapters'
+import type { AnnotationGridItem } from '../../types'
 
 const props = defineProps<{
   data?: Record<string, unknown> | null

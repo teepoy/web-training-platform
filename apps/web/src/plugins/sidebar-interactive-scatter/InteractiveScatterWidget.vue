@@ -35,7 +35,7 @@ import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetIntent,
   type SidebarWidgetInteractionConfig,
-} from "../widgetContract";
+} from "@platform/plugin-sdk";
 
 use([ScatterChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 

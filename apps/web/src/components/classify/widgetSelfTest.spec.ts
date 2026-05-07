@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SIDEBAR_WIDGETS } from "./sidebarConfig";
+import "../../plugins/index";
+import { pluginRegistry } from "../../core/registry";
 import { runSidebarWidgetSelfTest } from "./widgetContract";
 
 describe("sidebar widget author self-tests", () => {
-  for (const definition of Object.values(SIDEBAR_WIDGETS)) {
+  for (const definition of pluginRegistry.getAllSidebarWidgets()) {
     it(`validates ${definition.key}`, () => {
       const result = runSidebarWidgetSelfTest(definition);
 

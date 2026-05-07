@@ -3,7 +3,7 @@ import { computed, inject } from "vue";
 import {
   BROWSER_DASHBOARD_KEY,
   SIDEBAR_WIDGET_INTERACTION_KEY,
-} from "../widgetContract";
+} from "@platform/plugin-sdk";
 
 const props = withDefaults(
   defineProps<{

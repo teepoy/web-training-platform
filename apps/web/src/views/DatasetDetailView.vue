@@ -69,7 +69,17 @@
               <n-radio-button value="grid">Grid</n-radio-button>
               <n-radio-button value="list">List</n-radio-button>
             </n-radio-group>
-            <n-button type="primary" @click="showAddSampleModal = true">Add Sample</n-button>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <n-select
+                v-model:value="selectedImporterId"
+                :options="importerOptions"
+                style="width: 260px"
+                placeholder="Select importer"
+              />
+              <n-button type="primary" :disabled="!activeImporter" @click="openImporterModal">
+                Add Sample
+              </n-button>
+            </div>
           </div>
 
           <div class="ds-samples-layout">
@@ -96,34 +106,19 @@
             />
           </div>
 
-          <!-- Add Sample Modal -->
-          <n-modal v-model:show="showAddSampleModal" preset="dialog" title="Add Sample" style="width: 480px">
-            <n-form ref="sampleFormRef" :model="sampleForm" :rules="sampleRules" label-placement="top">
-              <n-form-item label="Image URIs (comma-separated, optional)" path="image_uris">
-                <n-input v-model:value="sampleForm.image_uris" placeholder="e.g. s3://bucket/img1.jpg, s3://bucket/img2.jpg" />
-              </n-form-item>
-              <n-form-item label="Upload Image (optional)">
-                <div>
-                  <input type="file" accept="image/*" style="display: none" ref="fileInputRef" @change="onFileChange" />
-                  <n-button @click="(fileInputRef as HTMLInputElement)?.click()">Choose Image</n-button>
-                  <n-image v-if="uploadPreviewUrl" :src="uploadPreviewUrl" width="80" height="80" object-fit="cover" style="margin-top: 8px; border-radius: 4px" />
-                </div>
-              </n-form-item>
-              <n-form-item label="Metadata (JSON)" path="metadata_raw">
-                <n-input
-                  v-model:value="sampleForm.metadata_raw"
-                  type="textarea"
-                  placeholder='{"key": "value"}'
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-                />
-              </n-form-item>
-            </n-form>
-            <template #action>
-              <n-button @click="showAddSampleModal = false">Cancel</n-button>
-              <n-button type="primary" :loading="uploadingImage" @click="submitSample">
-                Create
-              </n-button>
-            </template>
+          <n-modal
+            v-model:show="showImporterModal"
+            preset="dialog"
+            :title="activeImporter?.label ?? 'Import Samples'"
+            style="width: 560px"
+          >
+            <component
+              :is="activeImporter?.component"
+              v-if="activeImporter"
+              :dataset-id="id"
+              :on-complete="handleImporterComplete"
+              :on-cancel="closeImporterModal"
+            />
           </n-modal>
         </n-tab-pane>
 
@@ -131,24 +126,34 @@
         <!-- TAB 2: Export -->
         <!-- ============================================================ -->
         <n-tab-pane name="export" tab="Export">
-          <div style="display: flex; gap: 12px; margin-bottom: 16px">
-            <n-button type="default" :loading="exportLoading" @click="previewExport">
-              Preview Export
-            </n-button>
-            <n-button type="primary" :loading="persistLoading" @click="doPersistExport">
-              Persist Export
+          <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center">
+            <n-select
+              v-model:value="selectedExporterId"
+              :options="exporterOptions"
+              style="width: 260px"
+              placeholder="Select exporter"
+            />
+            <n-button type="primary" :disabled="!activeExporter" @click="showExporterModal = true">
+              Open Exporter
             </n-button>
           </div>
 
-          <template v-if="exportData">
-            <n-card title="Export Preview" size="small">
-              <n-scrollbar style="max-height: 400px">
-                <pre style="margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{ exportJson }}</pre>
-              </n-scrollbar>
-            </n-card>
-          </template>
+          <n-empty v-if="!activeExporter" description="Select an exporter plugin to continue." style="margin-top: 24px" />
 
-          <n-empty v-else description="Click 'Preview Export' to load export data." style="margin-top: 32px" />
+          <n-modal
+            v-model:show="showExporterModal"
+            preset="dialog"
+            :title="activeExporter?.label ?? 'Export'"
+            style="width: 700px"
+          >
+            <component
+              :is="activeExporter?.component"
+              v-if="activeExporter"
+              :dataset-id="id"
+              :on-complete="handleExporterComplete"
+              :on-cancel="() => { showExporterModal = false }"
+            />
+          </n-modal>
         </n-tab-pane>
 
         <!-- ============================================================ -->
@@ -316,7 +321,7 @@
 import { ref, computed, h, watch, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, type FormInst, type FormRules, type DataTableColumns } from "naive-ui";
+import { useMessage, type DataTableColumns } from "naive-ui";
 import { api, queryWaferPoints } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
@@ -333,7 +338,8 @@ import {
   type SidebarWidgetInteractionContext,
   type SidebarWidgetInteractionState,
 } from "../components/classify/widgetContract";
-import type { DatasetExport, ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
+import type { ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
+import { pluginRegistry } from "../core/registry";
 
 // ---------------------------------------------------------------------------
 // Route / Router
@@ -521,73 +527,41 @@ const featureSamplesQuery = useQuery({
   enabled: computed(() => !!id.value),
 });
 
-// Add Sample form
-const showAddSampleModal = ref(false);
-const sampleFormRef = ref<FormInst | null>(null);
-const sampleForm = ref({ image_uris: "", metadata_raw: "" });
+// Import plugin launcher
+const datasetImporters = computed(() => pluginRegistry.getImporters("dataset"));
+const selectedImporterId = ref<string | null>(null);
+const showImporterModal = ref(false);
 
-const sampleRules: FormRules = {
-  image_uris: [],
-};
+const importerOptions = computed(() =>
+  datasetImporters.value.map((plugin) => ({
+    label: plugin.label,
+    value: plugin.id,
+  })),
+);
 
-const uploadFile = ref<File | null>(null);
-const uploadPreviewUrl = ref<string | null>(null);
-const uploadingImage = ref(false);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-
-function onFileChange(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const file = target.files?.[0] ?? null;
-  uploadFile.value = file;
-  if (uploadPreviewUrl.value) {
-    URL.revokeObjectURL(uploadPreviewUrl.value);
-    uploadPreviewUrl.value = null;
+watch(datasetImporters, (plugins) => {
+  if (!selectedImporterId.value || !plugins.some((plugin) => plugin.id === selectedImporterId.value)) {
+    selectedImporterId.value = plugins[0]?.id ?? null;
   }
-  if (file) {
-    uploadPreviewUrl.value = URL.createObjectURL(file);
-  }
+}, { immediate: true });
+
+const activeImporter = computed(() =>
+  datasetImporters.value.find((plugin) => plugin.id === selectedImporterId.value) ?? null,
+);
+
+function openImporterModal() {
+  if (!activeImporter.value) return;
+  showImporterModal.value = true;
 }
 
-function submitSample() {
-  sampleFormRef.value?.validate(async (errors) => {
-    if (errors) return;
-    let metadata: Record<string, unknown> = {};
-    if (sampleForm.value.metadata_raw.trim()) {
-      try {
-        metadata = JSON.parse(sampleForm.value.metadata_raw) as Record<string, unknown>;
-      } catch {
-        message.error("Metadata must be valid JSON");
-        return;
-      }
-    }
-    const textUris = sampleForm.value.image_uris.split(",").map((s: string) => s.trim()).filter(Boolean);
+function closeImporterModal() {
+  showImporterModal.value = false;
+}
 
-    try {
-      const newSample = await api.createSample(id.value, { image_uris: textUris, metadata });
-
-      if (uploadFile.value) {
-        uploadingImage.value = true;
-        try {
-          await api.uploadSampleImage(newSample.id, uploadFile.value);
-        } finally {
-          uploadingImage.value = false;
-        }
-      }
-
-      sampleLoader.reset();
-      qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
-      message.success("Sample created");
-      showAddSampleModal.value = false;
-      sampleForm.value = { image_uris: "", metadata_raw: "" };
-      uploadFile.value = null;
-      if (uploadPreviewUrl.value) {
-        URL.revokeObjectURL(uploadPreviewUrl.value);
-      }
-      uploadPreviewUrl.value = null;
-    } catch (e) {
-      message.error(`Failed to create sample: ${(e as Error).message}`);
-    }
-  });
+function handleImporterComplete() {
+  showImporterModal.value = false;
+  sampleLoader.reset();
+  qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
 }
 
 function openSampleDetail(sampleId: string) {
@@ -597,34 +571,31 @@ function openSampleDetail(sampleId: string) {
 // ---------------------------------------------------------------------------
 // Export tab
 // ---------------------------------------------------------------------------
-const exportData = ref<DatasetExport | null>(null);
-const exportLoading = ref(false);
-const persistLoading = ref(false);
+const datasetExporters = computed(() => pluginRegistry.getExporters("dataset"));
+const selectedExporterId = ref<string | null>(null);
+const showExporterModal = ref(false);
 
-const exportJson = computed(() =>
-  exportData.value ? JSON.stringify(exportData.value, null, 2) : ""
+const exporterOptions = computed(() =>
+  datasetExporters.value.map((plugin) => ({
+    label: plugin.label,
+    value: plugin.id,
+  })),
 );
 
-async function previewExport() {
-  exportLoading.value = true;
-  try {
-    exportData.value = await api.getExport(id.value);
-  } catch (e) {
-    message.error(`Export preview failed: ${(e as Error).message}`);
-  } finally {
-    exportLoading.value = false;
+watch(datasetExporters, (plugins) => {
+  if (!selectedExporterId.value || !plugins.some((plugin) => plugin.id === selectedExporterId.value)) {
+    selectedExporterId.value = plugins[0]?.id ?? null;
   }
-}
+}, { immediate: true });
 
-async function doPersistExport() {
-  persistLoading.value = true;
-  try {
-    const res = await api.persistExport(id.value);
-    message.success(`Export persisted: ${res.uri}`);
-  } catch (e) {
-    message.error(`Persist failed: ${(e as Error).message}`);
-  } finally {
-    persistLoading.value = false;
+const activeExporter = computed(() =>
+  datasetExporters.value.find((plugin) => plugin.id === selectedExporterId.value) ?? null,
+);
+
+function handleExporterComplete(payload?: { url?: string; message?: string }) {
+  showExporterModal.value = false;
+  if (payload?.message) {
+    message.success(payload.message);
   }
 }
 
@@ -635,20 +606,6 @@ const activeTab = ref("samples");
 
 onMounted(() => {
   void sampleLoader.loadMore();
-});
-
-// Reset export state on dataset change
-watch(id, () => {
-  exportData.value = null;
-});
-
-// Revoke object URL when Add Sample modal is closed
-watch(showAddSampleModal, (open) => {
-  if (!open && uploadPreviewUrl.value) {
-    URL.revokeObjectURL(uploadPreviewUrl.value);
-    uploadPreviewUrl.value = null;
-    uploadFile.value = null;
-  }
 });
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { MetricCardItem } from '../../../types'
+import type { MetricCardItem } from '../../types'
 
 const props = defineProps<{
   data?: Record<string, unknown> | null

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { provide, ref, computed, watch, type Component } from "vue";
 import {
-  WIDGET_COMPONENTS,
   type SidebarPanelDescriptor,
 } from "../../components/classify/sidebarConfig";
 import {
@@ -17,6 +16,7 @@ import {
   COLLAPSED_SIDEBAR_WIDTH,
   DEFAULT_SIDEBAR_WIDTH
 } from "../../stores/sampleBrowser";
+import { pluginRegistry } from "../../core/registry";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -75,7 +75,7 @@ function togglePanel(panel: SidebarPanelDescriptor): void {
 // ---------------------------------------------------------------------------
 
 function resolveComponent(key: string): Component | null {
-  return WIDGET_COMPONENTS[key] ?? null;
+  return pluginRegistry.getSidebarComponent(key) ?? null;
 }
 
 // Sidebar-level collapse toggle

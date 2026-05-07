@@ -74,7 +74,7 @@ function getAuthContext(): { token: string | null; authEnabled: boolean } {
     const authStore = useAuthStore();
     const authEnabled = authStore.authEnabled;
     return {
-      token: authEnabled ? authStore.token ?? getStoredToken() : null,
+      token: authEnabled ? (authStore.token ?? getStoredToken()) : null,
       authEnabled,
     };
   } catch {
@@ -92,7 +92,7 @@ function getAuthContext(): { token: string | null; authEnabled: boolean } {
 async function req<T>(
   path: string,
   init?: RequestInit,
-  timeoutMs = 30_000
+  timeoutMs = 30_000,
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -107,8 +107,7 @@ async function req<T>(
       authHeader["Authorization"] = `Bearer ${token}`;
       hasAuthToken = true;
     }
-  } catch {
-  }
+  } catch {}
 
   try {
     const { useOrgStore } = await import("./stores/org");
@@ -116,8 +115,7 @@ async function req<T>(
     if (orgStore.currentOrgId) {
       authHeader["X-Organization-ID"] = orgStore.currentOrgId;
     }
-  } catch {
-  }
+  } catch {}
 
   try {
     const { headers: initHeaders, ...restInit } = init ?? {};
@@ -149,7 +147,8 @@ async function req<T>(
       let detail = `request failed: ${r.status}`;
       try {
         const body = await r.json();
-        detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+        detail =
+          typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
       } catch {
         // response body not JSON — keep default message
       }
@@ -170,7 +169,10 @@ async function req<T>(
 // Multipart upload (bypasses req<T> to avoid forcing JSON Content-Type)
 // ---------------------------------------------------------------------------
 
-export async function uploadSampleImage(sampleId: string, file: File): Promise<UploadResponse> {
+export async function uploadSampleImage(
+  sampleId: string,
+  file: File,
+): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
   const uploadHeaders: Record<string, string> = {};
@@ -200,8 +202,11 @@ export async function uploadSampleImage(sampleId: string, file: File): Promise<U
     let detail = `upload failed: ${r.status}`;
     try {
       const body = await r.json();
-      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch { /* ignore */ }
+      detail =
+        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<UploadResponse>;
@@ -245,8 +250,11 @@ export async function uploadModel(
     let detail = `upload failed: ${r.status}`;
     try {
       const body = await r.json();
-      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch { /* ignore */ }
+      detail =
+        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<Model>;
@@ -350,7 +358,7 @@ export function syncAnnotationsToLs(datasetId: string) {
 
 export function bulkCreateAnnotations(
   datasetId: string,
-  body: BulkAnnotationRequest
+  body: BulkAnnotationRequest,
 ) {
   return req<BulkAnnotationResponse>(
     `/datasets/${datasetId}/annotations/bulk`,
@@ -358,7 +366,7 @@ export function bulkCreateAnnotations(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }
+    },
   );
 }
 
@@ -367,16 +375,16 @@ export async function listSamplesWithLabels(
   offset = 0,
   limit = 50,
   label?: string,
-  orderBy = 'id',
+  orderBy = "id",
 ): Promise<PaginatedResponse<SampleWithLabels>> {
-  const params = new URLSearchParams()
-  params.set('offset', String(offset))
-  params.set('limit', String(limit))
-  if (label != null) params.set('label', label)
-  params.set('order_by', orderBy)
+  const params = new URLSearchParams();
+  params.set("offset", String(offset));
+  params.set("limit", String(limit));
+  if (label != null) params.set("label", label);
+  params.set("order_by", orderBy);
   return req<PaginatedResponse<SampleWithLabels>>(
-    `/datasets/${datasetId}/samples-with-labels?${params.toString()}`
-  )
+    `/datasets/${datasetId}/samples-with-labels?${params.toString()}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,11 +401,15 @@ export const api = {
       body: JSON.stringify({
         name: body.name,
         dataset_type: body.dataset_type,
-        task_spec: body.task_spec ?? { task_type: "classification", label_space: [] },
+        task_spec: body.task_spec ?? {
+          task_type: "classification",
+          label_space: [],
+        },
       }),
     }),
 
-  deleteDataset: (id: string) => req<void>(`/datasets/${id}`, { method: "DELETE" }),
+  deleteDataset: (id: string) =>
+    req<void>(`/datasets/${id}`, { method: "DELETE" }),
 
   getDataset: (id: string) => req<Dataset>(`/datasets/${id}`),
 
@@ -416,20 +428,29 @@ export const api = {
     if (offset !== undefined) params.set("offset", String(offset));
     if (limit !== undefined) params.set("limit", String(limit));
     const qs = params.toString() ? `?${params.toString()}` : "";
-    return req<PaginatedResponse<Sample>>(`/datasets/${datasetId}/samples${qs}`);
+    return req<PaginatedResponse<Sample>>(
+      `/datasets/${datasetId}/samples${qs}`,
+    );
   },
 
   createSample: (datasetId: string, body: CreateSampleBody) =>
     req<Sample>(`/datasets/${datasetId}/samples`, {
       method: "POST",
-      body: JSON.stringify({ image_uris: body.image_uris, metadata: body.metadata ?? {} }),
+      body: JSON.stringify({
+        image_uris: body.image_uris,
+        metadata: body.metadata ?? {},
+      }),
     }),
 
   importSamples: (datasetId: string, items: BulkCreateSampleItem[]) =>
-    req<BulkCreateSampleResponse>(`/datasets/${datasetId}/samples/import`, {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    }, 120_000),
+    req<BulkCreateSampleResponse>(
+      `/datasets/${datasetId}/samples/import`,
+      {
+        method: "POST",
+        body: JSON.stringify({ items }),
+      },
+      120_000,
+    ),
 
   getSample: (sampleId: string) => req<Sample>(`/samples/${sampleId}`),
 
@@ -440,7 +461,9 @@ export const api = {
       body: JSON.stringify({
         sample_id: body.sample_id,
         label: body.label,
-        ...(body.created_by !== undefined ? { created_by: body.created_by } : {}),
+        ...(body.created_by !== undefined
+          ? { created_by: body.created_by }
+          : {}),
       }),
     }),
 
@@ -449,7 +472,8 @@ export const api = {
 
   getPreset: (id: string) => req<TrainingPreset>(`/training-presets/${id}`),
 
-  listModelUploadTemplates: () => req<ModelUploadTemplate[]>("/model-upload-templates"),
+  listModelUploadTemplates: () =>
+    req<ModelUploadTemplate[]>("/model-upload-templates"),
 
   // ---- Training Jobs ----
   listJobs: () => req<TrainingJob[]>("/training-jobs"),
@@ -469,21 +493,56 @@ export const api = {
     req<MarkLeftResponse>(`/training-jobs/${id}/mark-left`, { method: "POST" }),
 
   // ---- Exports ----
-  getExport: (datasetId: string) =>
-    req<DatasetExport>(`/exports/${datasetId}`),
+  getExport: (datasetId: string) => req<DatasetExport>(`/exports/${datasetId}`),
 
   persistExport: (datasetId: string) =>
-    req<PersistExportResponse>(`/exports/${datasetId}/persist`, { method: "POST" }),
+    req<PersistExportResponse>(`/exports/${datasetId}/persist`, {
+      method: "POST",
+    }),
+
+  // ---- Plugin routes ----
+  pluginImport: (
+    pluginId: string,
+    body: {
+      dataset_id: string;
+      items: BulkCreateSampleItem[];
+    },
+  ) =>
+    req<BulkCreateSampleResponse>(
+      `/plugins/${pluginId}/import`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      120_000,
+    ),
+
+  pluginExport: (
+    pluginId: string,
+    body: {
+      dataset_id: string;
+      [key: string]: unknown;
+    },
+  ) =>
+    req<Record<string, unknown>>(`/plugins/${pluginId}/export`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   // ---- Feature Ops ----
   extractFeatures: (datasetId: string, force?: boolean) => {
     const qs = force ? "?force=true" : "";
-    return req<ExtractFeaturesResponse>(`/datasets/${datasetId}/features/extract${qs}`, { method: "POST" });
+    return req<ExtractFeaturesResponse>(
+      `/datasets/${datasetId}/features/extract${qs}`,
+      { method: "POST" },
+    );
   },
 
   getSimilarity: (datasetId: string, sampleId: string, k?: number) => {
     const qs = k !== undefined ? `?k=${k}` : "";
-    return req<SimilarityResponse>(`/datasets/${datasetId}/similarity/${sampleId}${qs}`);
+    return req<SimilarityResponse>(
+      `/datasets/${datasetId}/similarity/${sampleId}${qs}`,
+    );
   },
 
   getSelectionMetrics: (datasetId: string) =>
@@ -495,7 +554,10 @@ export const api = {
   getEmbedConfig: (datasetId: string) =>
     req<Record<string, unknown>>(`/datasets/${datasetId}/embed-config`),
 
-  updateEmbedConfig: (datasetId: string, config: { model: string; dimension: number }) =>
+  updateEmbedConfig: (
+    datasetId: string,
+    config: { model: string; dimension: number },
+  ) =>
     req<Record<string, unknown>>(`/datasets/${datasetId}/embed-config`, {
       method: "PATCH",
       body: JSON.stringify(config),
@@ -517,7 +579,8 @@ export const api = {
   downloadModelUrl: (id: string) => `${API_BASE}/models/${id}/download`,
 
   // ---- Image Upload ----
-  uploadSampleImage: (sampleId: string, file: File) => uploadSampleImage(sampleId, file),
+  uploadSampleImage: (sampleId: string, file: File) =>
+    uploadSampleImage(sampleId, file),
 
   // ---- Annotation CRUD (new) ----
   listAnnotationsForSample: (sampleId: string) =>
@@ -533,17 +596,17 @@ export const api = {
     req<void>(`/annotations/${annotationId}`, { method: "DELETE" }),
 
   // ---- Schedules ----
-  listSchedules: () => req<Schedule[]>('/schedules'),
+  listSchedules: () => req<Schedule[]>("/schedules"),
 
   createSchedule: (body: CreateScheduleBody) =>
-    req<Schedule>('/schedules', {
-      method: 'POST',
+    req<Schedule>("/schedules", {
+      method: "POST",
       body: JSON.stringify({
         name: body.name,
         flow_name: body.flow_name,
         cron: body.cron,
         parameters: body.parameters ?? {},
-        description: body.description ?? '',
+        description: body.description ?? "",
       }),
     }),
 
@@ -551,93 +614,106 @@ export const api = {
 
   updateSchedule: (id: string, body: UpdateScheduleBody) =>
     req<Schedule>(`/schedules/${id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
 
   deleteSchedule: (id: string) =>
-    req<void>(`/schedules/${id}`, { method: 'DELETE' }),
+    req<void>(`/schedules/${id}`, { method: "DELETE" }),
 
   triggerScheduleRun: (id: string) =>
-    req<ScheduleRun>(`/schedules/${id}/run`, { method: 'POST' }),
+    req<ScheduleRun>(`/schedules/${id}/run`, { method: "POST" }),
 
   pauseSchedule: (id: string) =>
-    req<Schedule>(`/schedules/${id}/pause`, { method: 'POST' }),
+    req<Schedule>(`/schedules/${id}/pause`, { method: "POST" }),
 
   resumeSchedule: (id: string) =>
-    req<Schedule>(`/schedules/${id}/resume`, { method: 'POST' }),
+    req<Schedule>(`/schedules/${id}/resume`, { method: "POST" }),
 
   listScheduleRuns: (id: string, limit?: number) => {
-    const qs = limit !== undefined ? `?limit=${limit}` : '';
+    const qs = limit !== undefined ? `?limit=${limit}` : "";
     return req<ScheduleRun[]>(`/schedules/${id}/runs${qs}`);
   },
 
   getRun: (runId: string) => req<ScheduleRun>(`/runs/${runId}`),
 
   getRunLogs: (runId: string, limit?: number) => {
-    const qs = limit !== undefined ? `?limit=${limit}` : '';
+    const qs = limit !== undefined ? `?limit=${limit}` : "";
     return req<RunLog[]>(`/runs/${runId}/logs${qs}`);
   },
 
   // ---- Dashboard ----
-  getDashboard: () => req<DashboardResponse>('/dashboard'),
+  getDashboard: () => req<DashboardResponse>("/dashboard"),
 
   // ---- Task Tracker ----
-  listTrackedTasks: (kind?: 'training' | 'prediction') => {
-    const qs = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+  listTrackedTasks: (kind?: "training" | "prediction") => {
+    const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
     return req<TaskTrackerSummary[]>(`/task-tracker/tasks${qs}`);
   },
 
-  getTrackedTask: (id: string) => req<TaskTrackerDetail>(`/task-tracker/tasks/${id}`),
+  getTrackedTask: (id: string) =>
+    req<TaskTrackerDetail>(`/task-tracker/tasks/${id}`),
 
-  cancelTrackedTask: (id: string) => req<{ cancelled: boolean }>(`/task-tracker/tasks/${id}/cancel`, {
-    method: 'POST',
-  }),
+  cancelTrackedTask: (id: string) =>
+    req<{ cancelled: boolean }>(`/task-tracker/tasks/${id}/cancel`, {
+      method: "POST",
+    }),
 
   // ---- Predictions ----
   runPredictions: (request: RunPredictionRequest) =>
-    req<PredictionJob>('/predictions/run', {
-      method: 'POST',
+    req<PredictionJob>("/predictions/run", {
+      method: "POST",
       body: JSON.stringify(request),
     }),
 
-  listPredictionJobs: () => req<PredictionJob[]>('/prediction-jobs'),
+  listPredictionJobs: () => req<PredictionJob[]>("/prediction-jobs"),
 
-  getPredictionJob: (id: string) => req<PredictionJob>(`/prediction-jobs/${id}`),
+  getPredictionJob: (id: string) =>
+    req<PredictionJob>(`/prediction-jobs/${id}`),
 
-  listPredictionJobPredictions: (id: string) => req<PredictionResult[]>(`/prediction-jobs/${id}/predictions`),
+  listPredictionJobPredictions: (id: string) =>
+    req<PredictionResult[]>(`/prediction-jobs/${id}/predictions`),
 
-  listPredictionJobEvents: (id: string) => req<PredictionEvent[]>(`/prediction-jobs/${id}/events`),
+  listPredictionJobEvents: (id: string) =>
+    req<PredictionEvent[]>(`/prediction-jobs/${id}/events`),
 
-  cancelPredictionJob: (id: string) => req<{ cancelled: boolean }>(`/prediction-jobs/${id}/cancel`, {
-    method: 'POST',
-  }),
+  cancelPredictionJob: (id: string) =>
+    req<{ cancelled: boolean }>(`/prediction-jobs/${id}/cancel`, {
+      method: "POST",
+    }),
 
   predictSingle: (request: PredictSingleRequest) =>
-    req<PredictionResult>('/predictions/single', {
-      method: 'POST',
+    req<PredictionResult>("/predictions/single", {
+      method: "POST",
       body: JSON.stringify(request),
     }),
 
   listSamplePredictions: (sampleId: string, modelVersion?: string | null) => {
-    const qs = modelVersion ? `?model_version=${encodeURIComponent(modelVersion)}` : '';
+    const qs = modelVersion
+      ? `?model_version=${encodeURIComponent(modelVersion)}`
+      : "";
     return req<PredictionResult[]>(`/samples/${sampleId}/predictions${qs}`);
   },
 
   createPredictionCollection: (request: CreatePredictionCollectionRequest) =>
-    req<PredictionCollection>('/prediction-collections', {
-      method: 'POST',
+    req<PredictionCollection>("/prediction-collections", {
+      method: "POST",
       body: JSON.stringify(request),
     }),
 
   listPredictionCollections: (datasetId: string) =>
-    req<PredictionCollection[]>(`/prediction-collections?dataset_id=${encodeURIComponent(datasetId)}`),
+    req<PredictionCollection[]>(
+      `/prediction-collections?dataset_id=${encodeURIComponent(datasetId)}`,
+    ),
 
   syncPredictionCollection: (collectionId: string, syncTag?: string | null) =>
-    req<SyncPredictionCollectionResponse>(`/prediction-collections/${collectionId}/sync-label-studio`, {
-      method: 'POST',
-      body: JSON.stringify(syncTag ? { sync_tag: syncTag } : {}),
-    }),
+    req<SyncPredictionCollectionResponse>(
+      `/prediction-collections/${collectionId}/sync-label-studio`,
+      {
+        method: "POST",
+        body: JSON.stringify(syncTag ? { sync_tag: syncTag } : {}),
+      },
+    ),
 
   // ---- Prediction Reviews ----
   createReviewAction: (
@@ -647,8 +723,8 @@ export const api = {
     collectionId?: string | null,
     syncTag?: string | null,
   ) =>
-    req<ReviewAction>('/prediction-reviews', {
-      method: 'POST',
+    req<ReviewAction>("/prediction-reviews", {
+      method: "POST",
       body: JSON.stringify({
         dataset_id: datasetId,
         model_id: modelId,
@@ -659,43 +735,51 @@ export const api = {
     }),
 
   listReviewActions: (datasetId: string) =>
-    req<ReviewAction[]>(`/prediction-reviews?dataset_id=${encodeURIComponent(datasetId)}`),
+    req<ReviewAction[]>(
+      `/prediction-reviews?dataset_id=${encodeURIComponent(datasetId)}`,
+    ),
 
   getReviewAction: (actionId: string) =>
     req<ReviewAction>(`/prediction-reviews/${actionId}`),
 
   deleteReviewAction: (actionId: string) =>
-    req<void>(`/prediction-reviews/${actionId}`, { method: 'DELETE' }),
+    req<void>(`/prediction-reviews/${actionId}`, { method: "DELETE" }),
 
-  saveReviewAnnotations: (actionId: string, items: SaveReviewAnnotationItem[]) =>
+  saveReviewAnnotations: (
+    actionId: string,
+    items: SaveReviewAnnotationItem[],
+  ) =>
     req<SaveReviewAnnotationsResponse>(
       `/prediction-reviews/${actionId}/annotations`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({ items }),
       },
     ),
 
   listAnnotationVersions: (actionId: string) =>
-    req<AnnotationVersion[]>(`/prediction-reviews/${actionId}/annotation-versions`),
+    req<AnnotationVersion[]>(
+      `/prediction-reviews/${actionId}/annotation-versions`,
+    ),
 
-  listExportFormats: () =>
-    req<ExportFormat[]>('/export-formats'),
+  listExportFormats: () => req<ExportFormat[]>("/export-formats"),
 
   previewReviewExport: (actionId: string, formatId?: string) => {
     const params = new URLSearchParams();
-    if (formatId) params.set('format_id', formatId);
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    return req<Record<string, unknown>>(`/prediction-reviews/${actionId}/export${qs}`);
+    if (formatId) params.set("format_id", formatId);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return req<Record<string, unknown>>(
+      `/prediction-reviews/${actionId}/export${qs}`,
+    );
   },
 
   persistReviewExport: (actionId: string, formatId?: string) =>
     req<VersionExportResponse>(
       `/prediction-reviews/${actionId}/export/persist`,
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          format_id: formatId ?? 'annotation-version-full-context-v1',
+          format_id: formatId ?? "annotation-version-full-context-v1",
         }),
       },
     ),
@@ -719,10 +803,13 @@ export const api = {
 // ---------------------------------------------------------------------------
 
 export async function fetchOrganizations(): Promise<Organization[]> {
-  return req<Organization[]>('/organizations');
+  return req<Organization[]>("/organizations");
 }
 
-export async function fetchHealthStatus(): Promise<{ status: string; auth_enabled: boolean }> {
+export async function fetchHealthStatus(): Promise<{
+  status: string;
+  auth_enabled: boolean;
+}> {
   const r = await fetch(HEALTH_URL);
   if (!r.ok) {
     throw new ApiError(`health failed: ${r.status}`, r.status);
@@ -734,7 +821,10 @@ export async function fetchHealthStatus(): Promise<{ status: string; auth_enable
 // Auth functions
 // ---------------------------------------------------------------------------
 
-export async function authLogin(email: string, password: string): Promise<LoginResponse> {
+export async function authLogin(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
   const r = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -744,14 +834,21 @@ export async function authLogin(email: string, password: string): Promise<LoginR
     let detail = `login failed: ${r.status}`;
     try {
       const body = await r.json();
-      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch { /* ignore */ }
+      detail =
+        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<LoginResponse>;
 }
 
-export async function authRegister(name: string, email: string, password: string): Promise<User> {
+export async function authRegister(
+  name: string,
+  email: string,
+  password: string,
+): Promise<User> {
   const r = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -761,8 +858,11 @@ export async function authRegister(name: string, email: string, password: string
     let detail = `register failed: ${r.status}`;
     try {
       const body = await r.json();
-      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch { /* ignore */ }
+      detail =
+        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<User>;
@@ -777,8 +877,11 @@ export async function authMe(token?: string | null): Promise<UserWithOrgs> {
     let detail = `auth/me failed: ${r.status}`;
     try {
       const body = await r.json();
-      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch { /* ignore */ }
+      detail =
+        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
     throw new ApiError(detail, r.status);
   }
   return r.json() as Promise<UserWithOrgs>;
@@ -798,7 +901,9 @@ export function buildJobEventSource(jobId: string): EventSource {
   } catch {
     /* ignore */
   }
-  return new EventSource(`${API_BASE}/training-jobs/${jobId}/events${tokenParam}`);
+  return new EventSource(
+    `${API_BASE}/training-jobs/${jobId}/events${tokenParam}`,
+  );
 }
 
 export function buildTrackedTaskEventSource(taskId: string): EventSource {
@@ -811,7 +916,9 @@ export function buildTrackedTaskEventSource(taskId: string): EventSource {
   } catch {
     /* ignore */
   }
-  return new EventSource(`${API_BASE}/task-tracker/tasks/${taskId}/stream${tokenParam}`);
+  return new EventSource(
+    `${API_BASE}/task-tracker/tasks/${taskId}/stream${tokenParam}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -820,7 +927,7 @@ export function buildTrackedTaskEventSource(taskId: string): EventSource {
 
 export async function getSurfaceState(
   sessionId: string,
-  surfaceId: string
+  surfaceId: string,
 ): Promise<import("./types").SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}`);
 }
@@ -828,7 +935,7 @@ export async function getSurfaceState(
 export async function setSurfacePanel(
   sessionId: string,
   surfaceId: string,
-  panel: import("./types").AgentPanelDescriptor
+  panel: import("./types").AgentPanelDescriptor,
 ): Promise<import("./types").SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}/panels`, {
     method: "POST",
@@ -840,7 +947,7 @@ export async function setSurfacePanel(
 export async function removeSurfacePanel(
   sessionId: string,
   surfaceId: string,
-  panelId: string
+  panelId: string,
 ): Promise<import("./types").SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}/panels/${panelId}`, {
     method: "DELETE",
@@ -849,7 +956,7 @@ export async function removeSurfacePanel(
 
 export async function exportSurfaceState(
   sessionId: string,
-  surfaceId: string
+  surfaceId: string,
 ): Promise<import("./types").SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}/export`);
 }
@@ -857,7 +964,7 @@ export async function exportSurfaceState(
 export async function importSurfaceState(
   sessionId: string,
   surfaceId: string,
-  doc: import("./types").SurfaceStateDocument
+  doc: import("./types").SurfaceStateDocument,
 ): Promise<import("./types").SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}/import`, {
     method: "POST",
@@ -869,7 +976,7 @@ export async function importSurfaceState(
 export async function queryDatasetData<T = Record<string, unknown>>(
   datasetId: string,
   queryType: string,
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
 ): Promise<T> {
   return req<T>(`/datasets/${datasetId}/query`, {
     method: "POST",
@@ -878,7 +985,9 @@ export async function queryDatasetData<T = Record<string, unknown>>(
   });
 }
 
-export async function queryWaferPoints(datasetId: string): Promise<WaferPointsQueryResponse> {
+export async function queryWaferPoints(
+  datasetId: string,
+): Promise<WaferPointsQueryResponse> {
   return queryDatasetData<WaferPointsQueryResponse>(datasetId, "wafer-points");
 }
 
@@ -892,12 +1001,13 @@ export interface FetchSampleSliceOptions {
 
 export async function fetchSampleSlice(
   datasetId: string,
-  options: FetchSampleSliceOptions = {}
+  options: FetchSampleSliceOptions = {},
 ): Promise<PaginatedResponse<SampleWithLabels>> {
   const params: Record<string, unknown> = {};
   if (options.offset !== undefined) params.offset = options.offset;
   if (options.limit !== undefined) params.limit = options.limit;
-  if (options.label !== undefined && options.label !== null) params.label = options.label;
+  if (options.label !== undefined && options.label !== null)
+    params.label = options.label;
   if (options.orderBy !== undefined) params.order_by = options.orderBy;
   if (options.sampleIds !== undefined && options.sampleIds !== null) {
     params.sample_ids = options.sampleIds;
@@ -909,7 +1019,12 @@ export async function fetchSampleSlice(
     error?: string;
   }>(datasetId, "sample-slice", params);
 
-  if (response && typeof response === "object" && "error" in response && response.error) {
+  if (
+    response &&
+    typeof response === "object" &&
+    "error" in response &&
+    response.error
+  ) {
     throw new ApiError(String(response.error), 400);
   }
 
@@ -922,7 +1037,7 @@ export async function fetchSampleSlice(
  */
 export function sendAgentChat(
   datasetId: string,
-  message: string
+  message: string,
 ): { eventSource: EventSource; abort: () => void } {
   // Use fetch + ReadableStream for POST-based SSE (EventSource only supports GET).
   // We fake an EventSource-like interface using a custom approach.
@@ -946,7 +1061,7 @@ export function sendAgentChat(
 export async function* streamAgentChat(
   datasetId: string,
   userMessage: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): AsyncGenerator<{ event: string; data: string }> {
   const { token } = getAuthContext();
 
@@ -1066,20 +1181,24 @@ export async function* streamGlobalAgentChat(
 // Preview session API
 // ---------------------------------------------------------------------------
 
-export async function createPreviewSession(collectionRef: string): Promise<PreviewSession> {
+export async function createPreviewSession(
+  collectionRef: string,
+): Promise<PreviewSession> {
   const res = await fetch(`${API_BASE}/preview-sessions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ collection_ref: collectionRef }),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
-export async function getPreviewSession(sessionId: string): Promise<PreviewSession> {
-  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}`)
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+export async function getPreviewSession(
+  sessionId: string,
+): Promise<PreviewSession> {
+  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export async function listPreviewItems(
@@ -1087,11 +1206,13 @@ export async function listPreviewItems(
   cursor: string | null,
   limit: number,
 ): Promise<PreviewItemsPage> {
-  const params = new URLSearchParams({ limit: String(limit) })
-  if (cursor) params.set('cursor', cursor)
-  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}/items?${params}`)
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const res = await fetch(
+    `${API_BASE}/preview-sessions/${sessionId}/items?${params}`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export async function startPreviewPersist(
@@ -1099,16 +1220,20 @@ export async function startPreviewPersist(
   scope: PreviewPersistScope,
 ): Promise<PreviewPersistStatus> {
   const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}/persist`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scope }),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
-export async function getPreviewPersistStatus(sessionId: string): Promise<PreviewPersistStatus> {
-  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}/persist-status`)
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+export async function getPreviewPersistStatus(
+  sessionId: string,
+): Promise<PreviewPersistStatus> {
+  const res = await fetch(
+    `${API_BASE}/preview-sessions/${sessionId}/persist-status`,
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
