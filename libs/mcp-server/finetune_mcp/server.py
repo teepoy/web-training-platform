@@ -38,6 +38,7 @@ Environment:
   FINETUNE_API_TOKEN    — bearer token (optional)
   FINETUNE_ORG_ID       — default org (optional)
 """
+
 from __future__ import annotations
 
 import json
@@ -51,6 +52,7 @@ from mcp.types import TextContent, Tool
 
 from finetune_mcp.client import PlatformClient
 from finetune_mcp.config import McpConfig
+from finetune_mcp.plugins.loader import load_plugin_tools
 
 _logger = logging.getLogger("finetune-mcp")
 
@@ -61,6 +63,7 @@ _logger = logging.getLogger("finetune-mcp")
 _server = Server("finetune-mcp")
 _config = McpConfig.from_env()
 _client = PlatformClient(_config)
+_PLUGIN_TOOLS, _PLUGIN_HANDLERS = load_plugin_tools()
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +112,10 @@ _TOOLS: list[Tool] = [
                         "prediction-summary",
                     ],
                 },
-                "params": {"type": "object", "description": "Query-specific parameters"},
+                "params": {
+                    "type": "object",
+                    "description": "Query-specific parameters",
+                },
             },
             "required": ["dataset_id", "query_type"],
         },
@@ -147,7 +153,10 @@ _TOOLS: list[Tool] = [
         inputSchema={
             "type": "object",
             "properties": {
-                "dataset_id": {"type": "string", "description": "Filter by dataset UUID"},
+                "dataset_id": {
+                    "type": "string",
+                    "description": "Filter by dataset UUID",
+                },
             },
         },
     ),
@@ -177,7 +186,10 @@ _TOOLS: list[Tool] = [
         inputSchema={
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Human-readable dataset name"},
+                "name": {
+                    "type": "string",
+                    "description": "Human-readable dataset name",
+                },
                 "task_spec": {
                     "type": "object",
                     "description": "Task specification with label_space",
@@ -195,9 +207,7 @@ _TOOLS: list[Tool] = [
     ),
     Tool(
         name="create_job",
-        description=(
-            "Start a training job on a dataset with a preset."
-        ),
+        description=("Start a training job on a dataset with a preset."),
         inputSchema={
             "type": "object",
             "properties": {
@@ -226,7 +236,10 @@ _TOOLS: list[Tool] = [
             "properties": {
                 "dataset_id": {"type": "string", "description": "Dataset UUID"},
                 "model_id": {"type": "string", "description": "Model UUID"},
-                "target": {"type": "string", "description": "Prediction target (default: image_classification)"},
+                "target": {
+                    "type": "string",
+                    "description": "Prediction target (default: image_classification)",
+                },
             },
             "required": ["dataset_id", "model_id"],
         },
@@ -238,8 +251,14 @@ _TOOLS: list[Tool] = [
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
-                "flow_name": {"type": "string", "description": "Prefect flow name (e.g. 'train-job')"},
-                "cron": {"type": "string", "description": "Cron expression (e.g. '0 2 * * *')"},
+                "flow_name": {
+                    "type": "string",
+                    "description": "Prefect flow name (e.g. 'train-job')",
+                },
+                "cron": {
+                    "type": "string",
+                    "description": "Cron expression (e.g. '0 2 * * *')",
+                },
                 "parameters": {"type": "object", "description": "Flow parameters"},
                 "description": {"type": "string"},
             },
@@ -345,7 +364,10 @@ _TOOLS: list[Tool] = [
                         "data": {"type": "object"},
                         "config": {"type": "object"},
                         "order": {"type": "integer", "minimum": 0},
-                        "size": {"type": "string", "enum": ["compact", "normal", "large"]},
+                        "size": {
+                            "type": "string",
+                            "enum": ["compact", "normal", "large"],
+                        },
                         "ephemeral": {"type": "boolean"},
                     },
                     "required": ["id", "component", "title"],
@@ -405,7 +427,7 @@ _TOOLS: list[Tool] = [
 
 @_server.list_tools()
 async def list_tools() -> list[Tool]:
-    return _TOOLS
+    return [*_TOOLS, *_PLUGIN_TOOLS]
 
 
 @_server.call_tool()
@@ -413,7 +435,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Dispatch tool calls to the platform API client."""
     try:
         result = _dispatch(name, arguments)
-        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        return [
+            TextContent(type="text", text=json.dumps(result, indent=2, default=str))
+        ]
     except Exception as exc:
         _logger.exception("Tool %s failed", name)
         return [TextContent(type="text", text=json.dumps({"error": str(exc)}))]
@@ -421,6 +445,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 def _dispatch(name: str, args: dict[str, Any]) -> Any:
     """Route a tool call to the appropriate client method."""
+    plugin_handler = _PLUGIN_HANDLERS.get(name)
+    if plugin_handler is not None:
+        return plugin_handler(args)
+
     # ----- Read tools -----
     if name == "list_datasets":
         return _client.list_datasets()
@@ -461,10 +489,12 @@ def _dispatch(name: str, args: dict[str, Any]) -> Any:
         return _client.create_dataset(body)
 
     elif name == "create_job":
-        return _client.create_job({
-            "dataset_id": args["dataset_id"],
-            "preset_id": args["preset_id"],
-        })
+        return _client.create_job(
+            {
+                "dataset_id": args["dataset_id"],
+                "preset_id": args["preset_id"],
+            }
+        )
 
     elif name == "cancel_job":
         return _client.cancel_job(args["job_id"])
@@ -547,11 +577,10 @@ def _dispatch(name: str, args: dict[str, Any]) -> Any:
 def main() -> None:
     """Run the MCP server on stdio transport."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
-    _logger.info(
-        "Starting finetune-mcp server (api=%s)", _config.api_base_url
-    )
+    _logger.info("Starting finetune-mcp server (api=%s)", _config.api_base_url)
 
     import asyncio
+
     asyncio.run(_run_stdio())
 
 
