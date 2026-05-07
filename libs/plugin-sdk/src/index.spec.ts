@@ -11,6 +11,9 @@ import {
   reduceCollectionIntent,
 } from "./index";
 import type { SidebarWidgetIntent } from "./sidebar";
+import * as pluginSdk from "./index";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 
 // ---------------------------------------------------------------------------
 // Stub component (Vue component without a DOM env)
@@ -421,5 +424,70 @@ describe("reduceCollectionIntent", () => {
       { type: "select-samples", operation: "replace", values: ["y"] },
     );
     expect(result["existing"].selection.ids).toEqual(["x"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: source barrel exports all expected names
+// ---------------------------------------------------------------------------
+
+describe("source barrel export completeness", () => {
+  const EXPECTED_EXPORTS = [
+    "BROWSER_DASHBOARD_KEY",
+    "SIDEBAR_WIDGET_INTERACTION_KEY",
+    "defineSidebarPlugin",
+    "reduceLabelFilterIntent",
+    "reduceCollectionIntent",
+    "defineImportPlugin",
+    "defineExportPlugin",
+    "defineAgentSkill",
+    "definePreviewPlugin",
+    "createPluginRegistry",
+  ] as const;
+
+  it("exports every expected named export from the source barrel", () => {
+    for (const name of EXPECTED_EXPORTS) {
+      expect(
+        name in pluginSdk,
+        `Expected "${name}" to be exported from index.ts`,
+      ).toBe(true);
+      expect(typeof (pluginSdk as Record<string, unknown>)[name]).not.toBe(
+        "undefined",
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: built ESM dist contains all named exports
+// ---------------------------------------------------------------------------
+
+describe("built ESM dist export completeness", () => {
+  const REQUIRED_EXPORTS = [
+    "defineSidebarPlugin",
+    "defineImportPlugin",
+    "defineExportPlugin",
+    "defineAgentSkill",
+    "definePreviewPlugin",
+    "createPluginRegistry",
+  ] as const;
+
+  it("includes all named exports in the ESM dist output", () => {
+    const distPath = resolve(__dirname, "../dist/index.js");
+    let source: string;
+    try {
+      source = readFileSync(distPath, "utf-8");
+    } catch {
+      return;
+    }
+    const exportStart = source.indexOf("export {");
+    expect(exportStart).toBeGreaterThan(-1);
+    const exportBlock = source.slice(exportStart, source.indexOf("};", exportStart) + 2);
+    for (const name of REQUIRED_EXPORTS) {
+      expect(
+        exportBlock.includes(name),
+        `Expected "${name}" in ESM export clause`,
+      ).toBe(true);
+    }
   });
 });
