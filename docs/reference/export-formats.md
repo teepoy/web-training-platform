@@ -8,11 +8,11 @@ Export formats are registered via a **strategy pattern** in `apps/api/app/servic
 
 The API exposes:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/v1/export-formats` | List all registered format IDs |
-| `GET /api/v1/prediction-reviews/{id}/export?format_id=...` | Preview export JSON |
-| `POST /api/v1/prediction-reviews/{id}/export/persist` | Persist to artifact storage |
+| Endpoint                                                   | Description                    |
+| ---------------------------------------------------------- | ------------------------------ |
+| `GET /api/v1/export-formats`                               | List all registered format IDs |
+| `GET /api/v1/prediction-reviews/{id}/export?format_id=...` | Preview export JSON            |
+| `POST /api/v1/prediction-reviews/{id}/export/persist`      | Persist to artifact storage    |
 
 ## Built-in Formats
 
@@ -85,11 +85,11 @@ Flat rows for quick analysis or downstream pipelines.
 
 ### Code Touchpoints
 
-| File | What to change |
-|------|----------------|
-| `apps/api/app/services/artifacts.py` | Add `@register_format(...)` builder function |
-| `apps/api/tests/test_prediction_review.py` | Add test for the new format |
-| `docs/export-formats.md` | Document the JSON shape |
+| File                                       | What to change                               |
+| ------------------------------------------ | -------------------------------------------- |
+| `apps/api/app/services/artifacts.py`       | Add `@register_format(...)` builder function |
+| `apps/api/tests/test_prediction_review.py` | Add test for the new format                  |
+| `docs/reference/export-formats.md`         | Document the JSON shape                      |
 
 ### Versioning Guidance
 

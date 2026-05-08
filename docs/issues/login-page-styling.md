@@ -34,10 +34,10 @@ The `n-input` div has correct dark theme variables, but the inner `input` elemen
 None of these resolved the issue.
 
 ## Relevant Files
-- [`apps/web/src/views/LoginView.vue`](../../apps/web/src/views/LoginView.vue) - Login page component
-- [`apps/web/src/views/RegisterView.vue`](../../apps/web/src/views/RegisterView.vue) - Register page (likely same issue)
-- [`apps/web/src/style.css`](../../apps/web/src/style.css) - Global styles with attempted fixes
-- [`apps/web/src/App.vue`](../../apps/web/src/App.vue) - Theme provider setup
+- `apps/web/src/views/LoginView.vue` - Login page component
+- `apps/web/src/views/RegisterView.vue` - Register page (likely same issue)
+- `apps/web/src/style.css` - Global styles with attempted fixes
+- `apps/web/src/App.vue` - Theme provider setup
 
 ## Possible Causes to Investigate
 1. CSS specificity - Naive UI styles may load after global styles

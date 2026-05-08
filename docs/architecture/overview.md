@@ -43,5 +43,5 @@
 
 ## Prefect Delegation
 
-- Prefect-based training delegation is documented in `docs/prefect-training-delegation.md`.
+- Prefect-based training delegation is documented in `prefect-training-delegation.md`.
 - The target model separates API orchestration from Prefect flow workers and the inference service.

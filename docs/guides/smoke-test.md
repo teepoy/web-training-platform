@@ -278,8 +278,8 @@ make test-api ARGS="tests/test_datasets.py -v"
 
 ## Known Issues
 
-See [`docs/issues/`](./issues/) for tracked issues:
-- [Login page styling](./issues/login-page-styling.md) - Input fields have wrong background color
+See [issues](../issues/login-page-styling.md) for one tracked example:
+- [Login page styling](../issues/login-page-styling.md) - Input fields have wrong background color
 
 ---
 

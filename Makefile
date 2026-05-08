@@ -81,6 +81,14 @@ test-api: ## Run API tests
 build-web: ## Build frontend for production
 	cd $(WEB_DIR) && pnpm build
 
+.PHONY: docs-build
+docs-build: ## Build the MkDocs documentation site
+	uv run mkdocs build --strict
+
+.PHONY: docs-serve
+docs-serve: ## Serve the MkDocs documentation site locally
+	uv run mkdocs serve
+
 .PHONY: create-superadmin
 create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
 	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)

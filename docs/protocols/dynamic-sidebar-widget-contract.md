@@ -9,7 +9,7 @@ The frontend sidebar widget system now has an explicit author contract.
 
 `widgetContract.ts` defines the shared type vocabulary. `sidebarConfig.ts` remains the registry, but each widget entry now carries author-facing metadata as well as the component reference.
 
-For the general collection and row interaction model used by interactive tables and linked widgets, see `docs/table-widget-interaction-protocol.md`.
+For the general collection and row interaction model used by interactive tables and linked widgets, see `table-widget-interaction-protocol.md`.
 
 ## Required widget contract fields
 

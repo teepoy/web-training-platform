@@ -68,3 +68,7 @@ minio-data/
 apps/web/test-results/
 apps/web/evidence-*.png
 classify-*.png
+
+# MkDocs
+site/
+.mkdocs.yml.swp

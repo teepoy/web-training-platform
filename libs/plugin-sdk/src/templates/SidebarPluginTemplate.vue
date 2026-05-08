@@ -45,7 +45,7 @@ const props = withDefaults(
 // ---------------------------------------------------------------------------
 
 // The context object passed via BrowserSidebar's :context prop.
-// Keys depend on the surface — see docs/sidebar-extension-guide.md.
+// Keys depend on the surface — see docs/guides/sidebar-extension-guide.md.
 const ctx = inject(BROWSER_DASHBOARD_KEY, {} as Record<string, unknown>);
 
 // Example: read a value from the context

@@ -4,43 +4,43 @@
 Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views, and a thin API client that currently assumes a local backend.
 
 ## WHERE TO LOOK
-| Task | Location | Notes |
-|------|----------|-------|
-| Boot sequence | `src/main.ts` + `index.html` | Mounts app, installs router/query/pinia |
-| Top-level shell | `src/App.vue` | Navigation and `RouterView` |
-| Routes | `src/router.ts` | `/datasets`, `/jobs` |
-| API + SSE | `src/api.ts` | Hardcoded `API_BASE`, EventSource helper |
-| Shared types | `src/types.ts` + `src/contracts.ts` | Classification-first shapes |
-| Dataset workflow | `src/views/DatasetsView.vue` | Import dataset via `PluginFlowModal` |
-| Job workflow | `src/views/JobsView.vue` | Start job, consume SSE |
-| Job detail metrics | `src/views/JobDetailView.vue` + `src/components/TrainingChart.vue` | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present |
-| Schedule list | `src/views/SchedulesView.vue` | CRUD + create modal + pause/resume/delete |
-| Schedule detail | `src/views/ScheduleDetailView.vue` | Config display, run history table, Trigger Now, Prefect deep link |
-| Run log viewer | `src/components/RunLogViewer.vue` | Reusable; props: `runId: string`; shows level badges |
-| Classify view | `src/views/ClassifyView.vue` | Unified annotate + train + predict + review workflow with shared grid/sidebar |
-| Classify sidebar | `src/components/classify/` | Widget registry, sidebar shell, widget components; see Classify Sidebar Architecture section |
-| Agent chat drawer | `src/components/AgentChatDrawer.vue` | Floating chat UI for agent interaction |
-| Sidebar plugin implementations | `src/plugins/sidebar-*/` | Widget descriptors and `.vue` implementations |
-| Agent composables | `src/composables/useAgentSurface.ts`, `src/composables/useAgentChat.ts` | Surface state management, chat SSE streaming |
-| Shared browser core | `src/components/sample-browser/SampleBrowser.vue` | Shared virtualized browser core |
-| Sidebar shell | `src/components/sample-browser/BrowserSidebar.vue` | Neutral sidebar shell used by all surfaces |
-| Browser preferences | `src/stores/sampleBrowser.ts` | Shared browser presentation preferences |
-| Browser filter | `src/composables/useBrowserFilter.ts` | Browser-scope item filter pipeline |
-| Sidebar config | `src/components/classify/sidebarConfig.ts` | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels` |
+| Task                           | Location                                                                | Notes                                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Boot sequence                  | `src/main.ts` + `index.html`                                            | Mounts app, installs router/query/pinia                                                      |
+| Top-level shell                | `src/App.vue`                                                           | Navigation and `RouterView`                                                                  |
+| Routes                         | `src/router.ts`                                                         | `/datasets`, `/jobs`                                                                         |
+| API + SSE                      | `src/api.ts`                                                            | Hardcoded `API_BASE`, EventSource helper                                                     |
+| Shared types                   | `src/types.ts` + `src/contracts.ts`                                     | Classification-first shapes                                                                  |
+| Dataset workflow               | `src/views/DatasetsView.vue`                                            | Import dataset via `PluginFlowModal`                                                         |
+| Job workflow                   | `src/views/JobsView.vue`                                                | Start job, consume SSE                                                                       |
+| Job detail metrics             | `src/views/JobDetailView.vue` + `src/components/TrainingChart.vue`      | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present                 |
+| Schedule list                  | `src/views/SchedulesView.vue`                                           | CRUD + create modal + pause/resume/delete                                                    |
+| Schedule detail                | `src/views/ScheduleDetailView.vue`                                      | Config display, run history table, Trigger Now, Prefect deep link                            |
+| Run log viewer                 | `src/components/RunLogViewer.vue`                                       | Reusable; props: `runId: string`; shows level badges                                         |
+| Classify view                  | `src/views/ClassifyView.vue`                                            | Unified annotate + train + predict + review workflow with shared grid/sidebar                |
+| Classify sidebar               | `src/components/classify/`                                              | Widget registry, sidebar shell, widget components; see Classify Sidebar Architecture section |
+| Agent chat drawer              | `src/components/AgentChatDrawer.vue`                                    | Floating chat UI for agent interaction                                                       |
+| Sidebar plugin implementations | `src/plugins/sidebar-*/`                                                | Widget descriptors and `.vue` implementations                                                |
+| Agent composables              | `src/composables/useAgentSurface.ts`, `src/composables/useAgentChat.ts` | Surface state management, chat SSE streaming                                                 |
+| Shared browser core            | `src/components/sample-browser/SampleBrowser.vue`                       | Shared virtualized browser core                                                              |
+| Sidebar shell                  | `src/components/sample-browser/BrowserSidebar.vue`                      | Neutral sidebar shell used by all surfaces                                                   |
+| Browser preferences            | `src/stores/sampleBrowser.ts`                                           | Shared browser presentation preferences                                                      |
+| Browser filter                 | `src/composables/useBrowserFilter.ts`                                   | Browser-scope item filter pipeline                                                           |
+| Sidebar config                 | `src/components/classify/sidebarConfig.ts`                              | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels`                            |
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 The classify page (`/datasets/:id/classify`) is the one-stop classification workflow and has a collapsible sidebar that renders dashboard widgets dynamically from a typed config.
 
-| Piece | Location | Role |
-|-------|----------|------|
-| Panel config | `src/components/classify/sidebarConfig.ts` | `SidebarPanelDescriptor` type, `defaultPanels`, `datasetPanels`, `previewPanels` |
-| Sidebar shell | `src/components/sample-browser/BrowserSidebar.vue` | Neutral shell used by all surfaces; renders panels from config; per-panel collapse; sidebar collapse; injects context via `provide` |
-| Classify sidebar wrapper | `src/components/classify/ClassifySidebar.vue` | Thin wrapper around `BrowserSidebar.vue` for the classify view |
-| Donut chart widget | `src/plugins/sidebar-annotation-progress/AnnotationProgressWidget.vue` | Donut chart (annotated/remaining/drafts), metric grid, label breakdown |
-| Interactive scatter widget | `src/plugins/sidebar-interactive-scatter/InteractiveScatterWidget.vue` | Metadata-driven scatter plot; emits linked selection/filter intents |
-| Browser summary widget | `src/plugins/sidebar-browser-summary/BrowserSummaryWidget.vue` | Read-only item counts (showing X of Y) for filtered views |
-| Sample preview widget | `src/plugins/sidebar-sample-viewer/SampleViewerWidget.vue` | Renders sidebar-linked sample previews |
-| Data composable | `src/composables/useClassifyDashboard.ts` | Vue Query fetch of `/annotation-stats` |
+| Piece                      | Location                                                               | Role                                                                                                                                |
+| -------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Panel config               | `src/components/classify/sidebarConfig.ts`                             | `SidebarPanelDescriptor` type, `defaultPanels`, `datasetPanels`, `previewPanels`                                                    |
+| Sidebar shell              | `src/components/sample-browser/BrowserSidebar.vue`                     | Neutral shell used by all surfaces; renders panels from config; per-panel collapse; sidebar collapse; injects context via `provide` |
+| Classify sidebar wrapper   | `src/components/classify/ClassifySidebar.vue`                          | Thin wrapper around `BrowserSidebar.vue` for the classify view                                                                      |
+| Donut chart widget         | `src/plugins/sidebar-annotation-progress/AnnotationProgressWidget.vue` | Donut chart (annotated/remaining/drafts), metric grid, label breakdown                                                              |
+| Interactive scatter widget | `src/plugins/sidebar-interactive-scatter/InteractiveScatterWidget.vue` | Metadata-driven scatter plot; emits linked selection/filter intents                                                                 |
+| Browser summary widget     | `src/plugins/sidebar-browser-summary/BrowserSummaryWidget.vue`         | Read-only item counts (showing X of Y) for filtered views                                                                           |
+| Sample preview widget      | `src/plugins/sidebar-sample-viewer/SampleViewerWidget.vue`             | Renders sidebar-linked sample previews                                                                                              |
+| Data composable            | `src/composables/useClassifyDashboard.ts`                              | Vue Query fetch of `/annotation-stats`                                                                                              |
 
 **How to add a new widget:**
 1. Create `src/plugins/sidebar-<name>/<Name>Widget.vue`.
@@ -54,29 +54,29 @@ The classify view also provides the live grid items under `classify-grid-items` 
 
 The default sidebar now includes an `Interactive Scatter` panel when samples expose numeric `metadata.scatter_x` and `metadata.scatter_y`. Clicking a point updates the shared `classify-samples` collection state and the adjacent `Selected Samples` panel narrows to those sample IDs.
 
-General row and collection interaction rules for future interactive table widgets are documented in `docs/table-widget-interaction-protocol.md`.
+General row and collection interaction rules for future interactive table widgets are documented in `docs/protocols/table-widget-interaction-protocol.md`.
 
 ## AGENT DISPLAY SURFACE ARCHITECTURE
 The classify page includes an AI agent sidebar system and floating chat drawer:
 
-| Piece | Location | Role |
-|-------|----------|------|
-| Chat drawer | `src/components/AgentChatDrawer.vue` | FAB-toggled floating panel; sends messages, renders SSE events |
-| Surface composable | `src/composables/useAgentSurface.ts` | Manages agent panel state, refresh, import/export, live updates |
-| Chat composable | `src/composables/useAgentChat.ts` | SSE streaming, conversation state, sidebar update emission |
-| Widget error boundary | `src/components/classify/widgets/WidgetErrorBoundary.vue` | Catches widget render errors |
-| Generic ECharts | `src/plugins/sidebar-echarts-generic/GenericEChartsWidget.vue` | Any ECharts chart from inline option object |
-| Interactive scatter | `src/plugins/sidebar-interactive-scatter/InteractiveScatterWidget.vue` | Metadata-driven sample scatter plot with linked sidebar selection |
-| Markdown log | `src/plugins/sidebar-markdown-log/MarkdownLogWidget.vue` | Scrollable timestamped log entries |
-| Data table | `src/plugins/sidebar-data-table/DataTableWidget.vue` | Sortable table from columns/rows |
-| Metric cards | `src/plugins/sidebar-metric-cards/MetricCardsWidget.vue` | KPI card grid |
-| Sample viewer | `src/plugins/sidebar-sample-viewer/SampleViewerWidget.vue` | Sample image grid/list by ID; can resolve classify-grid-backed sample previews |
+| Piece                 | Location                                                               | Role                                                                           |
+| --------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Chat drawer           | `src/components/AgentChatDrawer.vue`                                   | FAB-toggled floating panel; sends messages, renders SSE events                 |
+| Surface composable    | `src/composables/useAgentSurface.ts`                                   | Manages agent panel state, refresh, import/export, live updates                |
+| Chat composable       | `src/composables/useAgentChat.ts`                                      | SSE streaming, conversation state, sidebar update emission                     |
+| Widget error boundary | `src/components/classify/widgets/WidgetErrorBoundary.vue`              | Catches widget render errors                                                   |
+| Generic ECharts       | `src/plugins/sidebar-echarts-generic/GenericEChartsWidget.vue`         | Any ECharts chart from inline option object                                    |
+| Interactive scatter   | `src/plugins/sidebar-interactive-scatter/InteractiveScatterWidget.vue` | Metadata-driven sample scatter plot with linked sidebar selection              |
+| Markdown log          | `src/plugins/sidebar-markdown-log/MarkdownLogWidget.vue`               | Scrollable timestamped log entries                                             |
+| Data table            | `src/plugins/sidebar-data-table/DataTableWidget.vue`                   | Sortable table from columns/rows                                               |
+| Metric cards          | `src/plugins/sidebar-metric-cards/MetricCardsWidget.vue`               | KPI card grid                                                                  |
+| Sample viewer         | `src/plugins/sidebar-sample-viewer/SampleViewerWidget.vue`             | Sample image grid/list by ID; can resolve classify-grid-backed sample previews |
 
 **Agent panels** are merged with static dashboard panels via `mergePanels()` in `sidebarConfig.ts`. Agent panels are visually distinguished with a left border accent and "AI" badge.
 
 **SSE pattern**: The agent chat uses `POST → SSE response stream` (not `EventSource`). The `streamAgentChat()` function in `api.ts` uses `fetch` + `ReadableStream` and parses SSE frames via an async generator. Event types: `agent-message`, `agent-action`, `sidebar-update`, `done`.
 
-See `docs/agent-display-protocol.md` for the full protocol specification.
+See `docs/protocols/agent-display-protocol.md` for the full protocol specification.
 
 ## CONVENTIONS
 - Run with `pnpm` from this directory.

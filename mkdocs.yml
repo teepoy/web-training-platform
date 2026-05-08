@@ -1,0 +1,40 @@
+site_name: Online Finetune Platform
+site_description: Architecture, guides, and reference docs for the online finetune platform monorepo.
+strict: true
+
+theme:
+  name: mkdocs
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Prefect Training Delegation: architecture/prefect-training-delegation.md
+      - Cron Scheduling: architecture/cron-scheduling.md
+      - Sample Browser: architecture/sample-browser.md
+      - Task Tracker: architecture/task-tracker.md
+  - Guides:
+      - Plugin Extension Guide: guides/plugin-extension-guide.md
+      - Sidebar Extension Guide: guides/sidebar-extension-guide.md
+      - Preview Dataset Mode: guides/preview-dataset-mode.md
+      - Export Bundle: guides/export-bundle.md
+      - Smoke Test Checklist: guides/smoke-test.md
+  - Reference:
+      - API Endpoints: reference/api-endpoints.md
+      - Dataset Model Compatibility: reference/dataset-model-compatibility.md
+      - Export Formats: reference/export-formats.md
+      - OpenCode Skills: reference/opencode-skills.md
+  - Protocols:
+      - Agent Display Protocol: protocols/agent-display-protocol.md
+      - Dynamic Sidebar Widget Contract: protocols/dynamic-sidebar-widget-contract.md
+      - Table Widget Interaction Protocol: protocols/table-widget-interaction-protocol.md
+  - Plans:
+      - Runtime De-stubbing Plan: plans/runtime-destub-implementation-plan.md
+  - Issues:
+      - Login Page Styling: issues/login-page-styling.md

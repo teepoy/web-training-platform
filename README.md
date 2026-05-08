@@ -68,7 +68,7 @@ uv run python -m ftsdk.cli jobs ls
 - Local smoke uses async SQLite storage and local execution engine.
 - Docker/K8s integration is scaffolded but intentionally optional.
 - `pnpm` was not available in this environment, so frontend build was scaffolded but not executed.
-- Prefect queue-based delegation design is documented in `docs/prefect-training-delegation.md`.
+- Prefect queue-based delegation design is documented in `docs/architecture/prefect-training-delegation.md`.
 
 ## Export Bundle
 
@@ -85,4 +85,18 @@ make export-bundle ARGS="--pull-missing"
 make export-bundle ARGS="--output /tmp/online-finetune-platform.tar"
 ```
 
-See `docs/export-bundle.md` for details.
+See `docs/guides/export-bundle.md` for details.
+
+## Docs site
+
+Build the MkDocs site locally:
+
+```bash
+make docs-build
+```
+
+Serve the docs locally with live reload:
+
+```bash
+make docs-serve
+```

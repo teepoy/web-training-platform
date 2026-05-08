@@ -35,7 +35,7 @@ flowchart LR
 - Prefect owns deployment, cron, run, and log state.
 - The API talks to Prefect as a control-plane client only.
 - Prefect workers own deployment execution and queue consumption.
-- See `docs/prefect-training-delegation.md` for the target ownership model and routing flow chart.
+- See `prefect-training-delegation.md` for the target ownership model and routing flow chart.
 
 ### Compose service dependencies
 
@@ -101,19 +101,19 @@ sequenceDiagram
 
 ## API endpoint mapping
 
-| Platform Endpoint | Prefect Endpoint | Notes |
-|---|---|---|
-| `POST /api/v1/schedules` | `POST /api/deployments/` | Create deployment with cron schedule and `flow_id` |
-| `GET /api/v1/schedules` | `POST /api/deployments/filter` | List all deployments (enriched with `flow_name`) |
-| `GET /api/v1/schedules/{id}` | `GET /api/deployments/{id}` | Get single deployment |
-| `PATCH /api/v1/schedules/{id}` | `PATCH /api/deployments/{id}` | Update deployment (cron via `schedules` array, pause via `paused`) |
-| `DELETE /api/v1/schedules/{id}` | `DELETE /api/deployments/{id}` | Delete deployment |
-| `POST /api/v1/schedules/{id}/run` | `POST /api/deployments/{id}/create_flow_run` | Trigger ad-hoc run |
-| `POST /api/v1/schedules/{id}/pause` | `PATCH /api/deployments/{id}` `{"paused": true}` | Pause schedule |
-| `POST /api/v1/schedules/{id}/resume` | `PATCH /api/deployments/{id}` `{"paused": false}` | Resume schedule |
-| `GET /api/v1/schedules/{id}/runs` | `POST /api/flow_runs/filter` | List runs for deployment |
-| `GET /api/v1/runs/{run_id}` | `GET /api/flow_runs/{run_id}` | Get single run |
-| `GET /api/v1/runs/{run_id}/logs` | `POST /api/logs/filter` | Get run logs |
+| Platform Endpoint                    | Prefect Endpoint                                  | Notes                                                              |
+| ------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /api/v1/schedules`             | `POST /api/deployments/`                          | Create deployment with cron schedule and `flow_id`                 |
+| `GET /api/v1/schedules`              | `POST /api/deployments/filter`                    | List all deployments (enriched with `flow_name`)                   |
+| `GET /api/v1/schedules/{id}`         | `GET /api/deployments/{id}`                       | Get single deployment                                              |
+| `PATCH /api/v1/schedules/{id}`       | `PATCH /api/deployments/{id}`                     | Update deployment (cron via `schedules` array, pause via `paused`) |
+| `DELETE /api/v1/schedules/{id}`      | `DELETE /api/deployments/{id}`                    | Delete deployment                                                  |
+| `POST /api/v1/schedules/{id}/run`    | `POST /api/deployments/{id}/create_flow_run`      | Trigger ad-hoc run                                                 |
+| `POST /api/v1/schedules/{id}/pause`  | `PATCH /api/deployments/{id}` `{"paused": true}`  | Pause schedule                                                     |
+| `POST /api/v1/schedules/{id}/resume` | `PATCH /api/deployments/{id}` `{"paused": false}` | Resume schedule                                                    |
+| `GET /api/v1/schedules/{id}/runs`    | `POST /api/flow_runs/filter`                      | List runs for deployment                                           |
+| `GET /api/v1/runs/{run_id}`          | `GET /api/flow_runs/{run_id}`                     | Get single run                                                     |
+| `GET /api/v1/runs/{run_id}/logs`     | `POST /api/logs/filter`                           | Get run logs                                                       |
 
 ### Prefect 3.x field notes
 
@@ -126,7 +126,7 @@ sequenceDiagram
 
 The API no longer serves embedded Prefect deployments in supported dev/prod runtime.
 Dedicated delegated workers own deployment registration and queue consumption.
-See `docs/prefect-training-delegation.md` for the concrete topology.
+See `prefect-training-delegation.md` for the concrete topology.
 
 ## First flow
 
@@ -148,12 +148,12 @@ The UI header includes a link to the Prefect dashboard at `http://localhost:4200
 
 The platform maps Prefect HTTP errors to standard API responses:
 
-| Prefect Response | Platform Response | Detail |
-|---|---|---|
-| 404 | 404 | Context-specific: "schedule not found", "flow run not found", etc. |
-| 400-499 (not 404) | 422 | Validation error with Prefect's response body |
-| 500+ | 502 | Prefect server error |
-| Connection error | 503 | Prefect server unavailable |
+| Prefect Response  | Platform Response | Detail                                                             |
+| ----------------- | ----------------- | ------------------------------------------------------------------ |
+| 404               | 404               | Context-specific: "schedule not found", "flow run not found", etc. |
+| 400-499 (not 404) | 422               | Validation error with Prefect's response body                      |
+| 500+              | 502               | Prefect server error                                               |
+| Connection error  | 503               | Prefect server unavailable                                         |
 
 ## Cron validation
 
