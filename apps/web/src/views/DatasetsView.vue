@@ -1,13 +1,13 @@
 <template>
   <div>
-    <DatasetPageShell v-bind="adapter.pageShellProps.value">
-      <component
-        :is="activeShim"
-        :datasets="adapter.datasets.value"
-        :current-org-id="orgStore.currentOrgId"
-        :is-superadmin="authStore.user?.is_superadmin ?? false"
-        :importer-plugins="adapter.toolbarProps.value.importerPlugins"
-        :preview-launcher-plugins="adapter.toolbarProps.value.previewLauncherPlugins"
+      <DatasetPageShell v-bind="surface.pageShellProps.value">
+        <component
+          :is="activeShim"
+          :datasets="surface.datasets.value"
+          :current-org-id="orgStore.currentOrgId"
+          :is-superadmin="authStore.user?.is_superadmin ?? false"
+          :importer-plugins="surface.toolbarProps.value.importerPlugins"
+          :preview-launcher-plugins="surface.toolbarProps.value.previewLauncherPlugins"
         @import-complete="handleImportComplete"
         @preview-complete="handlePreviewComplete"
         @view="handleViewDataset"
@@ -23,13 +23,13 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
+import { DatasetPageShell, useDatasetListSurface } from "@platform/web-ui";
 import { api } from "../api";
-import type { Dataset } from "../types";
+import type { Dataset, User } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
-import DatasetPageShell from "../components/datasets/DatasetPageShell.vue";
-import { resolveDatasetShim } from "./datasets/registry";
-import { useDatasetsAdapter } from "../composables/useDatasetsAdapter";
+import { pluginRegistry } from "../core/registry";
+import { resolveDatasetShim, resolveDatasetTaskType } from "./datasets/registry";
 import { getActiveDatasetTaskType } from "./datasets/selection";
 
 const router = useRouter();
@@ -92,17 +92,21 @@ function handleDeleteDataset(row: Dataset) {
   deleteDatasetMut.mutate(row.id);
 }
 
-const adapter = useDatasetsAdapter({
+const importerPlugins = computed(() => pluginRegistry.getImporters("dataset"));
+const previewLauncherPlugins = computed(() => pluginRegistry.getPreviewLaunchers("dataset-list"));
+
+const surface = useDatasetListSurface<Dataset, User>({
   datasets,
   isLoading,
   error,
   currentOrgId: computed(() => orgStore.currentOrgId),
   user: computed(() => authStore.user),
+  importerPlugins,
+  previewLauncherPlugins,
+  resolveTaskType: resolveDatasetTaskType,
   onViewDataset: handleViewDataset,
   onTogglePublic: handleTogglePublic,
   onDeleteDataset: handleDeleteDataset,
-  onImportComplete: handleImportComplete,
-  onPreviewComplete: handlePreviewComplete,
 });
 
 const activeTaskType = computed(() => getActiveDatasetTaskType(datasets.value));
