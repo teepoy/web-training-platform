@@ -12,7 +12,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@platform/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"]
+      "@platform/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"],
+      "@platform/web-ui": ["../../libs/web-ui/src/index.ts"]
     },
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["node"]
