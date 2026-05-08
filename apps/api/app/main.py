@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import httpx
 from fastapi import (
@@ -3123,7 +3124,7 @@ async def start_preview_persist(
     valid_scopes = ("entire_collection", "loaded_items_only")
     if payload.scope not in valid_scopes:
         raise HTTPException(status_code=422, detail=f"invalid scope: {payload.scope}")
-    scope: PreviewPersistScope = payload.scope  # type: ignore[assignment]
+    scope = cast(PreviewPersistScope, payload.scope)
     status = await container.preview_service().start_persist(
         session_id=session_id,
         scope=scope,

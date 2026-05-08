@@ -44,7 +44,6 @@ from app.services.label_studio import (
 )
 
 if TYPE_CHECKING:
-    from app.core.config import AppConfig
     from app.domain.models import Sample
     from app.repositories.sql_repository import SqlRepository
     from app.storage.interfaces import ArtifactStorage
@@ -118,7 +117,7 @@ class PredictionService:
         self,
         repository: SqlRepository,
         artifact_storage: ArtifactStorage,
-        config: AppConfig,
+        config: Any,
         embedding_client: EmbeddingClient | None = None,
         llm_client: OpenAICompatibleLlmClient | None = None,
         inference_worker: InferenceWorkerClient | None = None,

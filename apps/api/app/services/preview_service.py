@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 from app.domain.models import Dataset, Sample, TaskSpec
@@ -35,8 +36,8 @@ class PreviewService:
         self,
         session_id: str,
         scope: PreviewPersistScope,
-        dataset_repo: object,
-        label_studio_client: object,
+        dataset_repo: Any,
+        label_studio_client: Any,
     ) -> PreviewPersistStatus:
         session = await self._store.get(session_id)
         if session is None:

@@ -20,14 +20,14 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any
+from typing import Any, cast
 
 import litellm
 
 _logger = logging.getLogger(__name__)
 
 # Suppress litellm's noisy default logging (it logs full payloads at INFO)
-litellm.suppress_debug_info = True
+cast(Any, litellm).suppress_debug_info = True
 
 
 class LlmClientError(Exception):

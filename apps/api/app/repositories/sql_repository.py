@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import cast
 
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,6 +37,7 @@ from app.domain.models import (
     Dataset,
     DEFAULT_ORG_ID,
     Model,
+    ModelSpec,
     PlatformPrediction,
     PredictionCollection,
     PredictionCollectionItem,
@@ -44,11 +46,12 @@ from app.domain.models import (
     PredictionReviewAction,
     Sample,
     SampleFeature,
+    TaskSpec,
     TrainingEvent,
     TrainingJob,
     TrainingPreset,
 )
-from app.domain.types import JobStatus
+from app.domain.types import DatasetType, JobStatus
 
 
 def _utcnow() -> datetime:
@@ -97,8 +100,8 @@ class SqlRepository:
                     org_id=r.org_id,
                     org_name=await _org_name_for(session, r.org_id),
                     name=r.name,
-                    dataset_type=r.dataset_type,
-                    task_spec=r.task_spec,
+                    dataset_type=cast(DatasetType, r.dataset_type),
+                    task_spec=cast(TaskSpec, r.task_spec),
                     is_public=r.is_public,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
@@ -119,8 +122,8 @@ class SqlRepository:
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 name=row.name,
-                dataset_type=row.dataset_type,
-                task_spec=row.task_spec,
+                dataset_type=cast(DatasetType, row.dataset_type),
+                task_spec=cast(TaskSpec, row.task_spec),
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
@@ -183,8 +186,8 @@ class SqlRepository:
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 name=row.name,
-                dataset_type=row.dataset_type,
-                task_spec=row.task_spec,
+                dataset_type=cast(DatasetType, row.dataset_type),
+                task_spec=cast(TaskSpec, row.task_spec),
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
@@ -612,7 +615,7 @@ class SqlRepository:
                     id=r.id,
                     org_id=r.org_id,
                     name=r.name,
-                    model_spec=r.model_spec,
+                    model_spec=cast(ModelSpec, r.model_spec),
                     omegaconf_yaml=r.omegaconf_yaml,
                     dataloader_ref=r.dataloader_ref,
                 )
@@ -630,7 +633,7 @@ class SqlRepository:
                 id=row.id,
                 org_id=row.org_id,
                 name=row.name,
-                model_spec=row.model_spec,
+                model_spec=cast(ModelSpec, row.model_spec),
                 omegaconf_yaml=row.omegaconf_yaml,
                 dataloader_ref=row.dataloader_ref,
             )
@@ -698,7 +701,7 @@ class SqlRepository:
                         org_name=await _org_name_for(session, row.org_id),
                         dataset_id=row.dataset_id,
                         preset_id=row.preset_id,
-                        status=row.status,
+                        status=cast(JobStatus, row.status),
                         created_by=row.created_by,
                         is_public=row.is_public,
                         created_at=row.created_at,
@@ -723,7 +726,7 @@ class SqlRepository:
                 org_name=await _org_name_for(session, row.org_id),
                 dataset_id=row.dataset_id,
                 preset_id=row.preset_id,
-                status=row.status,
+                status=cast(JobStatus, row.status),
                 created_by=row.created_by,
                 is_public=row.is_public,
                 created_at=row.created_at,
@@ -823,7 +826,7 @@ class SqlRepository:
                 org_name=await _org_name_for(session, row.org_id),
                 dataset_id=row.dataset_id,
                 model_id=row.model_id,
-                status=row.status,
+                status=cast(JobStatus, row.status),
                 created_by=row.created_by,
                 target=row.target,
                 model_version=row.model_version,
@@ -847,7 +850,7 @@ class SqlRepository:
                     org_name=await _org_name_for(session, row.org_id),
                     dataset_id=row.dataset_id,
                     model_id=row.model_id,
-                    status=row.status,
+                    status=cast(JobStatus, row.status),
                     created_by=row.created_by,
                     target=row.target,
                     model_version=row.model_version,

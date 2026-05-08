@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from typing import Any, cast
 
 from app.core.config import load_config
 from app.db.session import create_engine, create_session_factory
@@ -242,7 +243,7 @@ async def run_training_pipeline(
         ArtifactRef(
             uri=str(item["uri"]),
             kind=str(item.get("kind", "artifact")),
-            metadata=item.get("metadata", {}) if isinstance(item.get("metadata", {}), dict) else {},
+            metadata=cast(dict[str, Any], item["metadata"]) if isinstance(item.get("metadata"), dict) else {},
         )
         for item in artifacts
         if isinstance(item, dict) and item.get("uri")

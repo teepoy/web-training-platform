@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+from typing import TypeGuard
 
 import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -22,7 +23,7 @@ def _get_container():
     return container
 
 
-def _is_image_struct(value: object) -> bool:
+def _is_image_struct(value: object) -> TypeGuard[dict[str, object]]:
     """Check if a value looks like a HuggingFace image struct {bytes, path}."""
     if not isinstance(value, dict):
         return False

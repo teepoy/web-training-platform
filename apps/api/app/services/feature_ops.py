@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import base64
 import math
+from typing import Any
 
 from app.domain.models import Sample
 
 
 class FeatureOpsService:
-    def __init__(self, repository=None, embedding_service=None, inference_worker=None):
+    def __init__(self, repository: Any = None, embedding_service: Any = None, inference_worker: Any = None):
         self._repo = repository
         self._embedding_service = embedding_service
         self._inference_worker = inference_worker

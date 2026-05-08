@@ -5,7 +5,7 @@ import io
 import json
 import math
 import os
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI
 import httpx
@@ -17,7 +17,7 @@ def _image_embedding_from_bytes(image_bytes: bytes, dim: int = 64) -> list[float
 
     with Image.open(io.BytesIO(image_bytes)) as img:
         gray = img.convert("L").resize((8, 8))
-        pixels = list(gray.getdata())
+        pixels = list(gray.tobytes())
     vals = [float(p) / 255.0 for p in pixels]
     if len(vals) < dim:
         vals.extend([0.0] * (dim - len(vals)))
@@ -47,7 +47,7 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
         raise ValueError("LLM model is not configured")
 
     import litellm
-    litellm.suppress_debug_info = True
+    cast(Any, litellm).suppress_debug_info = True
 
     data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
     messages: list[dict[str, Any]] = [

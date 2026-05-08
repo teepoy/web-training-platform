@@ -25,6 +25,7 @@ import random
 import struct
 import sys
 import zlib
+from typing import Any, cast
 
 import httpx
 from seed_common import (
@@ -188,12 +189,17 @@ def _create_samples(
     images_per_sample: int,
 ) -> tuple[int, list[str]]:
     response = api_request(client, "get", f"/api/v1/datasets/{dataset_id}/samples")
-    existing = (
+    existing: dict[str, Any] = (
         response.json() if response.status_code == 200 else {"total": 0, "items": []}
     )
-    if int(existing.get("total", 0)) > 0:
+    total = existing.get("total", 0)
+    if isinstance(total, list):
+        total = 0
+    if int(cast(int | str, total)) > 0:
         items = existing.get("items", [])
-        return int(existing.get("total", 0)), [str(item.get("id")) for item in items]
+        if not isinstance(items, list):
+            items = []
+        return int(cast(int | str, total)), [str(item.get("id")) for item in items if isinstance(item, dict)]
 
     payload = {
         "items": [_build_sample_item(idx, images_per_sample) for idx in range(samples)]

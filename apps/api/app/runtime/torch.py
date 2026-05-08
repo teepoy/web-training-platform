@@ -29,7 +29,7 @@ def _decode_data_uri(uri: str) -> bytes:
 def _image_embedding_from_bytes(image_bytes: bytes, dim: int = 64) -> list[float]:
     with Image.open(BytesIO(image_bytes)) as img:
         gray = img.convert("L").resize((8, 8))
-        pixels = list(gray.getdata())
+        pixels = list(gray.tobytes())
     vals = [float(p) / 255.0 for p in pixels]
     if len(vals) < dim:
         vals.extend([0.0] * (dim - len(vals)))

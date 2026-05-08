@@ -1,0 +1,30 @@
+[environment]
+python = ".venv"
+python-version = "3.12"
+extra-paths = ["./libs/protos"]
+
+[analysis]
+replace-imports-with-any = [
+    "datasets",
+    "datasets.**",
+    "embedding_pb",
+    "embedding_pb.**",
+    "polars",
+    "polars.**",
+]
+
+[src]
+exclude = [
+    "apps/api/alembic/versions/**",
+    "apps/api/tests/**",
+    "examples/**",
+    "libs/mcp-server/**",
+    "libs/protos/**",
+    "scripts/seed_imagenet_dev.py",
+    "scripts/seed_imagenet_real.py",
+    "scripts/seed_presets.py",
+    "scripts/seed_wafer_demo.py",
+    "scripts/smoke_dev_batch.py",
+    "scripts/smoke_dev_prediction.py",
+    "scripts/smoke_dev_training.py",
+]

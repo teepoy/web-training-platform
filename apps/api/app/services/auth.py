@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
 import bcrypt
 from jose import JWTError, jwt  # noqa: F401 — re-exported for callers
@@ -12,7 +11,7 @@ from app.core.config import load_config
 from app.db.models import PersonalAccessTokenORM
 
 _cfg = load_config()
-JWT_SECRET_KEY: str = cast(str, os.environ.get("JWT_SECRET_KEY") or str(_cfg.auth.jwt_secret_key))
+JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY") or str(_cfg.auth.jwt_secret_key)
 JWT_ALGORITHM: str = _cfg.auth.jwt_algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES: int = _cfg.auth.access_token_expire_minutes
 

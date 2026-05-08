@@ -106,6 +106,7 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     llm_model = os.getenv("LLM_MODEL")
     if llm_model:
         cfg.llm.model = llm_model
+    assert isinstance(cfg, DictConfig)
     if not skip_runtime_validation:
         _validate_runtime_config(cfg, profile)
     return cfg

@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def _get_url() -> str:
+def _get_url() -> str | None:
     """Resolve the database URL for Alembic migrations.
 
     Priority:
@@ -61,7 +61,10 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     alembic_cfg = config.get_section(config.config_ini_section, {})
-    alembic_cfg["sqlalchemy.url"] = _get_url()
+    url = _get_url()
+    if url is None:
+        raise RuntimeError("Unable to resolve sqlalchemy.url for Alembic")
+    alembic_cfg["sqlalchemy.url"] = url
 
     connectable = engine_from_config(
         alembic_cfg,
