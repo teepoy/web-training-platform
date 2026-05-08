@@ -199,7 +199,9 @@ def _create_samples(
         items = existing.get("items", [])
         if not isinstance(items, list):
             items = []
-        return int(cast(int | str, total)), [str(item.get("id")) for item in items if isinstance(item, dict)]
+        return int(cast(int | str, total)), [
+            str(item.get("id")) for item in items if isinstance(item, dict)
+        ]
 
     payload = {
         "items": [_build_sample_item(idx, images_per_sample) for idx in range(samples)]

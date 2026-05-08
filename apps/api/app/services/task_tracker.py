@@ -43,7 +43,9 @@ class TaskTrackerService:
         self._prefect = prefect_client
         self._config = config
 
-    async def list_tasks(self, org_id: str, kind: str | None = None) -> list[TaskTrackerSummaryResponse]:
+    async def list_tasks(
+        self, org_id: str, kind: str | None = None
+    ) -> list[TaskTrackerSummaryResponse]:
         tasks: list[_TaskRecord] = []
         if kind in (None, "training"):
             jobs = await self._repository.list_jobs(org_id=org_id)
@@ -72,8 +74,12 @@ class TaskTrackerService:
                     created_at=task.platform_job.created_at,
                     updated_at=task.platform_job.updated_at,
                     prefect_state=detail.derived.prefect_state,
-                    work_pool_name=self._string_or_none(detail.raw.flow_run, "work_pool_name"),
-                    work_queue_name=self._string_or_none(detail.raw.flow_run, "work_queue_name"),
+                    work_pool_name=self._string_or_none(
+                        detail.raw.flow_run, "work_pool_name"
+                    ),
+                    work_queue_name=self._string_or_none(
+                        detail.raw.flow_run, "work_queue_name"
+                    ),
                     queue_priority=detail.derived.queue_priority,
                     queue_priority_label=detail.derived.queue_priority_label,
                     queue_depth_ahead=detail.derived.queue_depth_ahead,
@@ -85,7 +91,9 @@ class TaskTrackerService:
         summaries.sort(key=lambda item: item.updated_at, reverse=True)
         return summaries
 
-    async def get_task(self, task_id: str, org_id: str) -> TaskTrackerDetailResponse | None:
+    async def get_task(
+        self, task_id: str, org_id: str
+    ) -> TaskTrackerDetailResponse | None:
         task = await self._resolve_task(task_id, org_id)
         if task is None:
             return None
@@ -113,7 +121,9 @@ class TaskTrackerService:
             await self._prefect.set_flow_run_state(task.external_job_id, "CANCELLING")
         except Exception:
             return False
-        await self._repository.update_prediction_job_status(task_id, JobStatus.CANCELLED)
+        await self._repository.update_prediction_job_status(
+            task_id, JobStatus.CANCELLED
+        )
         return True
 
     async def _resolve_task(self, task_id: str, org_id: str) -> _TaskRecord | None:
@@ -145,18 +155,26 @@ class TaskTrackerService:
                     tasks.append(
                         _TaskRecord(
                             task_kind="schedule_run",
-                            platform_job=type("ScheduleRunRecord", (), {
-                                "id": str(run.get("id", "")),
-                                "created_by": getattr(schedule, "created_by", "system"),
-                                "created_at": getattr(schedule, "created_at", None),
-                                "updated_at": getattr(schedule, "updated_at", None) or getattr(schedule, "created_at", None),
-                                "flow_name": run.get("flow_name") or schedule.flow_name,
-                                "state_type": run.get("state_type"),
-                                "state_name": run.get("state_name"),
-                                "schedule_name": schedule.name,
-                                "schedule_id": schedule.id,
-                                "parameters": run.get("parameters", {}),
-                            })(),
+                            platform_job=type(
+                                "ScheduleRunRecord",
+                                (),
+                                {
+                                    "id": str(run.get("id", "")),
+                                    "created_by": getattr(
+                                        schedule, "created_by", "system"
+                                    ),
+                                    "created_at": getattr(schedule, "created_at", None),
+                                    "updated_at": getattr(schedule, "updated_at", None)
+                                    or getattr(schedule, "created_at", None),
+                                    "flow_name": run.get("flow_name")
+                                    or schedule.flow_name,
+                                    "state_type": run.get("state_type"),
+                                    "state_name": run.get("state_name"),
+                                    "schedule_name": schedule.name,
+                                    "schedule_id": schedule.id,
+                                    "parameters": run.get("parameters", {}),
+                                },
+                            )(),
                             raw_platform_job={
                                 "id": run.get("id"),
                                 "flow_name": run.get("flow_name") or schedule.flow_name,
@@ -165,8 +183,16 @@ class TaskTrackerService:
                                 "schedule_name": schedule.name,
                                 "schedule_id": schedule.id,
                                 "parameters": run.get("parameters", {}),
-                                    "created_at": schedule.created_at.isoformat() if isinstance(getattr(schedule, "created_at", None), datetime) else None,
-                                    "updated_at": schedule.updated_at.isoformat() if isinstance(getattr(schedule, "updated_at", None), datetime) else None,
+                                "created_at": schedule.created_at.isoformat()
+                                if isinstance(
+                                    getattr(schedule, "created_at", None), datetime
+                                )
+                                else None,
+                                "updated_at": schedule.updated_at.isoformat()
+                                if isinstance(
+                                    getattr(schedule, "updated_at", None), datetime
+                                )
+                                else None,
                             },
                             dataset_id="",
                             model_id=None,
@@ -236,15 +262,21 @@ class TaskTrackerService:
                     except Exception:
                         work_pool = None
                 try:
-                    logs = await self._prefect.get_flow_run_logs(task.external_job_id, limit=80)
+                    logs = await self._prefect.get_flow_run_logs(
+                        task.external_job_id, limit=80
+                    )
                 except Exception:
                     logs = []
                 try:
-                    task_runs = await self._prefect.list_task_runs(task.external_job_id, limit=200)
+                    task_runs = await self._prefect.list_task_runs(
+                        task.external_job_id, limit=200
+                    )
                 except Exception:
                     task_runs = []
 
-        derived = await self._derive(task, flow_run, deployment, task_runs, work_queue, work_pool, logs)
+        derived = await self._derive(
+            task, flow_run, deployment, task_runs, work_queue, work_pool, logs
+        )
         return TaskTrackerDetailResponse(
             id=task.platform_job.id,
             task_kind=task.task_kind,
@@ -300,11 +332,18 @@ class TaskTrackerService:
             active_node=active_node,
             capacity_status=self._capacity_status(pool_slots, pool_limit),
             queue_priority=queue_priority,
-            queue_priority_label="none" if queue_priority is None else str(queue_priority),
+            queue_priority_label="none"
+            if queue_priority is None
+            else str(queue_priority),
             queue_depth_ahead=queue_depth,
             pool_concurrency_limit=pool_limit,
             pool_slots_used=pool_slots,
-            stages=self._stages(task, active_stage=stage, prefect_state=prefect_state, task_runs=task_runs),
+            stages=self._stages(
+                task,
+                active_stage=stage,
+                prefect_state=prefect_state,
+                task_runs=task_runs,
+            ),
             scorecard=scorecard,
             summary_metrics=summary_metrics,
             artifacts=artifacts,
@@ -331,10 +370,15 @@ class TaskTrackerService:
 
     def _artifacts(self, task: _TaskRecord) -> list[dict[str, Any]]:
         if task.task_kind == "training":
-            return [artifact.model_dump(mode="json") for artifact in task.platform_job.artifact_refs]
+            return [
+                artifact.model_dump(mode="json")
+                for artifact in task.platform_job.artifact_refs
+            ]
         return []
 
-    def _scorecard(self, task: _TaskRecord, display_status: str, artifacts: list[dict[str, Any]]) -> TaskTrackerScorecard:
+    def _scorecard(
+        self, task: _TaskRecord, display_status: str, artifacts: list[dict[str, Any]]
+    ) -> TaskTrackerScorecard:
         checks: list[TaskTrackerCheckResult] = []
         if task.task_kind == "training" and artifacts:
             checks.append(
@@ -353,7 +397,9 @@ class TaskTrackerService:
                     TaskTrackerCheckResult(
                         key="processed_items",
                         label="Processed Items",
-                        status="passed" if display_status == "completed" else "not_available",
+                        status="passed"
+                        if display_status == "completed"
+                        else "not_available",
                         message=f"Processed {processed} item(s)",
                         value=str(processed),
                     )
@@ -384,9 +430,15 @@ class TaskTrackerService:
             return None
         return f"{processed}/{total} processed"
 
-    def _console_lines(self, task: _TaskRecord, logs: list[dict[str, Any]]) -> list[str]:
+    def _console_lines(
+        self, task: _TaskRecord, logs: list[dict[str, Any]]
+    ) -> list[str]:
         if logs:
-            return [str(log.get("message", "")) for log in logs[-5:] if str(log.get("message", "")).strip()]
+            return [
+                str(log.get("message", ""))
+                for log in logs[-5:]
+                if str(log.get("message", "")).strip()
+            ]
         summary = getattr(task.platform_job, "summary", {}) or {}
         if summary:
             return [json_line for json_line in self._summary_lines(summary)[:5]]
@@ -394,7 +446,14 @@ class TaskTrackerService:
 
     def _summary_lines(self, summary: dict[str, Any]) -> list[str]:
         lines = []
-        for key in ("status", "processed", "successful", "failed", "skipped", "embedding_model"):
+        for key in (
+            "status",
+            "processed",
+            "successful",
+            "failed",
+            "skipped",
+            "embedding_model",
+        ):
             value = summary.get(key)
             if value is not None:
                 lines.append(f"{key}: {value}")
@@ -410,13 +469,21 @@ class TaskTrackerService:
         flow_run_id = self._string_or_none(flow_run, "id")
         deployment_id = self._string_or_none(deployment, "id")
         return TaskTrackerDeepLinks(
-            prefect_run_url=None if ui_base is None or flow_run_id is None else f"{ui_base}/runs/flow-run/{flow_run_id}",
-            prefect_deployment_url=None if ui_base is None or deployment_id is None else f"{ui_base}/deployments/deployment/{deployment_id}",
-            platform_job_url=f"/jobs/{task.platform_job.id}" if task.task_kind == "training" else None,
+            prefect_run_url=None
+            if ui_base is None or flow_run_id is None
+            else f"{ui_base}/runs/flow-run/{flow_run_id}",
+            prefect_deployment_url=None
+            if ui_base is None or deployment_id is None
+            else f"{ui_base}/deployments/deployment/{deployment_id}",
+            platform_job_url=f"/jobs/{task.platform_job.id}"
+            if task.task_kind == "training"
+            else None,
         )
 
     def _prefect_ui_base_url(self) -> str | None:
-        explicit_ui_url = str(getattr(self._config.prefect, "ui_url", "") or "").rstrip("/")
+        explicit_ui_url = str(getattr(self._config.prefect, "ui_url", "") or "").rstrip(
+            "/"
+        )
         if explicit_ui_url:
             return explicit_ui_url
         api_url = str(getattr(self._config.prefect, "api_url", "") or "").rstrip("/")
@@ -436,7 +503,9 @@ class TaskTrackerService:
         return "Embedding Batch" if target == "embedding" else f"Prediction {target}"
 
     def _display_status(self, platform_job: Any, prefect_state: str | None) -> str:
-        if hasattr(platform_job, "state_type") and getattr(platform_job, "state_type", None):
+        if hasattr(platform_job, "state_type") and getattr(
+            platform_job, "state_type", None
+        ):
             return self._display_status_from_prefect(str(platform_job.state_type))
         if prefect_state is None:
             status = getattr(platform_job, "status", "queued")
@@ -464,11 +533,17 @@ class TaskTrackerService:
             return "execution_flow"
         return "queue_allocation"
 
-    def _execution_kind(self, task: _TaskRecord, flow_run: dict[str, Any] | None) -> str:
+    def _execution_kind(
+        self, task: _TaskRecord, flow_run: dict[str, Any] | None
+    ) -> str:
         if task.task_kind == "training":
-            return self._string_or_none(flow_run, "work_queue_name") or "training-default"
+            return (
+                self._string_or_none(flow_run, "work_queue_name") or "training-default"
+            )
         if task.task_kind == "schedule_run":
-            return self._string_or_none(flow_run, "flow_name") or getattr(task.platform_job, "flow_name", "schedule-run")
+            return self._string_or_none(flow_run, "flow_name") or getattr(
+                task.platform_job, "flow_name", "schedule-run"
+            )
         target = getattr(task.platform_job, "target", "prediction")
         if target == "embedding":
             return "embedding-batch"
@@ -511,14 +586,20 @@ class TaskTrackerService:
         )
         return [queue_stage, execution_stage, validation_stage]
 
-    def _queue_nodes(self, active_stage: str, prefect_state: str | None) -> list[TaskTrackerNode]:
+    def _queue_nodes(
+        self, active_stage: str, prefect_state: str | None
+    ) -> list[TaskTrackerNode]:
         stage_status = self._stage_status("queue_allocation", active_stage)
         return [
             TaskTrackerNode(
                 key="queue",
                 label="Queue",
-                status=self._node_status("queue_allocation", active_stage, stage_status, "queue"),
-                detail="waiting for worker" if prefect_state in _QUEUE_STATES or prefect_state is None else "queue cleared",
+                status=self._node_status(
+                    "queue_allocation", active_stage, stage_status, "queue"
+                ),
+                detail="waiting for worker"
+                if prefect_state in _QUEUE_STATES or prefect_state is None
+                else "queue cleared",
                 expected_start_at=None,
                 started_at=None,
                 ended_at=None,
@@ -526,7 +607,9 @@ class TaskTrackerService:
             TaskTrackerNode(
                 key="dispatch",
                 label="Dispatch",
-                status=self._node_status("queue_allocation", active_stage, stage_status, "dispatch"),
+                status=self._node_status(
+                    "queue_allocation", active_stage, stage_status, "dispatch"
+                ),
                 detail="worker selection and handoff",
                 expected_start_at=None,
                 started_at=None,
@@ -549,7 +632,9 @@ class TaskTrackerService:
                     label=self._task_run_label(run, index=index),
                     status=self._task_run_status(run, stage_status),
                     detail=self._task_run_detail(run),
-                    expected_start_at=self._task_run_timestamp(run, "expected_start_time"),
+                    expected_start_at=self._task_run_timestamp(
+                        run, "expected_start_time"
+                    ),
                     started_at=self._task_run_timestamp(run, "start_time"),
                     ended_at=self._task_run_timestamp(run, "end_time"),
                 )
@@ -562,7 +647,11 @@ class TaskTrackerService:
             TaskTrackerNode(
                 key="execute",
                 label=self._fallback_execution_label(task),
-                status=self._node_status("execution_flow", active_stage, stage_status, "execute") if prefect_state else stage_status,
+                status=self._node_status(
+                    "execution_flow", active_stage, stage_status, "execute"
+                )
+                if prefect_state
+                else stage_status,
                 detail=fallback_detail,
                 expected_start_at=None,
                 started_at=None,
@@ -570,7 +659,9 @@ class TaskTrackerService:
             )
         ]
 
-    def _validation_nodes(self, task: _TaskRecord, active_stage: str, prefect_state: str | None) -> list[TaskTrackerNode]:
+    def _validation_nodes(
+        self, task: _TaskRecord, active_stage: str, prefect_state: str | None
+    ) -> list[TaskTrackerNode]:
         stage_status = self._stage_status("validation_output", active_stage)
         if task.task_kind == "training":
             validate_detail = "check artifacts"
@@ -587,7 +678,9 @@ class TaskTrackerService:
             TaskTrackerNode(
                 key="validate",
                 label="Validate",
-                status=self._node_status("validation_output", active_stage, stage_status, "validate"),
+                status=self._node_status(
+                    "validation_output", active_stage, stage_status, "validate"
+                ),
                 detail=validate_detail,
                 expected_start_at=None,
                 started_at=None,
@@ -596,7 +689,9 @@ class TaskTrackerService:
             TaskTrackerNode(
                 key="output",
                 label="Output",
-                status=self._node_status("validation_output", active_stage, stage_status, "output"),
+                status=self._node_status(
+                    "validation_output", active_stage, stage_status, "output"
+                ),
                 detail=output_detail,
                 expected_start_at=None,
                 started_at=None,
@@ -604,17 +699,32 @@ class TaskTrackerService:
             ),
         ]
 
-    def _execution_summary(self, task_runs: list[dict[str, Any]], prefect_state: str | None) -> str:
+    def _execution_summary(
+        self, task_runs: list[dict[str, Any]], prefect_state: str | None
+    ) -> str:
         if task_runs:
-            completed = sum(1 for run in task_runs if self._task_run_state_type(run) == "COMPLETED")
+            completed = sum(
+                1 for run in task_runs if self._task_run_state_type(run) == "COMPLETED"
+            )
             total = len(task_runs)
-            active = next((self._task_run_name(run) for run in task_runs if self._task_run_state_type(run) in _RUNNING_STATES), None)
+            active = next(
+                (
+                    self._task_run_name(run)
+                    for run in task_runs
+                    if self._task_run_state_type(run) in _RUNNING_STATES
+                ),
+                None,
+            )
             if active:
                 return f"{completed}/{total} task runs completed, active: {active}"
             if prefect_state in _TERMINAL_STATES:
                 return f"{completed}/{total} task runs completed"
             return f"{completed}/{total} task runs ready"
-        return "Task is actively progressing" if prefect_state in _RUNNING_STATES else "Execution not active"
+        return (
+            "Task is actively progressing"
+            if prefect_state in _RUNNING_STATES
+            else "Execution not active"
+        )
 
     def _task_run_label(self, task_run: dict[str, Any], index: int) -> str:
         name = self._task_run_name(task_run)
@@ -633,7 +743,9 @@ class TaskTrackerService:
         return None
 
     def _task_run_state_type(self, task_run: dict[str, Any]) -> str | None:
-        return self._nested_string(task_run, "state", "type") or self._string_or_none(task_run, "state_type")
+        return self._nested_string(task_run, "state", "type") or self._string_or_none(
+            task_run, "state_type"
+        )
 
     def _task_run_status(self, task_run: dict[str, Any], default_status: str) -> str:
         state_type = self._task_run_state_type(task_run)
@@ -646,8 +758,12 @@ class TaskTrackerService:
         return default_status
 
     def _task_run_detail(self, task_run: dict[str, Any]) -> str:
-        state_name = self._nested_string(task_run, "state", "name") or self._string_or_none(task_run, "state_name")
-        start = self._string_or_none(task_run, "start_time") or self._string_or_none(task_run, "expected_start_time")
+        state_name = self._nested_string(
+            task_run, "state", "name"
+        ) or self._string_or_none(task_run, "state_name")
+        start = self._string_or_none(task_run, "start_time") or self._string_or_none(
+            task_run, "expected_start_time"
+        )
         end = self._string_or_none(task_run, "end_time")
         parts = []
         if state_name:
@@ -658,7 +774,9 @@ class TaskTrackerService:
             parts.append(f"end {end}")
         return " | ".join(parts) if parts else "Prefect task run"
 
-    def _task_run_timestamp(self, task_run: dict[str, Any], key: str) -> datetime | None:
+    def _task_run_timestamp(
+        self, task_run: dict[str, Any], key: str
+    ) -> datetime | None:
         value = self._string_or_none(task_run, key)
         if not value:
             return None
@@ -695,23 +813,47 @@ class TaskTrackerService:
             return "active"
         return "pending"
 
-    def _node_status(self, stage_key: str, active_stage: str, stage_status: str, node_key: str) -> str:
+    def _node_status(
+        self, stage_key: str, active_stage: str, stage_status: str, node_key: str
+    ) -> str:
         if stage_key != active_stage:
             return stage_status
         if node_key in {"dispatch", "output"} and stage_status == "active":
             return "active"
         return stage_status
 
-    def _stage_summary(self, stage_key: str, task: _TaskRecord, prefect_state: str | None) -> str:
+    def _stage_summary(
+        self, stage_key: str, task: _TaskRecord, prefect_state: str | None
+    ) -> str:
         if stage_key == "queue_allocation":
-            return "Waiting for orchestration resources" if prefect_state in _QUEUE_STATES or prefect_state is None else "Scheduling completed"
+            return (
+                "Waiting for orchestration resources"
+                if prefect_state in _QUEUE_STATES or prefect_state is None
+                else "Scheduling completed"
+            )
         if stage_key == "execution_flow":
-            return "Task is actively progressing" if prefect_state in _RUNNING_STATES else "Execution not active"
+            return (
+                "Task is actively progressing"
+                if prefect_state in _RUNNING_STATES
+                else "Execution not active"
+            )
         if task.task_kind == "training":
-            return "Artifacts and final status" if prefect_state in _TERMINAL_STATES else "Awaiting completion"
+            return (
+                "Artifacts and final status"
+                if prefect_state in _TERMINAL_STATES
+                else "Awaiting completion"
+            )
         if task.task_kind == "prediction":
-            return "Prediction outputs and checks" if prefect_state in _TERMINAL_STATES else "Awaiting completion"
-        return "Run logs and final state" if prefect_state in _TERMINAL_STATES else "Awaiting completion"
+            return (
+                "Prediction outputs and checks"
+                if prefect_state in _TERMINAL_STATES
+                else "Awaiting completion"
+            )
+        return (
+            "Run logs and final state"
+            if prefect_state in _TERMINAL_STATES
+            else "Awaiting completion"
+        )
 
     def _capacity_status(self, slots_used: int | None, limit: int | None) -> str:
         if limit is None or limit <= 0 or slots_used is None:

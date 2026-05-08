@@ -39,6 +39,7 @@ def _get_url() -> str | None:
     if not url:
         try:
             from app.core.config import load_config
+
             cfg = load_config()
             url = cfg.db.url
         except Exception:
@@ -53,7 +54,12 @@ def _get_url() -> str | None:
 
 def run_migrations_offline() -> None:
     url = _get_url()
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, dialect_opts={"paramstyle": "named"})
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
 
     with context.begin_transaction():
         context.run_migrations()

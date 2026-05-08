@@ -6,6 +6,7 @@ This module provides :class:`PredictionService` for:
 - Storing prediction results in the platform DB
 - Creating prediction review actions and saving reviewed annotations
 """
+
 from __future__ import annotations
 
 import base64
@@ -30,7 +31,12 @@ from app.domain.models import (
 )
 from app.domain.types import TaskType
 from app.presets.registry import PresetRegistry
-from app.presets.runtime import DatasetRef, ModelRef, PredictContext, PredictResult as RuntimePredictResult
+from app.presets.runtime import (
+    DatasetRef,
+    ModelRef,
+    PredictContext,
+    PredictResult as RuntimePredictResult,
+)
 from app.services.compatibility import validate_model_prediction, validate_model_review
 from app.services.embedding import EmbeddingClient
 from app.services.inference_worker import InferenceWorkerClient
@@ -53,6 +59,7 @@ logger = logging.getLogger(__name__)
 
 class PredictionResult(BaseModel):
     """Result of a single prediction."""
+
     id: str | None = None
     sample_id: str
     predicted_label: str
@@ -68,6 +75,7 @@ class PredictionResult(BaseModel):
 
 class BatchPredictionResult(BaseModel):
     """Result of running predictions on a batch of samples."""
+
     model_id: str
     dataset_id: str
     total_samples: int
@@ -82,6 +90,7 @@ class BatchPredictionResult(BaseModel):
 @dataclass
 class PredictionRequest:
     """Request parameters for running predictions."""
+
     model_id: str
     dataset_id: str
     sample_ids: list[str] | None = None  # None = all samples in dataset
@@ -90,7 +99,7 @@ class PredictionRequest:
 
 class PredictionService:
     """Service for running model predictions and storing results in the platform DB.
-    
+
     This service orchestrates:
     1. Fetching image data for samples
     2. Running real CLIP zero-shot classification via gRPC embedding service
@@ -146,7 +155,9 @@ class PredictionService:
         """Get the embedding client for inference."""
         if self._embedding_client is None:
             # Create a default client - in production this should be injected
-            grpc_target = getattr(self.config, 'embedding_grpc_target', 'localhost:50051')
+            grpc_target = getattr(
+                self.config, "embedding_grpc_target", "localhost:50051"
+            )
             self._embedding_client = EmbeddingClient(grpc_target=grpc_target)
         return self._embedding_client
 
@@ -170,7 +181,9 @@ class PredictionService:
         module = importlib.import_module(module_name)
         return getattr(module, attr_name)
 
-    async def _resolve_predictor(self, model, org_id: str, target: str = "image_classification") -> tuple[Any, PredictContext]:
+    async def _resolve_predictor(
+        self, model, org_id: str, target: str = "image_classification"
+    ) -> tuple[Any, PredictContext]:
         registry = self._load_preset_registry()
         preset_id = model.preset_id or model.preset_name or ""
         preset = registry.get_preset(preset_id)
@@ -183,9 +196,15 @@ class PredictionService:
             raise ValueError(f"Preset not found for model/job: {model.id}")
 
         target_cfg = preset.predict.targets.get(target)
-        entrypoint_ref = target_cfg.entrypoint if target_cfg is not None else preset.predict.entrypoint
+        entrypoint_ref = (
+            target_cfg.entrypoint
+            if target_cfg is not None
+            else preset.predict.entrypoint
+        )
         if not entrypoint_ref:
-            raise ValueError(f"No predict entrypoint configured for preset: {preset.id}")
+            raise ValueError(
+                f"No predict entrypoint configured for preset: {preset.id}"
+            )
 
         entrypoint = self._load_entrypoint(entrypoint_ref)
         predictor = None
@@ -211,7 +230,9 @@ class PredictionService:
                 predictor = entrypoint()
         else:
             maybe_predictor = entrypoint
-            if hasattr(maybe_predictor, "predict_single") and callable(getattr(maybe_predictor, "predict_single")):
+            if hasattr(maybe_predictor, "predict_single") and callable(
+                getattr(maybe_predictor, "predict_single")
+            ):
                 predictor = maybe_predictor
 
         if predictor is None:
@@ -222,9 +243,15 @@ class PredictionService:
         dataset_ref = DatasetRef(dataset_id=model.dataset_id or "")
         model_ref = ModelRef(
             uri=model.uri,
-            framework=str(model.metadata.get("framework", "")) if isinstance(model.metadata, dict) else "",
-            architecture=str(model.metadata.get("architecture", "")) if isinstance(model.metadata, dict) else "",
-            base_model=str(model.metadata.get("base_model", "")) if isinstance(model.metadata, dict) else "",
+            framework=str(model.metadata.get("framework", ""))
+            if isinstance(model.metadata, dict)
+            else "",
+            architecture=str(model.metadata.get("architecture", ""))
+            if isinstance(model.metadata, dict)
+            else "",
+            base_model=str(model.metadata.get("base_model", ""))
+            if isinstance(model.metadata, dict)
+            else "",
             format=model.format,
             metadata=model.metadata,
         )
@@ -240,14 +267,14 @@ class PredictionService:
 
     async def _get_image_bytes(self, sample: Sample) -> bytes | None:
         """Fetch image bytes for a sample.
-        
+
         Supports data URIs, s3://, and memory:// schemes.
         """
         if not sample.image_uris:
             return None
-        
+
         uri = sample.image_uris[0]
-        
+
         if uri.startswith("data:"):
             try:
                 _, encoded = uri.split(",", 1)
@@ -262,7 +289,9 @@ class PredictionService:
                 logger.warning(f"Failed to fetch image for sample {sample.id}: {e}")
                 return None
         else:
-            logger.warning(f"Unsupported URI scheme for sample {sample.id}: {uri[:20]}...")
+            logger.warning(
+                f"Unsupported URI scheme for sample {sample.id}: {uri[:20]}..."
+            )
             return None
 
     async def run_prediction(
@@ -276,7 +305,7 @@ class PredictionService:
         prompt: str | None = None,
     ) -> BatchPredictionResult:
         """Run predictions on a dataset using a trained model.
-        
+
         Parameters
         ----------
         model_id:
@@ -289,27 +318,29 @@ class PredictionService:
             Optional list of specific sample IDs. If None, runs on all samples.
         model_version:
             Optional version tag for Label Studio (for filtering predictions).
-            
+
         Returns
         -------
         BatchPredictionResult
             Summary of prediction results including per-sample outcomes.
         """
         started_at = datetime.now(UTC)
-        
+
         # Get model info
         model = await self.repository.get_model(model_id, org_id)
         if model is None:
             raise ValueError(f"Model not found: {model_id}")
-        
+
         # Get dataset info
         dataset = await self.repository.get_dataset(dataset_id, org_id)
         if dataset is None:
             raise ValueError(f"Dataset not found: {dataset_id}")
-        
-        validate_model_prediction(dataset, model.metadata if isinstance(model.metadata, dict) else {}, target)
+
+        validate_model_prediction(
+            dataset, model.metadata if isinstance(model.metadata, dict) else {}, target
+        )
         label_space = dataset.task_spec.label_space
-        
+
         # Get samples
         if sample_ids:
             samples = []
@@ -330,14 +361,14 @@ class PredictionService:
                 offset += batch_size
                 if offset >= total:
                     break
-        
+
         # Generate model version tag
         version_tag = model_version or f"model-{model_id[:8]}"
 
         predictions: list[PredictionResult] = []
         successful = 0
         failed = 0
-        
+
         if self._should_use_inference_worker():
             worker_results = await self._predict_via_worker(
                 model=model,
@@ -346,11 +377,16 @@ class PredictionService:
                 target=target,
                 prompt=prompt,
             )
-            worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
+            worker_by_sample = {
+                str(item.get("sample_id", "")): item for item in worker_results
+            }
             for sample in samples:
                 result = await self._prediction_result_from_worker(
                     sample=sample,
-                    worker_result=worker_by_sample.get(sample.id, {"sample_id": sample.id, "error": "missing worker result"}),
+                    worker_result=worker_by_sample.get(
+                        sample.id,
+                        {"sample_id": sample.id, "error": "missing worker result"},
+                    ),
                     model_id=model.id,
                     org_id=org_id,
                     model_version=version_tag,
@@ -362,7 +398,9 @@ class PredictionService:
                 else:
                     successful += 1
         else:
-            predictor, predict_ctx = await self._resolve_predictor(model, org_id=org_id, target=target)
+            predictor, predict_ctx = await self._resolve_predictor(
+                model, org_id=org_id, target=target
+            )
             predict_ctx.dataset_ref.label_space = list(label_space)
             if prompt:
                 predict_ctx.dataset_ref.metadata["prompt"] = prompt
@@ -401,7 +439,10 @@ class PredictionService:
 
     def _should_use_inference_worker(self) -> bool:
         try:
-            return str(self.config.app.env) != "test" and self._inference_worker is not None
+            return (
+                str(self.config.app.env) != "test"
+                and self._inference_worker is not None
+            )
         except Exception:
             return self._inference_worker is not None
 
@@ -419,9 +460,19 @@ class PredictionService:
         model_bytes = await self.artifact_storage.get_bytes(model.uri)
         payload_samples: list[dict[str, Any]] = []
         for sample in samples:
-            text_input = sample.metadata.get("text") if isinstance(sample.metadata, dict) else None
-            question_input = prompt or (str(sample.metadata.get("question", "")) if isinstance(sample.metadata, dict) else "")
-            image_bytes = await self._get_image_bytes(sample) if sample.image_uris else None
+            text_input = (
+                sample.metadata.get("text")
+                if isinstance(sample.metadata, dict)
+                else None
+            )
+            question_input = prompt or (
+                str(sample.metadata.get("question", ""))
+                if isinstance(sample.metadata, dict)
+                else ""
+            )
+            image_bytes = (
+                await self._get_image_bytes(sample) if sample.image_uris else None
+            )
             payload_samples.append(
                 {
                     "sample_id": sample.id,
@@ -456,8 +507,14 @@ class PredictionService:
     ) -> PredictionResult:
         predicted_label = str(worker_result.get("label", ""))
         confidence_raw = worker_result.get("confidence")
-        confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else None
-        all_scores = worker_result.get("scores") if isinstance(worker_result.get("scores"), dict) else None
+        confidence = (
+            float(confidence_raw) if isinstance(confidence_raw, (int, float)) else None
+        )
+        all_scores = (
+            worker_result.get("scores")
+            if isinstance(worker_result.get("scores"), dict)
+            else None
+        )
         runtime_error = worker_result.get("error")
         return await self._finalize_prediction(
             sample=sample,
@@ -492,7 +549,9 @@ class PredictionService:
                 model_id=model_id,
                 target=target,
                 model_version=model_version,
-                predicted_label=(predicted_label or "embedding") if target == "embedding" else predicted_label,
+                predicted_label=(predicted_label or "embedding")
+                if target == "embedding"
+                else predicted_label,
                 confidence=confidence,
                 all_scores=all_scores,
                 error=str(runtime_error) if runtime_error else None,
@@ -513,10 +572,12 @@ class PredictionService:
         prompt: str | None = None,
     ) -> PredictionResult:
         """Run prediction on a single sample and store in the platform DB.
-        
+
         Uses preset-runtime predictor dispatch.
         """
-        text_input = sample.metadata.get("text") if isinstance(sample.metadata, dict) else None
+        text_input = (
+            sample.metadata.get("text") if isinstance(sample.metadata, dict) else None
+        )
         question_input = ""
         if prompt:
             question_input = prompt
@@ -548,7 +609,7 @@ class PredictionService:
                 confidence=None,
                 error="No usable prediction input (image or text)",
             )
-        
+
         runtime_input: dict[str, Any] = {
             "sample_id": sample.id,
             "image_bytes": image_bytes,
@@ -568,7 +629,9 @@ class PredictionService:
             predicted_label = runtime_pred.label
             confidence = runtime_pred.confidence
             all_scores = runtime_pred.scores
-            runtime_error = runtime_pred.metadata.get("error") if runtime_pred.metadata else None
+            runtime_error = (
+                runtime_pred.metadata.get("error") if runtime_pred.metadata else None
+            )
             return await self._finalize_prediction(
                 sample=sample,
                 model_id=model_id,
@@ -589,7 +652,6 @@ class PredictionService:
                 confidence=None,
                 error=f"Inference failed: {e}",
             )
-        
 
     async def predict_single(
         self,
@@ -601,7 +663,7 @@ class PredictionService:
         prompt: str | None = None,
     ) -> PredictionResult:
         """Run prediction on a single sample.
-        
+
         Parameters
         ----------
         model_id:
@@ -612,7 +674,7 @@ class PredictionService:
             Organization ID for access control.
         model_version:
             Optional version tag for Label Studio.
-            
+
         Returns
         -------
         PredictionResult
@@ -622,19 +684,21 @@ class PredictionService:
         model = await self.repository.get_model(model_id, org_id)
         if model is None:
             raise ValueError(f"Model not found: {model_id}")
-        
+
         # Get sample
         sample = await self.repository.get_sample(sample_id)
         if sample is None:
             raise ValueError(f"Sample not found: {sample_id}")
-        
+
         # Get dataset for label space
         dataset = await self.repository.get_dataset(sample.dataset_id, org_id)
         if dataset is None:
             raise ValueError(f"Dataset not found: {sample.dataset_id}")
-        validate_model_prediction(dataset, model.metadata if isinstance(model.metadata, dict) else {}, target)
+        validate_model_prediction(
+            dataset, model.metadata if isinstance(model.metadata, dict) else {}, target
+        )
         label_space = dataset.task_spec.label_space
-        
+
         version_tag = model_version or f"model-{model_id[:8]}"
         if self._should_use_inference_worker():
             worker_results = await self._predict_via_worker(
@@ -644,7 +708,11 @@ class PredictionService:
                 target=target,
                 prompt=prompt,
             )
-            worker_result = worker_results[0] if worker_results else {"sample_id": sample.id, "error": "missing worker result"}
+            worker_result = (
+                worker_results[0]
+                if worker_results
+                else {"sample_id": sample.id, "error": "missing worker result"}
+            )
             return await self._prediction_result_from_worker(
                 sample=sample,
                 worker_result=worker_result,
@@ -654,7 +722,9 @@ class PredictionService:
                 target=target,
             )
 
-        predictor, predict_ctx = await self._resolve_predictor(model, org_id=org_id, target=target)
+        predictor, predict_ctx = await self._resolve_predictor(
+            model, org_id=org_id, target=target
+        )
         predict_ctx.dataset_ref.label_space = list(label_space)
         if prompt:
             predict_ctx.dataset_ref.metadata["prompt"] = prompt
@@ -679,14 +749,14 @@ class PredictionService:
         model_version: str | None = None,
     ) -> list[PredictionResult]:
         """List all predictions for a sample from the platform DB.
-        
+
         Parameters
         ----------
         sample_id:
             Platform sample ID.
         org_id:
             Organization ID for access control.
-            
+
         Returns
         -------
         list[dict]
@@ -695,7 +765,7 @@ class PredictionService:
         sample = await self.repository.get_sample(sample_id)
         if sample is None:
             raise ValueError(f"Sample not found: {sample_id}")
-        
+
         predictions = await self.repository.list_platform_predictions_for_sample(
             sample_id=sample_id,
             org_id=org_id,
@@ -708,7 +778,9 @@ class PredictionService:
         job_id: str,
         org_id: str,
     ) -> list[PredictionResult]:
-        predictions = await self.repository.list_platform_predictions_for_job(job_id, org_id)
+        predictions = await self.repository.list_platform_predictions_for_job(
+            job_id, org_id
+        )
         return [self._result_from_prediction(prediction) for prediction in predictions]
 
     async def create_prediction_collection(
@@ -743,16 +815,26 @@ class PredictionService:
         )
         items: list[PredictionCollectionItem] = []
         for prediction_id in prediction_ids:
-            prediction = await self.repository.get_platform_prediction(prediction_id, org_id=org_id)
+            prediction = await self.repository.get_platform_prediction(
+                prediction_id, org_id=org_id
+            )
             if prediction is None:
                 raise ValueError(f"Prediction not found: {prediction_id}")
             if prediction.dataset_id != dataset_id:
-                raise ValueError(f"Prediction {prediction_id} does not belong to dataset {dataset_id}")
-            items.append(PredictionCollectionItem(collection_id=collection.id, prediction_id=prediction_id))
+                raise ValueError(
+                    f"Prediction {prediction_id} does not belong to dataset {dataset_id}"
+                )
+            items.append(
+                PredictionCollectionItem(
+                    collection_id=collection.id, prediction_id=prediction_id
+                )
+            )
         await self.repository.add_prediction_collection_items(items)
         return collection
 
-    async def list_prediction_collections(self, dataset_id: str, org_id: str) -> list[PredictionCollection]:
+    async def list_prediction_collections(
+        self, dataset_id: str, org_id: str
+    ) -> list[PredictionCollection]:
         return await self.repository.list_prediction_collections(dataset_id, org_id)
 
     async def sync_prediction_collection_to_label_studio(
@@ -761,15 +843,25 @@ class PredictionService:
         org_id: str,
         sync_tag: str | None = None,
     ) -> tuple[PredictionCollection, int, int, list[str]]:
-        collection = await self.repository.get_prediction_collection(collection_id, org_id=org_id)
+        collection = await self.repository.get_prediction_collection(
+            collection_id, org_id=org_id
+        )
         if collection is None:
             raise ValueError(f"Prediction collection not found: {collection_id}")
         dataset = await self.repository.get_dataset(collection.dataset_id, org_id)
         if dataset is None or dataset.ls_project_id is None:
-            raise ValueError(f"Dataset not found or missing Label Studio project: {collection.dataset_id}")
-        predictions = await self.repository.list_prediction_collection_predictions(collection_id, org_id)
+            raise ValueError(
+                f"Dataset not found or missing Label Studio project: {collection.dataset_id}"
+            )
+        predictions = await self.repository.list_prediction_collection_predictions(
+            collection_id, org_id
+        )
         ls_client = self._get_ls_client()
-        sync_tag_value = sync_tag or collection.sync_tag or f"sync-{collection.id[:8]}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+        sync_tag_value = (
+            sync_tag
+            or collection.sync_tag
+            or f"sync-{collection.id[:8]}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+        )
         successful = 0
         failed = 0
         errors: list[str] = []
@@ -785,7 +877,9 @@ class PredictionService:
                 continue
             try:
                 if prediction.target == "vqa":
-                    ls_result = platform_text_prediction_to_ls(prediction.predicted_label)
+                    ls_result = platform_text_prediction_to_ls(
+                        prediction.predicted_label
+                    )
                 else:
                     ls_result = platform_prediction_to_ls(prediction.predicted_label)
                 await ls_client.create_prediction(
@@ -798,7 +892,12 @@ class PredictionService:
             except LabelStudioError as exc:
                 failed += 1
                 errors.append(f"prediction {prediction.id}: {exc}")
-        return collection.model_copy(update={"sync_tag": sync_tag_value}), successful, failed, errors
+        return (
+            collection.model_copy(update={"sync_tag": sync_tag_value}),
+            successful,
+            failed,
+            errors,
+        )
 
     # ------------------------------------------------------------------
     # Prediction review actions
@@ -825,7 +924,9 @@ class PredictionService:
         model = await self.repository.get_model(model_id, org_id)
         if model is None:
             raise ValueError(f"Model not found: {model_id}")
-        validate_model_review(dataset, model.metadata if isinstance(model.metadata, dict) else {})
+        validate_model_review(
+            dataset, model.metadata if isinstance(model.metadata, dict) else {}
+        )
 
         action = PredictionReviewAction(
             dataset_id=dataset_id,

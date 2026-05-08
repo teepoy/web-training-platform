@@ -17,6 +17,7 @@ Format converters
 Module-level helpers convert between the platform's flat label representation
 and Label Studio's structured annotation JSON format.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -148,9 +149,7 @@ class LabelStudioClient:
             Project object.
         """
         try:
-            result = await asyncio.to_thread(
-                self._client.projects.get, id=project_id
-            )
+            result = await asyncio.to_thread(self._client.projects.get, id=project_id)
             return _to_dict(result)
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
@@ -235,7 +234,9 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def import_tasks(self, project_id: int, tasks: list[dict], return_task_ids: bool = True) -> dict:
+    async def import_tasks(
+        self, project_id: int, tasks: list[dict], return_task_ids: bool = True
+    ) -> dict:
         """Bulk import tasks into a project.
 
         Parameters
@@ -293,7 +294,8 @@ class LabelStudioClient:
             if hasattr(pager, "response") and pager.response is not None:
                 resp = pager.response
                 total_val = (
-                    resp.get("total") if isinstance(resp, dict)
+                    resp.get("total")
+                    if isinstance(resp, dict)
                     else getattr(resp, "total", None)
                 )
                 if total_val is not None:
@@ -318,9 +320,7 @@ class LabelStudioClient:
             Task object.
         """
         try:
-            result = await asyncio.to_thread(
-                self._client.tasks.get, id=str(task_id)
-            )
+            result = await asyncio.to_thread(self._client.tasks.get, id=str(task_id))
             return _to_dict(result)
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
@@ -329,9 +329,7 @@ class LabelStudioClient:
     # Annotations
     # ------------------------------------------------------------------
 
-    async def create_annotation(
-        self, task_id: int, result: list[dict]
-    ) -> dict:
+    async def create_annotation(self, task_id: int, result: list[dict]) -> dict:
         """Create an annotation on a task.
 
         Parameters
@@ -454,9 +452,7 @@ class LabelStudioClient:
             ID of the prediction to delete.
         """
         try:
-            await asyncio.to_thread(
-                self._client.predictions.delete, id=prediction_id
-            )
+            await asyncio.to_thread(self._client.predictions.delete, id=prediction_id)
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
@@ -483,7 +479,10 @@ class LabelStudioClient:
                 project_id=project_id,
             )
             if isinstance(data, list):
-                return [_to_dict(item) if not isinstance(item, dict) else item for item in data]
+                return [
+                    _to_dict(item) if not isinstance(item, dict) else item
+                    for item in data
+                ]
             return []
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
@@ -639,7 +638,7 @@ def ls_prediction_to_platform(prediction: dict) -> tuple[str, float | None]:
     """
     result = prediction.get("result", [])
     score = prediction.get("score")
-    
+
     label = ""
     for item in result:
         if item.get("type") == "choices":
@@ -647,5 +646,5 @@ def ls_prediction_to_platform(prediction: dict) -> tuple[str, float | None]:
             if choices:
                 label = choices[0]
                 break
-    
+
     return label, score

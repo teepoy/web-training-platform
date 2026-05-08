@@ -4,7 +4,12 @@ from typing import Any
 from uuid import uuid4
 
 from app.domain.models import Dataset, Sample, TaskSpec
-from app.domain.preview import PreviewPage, PreviewPersistScope, PreviewPersistStatus, PreviewSession
+from app.domain.preview import (
+    PreviewPage,
+    PreviewPersistScope,
+    PreviewPersistStatus,
+    PreviewSession,
+)
 from app.domain.types import DatasetType, TaskType
 from app.services.preview_store import PreviewStore
 from app.services.preview_upstream import UpstreamAdapter
@@ -24,7 +29,9 @@ class PreviewService:
     async def get_session(self, session_id: str) -> PreviewSession | None:
         return await self._store.get(session_id)
 
-    async def fetch_next_page(self, session_id: str, cursor: str | None, limit: int) -> PreviewPage:
+    async def fetch_next_page(
+        self, session_id: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
         session = await self._store.get(session_id)
         if session is None:
             raise KeyError(f"Preview session {session_id!r} not found or expired")
@@ -74,7 +81,10 @@ class PreviewService:
         dataset = await dataset_repo.create_dataset(dataset)
 
         if scope == "entire_collection":
-            page = await self._upstream.fetch_page(session.collection_ref, cursor=None, limit=2000)
+            # FIXME: limit 2000 will be overpassed. Use real 'full dataset' implementation
+            page = await self._upstream.fetch_page(
+                session.collection_ref, cursor=None, limit=2000
+            )
             items = page.items
         else:
             items = session.items

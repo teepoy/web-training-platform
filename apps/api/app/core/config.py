@@ -25,13 +25,17 @@ def _validate_runtime_config(cfg: DictConfig, profile: str) -> None:
         raise RuntimeError("storage.kind=memory is only supported in the test profile")
 
     if engine == "local":
-        raise RuntimeError("execution.engine=local is only supported in the test profile")
+        raise RuntimeError(
+            "execution.engine=local is only supported in the test profile"
+        )
 
     if not db_url.startswith("postgresql"):
         raise RuntimeError("dev/prod environments require PostgreSQL")
 
     if storage_kind != "minio":
-        raise RuntimeError("dev/prod environments require S3-compatible object storage (storage.kind=minio)")
+        raise RuntimeError(
+            "dev/prod environments require S3-compatible object storage (storage.kind=minio)"
+        )
 
     _require(str(cfg.prefect.api_url), "prefect.api_url")
     _require(str(cfg.storage.minio.endpoint), "storage.minio.endpoint")

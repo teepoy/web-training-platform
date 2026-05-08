@@ -27,7 +27,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (
-        expires_delta if expires_delta is not None else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta
+        if expires_delta is not None
+        else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
@@ -37,7 +39,9 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
 
-def create_personal_access_token(user_id: str, name: str) -> tuple[str, PersonalAccessTokenORM]:
+def create_personal_access_token(
+    user_id: str, name: str
+) -> tuple[str, PersonalAccessTokenORM]:
     token = f"ftp_{secrets.token_hex(32)}"
     token_hash = bcrypt.hashpw(token.encode(), bcrypt.gensalt()).decode()
     token_obj = PersonalAccessTokenORM(
@@ -60,7 +64,9 @@ class AuthService:
     def verify_password(self, plain: str, hashed: str) -> bool:
         return verify_password(plain, hashed)
 
-    def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+    def create_access_token(
+        self, data: dict, expires_delta: timedelta | None = None
+    ) -> str:
         return create_access_token(data, expires_delta)
 
     def decode_access_token(self, token: str) -> dict:

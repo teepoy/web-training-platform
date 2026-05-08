@@ -8,17 +8,28 @@ from app.domain.models import Sample
 
 
 class FeatureOpsService:
-    def __init__(self, repository: Any = None, embedding_service: Any = None, inference_worker: Any = None):
+    def __init__(
+        self,
+        repository: Any = None,
+        embedding_service: Any = None,
+        inference_worker: Any = None,
+    ):
         self._repo = repository
         self._embedding_service = embedding_service
         self._inference_worker = inference_worker
 
-    async def extract_features(self, samples: list[Sample], embed_model: str, force: bool = False, storage=None) -> dict:
+    async def extract_features(
+        self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
+    ) -> dict:
         computed = 0
         skipped = 0
         for sample in samples:
             existing = await self._repo.get_sample_feature(sample.id)
-            if existing is not None and existing.embed_model == embed_model and not force:
+            if (
+                existing is not None
+                and existing.embed_model == embed_model
+                and not force
+            ):
                 skipped += 1
                 continue
             if not sample.image_uris:
@@ -34,8 +45,12 @@ class FeatureOpsService:
                 else:
                     skipped += 1
                     continue
-                embedding = await self._embedding_service.embed_image(image_bytes, model_name=embed_model)
-                await self._repo.upsert_sample_feature(sample.id, embedding, embed_model)
+                embedding = await self._embedding_service.embed_image(
+                    image_bytes, model_name=embed_model
+                )
+                await self._repo.upsert_sample_feature(
+                    sample.id, embedding, embed_model
+                )
                 computed += 1
             except Exception:
                 skipped += 1
@@ -47,14 +62,20 @@ class FeatureOpsService:
             "status": "completed",
         }
 
-    async def extract_features_via_worker(self, samples: list[Sample], embed_model: str, force: bool = False, storage=None) -> dict:
+    async def extract_features_via_worker(
+        self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
+    ) -> dict:
         computed = 0
         skipped = 0
         payload_samples: list[dict] = []
         selected_samples: list[Sample] = []
         for sample in samples:
             existing = await self._repo.get_sample_feature(sample.id)
-            if existing is not None and existing.embed_model == embed_model and not force:
+            if (
+                existing is not None
+                and existing.embed_model == embed_model
+                and not force
+            ):
                 skipped += 1
                 continue
             if not sample.image_uris:
@@ -85,7 +106,9 @@ class FeatureOpsService:
             }
         if self._inference_worker is None:
             raise ValueError("Inference worker is not configured")
-        embeddings = await self._inference_worker.embed_batch(model_name=embed_model, samples=payload_samples)
+        embeddings = await self._inference_worker.embed_batch(
+            model_name=embed_model, samples=payload_samples
+        )
         embedding_map = {str(item.get("sample_id", "")): item for item in embeddings}
         for sample in selected_samples:
             item = embedding_map.get(sample.id)
@@ -96,7 +119,9 @@ class FeatureOpsService:
             if not isinstance(embedding, list):
                 skipped += 1
                 continue
-            await self._repo.upsert_sample_feature(sample.id, [float(v) for v in embedding], embed_model)
+            await self._repo.upsert_sample_feature(
+                sample.id, [float(v) for v in embedding], embed_model
+            )
             computed += 1
         return {
             "count": len(samples),
@@ -106,7 +131,9 @@ class FeatureOpsService:
             "status": "completed",
         }
 
-    async def similarity_search(self, sample_id: str, dataset_id: str, k: int = 5) -> dict:
+    async def similarity_search(
+        self, sample_id: str, dataset_id: str, k: int = 5
+    ) -> dict:
         """Return k nearest neighbors by cosine similarity."""
         # Get the query embedding
         feature = await self._repo.get_sample_feature(sample_id)
@@ -123,7 +150,9 @@ class FeatureOpsService:
         embedding = feature.embedding
 
         # Try pgvector first, fall back to SQLite cosine
-        neighbors = await self._repo.similarity_search(embedding, dataset_id, k, exclude_id=sample_id)
+        neighbors = await self._repo.similarity_search(
+            embedding, dataset_id, k, exclude_id=sample_id
+        )
         return {"sample_id": sample_id, "neighbors": neighbors}
 
     async def uniqueness_scores(self, sample_ids: list[str], dataset_id: str) -> dict:
@@ -132,18 +161,24 @@ class FeatureOpsService:
             feature = await self._repo.get_sample_feature(sid)
             if feature is None or not feature.embedding:
                 continue
-            neighbors = await self._repo.similarity_search(feature.embedding, dataset_id=dataset_id, k=5, exclude_id=sid)
+            neighbors = await self._repo.similarity_search(
+                feature.embedding, dataset_id=dataset_id, k=5, exclude_id=sid
+            )
             best = max((float(n.get("score", 0.0)) for n in neighbors), default=0.0)
             scores[sid] = round(1.0 - max(0.0, min(1.0, best)), 4)
         return scores
 
-    async def representativeness_scores(self, sample_ids: list[str], dataset_id: str) -> dict:
+    async def representativeness_scores(
+        self, sample_ids: list[str], dataset_id: str
+    ) -> dict:
         scores: dict[str, float] = {}
         for sid in sample_ids:
             feature = await self._repo.get_sample_feature(sid)
             if feature is None or not feature.embedding:
                 continue
-            neighbors = await self._repo.similarity_search(feature.embedding, dataset_id=dataset_id, k=10, exclude_id=sid)
+            neighbors = await self._repo.similarity_search(
+                feature.embedding, dataset_id=dataset_id, k=10, exclude_id=sid
+            )
             if not neighbors:
                 scores[sid] = 0.0
                 continue

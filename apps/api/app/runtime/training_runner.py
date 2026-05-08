@@ -16,7 +16,10 @@ from app.domain.models import ArtifactRef
 from app.presets.registry import PresetRegistry
 from app.presets.runtime import DatasetRef, ModelRef, TrainContext, TrainResult
 from app.repositories.sql_repository import SqlRepository
-from app.services.compatibility import build_trained_model_metadata, validate_dataset_preset_training
+from app.services.compatibility import (
+    build_trained_model_metadata,
+    validate_dataset_preset_training,
+)
 from app.services.embedding import EmbeddingClient
 from app.services.llm import OpenAICompatibleLlmClient
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
@@ -89,9 +92,15 @@ async def _invoke_entrypoint(
             if isinstance(result, dict):
                 return TrainResult(
                     model_uri=str(result.get("model_uri", "")),
-                    metrics=result.get("metrics", {}) if isinstance(result.get("metrics", {}), dict) else {},
-                    artifact_uris=result.get("artifact_uris", []) if isinstance(result.get("artifact_uris", []), list) else [],
-                    metadata=result.get("metadata", {}) if isinstance(result.get("metadata", {}), dict) else {},
+                    metrics=result.get("metrics", {})
+                    if isinstance(result.get("metrics", {}), dict)
+                    else {},
+                    artifact_uris=result.get("artifact_uris", [])
+                    if isinstance(result.get("artifact_uris", []), list)
+                    else [],
+                    metadata=result.get("metadata", {})
+                    if isinstance(result.get("metadata", {}), dict)
+                    else {},
                 )
             raise TypeError("Trainer.train must return TrainResult or dict")
         raise TypeError("Trainer class entrypoint must expose train(ctx)")
@@ -109,9 +118,15 @@ async def _invoke_entrypoint(
         if isinstance(result, dict):
             return TrainResult(
                 model_uri=str(result.get("model_uri", "")),
-                metrics=result.get("metrics", {}) if isinstance(result.get("metrics", {}), dict) else {},
-                artifact_uris=result.get("artifact_uris", []) if isinstance(result.get("artifact_uris", []), list) else [],
-                metadata=result.get("metadata", {}) if isinstance(result.get("metadata", {}), dict) else {},
+                metrics=result.get("metrics", {})
+                if isinstance(result.get("metrics", {}), dict)
+                else {},
+                artifact_uris=result.get("artifact_uris", [])
+                if isinstance(result.get("artifact_uris", []), list)
+                else [],
+                metadata=result.get("metadata", {})
+                if isinstance(result.get("metadata", {}), dict)
+                else {},
             )
         raise TypeError("Trainer.train must return TrainResult or dict")
 
@@ -123,14 +138,22 @@ async def _invoke_entrypoint(
     if isinstance(result, dict):
         return TrainResult(
             model_uri=str(result.get("model_uri", "")),
-            metrics=result.get("metrics", {}) if isinstance(result.get("metrics", {}), dict) else {},
-            artifact_uris=result.get("artifact_uris", []) if isinstance(result.get("artifact_uris", []), list) else [],
-            metadata=result.get("metadata", {}) if isinstance(result.get("metadata", {}), dict) else {},
+            metrics=result.get("metrics", {})
+            if isinstance(result.get("metrics", {}), dict)
+            else {},
+            artifact_uris=result.get("artifact_uris", [])
+            if isinstance(result.get("artifact_uris", []), list)
+            else [],
+            metadata=result.get("metadata", {})
+            if isinstance(result.get("metadata", {}), dict)
+            else {},
         )
     raise TypeError("Training entrypoint must return TrainResult or dict")
 
 
-async def _load_dataset_records(repo: SqlRepository, dataset_id: str) -> tuple[list[dict[str, Any]], list[str]]:
+async def _load_dataset_records(
+    repo: SqlRepository, dataset_id: str
+) -> tuple[list[dict[str, Any]], list[str]]:
     dataset = await repo.get_dataset(dataset_id)
     label_space = list(dataset.task_spec.label_space) if dataset is not None else []
     annotations = await repo.list_annotations_for_dataset(dataset_id)
@@ -233,7 +256,9 @@ async def run_training_pipeline(
         {
             "uri": train_result.model_uri,
             "kind": "model",
-            "metadata": build_trained_model_metadata(dataset, preset, train_result.metadata),
+            "metadata": build_trained_model_metadata(
+                dataset, preset, train_result.metadata
+            ),
         },
     ]
     for uri in train_result.artifact_uris:
@@ -243,7 +268,9 @@ async def run_training_pipeline(
         ArtifactRef(
             uri=str(item["uri"]),
             kind=str(item.get("kind", "artifact")),
-            metadata=cast(dict[str, Any], item["metadata"]) if isinstance(item.get("metadata"), dict) else {},
+            metadata=cast(dict[str, Any], item["metadata"])
+            if isinstance(item.get("metadata"), dict)
+            else {},
         )
         for item in artifacts
         if isinstance(item, dict) and item.get("uri")

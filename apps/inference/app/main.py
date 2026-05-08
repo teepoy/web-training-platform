@@ -47,6 +47,7 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
         raise ValueError("LLM model is not configured")
 
     import litellm
+
     cast(Any, litellm).suppress_debug_info = True
 
     data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
@@ -149,7 +150,12 @@ def health() -> dict[str, object]:
     return {
         "status": "ok",
         "service": "inference-worker",
-        "capabilities": ["predict-single", "predict-batch", "embed-single", "embed-batch"],
+        "capabilities": [
+            "predict-single",
+            "predict-batch",
+            "embed-single",
+            "embed-batch",
+        ],
         "cache": {"policy": "warm-default", "loaded_models": 0},
     }
 
@@ -157,28 +163,49 @@ def health() -> dict[str, object]:
 @app.post("/v1/predict", response_model=PredictResponse)
 async def predict(payload: PredictRequest) -> PredictResponse:
     model_bytes = base64.b64decode(payload.model.content_b64)
-    metadata = payload.model.metadata if isinstance(payload.model.metadata, dict) else {}
+    metadata = (
+        payload.model.metadata if isinstance(payload.model.metadata, dict) else {}
+    )
     predictions: list[PredictResponseItem] = []
 
     if payload.target == "vqa":
         for sample in payload.samples:
             question = sample.question.strip()
             if not sample.image_bytes_b64:
-                predictions.append(PredictResponseItem(sample_id=sample.sample_id, error="missing image bytes"))
+                predictions.append(
+                    PredictResponseItem(
+                        sample_id=sample.sample_id, error="missing image bytes"
+                    )
+                )
                 continue
             if not question:
-                predictions.append(PredictResponseItem(sample_id=sample.sample_id, error="missing question"))
+                predictions.append(
+                    PredictResponseItem(
+                        sample_id=sample.sample_id, error="missing question"
+                    )
+                )
                 continue
             try:
                 image_bytes = base64.b64decode(sample.image_bytes_b64)
                 answer = await _answer_vqa(
                     image_bytes,
                     question,
-                    str(metadata.get("system_prompt", "You are a helpful visual question answering assistant. Answer briefly and accurately based on the image.")),
+                    str(
+                        metadata.get(
+                            "system_prompt",
+                            "You are a helpful visual question answering assistant. Answer briefly and accurately based on the image.",
+                        )
+                    ),
                 )
-                predictions.append(PredictResponseItem(sample_id=sample.sample_id, label=answer, confidence=None))
+                predictions.append(
+                    PredictResponseItem(
+                        sample_id=sample.sample_id, label=answer, confidence=None
+                    )
+                )
             except Exception as exc:
-                predictions.append(PredictResponseItem(sample_id=sample.sample_id, error=str(exc)))
+                predictions.append(
+                    PredictResponseItem(sample_id=sample.sample_id, error=str(exc))
+                )
         return PredictResponse(predictions=predictions)
 
     try:
@@ -186,11 +213,17 @@ async def predict(payload: PredictRequest) -> PredictResponse:
     except Exception:
         model_payload = {}
 
-    prototypes = model_payload.get("label_prototypes") if isinstance(model_payload, dict) else None
+    prototypes = (
+        model_payload.get("label_prototypes")
+        if isinstance(model_payload, dict)
+        else None
+    )
     if not isinstance(prototypes, dict):
         prototypes = {}
     if not prototypes:
-        label_space = payload.label_space or [str(x) for x in metadata.get("label_space", []) if str(x)]
+        label_space = payload.label_space or [
+            str(x) for x in metadata.get("label_space", []) if str(x)
+        ]
         for idx, label in enumerate(label_space):
             vec = [0.0] * 64
             vec[idx % 64] = 1.0
@@ -198,19 +231,31 @@ async def predict(payload: PredictRequest) -> PredictResponse:
 
     for sample in payload.samples:
         if not sample.image_bytes_b64:
-            predictions.append(PredictResponseItem(sample_id=sample.sample_id, error="missing image bytes"))
+            predictions.append(
+                PredictResponseItem(
+                    sample_id=sample.sample_id, error="missing image bytes"
+                )
+            )
             continue
         image_bytes = base64.b64decode(sample.image_bytes_b64)
         embedding = _image_embedding_from_bytes(image_bytes)
         if payload.target == "embedding":
-            predictions.append(PredictResponseItem(sample_id=sample.sample_id, label="embedding", confidence=1.0))
+            predictions.append(
+                PredictResponseItem(
+                    sample_id=sample.sample_id, label="embedding", confidence=1.0
+                )
+            )
             continue
         scores: dict[str, float] = {}
         for label, proto in prototypes.items():
             if isinstance(proto, list) and proto:
                 scores[str(label)] = _cosine(embedding, [float(x) for x in proto])
         if not scores:
-            predictions.append(PredictResponseItem(sample_id=sample.sample_id, error="model has no label prototypes"))
+            predictions.append(
+                PredictResponseItem(
+                    sample_id=sample.sample_id, error="model has no label prototypes"
+                )
+            )
             continue
         best_label = max(scores.items(), key=lambda x: x[1])[0]
         total = sum(max(v, 0.0) for v in scores.values())
@@ -232,7 +277,11 @@ def embed(payload: EmbedRequest) -> EmbedResponse:
     embeddings: list[EmbedResponseItem] = []
     for sample in payload.samples:
         if not sample.image_bytes_b64:
-            embeddings.append(EmbedResponseItem(sample_id=sample.sample_id, error="missing image bytes"))
+            embeddings.append(
+                EmbedResponseItem(
+                    sample_id=sample.sample_id, error="missing image bytes"
+                )
+            )
             continue
         image_bytes = base64.b64decode(sample.image_bytes_b64)
         embeddings.append(

@@ -59,7 +59,9 @@ def _logger():
 class TorchPredictor:
     """Runtime predictor backed by persisted prototype model artifacts."""
 
-    def __init__(self, embedding_client: Any = None, artifact_storage: Any = None) -> None:
+    def __init__(
+        self, embedding_client: Any = None, artifact_storage: Any = None
+    ) -> None:
         self._embedding_client = embedding_client
         self._artifact_storage = artifact_storage
         self._model_payload: dict[str, Any] = {}
@@ -77,9 +79,15 @@ class TorchPredictor:
             pass
 
         metadata = model_ref.metadata if isinstance(model_ref.metadata, dict) else {}
-        label_space = metadata.get("label_space") if isinstance(metadata.get("label_space"), list) else []
+        label_space = (
+            metadata.get("label_space")
+            if isinstance(metadata.get("label_space"), list)
+            else []
+        )
         if not label_space:
-            raise ValueError("model artifact is not a supported torch prototype payload")
+            raise ValueError(
+                "model artifact is not a supported torch prototype payload"
+            )
 
         dim = 64
         prototypes: dict[str, list[float]] = {}
@@ -95,7 +103,9 @@ class TorchPredictor:
             "source": "metadata-fallback",
         }
 
-    async def predict_batch(self, ctx: PredictContext, samples: list[Any]) -> BatchPredictResult:
+    async def predict_batch(
+        self, ctx: PredictContext, samples: list[Any]
+    ) -> BatchPredictResult:
         predictions: list[PredictResult] = []
         failed = 0
         for sample in samples:
@@ -206,7 +216,9 @@ class TorchTrainer:
 
         if not grouped:
             if not label_space:
-                raise ValueError("no labeled samples with readable images found for training")
+                raise ValueError(
+                    "no labeled samples with readable images found for training"
+                )
             dim = 64
             for idx, label in enumerate(label_space):
                 seed = [0.0] * dim
@@ -250,7 +262,9 @@ class TorchTrainer:
             data=json.dumps(metrics_payload, sort_keys=True).encode("utf-8"),
             content_type="application/json",
         )
-        logger.info("Torch training finished job_id=%s processed=%s", ctx.job_id, processed)
+        logger.info(
+            "Torch training finished job_id=%s processed=%s", ctx.job_id, processed
+        )
         return TrainResult(
             model_uri=model_uri,
             metrics=metrics_payload,
@@ -268,7 +282,9 @@ async def train(ctx: TrainContext) -> TrainResult:
     return await TorchTrainer().train(ctx)
 
 
-async def predict_classification(ctx: PredictContext, sample: dict[str, Any], predictor: TorchPredictor) -> dict[str, Any]:
+async def predict_classification(
+    ctx: PredictContext, sample: dict[str, Any], predictor: TorchPredictor
+) -> dict[str, Any]:
     pred = await predictor.predict_single(ctx, sample)
     return {
         "label": pred.label,
@@ -278,7 +294,9 @@ async def predict_classification(ctx: PredictContext, sample: dict[str, Any], pr
     }
 
 
-async def predict_embedding(ctx: PredictContext, sample: dict[str, Any], predictor: TorchPredictor) -> dict[str, Any]:
+async def predict_embedding(
+    ctx: PredictContext, sample: dict[str, Any], predictor: TorchPredictor
+) -> dict[str, Any]:
     emb_ctx = PredictContext(
         job_id=ctx.job_id,
         preset=ctx.preset,

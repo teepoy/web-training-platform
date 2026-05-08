@@ -16,6 +16,7 @@ litellm handles provider routing via the model string:
 When ``api_base`` is set, litellm treats it as an OpenAI-compatible custom
 endpoint (same behaviour as the previous raw-httpx implementation).
 """
+
 from __future__ import annotations
 
 import base64
@@ -61,7 +62,9 @@ class OpenAICompatibleLlmClient:
         if not self._model:
             raise LlmClientError("LLM model is not configured")
 
-        data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+        data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode(
+            "ascii"
+        )
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
             {

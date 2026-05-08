@@ -20,6 +20,7 @@ _logger = logging.getLogger(__name__)
 
 def _get_container():
     from app.main import container
+
     return container
 
 
@@ -96,9 +97,7 @@ def _parquet_to_sample_items(
     image_cols = _find_image_columns(table)
     label_col = _find_label_column(table, image_cols)
     metadata_cols = [
-        c
-        for c in table.column_names
-        if c not in image_cols and c != label_col
+        c for c in table.column_names if c not in image_cols and c != label_col
     ]
 
     warnings: list[str] = []
@@ -159,9 +158,7 @@ async def import_parquet(
     try:
         table = pq.read_table(io.BytesIO(content))
     except Exception as exc:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid parquet file: {exc}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid parquet file: {exc}")
 
     if table.num_rows == 0:
         raise HTTPException(status_code=400, detail="Parquet file has no rows")

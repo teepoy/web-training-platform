@@ -69,7 +69,9 @@ class SqlRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
-    async def create_dataset(self, dataset: Dataset, org_id: str | None = None) -> Dataset:
+    async def create_dataset(
+        self, dataset: Dataset, org_id: str | None = None
+    ) -> Dataset:
         org_id = org_id or dataset.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
@@ -92,7 +94,9 @@ class SqlRepository:
         async with self.session_factory() as session:
             stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
             if org_id is not None:
-                stmt = stmt.where(or_(DatasetORM.org_id == org_id, DatasetORM.is_public == True))  # noqa: E712
+                stmt = stmt.where(
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public == True)
+                )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 Dataset(
@@ -110,7 +114,9 @@ class SqlRepository:
                 for r in rows
             ]
 
-    async def get_dataset(self, dataset_id: str, org_id: str | None = None) -> Dataset | None:
+    async def get_dataset(
+        self, dataset_id: str, org_id: str | None = None
+    ) -> Dataset | None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
             if row is None:
@@ -130,7 +136,9 @@ class SqlRepository:
                 ls_project_id=row.ls_project_id,
             )
 
-    async def update_dataset_embed_config(self, dataset_id: str, embed_config: dict) -> None:
+    async def update_dataset_embed_config(
+        self, dataset_id: str, embed_config: dict
+    ) -> None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
             if row is not None:
@@ -145,36 +153,100 @@ class SqlRepository:
             if org_id is not None and dataset.org_id != org_id:
                 return False
 
-            training_job_ids = select(TrainingJobORM.id).where(TrainingJobORM.dataset_id == dataset_id)
-            prediction_job_ids = select(PredictionJobORM.id).where(PredictionJobORM.dataset_id == dataset_id)
+            training_job_ids = select(TrainingJobORM.id).where(
+                TrainingJobORM.dataset_id == dataset_id
+            )
+            prediction_job_ids = select(PredictionJobORM.id).where(
+                PredictionJobORM.dataset_id == dataset_id
+            )
             sample_ids = select(SampleORM.id).where(SampleORM.dataset_id == dataset_id)
-            annotation_ids = select(AnnotationORM.id).where(AnnotationORM.sample_id.in_(sample_ids))
-            prediction_ids = select(PlatformPredictionORM.id).where(PlatformPredictionORM.dataset_id == dataset_id)
-            collection_ids = select(PredictionCollectionORM.id).where(PredictionCollectionORM.dataset_id == dataset_id)
+            annotation_ids = select(AnnotationORM.id).where(
+                AnnotationORM.sample_id.in_(sample_ids)
+            )
+            prediction_ids = select(PlatformPredictionORM.id).where(
+                PlatformPredictionORM.dataset_id == dataset_id
+            )
+            collection_ids = select(PredictionCollectionORM.id).where(
+                PredictionCollectionORM.dataset_id == dataset_id
+            )
             review_action_ids = select(PredictionReviewActionORM.id).where(
                 PredictionReviewActionORM.dataset_id == dataset_id
             )
 
-            await session.execute(delete(TrainingEventORM).where(TrainingEventORM.job_id.in_(training_job_ids)))
-            await session.execute(delete(JobUserStateORM).where(JobUserStateORM.job_id.in_(training_job_ids)))
-            await session.execute(delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids)))
-            await session.execute(delete(PredictionEventORM).where(PredictionEventORM.job_id.in_(prediction_job_ids)))
-            await session.execute(delete(PredictionCollectionItemORM).where(PredictionCollectionItemORM.collection_id.in_(collection_ids)))
-            await session.execute(delete(AnnotationVersionORM).where(AnnotationVersionORM.annotation_id.in_(annotation_ids)))
-            await session.execute(delete(PredictionReviewActionORM).where(PredictionReviewActionORM.id.in_(review_action_ids)))
-            await session.execute(delete(PredictionCollectionORM).where(PredictionCollectionORM.id.in_(collection_ids)))
-            await session.execute(delete(PlatformPredictionORM).where(PlatformPredictionORM.id.in_(prediction_ids)))
-            await session.execute(delete(PredictionJobORM).where(PredictionJobORM.dataset_id == dataset_id))
-            await session.execute(delete(TrainingJobORM).where(TrainingJobORM.dataset_id == dataset_id))
-            await session.execute(delete(SampleFeatureORM).where(SampleFeatureORM.sample_id.in_(sample_ids)))
-            await session.execute(delete(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids)))
-            await session.execute(delete(SampleORM).where(SampleORM.dataset_id == dataset_id))
-            await session.execute(delete(PredictionReviewActionORM).where(PredictionReviewActionORM.dataset_id == dataset_id))
+            await session.execute(
+                delete(TrainingEventORM).where(
+                    TrainingEventORM.job_id.in_(training_job_ids)
+                )
+            )
+            await session.execute(
+                delete(JobUserStateORM).where(
+                    JobUserStateORM.job_id.in_(training_job_ids)
+                )
+            )
+            await session.execute(
+                delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids))
+            )
+            await session.execute(
+                delete(PredictionEventORM).where(
+                    PredictionEventORM.job_id.in_(prediction_job_ids)
+                )
+            )
+            await session.execute(
+                delete(PredictionCollectionItemORM).where(
+                    PredictionCollectionItemORM.collection_id.in_(collection_ids)
+                )
+            )
+            await session.execute(
+                delete(AnnotationVersionORM).where(
+                    AnnotationVersionORM.annotation_id.in_(annotation_ids)
+                )
+            )
+            await session.execute(
+                delete(PredictionReviewActionORM).where(
+                    PredictionReviewActionORM.id.in_(review_action_ids)
+                )
+            )
+            await session.execute(
+                delete(PredictionCollectionORM).where(
+                    PredictionCollectionORM.id.in_(collection_ids)
+                )
+            )
+            await session.execute(
+                delete(PlatformPredictionORM).where(
+                    PlatformPredictionORM.id.in_(prediction_ids)
+                )
+            )
+            await session.execute(
+                delete(PredictionJobORM).where(
+                    PredictionJobORM.dataset_id == dataset_id
+                )
+            )
+            await session.execute(
+                delete(TrainingJobORM).where(TrainingJobORM.dataset_id == dataset_id)
+            )
+            await session.execute(
+                delete(SampleFeatureORM).where(
+                    SampleFeatureORM.sample_id.in_(sample_ids)
+                )
+            )
+            await session.execute(
+                delete(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids))
+            )
+            await session.execute(
+                delete(SampleORM).where(SampleORM.dataset_id == dataset_id)
+            )
+            await session.execute(
+                delete(PredictionReviewActionORM).where(
+                    PredictionReviewActionORM.dataset_id == dataset_id
+                )
+            )
             await session.delete(dataset)
             await session.commit()
             return True
 
-    async def update_dataset_task_spec(self, dataset_id: str, task_spec: dict) -> Dataset | None:
+    async def update_dataset_task_spec(
+        self, dataset_id: str, task_spec: dict
+    ) -> Dataset | None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
             if row is None:
@@ -245,19 +317,27 @@ class SqlRepository:
             await session.commit()
         return samples
 
-    async def list_samples(self, dataset_id: str, offset: int = 0, limit: int = 50) -> tuple[list[Sample], int]:
+    async def list_samples(
+        self, dataset_id: str, offset: int = 0, limit: int = 50
+    ) -> tuple[list[Sample], int]:
         async with self.session_factory() as session:
             total = await session.scalar(
-                select(func.count()).select_from(SampleORM).where(SampleORM.dataset_id == dataset_id)
+                select(func.count())
+                .select_from(SampleORM)
+                .where(SampleORM.dataset_id == dataset_id)
             )
             rows = (
-                await session.execute(
-                    select(SampleORM)
-                    .where(SampleORM.dataset_id == dataset_id)
-                    .offset(offset)
-                    .limit(limit)
+                (
+                    await session.execute(
+                        select(SampleORM)
+                        .where(SampleORM.dataset_id == dataset_id)
+                        .offset(offset)
+                        .limit(limit)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             return [
                 Sample(
                     id=r.id,
@@ -272,7 +352,9 @@ class SqlRepository:
     async def list_wafer_points(self, dataset_id: str) -> list[dict[str, object]]:
         async with self.session_factory() as session:
             rows = await session.execute(
-                select(SampleORM.id, SampleORM.metadata_json).where(SampleORM.dataset_id == dataset_id)
+                select(SampleORM.id, SampleORM.metadata_json).where(
+                    SampleORM.dataset_id == dataset_id
+                )
             )
 
             points: list[dict[str, object]] = []
@@ -496,7 +578,9 @@ class SqlRepository:
                 "label_counts": label_counts,
             }
 
-    async def create_annotation(self, annotation: Annotation, user_id: str | None = None) -> Annotation:
+    async def create_annotation(
+        self, annotation: Annotation, user_id: str | None = None
+    ) -> Annotation:
         async with self.session_factory() as session:
             session.add(
                 AnnotationORM(
@@ -513,10 +597,20 @@ class SqlRepository:
 
     async def list_annotations_for_dataset(self, dataset_id: str) -> list[Annotation]:
         async with self.session_factory() as session:
-            stmt = select(AnnotationORM).join(SampleORM, AnnotationORM.sample_id == SampleORM.id).where(SampleORM.dataset_id == dataset_id)
+            stmt = (
+                select(AnnotationORM)
+                .join(SampleORM, AnnotationORM.sample_id == SampleORM.id)
+                .where(SampleORM.dataset_id == dataset_id)
+            )
             rows = (await session.execute(stmt)).scalars().all()
             return [
-                Annotation(id=r.id, sample_id=r.sample_id, label=r.label, created_by=r.created_by, created_at=r.created_at)
+                Annotation(
+                    id=r.id,
+                    sample_id=r.sample_id,
+                    label=r.label,
+                    created_by=r.created_by,
+                    created_at=r.created_at,
+                )
                 for r in rows
             ]
 
@@ -525,7 +619,13 @@ class SqlRepository:
             stmt = select(AnnotationORM).where(AnnotationORM.sample_id == sample_id)
             rows = (await session.execute(stmt)).scalars().all()
             return [
-                Annotation(id=r.id, sample_id=r.sample_id, label=r.label, created_by=r.created_by, created_at=r.created_at)
+                Annotation(
+                    id=r.id,
+                    sample_id=r.sample_id,
+                    label=r.label,
+                    created_by=r.created_by,
+                    created_at=r.created_at,
+                )
                 for r in rows
             ]
 
@@ -534,16 +634,30 @@ class SqlRepository:
             row = await session.get(AnnotationORM, annotation_id)
             if row is None:
                 return None
-            return Annotation(id=row.id, sample_id=row.sample_id, label=row.label, created_by=row.created_by, created_at=row.created_at)
+            return Annotation(
+                id=row.id,
+                sample_id=row.sample_id,
+                label=row.label,
+                created_by=row.created_by,
+                created_at=row.created_at,
+            )
 
-    async def update_annotation(self, annotation_id: str, label: str) -> Annotation | None:
+    async def update_annotation(
+        self, annotation_id: str, label: str
+    ) -> Annotation | None:
         async with self.session_factory() as session:
             row = await session.get(AnnotationORM, annotation_id)
             if row is None:
                 return None
             row.label = label
             await session.commit()
-            return Annotation(id=row.id, sample_id=row.sample_id, label=row.label, created_by=row.created_by, created_at=row.created_at)
+            return Annotation(
+                id=row.id,
+                sample_id=row.sample_id,
+                label=row.label,
+                created_by=row.created_by,
+                created_at=row.created_at,
+            )
 
     async def delete_annotation(self, annotation_id: str) -> bool:
         async with self.session_factory() as session:
@@ -554,7 +668,9 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def create_preset(self, preset: TrainingPreset, org_id: str | None = None) -> TrainingPreset:
+    async def create_preset(
+        self, preset: TrainingPreset, org_id: str | None = None
+    ) -> TrainingPreset:
         org_id = org_id or preset.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             session.add(
@@ -622,7 +738,9 @@ class SqlRepository:
                 for r in rows
             ]
 
-    async def get_preset(self, preset_id: str, org_id: str | None = None) -> TrainingPreset | None:
+    async def get_preset(
+        self, preset_id: str, org_id: str | None = None
+    ) -> TrainingPreset | None:
         async with self.session_factory() as session:
             row = await session.get(TrainingPresetORM, preset_id)
             if row is None:
@@ -638,7 +756,9 @@ class SqlRepository:
                 dataloader_ref=row.dataloader_ref,
             )
 
-    async def create_job(self, job: TrainingJob, org_id: str | None = None, user_id: str | None = None) -> TrainingJob:
+    async def create_job(
+        self, job: TrainingJob, org_id: str | None = None, user_id: str | None = None
+    ) -> TrainingJob:
         org_id = org_id or job.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
@@ -689,7 +809,12 @@ class SqlRepository:
         async with self.session_factory() as session:
             stmt = select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc())
             if org_id is not None:
-                stmt = stmt.where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+                stmt = stmt.where(
+                    or_(
+                        TrainingJobORM.org_id == org_id,
+                        TrainingJobORM.is_public == True,
+                    )
+                )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
@@ -712,7 +837,9 @@ class SqlRepository:
                 )
             return jobs
 
-    async def get_job(self, job_id: str, org_id: str | None = None) -> TrainingJob | None:
+    async def get_job(
+        self, job_id: str, org_id: str | None = None
+    ) -> TrainingJob | None:
         async with self.session_factory() as session:
             row = await session.get(TrainingJobORM, job_id)
             if row is None:
@@ -750,26 +877,64 @@ class SqlRepository:
 
     async def list_events(self, job_id: str) -> list[TrainingEvent]:
         async with self.session_factory() as session:
-            rows = (await session.execute(select(TrainingEventORM).where(TrainingEventORM.job_id == job_id).order_by(TrainingEventORM.id.asc()))).scalars().all()
-            return [TrainingEvent(job_id=r.job_id, ts=r.ts, level=r.level, message=r.message, payload=r.payload) for r in rows]
+            rows = (
+                (
+                    await session.execute(
+                        select(TrainingEventORM)
+                        .where(TrainingEventORM.job_id == job_id)
+                        .order_by(TrainingEventORM.id.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [
+                TrainingEvent(
+                    job_id=r.job_id,
+                    ts=r.ts,
+                    level=r.level,
+                    message=r.message,
+                    payload=r.payload,
+                )
+                for r in rows
+            ]
 
-    async def list_events_paginated(self, job_id: str, offset: int = 0, limit: int = 50) -> tuple[list[TrainingEvent], int]:
+    async def list_events_paginated(
+        self, job_id: str, offset: int = 0, limit: int = 50
+    ) -> tuple[list[TrainingEvent], int]:
         async with self.session_factory() as session:
             total = await session.scalar(
-                select(func.count()).select_from(TrainingEventORM).where(TrainingEventORM.job_id == job_id)
+                select(func.count())
+                .select_from(TrainingEventORM)
+                .where(TrainingEventORM.job_id == job_id)
             )
             rows = (
-                await session.execute(
-                    select(TrainingEventORM)
-                    .where(TrainingEventORM.job_id == job_id)
-                    .order_by(TrainingEventORM.id.asc())
-                    .offset(offset)
-                    .limit(limit)
+                (
+                    await session.execute(
+                        select(TrainingEventORM)
+                        .where(TrainingEventORM.job_id == job_id)
+                        .order_by(TrainingEventORM.id.asc())
+                        .offset(offset)
+                        .limit(limit)
+                    )
                 )
-            ).scalars().all()
-            return [TrainingEvent(job_id=r.job_id, ts=r.ts, level=r.level, message=r.message, payload=r.payload) for r in rows], total or 0
+                .scalars()
+                .all()
+            )
+            return [
+                TrainingEvent(
+                    job_id=r.job_id,
+                    ts=r.ts,
+                    level=r.level,
+                    message=r.message,
+                    payload=r.payload,
+                )
+                for r in rows
+            ], total or 0
 
-    async def create_prediction_job(self, job: PredictionJob, org_id: str | None = None) -> PredictionJob:
+    async def create_prediction_job(
+        self, job: PredictionJob, org_id: str | None = None
+    ) -> PredictionJob:
         org_id = org_id or job.org_id or DEFAULT_ORG_ID
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
@@ -793,7 +958,9 @@ class SqlRepository:
             await session.commit()
         return job.model_copy(update={"org_id": org_id, "org_name": org_name})
 
-    async def set_prediction_job_external_id(self, job_id: str, external_job_id: str) -> None:
+    async def set_prediction_job_external_id(
+        self, job_id: str, external_job_id: str
+    ) -> None:
         async with self.session_factory() as session:
             row = await session.get(PredictionJobORM, job_id)
             if row is None:
@@ -802,7 +969,9 @@ class SqlRepository:
             row.updated_at = _utcnow()
             await session.commit()
 
-    async def update_prediction_job_status(self, job_id: str, status: JobStatus, summary: dict | None = None) -> None:
+    async def update_prediction_job_status(
+        self, job_id: str, status: JobStatus, summary: dict | None = None
+    ) -> None:
         async with self.session_factory() as session:
             row = await session.get(PredictionJobORM, job_id)
             if row is None:
@@ -813,7 +982,9 @@ class SqlRepository:
                 row.summary_json = summary
             await session.commit()
 
-    async def get_prediction_job(self, job_id: str, org_id: str | None = None) -> PredictionJob | None:
+    async def get_prediction_job(
+        self, job_id: str, org_id: str | None = None
+    ) -> PredictionJob | None:
         async with self.session_factory() as session:
             row = await session.get(PredictionJobORM, job_id)
             if row is None:
@@ -837,7 +1008,9 @@ class SqlRepository:
                 summary=row.summary_json or {},
             )
 
-    async def list_prediction_jobs(self, org_id: str | None = None) -> list[PredictionJob]:
+    async def list_prediction_jobs(
+        self, org_id: str | None = None
+    ) -> list[PredictionJob]:
         async with self.session_factory() as session:
             stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
             if org_id is not None:
@@ -879,15 +1052,30 @@ class SqlRepository:
     async def list_prediction_events(self, job_id: str) -> list[PredictionEvent]:
         async with self.session_factory() as session:
             rows = (
-                await session.execute(
-                    select(PredictionEventORM)
-                    .where(PredictionEventORM.job_id == job_id)
-                    .order_by(PredictionEventORM.id.asc())
+                (
+                    await session.execute(
+                        select(PredictionEventORM)
+                        .where(PredictionEventORM.job_id == job_id)
+                        .order_by(PredictionEventORM.id.asc())
+                    )
                 )
-            ).scalars().all()
-            return [PredictionEvent(job_id=r.job_id, ts=r.ts, level=r.level, message=r.message, payload=r.payload) for r in rows]
+                .scalars()
+                .all()
+            )
+            return [
+                PredictionEvent(
+                    job_id=r.job_id,
+                    ts=r.ts,
+                    level=r.level,
+                    message=r.message,
+                    payload=r.payload,
+                )
+                for r in rows
+            ]
 
-    async def create_platform_prediction(self, prediction: PlatformPrediction) -> PlatformPrediction:
+    async def create_platform_prediction(
+        self, prediction: PlatformPrediction
+    ) -> PlatformPrediction:
         async with self.session_factory() as session:
             session.add(
                 PlatformPredictionORM(
@@ -910,7 +1098,9 @@ class SqlRepository:
             await session.commit()
         return prediction
 
-    async def create_platform_predictions_bulk(self, predictions: list[PlatformPrediction]) -> list[PlatformPrediction]:
+    async def create_platform_predictions_bulk(
+        self, predictions: list[PlatformPrediction]
+    ) -> list[PlatformPrediction]:
         if not predictions:
             return []
         async with self.session_factory() as session:
@@ -936,7 +1126,9 @@ class SqlRepository:
             await session.commit()
         return predictions
 
-    async def get_platform_prediction(self, prediction_id: str, org_id: str | None = None) -> PlatformPrediction | None:
+    async def get_platform_prediction(
+        self, prediction_id: str, org_id: str | None = None
+    ) -> PlatformPrediction | None:
         async with self.session_factory() as session:
             row = await session.get(PlatformPredictionORM, prediction_id)
             if row is None:
@@ -996,7 +1188,9 @@ class SqlRepository:
                 for row in rows
             ]
 
-    async def list_platform_predictions_for_job(self, job_id: str, org_id: str) -> list[PlatformPrediction]:
+    async def list_platform_predictions_for_job(
+        self, job_id: str, org_id: str
+    ) -> list[PlatformPrediction]:
         async with self.session_factory() as session:
             stmt = (
                 select(PlatformPredictionORM)
@@ -1025,7 +1219,9 @@ class SqlRepository:
                 for row in rows
             ]
 
-    async def create_prediction_collection(self, collection: PredictionCollection) -> PredictionCollection:
+    async def create_prediction_collection(
+        self, collection: PredictionCollection
+    ) -> PredictionCollection:
         async with self.session_factory() as session:
             session.add(
                 PredictionCollectionORM(
@@ -1045,7 +1241,9 @@ class SqlRepository:
             await session.commit()
         return collection
 
-    async def get_prediction_collection(self, collection_id: str, org_id: str | None = None) -> PredictionCollection | None:
+    async def get_prediction_collection(
+        self, collection_id: str, org_id: str | None = None
+    ) -> PredictionCollection | None:
         async with self.session_factory() as session:
             row = await session.get(PredictionCollectionORM, collection_id)
             if row is None:
@@ -1066,7 +1264,9 @@ class SqlRepository:
                 created_at=row.created_at,
             )
 
-    async def list_prediction_collections(self, dataset_id: str, org_id: str) -> list[PredictionCollection]:
+    async def list_prediction_collections(
+        self, dataset_id: str, org_id: str
+    ) -> list[PredictionCollection]:
         async with self.session_factory() as session:
             stmt = (
                 select(PredictionCollectionORM)
@@ -1092,7 +1292,9 @@ class SqlRepository:
                 for row in rows
             ]
 
-    async def add_prediction_collection_items(self, items: list[PredictionCollectionItem]) -> list[PredictionCollectionItem]:
+    async def add_prediction_collection_items(
+        self, items: list[PredictionCollectionItem]
+    ) -> list[PredictionCollectionItem]:
         if not items:
             return []
         async with self.session_factory() as session:
@@ -1107,13 +1309,16 @@ class SqlRepository:
             await session.commit()
         return items
 
-    async def list_prediction_collection_predictions(self, collection_id: str, org_id: str) -> list[PlatformPrediction]:
+    async def list_prediction_collection_predictions(
+        self, collection_id: str, org_id: str
+    ) -> list[PlatformPrediction]:
         async with self.session_factory() as session:
             stmt = (
                 select(PlatformPredictionORM)
                 .join(
                     PredictionCollectionItemORM,
-                    PredictionCollectionItemORM.prediction_id == PlatformPredictionORM.id,
+                    PredictionCollectionItemORM.prediction_id
+                    == PlatformPredictionORM.id,
                 )
                 .where(PredictionCollectionItemORM.collection_id == collection_id)
                 .where(PlatformPredictionORM.org_id == org_id)
@@ -1157,18 +1362,20 @@ class SqlRepository:
     async def add_artifacts(self, job_id: str, artifacts: list[ArtifactRef]) -> None:
         async with self.session_factory() as session:
             for a in artifacts:
-                session.add(ArtifactORM(
-                    id=a.id,
-                    job_id=job_id,
-                    uri=a.uri,
-                    kind=a.kind,
-                    metadata_json=a.metadata,
-                    name=a.name,
-                    file_size=a.file_size,
-                    file_hash=a.file_hash,
-                    format=a.format,
-                    created_at=a.created_at,
-                ))
+                session.add(
+                    ArtifactORM(
+                        id=a.id,
+                        job_id=job_id,
+                        uri=a.uri,
+                        kind=a.kind,
+                        metadata_json=a.metadata,
+                        name=a.name,
+                        file_size=a.file_size,
+                        file_hash=a.file_hash,
+                        format=a.format,
+                        created_at=a.created_at,
+                    )
+                )
             await session.commit()
 
     async def get_artifact(self, artifact_id: str) -> ArtifactRef | None:
@@ -1188,7 +1395,9 @@ class SqlRepository:
                 created_at=row.created_at,
             )
 
-    async def update_sample_image_uris(self, sample_id: str, image_uris: list[str]) -> Sample | None:
+    async def update_sample_image_uris(
+        self, sample_id: str, image_uris: list[str]
+    ) -> Sample | None:
         async with self.session_factory() as session:
             row = await session.get(SampleORM, sample_id)
             if row is None:
@@ -1210,8 +1419,18 @@ class SqlRepository:
                 row.ls_task_id = ls_task_id
                 await session.commit()
 
-    async def _list_artifacts_by_job_in_session(self, session: AsyncSession, job_id: str) -> list[ArtifactRef]:
-        rows = (await session.execute(select(ArtifactORM).where(ArtifactORM.job_id == job_id))).scalars().all()
+    async def _list_artifacts_by_job_in_session(
+        self, session: AsyncSession, job_id: str
+    ) -> list[ArtifactRef]:
+        rows = (
+            (
+                await session.execute(
+                    select(ArtifactORM).where(ArtifactORM.job_id == job_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         return [
             ArtifactRef(
                 id=r.id,
@@ -1317,12 +1536,17 @@ class SqlRepository:
                     ORDER BY sf.embedding_vec <=> :vec::vector
                     LIMIT :k
                 """)
-                rows = (await session.execute(sql, {
-                    "vec": vec_str,
-                    "did": dataset_id,
-                    "exclude": exclude_id,
-                    "k": k,
-                })).fetchall()
+                rows = (
+                    await session.execute(
+                        sql,
+                        {
+                            "vec": vec_str,
+                            "did": dataset_id,
+                            "exclude": exclude_id,
+                            "k": k,
+                        },
+                    )
+                ).fetchall()
                 return [{"sample_id": row[0], "score": float(row[1])} for row in rows]
 
             else:
@@ -1335,10 +1559,15 @@ class SqlRepository:
                     WHERE s.dataset_id = :did
                       AND sf.sample_id != :exclude
                 """)
-                rows = (await session.execute(sql, {
-                    "did": dataset_id,
-                    "exclude": exclude_id,
-                })).fetchall()
+                rows = (
+                    await session.execute(
+                        sql,
+                        {
+                            "did": dataset_id,
+                            "exclude": exclude_id,
+                        },
+                    )
+                ).fetchall()
 
                 if not rows:
                     return []
@@ -1367,7 +1596,9 @@ class SqlRepository:
                 results.sort(key=lambda x: x["score"], reverse=True)
                 return results[:k]
 
-    async def list_model_assets(self, dataset_id: str, org_id: str | None = None) -> list[ArtifactRef]:
+    async def list_model_assets(
+        self, dataset_id: str, org_id: str | None = None
+    ) -> list[ArtifactRef]:
         """Return artifact refs for all training jobs on dataset_id, optionally filtered by org_id."""
         async with self.session_factory() as session:
             stmt = (
@@ -1376,9 +1607,17 @@ class SqlRepository:
                 .where(TrainingJobORM.dataset_id == dataset_id)
             )
             if org_id is not None:
-                stmt = stmt.where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+                stmt = stmt.where(
+                    or_(
+                        TrainingJobORM.org_id == org_id,
+                        TrainingJobORM.is_public == True,
+                    )
+                )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
-            return [ArtifactRef(id=r.id, uri=r.uri, kind=r.kind, metadata=r.metadata_json) for r in rows]
+            return [
+                ArtifactRef(id=r.id, uri=r.uri, kind=r.kind, metadata=r.metadata_json)
+                for r in rows
+            ]
 
     # ------------------------------------------------------------------
     # Schedule CRUD
@@ -1407,7 +1646,9 @@ class SqlRepository:
                 session.expunge(row)
             return list(rows)
 
-    async def get_schedule(self, schedule_id: str, org_id: str | None = None) -> ScheduleORM | None:
+    async def get_schedule(
+        self, schedule_id: str, org_id: str | None = None
+    ) -> ScheduleORM | None:
         async with self.session_factory() as session:
             row = await session.get(ScheduleORM, schedule_id)
             if row is None:
@@ -1417,7 +1658,9 @@ class SqlRepository:
             session.expunge(row)
             return row
 
-    async def update_schedule(self, schedule_id: str, **kwargs: object) -> ScheduleORM | None:
+    async def update_schedule(
+        self, schedule_id: str, **kwargs: object
+    ) -> ScheduleORM | None:
         async with self.session_factory() as session:
             row = await session.get(ScheduleORM, schedule_id)
             if row is None:
@@ -1446,7 +1689,9 @@ class SqlRepository:
 
     async def get_user_by_email(self, email: str) -> UserORM | None:
         async with self.session_factory() as session:
-            result = await session.execute(select(UserORM).where(UserORM.email == email))
+            result = await session.execute(
+                select(UserORM).where(UserORM.email == email)
+            )
             row = result.scalar_one_or_none()
             if row is not None:
                 session.expunge(row)
@@ -1481,7 +1726,9 @@ class SqlRepository:
             await session.commit()
             return pat
 
-    async def list_personal_access_tokens(self, user_id: str) -> list[PersonalAccessTokenORM]:
+    async def list_personal_access_tokens(
+        self, user_id: str
+    ) -> list[PersonalAccessTokenORM]:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(PersonalAccessTokenORM)
@@ -1524,7 +1771,9 @@ class SqlRepository:
 
     async def get_organization_by_slug(self, slug: str) -> OrganizationORM | None:
         async with self.session_factory() as session:
-            result = await session.execute(select(OrganizationORM).where(OrganizationORM.slug == slug))
+            result = await session.execute(
+                select(OrganizationORM).where(OrganizationORM.slug == slug)
+            )
             row = result.scalar_one_or_none()
             if row is not None:
                 session.expunge(row)
@@ -1553,7 +1802,9 @@ class SqlRepository:
             await session.commit()
             return membership
 
-    async def get_org_members(self, org_id: str) -> list[tuple[OrgMembershipORM, UserORM]]:
+    async def get_org_members(
+        self, org_id: str
+    ) -> list[tuple[OrgMembershipORM, UserORM]]:
         """Return list of (membership, user) tuples for org."""
         async with self.session_factory() as session:
             result = await session.execute(
@@ -1570,7 +1821,9 @@ class SqlRepository:
                 out.append((membership, user))
             return out
 
-    async def get_org_membership(self, org_id: str, user_id: str) -> OrgMembershipORM | None:
+    async def get_org_membership(
+        self, org_id: str, user_id: str
+    ) -> OrgMembershipORM | None:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(OrgMembershipORM).where(
@@ -1598,7 +1851,9 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def get_user_orgs(self, user_id: str) -> list[tuple[OrgMembershipORM, OrganizationORM]]:
+    async def get_user_orgs(
+        self, user_id: str
+    ) -> list[tuple[OrgMembershipORM, OrganizationORM]]:
         """Return list of (membership, org) tuples for user."""
         async with self.session_factory() as session:
             result = await session.execute(
@@ -1631,9 +1886,16 @@ class SqlRepository:
                 select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .outerjoin(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .outerjoin(
+                    TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id
+                )
                 .where(ArtifactORM.kind == "model")
-                .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+                .where(
+                    or_(
+                        TrainingJobORM.org_id == org_id,
+                        TrainingJobORM.is_public == True,
+                    )
+                )  # noqa: E712
             )
             if dataset_id is not None:
                 stmt = stmt.where(TrainingJobORM.dataset_id == dataset_id)
@@ -1669,10 +1931,17 @@ class SqlRepository:
                 select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .outerjoin(TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id)
+                .outerjoin(
+                    TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id
+                )
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
-                .where(or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public == True))  # noqa: E712
+                .where(
+                    or_(
+                        TrainingJobORM.org_id == org_id,
+                        TrainingJobORM.is_public == True,
+                    )
+                )  # noqa: E712
             )
             row = (await session.execute(stmt)).first()
             if row is None:
@@ -1709,7 +1978,9 @@ class SqlRepository:
     # Prediction Review Action CRUD
     # ------------------------------------------------------------------
 
-    async def create_review_action(self, action: PredictionReviewAction) -> PredictionReviewAction:
+    async def create_review_action(
+        self, action: PredictionReviewAction
+    ) -> PredictionReviewAction:
         async with self.session_factory() as session:
             session.add(
                 PredictionReviewActionORM(
@@ -1742,7 +2013,9 @@ class SqlRepository:
                 created_at=row.created_at,
             )
 
-    async def list_review_actions(self, dataset_id: str) -> list[PredictionReviewAction]:
+    async def list_review_actions(
+        self, dataset_id: str
+    ) -> list[PredictionReviewAction]:
         async with self.session_factory() as session:
             stmt = (
                 select(PredictionReviewActionORM)
@@ -1777,24 +2050,28 @@ class SqlRepository:
     # Annotation Version CRUD
     # ------------------------------------------------------------------
 
-    async def create_annotation_version(self, version: AnnotationVersion) -> AnnotationVersion:
+    async def create_annotation_version(
+        self, version: AnnotationVersion
+    ) -> AnnotationVersion:
         async with self.session_factory() as session:
             session.add(
-                    AnnotationVersionORM(
-                        id=version.id,
-                        review_action_id=version.review_action_id,
-                        annotation_id=version.annotation_id,
-                        prediction_id=version.prediction_id,
-                        predicted_label=version.predicted_label,
-                        final_label=version.final_label,
-                        confidence=version.confidence,
-                        created_at=version.created_at,
+                AnnotationVersionORM(
+                    id=version.id,
+                    review_action_id=version.review_action_id,
+                    annotation_id=version.annotation_id,
+                    prediction_id=version.prediction_id,
+                    predicted_label=version.predicted_label,
+                    final_label=version.final_label,
+                    confidence=version.confidence,
+                    created_at=version.created_at,
                 )
             )
             await session.commit()
         return version
 
-    async def create_annotation_versions_bulk(self, versions: list[AnnotationVersion]) -> list[AnnotationVersion]:
+    async def create_annotation_versions_bulk(
+        self, versions: list[AnnotationVersion]
+    ) -> list[AnnotationVersion]:
         async with self.session_factory() as session:
             for v in versions:
                 session.add(
@@ -1812,7 +2089,9 @@ class SqlRepository:
             await session.commit()
         return versions
 
-    async def list_annotation_versions(self, review_action_id: str) -> list[AnnotationVersion]:
+    async def list_annotation_versions(
+        self, review_action_id: str
+    ) -> list[AnnotationVersion]:
         async with self.session_factory() as session:
             stmt = (
                 select(AnnotationVersionORM)
@@ -1838,9 +2117,7 @@ class SqlRepository:
     # Agent data queries
     # ------------------------------------------------------------------
 
-    async def get_random_samples(
-        self, dataset_id: str, limit: int = 100
-    ) -> list[dict]:
+    async def get_random_samples(self, dataset_id: str, limit: int = 100) -> list[dict]:
         """Return up to *limit* random samples from a dataset (metadata only)."""
         async with self.session_factory() as session:
             # SQLite uses RANDOM(), Postgres uses RANDOM() too
@@ -1862,9 +2139,7 @@ class SqlRepository:
                 for r in rows
             ]
 
-    async def metadata_histogram(
-        self, dataset_id: str, key: str
-    ) -> dict:
+    async def metadata_histogram(self, dataset_id: str, key: str) -> dict:
         """Return value counts for a single metadata JSON key.
 
         Uses SQLAlchemy ``func.json_extract`` for SQLite and
@@ -1878,9 +2153,9 @@ class SqlRepository:
                 val_col = SampleORM.metadata_json[key].astext.label("val")
             else:
                 # SQLite json_extract
-                val_col = func.json_extract(
-                    SampleORM.metadata_json, f"$.{key}"
-                ).label("val")
+                val_col = func.json_extract(SampleORM.metadata_json, f"$.{key}").label(
+                    "val"
+                )
 
             stmt = (
                 select(val_col, func.count().label("cnt"))
@@ -1897,9 +2172,7 @@ class SqlRepository:
                 "total_non_null": sum(r[1] for r in rows),
             }
 
-    async def recent_annotations(
-        self, dataset_id: str, limit: int = 20
-    ) -> dict:
+    async def recent_annotations(self, dataset_id: str, limit: int = 20) -> dict:
         """Return the most recent annotations for samples in a dataset."""
         async with self.session_factory() as session:
             stmt = (
@@ -1963,9 +2236,7 @@ class SqlRepository:
 
             return {
                 "total_predictions": total,
-                "models": [
-                    {"model_id": r[0], "count": r[1]} for r in model_rows
-                ],
+                "models": [{"model_id": r[0], "count": r[1]} for r in model_rows],
                 "label_distribution": {r[0]: r[1] for r in label_rows},
             }
 
