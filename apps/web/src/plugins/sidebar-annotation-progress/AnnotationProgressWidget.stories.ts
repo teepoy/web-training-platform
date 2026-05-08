@@ -40,12 +40,6 @@ export const NoDrafts: Story = {
   },
 };
 
-export const Compact: Story = {
-  args: {
-    size: "compact",
-  },
-};
-
 export const NoLabels: Story = {
   args: {},
   decorators: [
