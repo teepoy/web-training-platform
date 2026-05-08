@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@platform/plugin-sdk": "workspace:*",
+    "@platform/web-ui": "workspace:*",
     "@tanstack/vue-query": "^5.66.9",
     "@tanstack/vue-table": "^8.21.3",
     "@tanstack/vue-virtual": "^3.13.23",

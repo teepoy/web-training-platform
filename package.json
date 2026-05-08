@@ -9,6 +9,7 @@
     "test:web": "pnpm --filter web test:all",
     "test:plugins": "pnpm --filter web test:plugins",
     "test:plugin-sdk": "pnpm --filter @platform/plugin-sdk test",
+    "test:web-ui": "pnpm --filter @platform/web-ui test",
     "storybook": "pnpm --filter web storybook",
     "build-storybook": "pnpm --filter web build-storybook"
   }
