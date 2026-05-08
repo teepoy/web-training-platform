@@ -27,6 +27,23 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Browser preferences            | `src/stores/sampleBrowser.ts`                                           | Shared browser presentation preferences                                                      |
 | Browser filter                 | `src/composables/useBrowserFilter.ts`                                   | Browser-scope item filter pipeline                                                           |
 | Sidebar config                 | `src/components/classify/sidebarConfig.ts`                              | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels`                            |
+| Datasets shim registry         | `src/views/datasets/registry.ts`                                        | Maps task types to specialized list shims                                                   |
+
+## DATASETS SHIM ARCHITECTURE
+The `DatasetsView.vue` uses a shim-based architecture to render specialized list views based on the task type of the datasets.
+
+| Piece                 | Location                                     | Role                                                                        |
+| --------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
+| Host                  | `src/views/DatasetsView.vue`                 | Thin container; resolves shim via registry; provides data via adapter       |
+| Registry              | `src/views/datasets/registry.ts`             | `DATASET_SHIM_REGISTRY` map and `resolveDatasetShim` logic                  |
+| Adapter               | `src/composables/useDatasetsAdapter.ts`      | Centralizes data normalization, permissions, and common UI props            |
+| Classification Shim   | `src/views/datasets/shims/ClassificationDatasetsShim.vue` | Default list view for classification tasks                                  |
+| VQA Shim              | `src/views/datasets/shims/VqaDatasetsShim.vue` | Specialized list view for VQA tasks                                         |
+
+**How to add a new shim:**
+1. Create `src/views/datasets/shims/<Name>DatasetsShim.vue`.
+2. Register it in `src/views/datasets/registry.ts` under `DATASET_SHIM_REGISTRY`.
+3. Update `resolveDatasetShim` in `registry.ts` to handle the new task type.
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 The classify page (`/datasets/:id/classify`) is the one-stop classification workflow and has a collapsible sidebar that renders dashboard widgets dynamically from a typed config.

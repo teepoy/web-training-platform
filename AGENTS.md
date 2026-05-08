@@ -125,6 +125,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                  | Presentation persistence (layout, thumbSize)                        |
 | Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`          | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                   | Shared browser architecture doc                                     |
+| Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`       | Specialized list view shim architecture                             |
 | Plugin SDK contracts      | `libs/plugin-sdk/src/`                                  | TypeScript plugin type definitions and factories                    |
 | Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                        | Copy-paste starter templates for new plugins                        |
 | Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                                 |
