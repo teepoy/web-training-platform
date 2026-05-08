@@ -16,6 +16,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/web/src/plugins/  # Frontend plugin descriptors (one subdirectory per plugin)
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
 ├── libs/plugin-sdk/    # @platform/plugin-sdk — TypeScript plugin contract types & factories
+├── libs/web-ui/        # @platform/web-ui — shared Vue/Naive UI components and composables
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
 ├── libs/mcp-server/finetune_mcp/plugins/  # MCP tool plugins — auto-discovered by loader.py
@@ -53,6 +54,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Compose dev entrypoint  | `make updev`                                        | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server                               |
 
 | Plugin SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/plugin-sdk/` (20 tests) |
+| Web UI package tests | `pnpm test:web-ui` | vitest in `libs/web-ui/` |
 | Plugin integration tests | `pnpm test:plugins` | vitest for plugin registrations |
 | Build plugin SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/plugin-sdk` |
 | **Storybook** | `pnpm storybook` | Plugin component stories on port 6006 |
@@ -127,6 +129,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Browser architecture      | `docs/architecture/sample-browser.md`                   | Shared browser architecture doc                                     |
 | Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`       | Specialized list view shim architecture                             |
 | Plugin SDK contracts      | `libs/plugin-sdk/src/`                                  | TypeScript plugin type definitions and factories                    |
+| Web UI package            | `libs/web-ui/src/`                                      | Shared Vue/Naive UI components and dataset-list helpers             |
 | Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                        | Copy-paste starter templates for new plugins                        |
 | Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                                 |
 | Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                         | Explicit registration of all plugins before app mount               |
@@ -134,8 +137,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
 | Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
 | Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                       | Preview launcher plugins (e.g. `preview-upstream`)                  |
-| Plugin flow modal         | `apps/web/src/components/PluginFlowModal.vue`           | 2-step modal: select type, then execute component                   |
-| Plugin type selector      | `apps/web/src/components/PluginTypeSelector.vue`        | Card grid for selecting a plugin type                               |
+| Plugin flow modal         | `libs/web-ui/src/components/PluginFlowModal.vue`        | 2-step modal: select type, then execute component                   |
+| Plugin type selector      | `libs/web-ui/src/components/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
 | Backend plugin registry   | `apps/api/app/plugins/registry.py`                      | Explicit list of backend plugin routers                             |
 | Backend plugin routes     | `apps/api/app/plugins/*/router.py`                      | One FastAPI router per backend plugin                               |
 | MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`                  |
@@ -166,13 +169,15 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PreviewClassifyView`  | view       | `apps/web/src/views/PreviewClassifyView.vue`     | Preview workspace with grid + persist flow                  |
 | `pluginRegistry`       | singleton  | `apps/web/src/core/registry.ts`                  | Runtime registry of all frontend plugins                    |
 | `createPluginRegistry` | factory    | `libs/plugin-sdk/src/registry.ts`                | Creates the `PluginRegistry` instance                       |
+| `useDatasetListSurface` | composable | `libs/web-ui/src/datasets/surface.ts`           | Shared dataset list normalization, permissions, and UI props |
+| `buildDatasetColumns`  | function   | `libs/web-ui/src/datasets/surface.ts`           | Shared dataset table column/action factory                  |
 | `defineSidebarPlugin`  | factory    | `libs/plugin-sdk/src/sidebar.ts`                 | Declares a sidebar widget plugin                            |
 | `defineImportPlugin`   | factory    | `libs/plugin-sdk/src/importer.ts`                | Declares an import flow plugin                              |
 | `defineExportPlugin`   | factory    | `libs/plugin-sdk/src/exporter.ts`                | Declares an export flow plugin                              |
 | `defineAgentSkill`     | factory    | `libs/plugin-sdk/src/agent.ts`                   | Declares an agent skill plugin                              |
 | `definePreviewPlugin`  | factory    | `libs/plugin-sdk/src/preview.ts`                 | Declares a preview launcher plugin                          |
-| `PluginFlowModal`      | component  | `apps/web/src/components/PluginFlowModal.vue`    | 2-step modal: select type, then execute component           |
-| `PluginTypeSelector`   | component  | `apps/web/src/components/PluginTypeSelector.vue` | Card grid for selecting a plugin type                       |
+| `PluginFlowModal`      | component  | `libs/web-ui/src/components/PluginFlowModal.vue` | 2-step modal: select type, then execute component           |
+| `PluginTypeSelector`   | component  | `libs/web-ui/src/components/PluginTypeSelector.vue` | Card grid for selecting a plugin type                    |
 | `PLUGIN_ROUTERS`       | list       | `apps/api/app/plugins/registry.py`               | Explicit list of all backend plugin routers                 |
 | `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules        |
 | `providePluginContext` | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`     | Storybook decorator providing sidebar-widget injection keys |

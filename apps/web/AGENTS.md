@@ -36,7 +36,7 @@ The `DatasetsView.vue` uses a shim-based architecture to render specialized list
 | --------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
 | Host                  | `src/views/DatasetsView.vue`                 | Thin container; resolves shim via registry; provides data via adapter       |
 | Registry              | `src/views/datasets/registry.ts`             | `DATASET_SHIM_REGISTRY` map and `resolveDatasetShim` logic                  |
-| Adapter               | `src/composables/useDatasetsAdapter.ts`      | Centralizes data normalization, permissions, and common UI props            |
+| Shared UI package     | `../../libs/web-ui/src/`                     | `@platform/web-ui` components, plugin flow UI, and dataset-list helpers     |
 | Classification Shim   | `src/views/datasets/shims/ClassificationDatasetsShim.vue` | Default list view for classification tasks                                  |
 | VQA Shim              | `src/views/datasets/shims/VqaDatasetsShim.vue` | Specialized list view for VQA tasks                                         |
 

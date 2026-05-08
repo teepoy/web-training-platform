@@ -8,7 +8,7 @@ The architecture consists of four main parts:
 
 1.  **Host (`DatasetsView.vue`)**: A thin container that manages data fetching and determines which specialized "shim" to render.
 2.  **Registry (`registry.ts`)**: A central map that associates task types with their corresponding shim components.
-3.  **Adapter (`useDatasetsAdapter.ts`)**: A composable that centralizes data normalization, permissions, and common UI properties (like table columns and toolbar plugins).
+3.  **Shared UI package (`@platform/web-ui`)**: Reusable Vue/Naive UI components and dataset-list helpers shared across app surfaces.
 4.  **Shims (`shims/*.vue`)**: Specialized components that render the actual UI for a specific task type.
 
 ## How it Works
@@ -17,7 +17,7 @@ The architecture consists of four main parts:
 
 The host component is responsible for:
 - Fetching the list of datasets using Vue Query.
-- Initializing the `useDatasetsAdapter` with the fetched data and event handlers.
+- Initializing `useDatasetListSurface` from `@platform/web-ui` with fetched data, plugin registry results, and event handlers.
 - Determining the `activeTaskType` (currently based on the first dataset in the list).
 - Resolving the `activeShim` component via the registry.
 - Rendering the `DatasetPageShell` and the resolved shim.
@@ -37,17 +37,21 @@ The `resolveDatasetShim` function provides the resolution logic, including fallb
 - If `taskType` is `vqa`, it returns the VQA shim.
 - Otherwise, it falls back to the `classification` shim.
 
-### 3. Adapter: `useDatasetsAdapter.ts`
+### 3. Shared UI Package: `@platform/web-ui`
 
-The adapter provides a unified interface for shims to access:
+The `libs/web-ui` package owns reusable frontend UI and helpers that are not tied to app routing, API clients, stores, or the singleton plugin registry.
+
+The package provides:
 - **Normalized Data**: Datasets with consistent field types.
 - **Permissions**: `isSuperadmin`, `canDelete`, etc.
-- **UI Props**: Pre-configured `columns` for `DatasetTable` and `importerPlugins` for `DatasetToolbar`.
-- **Event Handlers**: Wrapped handlers for viewing, deleting, and toggling public status.
+- **UI Components**: `DatasetPageShell`, `DatasetToolbar`, `DatasetTable`, `DatasetRowActions`, `PluginFlowModal`, and `PluginTypeSelector`.
+- **Dataset Helpers**: `useDatasetListSurface` and `buildDatasetColumns` for shared table/action behavior.
+
+The web app remains responsible for API calls, Vue Query, routing, auth/org stores, and reading registered plugins from `pluginRegistry`.
 
 ### 4. Shims
 
-Shims are the "leaf" components that define the layout. They typically use shared components like `DatasetToolbar` and `DatasetTable`.
+Shims are the "leaf" components that define the layout. They use shared components and helpers from `@platform/web-ui`.
 
 - **`ClassificationDatasetsShim.vue`**: The default view for classification tasks.
 - **`VqaDatasetsShim.vue`**: A specialized view for Visual Question Answering, which can include additional alerts or custom columns.
