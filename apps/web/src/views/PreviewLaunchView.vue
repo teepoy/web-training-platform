@@ -3,8 +3,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { NCard } from 'naive-ui'
+import { PluginTypeSelector, type PluginCard } from '@platform/web-ui'
 import { pluginRegistry } from '../core/registry'
-import PluginTypeSelector, { type PluginCard } from '../components/PluginTypeSelector.vue'
 import type { PreviewLauncherDescriptor } from '@platform/plugin-sdk'
 
 const router = useRouter()

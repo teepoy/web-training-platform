@@ -293,6 +293,7 @@ import { ref, computed, h, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
+import { PluginFlowModal, type PluginCard } from "@platform/web-ui";
 import { api, queryWaferPoints } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
@@ -311,8 +312,6 @@ import {
 } from "../components/classify/widgetContract";
 import type { ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import { pluginRegistry } from "../core/registry";
-import PluginFlowModal from "../components/PluginFlowModal.vue";
-import type { PluginCard } from "../components/PluginTypeSelector.vue";
 
 // ---------------------------------------------------------------------------
 // Route / Router
