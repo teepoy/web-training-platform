@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
-import DataTableWidget from "./DataTableWidget.vue";
+import { DataTableWidget } from "@platform/web-ui";
 import { providePluginContext } from "../../../.storybook/mocks/pluginContext";
 
 const meta = {
