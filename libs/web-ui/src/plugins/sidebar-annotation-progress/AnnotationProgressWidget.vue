@@ -22,7 +22,7 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
-import type { ClassifyDashboardContext } from '../../composables/useClassifyDashboard'
+import type { ClassifyDashboardContext } from "../../types/sidebar-widgets";
 
 use([CanvasRenderer, GridComponent, LegendComponent, PieChart, BarChart, TooltipComponent])
 
