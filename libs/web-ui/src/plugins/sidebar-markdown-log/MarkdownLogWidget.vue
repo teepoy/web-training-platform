@@ -9,7 +9,7 @@
 -->
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
-import type { MarkdownLogEntry } from '../../types'
+import type { MarkdownLogEntry } from "../../types/sidebar-widgets";
 
 const props = defineProps<{
   data?: Record<string, unknown> | null
