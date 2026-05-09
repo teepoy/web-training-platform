@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
-import InteractiveScatterWidget from "./InteractiveScatterWidget.vue";
+import { InteractiveScatterWidget } from "@platform/web-ui";
 import { providePluginContext } from "../../../.storybook/mocks/pluginContext";
 
 const meta = {
