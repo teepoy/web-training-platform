@@ -13,8 +13,8 @@
  *   props in its own plugin directory.
  *
  * Extending:
- *   1. Create a new plugin directory under `src/plugins/sidebar-{name}/`.
- *   2. Export a descriptor from that plugin's `index.ts`.
+ *   1. Create reusable widgets under `libs/web-ui/src/plugins/sidebar-{name}/`.
+ *   2. Export a descriptor from that plugin's `index.ts` and `@platform/web-ui`.
  *   3. Register the descriptor in `src/plugins/index.ts`.
  *   4. Add a descriptor entry to the desired panel preset below.
  */

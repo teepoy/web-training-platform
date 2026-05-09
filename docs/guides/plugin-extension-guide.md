@@ -4,7 +4,8 @@ This document describes the current extension model for the web app and API.
 
 ## Frontend plugin layout
 
-- Sidebar widgets: `apps/web/src/plugins/sidebar-*/index.ts`
+- Reusable first-party sidebar widgets: `libs/web-ui/src/plugins/sidebar-*/index.ts`
+- App-specific sidebar widgets: `apps/web/src/plugins/sidebar-*/index.ts`
 - Importers: `apps/web/src/plugins/import-*/index.ts`
 - Exporters: `apps/web/src/plugins/export-*/index.ts`
 - Preview launchers: `apps/web/src/plugins/preview-*/index.ts`
@@ -24,6 +25,7 @@ Plugins do **not** self-register via side effects — they export descriptors,
 and the barrel file calls `pluginRegistry.register*()` explicitly.
 
 SDK package: `libs/plugin-sdk/`.
+Shared UI and first-party sidebar widgets package: `libs/web-ui/`.
 
 ## Sidebar widgets
 
@@ -33,14 +35,15 @@ Sidebar panel descriptors in `apps/web/src/components/classify/sidebarConfig.ts`
 
 To add a widget:
 
-1. Create `apps/web/src/plugins/sidebar-my-widget/index.ts`
-2. Export a named descriptor via `defineSidebarPlugin({...})`
-3. Import and register it in `apps/web/src/plugins/index.ts`:
+1. Create `libs/web-ui/src/plugins/sidebar-my-widget/index.ts` for reusable widgets, or `apps/web/src/plugins/sidebar-my-widget/index.ts` for app-specific widgets.
+2. Export a named descriptor via `defineSidebarPlugin({...})`.
+3. For reusable widgets, export the descriptor from `libs/web-ui/src/index.ts`.
+4. Import and register it in `apps/web/src/plugins/index.ts`:
    ```ts
-   import { myWidgetPlugin } from "./sidebar-my-widget";
+   import { myWidgetPlugin } from "@platform/web-ui";
    pluginRegistry.registerSidebarWidget(myWidgetPlugin);
    ```
-4. Add panel entry in one of:
+5. Add panel entry in one of:
    - `defaultPanels`
    - `datasetPanels`
    - `previewPanels`

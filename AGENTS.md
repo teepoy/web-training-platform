@@ -133,7 +133,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                        | Copy-paste starter templates for new plugins                        |
 | Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                                 |
 | Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                         | Explicit registration of all plugins before app mount               |
-| Frontend sidebar plugins  | `apps/web/src/plugins/sidebar-*/`                       | One directory per sidebar widget plugin                             |
+| Shared sidebar plugins    | `libs/web-ui/src/plugins/sidebar-*/`                    | First-party sidebar widget plugin descriptors and components         |
 | Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
 | Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
 | Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                       | Preview launcher plugins (e.g. `preview-upstream`)                  |
@@ -232,7 +232,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 - Plugin SDK (`@platform/plugin-sdk`) is a workspace TypeScript package in `libs/plugin-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/plugin-sdk → ../../libs/plugin-sdk/src/index.ts`) and built with `tsup`.
-- To add a new sidebar widget: create `apps/web/src/plugins/sidebar-<name>/index.ts`, export a named descriptor via `defineSidebarPlugin({...})`, then import and register it in `apps/web/src/plugins/index.ts`. See `docs/guides/plugin-extension-guide.md`.
+- To add a reusable first-party sidebar widget: create `libs/web-ui/src/plugins/sidebar-<name>/index.ts`, export a named descriptor via `defineSidebarPlugin({...})`, export it from `libs/web-ui/src/index.ts`, then import and register it in `apps/web/src/plugins/index.ts`. App-specific sidebar widgets can still live under `apps/web/src/plugins/sidebar-<name>/`. See `docs/guides/plugin-extension-guide.md`.
 - To add a new importer: create `apps/web/src/plugins/import-<name>/index.ts`, export a named descriptor via `defineImportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Importers use `PluginFlowModal` with `kind="import"` for a 2-step type-selection flow.
 - To add a new exporter: create `apps/web/src/plugins/export-<name>/index.ts`, export a named descriptor via `defineExportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Exporters use `PluginFlowModal` with `kind="export"`.
 - To add a new preview launcher: create `apps/web/src/plugins/preview-<name>/index.ts`, export a named descriptor via `definePreviewPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Preview launchers use `PluginTypeSelector` for a 2-step flow.

@@ -26,7 +26,9 @@ The sidebar is data-agnostic. It receives two things from the owning view:
 
 ## Step 1 — Create the Widget Component
 
-Create `apps/web/src/plugins/sidebar-my-widget/MyWidget.vue`.
+Create reusable first-party widgets in `libs/web-ui/src/plugins/sidebar-my-widget/MyWidget.vue`.
+
+Create app-specific widgets in `apps/web/src/plugins/sidebar-my-widget/MyWidget.vue` only when they need app-local API clients, stores, or routes.
 
 ### Minimal template
 
@@ -109,7 +111,7 @@ function handleClick(id: string) {
 
 ## Step 2 — Export and Register the Plugin Descriptor
 
-Create `apps/web/src/plugins/sidebar-my-widget/index.ts`:
+Create `libs/web-ui/src/plugins/sidebar-my-widget/index.ts` for reusable widgets:
 
 ```ts
 import { defineAsyncComponent } from 'vue'
@@ -138,10 +140,10 @@ export const myWidgetPlugin = defineSidebarPlugin({
 })
 ```
 
-Then import and register the descriptor in `apps/web/src/plugins/index.ts`:
+Export reusable descriptors from `libs/web-ui/src/index.ts`, then import and register the descriptor in `apps/web/src/plugins/index.ts`:
 
 ```ts
-import { myWidgetPlugin } from './sidebar-my-widget'
+import { myWidgetPlugin } from '@platform/web-ui'
 
 pluginRegistry.registerSidebarWidget(myWidgetPlugin)
 ```

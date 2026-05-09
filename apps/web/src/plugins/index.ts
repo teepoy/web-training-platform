@@ -6,17 +6,19 @@
 
 import { pluginRegistry } from "../core/registry";
 
-import { annotationProgressPlugin } from "./sidebar-annotation-progress";
-import { labelDistributionPlugin } from "./sidebar-label-distribution";
-import { echartsGenericPlugin } from "./sidebar-echarts-generic";
-import { markdownLogPlugin } from "./sidebar-markdown-log";
-import { dataTablePlugin } from "./sidebar-data-table";
-import { metricCardsPlugin } from "./sidebar-metric-cards";
-import { sampleViewerPlugin } from "./sidebar-sample-viewer";
-import { predictionSummaryPlugin } from "./sidebar-prediction-summary";
-import { waferMapPlugin } from "./sidebar-wafer-map";
-import { interactiveScatterPlugin } from "./sidebar-interactive-scatter";
-import { browserSummaryPlugin } from "./sidebar-browser-summary";
+import {
+  annotationProgressPlugin,
+  browserSummaryPlugin,
+  dataTablePlugin,
+  echartsGenericPlugin,
+  interactiveScatterPlugin,
+  labelDistributionPlugin,
+  markdownLogPlugin,
+  metricCardsPlugin,
+  predictionSummaryPlugin,
+  sampleViewerPlugin,
+  waferMapPlugin,
+} from "@platform/web-ui";
 
 import { manualImportPlugin } from "./import-manual";
 import { importDatasetManualPlugin } from "./import-dataset-manual";
