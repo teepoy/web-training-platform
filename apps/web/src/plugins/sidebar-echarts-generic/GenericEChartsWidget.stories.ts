@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
-import GenericEChartsWidget from "./GenericEChartsWidget.vue";
+import { GenericEChartsWidget } from "@platform/web-ui";
 import { providePluginContext } from "../../../.storybook/mocks/pluginContext";
 
 const meta = {
