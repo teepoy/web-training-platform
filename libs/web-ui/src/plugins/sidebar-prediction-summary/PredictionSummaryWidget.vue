@@ -9,7 +9,7 @@
 -->
 <script setup lang="ts">
 import { inject, computed, type Ref } from 'vue'
-import type { AnnotationGridItem } from '../../types'
+import type { AnnotationGridItem } from "../../types/sidebar-widgets";
 
 const gridItems = inject<Ref<AnnotationGridItem[]>>('pr-grid-items')
 

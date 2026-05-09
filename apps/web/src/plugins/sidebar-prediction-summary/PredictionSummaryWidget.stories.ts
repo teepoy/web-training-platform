@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import { provide, computed } from "vue";
-import PredictionSummaryWidget from "./PredictionSummaryWidget.vue";
+import { PredictionSummaryWidget } from "@platform/web-ui";
 import { providePluginContext } from "../../../.storybook/mocks/pluginContext";
 
 const withPredictionItems: typeof meta.decorators[number] = (story) => ({
