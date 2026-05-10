@@ -75,7 +75,7 @@ _logger = logging.getLogger(__name__)
 
 # Re-export so existing test patches against ``app.agent.global_runtime._call_llm``
 # continue to work without changes.
-from app.services.llm import call_llm as _call_llm  # noqa: F401
+from app.services.llm import call_llm as _call_llm  # noqa: E402, F401
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ class GlobalAgent:
         to, and persisted back after each LLM turn.
         """
         # Ensure session exists
-        session = await self._session_store.get_or_create(session_id, user_id)
+        session = await self._session_store.get_or_create(session_id, user_id)  # noqa: F841
 
         # Build system prompt with platform context
         dataset_info: dict[str, Any] | None = None

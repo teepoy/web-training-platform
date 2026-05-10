@@ -95,7 +95,7 @@ class SqlRepository:
             stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
             if org_id is not None:
                 stmt = stmt.where(
-                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public == True)
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
                 )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
             return [
@@ -513,7 +513,7 @@ class SqlRepository:
         Returns a dict with keys: total_samples, annotated_samples,
         unlabeled_samples, label_counts.
         """
-        from sqlalchemy import alias, and_, case
+        from sqlalchemy import alias, and_
 
         async with self.session_factory() as session:
             # Subquery: latest annotation per sample (max created_at)
@@ -812,7 +812,7 @@ class SqlRepository:
                 stmt = stmt.where(
                     or_(
                         TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public == True,
+                        TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
@@ -1610,7 +1610,7 @@ class SqlRepository:
                 stmt = stmt.where(
                     or_(
                         TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public == True,
+                        TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
@@ -1893,7 +1893,7 @@ class SqlRepository:
                 .where(
                     or_(
                         TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public == True,
+                        TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
             )
@@ -1939,7 +1939,7 @@ class SqlRepository:
                 .where(
                     or_(
                         TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public == True,
+                        TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
             )

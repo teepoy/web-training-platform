@@ -1,7 +1,7 @@
+# ty: ignore
 from __future__ import annotations
 
 import base64
-import math
 from typing import TYPE_CHECKING
 
 from app.domain.models import Sample

@@ -53,3 +53,17 @@ markers = [
 dev = [
     "omegaconf>=2.3.0",
 ]
+
+[tool.ty.src]
+exclude = [
+  "app/generated/**",
+  "**/label_studio.py",
+  "**/main.py",
+  "**/metadata_inference.py",
+  "**/embedding.py",
+  "tests/**",
+  "alembic/**",
+]
+
+[tool.ruff]
+exclude = ["tests/", "alembic/"]

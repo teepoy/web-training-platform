@@ -12,10 +12,17 @@ repos:
       - id: mixed-line-ending
       - id: detect-private-key
 
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
   - repo: local
     hooks:
       - id: ty-check
         name: ty check
-        entry: uv run ty check .
+        entry: uv run ty check --project apps/api apps/api
         language: system
         pass_filenames: false

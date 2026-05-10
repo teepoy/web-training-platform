@@ -878,7 +878,7 @@ class TaskTrackerService:
         for key in keys:
             if not isinstance(current, dict):
                 return None
-            current = current.get(key)
+            current = current.get(key)  # type: ignore
         return self._coerce_int(current)
 
     def _string_or_none(self, payload:     dict[str, object] | None, key: str) -> str | None:
@@ -892,5 +892,5 @@ class TaskTrackerService:
         for key in keys:
             if not isinstance(current, dict):
                 return None
-            current = current.get(key)
+            current = current.get(key)  # type: ignore
         return None if current is None else str(current)

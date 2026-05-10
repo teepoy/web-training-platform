@@ -198,12 +198,12 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
     if not isinstance(compatibility, dict):
         raise ValueError("upload compatibility metadata is required")
 
-    dataset_types = _as_str_list(compatibility.get("dataset_types"))
-    task_types = _as_str_list(compatibility.get("task_types"))
-    prediction_targets = _as_str_list(compatibility.get("prediction_targets"))
-    label_space = _as_str_list(compatibility.get("label_space"))
-    embedding_dimension = compatibility.get("embedding_dimension")
-    normalized_output = compatibility.get("normalized_output")
+    dataset_types = _as_str_list(compatibility.get("dataset_types"))  # type: ignore
+    task_types = _as_str_list(compatibility.get("task_types"))  # type: ignore
+    prediction_targets = _as_str_list(compatibility.get("prediction_targets"))  # type: ignore
+    label_space = _as_str_list(compatibility.get("label_space"))  # type: ignore
+    embedding_dimension = compatibility.get("embedding_dimension")  # type: ignore
+    normalized_output = compatibility.get("normalized_output")  # type: ignore
 
     if not dataset_types:
         dataset_types = list(template.dataset_types)

@@ -5,7 +5,6 @@ import base64
 from contextlib import asynccontextmanager
 import json
 import logging
-from pathlib import Path
 from typing import cast
 
 import httpx
@@ -24,9 +23,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
-    AgentPanelDescriptor,
     AnnotationVersionResponse,
-    BatchPredictionResponse,
     BulkAnnotationRequest,
     BulkCreateSampleRequest,
     BulkCreateSampleResponse,
@@ -47,7 +44,6 @@ from app.api.schemas import (
     ExportFormatResponse,
     ImportVqaJsonlResponse,
     JobQueueStats,
-    LatestAnnotation,
     LoginRequest,
     LoginResponse,
     MemberResponse,
@@ -86,7 +82,6 @@ from app.api.schemas import (
     UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
     UpdateScheduleRequest,
-    UploadModelRequest,
     UploadTemplateProfileResponse,
     UserResponse,
     UserWithOrgsResponse,
@@ -109,11 +104,8 @@ from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.plugins.registry import PLUGIN_ROUTERS
 from app.db.models import (
-    DatasetORM,
     OrgMembershipORM,
     OrganizationORM,
-    PersonalAccessTokenORM,
-    TrainingJobORM,
     UserORM,
 )
 from app.db.session import init_db
@@ -2926,7 +2918,7 @@ async def agent_chat(
             elif isinstance(event, AgentSidebarUpdate):
                 yield f"event: sidebar-update\ndata: {json.dumps({'surface_id': event.surface_id, 'panels': event.panels})}\n\n"
             elif isinstance(event, AgentDone):
-                yield f"event: done\ndata: {{}}\n\n"
+                yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -3015,7 +3007,7 @@ async def global_agent_chat(
             elif isinstance(event, AgentSidebarUpdate):
                 yield f"event: sidebar-update\ndata: {json.dumps({'surface_id': event.surface_id, 'panels': event.panels})}\n\n"
             elif isinstance(event, AgentDone):
-                yield f"event: done\ndata: {{}}\n\n"
+                yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

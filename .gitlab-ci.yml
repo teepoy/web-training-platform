@@ -1,0 +1,38 @@
+stages:
+  - check
+  - test
+
+variables:
+  UV_CACHE_DIR: .uv-cache
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .venv/
+    - .uv-cache/
+
+.default:
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  before_script:
+    - uv sync --frozen
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+ruff:
+  extends: .default
+  stage: check
+  script:
+    - uv run ruff check apps/api/
+
+ty-check:
+  extends: .default
+  stage: check
+  script:
+    - uv run ty check --project apps/api apps/api
+
+api-tests:
+  extends: .default
+  stage: test
+  script:
+    - uv run pytest apps/api/tests/

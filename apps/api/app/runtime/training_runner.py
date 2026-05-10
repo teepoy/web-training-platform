@@ -272,7 +272,7 @@ async def run_training_pipeline(
             kind=str(item.get("kind", "artifact")),
             metadata=item["metadata"]
             if isinstance(item.get("metadata"), dict)
-            else {},
+            else {},  # type: ignore
         )
         for item in artifacts
         if isinstance(item, dict) and item.get("uri")

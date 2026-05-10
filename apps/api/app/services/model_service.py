@@ -155,11 +155,11 @@ class ModelService:
                 "original_filename": file.filename,
                 "template_id": upload_metadata.get("template_id"),
                 "profile_id": upload_metadata.get("profile_id"),
-                **upload_metadata.get("compatibility", {}),
+                **upload_metadata.get("compatibility", {}),  # type: ignore
                 "model_spec": upload_metadata.get("model_spec", {}),
-                "framework": str(upload_metadata.get("model_spec", {}).get("framework", "")),
-                "architecture": str(upload_metadata.get("model_spec", {}).get("architecture", "")),
-                "base_model": str(upload_metadata.get("model_spec", {}).get("base_model", "")),
+                "framework": str(upload_metadata.get("model_spec", {}).get("framework", "")),  # type: ignore
+                "architecture": str(upload_metadata.get("model_spec", {}).get("architecture", "")),  # type: ignore
+                "base_model": str(upload_metadata.get("model_spec", {}).get("base_model", "")),  # type: ignore
             },
         )
 

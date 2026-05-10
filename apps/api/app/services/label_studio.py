@@ -46,7 +46,7 @@ class LabelStudioNotFoundError(LabelStudioError):
 # ---------------------------------------------------------------------------
 
 
-def _to_dict(obj: Any) -> dict:
+def _to_dict(obj: BaseModel | dict[str, object]) -> dict[str, object]:
     """Convert a label-studio-sdk Pydantic model to a plain dict.
 
     The SDK returns Pydantic v2 model instances.  We normalise them to plain
@@ -110,7 +110,7 @@ class LabelStudioClient:
     # Projects
     # ------------------------------------------------------------------
 
-    async def create_project(self, name: str, label_config: str) -> dict:
+    async def create_project(self, name: str, label_config: str) -> dict[str, object]:
         """Create a new Label Studio project.
 
         Parameters
@@ -135,7 +135,7 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def get_project(self, project_id: int) -> dict:
+    async def get_project(self, project_id: int) -> dict[str, object]:
         """Fetch a single project by ID.
 
         Parameters
@@ -154,7 +154,7 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def list_projects(self) -> list[dict]:
+    async def list_projects(self) -> list[dict[str, object]]:
         """List all projects accessible to the authenticated user.
 
         Returns
@@ -170,7 +170,7 @@ class LabelStudioClient:
 
     async def update_project(
         self, project_id: int, *, label_config: str | None = None
-    ) -> dict:
+    ) -> dict[str, object]:
         """Update a Label Studio project.
 
         Parameters
@@ -186,7 +186,7 @@ class LabelStudioClient:
             Updated project object.
         """
         try:
-            kwargs: dict[str, Any] = {}
+            kwargs: dict[str, object] = {}
             if label_config is not None:
                 kwargs["label_config"] = label_config
             result = await asyncio.to_thread(
@@ -209,7 +209,7 @@ class LabelStudioClient:
     # Tasks
     # ------------------------------------------------------------------
 
-    async def create_task(self, project_id: int, data: dict) -> dict:
+    async def create_task(self, project_id: int, data: dict[str, object]) -> dict[str, object]:
         """Create a single task in a project.
 
         Parameters
@@ -235,8 +235,8 @@ class LabelStudioClient:
             raise _wrap_sdk_error(exc) from exc
 
     async def import_tasks(
-        self, project_id: int, tasks: list[dict], return_task_ids: bool = True
-    ) -> dict:
+        self, project_id: int, tasks: list[dict[str, object]], return_task_ids: bool = True
+    ) -> dict[str, object]:
         """Bulk import tasks into a project.
 
         Parameters
@@ -260,7 +260,7 @@ class LabelStudioClient:
 
     async def list_tasks(
         self, project_id: int, page: int = 1, page_size: int = 50
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, object]], int]:
         """List tasks for a project with pagination.
 
         Parameters
@@ -304,7 +304,7 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def get_task(self, task_id: int) -> dict:
+    async def get_task(self, task_id: int) -> dict[str, object]:
         """Fetch a single task by ID.
 
         Parameters
@@ -327,7 +327,7 @@ class LabelStudioClient:
     # Annotations
     # ------------------------------------------------------------------
 
-    async def create_annotation(self, task_id: int, result: list[dict]) -> dict:
+    async def create_annotation(self, task_id: int, result: list[dict[str, object]]) -> dict[str, object]:
         """Create an annotation on a task.
 
         Parameters
@@ -352,7 +352,7 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def list_annotations(self, task_id: int) -> list[dict]:
+    async def list_annotations(self, task_id: int) -> list[dict[str, object]]:
         """List all annotations for a task.
 
         Parameters
@@ -380,10 +380,10 @@ class LabelStudioClient:
     async def create_prediction(
         self,
         task_id: int,
-        result: list[dict],
+        result: list[dict[str, object]],
         model_version: str | None = None,
         score: float | None = None,
-    ) -> dict:
+    ) -> dict[str, object]:
         """Create a prediction for a task.
 
         Parameters
@@ -403,7 +403,7 @@ class LabelStudioClient:
             Created prediction object.
         """
         try:
-            kwargs: dict[str, Any] = {
+            kwargs: dict[str, object] = {
                 "task": task_id,
                 "result": result,
             }
@@ -420,7 +420,7 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
-    async def list_predictions(self, task_id: int) -> list[dict]:
+    async def list_predictions(self, task_id: int) -> list[dict[str, object]]:
         """List all predictions for a task.
 
         Parameters
@@ -458,7 +458,7 @@ class LabelStudioClient:
     # Export
     # ------------------------------------------------------------------
 
-    async def export_project(self, project_id: int) -> list[dict]:
+    async def export_project(self, project_id: int) -> list[dict[str, object]]:
         """Export all tasks with their annotations from a project.
 
         Parameters
@@ -533,8 +533,8 @@ class LabelStudioClient:
 
 
 def platform_annotation_to_ls(
-    label: str, label_config_info: dict | None = None
-) -> list[dict]:
+    label: str, label_config_info: dict[str, object] | None = None
+) -> list[dict[str, object]]:
     """Convert a platform label string to a Label Studio annotation result.
 
     Parameters
@@ -559,7 +559,7 @@ def platform_annotation_to_ls(
     ]
 
 
-def ls_annotation_to_platform(result: list[dict]) -> str:
+def ls_annotation_to_platform(result: list[dict[str, Any]]) -> str:
     """Extract the first choice label from a Label Studio annotation result.
 
     Parameters
@@ -583,7 +583,7 @@ def ls_annotation_to_platform(result: list[dict]) -> str:
 def platform_prediction_to_ls(
     label: str,
     score: float | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Convert a prediction label to Label Studio prediction result format.
 
     Parameters
@@ -608,7 +608,7 @@ def platform_prediction_to_ls(
     ]
 
 
-def platform_text_prediction_to_ls(text: str) -> list[dict]:
+def platform_text_prediction_to_ls(text: str) -> list[dict[str, Any]]:
     """Convert generated text to Label Studio textarea prediction format."""
     return [
         {
@@ -620,7 +620,7 @@ def platform_text_prediction_to_ls(text: str) -> list[dict]:
     ]
 
 
-def ls_prediction_to_platform(prediction: dict) -> tuple[str, float | None]:
+def ls_prediction_to_platform(prediction: dict[str, Any]) -> tuple[str, float | None]:
     """Extract label and score from a Label Studio prediction.
 
     Parameters

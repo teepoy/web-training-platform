@@ -29,7 +29,6 @@ from app.domain.models import (
     PredictionCollectionItem,
     PredictionReviewAction,
 )
-from app.domain.types import TaskType
 from app.presets.registry import PresetRegistry
 from app.presets.runtime import (
     DatasetRef,

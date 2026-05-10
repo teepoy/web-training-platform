@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from litellm.types.llms.openai import AllMessageValues, ChatCompletionToolMessage
 
-from app.agent.assembler import assemble_prompt
 from app.agent.surface_store import SurfaceStore
 from app.agent.tools import (
     TOOL_DEFINITIONS,
@@ -71,7 +70,7 @@ AgentEvent = AgentMessage | AgentAction | AgentSidebarUpdate | AgentDone
 
 # Re-export so existing test patches against ``app.agent.runtime._call_llm``
 # continue to work without changes.
-from app.services.llm import call_llm as _call_llm  # noqa: F401
+from app.services.llm import call_llm as _call_llm  # noqa: E402, F401
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +130,7 @@ class ClassifyAgent:
 
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
-            finish_reason = choice.get("finish_reason", "")
+            finish_reason = choice.get("finish_reason", "")  # noqa: F841
 
             # Append the assistant message to history
             self._messages.append(message)

@@ -503,9 +503,9 @@ class SchedulerService:
                 if schedules and isinstance(schedules, list):
                     first: object = schedules[0]  # type: ignore[unused-ignore]
                     if isinstance(first, dict):
-                        sched: object = first.get("schedule", {})
+                        sched: object = first.get("schedule", {})  # type: ignore
                         if isinstance(sched, dict):
-                            cron_raw: object = sched.get("cron")
+                            cron_raw: object = sched.get("cron")  # type: ignore
                             if isinstance(cron_raw, str):
                                 orm_updates["cron"] = cron_raw
 

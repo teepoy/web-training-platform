@@ -10,7 +10,7 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from app.api.schemas import AgentPanelDescriptor, SurfaceLayout, SurfaceStateDocument
+from app.api.schemas import AgentPanelDescriptor, SurfaceStateDocument
 
 
 class SurfaceStore:
