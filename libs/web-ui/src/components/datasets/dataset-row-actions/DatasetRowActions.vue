@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NButton } from "naive-ui";
 
-import type { DatasetListItem } from "../../datasets/types";
+import type { DatasetListItem } from "../../../datasets/types";
 
 const props = defineProps<{
   row: DatasetListItem;

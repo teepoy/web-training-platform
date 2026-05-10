@@ -1,11 +1,20 @@
-export { default as PluginFlowModal } from "./components/PluginFlowModal.vue";
-export { default as PluginTypeSelector } from "./components/PluginTypeSelector.vue";
+export { default as PluginFlowModal } from "./components/plugin-flow-modal";
+export { default as PluginTypeSelector } from "./components/plugin-type-selector";
 export type { PluginCard, PluginKind } from "./plugin-flow";
 
-export { default as DatasetPageShell } from "./components/datasets/DatasetPageShell.vue";
-export { default as DatasetRowActions } from "./components/datasets/DatasetRowActions.vue";
-export { default as DatasetTable } from "./components/datasets/DatasetTable.vue";
-export { default as DatasetToolbar } from "./components/datasets/DatasetToolbar.vue";
+export { default as DatasetPageShell } from "./components/datasets/dataset-page-shell";
+export { default as DatasetRowActions } from "./components/datasets/dataset-row-actions";
+export { default as DatasetTable } from "./components/datasets/dataset-table";
+export { default as DatasetToolbar } from "./components/datasets/dataset-toolbar";
+export { default as AgentChatDrawer } from "./components/agent-chat-drawer";
+export { default as AnnotationGrid } from "./components/annotation-grid";
+export { default as BrowserSidebar } from "./components/browser-sidebar";
+export { default as PreviewItemDrawer } from "./components/preview-item-drawer";
+export { default as SampleBrowser } from "./components/sample-browser";
+export { default as TrainingChart } from "./components/training-chart";
+export { default as WidgetErrorBoundary } from "./components/widget-error-boundary";
+export { handleBrowserActivation } from "./utils/browser-activation";
+export type { ActivationCallbacks, ActivationEvent, ActivationMode } from "./utils/browser-activation";
 
 export type {
   DatasetListItem,
@@ -47,6 +56,17 @@ export { default as WaferMapWidget } from "./plugins/sidebar-wafer-map/WaferMapW
 
 export type {
   AnnotationGridItem,
+  AgentChatStatus,
+  BrowserItem,
+  ChatEntry,
+  PreviewItem,
+  RunLog,
+  SidebarPanelDescriptor,
+  TrainingEvent,
+} from "./types/components";
+
+export type {
+  AnnotationGridItem as SidebarAnnotationGridItem,
   ClassifyDashboardContext,
   ClassifyDashboardStats,
   MarkdownLogEntry,

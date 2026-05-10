@@ -1,7 +1,7 @@
 import { computed, h, unref } from "vue";
 import { NTag, type DataTableColumns } from "naive-ui";
 
-import DatasetRowActions from "../components/datasets/DatasetRowActions.vue";
+import DatasetRowActions from "../components/datasets/dataset-row-actions/DatasetRowActions.vue";
 import type {
   BuildDatasetColumnsOptions,
   DatasetListItem,

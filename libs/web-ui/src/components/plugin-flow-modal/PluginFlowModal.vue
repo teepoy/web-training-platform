@@ -2,8 +2,8 @@
 import { computed, ref, watch } from "vue";
 import { NButton, NModal, NSpace } from "naive-ui";
 
-import PluginTypeSelector from "./PluginTypeSelector.vue";
-import type { PluginCard, PluginKind } from "../plugin-flow";
+import PluginTypeSelector from "../plugin-type-selector/PluginTypeSelector.vue";
+import type { PluginCard, PluginKind } from "../../plugin-flow";
 
 const props = defineProps<{
   show: boolean;

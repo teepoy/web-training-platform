@@ -2,8 +2,8 @@
 import { ref } from "vue";
 import { NButton, NH2, NSpace } from "naive-ui";
 
-import PluginFlowModal from "../PluginFlowModal.vue";
-import type { PluginCard } from "../../plugin-flow";
+import PluginFlowModal from "../../plugin-flow-modal/PluginFlowModal.vue";
+import type { PluginCard } from "../../../plugin-flow";
 
 const props = withDefaults(
   defineProps<{

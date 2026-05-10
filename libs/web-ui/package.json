@@ -11,6 +11,8 @@
   },
   "peerDependencies": {
     "@platform/plugin-sdk": "workspace:*",
+    "@storybook/vue3": "8.6.18",
+    "@tanstack/vue-virtual": "^3.13.23",
     "echarts": "^6.0.0",
     "kdbush": "^4.0.2",
     "naive-ui": "^2.44.1",
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "@platform/plugin-sdk": "workspace:*",
+    "@tanstack/vue-virtual": "^3.13.23",
     "@vitejs/plugin-vue": "^5.2.1",
     "echarts": "^6.0.0",
     "kdbush": "^4.0.2",

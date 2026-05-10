@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NCard, NSpace, NText } from "naive-ui";
 
-import type { PluginCard } from "../plugin-flow";
+import type { PluginCard } from "../../plugin-flow";
 
 defineProps<{
   plugins: PluginCard[];

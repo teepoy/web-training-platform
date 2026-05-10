@@ -11,7 +11,7 @@
 <script setup lang="ts" generic="TDataset extends DatasetListItem">
 import type { DataTableColumns } from "naive-ui";
 
-import type { DatasetListItem } from "../../datasets/types";
+import type { DatasetListItem } from "../../../datasets/types";
 
 const props = defineProps<{
   datasets: TDataset[];
