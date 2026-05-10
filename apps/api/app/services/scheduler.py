@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _repository = None
-_local_schedule_runs: dict[str, list[dict[str, Any]]] = {}
+_local_schedule_runs: dict[str, list[    dict[str, object]]] = {}
 
 
 def _get_repository():
@@ -76,7 +76,7 @@ def _get_repository():
     return _repository
 
 
-def _orm_to_dict(row: ScheduleORM) -> dict[str, Any]:
+def _orm_to_dict(row: ScheduleORM) ->     dict[str, object]:
     """Convert a :class:`ScheduleORM` instance to a response-compatible dict."""
     return {
         "id": row.id,
@@ -101,7 +101,7 @@ def _orm_to_dict(row: ScheduleORM) -> dict[str, Any]:
     }
 
 
-def _local_run_dict(schedule: ScheduleORM, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+def _local_run_dict(schedule: ScheduleORM, parameters:     dict[str, object] | None = None) ->     dict[str, object]:
     started_at = datetime.now(timezone.utc).isoformat()
     return {
         "id": str(uuid4()),
@@ -117,7 +117,7 @@ def _local_run_dict(schedule: ScheduleORM, parameters: dict[str, Any] | None = N
     }
 
 
-def _store_local_run(schedule_id: str, run: dict[str, Any], limit: int = 20) -> None:
+def _store_local_run(schedule_id: str, run:     dict[str, object], limit: int = 20) -> None:
     runs = _local_schedule_runs.setdefault(schedule_id, [])
     runs.insert(0, run)
     del runs[limit:]
@@ -297,7 +297,7 @@ class SchedulerService:
         except HTTPException:
             return ""
 
-    async def _enrich_deployment(self, raw: dict[str, Any]) -> dict[str, Any]:
+    async def _enrich_deployment(self, raw:     dict[str, object]) ->     dict[str, object]:
         """Add ``flow_name`` to a Prefect deployment dict.
 
         Prefect 3.x deployments only carry ``flow_id``.  This helper
@@ -305,7 +305,7 @@ class SchedulerService:
         include it.
         """
         flow_id = raw.get("flow_id", "")
-        if flow_id:
+        if isinstance(flow_id, str) and flow_id:
             raw["flow_name"] = await self._resolve_flow_name(flow_id)
         return raw
 
@@ -320,9 +320,9 @@ class SchedulerService:
         name: str,
         flow_name: str,
         cron: str,
-        parameters: dict[str, Any] | None = None,
+        parameters:     dict[str, object] | None = None,
         description: str = "",
-    ) -> dict[str, Any]:
+    ) ->     dict[str, object]:
         """Create a Prefect deployment with a cron schedule and persist locally.
 
         Parameters
@@ -352,7 +352,7 @@ class SchedulerService:
         # 1. Try to create Prefect deployment
         try:
             flow_id = await self._resolve_flow_id(flow_name)
-            body: dict[str, Any] = {
+            body:     dict[str, object] = {
                 "name": name,
                 "flow_id": flow_id,
                 "schedules": [
@@ -399,7 +399,7 @@ class SchedulerService:
             "prefect_deployment_id": prefect_deployment_id,
         }
 
-    async def list_schedules(self, org_id: str | None = None) -> list[dict[str, Any]]:
+    async def list_schedules(self, org_id: str | None = None) -> list[    dict[str, object]]:
         """Return schedules for an org from local DB.
 
         When ``org_id`` is provided (expected for org-scoped calls), queries
@@ -425,7 +425,7 @@ class SchedulerService:
             return []
 
         # Legacy Prefect-only fallback
-        body: dict[str, Any] = {"offset": 0, "limit": 100}
+        body:     dict[str, object] = {"offset": 0, "limit": 100}
         result = await self._request("POST", "/deployments/filter", json=body)
         if not isinstance(result, list):
             return []
@@ -435,7 +435,7 @@ class SchedulerService:
         self,
         schedule_id: str,
         org_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) ->     dict[str, object]:
         """Fetch a single schedule by local DB ID.
 
         Parameters
@@ -469,8 +469,8 @@ class SchedulerService:
     async def update_schedule(
         self,
         schedule_id: str,
-        updates: dict[str, Any],
-    ) -> dict[str, Any]:
+        updates:     dict[str, object],
+    ) ->     dict[str, object]:
         """Partially update a schedule in local DB and optionally in Prefect.
 
         Parameters
@@ -489,7 +489,7 @@ class SchedulerService:
         """
         if self._repo is not None:
             # Translate Prefect fields back to ORM fields for local update
-            orm_updates: dict[str, Any] = {}
+            orm_updates:     dict[str, object] = {}
             if "name" in updates:
                 orm_updates["name"] = updates["name"]
             if "description" in updates:
@@ -501,9 +501,13 @@ class SchedulerService:
             if "schedules" in updates:
                 schedules = updates["schedules"]
                 if schedules and isinstance(schedules, list):
-                    cron = schedules[0].get("schedule", {}).get("cron")
-                    if cron:
-                        orm_updates["cron"] = cron
+                    first: Any = schedules[0]  # type: ignore[unused-ignore]
+                    if isinstance(first, dict):
+                        sched: Any = first.get("schedule", {})
+                        if isinstance(sched, dict):
+                            cron_raw: Any = sched.get("cron")
+                            if isinstance(cron_raw, str):
+                                orm_updates["cron"] = cron_raw
 
             row = await self._repo.update_schedule(schedule_id, **orm_updates)
             if row is None:
@@ -579,8 +583,8 @@ class SchedulerService:
     async def trigger_run(
         self,
         schedule_id: str,
-        parameters: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        parameters:     dict[str, object] | None = None,
+    ) ->     dict[str, object]:
         """Create an ad-hoc flow run from a schedule.
 
         Parameters
@@ -607,7 +611,7 @@ class SchedulerService:
         else:
             deployment_id = schedule_id
 
-        body: dict[str, Any] = {"parameters": parameters or {}}
+        body:     dict[str, object] = {"parameters": parameters or {}}
         return await self._request(
             "POST",
             f"/deployments/{deployment_id}/create_flow_run",
@@ -618,7 +622,7 @@ class SchedulerService:
     # Schedule pause / resume
     # ------------------------------------------------------------------
 
-    async def pause_schedule(self, schedule_id: str) -> dict[str, Any]:
+    async def pause_schedule(self, schedule_id: str) ->     dict[str, object]:
         """Disable the cron schedule on a deployment.
 
         Updates local ``is_schedule_active=False`` and calls Prefect pause.
@@ -660,7 +664,7 @@ class SchedulerService:
         # Legacy Prefect-only fallback
         return await self.update_schedule(schedule_id, {"paused": True})
 
-    async def resume_schedule(self, schedule_id: str) -> dict[str, Any]:
+    async def resume_schedule(self, schedule_id: str) ->     dict[str, object]:
         """Re-enable the cron schedule on a deployment.
 
         Updates local ``is_schedule_active=True`` and calls Prefect resume.
@@ -710,7 +714,7 @@ class SchedulerService:
         self,
         schedule_id: str,
         limit: int = 50,
-    ) -> list[dict[str, Any]]:
+    ) -> list[    dict[str, object]]:
         """List flow runs belonging to a schedule/deployment.
 
         Parameters
@@ -735,7 +739,7 @@ class SchedulerService:
         else:
             deployment_id = schedule_id
 
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "deployments": {"id": {"any_": [deployment_id]}},
             "limit": limit,
             "sort": "EXPECTED_START_TIME_DESC",
@@ -745,7 +749,7 @@ class SchedulerService:
         )
         return result if isinstance(result, list) else []
 
-    async def get_run(self, run_id: str) -> dict[str, Any]:
+    async def get_run(self, run_id: str) ->     dict[str, object]:
         """Fetch a single flow run by ID.
 
         Parameters
@@ -766,7 +770,7 @@ class SchedulerService:
         self,
         run_id: str,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[    dict[str, object]]:
         """Retrieve log entries for a flow run.
 
         Parameters
@@ -781,7 +785,7 @@ class SchedulerService:
         list[dict]
             Log entry objects as returned by Prefect.
         """
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "flow_run_id": {"any_": [run_id]},
             "limit": limit,
         }

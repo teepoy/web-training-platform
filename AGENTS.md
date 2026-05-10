@@ -102,89 +102,89 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - **Markers**: `no_auth_override` — defined in `apps/api/pyproject.toml`.
 
 ## WHERE TO LOOK
-| Task                      | Location                                                |
-| ------------------------- | ------------------------------------------------------- |
-| API routes                | `apps/api/app/main.py`                                  |
-| Runtime DI wiring         | `apps/api/app/container.py`                             |
-| Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)         |
-| DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`       |
-| Frontend API calls        | `apps/web/src/api.ts`                                   |
-| Frontend views            | `apps/web/src/views/` + `apps/web/src/router.ts`        |
-| Prefect flows             | `apps/api/app/flows/`                                   |
-| Schedule service          | `apps/api/app/services/scheduler.py`                    |
-| Agent runtime             | `apps/api/app/agent/`                                   |
-| Agent display protocol    | `docs/protocols/agent-display-protocol.md`              |                                                                     |
-| MCP server                | `libs/mcp-server/`                                      |                                                                     |
-| Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`              |                                                                     |
-| Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`            |                                                                     |
-| Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue` |                                                                     |
-| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`          |                                                                     |
-| Preview domain models     | `apps/api/app/domain/preview.py`                        |                                                                     |
-| Preview service           | `apps/api/app/services/preview_service.py`              | Session lifecycle, item pagination, persist handoff                 |
-| Preview TTL store         | `apps/api/app/services/preview_store.py`                | In-memory TTL session store                                         |
-| Upstream adapter          | `apps/api/app/services/preview_upstream.py`             | 50-item mock upstream; replace with real adapter                    |
-| Shared browser core       | `libs/web-ui/src/components/sample-browser/`            | Shared virtualized browser core                                     |
-| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Shared sidebar shell with injected plugin resolver            |
-| Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                  | Presentation persistence (layout, thumbSize)                        |
-| Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`          | Browser-scope item filter pipeline                                  |
-| Browser architecture      | `docs/architecture/sample-browser.md`                   | Shared browser architecture doc                                     |
-| Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`       | Specialized list view shim architecture                             |
-| Plugin SDK contracts      | `libs/plugin-sdk/src/`                                  | TypeScript plugin type definitions and factories                    |
-| Web UI package            | `libs/web-ui/src/`                                      | Shared Vue/Naive UI components and dataset-list helpers             |
-| Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                        | Copy-paste starter templates for new plugins                        |
-| Frontend plugin registry  | `apps/web/src/core/registry.ts`                         | Singleton `pluginRegistry` instance                                 |
-| Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                         | Explicit registration of all plugins before app mount               |
-| Shared sidebar plugins    | `libs/web-ui/src/plugins/sidebar-*/`                    | First-party sidebar widget plugin descriptors and components         |
-| Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
-| Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
-| Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                       | Preview launcher plugins (e.g. `preview-upstream`)                  |
-| Plugin flow modal         | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`        | 2-step modal: select type, then execute component                   |
+| Task                      | Location                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| API routes                | `apps/api/app/main.py`                                                       |
+| Runtime DI wiring         | `apps/api/app/container.py`                                                  |
+| Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)                              |
+| DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`                            |
+| Frontend API calls        | `apps/web/src/api.ts`                                                        |
+| Frontend views            | `apps/web/src/views/` + `apps/web/src/router.ts`                             |
+| Prefect flows             | `apps/api/app/flows/`                                                        |
+| Schedule service          | `apps/api/app/services/scheduler.py`                                         |
+| Agent runtime             | `apps/api/app/agent/`                                                        |
+| Agent display protocol    | `docs/protocols/agent-display-protocol.md`                                   |                                                                     |
+| MCP server                | `libs/mcp-server/`                                                           |                                                                     |
+| Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`                                   |                                                                     |
+| Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`                                 |                                                                     |
+| Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue`       |                                                                     |
+| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`                               |                                                                     |
+| Preview domain models     | `apps/api/app/domain/preview.py`                                             |                                                                     |
+| Preview service           | `apps/api/app/services/preview_service.py`                                   | Session lifecycle, item pagination, persist handoff                 |
+| Preview TTL store         | `apps/api/app/services/preview_store.py`                                     | In-memory TTL session store                                         |
+| Upstream adapter          | `apps/api/app/services/preview_upstream.py`                                  | 50-item mock upstream; replace with real adapter                    |
+| Shared browser core       | `libs/web-ui/src/components/sample-browser/`                                 | Shared virtualized browser core                                     |
+| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`              | Shared sidebar shell with injected plugin resolver                  |
+| Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                                       | Presentation persistence (layout, thumbSize)                        |
+| Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`                               | Browser-scope item filter pipeline                                  |
+| Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
+| Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
+| Plugin SDK contracts      | `libs/plugin-sdk/src/`                                                       | TypeScript plugin type definitions and factories                    |
+| Web UI package            | `libs/web-ui/src/`                                                           | Shared Vue/Naive UI components and dataset-list helpers             |
+| Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                                             | Copy-paste starter templates for new plugins                        |
+| Frontend plugin registry  | `apps/web/src/core/registry.ts`                                              | Singleton `pluginRegistry` instance                                 |
+| Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                                              | Explicit registration of all plugins before app mount               |
+| Shared sidebar plugins    | `libs/web-ui/src/plugins/sidebar-*/`                                         | First-party sidebar widget plugin descriptors and components        |
+| Frontend import plugins   | `apps/web/src/plugins/import-*/`                                             | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
+| Frontend export plugins   | `apps/web/src/plugins/export-*/`                                             | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
+| Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                                            | Preview launcher plugins (e.g. `preview-upstream`)                  |
+| Plugin flow modal         | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`           | 2-step modal: select type, then execute component                   |
 | Plugin type selector      | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
-| Backend plugin registry   | `apps/api/app/plugins/registry.py`                      | Explicit list of backend plugin routers                             |
-| Backend plugin routes     | `apps/api/app/plugins/*/router.py`                      | One FastAPI router per backend plugin                               |
-| MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`                  |
-| Plugin extension guide    | `docs/guides/plugin-extension-guide.md`                 | Step-by-step guide for all 4 plugin types                           |
-| Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`    | Re-exports SDK types; kept for backward compatibility               |
-| Storybook config          | `apps/web/.storybook/`                                  | Storybook main.ts, preview.ts, mock helpers                         |
-| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts`                  | Story files for app plugins and shared web-ui components            |
+| Backend plugin registry   | `apps/api/app/plugins/registry.py`                                           | Explicit list of backend plugin routers                             |
+| Backend plugin routes     | `apps/api/app/plugins/*/router.py`                                           | One FastAPI router per backend plugin                               |
+| MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`                             | Auto-discovers modules with `TOOLS` + `dispatch()`                  |
+| Plugin extension guide    | `docs/guides/plugin-extension-guide.md`                                      | Step-by-step guide for all 4 plugin types                           |
+| Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
+| Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
+| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts` | Story files for app plugins and shared web-ui components            |
 
 ## CODE MAP
-| Symbol                 | Type       | Location                                         | Role                                                        |
-| ---------------------- | ---------- | ------------------------------------------------ | ----------------------------------------------------------- |
-| `app`                  | FastAPI    | `apps/api/app/main.py`                           | HTTP/SSE entrypoint                                         |
-| `Container`            | DI         | `apps/api/app/container.py`                      | Wires engine/storage/repo                                   |
-| `TrainingOrchestrator` | service    | `apps/api/app/services/orchestrator.py`          | Job persistence + notifications                             |
-| `SchedulerService`     | service    | `apps/api/app/services/scheduler.py`             | Prefect REST client                                         |
-| `SurfaceStore`         | service    | `apps/api/app/agent/surface_store.py`            | In-memory agent panel state                                 |
-| `SessionStore`         | service    | `apps/api/app/agent/session_store.py`            | In-memory conversation persistence (TTL-based)              |
-| `ClassifyAgent`        | service    | `apps/api/app/agent/runtime.py`                  | LLM tool-calling loop for classify sidebar                  |
-| `GlobalAgent`          | service    | `apps/api/app/agent/global_runtime.py`           | Platform-wide LLM agent (read/write/sidebar)                |
-| `useGlobalAgent`       | composable | `apps/web/src/composables/useGlobalAgent.ts`     | Global agent chat + panel injection                         |
-| `PlatformClient`       | MCP        | `libs/mcp-server/finetune_mcp/client.py`         | HTTP client for MCP server                                  |
-| `router`               | Vue Router | `apps/web/src/router.ts`                         | `/datasets`, `/jobs`, `/schedules`                          |
-| `FinetuneClient`       | SDK        | `libs/python-sdk/ftsdk/client.py`                | Sync HTTP wrapper                                           |
-| `PreviewService`       | service    | `apps/api/app/services/preview_service.py`       | Session lifecycle, item pagination, persist handoff         |
-| `PreviewStore`         | service    | `apps/api/app/services/preview_store.py`         | In-memory TTL session store                                 |
-| `MockUpstreamAdapter`  | service    | `apps/api/app/services/preview_upstream.py`      | 50-item mock upstream; replace with real adapter            |
-| `usePreviewLoader`     | composable | `apps/web/src/composables/usePreviewLoader.ts`   | Cursor-based preview item loader                            |
-| `PreviewClassifyView`  | view       | `apps/web/src/views/PreviewClassifyView.vue`     | Preview workspace with grid + persist flow                  |
-| `pluginRegistry`       | singleton  | `apps/web/src/core/registry.ts`                  | Runtime registry of all frontend plugins                    |
-| `createPluginRegistry` | factory    | `libs/plugin-sdk/src/registry.ts`                | Creates the `PluginRegistry` instance                       |
-| `useDatasetListSurface` | composable | `libs/web-ui/src/datasets/surface.ts`           | Shared dataset list normalization, permissions, and UI props |
-| `buildDatasetColumns`  | function   | `libs/web-ui/src/datasets/surface.ts`           | Shared dataset table column/action factory                  |
-| `defineSidebarPlugin`  | factory    | `libs/plugin-sdk/src/sidebar.ts`                 | Declares a sidebar widget plugin                            |
-| `defineImportPlugin`   | factory    | `libs/plugin-sdk/src/importer.ts`                | Declares an import flow plugin                              |
-| `defineExportPlugin`   | factory    | `libs/plugin-sdk/src/exporter.ts`                | Declares an export flow plugin                              |
-| `defineAgentSkill`     | factory    | `libs/plugin-sdk/src/agent.ts`                   | Declares an agent skill plugin                              |
-| `definePreviewPlugin`  | factory    | `libs/plugin-sdk/src/preview.ts`                 | Declares a preview launcher plugin                          |
-| `PluginFlowModal`      | component  | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue` | 2-step modal: select type, then execute component           |
-| `PluginTypeSelector`   | component  | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue` | Card grid for selecting a plugin type                    |
-| `PLUGIN_ROUTERS`       | list       | `apps/api/app/plugins/registry.py`               | Explicit list of all backend plugin routers                 |
-| `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules        |
-| `providePluginContext` | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`     | Storybook decorator providing sidebar-widget injection keys |
-| `mockImportProps`      | factory    | `apps/web/.storybook/mocks/pluginProps.ts`       | Storybook mock factory for import plugin props              |
-| `mockExportProps`      | factory    | `apps/web/.storybook/mocks/pluginProps.ts`       | Storybook mock factory for export plugin props              |
-| `mockPreviewProps`     | factory    | `apps/web/.storybook/mocks/pluginProps.ts`       | Storybook mock factory for preview launcher props           |
+| Symbol                  | Type       | Location                                                                 | Role                                                         |
+| ----------------------- | ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `app`                   | FastAPI    | `apps/api/app/main.py`                                                   | HTTP/SSE entrypoint                                          |
+| `Container`             | DI         | `apps/api/app/container.py`                                              | Wires engine/storage/repo                                    |
+| `TrainingOrchestrator`  | service    | `apps/api/app/services/orchestrator.py`                                  | Job persistence + notifications                              |
+| `SchedulerService`      | service    | `apps/api/app/services/scheduler.py`                                     | Prefect REST client                                          |
+| `SurfaceStore`          | service    | `apps/api/app/agent/surface_store.py`                                    | In-memory agent panel state                                  |
+| `SessionStore`          | service    | `apps/api/app/agent/session_store.py`                                    | In-memory conversation persistence (TTL-based)               |
+| `ClassifyAgent`         | service    | `apps/api/app/agent/runtime.py`                                          | LLM tool-calling loop for classify sidebar                   |
+| `GlobalAgent`           | service    | `apps/api/app/agent/global_runtime.py`                                   | Platform-wide LLM agent (read/write/sidebar)                 |
+| `useGlobalAgent`        | composable | `apps/web/src/composables/useGlobalAgent.ts`                             | Global agent chat + panel injection                          |
+| `PlatformClient`        | MCP        | `libs/mcp-server/finetune_mcp/client.py`                                 | HTTP client for MCP server                                   |
+| `router`                | Vue Router | `apps/web/src/router.ts`                                                 | `/datasets`, `/jobs`, `/schedules`                           |
+| `FinetuneClient`        | SDK        | `libs/python-sdk/ftsdk/client.py`                                        | Sync HTTP wrapper                                            |
+| `PreviewService`        | service    | `apps/api/app/services/preview_service.py`                               | Session lifecycle, item pagination, persist handoff          |
+| `PreviewStore`          | service    | `apps/api/app/services/preview_store.py`                                 | In-memory TTL session store                                  |
+| `MockUpstreamAdapter`   | service    | `apps/api/app/services/preview_upstream.py`                              | 50-item mock upstream; replace with real adapter             |
+| `usePreviewLoader`      | composable | `apps/web/src/composables/usePreviewLoader.ts`                           | Cursor-based preview item loader                             |
+| `PreviewClassifyView`   | view       | `apps/web/src/views/PreviewClassifyView.vue`                             | Preview workspace with grid + persist flow                   |
+| `pluginRegistry`        | singleton  | `apps/web/src/core/registry.ts`                                          | Runtime registry of all frontend plugins                     |
+| `createPluginRegistry`  | factory    | `libs/plugin-sdk/src/registry.ts`                                        | Creates the `PluginRegistry` instance                        |
+| `useDatasetListSurface` | composable | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset list normalization, permissions, and UI props |
+| `buildDatasetColumns`   | function   | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset table column/action factory                   |
+| `defineSidebarPlugin`   | factory    | `libs/plugin-sdk/src/sidebar.ts`                                         | Declares a sidebar widget plugin                             |
+| `defineImportPlugin`    | factory    | `libs/plugin-sdk/src/importer.ts`                                        | Declares an import flow plugin                               |
+| `defineExportPlugin`    | factory    | `libs/plugin-sdk/src/exporter.ts`                                        | Declares an export flow plugin                               |
+| `defineAgentSkill`      | factory    | `libs/plugin-sdk/src/agent.ts`                                           | Declares an agent skill plugin                               |
+| `definePreviewPlugin`   | factory    | `libs/plugin-sdk/src/preview.ts`                                         | Declares a preview launcher plugin                           |
+| `PluginFlowModal`       | component  | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`       | 2-step modal: select type, then execute component            |
+| `PluginTypeSelector`    | component  | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue` | Card grid for selecting a plugin type                        |
+| `PLUGIN_ROUTERS`        | list       | `apps/api/app/plugins/registry.py`                                       | Explicit list of all backend plugin routers                  |
+| `load_plugin_tools`     | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py`                         | Returns merged MCP tool list from all plugin modules         |
+| `providePluginContext`  | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
+| `mockImportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for import plugin props               |
+| `mockExportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for export plugin props               |
+| `mockPreviewProps`      | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for preview launcher props            |
 
 ## ANTI-PATTERNS — DO NOT
 
@@ -246,7 +246,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Flow tasks that create their own `Container()` (e.g. `predict_job.py`) need `unittest.mock.patch` on the Container import in tests to share the app container's DB and storage. See `test_prediction_flow.py:_use_app_container()` for the pattern.
 
 ## NOTES
-- No linter, formatter, or CI pipeline is configured. Conventions are enforced manually.
+- No CI pipeline is configured. Conventions are enforced manually.
 - Test coverage is backend-only; frontend, SDK, and worker are untested.
 - Auth scaffolding exists but route protection is not wired — don't assume auth is enforced.
 
@@ -257,6 +257,15 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 
 ## TEST RULE
 - Always run `make test` after modify code files and resolve any error.
+
+## TYPE CHECK & LINT RULE
+- After modifying Python code, run `ty check apps/api` from repo root. Resolve all newly introduced diagnostics.
+  - Use `# type: ignore` (not bracket syntax) to suppress false positives from third-party stub issues.
+  - If `ty` is unavailable, use `uv tool run ty check apps/api`.
+- After modifying Python code, run `ruff check apps/api` from repo root. Fix all newly introduced errors.
+  - Run `ruff check apps/api --fix` for auto-fixable issues (unused imports, etc.).
+  - If `ruff` is unavailable, use `uv tool run ruff check apps/api`.
+- These commands replace the former "no linter" convention. Treat type/lint errors the same as test failures.
 
 ## COMMIT RULE
 - After completing code changes, remind the user to ask you to commit. Do not commit automatically — wait for the user to explicitly request it.

@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any
+
+from litellm.types.llms.openai import AllMessageValues
 
 
 @dataclass
@@ -20,7 +21,7 @@ class Session:
 
     session_id: str
     user_id: str
-    messages: list[dict[str, Any]] = field(default_factory=list)
+    messages: list[AllMessageValues] = field(default_factory=list)
     created_at: float = field(default_factory=time.monotonic)
     last_active: float = field(default_factory=time.monotonic)
 
@@ -106,7 +107,7 @@ class SessionStore:
             return session
 
     async def append_messages(
-        self, session_id: str, messages: list[dict[str, Any]]
+        self, session_id: str, messages: list[AllMessageValues]
     ) -> None:
         """Append messages to a session and truncate if needed."""
         async with self._lock:
@@ -117,7 +118,7 @@ class SessionStore:
             self._truncate_messages(session)
             session.touch()
 
-    async def get_messages(self, session_id: str) -> list[dict[str, Any]]:
+    async def get_messages(self, session_id: str) -> list[AllMessageValues]:
         """Return a copy of the session message history."""
         async with self._lock:
             session = self._sessions.get(session_id)

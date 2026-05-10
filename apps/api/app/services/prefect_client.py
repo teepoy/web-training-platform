@@ -291,7 +291,7 @@ class PrefectClient:
 
     async def list_work_queues(self, work_pool_name: str | None = None) -> list[dict]:
         """Return work queues, optionally filtered by work pool name."""
-        body: dict[str, Any] = {"limit": 200}
+        body:     dict[str, object] = {"limit": 200}
         if work_pool_name is not None:
             body["work_pools"] = {"name": {"any_": [work_pool_name]}}
         result = await self._request(
@@ -308,7 +308,7 @@ class PrefectClient:
         work_pool_name: str | None = None,
     ) -> dict | None:
         """Return the first matching work queue by name."""
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "work_queues": {"name": {"any_": [name]}},
             "limit": 1,
         }
@@ -346,7 +346,7 @@ class PrefectClient:
         dict
             The created flow-run object returned by Prefect.
         """
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "parameters": parameters,
         }
         if idempotency_key is not None:
@@ -387,7 +387,7 @@ class PrefectClient:
         dict
             The created flow-run object returned by Prefect.
         """
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "flow_id": flow_id,
             "work_pool_name": work_pool_name,
             "parameters": parameters,
@@ -433,7 +433,7 @@ class PrefectClient:
         list[dict]
             Log entry objects ordered by timestamp ascending.
         """
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "logs": {"flow_run_id": {"any_": [flow_run_id]}},
             "limit": limit,
             "sort": "TIMESTAMP_ASC",
@@ -462,7 +462,7 @@ class PrefectClient:
         list[dict]
             Task-run objects ordered by expected start time ascending.
         """
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "task_runs": {"flow_run_id": {"any_": [flow_run_id]}},
             "limit": limit,
             "sort": "EXPECTED_START_TIME_ASC",
@@ -526,7 +526,7 @@ class PrefectClient:
         list[dict]
             Flow-run objects ordered by expected start time descending.
         """
-        flow_runs_filter: dict[str, Any] = {}
+        flow_runs_filter:     dict[str, object] = {}
         if work_queue_name is not None:
             flow_runs_filter["work_queue_name"] = {"any_": [work_queue_name]}
         if deployment_id is not None:
@@ -534,7 +534,7 @@ class PrefectClient:
         if state_types is not None:
             flow_runs_filter["state"] = {"type": {"any_": state_types}}
 
-        body: dict[str, Any] = {
+        body:     dict[str, object] = {
             "flow_runs": flow_runs_filter,
             "limit": limit,
             "sort": "EXPECTED_START_TIME_DESC",

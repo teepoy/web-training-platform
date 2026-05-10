@@ -13,6 +13,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
+from litellm.types.llms.openai import AllMessageValues, ChatCompletionToolMessage
+
 from app.agent.assembler import assemble_prompt
 from app.agent.surface_store import SurfaceStore
 from app.agent.tools import (
@@ -102,7 +104,7 @@ class ClassifyAgent:
         self._surface_id = surface_id
         self._surface_store = surface_store
         self._repository = repository
-        self._messages: list[dict[str, Any]] = []
+        self._messages: list[AllMessageValues] = []
 
     async def handle_message(self, user_message: str) -> AsyncIterator[AgentEvent]:
         """Process a user message and yield events."""
@@ -161,11 +163,12 @@ class ClassifyAgent:
                         )
 
                     # Feed tool result back into conversation
-                    self._messages.append({
+                    tool_msg: ChatCompletionToolMessage = {
                         "role": "tool",
                         "tool_call_id": tc.get("id", ""),
                         "content": json.dumps(result, default=str),
-                    })
+                    }
+                    self._messages.append(tool_msg)
             else:
                 # No tool calls — agent is done
                 content = message.get("content", "")

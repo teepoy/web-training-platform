@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -16,7 +15,7 @@ class ArtifactRef(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     uri: str
     kind: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, object] = Field(default_factory=dict)
     # Model-specific fields (optional)
     name: str | None = None
     file_size: int | None = None
@@ -59,7 +58,7 @@ class Sample(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     dataset_id: str
     image_uris: list[str] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, object] = Field(default_factory=dict)
     ls_task_id: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -91,7 +90,7 @@ class TrainingEvent(BaseModel):
     ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
     level: str = "info"
     message: str
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, object] = Field(default_factory=dict)
 
 
 class TrainingJob(BaseModel):
@@ -204,7 +203,7 @@ class PredictionEvent(BaseModel):
     ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
     level: str = "info"
     message: str
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, object] = Field(default_factory=dict)
 
 
 class PredictionJob(BaseModel):
@@ -221,7 +220,7 @@ class PredictionJob(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     external_job_id: str | None = None
     sample_ids: list[str] | None = None
-    summary: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, object] = Field(default_factory=dict)
 
 
 class UserWithOrgs(BaseModel):

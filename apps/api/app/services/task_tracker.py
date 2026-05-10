@@ -29,7 +29,7 @@ _TERMINAL_STATES = {"COMPLETED", "FAILED", "CRASHED", "CANCELLED"}
 class _TaskRecord:
     task_kind: str
     platform_job: Any
-    raw_platform_job: dict[str, Any]
+    raw_platform_job:     dict[str, object]
     dataset_id: str
     model_id: str | None
     preset_id: str | None
@@ -230,10 +230,10 @@ class TaskTrackerService:
     async def _build_detail(self, task: _TaskRecord) -> TaskTrackerDetailResponse:
         flow_run = None
         deployment = None
-        task_runs: list[dict[str, Any]] = []
+        task_runs: list[    dict[str, object]] = []
         work_queue = None
         work_pool = None
-        logs: list[dict[str, Any]] = []
+        logs: list[    dict[str, object]] = []
         if task.external_job_id:
             try:
                 flow_run = await self._prefect.get_flow_run(task.external_job_id)
@@ -302,12 +302,12 @@ class TaskTrackerService:
     async def _derive(
         self,
         task: _TaskRecord,
-        flow_run: dict[str, Any] | None,
-        deployment: dict[str, Any] | None,
-        task_runs: list[dict[str, Any]],
-        work_queue: dict[str, Any] | None,
-        work_pool: dict[str, Any] | None,
-        logs: list[dict[str, Any]],
+        flow_run:     dict[str, object] | None,
+        deployment:     dict[str, object] | None,
+        task_runs: list[    dict[str, object]],
+        work_queue:     dict[str, object] | None,
+        work_pool:     dict[str, object] | None,
+        logs: list[    dict[str, object]],
     ) -> TaskTrackerDerived:
         prefect_state = self._nested_string(flow_run, "state", "type")
         display_status = self._display_status(task.platform_job, prefect_state)
@@ -351,7 +351,7 @@ class TaskTrackerService:
             deep_links=self._deep_links(task, flow_run, deployment),
         )
 
-    async def _queue_depth(self, flow_run: dict[str, Any] | None) -> int | None:
+    async def _queue_depth(self, flow_run:     dict[str, object] | None) -> int | None:
         if flow_run is None:
             return None
         work_queue_name = self._string_or_none(flow_run, "work_queue_name")
@@ -368,7 +368,7 @@ class TaskTrackerService:
         ahead = [run for run in runs if run.get("id") != current_id]
         return max(0, len(ahead))
 
-    def _artifacts(self, task: _TaskRecord) -> list[dict[str, Any]]:
+    def _artifacts(self, task: _TaskRecord) -> list[    dict[str, object]]:
         if task.task_kind == "training":
             return [
                 artifact.model_dump(mode="json")
@@ -377,7 +377,7 @@ class TaskTrackerService:
         return []
 
     def _scorecard(
-        self, task: _TaskRecord, display_status: str, artifacts: list[dict[str, Any]]
+        self, task: _TaskRecord, display_status: str, artifacts: list[    dict[str, object]]
     ) -> TaskTrackerScorecard:
         checks: list[TaskTrackerCheckResult] = []
         if task.task_kind == "training" and artifacts:
@@ -423,7 +423,7 @@ class TaskTrackerService:
             rate_hint=self._rate_hint(summary),
         )
 
-    def _rate_hint(self, summary: dict[str, Any]) -> str | None:
+    def _rate_hint(self, summary:     dict[str, object]) -> str | None:
         total = self._coerce_int(summary.get("total_samples"))
         processed = self._coerce_int(summary.get("processed"))
         if total is None or processed is None or total <= 0:
@@ -431,7 +431,7 @@ class TaskTrackerService:
         return f"{processed}/{total} processed"
 
     def _console_lines(
-        self, task: _TaskRecord, logs: list[dict[str, Any]]
+        self, task: _TaskRecord, logs: list[    dict[str, object]]
     ) -> list[str]:
         if logs:
             return [
@@ -444,7 +444,7 @@ class TaskTrackerService:
             return [json_line for json_line in self._summary_lines(summary)[:5]]
         return []
 
-    def _summary_lines(self, summary: dict[str, Any]) -> list[str]:
+    def _summary_lines(self, summary:     dict[str, object]) -> list[str]:
         lines = []
         for key in (
             "status",
@@ -462,8 +462,8 @@ class TaskTrackerService:
     def _deep_links(
         self,
         task: _TaskRecord,
-        flow_run: dict[str, Any] | None,
-        deployment: dict[str, Any] | None,
+        flow_run:     dict[str, object] | None,
+        deployment:     dict[str, object] | None,
     ) -> TaskTrackerDeepLinks:
         ui_base = self._prefect_ui_base_url()
         flow_run_id = self._string_or_none(flow_run, "id")
@@ -534,7 +534,7 @@ class TaskTrackerService:
         return "queue_allocation"
 
     def _execution_kind(
-        self, task: _TaskRecord, flow_run: dict[str, Any] | None
+        self, task: _TaskRecord, flow_run:     dict[str, object] | None
     ) -> str:
         if task.task_kind == "training":
             return (
@@ -561,7 +561,7 @@ class TaskTrackerService:
         task: _TaskRecord,
         active_stage: str,
         prefect_state: str | None,
-        task_runs: list[dict[str, Any]],
+        task_runs: list[    dict[str, object]],
     ) -> list[TaskTrackerStage]:
         queue_stage = TaskTrackerStage(
             key="queue_allocation",
@@ -620,7 +620,7 @@ class TaskTrackerService:
     def _execution_nodes(
         self,
         task: _TaskRecord,
-        task_runs: list[dict[str, Any]],
+        task_runs: list[    dict[str, object]],
         active_stage: str,
         prefect_state: str | None,
     ) -> list[TaskTrackerNode]:
@@ -700,7 +700,7 @@ class TaskTrackerService:
         ]
 
     def _execution_summary(
-        self, task_runs: list[dict[str, Any]], prefect_state: str | None
+        self, task_runs: list[    dict[str, object]], prefect_state: str | None
     ) -> str:
         if task_runs:
             completed = sum(
@@ -726,7 +726,7 @@ class TaskTrackerService:
             else "Execution not active"
         )
 
-    def _task_run_label(self, task_run: dict[str, Any], index: int) -> str:
+    def _task_run_label(self, task_run:     dict[str, object], index: int) -> str:
         name = self._task_run_name(task_run)
         if name:
             return name
@@ -735,19 +735,19 @@ class TaskTrackerService:
             return task_key
         return f"Task {index}"
 
-    def _task_run_name(self, task_run: dict[str, Any]) -> str | None:
+    def _task_run_name(self, task_run:     dict[str, object]) -> str | None:
         for key in ("name", "task_key"):
             value = self._string_or_none(task_run, key)
             if value:
                 return value
         return None
 
-    def _task_run_state_type(self, task_run: dict[str, Any]) -> str | None:
+    def _task_run_state_type(self, task_run:     dict[str, object]) -> str | None:
         return self._nested_string(task_run, "state", "type") or self._string_or_none(
             task_run, "state_type"
         )
 
-    def _task_run_status(self, task_run: dict[str, Any], default_status: str) -> str:
+    def _task_run_status(self, task_run:     dict[str, object], default_status: str) -> str:
         state_type = self._task_run_state_type(task_run)
         if state_type in _TERMINAL_STATES:
             return "completed" if state_type == "COMPLETED" else "failed"
@@ -757,7 +757,7 @@ class TaskTrackerService:
             return "pending"
         return default_status
 
-    def _task_run_detail(self, task_run: dict[str, Any]) -> str:
+    def _task_run_detail(self, task_run:     dict[str, object]) -> str:
         state_name = self._nested_string(
             task_run, "state", "name"
         ) or self._string_or_none(task_run, "state_name")
@@ -775,7 +775,7 @@ class TaskTrackerService:
         return " | ".join(parts) if parts else "Prefect task run"
 
     def _task_run_timestamp(
-        self, task_run: dict[str, Any], key: str
+        self, task_run:     dict[str, object], key: str
     ) -> datetime | None:
         value = self._string_or_none(task_run, key)
         if not value:
@@ -873,7 +873,7 @@ class TaskTrackerService:
         except (TypeError, ValueError):
             return None
 
-    def _int_or_none(self, payload: dict[str, Any] | None, *keys: str) -> int | None:
+    def _int_or_none(self, payload:     dict[str, object] | None, *keys: str) -> int | None:
         current: Any = payload
         for key in keys:
             if not isinstance(current, dict):
@@ -881,13 +881,13 @@ class TaskTrackerService:
             current = current.get(key)
         return self._coerce_int(current)
 
-    def _string_or_none(self, payload: dict[str, Any] | None, key: str) -> str | None:
+    def _string_or_none(self, payload:     dict[str, object] | None, key: str) -> str | None:
         if not isinstance(payload, dict):
             return None
         value = payload.get(key)
         return None if value is None else str(value)
 
-    def _nested_string(self, payload: dict[str, Any] | None, *keys: str) -> str | None:
+    def _nested_string(self, payload:     dict[str, object] | None, *keys: str) -> str | None:
         current: Any = payload
         for key in keys:
             if not isinstance(current, dict):

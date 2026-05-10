@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 from prefect import get_run_logger
@@ -19,6 +19,10 @@ from app.presets.runtime import (
     TrainContext,
     TrainResult,
 )
+
+if TYPE_CHECKING:
+    from app.services.embedding import EmbeddingClient
+    from app.storage.interfaces import ArtifactStorage
 
 
 def _decode_data_uri(uri: str) -> bytes:
@@ -60,7 +64,7 @@ class TorchPredictor:
     """Runtime predictor backed by persisted prototype model artifacts."""
 
     def __init__(
-        self, embedding_client: Any = None, artifact_storage: Any = None
+        self, embedding_client: EmbeddingClient | None = None, artifact_storage: ArtifactStorage | None = None
     ) -> None:
         self._embedding_client = embedding_client
         self._artifact_storage = artifact_storage
@@ -176,7 +180,7 @@ class TorchPredictor:
 class TorchTrainer:
     """Concrete trainer that persists a prototype classifier model artifact."""
 
-    def __init__(self, artifact_storage: Any = None) -> None:
+    def __init__(self, artifact_storage: ArtifactStorage | None = None) -> None:
         self._artifact_storage = artifact_storage
 
     async def train(self, ctx: TrainContext) -> TrainResult:
@@ -218,7 +222,7 @@ class TorchTrainer:
             if not label_space:
                 raise ValueError(
                     "no labeled samples with readable images found for training"
-                )
+            )
             dim = 64
             for idx, label in enumerate(label_space):
                 seed = [0.0] * dim

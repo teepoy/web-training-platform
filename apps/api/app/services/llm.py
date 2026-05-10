@@ -24,11 +24,12 @@ import logging
 from typing import Any
 
 import litellm
+from litellm.types.llms.openai import AllMessageValues
 
 _logger = logging.getLogger(__name__)
 
 # Suppress litellm's noisy default logging (it logs full payloads at INFO)
-litellm.suppress_debug_info = True
+setattr(litellm, "suppress_debug_info", True)
 
 
 class LlmClientError(Exception):
@@ -111,7 +112,7 @@ async def call_llm(
     api_key: str,
     model: str,
     system_prompt: str,
-    messages: list[dict[str, Any]],
+    messages: list[AllMessageValues],
     tools: list[dict[str, Any]],
     timeout: float = 60.0,
 ) -> dict[str, Any]:

@@ -19,6 +19,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
+from litellm.types.llms.openai import AllMessageValues, ChatCompletionToolMessage
+
 from app.agent.global_assembler import assemble_global_prompt
 from app.agent.global_tools import (
     get_tool_definitions,
@@ -202,7 +204,7 @@ class GlobalAgent:
             await self._surface_store.clear_ephemeral(session_id, surface_id)
 
         # Collect new messages produced this turn for later persistence
-        new_messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
+        new_messages: list[AllMessageValues] = [{"role": "user", "content": user_message}]
 
         max_iterations = 10
         for _ in range(max_iterations):
@@ -260,7 +262,7 @@ class GlobalAgent:
                         )
 
                     # Feed tool result back
-                    tool_msg = {
+                    tool_msg: ChatCompletionToolMessage = {
                         "role": "tool",
                         "tool_call_id": tc.get("id", ""),
                         "content": json.dumps(result, default=str),

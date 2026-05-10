@@ -175,7 +175,7 @@ async def execute_query_data(
 
     elif query_type == "wafer-points":
         points = await repository.list_wafer_points(dataset_id)
-        return WaferPointsResponse(points=points, total=len(points)).model_dump()
+        return WaferPointsResponse(points=points, total=len(points)).model_dump()  # type: ignore
 
     else:
         return {"error": f"Unknown query_type: {query_type}"}

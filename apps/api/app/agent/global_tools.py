@@ -294,7 +294,7 @@ async def execute_list_datasets(
 
 
 async def execute_get_dataset(
-    *, dataset_id: str, repository: Any, org_id: str
+    *, dataset_id: str, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     dataset = await repository.get_dataset(dataset_id, org_id=org_id)
     if dataset is None:
@@ -341,7 +341,7 @@ async def execute_list_training_jobs(
 
 
 async def execute_get_training_job(
-    *, job_id: str, repository: Any, org_id: str
+    *, job_id: str, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     job = await repository.get_job(job_id, org_id=org_id)
     if job is None:
