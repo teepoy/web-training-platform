@@ -7,10 +7,13 @@ function schema that goes into the LLM ``tools`` parameter.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.agent.surface_store import SurfaceStore
 from app.api.schemas import AgentPanelDescriptor, WaferPointsResponse
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +127,7 @@ async def execute_query_data(
     query_type: str,
     params: dict[str, Any] | None,
     dataset_id: str,
-    repository: Any,
+    repository: SqlRepository,
 ) -> dict[str, Any]:
     """Execute a data query and return the result dict."""
     params = params or {}

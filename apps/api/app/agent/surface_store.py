@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any
 
 from app.api.schemas import AgentPanelDescriptor, SurfaceLayout, SurfaceStateDocument
 

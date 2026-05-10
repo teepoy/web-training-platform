@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prefect import get_run_logger
 
 from app.presets.runtime import BatchPredictResult, PredictContext, PredictResult, TrainContext, TrainResult
+
+if TYPE_CHECKING:
+    from app.services.llm import OpenAICompatibleLlmClient
+    from app.storage.interfaces import ArtifactStorage
 
 
 def _logger():
@@ -18,7 +22,7 @@ def _logger():
 
 
 class DspyVqaTrainer:
-    def __init__(self, artifact_storage: Any, llm_client: Any = None) -> None:
+    def __init__(self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient | None = None) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client
 
@@ -98,7 +102,7 @@ class DspyVqaTrainer:
 
 
 class DspyVqaPredictor:
-    def __init__(self, artifact_storage: Any, llm_client: Any) -> None:
+    def __init__(self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client
         self._program: dict[str, Any] | None = None

@@ -9,10 +9,19 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.agent.surface_store import SurfaceStore
 from app.api.schemas import AgentContext, AgentPanelDescriptor
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
+    from app.services.label_studio import LabelStudioClient
+    from app.services.model_service import ModelService
+    from app.services.orchestrator import TrainingOrchestrator
+    from app.services.prediction_orchestrator import PredictionOrchestrator
+    from app.presets.registry import PresetRegistry
+    from app.services.scheduler import SchedulerService
 
 _logger = logging.getLogger(__name__)
 
@@ -267,7 +276,7 @@ MAX_PANELS = 8
 
 
 async def execute_list_datasets(
-    *, repository: Any, org_id: str
+    *, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     datasets = await repository.list_datasets(org_id=org_id)
     return {
@@ -311,7 +320,7 @@ async def execute_get_dataset(
 
 
 async def execute_list_training_jobs(
-    *, repository: Any, org_id: str, dataset_id: str | None = None, status: str | None = None
+    *, repository: SqlRepository, org_id: str, dataset_id: str | None = None, status: str | None = None
 ) -> dict[str, Any]:
     jobs = await repository.list_jobs(org_id=org_id)
     results = []
@@ -348,7 +357,7 @@ async def execute_get_training_job(
 
 
 async def execute_list_presets(
-    *, preset_registry: Any
+    *, preset_registry: PresetRegistry
 ) -> dict[str, Any]:
     presets = preset_registry.list_presets()
     return {
@@ -365,7 +374,7 @@ async def execute_list_presets(
 
 
 async def execute_list_models(
-    *, model_service: Any, org_id: str, dataset_id: str | None = None
+    *, model_service: ModelService, org_id: str, dataset_id: str | None = None
 ) -> dict[str, Any]:
     models = await model_service.list_models(org_id=org_id, dataset_id=dataset_id)
     return {
@@ -386,7 +395,7 @@ async def execute_list_models(
 
 
 async def execute_list_prediction_jobs(
-    *, repository: Any, org_id: str
+    *, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     jobs = await repository.list_prediction_jobs(org_id=org_id)
     return {
@@ -406,7 +415,7 @@ async def execute_list_prediction_jobs(
 
 
 async def execute_list_schedules(
-    *, scheduler_service: Any, org_id: str
+    *, scheduler_service: SchedulerService, org_id: str
 ) -> dict[str, Any]:
     schedules = await scheduler_service.list_schedules(org_id=org_id)
     return {
@@ -424,7 +433,7 @@ async def execute_list_schedules(
 
 
 async def execute_get_dashboard(
-    *, repository: Any, org_id: str
+    *, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     datasets = await repository.list_datasets(org_id=org_id)
     jobs = await repository.list_jobs(org_id=org_id)
@@ -441,7 +450,7 @@ async def execute_get_dashboard(
 
 
 async def execute_query_data(
-    *, dataset_id: str, query_type: str, params: dict[str, Any] | None, repository: Any, org_id: str
+    *, dataset_id: str, query_type: str, params: dict[str, Any] | None, repository: SqlRepository, org_id: str
 ) -> dict[str, Any]:
     """Reuse the classify-agent query_data implementation."""
     from app.agent.tools import execute_query_data as _classify_query
@@ -465,9 +474,9 @@ async def execute_create_dataset(
     name: str,
     label_space: list[str],
     task_type: str | None,
-    repository: Any,
+    repository: SqlRepository,
     org_id: str,
-    label_studio_client: Any,
+    label_studio_client: LabelStudioClient,
     user_id: str,
 ) -> dict[str, Any]:
     """Create a new dataset with a Label Studio project."""
@@ -506,10 +515,10 @@ async def execute_start_training_job(
     *,
     dataset_id: str,
     preset_id: str,
-    repository: Any,
+    repository: SqlRepository,
     org_id: str,
-    orchestrator: Any,
-    preset_registry: Any,
+    orchestrator: TrainingOrchestrator,
+    preset_registry: PresetRegistry,
     user_id: str,
 ) -> dict[str, Any]:
     """Start a training job."""
@@ -539,9 +548,9 @@ async def execute_run_predictions(
     dataset_id: str,
     model_id: str,
     target: str | None,
-    repository: Any,
+    repository: SqlRepository,
     org_id: str,
-    prediction_orchestrator: Any,
+    prediction_orchestrator: PredictionOrchestrator,
     user_id: str,
 ) -> dict[str, Any]:
     """Run predictions on a dataset."""
@@ -569,7 +578,7 @@ async def execute_create_schedule(
     cron: str,
     parameters: dict[str, Any] | None,
     description: str | None,
-    scheduler_service: Any,
+    scheduler_service: SchedulerService,
     org_id: str,
     user_id: str,
 ) -> dict[str, Any]:
@@ -592,8 +601,8 @@ async def execute_create_schedule(
 async def execute_cancel_training_job(
     *,
     job_id: str,
-    orchestrator: Any,
-    repository: Any,
+    orchestrator: TrainingOrchestrator,
+    repository: SqlRepository,
     org_id: str,
 ) -> dict[str, Any]:
     """Cancel a running training job."""

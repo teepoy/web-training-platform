@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import base64
 import math
-from typing import Any
+from typing import TYPE_CHECKING
 
 from app.domain.models import Sample
+from app.services.embedding import EmbeddingClient
+from app.services.inference_worker import InferenceWorkerClient
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
 
 
 class FeatureOpsService:
     def __init__(
         self,
-        repository: Any = None,
-        embedding_service: Any = None,
-        inference_worker: Any = None,
+        repository: SqlRepository | None = None,
+        embedding_service: EmbeddingClient | None = None,
+        inference_worker: InferenceWorkerClient | None = None,
     ):
         self._repo = repository
         self._embedding_service = embedding_service

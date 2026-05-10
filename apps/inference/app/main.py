@@ -5,7 +5,7 @@ import io
 import json
 import math
 import os
-from typing import Any, cast
+from typing import Any
 
 from fastapi import FastAPI
 import httpx
@@ -48,7 +48,7 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
 
     import litellm
 
-    cast(Any, litellm).suppress_debug_info = True
+    litellm.suppress_debug_info = True
 
     data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
     messages: list[dict[str, Any]] = [

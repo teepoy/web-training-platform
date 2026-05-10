@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
+from omegaconf import DictConfig
 from pydantic import BaseModel
 
 from app.domain.models import (
@@ -126,7 +126,7 @@ class PredictionService:
         self,
         repository: SqlRepository,
         artifact_storage: ArtifactStorage,
-        config: Any,
+        config: DictConfig,
         embedding_client: EmbeddingClient | None = None,
         llm_client: OpenAICompatibleLlmClient | None = None,
         inference_worker: InferenceWorkerClient | None = None,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from app.agent.assembler import assemble_prompt
 from app.agent.surface_store import SurfaceStore
@@ -22,6 +22,9 @@ from app.agent.tools import (
     execute_remove_panel,
     execute_set_panel,
 )
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
 
 _logger = logging.getLogger(__name__)
 
@@ -88,7 +91,7 @@ class ClassifyAgent:
         session_id: str,
         surface_id: str,
         surface_store: SurfaceStore,
-        repository: Any,
+        repository: SqlRepository,
     ) -> None:
         self._system_prompt = system_prompt
         self._llm_base_url = llm_base_url

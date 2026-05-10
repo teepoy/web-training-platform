@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from app.agent.global_assembler import assemble_global_prompt
 from app.agent.global_tools import (
@@ -54,6 +54,15 @@ from app.agent.runtime import (
 from app.agent.session_store import SessionStore
 from app.agent.surface_store import SurfaceStore
 from app.api.schemas import AgentContext
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
+    from app.services.label_studio import LabelStudioClient
+    from app.services.model_service import ModelService
+    from app.services.orchestrator import TrainingOrchestrator
+    from app.services.prediction_orchestrator import PredictionOrchestrator
+    from app.presets.registry import PresetRegistry
+    from app.services.scheduler import SchedulerService
 
 _logger = logging.getLogger(__name__)
 
@@ -107,13 +116,13 @@ class GlobalAgent:
         llm_model: str,
         session_store: SessionStore,
         surface_store: SurfaceStore,
-        repository: Any,
-        orchestrator: Any,
-        prediction_orchestrator: Any,
-        scheduler_service: Any,
-        model_service: Any,
-        preset_registry: Any,
-        label_studio_client: Any,
+        repository: SqlRepository,
+        orchestrator: TrainingOrchestrator,
+        prediction_orchestrator: PredictionOrchestrator,
+        scheduler_service: SchedulerService,
+        model_service: ModelService,
+        preset_registry: PresetRegistry,
+        label_studio_client: LabelStudioClient,
     ) -> None:
         self._llm_base_url = llm_base_url
         self._llm_api_key = llm_api_key

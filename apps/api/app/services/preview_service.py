@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.domain.models import Dataset, Sample, TaskSpec
@@ -13,6 +13,10 @@ from app.domain.preview import (
 from app.domain.types import DatasetType, TaskType
 from app.services.preview_store import PreviewStore
 from app.services.preview_upstream import UpstreamAdapter
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
+    from app.services.label_studio import LabelStudioClient
 
 
 class PreviewService:
@@ -43,8 +47,8 @@ class PreviewService:
         self,
         session_id: str,
         scope: PreviewPersistScope,
-        dataset_repo: Any,
-        label_studio_client: Any,
+        dataset_repo: SqlRepository,
+        label_studio_client: LabelStudioClient,
     ) -> PreviewPersistStatus:
         session = await self._store.get(session_id)
         if session is None:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 import httpx
+from omegaconf import DictConfig
 from pydantic import BaseModel
+
+from app.services.embedding import EmbeddingClient
+from app.services.prefect_client import PrefectClient
 
 
 class ServiceCheckResult(BaseModel):
@@ -24,7 +27,7 @@ class ServiceHealthService:
         "embedding-worker": "embed-job-batch-deployment",
     }
 
-    def __init__(self, config: Any, prefect_client: Any, embedding_client: Any) -> None:
+    def __init__(self, config: DictConfig, prefect_client: PrefectClient, embedding_client: EmbeddingClient) -> None:
         self._config = config
         self._prefect_client = prefect_client
         self._embedding_client = embedding_client

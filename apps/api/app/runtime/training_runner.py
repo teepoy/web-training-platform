@@ -7,8 +7,7 @@ import inspect
 import json
 import os
 from pathlib import Path
-from typing import Any
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import load_config
 from app.db.session import create_engine, create_session_factory
@@ -23,6 +22,9 @@ from app.services.compatibility import (
 from app.services.embedding import EmbeddingClient
 from app.services.llm import OpenAICompatibleLlmClient
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
+
+if TYPE_CHECKING:
+    from app.storage.interfaces import ArtifactStorage
 
 _DEFAULT_PRESETS_DIR = str(Path(__file__).resolve().parents[2] / "presets")
 
@@ -64,9 +66,9 @@ def _load_callable(ref: str) -> Any:
 
 
 async def _invoke_entrypoint(
-    fn: Any,
+    fn: Any,  # dynamically loaded plugin entrypoint (class or callable via importlib)
     ctx: TrainContext,
-    artifact_storage: Any | None = None,
+    artifact_storage: ArtifactStorage | None = None,
     embedding_client: EmbeddingClient | None = None,
     llm_client: OpenAICompatibleLlmClient | None = None,
 ) -> TrainResult:
@@ -268,7 +270,7 @@ async def run_training_pipeline(
         ArtifactRef(
             uri=str(item["uri"]),
             kind=str(item.get("kind", "artifact")),
-            metadata=cast(dict[str, Any], item["metadata"])
+            metadata=item["metadata"]
             if isinstance(item.get("metadata"), dict)
             else {},
         )

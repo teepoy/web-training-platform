@@ -37,13 +37,16 @@ import logging
 import os
 from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
 
 from app.db.models import ScheduleORM
+
+if TYPE_CHECKING:
+    from app.repositories.sql_repository import SqlRepository
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +136,7 @@ class SchedulerService:
         service operates in Prefect-only mode (legacy behaviour).
     """
 
-    def __init__(self, prefect_api_url: str, repository: Any = None) -> None:
+    def __init__(self, prefect_api_url: str, repository: SqlRepository | None = None) -> None:
         self._base = prefect_api_url.rstrip("/")
         self._client: httpx.AsyncClient = httpx.AsyncClient(
             base_url=self._base,

@@ -19,10 +19,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
 
 from app.domain.models import ArtifactRef, TrainingEvent, TrainingJob
 from app.domain.types import JobStatus
+from app.presets.registry import PresetRegistry
 from app.services.prefect_client import PrefectClient
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ class PrefectWorkPoolEngine:
         flow_name: str,
         deployment_name: str = "train-job-deployment",
         concurrency_limit: int = 1,
-        preset_registry: Any = None,
+        preset_registry: PresetRegistry | None = None,
     ) -> None:
         self._client = prefect_client
         self._pool_name = work_pool_name

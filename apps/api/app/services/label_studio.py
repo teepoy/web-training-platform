@@ -21,7 +21,7 @@ and Label Studio's structured annotation JSON format.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -249,12 +249,10 @@ class LabelStudioClient:
             Whether the response should include created task IDs.
         """
         try:
-            import_tasks = cast(Any, self._client.projects.import_tasks)
             result = await asyncio.to_thread(
-                import_tasks,
-                id=project_id,
-                request=tasks,
-                return_task_ids=return_task_ids,
+                lambda: self._client.projects.import_tasks(
+                    id=project_id, request=tasks, return_task_ids=return_task_ids
+                )
             )
             return _to_dict(result)
         except Exception as exc:
