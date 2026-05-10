@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 from app.domain.models import Dataset
 from app.domain.types import DatasetType, TaskType
 from app.presets.schema import PresetSpec
@@ -16,7 +14,7 @@ class UploadTemplateDefinition:
     task_types: tuple[str, ...]
     label_space_mode: str
     requires_embedding_metadata: bool = False
-    profiles: tuple[dict[str, Any], ...] = ()
+    profiles: tuple[dict[str, object], ...] = ()
 
 
 ALLOWED_DATASET_TASK_PAIRS: dict[DatasetType, TaskType] = {
@@ -141,7 +139,7 @@ def validate_dataset_preset_training(dataset: Dataset, preset: PresetSpec) -> No
     validate_dataset_contract(dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space)
 
 
-def validate_model_prediction(dataset: Dataset, model_metadata: dict[str, Any], target: str) -> None:
+def validate_model_prediction(dataset: Dataset, model_metadata: dict[str, object], target: str) -> None:
     supported_dataset_types = _as_str_list(model_metadata.get("dataset_types"))
     supported_task_types = _as_str_list(model_metadata.get("task_types"))
     supported_targets = _as_str_list(model_metadata.get("prediction_targets"))
@@ -179,7 +177,7 @@ def validate_model_prediction(dataset: Dataset, model_metadata: dict[str, Any], 
                 raise ValueError("embedding models must declare a positive embedding_dimension")
 
 
-def validate_model_review(dataset: Dataset, model_metadata: dict[str, Any]) -> None:
+def validate_model_review(dataset: Dataset, model_metadata: dict[str, object]) -> None:
     supported_targets = _as_str_list(model_metadata.get("prediction_targets"))
     preferred_target = "vqa" if "vqa" in supported_targets else "image_classification"
     validate_model_prediction(dataset, model_metadata, preferred_target)
@@ -192,7 +190,7 @@ def get_upload_template(template_id: str) -> UploadTemplateDefinition:
     raise ValueError(f"unknown upload template '{template_id}'")
 
 
-def validate_upload_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
     template_id = str(metadata.get("template_id", ""))
     template = get_upload_template(template_id)
 
@@ -257,7 +255,7 @@ def validate_upload_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_trained_model_metadata(dataset: Dataset, preset: PresetSpec, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_trained_model_metadata(dataset: Dataset, preset: PresetSpec, metadata: dict[str, object] | None = None) -> dict[str, object]:
     runtime_metadata = metadata.copy() if isinstance(metadata, dict) else {}
     merged = {
         **runtime_metadata,
@@ -284,7 +282,7 @@ def _profile_prediction_targets(template: UploadTemplateDefinition, profile_id: 
     return []
 
 
-def _as_str_list(value: Any) -> list[str]:
+def _as_str_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item)]

@@ -874,7 +874,7 @@ class TaskTrackerService:
             return None
 
     def _int_or_none(self, payload:     dict[str, object] | None, *keys: str) -> int | None:
-        current: Any = payload
+        current: object = payload
         for key in keys:
             if not isinstance(current, dict):
                 return None
@@ -888,7 +888,7 @@ class TaskTrackerService:
         return None if value is None else str(value)
 
     def _nested_string(self, payload:     dict[str, object] | None, *keys: str) -> str | None:
-        current: Any = payload
+        current: object = payload
         for key in keys:
             if not isinstance(current, dict):
                 return None

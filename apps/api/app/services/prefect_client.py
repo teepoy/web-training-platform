@@ -71,7 +71,7 @@ class PrefectClient:
         method: str,
         path: str,
         *,
-        json: Any = None,
+        json: dict[str, object] | None = None,
         expect_json: bool = True,
         resource_label: str = "resource",
     ) -> Any:

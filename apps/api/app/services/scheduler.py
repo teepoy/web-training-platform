@@ -171,7 +171,7 @@ class SchedulerService:
         method: str,
         path: str,
         *,
-        json: Any = None,
+        json: dict[str, object] | None = None,
         expect_json: bool = True,
         resource_label: str = "schedule",
     ) -> Any:
@@ -501,11 +501,11 @@ class SchedulerService:
             if "schedules" in updates:
                 schedules = updates["schedules"]
                 if schedules and isinstance(schedules, list):
-                    first: Any = schedules[0]  # type: ignore[unused-ignore]
+                    first: object = schedules[0]  # type: ignore[unused-ignore]
                     if isinstance(first, dict):
-                        sched: Any = first.get("schedule", {})
+                        sched: object = first.get("schedule", {})
                         if isinstance(sched, dict):
-                            cron_raw: Any = sched.get("cron")
+                            cron_raw: object = sched.get("cron")
                             if isinstance(cron_raw, str):
                                 orm_updates["cron"] = cron_raw
 
