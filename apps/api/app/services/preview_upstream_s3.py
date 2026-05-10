@@ -16,31 +16,31 @@ from app.services.preview_upstream import UpstreamAdapter
 
 
 class S3ZipPreviewUpstream(UpstreamAdapter):
-    """Preview upstream that reads from S3-hosted zip archives.
+    """Preview upstream that reads seed-generated zip archives from S3/MinIO.
 
     Option B: in-memory zip cache with on-demand extraction.
-    Downloads zip files from S3/MinIO on first access, caches raw bytes
-    in memory (LRU), and extracts images from zip on demand.
 
-    Designed to work with zips produced by ``S3ZipWriter`` from seed_maker.
-    Each zip contains a ``manifest.json`` and individual PNG/JPEG image files
-    for up to 500 samples.
+    Collection ref format: ``{bucket}/{prefix}``
+    (the ``s3:`` scheme is stripped by ``PreviewUpstreamRouter``).
+
+    Example collection_ref: ``finetune-preview/seed/mock-multi-image``
+      → bucket = ``finetune-preview``, prefix = ``seed/mock-multi-image``
+
+    Each collection corresponds to a seed output (index.json + chunk zips).
+    Index and zip cache are per-collection, bounded by LRU eviction.
 
     Perf profile:
     - First page: download 1-2 zips → ~0.5s (localhost MinIO)
     - Same-chunk pages: cache hit → instant
     - Cross-chunk pages: download new zip → latency again
-    - Memory: max 10 zips × ~8 MB = ~80 MB
+    - Memory: max 10 zips × ~8 MB per collection = ~80 MB
 
     NOTE: boto3 ``get_object`` is synchronous. In production with high
-    concurrency, consider ``aioboto3`` or ``run_in_executor`` to avoid
-    blocking the event loop. Acceptable for dev/testing.
+    concurrency, consider ``aioboto3`` or ``run_in_executor``.
     """
 
     def __init__(
         self,
-        bucket: str,
-        prefix: str,
         *,
         endpoint_url: str = "http://localhost:9000",
         access_key: str = "minioadmin",
@@ -57,23 +57,32 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
             aws_secret_access_key=secret_key,
             region_name=region,
         )
-        self._bucket = bucket
-        self._prefix = prefix.rstrip("/")
         self._max_cached = max_cached_zips
-        self._index: list[dict] | None = None
-        self._zip_cache: dict[str, bytes] = {}
-        self._access_order: list[str] = []
+        self._indexes: dict[str, list[dict]] = {}
+        self._zip_caches: dict[str, dict[str, bytes]] = {}
+        self._access_orders: dict[str, list[str]] = {}
+
+    @staticmethod
+    def _parse_ref(collection_ref: str) -> tuple[str, str]:
+        if "/" not in collection_ref:
+            raise ValueError(
+                f"Invalid S3 collection_ref: '{collection_ref}'. "
+                f"Expected format: 'bucket/prefix'"
+            )
+        bucket, prefix = collection_ref.split("/", 1)
+        return bucket, prefix.rstrip("/")
 
     async def resolve_collection(self, collection_ref: str) -> dict[str, Any]:
         if not collection_ref.strip():
             raise ValueError("collection_ref must not be empty")
-        index = await self._load_index()
+        bucket, prefix = self._parse_ref(collection_ref)
+        index = await self._load_index(bucket, prefix)
         total = sum(e.get("sample_count", 0) for e in index)
         return {
             "collection_ref": collection_ref,
             "type": "s3-zip",
-            "bucket": self._bucket,
-            "prefix": self._prefix,
+            "bucket": bucket,
+            "prefix": prefix,
             "chunks": len(index),
             "estimated_total": total,
         }
@@ -81,7 +90,8 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
     async def fetch_page(
         self, collection_ref: str, cursor: str | None, limit: int
     ) -> PreviewPage:
-        index = await self._load_index()
+        bucket, prefix = self._parse_ref(collection_ref)
+        index = await self._load_index(bucket, prefix)
         cursor_int = int(cursor) if cursor else 0
         total_samples = sum(e.get("sample_count", 0) for e in index)
 
@@ -100,7 +110,7 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
             if not chunk_key:
                 continue
 
-            zip_bytes = await self._get_zip(chunk_key)
+            zip_bytes = await self._get_zip(bucket, collection_ref, chunk_key)
             chunk_items = self._extract_chunk(zip_bytes, current_pos, start, remaining)
             items.extend(chunk_items)
             remaining -= len(chunk_items)
@@ -115,39 +125,39 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
         )
 
     async def estimate_total(self, collection_ref: str) -> int | None:
-        index = await self._load_index()
+        bucket, prefix = self._parse_ref(collection_ref)
+        index = await self._load_index(bucket, prefix)
         return sum(e.get("sample_count", 0) for e in index)
 
-    async def _load_index(self) -> list[dict]:
-        if self._index is not None:
-            return self._index
+    async def _load_index(self, bucket: str, prefix: str) -> list[dict]:
+        cache_key = f"{bucket}/{prefix}"
+        if cache_key in self._indexes:
+            return self._indexes[cache_key]
         resp = self._s3.get_object(
-            Bucket=self._bucket,
-            Key=f"{self._prefix}/index.json",
+            Bucket=bucket,
+            Key=f"{prefix}/index.json",
         )
-        self._index = json.loads(resp["Body"].read())
-        return self._index
+        self._indexes[cache_key] = json.loads(resp["Body"].read())
+        return self._indexes[cache_key]
 
-    async def _get_zip(self, chunk_key: str) -> bytes:
-        if chunk_key not in self._zip_cache:
-            resp = self._s3.get_object(
-                Bucket=self._bucket,
-                Key=chunk_key,
-            )
-            data = resp["Body"].read()
-            self._zip_cache[chunk_key] = data
-            self._access_order.append(chunk_key)
-            while len(self._zip_cache) > self._max_cached:
-                old = self._access_order.pop(0)
-                del self._zip_cache[old]
-        return self._zip_cache[chunk_key]
+    async def _get_zip(self, bucket: str, cache_key: str, chunk_key: str) -> bytes:
+        if cache_key not in self._zip_caches:
+            self._zip_caches[cache_key] = {}
+            self._access_orders[cache_key] = []
+        zips = self._zip_caches[cache_key]
+        order = self._access_orders[cache_key]
+
+        if chunk_key not in zips:
+            resp = self._s3.get_object(Bucket=bucket, Key=chunk_key)
+            zips[chunk_key] = resp["Body"].read()
+            order.append(chunk_key)
+            while len(zips) > self._max_cached:
+                old = order.pop(0)
+                del zips[old]
+        return zips[chunk_key]
 
     def _extract_chunk(
-        self,
-        zip_bytes: bytes,
-        cursor: int,
-        chunk_start: int,
-        limit: int,
+        self, zip_bytes: bytes, cursor: int, chunk_start: int, limit: int,
     ) -> list[PreviewItem]:
         items: list[PreviewItem] = []
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
@@ -168,7 +178,7 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
                     image_uris.append(f"data:image/{mime};base64,{b64}")
 
                 items.append(PreviewItem(
-                    upstream_item_id=f"{self._prefix}-{m['id']}",
+                    upstream_item_id=str(m["id"]),
                     image_uris=image_uris,
                     metadata=m.get("metadata", {}),
                 ))
