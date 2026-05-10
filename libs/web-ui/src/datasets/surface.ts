@@ -12,11 +12,15 @@ import type {
 } from "./types";
 import type { PluginCard } from "../plugin-flow";
 
-export function resolveDefaultDatasetTaskType(taskType: string | null | undefined): string {
+export function resolveDefaultDatasetTaskType(
+  taskType: string | null | undefined,
+): string {
   return taskType === "vqa" ? "vqa" : "classification";
 }
 
-function normalizeDataset<TDataset extends DatasetListItem>(dataset: TDataset): TDataset {
+function normalizeDataset<TDataset extends DatasetListItem>(
+  dataset: TDataset,
+): TDataset {
   return {
     ...dataset,
     ls_project_id: dataset.ls_project_id ?? undefined,
@@ -37,7 +41,10 @@ function toPluginCard(plugin: DatasetPlugin): PluginCard {
   };
 }
 
-function getDatasetOrgLabel(dataset: DatasetListItem, currentOrgId: string | null): string | null {
+function getDatasetOrgLabel(
+  dataset: DatasetListItem,
+  currentOrgId: string | null,
+): string | null {
   if (!dataset.is_public || dataset.org_id === currentOrgId) {
     return null;
   }
@@ -48,7 +55,8 @@ function getDatasetOrgLabel(dataset: DatasetListItem, currentOrgId: string | nul
 export function buildDatasetColumns<TDataset extends DatasetListItem>(
   options: BuildDatasetColumnsOptions<TDataset>,
 ): DataTableColumns<TDataset> {
-  const resolveTaskType = options.resolveTaskType ?? resolveDefaultDatasetTaskType;
+  const resolveTaskType =
+    options.resolveTaskType ?? resolveDefaultDatasetTaskType;
 
   return [
     {
@@ -58,13 +66,23 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
         const nodes = [h("span", { style: "font-weight: 500" }, row.name)];
         if (row.is_public) {
           nodes.push(
-            h(NTag, { type: "info", size: "small", style: "margin-left: 6px" }, { default: () => "Public" }),
+            h(
+              NTag,
+              { type: "info", size: "small", style: "margin-left: 6px" },
+              { default: () => "Public" },
+            ),
           );
         }
 
         const orgLabel = getDatasetOrgLabel(row, options.currentOrgId);
         if (orgLabel) {
-          nodes.push(h("span", { style: "margin-left: 4px; font-size: 12px; color: #aaa" }, `(${orgLabel})`));
+          nodes.push(
+            h(
+              "span",
+              { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
+              `(${orgLabel})`,
+            ),
+          );
         }
 
         return h("span", {}, nodes);
@@ -73,7 +91,12 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Dataset Type",
       key: "dataset_type",
-      render: (row: TDataset) => h(NTag, { type: "default", size: "small" }, { default: () => row.dataset_type }),
+      render: (row: TDataset) =>
+        h(
+          NTag,
+          { type: "default", size: "small" },
+          { default: () => row.dataset_type },
+        ),
     },
     {
       title: "Task Type",
@@ -88,7 +111,8 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Created At",
       key: "created_at",
-      render: (row: TDataset) => h("span", {}, new Date(row.created_at).toLocaleString()),
+      render: (row: TDataset) =>
+        h("span", {}, new Date(row.created_at).toLocaleString()),
     },
     {
       title: "Actions",
@@ -123,7 +147,9 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
 export function useDatasetListSurface<
   TDataset extends DatasetListItem,
   TUser extends DatasetListUser = DatasetListUser,
->(options: UseDatasetListSurfaceOptions<TDataset, TUser>): UseDatasetListSurfaceResult<TDataset> {
+>(
+  options: UseDatasetListSurfaceOptions<TDataset, TUser>,
+): UseDatasetListSurfaceResult<TDataset> {
   const resolvedDatasets = computed<TDataset[]>(() => {
     const input = unref(options.datasets) ?? [];
     return input.map((dataset) => normalizeDataset(dataset));
@@ -151,8 +177,12 @@ export function useDatasetListSurface<
   }));
 
   const toolbarProps = computed(() => ({
-    importerPlugins: (unref(options.importerPlugins) ?? []).map((plugin) => toPluginCard(plugin)),
-    previewLauncherPlugins: (unref(options.previewLauncherPlugins) ?? []).map((plugin) => toPluginCard(plugin)),
+    importerPlugins: (unref(options.importerPlugins) ?? []).map((plugin) =>
+      toPluginCard(plugin),
+    ),
+    previewLauncherPlugins: (unref(options.previewLauncherPlugins) ?? []).map(
+      (plugin) => toPluginCard(plugin),
+    ),
   }));
 
   function getRowProps(row: TDataset): { onClick: () => void } {

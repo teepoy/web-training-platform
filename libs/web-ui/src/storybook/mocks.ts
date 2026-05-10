@@ -33,7 +33,9 @@ export interface MockContextOverrides {
   onDispatch?: (intent: unknown) => void;
 }
 
-export function provideWebUiContext(overrides: MockContextOverrides = {}): Decorator {
+export function provideWebUiContext(
+  overrides: MockContextOverrides = {},
+): Decorator {
   return (story) => ({
     components: { story },
     setup() {
@@ -69,14 +71,23 @@ export function provideWebUiContext(overrides: MockContextOverrides = {}): Decor
         ...(overrides.interactionState ?? {}),
       };
 
-      const interactionCtx: ComputedRef<SidebarWidgetInteractionContext> = computed(() => ({
-        state: interactionState,
-        dispatch: (overrides.onDispatch ?? (() => {})) as (intent: unknown) => void,
-      }));
+      const interactionCtx: ComputedRef<SidebarWidgetInteractionContext> =
+        computed(() => ({
+          state: interactionState,
+          dispatch: (overrides.onDispatch ?? (() => {})) as (
+            intent: unknown,
+          ) => void,
+        }));
 
       provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionCtx);
-      provide("pr-grid-items", computed(() => overrides.predictionGridItems ?? []));
-      provide("classify-grid-items", computed(() => overrides.classifyGridItems ?? []));
+      provide(
+        "pr-grid-items",
+        computed(() => overrides.predictionGridItems ?? []),
+      );
+      provide(
+        "classify-grid-items",
+        computed(() => overrides.classifyGridItems ?? []),
+      );
 
       return {};
     },

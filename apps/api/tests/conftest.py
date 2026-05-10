@@ -108,7 +108,6 @@ def _add_member(client, org_id: str, user_id: str, role: str, admin_token: str) 
 # ---------------------------------------------------------------------------
 
 import pytest
-from fastapi.testclient import TestClient
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000002"

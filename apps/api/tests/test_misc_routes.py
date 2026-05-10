@@ -11,12 +11,11 @@ from __future__ import annotations
 
 import io
 import json
-from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
-from tests.conftest import DEFAULT_ORG_ID, DEFAULT_USER_ID, PRESET_ID
+from app.main import app
+from tests.conftest import PRESET_ID
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
 

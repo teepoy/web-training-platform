@@ -1,13 +1,11 @@
 """Tests for auth, PAT, and org management endpoints."""
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import app
 from app.db.models import UserORM
-from app.services.auth import hash_password
 
 
 # ---------------------------------------------------------------------------

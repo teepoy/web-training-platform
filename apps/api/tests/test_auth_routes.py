@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import app
-from app.db.models import UserORM, OrgMembershipORM, OrganizationORM
+from app.db.models import UserORM
 
 
 # ---------------------------------------------------------------------------

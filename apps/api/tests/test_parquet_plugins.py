@@ -4,7 +4,6 @@ import io
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app

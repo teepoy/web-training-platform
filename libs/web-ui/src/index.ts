@@ -14,7 +14,11 @@ export { default as SampleBrowser } from "./components/sample-browser";
 export { default as TrainingChart } from "./components/training-chart";
 export { default as WidgetErrorBoundary } from "./components/widget-error-boundary";
 export { handleBrowserActivation } from "./utils/browser-activation";
-export type { ActivationCallbacks, ActivationEvent, ActivationMode } from "./utils/browser-activation";
+export type {
+  ActivationCallbacks,
+  ActivationEvent,
+  ActivationMode,
+} from "./utils/browser-activation";
 
 export type {
   DatasetListItem,
@@ -28,7 +32,11 @@ export type {
   UseDatasetListSurfaceResult,
 } from "./datasets/types";
 
-export { buildDatasetColumns, resolveDefaultDatasetTaskType, useDatasetListSurface } from "./datasets/surface";
+export {
+  buildDatasetColumns,
+  resolveDefaultDatasetTaskType,
+  useDatasetListSurface,
+} from "./datasets/surface";
 
 export { annotationProgressPlugin } from "./plugins/sidebar-annotation-progress";
 export { browserSummaryPlugin } from "./plugins/sidebar-browser-summary";

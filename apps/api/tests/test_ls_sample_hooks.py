@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, container, _make_ls_image_url
@@ -121,7 +120,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
             pass
 
         # Use mocked repository to test the sample creation path
-        from app.domain.models import Dataset, Sample
+        from app.domain.models import Dataset
         from uuid import uuid4
         from unittest.mock import patch
 
