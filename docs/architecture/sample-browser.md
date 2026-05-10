@@ -44,7 +44,7 @@ User presentation choices are persisted to `localStorage` across all surfaces vi
 
 ## Sidebar Shell & Panel Presets
 
-The `BrowserSidebar.vue` component provides a neutral shell for dashboard widgets. It injects a `BROWSER_DASHBOARD_KEY` context that widgets use to resolve stats. It responds to the `sample_browser.sidebar_width` preference and handles collapse/restore logic internally.
+The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a neutral shell for dashboard widgets. It injects a `BROWSER_DASHBOARD_KEY` context that widgets use to resolve stats. App surfaces pass the plugin component resolver and persisted sidebar width into the shared shell.
 
 ### Panel Presets (`sidebarConfig.ts`)
 | Preset          | Surface  | Purpose                  | Included Widgets                                       |
@@ -92,8 +92,8 @@ The `useBrowserFilter` composable provides a pure computed pipeline for filterin
 
 | File                                               | Role                                |
 | -------------------------------------------------- | ----------------------------------- |
-| `src/components/sample-browser/SampleBrowser.vue`  | Shared virtualized browser core     |
-| `src/components/sample-browser/BrowserSidebar.vue` | Neutral sidebar shell               |
+| `libs/web-ui/src/components/sample-browser/SampleBrowser.vue` | Shared virtualized browser core     |
+| `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Neutral sidebar shell               |
 | `src/stores/sampleBrowser.ts`                      | Presentation preference persistence |
 | `src/composables/useBrowserFilter.ts`              | Browser-scope filtering logic       |
 | `src/components/classify/sidebarConfig.ts`         | Panel registry and surface presets  |

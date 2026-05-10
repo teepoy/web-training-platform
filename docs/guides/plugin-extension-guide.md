@@ -31,7 +31,7 @@ Shared UI and first-party sidebar widgets package: `libs/web-ui/`.
 
 Sidebar panel descriptors in `apps/web/src/components/classify/sidebarConfig.ts` now only define panel layout and props. Widget component resolution happens at runtime through:
 
-- `pluginRegistry.getSidebarComponent(key)` in `apps/web/src/components/sample-browser/BrowserSidebar.vue`
+- `pluginRegistry.getSidebarComponent(key)` passed as the resolver prop to `@platform/web-ui`'s shared `BrowserSidebar.vue`
 
 To add a widget:
 

@@ -11,7 +11,7 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── apps/api/app/plugins/  # Backend plugin routes — explicit registry.py
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
 ├── apps/web/.storybook/ # Storybook config + mock helpers
-├── apps/web/src/components/sample-browser/ # Shared browser core and sidebar shell
+├── libs/web-ui/src/components/sample-browser/ # Shared virtualized browser core
 ├── apps/web/src/core/  # Singleton plugin registry
 ├── apps/web/src/plugins/  # Frontend plugin descriptors (one subdirectory per plugin)
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
@@ -117,13 +117,14 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | MCP server                | `libs/mcp-server/`                                      |                                                                     |
 | Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`              |                                                                     |
 | Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`            |                                                                     |
-| Preview item drawer       | `apps/web/src/components/preview/PreviewItemDrawer.vue` |                                                                     |
+| Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue` |                                                                     |
 | Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`          |                                                                     |
 | Preview domain models     | `apps/api/app/domain/preview.py`                        |                                                                     |
 | Preview service           | `apps/api/app/services/preview_service.py`              | Session lifecycle, item pagination, persist handoff                 |
 | Preview TTL store         | `apps/api/app/services/preview_store.py`                | In-memory TTL session store                                         |
 | Upstream adapter          | `apps/api/app/services/preview_upstream.py`             | 50-item mock upstream; replace with real adapter                    |
-| Shared browser core       | `apps/web/src/components/sample-browser/`               | Shared virtualized browser and sidebar shell                        |
+| Shared browser core       | `libs/web-ui/src/components/sample-browser/`            | Shared virtualized browser core                                     |
+| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Shared sidebar shell with injected plugin resolver            |
 | Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                  | Presentation persistence (layout, thumbSize)                        |
 | Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`          | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                   | Shared browser architecture doc                                     |
@@ -137,15 +138,15 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Frontend import plugins   | `apps/web/src/plugins/import-*/`                        | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
 | Frontend export plugins   | `apps/web/src/plugins/export-*/`                        | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
 | Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                       | Preview launcher plugins (e.g. `preview-upstream`)                  |
-| Plugin flow modal         | `libs/web-ui/src/components/PluginFlowModal.vue`        | 2-step modal: select type, then execute component                   |
-| Plugin type selector      | `libs/web-ui/src/components/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
+| Plugin flow modal         | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`        | 2-step modal: select type, then execute component                   |
+| Plugin type selector      | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
 | Backend plugin registry   | `apps/api/app/plugins/registry.py`                      | Explicit list of backend plugin routers                             |
 | Backend plugin routes     | `apps/api/app/plugins/*/router.py`                      | One FastAPI router per backend plugin                               |
 | MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`        | Auto-discovers modules with `TOOLS` + `dispatch()`                  |
 | Plugin extension guide    | `docs/guides/plugin-extension-guide.md`                 | Step-by-step guide for all 4 plugin types                           |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`    | Re-exports SDK types; kept for backward compatibility               |
 | Storybook config          | `apps/web/.storybook/`                                  | Storybook main.ts, preview.ts, mock helpers                         |
-| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts`                  | One story file per plugin component                                 |
+| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts`                  | Story files for app plugins and shared web-ui components            |
 
 ## CODE MAP
 | Symbol                 | Type       | Location                                         | Role                                                        |
@@ -176,8 +177,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `defineExportPlugin`   | factory    | `libs/plugin-sdk/src/exporter.ts`                | Declares an export flow plugin                              |
 | `defineAgentSkill`     | factory    | `libs/plugin-sdk/src/agent.ts`                   | Declares an agent skill plugin                              |
 | `definePreviewPlugin`  | factory    | `libs/plugin-sdk/src/preview.ts`                 | Declares a preview launcher plugin                          |
-| `PluginFlowModal`      | component  | `libs/web-ui/src/components/PluginFlowModal.vue` | 2-step modal: select type, then execute component           |
-| `PluginTypeSelector`   | component  | `libs/web-ui/src/components/PluginTypeSelector.vue` | Card grid for selecting a plugin type                    |
+| `PluginFlowModal`      | component  | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue` | 2-step modal: select type, then execute component           |
+| `PluginTypeSelector`   | component  | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue` | Card grid for selecting a plugin type                    |
 | `PLUGIN_ROUTERS`       | list       | `apps/api/app/plugins/registry.py`               | Explicit list of all backend plugin routers                 |
 | `load_plugin_tools`    | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py` | Returns merged MCP tool list from all plugin modules        |
 | `providePluginContext` | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`     | Storybook decorator providing sidebar-widget injection keys |
@@ -208,7 +209,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't register plugins directly in `main.ts`, `BrowserSidebar.vue`, or `DatasetDetailView.vue` — always add to `apps/web/src/plugins/index.ts`.
 - Each plugin `index.ts` exports a named descriptor; the barrel file does the registration. Don't call `pluginRegistry.register*()` inside plugin modules.
 - Don't import widget `.vue` files statically in plugin `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
-- Don't bypass `pluginRegistry` for sidebar rendering — `BrowserSidebar.vue` uses `pluginRegistry.getSidebarComponent(key)`.
+- Don't bypass `pluginRegistry` for sidebar rendering — app surfaces pass `pluginRegistry.getSidebarComponent(key)` into the shared `BrowserSidebar.vue` resolver prop.
 - Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineSidebarPlugin` instead.
 - Don't import from `widgetContract.ts` for new plugin code — import from `@platform/plugin-sdk` directly; the shim is kept only for backward compatibility.
 - Don't add hardcoded import/export/preview modals to views — use `PluginFlowModal` and `PluginTypeSelector` for the 2-step plugin selection flow.

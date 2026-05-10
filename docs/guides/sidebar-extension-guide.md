@@ -5,7 +5,7 @@ How to extend the sample browser sidebar: add new widgets, register new data sou
 ## Architecture Overview
 
 ```
-BrowserSidebar.vue              ← neutral shell: resize, collapse, panel iteration
+@platform/web-ui BrowserSidebar.vue ← neutral shell: resize, collapse, panel iteration
   └── WidgetErrorBoundary.vue   ← per-panel crash fence
         └── <YourWidget>.vue    ← Vue component resolved by component key
 
@@ -248,7 +248,7 @@ const points = computed(() => props.data?.inline?.points ?? [])
 
 ## The `BrowserItem` Schema
 
-Every item that flows into `SampleBrowser` must conform to `BrowserItem` (defined in `apps/web/src/types.ts`):
+Every item that flows into `SampleBrowser` must conform to `BrowserItem` (exported from `@platform/web-ui`):
 
 ```ts
 interface BrowserItem {
@@ -379,7 +379,7 @@ To add the sidebar to an entirely new view:
 
 ```ts
 // 1. Import the shell and a panel preset (or define your own array)
-import BrowserSidebar from '../components/sample-browser/BrowserSidebar.vue'
+import { BrowserSidebar, SampleBrowser } from '@platform/web-ui'
 import { datasetPanels } from '../components/classify/sidebarConfig'
 import {
   reduceCollectionIntent,
@@ -420,8 +420,8 @@ const sidebarContext = computed(() => ({
 ```html
 <!-- In the template, alongside SampleBrowser -->
 <div style="display: flex; height: 100%">
-  <SampleBrowser :items="filteredItems" ... />
-  <BrowserSidebar
+<SampleBrowser :items="filteredItems" ... />
+<BrowserSidebar
     :panels="datasetPanels"
     :context="sidebarContext"
     :interaction="interaction"
