@@ -150,6 +150,14 @@ seed-wafer-demo: ## Seed deterministic Wafer Demo data with batched wafer coordi
 .PHONY: wafer-demo
 wafer-demo: seed-wafer-demo ## Alias for seed-wafer-demo
 
+.PHONY: seed-mock-multi-image
+seed-mock-multi-image: ## Seed 100K-sample multi-image mock dataset (CIFAR-100 required + ImageNet optional)
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed_mock_multi_image.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+
+.PHONY: mock-multi-image
+mock-multi-image: seed-mock-multi-image ## Alias for seed-mock-multi-image
+
 .PHONY: smoke-dev-batch
 smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
