@@ -96,7 +96,7 @@ create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, N
 .PHONY: reset-app-data
 reset-app-data: ## Drop and recreate all application tables
 	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli reset-app-data
-	
+
 
 # ──────────────────────────────────────────────
 # SDK / CLI
@@ -109,6 +109,11 @@ ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
 # ──────────────────────────────────────────────
 # Seed data
 # ──────────────────────────────────────────────
+
+.PHONY: seed
+seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-samples 1000")
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run python scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-imagenet-mock
 seed-imagenet-mock: ## Seed ImageNet-1K mock data with 1000 offline synthetic samples
@@ -135,25 +140,22 @@ seed-imagenet-full: ## Seed ImageNet-1K full real dataset from the real bucket/s
 imagenet-full: seed-imagenet-full ## Alias for seed-imagenet-full
 
 .PHONY: seed-multi-image-scatter
-seed-multi-image-scatter: ## Seed multi-image samples with scatter coordinates for interactive demo
-	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_multi_image_scatter.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+seed-multi-image-scatter: ## Seed multi-image samples with scatter coordinates (delegates to unified CLI)
+	$(MAKE) seed ARGS="multi-image-scatter $(ARGS)"
 
 .PHONY: multi-image-scatter
 multi-image-scatter: seed-multi-image-scatter ## Alias for seed-multi-image-scatter
 
 .PHONY: seed-wafer-demo
-seed-wafer-demo: ## Seed deterministic Wafer Demo data with batched wafer coordinates
-	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_wafer_demo.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+seed-wafer-demo: ## Seed deterministic Wafer Demo data (delegates to unified CLI)
+	$(MAKE) seed ARGS="wafer-demo $(ARGS)"
 
 .PHONY: wafer-demo
 wafer-demo: seed-wafer-demo ## Alias for seed-wafer-demo
 
 .PHONY: seed-mock-multi-image
-seed-mock-multi-image: ## Seed 100K-sample multi-image mock dataset (CIFAR-100 required + ImageNet optional)
-	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_mock_multi_image.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+seed-mock-multi-image: ## Seed 100K-sample multi-image mock dataset (delegates to unified CLI)
+	$(MAKE) seed ARGS="mock-multi-image $(ARGS)"
 
 .PHONY: mock-multi-image
 mock-multi-image: seed-mock-multi-image ## Alias for seed-mock-multi-image
