@@ -2,7 +2,10 @@ import type { StorybookConfig } from "@storybook/vue3-vite";
 import path from "path";
 
 const config: StorybookConfig = {
-  stories: ["../src/plugins/**/*.stories.ts"],
+  stories: [
+    "../src/plugins/**/*.stories.ts",
+    "../../../libs/web-ui/src/**/*.stories.ts",
+  ],
   staticDirs: ["./public"],
   addons: ["@storybook/addon-essentials"],
   framework: {
@@ -13,8 +16,10 @@ const config: StorybookConfig = {
     autodocs: "tag",
   },
   async viteFinal(config) {
-    const { default: Components } = await import("unplugin-vue-components/vite");
-    const { NaiveUiResolver } = await import("unplugin-vue-components/resolvers");
+    const { default: Components } =
+      await import("unplugin-vue-components/vite");
+    const { NaiveUiResolver } =
+      await import("unplugin-vue-components/resolvers");
 
     config.plugins = config.plugins || [];
     config.plugins.push(
@@ -33,10 +38,7 @@ const config: StorybookConfig = {
       ),
     };
 
-    config.resolve.dedupe = [
-      ...(config.resolve.dedupe || []),
-      "vue",
-    ];
+    config.resolve.dedupe = [...(config.resolve.dedupe || []), "vue"];
 
     return config;
   },

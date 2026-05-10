@@ -92,7 +92,7 @@ import type { DataTableColumns } from "naive-ui";
 import { api, API_BASE } from "../api";
 import type { JobStatus, TrainingEvent } from "../types";
 import { useJobEvents } from "../composables/useJobEvents";
-import TrainingChart from "../components/TrainingChart.vue";
+import { TrainingChart } from "@platform/web-ui";
 import { getStoredToken } from "../stores/auth";
 import { useOrgStore } from "../stores/org";
 

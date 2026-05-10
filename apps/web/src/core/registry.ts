@@ -3,7 +3,8 @@
  *
  * Singleton PluginRegistry for the web app.
  * Populated in apps/web/src/plugins/index.ts before app mount.
- * Consumed by BrowserSidebar, DatasetDetailView (import/export dropdowns),
+ * Consumed by app surfaces that pass component resolvers into BrowserSidebar,
+ * DatasetDetailView (import/export dropdowns),
  * and the agent composables.
  */
 

@@ -11,9 +11,6 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AgentChatDrawer: typeof import('./src/components/AgentChatDrawer.vue')['default']
-    AnnotationGrid: typeof import('./src/components/annotation/AnnotationGrid.vue')['default']
-    BrowserSidebar: typeof import('./src/components/sample-browser/BrowserSidebar.vue')['default']
     ClassifySidebar: typeof import('./src/components/classify/ClassifySidebar.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
@@ -73,14 +70,10 @@ declare module 'vue' {
     NUpload: typeof import('naive-ui')['NUpload']
     OrgSelector: typeof import('./src/components/OrgSelector.vue')['default']
     PredictModal: typeof import('./src/components/PredictModal.vue')['default']
-    PreviewItemDrawer: typeof import('./src/components/preview/PreviewItemDrawer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RunLogViewer: typeof import('./src/components/RunLogViewer.vue')['default']
-    SampleBrowser: typeof import('./src/components/sample-browser/SampleBrowser.vue')['default']
     SampleDetailDrawer: typeof import('./src/components/SampleDetailDrawer.vue')['default']
     TaskInsightModal: typeof import('./src/components/TaskInsightModal.vue')['default']
-    TrainingChart: typeof import('./src/components/TrainingChart.vue')['default']
-    WidgetErrorBoundary: typeof import('./src/components/classify/widgets/WidgetErrorBoundary.vue')['default']
   }
 }

@@ -249,7 +249,7 @@ import type {
 import { resolveImageUris } from "../utils/imageAdapters";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
-import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
+import { SampleBrowser } from "@platform/web-ui";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
 import TaskInsightModal from "../components/TaskInsightModal.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";

@@ -94,7 +94,13 @@
               :context="browserSidebarContext as unknown as Record<string, unknown>"
               :interaction="datasetInteraction"
               :collapsed="prefs.sidebarCollapsed"
+              :sidebar-width="prefs.sidebarWidth"
+              :min-sidebar-width="MIN_SIDEBAR_WIDTH"
+              :max-sidebar-width="MAX_SIDEBAR_WIDTH"
+              :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
+              :component-resolver="(key) => pluginRegistry.getSidebarComponent(key) ?? null"
               @update:collapsed="prefs.setSidebarCollapsed"
+              @update:sidebar-width="prefs.setSidebarWidth"
             />
           </div>
         </n-tab-pane>
@@ -293,15 +299,18 @@ import { ref, computed, h, onMounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
-import { PluginFlowModal, type PluginCard } from "@platform/web-ui";
+import { BrowserSidebar, PluginFlowModal, SampleBrowser, type PluginCard } from "@platform/web-ui";
 import { api, queryWaferPoints } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
-import SampleBrowser from "../components/sample-browser/SampleBrowser.vue";
-import BrowserSidebar from "../components/sample-browser/BrowserSidebar.vue";
 import { datasetPanels } from "../components/classify/sidebarConfig";
-import { useSampleBrowserPrefs } from "../stores/sampleBrowser";
+import {
+  COLLAPSED_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  useSampleBrowserPrefs,
+} from "../stores/sampleBrowser";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import {

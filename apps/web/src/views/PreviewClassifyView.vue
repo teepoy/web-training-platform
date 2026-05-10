@@ -8,12 +8,15 @@ import {
 import { getPreviewSession, startPreviewPersist } from '../api'
 import { usePreviewLoader } from '../composables/usePreviewLoader'
 import type { PreviewSession, PreviewPersistScope, PreviewItem, BrowserItem, WaferPoint } from '../types'
-import PreviewItemDrawer from '../components/preview/PreviewItemDrawer.vue'
-
-import SampleBrowser from '../components/sample-browser/SampleBrowser.vue'
-import BrowserSidebar from '../components/sample-browser/BrowserSidebar.vue'
+import { BrowserSidebar, PreviewItemDrawer, SampleBrowser } from '@platform/web-ui'
 import { previewPanels } from '../components/classify/sidebarConfig'
-import { useSampleBrowserPrefs } from '../stores/sampleBrowser'
+import {
+  COLLAPSED_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  useSampleBrowserPrefs,
+} from '../stores/sampleBrowser'
+import { pluginRegistry } from '../core/registry'
 
 const route = useRoute()
 const router = useRouter()
@@ -182,7 +185,13 @@ async function handlePersist() {
               :panels="previewSidebarPanels"
               :context="{ totalLoaded: loader.loadedCount.value, filteredCount: loader.loadedCount.value } as unknown as Record<string, unknown>"
               :collapsed="prefs.sidebarCollapsed"
+              :sidebar-width="prefs.sidebarWidth"
+              :min-sidebar-width="MIN_SIDEBAR_WIDTH"
+              :max-sidebar-width="MAX_SIDEBAR_WIDTH"
+              :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
+              :component-resolver="(key) => pluginRegistry.getSidebarComponent(key) ?? null"
               @update:collapsed="prefs.setSidebarCollapsed"
+              @update:sidebar-width="prefs.setSidebarWidth"
               style="border-left: none;"
             />
           </div>
