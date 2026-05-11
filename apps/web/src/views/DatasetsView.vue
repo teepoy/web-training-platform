@@ -24,7 +24,8 @@ import { useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { DatasetPageShell, useDatasetListSurface } from "@platform/web-ui";
-import { api } from "../api";
+import { toggleDatasetPublic } from "@platform/web-data/datasets";
+import { listDatasets, deleteDataset } from "@platform/web-data/datasets";
 import type { Dataset, User } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
@@ -40,13 +41,13 @@ const authStore = useAuthStore();
 
 const { data: datasets, isLoading, error } = useQuery({
   queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
-  queryFn: api.listDatasets,
+  queryFn: listDatasets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const toggleDatasetPublicMut = useMutation({
   mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
-    api.toggleDatasetPublic(id, isPublic),
+    toggleDatasetPublic(id, isPublic),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
   },
@@ -56,7 +57,7 @@ const toggleDatasetPublicMut = useMutation({
 });
 
 const deleteDatasetMut = useMutation({
-  mutationFn: (datasetId: string) => api.deleteDataset(datasetId),
+  mutationFn: (datasetId: string) => deleteDataset(datasetId),
   onSuccess: () => {
     message.success("Dataset deleted");
     qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });

@@ -95,8 +95,10 @@ import { ref, computed, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage } from "naive-ui";
-import { api } from "../api";
-import type { Model, PredictionJob } from "../types";
+import { listDatasets } from "@platform/web-data/datasets";
+import { runPredictions } from "@platform/web-data/predictions";
+import type { PredictionJob } from "@platform/web-data/predictions";
+import type { Model } from "../types";
 import { useOrgStore } from "../stores/org";
 
 const props = defineProps<{
@@ -134,7 +136,7 @@ const rules: FormRules = {
 
 const { data: datasets } = useQuery({
   queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
-  queryFn: api.listDatasets,
+  queryFn: listDatasets,
   enabled: computed(() => !!orgStore.currentOrgId && props.show),
 });
 
@@ -175,7 +177,7 @@ const mutation = useMutation({
     if (!props.model || !form.value.datasetId) {
       throw new Error("Model and dataset are required");
     }
-    return api.runPredictions({
+    return runPredictions({
       model_id: props.model.id,
       dataset_id: form.value.datasetId,
       sample_ids: form.value.predictionMode === "specific" && form.value.sampleIds.length > 0

@@ -8,7 +8,7 @@
 
 import { ref, type Ref } from 'vue'
 import type { AgentPanelDescriptor, SurfaceStateDocument } from '../types'
-import { getSurfaceState, exportSurfaceState, importSurfaceState } from '../api'
+import { getSurfaceState, exportSurfaceState, importSurfaceState } from '@platform/web-data/agent'
 
 export interface UseAgentSurfaceReturn {
   /** Current agent-controlled panels. */

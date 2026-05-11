@@ -7,7 +7,7 @@
 
 import { ref, shallowRef, type Ref } from 'vue'
 import type { ChatEntry, AgentPanelDescriptor } from '../types'
-import { streamAgentChat } from '../api'
+import { streamAgentChat } from '@platform/web-data/agent'
 
 export type AgentChatStatus = 'idle' | 'streaming' | 'error'
 

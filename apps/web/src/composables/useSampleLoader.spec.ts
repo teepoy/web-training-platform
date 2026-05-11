@@ -4,13 +4,13 @@ import { ref } from 'vue'
 const listSamplesWithLabelsMock = vi.fn()
 const fetchSampleSliceMock = vi.fn()
 
-vi.mock('../api', () => ({
+vi.mock('@platform/web-data/samples', () => ({
   listSamplesWithLabels: (...args: unknown[]) => listSamplesWithLabelsMock(...args),
   fetchSampleSlice: (...args: unknown[]) => fetchSampleSliceMock(...args),
 }))
 
 import { useSampleLoader } from './useSampleLoader'
-import type { SampleWithLabels } from '../types'
+import type { SampleWithLabels } from '@platform/web-data/samples'
 
 function makeSample(id: string): SampleWithLabels {
   return {

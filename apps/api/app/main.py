@@ -25,33 +25,39 @@ from app.api.schemas import (
     AddMemberRequest,
     AnnotationVersionResponse,
     BulkAnnotationRequest,
+    BulkAnnotationResponse,
     BulkCreateSampleRequest,
     BulkCreateSampleResponse,
+    CancelJobResponse,
     ChatRequest,
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateOrgRequest,
     CreateReviewActionRequest,
-    GlobalChatRequest,
-    PredictionCollectionRequest,
-    PredictionCollectionResponse,
     CreateSampleRequest,
     CreateScheduleRequest,
     CreateTokenRequest,
     CreateTrainingJobRequest,
     DashboardResponse,
     DatasetAnnotationStats,
+    EmbedConfigResponse,
     ExportFormatResponse,
+    GlobalChatRequest,
     ImportVqaJsonlResponse,
     JobQueueStats,
     LoginRequest,
     LoginResponse,
+    MarkLeftResponse,
     MemberResponse,
-    ModelUploadTemplateResponse,
     MembershipResponse,
     ModelResponse,
+    ModelUploadTemplateResponse,
     OrgResponse,
     PaginatedResponse,
+    PersistExportResponse,
+    PersistStatusResponse,
+    PredictionCollectionRequest,
+    PredictionCollectionResponse,
     PredictionEventResponse,
     PredictionJobResponse,
     PredictionResultResponse,
@@ -63,20 +69,25 @@ from app.api.schemas import (
     RunLogResponse,
     RunPredictionRequest,
     RunResponse,
+    SampleEmbedResponse,
+    SampleWithLabels,
     SaveReviewAnnotationsRequest,
     SaveReviewAnnotationsResponse,
     ScheduleResponse,
     ServiceStatus,
-    SampleWithLabels,
     SetPanelRequest,
     SetPublicRequest,
+    SetPublicResponse,
+    SimilarityResponse,
+    StartPersistRequest,
     SurfaceStateDocument,
+    SyncAnnotationsResponse,
+    SyncPredictionCollectionRequest,
+    SyncPredictionCollectionResponse,
     TaskTrackerDetailResponse,
     TaskTrackerSummaryResponse,
     TokenCreatedResponse,
     TokenResponse,
-    SyncPredictionCollectionRequest,
-    SyncPredictionCollectionResponse,
     UpdateAnnotationRequest,
     UpdateEmbedConfigRequest,
     UpdateLabelSpaceRequest,
@@ -85,14 +96,13 @@ from app.api.schemas import (
     UploadTemplateProfileResponse,
     UserResponse,
     UserWithOrgsResponse,
+    VersionExportPersistResponse,
     VersionExportRequest,
     WorkPoolStatus,
     CreatePreviewSessionRequest,
     PreviewSessionResponse,
     PreviewItemsResponse,
     PreviewItemResponse,
-    StartPersistRequest,
-    PersistStatusResponse,
 )
 from app.api.deps import (
     get_current_org,
@@ -665,12 +675,12 @@ async def get_sample(
     return sample
 
 
-@app.post("/api/v1/samples/{sample_id}/embed")
+@app.post("/api/v1/samples/{sample_id}/embed", response_model=SampleEmbedResponse)
 async def embed_sample(
     sample_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> SampleEmbedResponse:
     sample = await container.repository().get_sample(sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -703,11 +713,11 @@ async def embed_sample(
     feature = await container.repository().upsert_sample_feature(
         sample_id, embedding, embed_model
     )
-    return {
-        "sample_id": feature.sample_id,
-        "embed_model": feature.embed_model,
-        "embedding_dim": len(feature.embedding),
-    }
+    return SampleEmbedResponse(
+        sample_id=feature.sample_id,
+        embed_model=feature.embed_model,
+        embedding_dim=len(feature.embedding),
+    )
 
 
 @app.post("/api/v1/annotations", response_model=Annotation)
@@ -783,13 +793,16 @@ async def delete_annotation(
     return Response(status_code=204)
 
 
-@app.post("/api/v1/datasets/{dataset_id}/annotations/bulk")
+@app.post(
+    "/api/v1/datasets/{dataset_id}/annotations/bulk",
+    response_model=BulkAnnotationResponse,
+)
 async def bulk_create_annotations(
     dataset_id: str,
     payload: BulkAnnotationRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> BulkAnnotationResponse:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
@@ -803,15 +816,18 @@ async def bulk_create_annotations(
         )
         await container.repository().create_annotation(ann)
         created += 1
-    return {"created": created}
+    return BulkAnnotationResponse(created=created)
 
 
-@app.post("/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+@app.post(
+    "/api/v1/datasets/{dataset_id}/sync-annotations-to-ls",
+    response_model=SyncAnnotationsResponse,
+)
 async def sync_annotations_to_ls(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> SyncAnnotationsResponse:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -828,7 +844,7 @@ async def sync_annotations_to_ls(
     annotations = await container.repository().list_annotations_for_dataset(dataset_id)
 
     synced_count = 0
-    errors = []
+    errors: list[str] = []
     ls_client = container.label_studio_client()
 
     from app.services.label_studio import platform_annotation_to_ls
@@ -850,7 +866,7 @@ async def sync_annotations_to_ls(
         except Exception as e:
             errors.append(f"annotation {ann.id}: {str(e)}")
 
-    return {"synced_count": synced_count, "errors": errors}
+    return SyncAnnotationsResponse(synced_count=synced_count, errors=errors)
 
 
 @app.get("/api/v1/training-presets")
@@ -937,19 +953,19 @@ async def get_job(
     return job
 
 
-@app.post("/api/v1/training-jobs/{job_id}/cancel")
+@app.post("/api/v1/training-jobs/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_job(
     job_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict[str, bool]:
+) -> CancelJobResponse:
     try:
         ok = await container.orchestrator().cancel_job(job_id)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to cancel job: {exc}")
-    return {"cancelled": ok}
+    return CancelJobResponse(cancelled=ok)
 
 
 @app.get("/api/v1/task-tracker/tasks", response_model=list[TaskTrackerSummaryResponse])
@@ -977,16 +993,18 @@ async def get_task_tracker_task(
     return detail
 
 
-@app.post("/api/v1/task-tracker/tasks/{task_id}/cancel")
+@app.post(
+    "/api/v1/task-tracker/tasks/{task_id}/cancel", response_model=CancelJobResponse
+)
 async def cancel_task_tracker_task(
     task_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict[str, bool]:
+) -> CancelJobResponse:
     ok = await container.task_tracker().cancel_task(task_id, org_id=org.id)
     if not ok:
         raise HTTPException(status_code=404, detail="task not found or not cancellable")
-    return {"cancelled": True}
+    return CancelJobResponse(cancelled=True)
 
 
 @app.get("/api/v1/task-tracker/tasks/{task_id}/stream")
@@ -1063,15 +1081,15 @@ async def get_job_events_history(
     return PaginatedResponse(items=items, total=total)
 
 
-@app.post("/api/v1/training-jobs/{job_id}/mark-left")
+@app.post("/api/v1/training-jobs/{job_id}/mark-left", response_model=MarkLeftResponse)
 async def mark_user_left(
     job_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict[str, bool]:
+) -> MarkLeftResponse:
     if await container.repository().get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
-    return {"marked": await container.repository().mark_user_left(job_id)}
+    return MarkLeftResponse(marked=await container.repository().mark_user_left(job_id))
 
 
 async def _build_export_data(dataset_id: str):
@@ -1156,20 +1174,23 @@ async def export_dataset(
     )
 
 
-@app.post("/api/v1/exports/{dataset_id}/persist")
+@app.post("/api/v1/exports/{dataset_id}/persist", response_model=PersistExportResponse)
 async def export_dataset_persist(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> PersistExportResponse:
     dataset, samples, anns = await _build_export_data(dataset_id)
     uri = await container.artifacts().persist_dataset_export(
         dataset=dataset, samples=samples, annotations=anns
     )
-    return {"uri": uri}
+    return PersistExportResponse(uri=uri)
 
 
-@app.post("/api/v1/datasets/{dataset_id}/features/extract")
+@app.post(
+    "/api/v1/datasets/{dataset_id}/features/extract",
+    response_model=PredictionJobResponse,
+)
 async def extract_features(
     dataset_id: str,
     force: bool = Query(default=False),
@@ -1229,14 +1250,17 @@ async def extract_features(
     return _prediction_job_to_response(started).model_dump()
 
 
-@app.get("/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
+@app.get(
+    "/api/v1/datasets/{dataset_id}/similarity/{sample_id}",
+    response_model=SimilarityResponse,
+)
 async def similarity_search(
     dataset_id: str,
     sample_id: str,
     k: int = 5,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+):
     if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     sample = await container.repository().get_sample(sample_id)
@@ -1519,31 +1543,39 @@ async def resolve_image(uri: str = Query(...)) -> Response:
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v1/datasets/{dataset_id}/embed-config")
+@app.get(
+    "/api/v1/datasets/{dataset_id}/embed-config", response_model=EmbedConfigResponse
+)
 async def get_embed_config(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> EmbedConfigResponse:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    return dataset.embed_config or {}
+    cfg = dataset.embed_config or {}
+    return EmbedConfigResponse(
+        model=cfg.get("model", "openai/clip-vit-base-patch32"),
+        dimension=cfg.get("dimension", 512),
+    )
 
 
-@app.patch("/api/v1/datasets/{dataset_id}/embed-config")
+@app.patch(
+    "/api/v1/datasets/{dataset_id}/embed-config", response_model=EmbedConfigResponse
+)
 async def update_embed_config(
     dataset_id: str,
     payload: UpdateEmbedConfigRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> EmbedConfigResponse:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     new_config = {"model": payload.model, "dimension": payload.dimension}
     await container.repository().update_dataset_embed_config(dataset_id, new_config)
-    return new_config
+    return EmbedConfigResponse(model=payload.model, dimension=payload.dimension)
 
 
 # ---------------------------------------------------------------------------
@@ -1727,12 +1759,12 @@ async def list_prediction_job_events(
     ]
 
 
-@app.post("/api/v1/prediction-jobs/{job_id}/cancel")
+@app.post("/api/v1/prediction-jobs/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_prediction_job(
     job_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
+) -> CancelJobResponse:
     cancelled = await container.prediction_orchestrator().cancel_job(
         job_id, org_id=org.id
     )
@@ -1740,7 +1772,7 @@ async def cancel_prediction_job(
         raise HTTPException(
             status_code=404, detail="Prediction job not found or not cancellable"
         )
-    return {"cancelled": True}
+    return CancelJobResponse(cancelled=True)
 
 
 @app.post("/api/v1/predictions/single", response_model=PredictionResultResponse)
@@ -1764,7 +1796,10 @@ async def predict_single(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/v1/samples/{sample_id}/predictions")
+@app.get(
+    "/api/v1/samples/{sample_id}/predictions",
+    response_model=list[PredictionResultResponse],
+)
 async def list_sample_predictions(
     sample_id: str,
     model_version: str | None = Query(default=None),
@@ -2097,14 +2132,16 @@ async def export_review_version(
     )
 
 
-@app.post("/api/v1/prediction-reviews/{action_id}/export/persist")
+@app.post(
+    "/api/v1/prediction-reviews/{action_id}/export/persist",
+    response_model=VersionExportPersistResponse,
+)
 async def persist_review_export(
     action_id: str,
     payload: VersionExportRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> dict:
-    """Persist an annotation-version export to artifact storage."""
+) -> VersionExportPersistResponse:
     action = await container.repository().get_review_action(action_id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
@@ -2144,33 +2181,33 @@ async def persist_review_export(
             status_code=400, detail=f"Unknown export format: {payload.format_id}"
         )
 
-    return {"uri": uri, "format_id": payload.format_id}
+    return VersionExportPersistResponse(uri=uri, format_id=payload.format_id)
 
 
-@app.patch("/api/v1/datasets/{dataset_id}/public")
+@app.patch("/api/v1/datasets/{dataset_id}/public", response_model=SetPublicResponse)
 async def set_dataset_public(
     dataset_id: str,
     payload: SetPublicRequest,
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> SetPublicResponse:
     await require_superadmin(current_user=current_user)
     ok = await container.repository().set_dataset_public(dataset_id, payload.is_public)
     if not ok:
         raise HTTPException(status_code=404, detail="dataset not found")
-    return {"ok": True}
+    return SetPublicResponse(ok=True)
 
 
-@app.patch("/api/v1/training-jobs/{job_id}/public")
+@app.patch("/api/v1/training-jobs/{job_id}/public", response_model=SetPublicResponse)
 async def set_job_public(
     job_id: str,
     payload: SetPublicRequest,
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> SetPublicResponse:
     await require_superadmin(current_user=current_user)
     ok = await container.repository().set_job_public(job_id, payload.is_public)
     if not ok:
         raise HTTPException(status_code=404, detail="job not found")
-    return {"ok": True}
+    return SetPublicResponse(ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -2746,7 +2783,10 @@ async def get_run_logs(
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v1/sessions/{session_id}/surfaces/{surface_id}")
+@app.get(
+    "/api/v1/sessions/{session_id}/surfaces/{surface_id}",
+    response_model=SurfaceStateDocument,
+)
 async def get_surface_state(
     session_id: str,
     surface_id: str,
@@ -2756,7 +2796,10 @@ async def get_surface_state(
     return await container.surface_store().get_state(session_id, surface_id)
 
 
-@app.post("/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels")
+@app.post(
+    "/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels",
+    response_model=SurfaceStateDocument,
+)
 async def set_surface_panel(
     session_id: str,
     surface_id: str,
@@ -2767,7 +2810,10 @@ async def set_surface_panel(
     return await container.surface_store().set_panel(session_id, surface_id, body.panel)
 
 
-@app.delete("/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels/{panel_id}")
+@app.delete(
+    "/api/v1/sessions/{session_id}/surfaces/{surface_id}/panels/{panel_id}",
+    response_model=SurfaceStateDocument,
+)
 async def remove_surface_panel(
     session_id: str,
     surface_id: str,
@@ -2781,7 +2827,10 @@ async def remove_surface_panel(
     return doc
 
 
-@app.post("/api/v1/sessions/{session_id}/surfaces/{surface_id}/import")
+@app.post(
+    "/api/v1/sessions/{session_id}/surfaces/{surface_id}/import",
+    response_model=SurfaceStateDocument,
+)
 async def import_surface_state(
     session_id: str,
     surface_id: str,
@@ -2792,7 +2841,10 @@ async def import_surface_state(
     return await container.surface_store().import_state(session_id, surface_id, body)
 
 
-@app.get("/api/v1/sessions/{session_id}/surfaces/{surface_id}/export")
+@app.get(
+    "/api/v1/sessions/{session_id}/surfaces/{surface_id}/export",
+    response_model=SurfaceStateDocument,
+)
 async def export_surface_state(
     session_id: str,
     surface_id: str,

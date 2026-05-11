@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import type { User } from "../types";
-import { authLogin, authRegister, authMe, fetchHealthStatus } from "../api";
+import { authLogin, authRegister, authMe, fetchHealthStatus } from "@platform/web-data/auth";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";

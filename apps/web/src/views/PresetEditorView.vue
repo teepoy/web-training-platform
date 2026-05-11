@@ -129,7 +129,7 @@
 import { ref, h, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { NTag } from "naive-ui";
-import { api } from "../api";
+import { listPresets } from "@platform/web-data/models";
 import type { TrainingPreset } from "../types";
 import { useOrgStore } from "../stores/org";
 
@@ -138,7 +138,7 @@ const orgStore = useOrgStore();
 // ── query ───────────────────────────────────────────────────────────────────
 const { data: presets, isLoading, isError, error } = useQuery({
   queryKey: computed(() => ["presets", orgStore.currentOrgId]),
-  queryFn: api.listPresets,
+  queryFn: listPresets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 

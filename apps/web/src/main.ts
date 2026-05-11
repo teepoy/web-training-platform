@@ -1,12 +1,48 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
+import { configureTransport } from "@platform/web-data/client";
 
 import "./style.css";
 import App from "./App.vue";
 import { router } from "./router";
-import { useAuthStore } from "./stores/auth";
+import { useAuthStore, getStoredToken } from "./stores/auth";
+import { useOrgStore } from "./stores/org";
 import "./plugins/index";
+
+configureTransport({
+  getToken: () => {
+    try {
+      const auth = useAuthStore(pinia);
+      return auth.token ?? getStoredToken();
+    } catch {
+      return getStoredToken();
+    }
+  },
+  getOrgId: () => {
+    try {
+      return useOrgStore(pinia).currentOrgId;
+    } catch {
+      return null;
+    }
+  },
+  onAuthError: () => {
+    try {
+      const auth = useAuthStore(pinia);
+      auth.logout();
+    } catch {}
+    try {
+      router.push("/login");
+    } catch {}
+  },
+  authEnabled: () => {
+    try {
+      return useAuthStore(pinia).authEnabled;
+    } catch {
+      return true;
+    }
+  },
+});
 
 const app = createApp(App);
 const pinia = createPinia();

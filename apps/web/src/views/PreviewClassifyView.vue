@@ -5,9 +5,15 @@ import { useMessage } from 'naive-ui'
 import {
   NButton, NSpace, NSpin, NAlert, NModal, NRadioGroup, NRadio, NRadioButton
 } from 'naive-ui'
-import { getPreviewSession, startPreviewPersist } from '../api'
+import {
+  getPreviewSession,
+  startPreviewPersist,
+  type PreviewSession,
+  type PreviewPersistScope,
+  type PreviewItem,
+} from '@platform/web-data/preview'
 import { usePreviewLoader } from '../composables/usePreviewLoader'
-import type { PreviewSession, PreviewPersistScope, PreviewItem, BrowserItem, WaferPoint } from '../types'
+import type { BrowserItem, WaferPoint } from '../types'
 import { BrowserSidebar, PreviewItemDrawer, SampleBrowser } from '@platform/web-ui'
 import { previewPanels } from '../components/classify/sidebarConfig'
 import {

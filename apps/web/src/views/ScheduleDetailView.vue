@@ -127,9 +127,17 @@ import {
   NFormItem,
   NInput,
 } from "naive-ui";
-import { api } from "../api";
+import {
+  getSchedule,
+  updateSchedule,
+  deleteSchedule,
+  triggerScheduleRun,
+  pauseSchedule,
+  resumeSchedule,
+  listScheduleRuns,
+} from "@platform/web-data/models";
+import type { UpdateScheduleBody } from "@platform/web-data/models";
 import type { ScheduleRun } from "../types";
-import type { UpdateScheduleBody } from "../api";
 import RunLogViewer from "../components/RunLogViewer.vue";
 
 const route = useRoute();
@@ -145,12 +153,12 @@ const id = computed(() => route.params.id as string);
 
 const { data: schedule, isLoading: scheduleLoading } = useQuery({
   queryKey: computed(() => ["schedule", id.value]),
-  queryFn: () => api.getSchedule(id.value),
+  queryFn: () => getSchedule(id.value),
 });
 
 const { data: runs, isLoading: runsLoading } = useQuery({
   queryKey: computed(() => ["schedule-runs", id.value]),
-  queryFn: () => api.listScheduleRuns(id.value),
+  queryFn: () => listScheduleRuns(id.value),
 });
 
 // ---------------------------------------------------------------------------
@@ -158,7 +166,7 @@ const { data: runs, isLoading: runsLoading } = useQuery({
 // ---------------------------------------------------------------------------
 
 const triggerMutation = useMutation({
-  mutationFn: () => api.triggerScheduleRun(id.value),
+  mutationFn: () => triggerScheduleRun(id.value),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedule-runs", id.value] });
     message.success("Run triggered");
@@ -169,7 +177,7 @@ const triggerMutation = useMutation({
 });
 
 const pauseMutation = useMutation({
-  mutationFn: () => api.pauseSchedule(id.value),
+  mutationFn: () => pauseSchedule(id.value),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedule", id.value] });
     message.success("Schedule paused");
@@ -180,7 +188,7 @@ const pauseMutation = useMutation({
 });
 
 const resumeMutation = useMutation({
-  mutationFn: () => api.resumeSchedule(id.value),
+  mutationFn: () => resumeSchedule(id.value),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedule", id.value] });
     message.success("Schedule resumed");
@@ -191,7 +199,7 @@ const resumeMutation = useMutation({
 });
 
 const deleteMutation = useMutation({
-  mutationFn: () => api.deleteSchedule(id.value),
+  mutationFn: () => deleteSchedule(id.value),
   onSuccess: () => {
     message.success("Schedule deleted");
     router.push("/schedules");
@@ -224,7 +232,7 @@ watch(
 );
 
 const updateMutation = useMutation({
-  mutationFn: (body: UpdateScheduleBody) => api.updateSchedule(id.value, body),
+  mutationFn: (body: UpdateScheduleBody) => updateSchedule(id.value, body),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedule", id.value] });
     message.success("Schedule updated");

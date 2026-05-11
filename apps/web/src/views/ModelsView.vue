@@ -143,7 +143,9 @@ import { ref, computed, h, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption, UploadFileInfo } from "naive-ui";
 import { useMessage, NTag, NButton, NSpace } from "naive-ui";
-import { api, uploadModel, API_BASE } from "../api";
+import { listModels, deleteModel, uploadModel, listModelUploadTemplates, listJobs } from "@platform/web-data/models";
+import { listDatasets } from "@platform/web-data/datasets";
+import { getApiBase } from "@platform/web-data/client";
 import type { Model, ModelUploadTemplate, UploadModelMetadata } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
@@ -166,25 +168,25 @@ const filterDatasetId = ref<string | null>(null);
 
 const { data: models, isLoading } = useQuery({
   queryKey: computed(() => ["models", orgStore.currentOrgId, filterDatasetId.value]),
-  queryFn: () => api.listModels(filterDatasetId.value ?? undefined),
+  queryFn: () => listModels(filterDatasetId.value ?? undefined),
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: datasets } = useQuery({
   queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
-  queryFn: api.listDatasets,
+  queryFn: listDatasets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: jobs, isLoading: jobsLoading } = useQuery({
   queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-  queryFn: api.listJobs,
+  queryFn: listJobs,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: uploadTemplates } = useQuery({
   queryKey: ["model-upload-templates"],
-  queryFn: api.listModelUploadTemplates,
+  queryFn: listModelUploadTemplates,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
@@ -238,7 +240,7 @@ function formatFileSize(bytes: number | null): string {
 
 function downloadModel(model: Model) {
   const token = authStore.token;
-  const url = `${API_BASE}/models/${model.id}/download${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  const url = `${getApiBase()}/models/${model.id}/download${token ? `?token=${encodeURIComponent(token)}` : ""}`;
   window.open(url, "_blank");
 }
 
@@ -398,7 +400,7 @@ const uploadMutation = useMutation({
     };
     return uploadModel(
       uploadForm.value.file,
-      metadata,
+      metadata as unknown as Record<string, unknown>,
     );
   },
   onSuccess: () => {
@@ -490,7 +492,7 @@ const showPredictModal = ref(false);
 const modelToPredict = ref<Model | null>(null);
 
 const deleteMutation = useMutation({
-  mutationFn: (id: string) => api.deleteModel(id),
+  mutationFn: (id: string) => deleteModel(id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["models", orgStore.currentOrgId] });
     message.success("Model deleted");

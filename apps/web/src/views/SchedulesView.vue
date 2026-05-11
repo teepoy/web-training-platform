@@ -87,7 +87,7 @@ import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
-import { api } from "../api";
+import { listSchedules, createSchedule, deleteSchedule, pauseSchedule, resumeSchedule } from "@platform/web-data/models";
 import type { Schedule } from "../types";
 import { useOrgStore } from "../stores/org";
 
@@ -102,7 +102,7 @@ const orgStore = useOrgStore();
 
 const { data: schedules, isLoading } = useQuery({
   queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
-  queryFn: api.listSchedules,
+  queryFn: listSchedules,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
@@ -111,8 +111,8 @@ const { data: schedules, isLoading } = useQuery({
 // ---------------------------------------------------------------------------
 
 const createMutation = useMutation({
-  mutationFn: (body: Parameters<typeof api.createSchedule>[0]) =>
-    api.createSchedule(body),
+  mutationFn: (body: Parameters<typeof createSchedule>[0]) =>
+    createSchedule(body),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule created");
@@ -123,7 +123,7 @@ const createMutation = useMutation({
 });
 
 const deleteMutation = useMutation({
-  mutationFn: (id: string) => api.deleteSchedule(id),
+  mutationFn: (id: string) => deleteSchedule(id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule deleted");
@@ -132,7 +132,7 @@ const deleteMutation = useMutation({
 });
 
 const pauseMutation = useMutation({
-  mutationFn: (id: string) => api.pauseSchedule(id),
+  mutationFn: (id: string) => pauseSchedule(id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule paused");
@@ -141,7 +141,7 @@ const pauseMutation = useMutation({
 });
 
 const resumeMutation = useMutation({
-  mutationFn: (id: string) => api.resumeSchedule(id),
+  mutationFn: (id: string) => resumeSchedule(id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
     message.success("Schedule resumed");

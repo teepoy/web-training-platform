@@ -7,16 +7,28 @@ import path from "path";
 export default defineConfig({
   plugins: [vue(), Components({ resolvers: [NaiveUiResolver()] })],
   resolve: {
-    alias: {
-      "@platform/plugin-sdk": path.resolve(
-        __dirname,
-        "../../libs/plugin-sdk/src/index.ts",
-      ),
-      "@platform/web-ui": path.resolve(
-        __dirname,
-        "../../libs/web-ui/src/index.ts",
-      ),
-    },
+    alias: [
+      {
+        find: /^@platform\/web-data\/(.+)$/,
+        replacement: path.resolve(__dirname, "../../libs/web-data/src/$1/index.ts"),
+      },
+      {
+        find: "@platform/web-data",
+        replacement: path.resolve(__dirname, "../../libs/web-data/src/index.ts"),
+      },
+      {
+        find: "@platform/plugin-sdk",
+        replacement: path.resolve(__dirname, "../../libs/plugin-sdk/src/index.ts"),
+      },
+      {
+        find: "@platform/web-ui",
+        replacement: path.resolve(__dirname, "../../libs/web-ui/src/index.ts"),
+      },
+      {
+        find: "@platform/api-contract",
+        replacement: path.resolve(__dirname, "../../libs/api-contract/src/index.ts"),
+      },
+    ],
   },
   server: {
     port: 5173,
