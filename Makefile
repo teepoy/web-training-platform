@@ -196,6 +196,25 @@ regression: test-regression ## Run fast regression then live-stack smoke
 	@echo "--- Running live-stack smoke regression ---"
 	$(MAKE) smoke-regression
 
+# ──────────────────────────────────────────────
+# Live-stack Playwright E2E
+# ──────────────────────────────────────────────
+
+WEB_URL ?= http://localhost:5173
+
+.PHONY: e2e-live
+e2e-live: ## Run live-stack Playwright browser tests (needs Docker Compose)
+	@curl -s --fail --show-error $(API_URL)/health > /dev/null 2>&1 || (echo "ERROR: API not healthy at $(API_URL)" && exit 1)
+	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm test:e2e-live
+
+.PHONY: e2e-live-ui
+e2e-live-ui: ## Run live-stack Playwright tests in headed mode (debugging)
+	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm exec playwright test --config e2e-live/playwright.config.ts --headed
+
+.PHONY: e2e-live-report
+e2e-live-report: ## Open Playwright HTML report
+	cd $(WEB_DIR) && pnpm exec playwright show-report e2e-live/playwright-report-live
+
 
 # ──────────────────────────────────────────────
 # Docker / Infra
