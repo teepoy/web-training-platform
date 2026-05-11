@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import glob as _glob_module
+import os
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -8,10 +10,51 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import os
-
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db")
+
+
+# ---------------------------------------------------------------------------
+# Old test database cleanup
+#
+# Test runs create per-session SQLite databases (finetune-test-<uuid>.db).
+# Over time these accumulate on disk.  We clean up databases from previous
+# sessions at module import time and after each test via _dispose_db_resources.
+# ---------------------------------------------------------------------------
+
+
+def _cleanup_old_test_dbs() -> int:
+    """Delete finetune-test-*.db files that are NOT the current session's DB.
+
+    Returns the number of files deleted.
+    """
+    _current_db_url = os.environ.get("DATABASE_URL", "")
+    _current_basename = ""
+    if "finetune-test-" in _current_db_url:
+        _current_basename = _current_db_url.rsplit("/", 1)[-1].split("?")[0]
+
+    test_db_pattern = os.path.join(str(ROOT), "finetune-test-*.db")
+    deleted = 0
+    for db_file in _glob_module.glob(test_db_pattern):
+        basename = os.path.basename(db_file)
+        # Skip the current session's DB
+        if _current_basename and basename == _current_basename:
+            continue
+        # Never delete the local smoke DB
+        if basename == "finetune-local-smoke.db":
+            continue
+        try:
+            os.remove(db_file)
+            deleted += 1
+        except OSError:
+            pass
+    return deleted
+
+
+# Run cleanup once at import time (before any test or fixture executes).
+_OLD_DB_COUNT = _cleanup_old_test_dbs()
+if _OLD_DB_COUNT > 0:
+    print(f"Cleaned up {_OLD_DB_COUNT} old test database(s)")
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +366,85 @@ def _mock_inference_worker(request):
 
 
 # ---------------------------------------------------------------------------
+# Prefect client override for non-Prefect tests
+#
+# Many services depend on PrefectClient for work pool, deployment, and
+# flow-run operations.  This mock provides deterministic responses so
+# tests don't need a running Prefect server.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_prefect_client(request):
+    if request.node.get_closest_marker("no_prefect_mock"):
+        yield
+        return
+
+    from app.main import container
+
+    async def _get_flow_run(flow_run_id: str) -> dict:
+        return {"id": flow_run_id, "state": {"type": "COMPLETED"}, "status": "COMPLETED"}
+
+    async def _get_flow_run_logs(flow_run_id: str, limit: int = 200) -> list[dict]:
+        return []
+
+    async def _list_task_runs(flow_run_id: str, limit: int = 200) -> list[dict]:
+        return []
+
+    async def _set_flow_run_state(flow_run_id: str, state_type: str) -> dict:
+        return {"state": {"type": state_type}}
+
+    _mock_prefect = MagicMock()
+    _mock_prefect.resolve_deployment_id = AsyncMock(return_value="mock-deployment-id")
+    _mock_prefect.create_flow_run_from_deployment = AsyncMock(
+        return_value={"id": "mock-flow-run-id", "state": {"type": "COMPLETED"}},
+    )
+    _mock_prefect.get_flow_run = AsyncMock(side_effect=_get_flow_run)
+    _mock_prefect.get_flow_run_logs = AsyncMock(side_effect=_get_flow_run_logs)
+    _mock_prefect.list_task_runs = AsyncMock(side_effect=_list_task_runs)
+    _mock_prefect.set_flow_run_state = AsyncMock(side_effect=_set_flow_run_state)
+    _mock_prefect.filter_flow_runs = AsyncMock(return_value=[])
+    _mock_prefect.resolve_flow_id = AsyncMock(return_value="mock-flow-id")
+    _mock_prefect.create_flow_run = AsyncMock(return_value={"id": "mock-flow-run-id"})
+    _mock_prefect.ensure_work_pool = AsyncMock(return_value={"name": "mock-pool"})
+    _mock_prefect.get_work_pool = AsyncMock(return_value={"name": "mock-pool"})
+    _mock_prefect.list_work_pools = AsyncMock(return_value=[])
+    _mock_prefect.close = AsyncMock()
+
+    container.prefect_client.override(providers.Object(_mock_prefect))
+    yield
+    container.prefect_client.reset_override()
+
+
+# ---------------------------------------------------------------------------
+# LLM client override for non-LLM tests
+#
+# PredictionService and VQA runtime depend on OpenAICompatibleLlmClient.
+# This mock provides deterministic responses so tests don't need a
+# configured LLM provider.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_llm_client(request):
+    if request.node.get_closest_marker("no_llm_mock"):
+        yield
+        return
+
+    from app.main import container
+
+    async def _answer_vqa(*, image_bytes: bytes, question: str, system_prompt: str) -> str:
+        return "mock vqa answer"
+
+    _mock_llm = MagicMock()
+    _mock_llm.answer_vqa = AsyncMock(side_effect=_answer_vqa)
+
+    container.llm_client.override(providers.Object(_mock_llm))
+    yield
+    container.llm_client.reset_override()
+
+
+# ---------------------------------------------------------------------------
 # Preset registry helper
 #
 # After the preset refactor, presets are loaded from YAML files on disk
@@ -364,6 +486,8 @@ def _dispose_db_resources():
     load_config.cache_clear()
     container.reset_singletons()
     _deps._session_factory = None
+
+    _cleanup_old_test_dbs()
 
     yield
 

@@ -10,19 +10,23 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import io
 import sys
 import time
 import uuid
+from pathlib import Path
 
 import httpx
 from minio import Minio
-from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).parent))
+from smoke_common import (
+    create_synthetic_image,
+    login_seed_user,
+    resolve_seed_org,
+    wait_for_api_ready,
+)
 
 API_URL = "http://localhost:8000"
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
 DEFAULT_TIMEOUT = 180
 DEFAULT_DATASET_NAME = "Smoke Training Dataset"
 DEFAULT_PRESET_ID = "resnet50-cls-v1"
@@ -37,45 +41,6 @@ def _fail(message: str) -> int:
     return 1
 
 
-def _wait_for_health(client: httpx.Client, timeout: int) -> None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            response = client.get(f"{API_URL}/health")
-            if response.status_code == 200:
-                return
-        except httpx.HTTPError:
-            pass
-        time.sleep(2)
-    raise RuntimeError("API health check timed out")
-
-
-def _login(client: httpx.Client) -> str:
-    response = client.post(
-        f"{API_URL}/api/v1/auth/login",
-        json={"email": SEED_EMAIL, "password": SEED_PASSWORD},
-    )
-    response.raise_for_status()
-    return str(response.json()["access_token"])
-
-
-def _get_first_org_id(client: httpx.Client, headers: dict[str, str]) -> str:
-    response = client.get(f"{API_URL}/api/v1/organizations", headers=headers)
-    response.raise_for_status()
-    orgs = response.json()
-    if not isinstance(orgs, list) or not orgs:
-        raise RuntimeError("No organizations available for smoke user")
-    return str(orgs[0]["id"])
-
-
-def _data_uri(color: tuple[int, int, int]) -> str:
-    image = Image.new("RGB", (8, 8), color=color)
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
-
-
 def _create_dataset(client: httpx.Client, headers: dict[str, str], name: str) -> str:
     response = client.post(
         f"{API_URL}/api/v1/datasets",
@@ -83,14 +48,19 @@ def _create_dataset(client: httpx.Client, headers: dict[str, str], name: str) ->
         json={
             "name": name,
             "dataset_type": "image_classification",
-            "task_spec": {"task_type": "classification", "label_space": ["red", "blue"]},
+            "task_spec": {
+                "task_type": "classification",
+                "label_space": ["red", "blue"],
+            },
         },
     )
     response.raise_for_status()
     return str(response.json()["id"])
 
 
-def _create_sample(client: httpx.Client, dataset_id: str, headers: dict[str, str], image_uri: str) -> str:
+def _create_sample(
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], image_uri: str
+) -> str:
     response = client.post(
         f"{API_URL}/api/v1/datasets/{dataset_id}/samples",
         headers=headers,
@@ -100,7 +70,9 @@ def _create_sample(client: httpx.Client, dataset_id: str, headers: dict[str, str
     return str(response.json()["id"])
 
 
-def _create_annotation(client: httpx.Client, sample_id: str, label: str, headers: dict[str, str]) -> None:
+def _create_annotation(
+    client: httpx.Client, sample_id: str, label: str, headers: dict[str, str]
+) -> None:
     response = client.post(
         f"{API_URL}/api/v1/annotations",
         headers=headers,
@@ -109,20 +81,30 @@ def _create_annotation(client: httpx.Client, sample_id: str, label: str, headers
     response.raise_for_status()
 
 
-def _create_training_job(client: httpx.Client, dataset_id: str, headers: dict[str, str], preset_id: str) -> str:
+def _create_training_job(
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], preset_id: str
+) -> str:
     response = client.post(
         f"{API_URL}/api/v1/training-jobs",
         headers=headers,
-        json={"dataset_id": dataset_id, "preset_id": preset_id, "created_by": "seed-user"},
+        json={
+            "dataset_id": dataset_id,
+            "preset_id": preset_id,
+            "created_by": "seed-user",
+        },
     )
     response.raise_for_status()
     return str(response.json()["id"])
 
 
-def _poll_training_job(client: httpx.Client, job_id: str, headers: dict[str, str], timeout: int) -> dict:
+def _poll_training_job(
+    client: httpx.Client, job_id: str, headers: dict[str, str], timeout: int
+) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        response = client.get(f"{API_URL}/api/v1/training-jobs/{job_id}", headers=headers)
+        response = client.get(
+            f"{API_URL}/api/v1/training-jobs/{job_id}", headers=headers
+        )
         response.raise_for_status()
         body = response.json()
         status = str(body.get("status", ""))
@@ -132,8 +114,12 @@ def _poll_training_job(client: httpx.Client, job_id: str, headers: dict[str, str
     raise RuntimeError(f"Training job {job_id} timed out")
 
 
-def _job_events(client: httpx.Client, job_id: str, headers: dict[str, str]) -> list[dict]:
-    response = client.get(f"{API_URL}/api/v1/training-jobs/{job_id}/events/history", headers=headers)
+def _job_events(
+    client: httpx.Client, job_id: str, headers: dict[str, str]
+) -> list[dict]:
+    response = client.get(
+        f"{API_URL}/api/v1/training-jobs/{job_id}/events/history", headers=headers
+    )
     response.raise_for_status()
     body = response.json()
     items = body.get("items") if isinstance(body, dict) else None
@@ -148,7 +134,9 @@ def _assert_s3_artifacts(job: dict) -> list[str]:
     for artifact in artifact_refs:
         uri = str(artifact.get("uri", ""))
         if not uri.startswith(f"s3://{MINIO_BUCKET}/"):
-            raise RuntimeError(f"Training artifact was not stored in shared MinIO bucket: {uri}")
+            raise RuntimeError(
+                f"Training artifact was not stored in shared MinIO bucket: {uri}"
+            )
         uris.append(uri)
     return uris
 
@@ -165,33 +153,52 @@ def _assert_minio_objects_exist(uris: list[str]) -> None:
         try:
             client.stat_object(MINIO_BUCKET, object_name)
         except Exception as exc:
-            raise RuntimeError(f"Artifact missing from shared MinIO bucket: {uri}") from exc
+            raise RuntimeError(
+                f"Artifact missing from shared MinIO bucket: {uri}"
+            ) from exc
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a real dev training smoke test against the local stack")
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Overall training timeout in seconds")
-    parser.add_argument("--preset-id", default=DEFAULT_PRESET_ID, help="Training preset to use")
-    parser.add_argument("--dataset-name-prefix", default=DEFAULT_DATASET_NAME, help="Prefix for the temporary smoke dataset")
+    parser = argparse.ArgumentParser(
+        description="Run a real dev training smoke test against the local stack"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help="Overall training timeout in seconds",
+    )
+    parser.add_argument(
+        "--preset-id", default=DEFAULT_PRESET_ID, help="Training preset to use"
+    )
+    parser.add_argument(
+        "--dataset-name-prefix",
+        default=DEFAULT_DATASET_NAME,
+        help="Prefix for the temporary smoke dataset",
+    )
     args = parser.parse_args()
 
-    with httpx.Client(timeout=30.0) as client:
-        try:
-            print("[1/7] Waiting for API health ...")
-            _wait_for_health(client, timeout=args.timeout)
+    try:
+        print("[1/7] Waiting for API health ...")
+        wait_for_api_ready(API_URL, timeout=args.timeout)
 
-            print("[2/7] Logging in as seed user ...")
-            token = _login(client)
-            headers = {"Authorization": f"Bearer {token}"}
+        print("[2/7] Logging in as seed user ...")
+        token = login_seed_user(API_URL)
+        headers = {"Authorization": f"Bearer {token}"}
 
-            print("[3/7] Resolving org context ...")
-            headers["X-Organization-ID"] = _get_first_org_id(client, headers)
+        print("[3/7] Resolving org context ...")
+        headers["X-Organization-ID"] = resolve_seed_org(API_URL, token)
 
+        with httpx.Client(timeout=30.0) as client:
             dataset_name = f"{args.dataset_name_prefix} {uuid.uuid4().hex[:8]}"
             print("[4/7] Creating tiny labeled dataset ...")
             dataset_id = _create_dataset(client, headers, dataset_name)
-            sample_red = _create_sample(client, dataset_id, headers, _data_uri((255, 0, 0)))
-            sample_blue = _create_sample(client, dataset_id, headers, _data_uri((0, 0, 255)))
+            sample_red = _create_sample(
+                client, dataset_id, headers, create_synthetic_image("red")
+            )
+            sample_blue = _create_sample(
+                client, dataset_id, headers, create_synthetic_image("blue")
+            )
             _create_annotation(client, sample_red, "red", headers)
             _create_annotation(client, sample_blue, "blue", headers)
 
@@ -218,8 +225,8 @@ def main() -> int:
             for uri in artifact_uris:
                 print(uri)
             return 0
-        except Exception as exc:
-            return _fail(str(exc))
+    except Exception as exc:
+        return _fail(str(exc))
 
 
 if __name__ == "__main__":
