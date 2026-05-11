@@ -10,9 +10,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@platform/api-contract':
+        specifier: workspace:*
+        version: link:../../libs/api-contract
       '@platform/plugin-sdk':
         specifier: workspace:*
         version: link:../../libs/plugin-sdk
+      '@platform/web-data':
+        specifier: workspace:*
+        version: link:../../libs/web-data
       '@platform/web-ui':
         specifier: workspace:*
         version: link:../../libs/web-ui
