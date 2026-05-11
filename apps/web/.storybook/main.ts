@@ -30,12 +30,20 @@ const config: StorybookConfig = {
     );
 
     config.resolve = config.resolve || {};
-    config.resolve.alias = [
-      ...(Array.isArray(config.resolve.alias)
+    const existingAliases: { find: string | RegExp; replacement: string }[] =
+      Array.isArray(config.resolve.alias)
         ? config.resolve.alias
-        : Object.entries(config.resolve.alias as Record<string, string>).map(
-            ([find, replacement]) => ({ find, replacement }),
-          )),
+        : config.resolve.alias
+          ? Object.entries(config.resolve.alias).map(
+              ([find, replacement]) => ({
+                find,
+                replacement: replacement as string,
+              }),
+            )
+          : [];
+
+    config.resolve.alias = [
+      ...existingAliases,
       {
         find: /^@platform\/web-data\/(.+)$/,
         replacement: path.resolve(
