@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { usePreviewLoader } from './usePreviewLoader'
-import { listPreviewItems } from '../api'
+import { listPreviewItems } from '@platform/web-data/preview'
 
-vi.mock('../api', () => ({
+vi.mock('@platform/web-data/preview', () => ({
   listPreviewItems: vi.fn(),
 }))
 
@@ -26,7 +26,7 @@ describe('usePreviewLoader', () => {
     } as any)
 
     const loader = usePreviewLoader({ sessionId: 'session1' })
-    
+
     await loader.loadMore()
     expect(loader.items.value.length).toBe(1)
     expect(loader.items.value[0].upstream_item_id).toBe('a')
@@ -47,7 +47,7 @@ describe('usePreviewLoader', () => {
     } as any)
 
     const loader = usePreviewLoader({ sessionId: 'session1' })
-    
+
     await loader.loadMore()
     expect(loader.items.value.length).toBe(1)
 
@@ -92,7 +92,7 @@ describe('usePreviewLoader', () => {
 
     const sessionId = ref('session1')
     const loader = usePreviewLoader({ sessionId })
-    
+
     await loader.loadMore()
     expect(loader.items.value.length).toBe(1)
 

@@ -300,7 +300,10 @@ import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
 import { BrowserSidebar, PluginFlowModal, SampleBrowser, type PluginCard } from "@platform/web-ui";
-import { api, queryWaferPoints } from "../api";
+import { getDataset } from "@platform/web-data/datasets";
+import { listSamples, getSimilarity } from "@platform/web-data/samples";
+import { queryWaferPoints } from "@platform/web-data/agent";
+import { api } from "../api";
 import { resolveImageUris } from "../utils/imageAdapters";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
@@ -319,7 +322,8 @@ import {
   type SidebarWidgetInteractionContext,
   type SidebarWidgetInteractionState,
 } from "../components/classify/widgetContract";
-import type { ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
+import type { SimilarityResponse } from "@platform/web-data/samples";
+import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import { pluginRegistry } from "../core/registry";
 
 // ---------------------------------------------------------------------------
@@ -338,7 +342,7 @@ const id = computed(() => String(route.params.id));
 // ---------------------------------------------------------------------------
 const datasetQuery = useQuery({
   queryKey: computed(() => ["dataset", id.value]),
-  queryFn: () => api.getDataset(id.value),
+  queryFn: () => getDataset(id.value),
   retry: false,
 });
 
@@ -504,7 +508,7 @@ const browserSidebarContext = computed(() => ({
 
 const featureSamplesQuery = useQuery({
   queryKey: computed(() => ["feature-samples", id.value]),
-  queryFn: () => api.listSamples(id.value, 0, 100),
+  queryFn: () => listSamples(id.value, 0, 100),
   enabled: computed(() => !!id.value),
 });
 
@@ -573,8 +577,8 @@ async function doApplyEmbedConfig() {
   embedConfigLoading.value = true;
   embedConfigSaved.value = false;
   try {
-    await api.updateEmbedConfig(id.value, { model: embedConfigModel.value, dimension: embedConfigDimension.value });
-    await api.extractFeatures(id.value, true);
+await api.updateEmbedConfig(id.value, { model: embedConfigModel.value, dimension: embedConfigDimension.value });
+await api.extractFeatures(id.value, true);
     embedConfigSaved.value = true;
   } finally {
     embedConfigLoading.value = false;
@@ -626,7 +630,7 @@ async function doSimilaritySearch() {
   if (!similaritySampleId.value) return;
   similarityLoading.value = true;
   try {
-    similarityResult.value = await api.getSimilarity(id.value, similaritySampleId.value);
+    similarityResult.value = await getSimilarity(id.value, similaritySampleId.value);
   } catch (e) {
     message.error(`Similarity search failed: ${(e as Error).message}`);
   } finally {

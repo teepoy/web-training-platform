@@ -11,7 +11,7 @@
 import { ref, computed, watch, provide, type InjectionKey, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import type { ChatEntry, AgentPanelDescriptor, AgentContext } from '../types'
-import { streamGlobalAgentChat } from '../api'
+import { streamGlobalAgentChat } from '@platform/web-data/agent'
 import { useAuthStore } from '../stores/auth'
 
 export type AgentChatStatus = 'idle' | 'streaming' | 'error'

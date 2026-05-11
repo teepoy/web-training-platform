@@ -33,7 +33,7 @@
 import { computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { NCard, NSpin, NTag, NText } from "naive-ui";
-import { api } from "../api";
+import { getRunLogs } from "@platform/web-data/models";
 import type { RunLog } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ function formatTimestamp(ts: string): string {
 
 const { data: logs, isLoading } = useQuery<RunLog[]>({
   queryKey: computed(() => ["run-logs", props.runId]),
-  queryFn: () => api.getRunLogs(props.runId),
+  queryFn: () => getRunLogs(props.runId),
   enabled: computed(() => !!props.runId),
   refetchOnWindowFocus: false,
 });

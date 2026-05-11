@@ -34,7 +34,7 @@ import { computed, h, ref, watch } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import type { DataTableColumns, SelectOption } from 'naive-ui'
 import { NButton, NTag } from 'naive-ui'
-import { api } from '../api'
+import { listTrackedTasks } from '@platform/web-data/task-tracker'
 import TaskInsightModal from '../components/TaskInsightModal.vue'
 import { useTaskHandoff } from '../composables/useTaskHandoff'
 import { useTaskHandoffState } from '../composables/taskHandoffState'
@@ -53,7 +53,7 @@ const handoffIds = computed(() => new Set(Object.keys(watchedTasks.value)))
 
 const { data: tasks, isLoading } = useQuery({
   queryKey: computed(() => ['task-tracker', orgStore.currentOrgId]),
-  queryFn: () => api.listTrackedTasks(),
+  queryFn: () => listTrackedTasks(),
   enabled: computed(() => !!orgStore.currentOrgId),
   refetchInterval: computed(() => (document.visibilityState === 'hidden' ? 20000 : 5000)),
 })

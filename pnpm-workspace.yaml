@@ -2,3 +2,5 @@ packages:
   - apps/web
   - libs/plugin-sdk
   - libs/web-ui
+  - libs/api-contract
+  - libs/web-data

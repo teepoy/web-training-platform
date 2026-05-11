@@ -1,6 +1,5 @@
 import { ref, computed, watch, type Ref } from 'vue'
-import { listPreviewItems } from '../api'
-import type { PreviewItem } from '../types'
+import { listPreviewItems, type PreviewItem } from '@platform/web-data/preview'
 
 export interface UsePreviewLoaderOptions {
   sessionId: string | Ref<string>
@@ -31,11 +30,11 @@ export function usePreviewLoader(options: UsePreviewLoaderOptions) {
     try {
       const page = await listPreviewItems(resolvedId.value, cursor.value, pageSize)
       estimatedTotal.value = page.estimated_total
-      
-      const newItems = page.items.filter(newItem => 
+
+      const newItems = page.items.filter(newItem =>
         !items.value.some(existing => existing.upstream_item_id === newItem.upstream_item_id)
       )
-      
+
       items.value = [...items.value, ...newItems]
       cursor.value = page.next_cursor
       hasMore.value = page.has_more

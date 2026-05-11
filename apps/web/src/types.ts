@@ -3,6 +3,50 @@ export type DatasetType = "image_classification" | "image_vqa";
 export type ModelFramework = "pytorch" | "dspy";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
+export {
+  type AnnotationGridItem,
+  type BrowserItem,
+  type ChatEntry,
+  type PreviewItem,
+  type RunLog,
+  type SidebarPanelDescriptor,
+  type TrainingEvent,
+} from "@platform/web-ui";
+
+export {
+  type MarkdownLogEntry,
+  type MetricCardItem,
+} from "@platform/web-ui";
+
+export {
+  type PredictionResult,
+  type PredictionJob,
+  type PredictionEvent,
+  type RunPredictionRequest,
+  type PredictSingleRequest,
+  type ReviewAction,
+  type AnnotationVersion,
+  type SaveReviewAnnotationItem,
+  type SaveReviewAnnotationsResponse,
+  type PredictionCollection,
+  type CreatePredictionCollectionRequest,
+  type SyncPredictionCollectionResponse,
+  type ExportFormat,
+  type VersionExportResponse,
+} from "@platform/web-data/predictions";
+
+export {
+  type OrgRole,
+  type User,
+  type Organization,
+  type OrgMembership,
+  type UserWithOrgs,
+  type LoginResponse,
+  type PersonalAccessToken,
+  type PersonalAccessTokenCreated,
+  type OrgMember,
+} from "@platform/web-data/auth";
+
 export interface TaskSpec {
   task_type: TaskType;
   label_space: string[];
@@ -148,14 +192,6 @@ export interface TrainingPreset {
   org_id?: string | null;
 }
 
-export interface TrainingEvent {
-  job_id: string;
-  ts: string;
-  level: string;
-  message: string;
-  payload: Record<string, unknown>;
-}
-
 export interface ArtifactRef {
   id: string;
   uri: string;
@@ -235,14 +271,6 @@ export interface ScheduleRun {
   parameters: Record<string, unknown>;
 }
 
-export interface RunLog {
-  id: string | null;
-  flow_run_id: string | null;
-  level: number;
-  timestamp: string;
-  message: string;
-}
-
 export interface SyncResult {
   synced_count: number;
   skipped_count?: number;
@@ -314,65 +342,6 @@ export interface DatasetAnnotationStats {
   label_counts: Record<string, number>
 }
 
-export type OrgRole = "admin" | "member";
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  is_superadmin: boolean;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  created_at: string;
-}
-
-export interface OrgMembership {
-  id: string;
-  user_id: string;
-  org_id: string;
-  role: OrgRole;
-  created_at: string;
-}
-
-export interface UserWithOrgs extends User {
-  organizations: OrgMembership[];
-}
-
-export interface LoginResponse {
-  access_token: string;
-  user: User;
-}
-
-export interface PersonalAccessToken {
-  id: string;
-  user_id: string;
-  name: string;
-  token_prefix: string;
-  created_at: string;
-  last_used_at: string | null;
-}
-
-export interface PersonalAccessTokenCreated extends PersonalAccessToken {
-  token: string;
-}
-
-export interface OrgMember {
-  user_id: string;
-  org_id: string;
-  role: OrgRole;
-  user: User;
-}
-
-// ---------------------------------------------------------------------------
-// Model artifacts
-// ---------------------------------------------------------------------------
-
 export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";
 
 export interface ModelCompatibility {
@@ -433,155 +402,7 @@ export interface Model {
   preset_name: string;
 }
 
-// ---------------------------------------------------------------------------
-// Predictions
-// ---------------------------------------------------------------------------
-
-export interface PredictionResult {
-  id: string | null;
-  sample_id: string;
-  predicted_label: string;
-  confidence: number | null;
-  model_id: string | null;
-  target: string | null;
-  model_version: string | null;
-  job_id: string | null;
-  created_at: string | null;
-  error: string | null;
-}
-
-export interface BatchPredictionResult {
-  model_id: string;
-  dataset_id: string;
-  total_samples: number;
-  successful: number;
-  failed: number;
-  predictions: PredictionResult[];
-  started_at: string;
-  completed_at: string;
-  model_version: string | null;
-}
-
-export interface PredictionJob {
-  id: string;
-  dataset_id: string;
-  model_id: string;
-  status: string;
-  created_by: string;
-  target: string;
-  model_version: string | null;
-  created_at: string;
-  updated_at: string;
-  external_job_id: string | null;
-  sample_ids: string[] | null;
-  summary: Record<string, unknown>;
-}
-
-export interface PredictionEvent {
-  job_id: string;
-  ts: string;
-  level: string;
-  message: string;
-  payload: Record<string, unknown>;
-}
-
-export interface RunPredictionRequest {
-  model_id: string;
-  dataset_id: string;
-  sample_ids?: string[] | null;
-  model_version?: string | null;
-  target?: string;
-  prompt?: string | null;
-}
-
-export interface PredictSingleRequest {
-  model_id: string;
-  sample_id: string;
-  model_version?: string | null;
-  target?: string;
-  prompt?: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Prediction Review
-// ---------------------------------------------------------------------------
-
-export interface ReviewAction {
-  id: string;
-  dataset_id: string;
-  model_id: string;
-  model_version: string | null;
-  collection_id: string | null;
-  sync_tag: string | null;
-  created_by: string;
-  created_at: string;
-}
-
-export interface AnnotationVersion {
-  id: string;
-  review_action_id: string;
-  annotation_id: string;
-  prediction_id: string | null;
-  predicted_label: string;
-  final_label: string;
-  confidence: number | null;
-  created_at: string;
-}
-
-export interface SaveReviewAnnotationItem {
-  sample_id: string;
-  predicted_label: string;
-  final_label: string;
-  confidence: number | null;
-  prediction_id: string | null;
-}
-
-export interface PredictionCollection {
-  id: string;
-  name: string;
-  dataset_id: string;
-  model_id: string;
-  model_version: string | null;
-  target: string;
-  source_job_id: string | null;
-  sync_tag: string | null;
-  created_by: string;
-  created_at: string;
-  prediction_ids: string[];
-}
-
-export interface CreatePredictionCollectionRequest {
-  name: string;
-  dataset_id: string;
-  model_id: string;
-  prediction_ids: string[];
-  model_version?: string | null;
-  target?: string;
-  source_job_id?: string | null;
-}
-
-export interface SyncPredictionCollectionResponse {
-  collection_id: string;
-  sync_tag: string;
-  synced_count: number;
-  failed_count: number;
-  errors: string[];
-}
-
-export interface SaveReviewAnnotationsResponse {
-  review_action_id: string;
-  created_count: number;
-  annotation_versions: AnnotationVersion[];
-}
-
-export interface ExportFormat {
-  format_id: string;
-}
-
-export interface VersionExportResponse {
-  uri: string;
-  format_id: string;
-}
+// Prediction/Review types re-exported from @platform/web-data
 
 export interface TaskTrackerCheckResult {
   key: string;
@@ -763,30 +584,10 @@ export interface AgentDoneEvent extends AgentChatEvent {
 }
 
 /** A single entry in the chat history shown to the user. */
-export interface ChatEntry {
-  id: string;
-  role: "user" | "assistant" | "action";
-  content: string;
-  tool?: string;
-  timestamp: number;
-}
+// ChatEntry re-exported from @platform/web-ui above
 
 // Widget inline data shapes
-
-export interface MarkdownLogEntry {
-  ts: string;
-  level: string;
-  message: string;
-}
-
-export interface MetricCardItem {
-  label: string;
-  value: string;
-  color?: string;
-}
-
 export type TableWidgetEntity = "sample" | "prediction" | "row";
-
 export type TableWidgetFilterMode = "all" | "selected-only";
 
 export interface TableWidgetInteractionConfig {
@@ -814,51 +615,7 @@ export interface InteractiveTableWidgetData {
   rows: TableWidgetRow[];
 }
 
-// ---------------------------------------------------------------------------
-// Annotation Grid item (shared by ClassifyView & PredictionReview Step 2)
-// ---------------------------------------------------------------------------
-
-export interface AnnotationGridItem {
-  /** Sample ID (unique key) */
-  id: string;
-  /** Resolved image src strings (already passed through resolveImageUris) */
-  imageSrcs: string[];
-  /** Current persisted label (from latest_annotation) */
-  currentLabel: string | null;
-  /** Draft label assigned in-session but not yet submitted */
-  draftLabel: string | null;
-  /** Prediction label (only in prediction-review mode) */
-  predictionLabel: string | null;
-  /** Prediction confidence 0-1 (only in prediction-review mode) */
-  predictionConfidence: number | null;
-  /** Prediction ID for review submission */
-  predictionId: string | null;
-  /** Arbitrary metadata shown on hover / detail */
-  metadata: Record<string, unknown>;
-}
-
-export interface BrowserItem {
-  /** Sample or upstream item ID (unique key within a browser surface) */
-  id: string;
-  /** Resolved image src strings */
-  imageSrcs: string[];
-  /** Arbitrary metadata shown on hover / detail */
-  metadata: Record<string, unknown>;
-  /** Which surface this item came from — filled in by surface adapters */
-  sourceKind?: "dataset" | "preview" | "classify-review";
-  /** Current persisted label */
-  currentLabel: string | null;
-  /** Draft label assigned in-session but not yet submitted */
-  draftLabel: string | null;
-  /** Prediction label */
-  predictionLabel: string | null;
-  /** Prediction confidence 0–1 */
-  predictionConfidence: number | null;
-  /** Prediction ID for review submission */
-  predictionId: string | null;
-  /** Activation label (the label most recently activated/highlighted in the browser) */
-  activationLabel: string | null;
-}
+// AnnotationGridItem and BrowserItem re-exported from @platform/web-ui above
 
 // ---------------------------------------------------------------------------
 // Global Agent types
@@ -880,40 +637,10 @@ export interface GlobalChatRequest {
   session_id?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Preview session types
-// ---------------------------------------------------------------------------
-
-export interface PreviewSession {
-  session_id: string
-  collection_ref: string
-  classification_enabled: boolean
-  estimated_total: number | null
-  loaded_count: number
-  next_cursor: string | null
-  has_more: boolean
-}
-
-export interface PreviewItem {
-  upstream_item_id: string
-  image_uris: string[]
-  metadata: Record<string, unknown>
-}
-
-export interface PreviewItemsPage {
-  items: PreviewItem[]
-  next_cursor: string | null
-  has_more: boolean
-  estimated_total: number | null
-}
-
-export type PreviewPersistScope = 'entire_collection' | 'loaded_items_only'
-
-export interface PreviewPersistStatus {
-  dataset_id: string
-  persist_session_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  imported_count: number
-  remaining_count: number
-  error: string | null
-}
+// Preview session types (aliased from web-data for backward compat)
+export {
+  type PreviewSession,
+  type PreviewItemsPage,
+  type PreviewPersistScope,
+  type PreviewPersistStatus,
+} from "@platform/web-data/preview";

@@ -220,13 +220,22 @@ import {
   useDialog,
   useThemeVars,
 } from "naive-ui";
+import { bulkCreateAnnotations, syncAnnotationsToLs } from "../api";
+import { getDataset, updateLabelSpace } from "@platform/web-data/datasets";
+import { getSample, listSamplesWithLabels } from "@platform/web-data/samples";
+import { listModels, listJobs, listPresets, createJob } from "@platform/web-data/models";
 import {
-  api,
-  bulkCreateAnnotations,
-  listSamplesWithLabels,
-  queryWaferPoints,
-  syncAnnotationsToLs,
-} from "../api";
+  listPredictionJobs,
+  listPredictionJobPredictions,
+  runPredictions as runPredictionsApi,
+  getPredictionJob,
+  cancelPredictionJob,
+  createPredictionCollection,
+  syncPredictionCollection,
+  createReviewAction as createReviewActionApi,
+  saveReviewAnnotations,
+} from "@platform/web-data/predictions";
+import { queryWaferPoints } from "@platform/web-data/agent";
 import type {
   AnnotationGridItem,
   BrowserItem,
@@ -304,7 +313,7 @@ const themeStyleVars = computed(() => ({
 
 const datasetQuery = useQuery({
   queryKey: computed(() => ["dataset", datasetId.value]),
-  queryFn: () => api.getDataset(datasetId.value),
+  queryFn: () => getDataset(datasetId.value),
   retry: false,
 });
 
@@ -338,7 +347,7 @@ const { samples, totalCount, isLoading, loadMore, reset: resetLoader } = useSamp
 
 onMounted(() => {
   resetLoader();
-  
+
   if (route.query.previewPersistSession) {
     message.success('Dataset imported from preview session.');
     router.replace({ query: { ...route.query, previewPersistSession: undefined } });
@@ -478,7 +487,7 @@ const selectedSidebarHydrationQuery = useQuery({
   ]),
   queryFn: async () => {
     const samples = await Promise.all(
-      selectedSidebarSampleHydrationIds.value.map((sampleId) => api.getSample(sampleId)),
+      selectedSidebarSampleHydrationIds.value.map((sampleId) => getSample(sampleId)),
     );
     return samples;
   },
@@ -539,7 +548,7 @@ const activeGridLoading = computed(() =>
 
 const { data: models } = useQuery({
   queryKey: computed(() => ["models", orgStore.currentOrgId]),
-  queryFn: () => api.listModels(),
+  queryFn: () => listModels(),
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
@@ -575,7 +584,7 @@ const predictionTarget = computed(() => {
 
 const { data: predictionJobsData } = useQuery({
   queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId]),
-  queryFn: api.listPredictionJobs,
+  queryFn: listPredictionJobs,
   enabled: computed(() => !!orgStore.currentOrgId),
   refetchInterval: 3000,
 });
@@ -604,7 +613,7 @@ async function loadReviewRowsFromJob(job: PredictionJob): Promise<ReviewRow[]> {
   if (summaryPredictions.length > 0) {
     return summaryPredictions;
   }
-  const fetched = await api.listPredictionJobPredictions(job.id);
+  const fetched = await listPredictionJobPredictions(job.id);
   return fetched.filter((item) => !item.error).map(predictionResultToReviewRow);
 }
 
@@ -663,7 +672,7 @@ const runPredictionsMutation = useMutation({
     if (!selectedModelId.value) {
       throw new Error("Model is required");
     }
-    return api.runPredictions({
+    return runPredictionsApi({
       model_id: selectedModelId.value,
       dataset_id: datasetId.value,
       model_version: modelVersionTag.value || null,
@@ -689,7 +698,7 @@ const cancelPredictionMutation = useMutation({
     if (!activePredictionJob.value) {
       throw new Error("No active prediction job");
     }
-    return api.cancelPredictionJob(activePredictionJob.value.id);
+    return cancelPredictionJob(activePredictionJob.value.id);
   },
   onSuccess: () => {
     message.warning("Prediction cancellation requested");
@@ -703,7 +712,7 @@ async function pollPredictionJob(jobId: string) {
   pollingPredictionJob.value = true;
   try {
     for (let attempt = 0; attempt < 120; attempt += 1) {
-      const job = await api.getPredictionJob(jobId);
+      const job = await getPredictionJob(jobId);
       activePredictionJob.value = job;
       const status = job.status.toLowerCase();
       if (status === "completed") {
@@ -730,7 +739,7 @@ const syncCollectionMutation = useMutation({
     if (!selectedModelId.value || predictions.value.length === 0) {
       throw new Error("Predictions are required before syncing to Label Studio");
     }
-    const collection = await api.createPredictionCollection({
+    const collection = await createPredictionCollection({
       name: `review-${new Date().toISOString()}`,
       dataset_id: datasetId.value,
       model_id: selectedModelId.value,
@@ -739,7 +748,7 @@ const syncCollectionMutation = useMutation({
       target: predictionTarget.value,
       source_job_id: activePredictionJob.value?.id ?? null,
     });
-    const syncResult = await api.syncPredictionCollection(collection.id);
+    const syncResult = await syncPredictionCollection(collection.id);
     syncedCollection.value = collection;
     syncedCollectionTag.value = syncResult.sync_tag;
     return syncResult;
@@ -760,13 +769,13 @@ const saveAnnotationsMutation = useMutation({
     if (!selectedModelId.value) {
       throw new Error("Model is required");
     }
-    const action = await api.createReviewAction(
-      datasetId.value,
-      selectedModelId.value,
-      modelVersionTag.value || null,
-      syncedCollection.value?.id ?? null,
-      syncedCollectionTag.value,
-    );
+    const action = await createReviewActionApi({
+      dataset_id: datasetId.value,
+      model_id: selectedModelId.value,
+      model_version: modelVersionTag.value || null,
+      collection_id: syncedCollection.value?.id ?? null,
+      sync_tag: syncedCollectionTag.value,
+    });
     const items: SaveReviewAnnotationItem[] = predictions.value.map((row) => ({
       sample_id: row.sample_id,
       predicted_label: row.predicted_label,
@@ -774,7 +783,7 @@ const saveAnnotationsMutation = useMutation({
       confidence: row.confidence,
       prediction_id: row.prediction_id,
     }));
-    return api.saveReviewAnnotations(action.id, items);
+    return saveReviewAnnotations(action.id, items);
   },
   onSuccess: (data) => {
     message.success(`Saved ${data.created_count} reviewed annotations`);
@@ -814,14 +823,14 @@ function clearPredictionReview() {
 
 const { data: trainingJobs } = useQuery({
   queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-  queryFn: api.listJobs,
+  queryFn: listJobs,
   refetchInterval: 5000,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: presets } = useQuery({
   queryKey: computed(() => ["presets", orgStore.currentOrgId]),
-  queryFn: api.listPresets,
+  queryFn: listPresets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
@@ -850,7 +859,7 @@ const startTrainingMutation = useMutation({
     if (!selectedPresetId.value) {
       throw new Error("Preset is required");
     }
-    return api.createJob(datasetId.value, selectedPresetId.value);
+    return createJob(datasetId.value, selectedPresetId.value);
   },
   onSuccess: (job) => {
     activeTrainingJobId.value = job.id;
@@ -1210,7 +1219,7 @@ const addLabelMutation = useMutation({
     if (currentLabels.includes(newLabel)) {
       throw new Error(`Label "${newLabel}" already exists`);
     }
-    return api.updateLabelSpace(datasetId.value, [...currentLabels, newLabel]);
+    return updateLabelSpace(datasetId.value, [...currentLabels, newLabel]);
   },
   onSuccess: () => {
     message.success(`Added label "${newLabelName.value}"`);

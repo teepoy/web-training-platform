@@ -302,8 +302,8 @@ import {
   NSpace,
   NAlert,
 } from "naive-ui";
-import { api } from "../api";
-import type { SimilarityResponse } from "../api";
+import { getSample, listAnnotationsForSample, createAnnotation, updateAnnotation, deleteAnnotation, uploadSampleImage, getSimilarity } from "@platform/web-data/samples";
+import type { SimilarityResponse } from "@platform/web-data/samples";
 import { resolveImageUris } from "../utils/imageAdapters";
 import type { Annotation } from "../types";
 
@@ -338,7 +338,7 @@ const qc = useQueryClient();
 // ---------------------------------------------------------------------------
 const sampleQuery = useQuery({
   queryKey: computed(() => ["sample", props.sampleId]),
-  queryFn: () => api.getSample(props.sampleId!),
+  queryFn: () => getSample(props.sampleId!),
   enabled: computed(() => !!props.sampleId),
 });
 
@@ -358,7 +358,7 @@ const metadataJson = computed(() =>
 // ---------------------------------------------------------------------------
 const annotationsQuery = useQuery({
   queryKey: computed(() => ["annotations", props.sampleId]),
-  queryFn: () => api.listAnnotationsForSample(props.sampleId!),
+  queryFn: () => listAnnotationsForSample(props.sampleId!),
   enabled: computed(() => !!props.sampleId),
 });
 
@@ -389,7 +389,7 @@ function cancelEdit() {
 
 const updateAnnotationMutation = useMutation({
   mutationFn: ({ id, label }: { id: string; label: string }) =>
-    api.updateAnnotation(id, { label }),
+    updateAnnotation(id, { label }),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
     cancelEdit();
@@ -402,7 +402,7 @@ function saveAnnotation(id: string) {
 }
 
 const deleteAnnotationMutation = useMutation({
-  mutationFn: (id: string) => api.deleteAnnotation(id),
+  mutationFn: (id: string) => deleteAnnotation(id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
   },
@@ -420,7 +420,7 @@ const newAnnotationCreatedBy = ref("web-user");
 
 const createAnnotationMutation = useMutation({
   mutationFn: (vars: { sample_id: string; label: string; created_by: string }) =>
-    api.createAnnotation(vars),
+    createAnnotation(vars),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
     newAnnotationLabel.value = "";
@@ -459,7 +459,7 @@ async function doUpload() {
   if (!props.sampleId || !replaceFile.value) return;
   uploadingImage.value = true;
   try {
-    await api.uploadSampleImage(props.sampleId, replaceFile.value);
+    await uploadSampleImage(props.sampleId, replaceFile.value);
     qc.invalidateQueries({ queryKey: ["sample", props.sampleId] });
     replaceFile.value = null;
     if (replacePreviewUrl.value) {
@@ -488,11 +488,11 @@ async function doFindSimilar() {
   findSimilarError.value = null;
   findSimilarSearched.value = true;
   try {
-    const result: SimilarityResponse = await api.getSimilarity(props.datasetId, props.sampleId, 10);
+    const result: SimilarityResponse = await getSimilarity(props.datasetId, props.sampleId, 10);
     const neighbors = await Promise.all(
       result.neighbors.map(async (nb) => {
         try {
-          const sample = await api.getSample(nb.sample_id);
+          const sample = await getSample(nb.sample_id);
           const previewUri = sample.image_uris.length > 0
             ? resolveImageUris(sample.image_uris)[0]
             : fallbackPlaceholder;

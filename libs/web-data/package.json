@@ -1,0 +1,31 @@
+{
+  "name": "@platform/web-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./preview": "./src/preview/index.ts",
+    "./samples": "./src/samples/index.ts",
+    "./datasets": "./src/datasets/index.ts",
+    "./task-tracker": "./src/task-tracker/index.ts",
+    "./agent": "./src/agent/index.ts",
+    "./models": "./src/models/index.ts",
+    "./predictions": "./src/predictions/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./client": "./src/client/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@tanstack/vue-query": "^5.66.9",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@platform/api-contract": "workspace:*",
+    "@tanstack/vue-query": "^5.66.9",
+    "typescript": "~5.7.3",
+    "vue": "^3.5.13"
+  }
+}

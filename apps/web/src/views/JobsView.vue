@@ -71,7 +71,9 @@ import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
-import { api } from "../api";
+import { listJobs, createJob, listPresets } from "@platform/web-data/models";
+import { listDatasets } from "@platform/web-data/datasets";
+import { toggleJobPublic as toggleJobPublicApi } from "@platform/web-data/models";
 import type { TrainingJob, JobStatus } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
@@ -88,20 +90,20 @@ const authStore = useAuthStore();
 
 const { data: jobs, isLoading } = useQuery({
   queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-  queryFn: api.listJobs,
+  queryFn: listJobs,
   refetchInterval: 5000,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
   queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
-  queryFn: api.listDatasets,
+  queryFn: listDatasets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: presets, isLoading: presetsLoading } = useQuery({
   queryKey: computed(() => ["presets", orgStore.currentOrgId]),
-  queryFn: api.listPresets,
+  queryFn: listPresets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
@@ -268,7 +270,7 @@ const formRules: FormRules = {
 
 const createJobMutation = useMutation({
   mutationFn: ({ dataset_id, preset_id }: { dataset_id: string; preset_id: string }) =>
-    api.createJob(dataset_id, preset_id),
+    createJob(dataset_id, preset_id),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
     message.success("Job started");
@@ -282,7 +284,7 @@ const createJobMutation = useMutation({
 
 const toggleJobPublic = useMutation({
   mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
-    api.toggleJobPublic(id, isPublic),
+    toggleJobPublicApi(id, isPublic),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
   },

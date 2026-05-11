@@ -89,7 +89,8 @@ import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useDialog, useMessage, NTag, NEllipsis } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { api, API_BASE } from "../api";
+import { getJob, cancelJob } from "@platform/web-data/models";
+import { getApiBase } from "@platform/web-data/client";
 import type { JobStatus, TrainingEvent } from "../types";
 import { useJobEvents } from "../composables/useJobEvents";
 import { TrainingChart } from "@platform/web-ui";
@@ -120,7 +121,7 @@ const {
   error,
 } = useQuery({
   queryKey: computed(() => ["jobs", id.value]),
-  queryFn: () => api.getJob(id.value),
+  queryFn: () => getJob(id.value),
   refetchInterval: 5000,
 });
 
@@ -144,7 +145,7 @@ const { data: metricsArtifact } = useQuery({
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE}/artifacts/${encodeURIComponent(artifact.id)}/download`, {
+    const response = await fetch(`${getApiBase()}/artifacts/${encodeURIComponent(artifact.id)}/download`, {
       headers,
     });
 
@@ -276,7 +277,7 @@ const eventColumns = computed<DataTableColumns<TrainingEvent>>(() => [
 // ---------------------------------------------------------------------------
 
 const cancelMutation = useMutation({
-  mutationFn: () => api.cancelJob(id.value),
+  mutationFn: () => cancelJob(id.value),
   onSuccess: () => {
     message.success("Job cancelled");
     qc.invalidateQueries({ queryKey: ["jobs", id.value] });
@@ -308,7 +309,7 @@ const downloadingId = ref<string | null>(null);
 async function onDownload(artifactId: string, uri: string) {
   downloadingId.value = artifactId;
   try {
-    const downloadUrl = `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`;
+    const downloadUrl = `${getApiBase()}/artifacts/${encodeURIComponent(artifactId)}/download`;
     window.open(downloadUrl, "_blank");
   } catch (err) {
     message.error((err as Error)?.message ?? "Download failed");

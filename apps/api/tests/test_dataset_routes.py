@@ -139,14 +139,14 @@ def test_similarity_search() -> None:
         dataset_id = _create_dataset(c)
         sample_id = _create_sample(c, dataset_id)
 
-        mock_result = {"neighbors": [], "query_sample_id": sample_id}
+        mock_result = {"neighbors": [], "sample_id": sample_id}
         with patch.object(
             container.feature_ops(), "similarity_search",
             new_callable=AsyncMock, return_value=mock_result,
         ):
             resp = c.get(f"/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
         assert resp.status_code == 200
-        assert resp.json()["query_sample_id"] == sample_id
+        assert resp.json()["sample_id"] == sample_id
 
 
 def test_similarity_search_dataset_not_found() -> None:

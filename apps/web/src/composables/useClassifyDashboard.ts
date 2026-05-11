@@ -8,7 +8,7 @@
 
 import { computed, isRef, ref, type Ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
-import { api } from '../api'
+import { getAnnotationStats } from '@platform/web-data/datasets'
 import type { DatasetAnnotationStats } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ export function useClassifyDashboard(
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: computed(() => ['annotation-stats', resolvedId.value]),
-    queryFn: () => api.getAnnotationStats(resolvedId.value),
+    queryFn: () => getAnnotationStats(resolvedId.value),
     enabled: computed(() => resolvedId.value !== ''),
     refetchInterval: 15_000,
     retry: 1,

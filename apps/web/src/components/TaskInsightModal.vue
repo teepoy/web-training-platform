@@ -144,9 +144,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
-import { api } from '../api'
+import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '@platform/web-data/task-tracker'
 import type { TaskTrackerNode, TaskTrackerSummary } from '../types'
 import { useTaskStream } from '../composables/useTaskHandoff'
 import { useOrgStore } from '../stores/org'
@@ -166,12 +166,9 @@ const message = useMessage()
 const queryClient = useQueryClient()
 const orgStore = useOrgStore()
 
-const { data: detail, isLoading } = useQuery({
-  queryKey: computed(() => ['task-tracker-detail', orgStore.currentOrgId, props.task?.id]),
-  queryFn: () => api.getTrackedTask(props.task!.id),
-  enabled: computed(() => props.show && !!props.task?.id && !!orgStore.currentOrgId),
-  refetchInterval: computed(() => (props.show ? 5000 : false)),
-})
+const { data: detail, isLoading } = useTrackedTaskQuery(
+  () => (props.show && props.task?.id && orgStore.currentOrgId ? props.task.id : null),
+)
 
 const streamedDetail = ref<typeof detail.value | null>(null)
 
@@ -190,17 +187,20 @@ useTaskStream(
   },
 )
 
-const cancelMutation = useMutation({
-  mutationFn: () => api.cancelTrackedTask(props.task!.id),
-  onSuccess: () => {
-    void queryClient.invalidateQueries({ queryKey: ['task-tracker', orgStore.currentOrgId] })
-    void queryClient.invalidateQueries({ queryKey: ['task-tracker-detail', orgStore.currentOrgId, props.task?.id] })
-    message.warning('Cancellation requested')
-  },
-  onError: (error: Error) => {
-    message.error(error.message || 'Failed to cancel task')
-  },
-})
+const rawCancel = useCancelTrackedTaskMutation()
+
+const cancelMutation = {
+  ...rawCancel,
+  mutate: () => rawCancel.mutate(props.task!.id, {
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: taskTrackerKeys.all })
+      message.warning('Cancellation requested')
+    },
+    onError: (error: Error) => {
+      message.error(error.message || 'Failed to cancel task')
+    },
+  }),
+}
 
 const defaultExpanded = computed(() => {
   const stage = activeDetail.value?.derived.stage
