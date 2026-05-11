@@ -47,6 +47,11 @@ faulthandler_timeout = 60
 faulthandler_exit_on_timeout = true
 markers = [
     "no_auth_override: skip the global auth dependency override for this test",
+    "no_ls_override: skip Label Studio client autouse mock",
+    "no_embedding_override: skip embedding service autouse mock",
+    "no_inference_override: skip inference worker autouse mock",
+    "no_prefect_mock: skip PrefectClient autouse mock",
+    "no_llm_mock: skip LLMClient autouse mock",
 ]
 
 [dependency-groups]
