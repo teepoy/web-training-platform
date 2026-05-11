@@ -21,7 +21,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
-import type { EChartsOption } from "echarts";
+import { getInstanceByDom, type EChartsOption, type EChartsType } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import { LineChart, ScatterChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
@@ -62,6 +62,13 @@ interface WaferBenchmarkConfig {
   queryBoxSize?: number;
 }
 
+interface WaferDieGridConfig {
+  dieWidthNm: number;
+  dieHeightNm: number;
+  originX: number;
+  originY: number;
+}
+
 const props = defineProps<{
   data?: Record<string, unknown> | null;
   config?: Record<string, unknown>;
@@ -71,6 +78,7 @@ const props = defineProps<{
 const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
 
 const chartRootRef = ref<HTMLElement | null>(null);
+const chartInstance = shallowRef<EChartsType | null>(null);
 
 const containerSize = ref({ w: 1, h: 1 });
 
@@ -130,6 +138,30 @@ const benchmarkConfig = computed<WaferBenchmarkConfig>(() => {
     return { enabled: false };
   }
   return raw as WaferBenchmarkConfig;
+});
+
+const scatterSize = computed(() => {
+  const parsed = Number(props.config?.scatterSize ?? 1);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(0.1, Math.min(20, parsed));
+});
+
+const dieGridConfig = computed<WaferDieGridConfig>(() => {
+  const raw = props.config?.dieGrid;
+  if (!raw || typeof raw !== "object") {
+    return { dieWidthNm: 6_000_000, dieHeightNm: 3_000_000, originX: 0, originY: 0 };
+  }
+  const obj = raw as Record<string, unknown>;
+  const dw = Number(obj.dieWidthNm ?? 6_000_000);
+  const dh = Number(obj.dieHeightNm ?? 3_000_000);
+  const ox = Number(obj.originX ?? 0);
+  const oy = Number(obj.originY ?? 0);
+  return {
+    dieWidthNm: Number.isFinite(dw) ? dw : 6_000_000,
+    dieHeightNm: Number.isFinite(dh) ? dh : 3_000_000,
+    originX: Number.isFinite(ox) ? ox : 0,
+    originY: Number.isFinite(oy) ? oy : 0,
+  };
 });
 
 const generatedPoints = ref<WaferPoint[] | null>(null);
@@ -685,6 +717,7 @@ const isZoomed = computed(() => {
 function resetZoom() {
   const radius = waferRadius.value;
   viewport.value = { minX: -radius, maxX: radius, minY: -radius, maxY: radius };
+  chartInstance.value?.setOption(viewportAxis.value, false);
 }
 
 let wheelRaf = 0;
@@ -743,6 +776,8 @@ function applyWheelZoom(): void {
     minY: nextMinY,
     maxY: nextMaxY,
   };
+
+  chartInstance.value?.setOption(viewportAxis.value, false);
 }
 
 function onWheel(event: WheelEvent) {
@@ -764,7 +799,73 @@ const waferScatterData = computed<Array<[number, number, string, number]>>(() =>
   normalizedPoints.value.map((point) => [point.x, point.y, point.id, point.value]),
 );
 
-const chartOption = computed<EChartsOption>(() => {
+type LineSegment = [[number, number], [number, number]];
+
+function computeDieGridLines(
+  radius: number,
+  dieWidth: number,
+  dieHeight: number,
+  originX: number,
+  originY: number,
+): LineSegment[] {
+  if (radius <= 0 || dieWidth <= 0 || dieHeight <= 0) {
+    return [];
+  }
+  const segments: LineSegment[] = [];
+
+  // Vertical grid lines: x = originX + n * dieWidth
+  const vStart = Math.ceil((-radius - originX) / dieWidth);
+  const vEnd = Math.floor((radius - originX) / dieWidth);
+  for (let n = vStart; n <= vEnd; n += 1) {
+    const x = originX + n * dieWidth;
+    const absX = Math.abs(x);
+    if (absX >= radius) {
+      continue;
+    }
+    const yI = Math.sqrt(radius * radius - x * x);
+    segments.push([
+      [x, -yI],
+      [x, yI],
+    ]);
+  }
+
+  // Horizontal grid lines: y = originY + m * dieHeight
+  const hStart = Math.ceil((-radius - originY) / dieHeight);
+  const hEnd = Math.floor((radius - originY) / dieHeight);
+  for (let m = hStart; m <= hEnd; m += 1) {
+    const y = originY + m * dieHeight;
+    const absY = Math.abs(y);
+    if (absY >= radius) {
+      continue;
+    }
+    const xI = Math.sqrt(radius * radius - y * y);
+    segments.push([
+      [-xI, y],
+      [xI, y],
+    ]);
+  }
+
+  return segments;
+}
+
+const dieGridSeriesData = computed(() => {
+  const segments = computeDieGridLines(
+    waferRadius.value,
+    dieGridConfig.value.dieWidthNm,
+    dieGridConfig.value.dieHeightNm,
+    dieGridConfig.value.originX,
+    dieGridConfig.value.originY,
+  );
+  if (segments.length === 0) return [];
+  // Flatten segments with null separators for disconnected line rendering
+  const flat: (number[] | null)[] = [];
+  for (const seg of segments) {
+    flat.push(seg[0], seg[1], null);
+  }
+  return flat;
+});
+
+const stableChartOption = computed<EChartsOption>(() => {
   const series: Extract<EChartsOption["series"], unknown[]> = [
     {
       name: "wafer-boundary",
@@ -785,7 +886,7 @@ const chartOption = computed<EChartsOption>(() => {
       largeThreshold: 2000,
       progressive: 20000,
       progressiveThreshold: 30000,
-      symbolSize: 2,
+      symbolSize: scatterSize.value,
       data: waferScatterData.value,
       itemStyle: {
         color: "#d83a3a",
@@ -804,7 +905,7 @@ const chartOption = computed<EChartsOption>(() => {
       name: "selected",
       type: "scatter",
       data: selectedPoints.value,
-      symbolSize: 4,
+      symbolSize: Math.max(4, scatterSize.value + 2),
       itemStyle: {
         color: "#f7c948",
         borderColor: "#7a5c00",
@@ -812,6 +913,22 @@ const chartOption = computed<EChartsOption>(() => {
       },
       silent: true,
       z: 3,
+    });
+  }
+
+  if (dieGridSeriesData.value.length > 0) {
+    series.push({
+      name: "die-grid",
+      type: "line",
+      data: dieGridSeriesData.value,
+      lineStyle: {
+        width: 0.5,
+        color: "#d0d0d0",
+        type: "solid",
+      },
+      symbol: "none",
+      silent: true,
+      z: 0,
     });
   }
 
@@ -824,6 +941,18 @@ const chartOption = computed<EChartsOption>(() => {
       top: gridInsets.value.top,
       bottom: gridInsets.value.bottom,
       containLabel: false,
+    },
+    xAxis: {
+      type: "value" as const,
+      min: -DEFAULT_WAFER_RADIUS_NM,
+      max: DEFAULT_WAFER_RADIUS_NM,
+      show: false,
+    },
+    yAxis: {
+      type: "value" as const,
+      min: -DEFAULT_WAFER_RADIUS_NM,
+      max: DEFAULT_WAFER_RADIUS_NM,
+      show: false,
     },
     tooltip: {
       trigger: "item",
@@ -844,21 +973,26 @@ const chartOption = computed<EChartsOption>(() => {
         return `id: <b>${id}</b><br/>x: ${x} nm<br/>y: ${y} nm`;
       },
     },
-    xAxis: {
-      type: "value",
-      min: viewport.value.minX,
-      max: viewport.value.maxX,
-      show: false,
-    },
-    yAxis: {
-      type: "value",
-      min: viewport.value.minY,
-      max: viewport.value.maxY,
-      show: false,
-    },
     series,
   };
 });
+
+const viewportAxis = computed(() => ({
+  xAxis: {
+    type: "value" as const,
+    min: viewport.value.minX,
+    max: viewport.value.maxX,
+    show: false,
+  },
+  yAxis: {
+    type: "value" as const,
+    min: viewport.value.minY,
+    max: viewport.value.maxY,
+    show: false,
+  },
+}));
+
+const chartOption = computed<EChartsOption>(() => stableChartOption.value);
 
 const selectionRectStyle = computed(() => {
   if (!dragState.value.active) {
@@ -897,6 +1031,11 @@ onMounted(() => {
     });
     resizeObserver.observe(root);
   }
+
+  const chartDom = root.querySelector(".wmw-chart") as HTMLElement;
+  if (chartDom) {
+    chartInstance.value = getInstanceByDom(chartDom) ?? null;
+  }
 });
 
 onUnmounted(() => {
@@ -912,6 +1051,7 @@ onUnmounted(() => {
     resizeObserver.disconnect();
     resizeObserver = null;
   }
+  chartInstance.value = null;
 });
 </script>
 
