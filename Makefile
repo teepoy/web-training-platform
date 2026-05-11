@@ -178,6 +178,24 @@ smoke-dev-prediction: ## Run prediction dev smoke test against local stack
 .PHONY: smoke-dev-runtime
 smoke-dev-runtime: smoke-dev-training smoke-dev-prediction ## Run core runtime smoke tests against local stack
 
+# ──────────────────────────────────────────────
+# Regression tests
+# ──────────────────────────────────────────────
+
+.PHONY: test-regression
+test-regression: ## Run pytest-native seed regression tests (SQLite, no Docker needed)
+	cd $(API_DIR) && uv run --extra dev pytest tests/test_seed_regression_*.py -v
+
+.PHONY: smoke-regression
+smoke-regression: ## Run live-stack smoke regression (needs Docker Compose)
+	@curl -s --fail --show-error $(API_URL)/health > /dev/null 2>&1 || (echo "ERROR: API not healthy at $(API_URL)" && exit 1)
+	python scripts/smoke_runner.py --all
+
+.PHONY: regression
+regression: test-regression ## Run fast regression then live-stack smoke
+	@echo "--- Running live-stack smoke regression ---"
+	$(MAKE) smoke-regression
+
 
 # ──────────────────────────────────────────────
 # Docker / Infra

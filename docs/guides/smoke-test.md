@@ -2,6 +2,44 @@
 
 Run this checklist after making significant changes to verify core functionality.
 
+## Automated Regression Testing
+
+Three test modes are available, each targeting a different layer:
+
+| Command | Scope | Prerequisites |
+|---------|-------|---------------|
+| `make test-regression` | Pytest-native seed regression (SQLite, ~5s) | None — runs offline |
+| `make smoke-regression` | Live-stack smoke via Docker Compose | `make up` (healthy API) |
+| `make e2e-live` | Browser E2E (Playwright, future) | `make up` + seeded data |
+
+### Quick-start
+
+```bash
+# Run fast regression tests first, then live-stack smoke
+make regression
+```
+
+### Smoke checklist → automated test mapping
+
+| Smoke checklist item | Automated test / script |
+|----------------------|------------------------|
+| 9.1 Batch Dev Smoke (mock) | `test_seed_regression_imagenet_mock.py` |
+| 9.1 Batch Dev Smoke (POC) | `test_seed_regression_imagenet_poc.py` |
+| 9.2.1 Multi-Image Scatter Demo | `test_seed_regression_multi_image_scatter.py` |
+| 9.2.2 Wafer Map Demo | `test_seed_regression_wafer_demo.py` |
+| 9 (mock multi-image) | `test_seed_regression_mock_multi_image.py` |
+| 9.2 Training Dev Smoke | `scripts/smoke_runner.py --all` (includes training) |
+| 9.3 Prediction Dev Smoke | `scripts/smoke_runner.py --all` (includes prediction) |
+| 9.4 Runtime Smoke Bundle | `scripts/smoke_runner.py --all` (includes runtime) |
+| All smoke (9.1–9.4) | `make smoke-regression` (runs `smoke_runner.py --all`) |
+
+### Prerequisites
+
+- **`make test-regression`**: No prerequisites — uses SQLite with `APP_CONFIG_PROFILE=test`.
+- **`make smoke-regression` / `make e2e-live`**: Docker Compose stack must be running (`make up`).
+
+The manual checklist below remains for interactive verification where automated coverage is not yet available.
+
 ## Prerequisites
 
 ```bash
