@@ -1,6 +1,7 @@
 stages:
   - check
   - test
+  - test-frontend
 
 variables:
   UV_CACHE_DIR: .uv-cache
@@ -19,6 +20,23 @@ cache:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
 
+.frontend:
+  image: node:22-bookworm
+  before_script:
+    - corepack enable
+    - pnpm install --frozen-lockfile
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-pnpm
+    paths:
+      - node_modules/
+      - apps/*/node_modules/
+      - libs/*/node_modules/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ── Python checks ──────────────────────────────────
+
 ruff:
   extends: .default
   stage: check
@@ -31,8 +49,30 @@ ty-check:
   script:
     - uv run ty check --project apps/api apps/api
 
+# ── Python tests ───────────────────────────────────
+
 api-tests:
   extends: .default
   stage: test
   script:
     - uv run pytest apps/api/tests/
+
+# ── Frontend tests ─────────────────────────────────
+
+plugin-sdk-tests:
+  extends: .frontend
+  stage: test-frontend
+  script:
+    - pnpm test:plugin-sdk
+
+web-ui-tests:
+  extends: .frontend
+  stage: test-frontend
+  script:
+    - pnpm test:web-ui
+
+web-tests:
+  extends: .frontend
+  stage: test-frontend
+  script:
+    - pnpm test:web

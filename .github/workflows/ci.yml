@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Python checks ──────────────────────────────────
+
+  ruff:
+    runs-on: ubuntu-latest
+    container: ghcr.io/astral-sh/uv:python3.12-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            .uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+      - run: uv sync --frozen
+      - run: uv run ruff check apps/api/
+
+  ty-check:
+    runs-on: ubuntu-latest
+    container: ghcr.io/astral-sh/uv:python3.12-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            .uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+      - run: uv sync --frozen
+      - run: uv run ty check --project apps/api apps/api
+
+  # ── Python tests ───────────────────────────────────
+
+  api-tests:
+    runs-on: ubuntu-latest
+    container: ghcr.io/astral-sh/uv:python3.12-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            .uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+      - run: uv sync --frozen
+      - run: uv run pytest apps/api/tests/
+
+  # ── Frontend tests ─────────────────────────────────
+
+  test-plugin-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:plugin-sdk
+
+  test-web-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:web-ui
+
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:web
