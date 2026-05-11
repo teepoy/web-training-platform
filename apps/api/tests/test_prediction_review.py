@@ -1,88 +1,15 @@
 from __future__ import annotations
 
-import io
-import json
-
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import PRESET_ID
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-_TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog", "bird"]}
-
-
-def _create_dataset(c: TestClient) -> str:
-    """Create a dataset and return its id."""
-    resp = c.post(
-        "/api/v1/datasets",
-        json={"name": "review-test-ds", "dataset_type": "image_classification", "task_spec": _TASK_SPEC},
-    )
-    assert resp.status_code == 200
-    return resp.json()["id"]
-
-
-def _create_job(c: TestClient, dataset_id: str) -> str:
-    """Create a training job and return its id."""
-    resp = c.post(
-        "/api/v1/training-jobs",
-        json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-    )
-    assert resp.status_code == 200
-    return resp.json()["id"]
-
-
-def _upload_model(c: TestClient, job_id: str) -> str:
-    """Upload a dummy model file and return the model id."""
-    dummy_content = b"fake-model-bytes"
-    resp = c.post(
-        "/api/v1/models/upload",
-        data={
-            "metadata": json.dumps(
-                {
-                    "name": "test-model",
-                    "format": "pytorch",
-                    "job_id": job_id,
-                    "template_id": "image-classifier",
-                    "profile_id": "resnet50-cls-v1",
-                    "model_spec": {
-                        "framework": "pytorch",
-                        "architecture": "resnet50",
-                        "base_model": "torchvision/resnet50",
-                    },
-                    "compatibility": {
-                        "dataset_types": ["image_classification"],
-                        "task_types": ["classification"],
-                        "prediction_targets": ["image_classification"],
-                        "label_space": ["cat", "dog"],
-                    },
-                }
-            )
-        },
-        files={"file": ("model.pt", io.BytesIO(dummy_content), "application/octet-stream")},
-    )
-    assert resp.status_code == 200, f"Model upload failed: {resp.text}"
-    return resp.json()["id"]
-
-
-def _create_sample(c: TestClient, dataset_id: str) -> str:
-    """Create a sample in a dataset and return its id."""
-    resp = c.post(
-        f"/api/v1/datasets/{dataset_id}/samples",
-        json={"image_uris": [], "metadata": {}},
-    )
-    assert resp.status_code == 200
-    return resp.json()["id"]
-
+from tests.conftest import create_dataset, create_sample, create_job, upload_model
 
 def _setup_dataset_with_model(c: TestClient) -> tuple[str, str, str]:
     """Create dataset + job + model, return (dataset_id, model_id, job_id)."""
-    dataset_id = _create_dataset(c)
-    job_id = _create_job(c, dataset_id)
-    model_id = _upload_model(c, job_id)
+    dataset_id = create_dataset(c)
+    job_id = create_job(c, dataset_id)
+    model_id = upload_model(c, job_id)
     return dataset_id, model_id, job_id
 
 
@@ -247,7 +174,7 @@ def test_delete_review_action_not_found() -> None:
 def test_save_review_annotations() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _setup_dataset_with_model(c)
-        sample_id = _create_sample(c, dataset_id)
+        sample_id = create_sample(c, dataset_id)
 
         # Create review action
         create_resp = c.post(
@@ -317,8 +244,8 @@ def test_save_review_annotations_bad_action() -> None:
 def test_list_annotation_versions() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _setup_dataset_with_model(c)
-        sample_id_1 = _create_sample(c, dataset_id)
-        sample_id_2 = _create_sample(c, dataset_id)
+        sample_id_1 = create_sample(c, dataset_id)
+        sample_id_2 = create_sample(c, dataset_id)
 
         # Create action and save annotations
         create_resp = c.post(
@@ -394,7 +321,7 @@ def test_list_export_formats() -> None:
 def test_preview_export() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _setup_dataset_with_model(c)
-        sample_id = _create_sample(c, dataset_id)
+        sample_id = create_sample(c, dataset_id)
 
         # Create action + save annotations
         create_resp = c.post(
@@ -442,7 +369,7 @@ def test_preview_export() -> None:
 def test_preview_export_compact() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _setup_dataset_with_model(c)
-        sample_id = _create_sample(c, dataset_id)
+        sample_id = create_sample(c, dataset_id)
 
         create_resp = c.post(
             "/api/v1/prediction-reviews",
@@ -516,7 +443,7 @@ def test_preview_export_not_found() -> None:
 def test_persist_export() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _setup_dataset_with_model(c)
-        sample_id = _create_sample(c, dataset_id)
+        sample_id = create_sample(c, dataset_id)
 
         create_resp = c.post(
             "/api/v1/prediction-reviews",

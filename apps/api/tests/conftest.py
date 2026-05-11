@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import glob as _glob_module
-import os
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -10,132 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import asyncio
+import os
+
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db")
-
-
-# ---------------------------------------------------------------------------
-# Old test database cleanup
-#
-# Test runs create per-session SQLite databases (finetune-test-<uuid>.db).
-# Over time these accumulate on disk.  We clean up databases from previous
-# sessions at module import time and after each test via _dispose_db_resources.
-# ---------------------------------------------------------------------------
-
-
-def _cleanup_old_test_dbs() -> int:
-    """Delete finetune-test-*.db files that are NOT the current session's DB.
-
-    Returns the number of files deleted.
-    """
-    _current_db_url = os.environ.get("DATABASE_URL", "")
-    _current_basename = ""
-    if "finetune-test-" in _current_db_url:
-        _current_basename = _current_db_url.rsplit("/", 1)[-1].split("?")[0]
-
-    test_db_pattern = os.path.join(str(ROOT), "finetune-test-*.db")
-    deleted = 0
-    for db_file in _glob_module.glob(test_db_pattern):
-        basename = os.path.basename(db_file)
-        # Skip the current session's DB
-        if _current_basename and basename == _current_basename:
-            continue
-        # Never delete the local smoke DB
-        if basename == "finetune-local-smoke.db":
-            continue
-        try:
-            os.remove(db_file)
-            deleted += 1
-        except OSError:
-            pass
-    return deleted
-
-
-# Run cleanup once at import time (before any test or fixture executes).
-_OLD_DB_COUNT = _cleanup_old_test_dbs()
-if _OLD_DB_COUNT > 0:
-    print(f"Cleaned up {_OLD_DB_COUNT} old test database(s)")
-
-
-# ---------------------------------------------------------------------------
-# Clean DB at the start of each test session
-#
-# The test profile uses SQLite. Without cleanup
-# previous test data survives across runs, causing 409 Conflict errors
-# when auth tests try to register the same email addresses.
-# ---------------------------------------------------------------------------
-
-import asyncio
-
-
-def _reset_database() -> None:
-    """Drop all tables and recreate them so every test session starts clean."""
-    from app.core.config import load_config
-    from app.db.session import create_engine as _create_engine
-    from app.db.base import Base
-    from app.db import models as _models  # noqa: F401 — ensure all models registered
-
-    cfg = load_config()
-    engine = _create_engine(str(cfg.db.url))
-
-    async def _drop_and_create() -> None:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-        await engine.dispose()
-
-    asyncio.run(_drop_and_create())
-
-    # Reset the module-level session factory in deps.py so it doesn't
-    # hold a stale connection to the old (dropped) tables.
-    import app.api.deps as _deps
-    _deps._session_factory = None
-
-
-# Run once at import time (before any test or fixture executes).
-_reset_database()
-
-
-def _register_user(client, email: str, password: str, name: str) -> dict:
-    """Call POST /api/v1/auth/register, return user dict"""
-    resp = client.post("/api/v1/auth/register", json={"email": email, "password": password, "name": name})
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _login_user(client, email: str, password: str) -> str:
-    """Call POST /api/v1/auth/login, return access_token string"""
-    resp = client.post("/api/v1/auth/login", json={"email": email, "password": password})
-    resp.raise_for_status()
-    return resp.json()["access_token"]
-
-
-def _auth_headers(token: str) -> dict:
-    """Return Authorization Bearer header dict"""
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _org_headers(org_id: str, token: str) -> dict:
-    """Return auth + org context headers"""
-    return {"Authorization": f"Bearer {token}", "X-Organization-ID": org_id}
-
-
-def _create_org(client, name: str, admin_token: str) -> dict:
-    """Call POST /api/v1/organizations, return org dict. Stub — endpoint added in T12."""
-    resp = client.post("/api/v1/organizations", json={"name": name}, headers=_auth_headers(admin_token))
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _add_member(client, org_id: str, user_id: str, role: str, admin_token: str) -> dict:
-    """Add user to org. Stub — endpoint added in T12."""
-    resp = client.post(
-        f"/api/v1/organizations/{org_id}/members",
-        json={"user_id": user_id, "role": role},
-        headers=_auth_headers(admin_token),
-    )
-    resp.raise_for_status()
-    return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -366,85 +243,6 @@ def _mock_inference_worker(request):
 
 
 # ---------------------------------------------------------------------------
-# Prefect client override for non-Prefect tests
-#
-# Many services depend on PrefectClient for work pool, deployment, and
-# flow-run operations.  This mock provides deterministic responses so
-# tests don't need a running Prefect server.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True, scope="function")
-def _mock_prefect_client(request):
-    if request.node.get_closest_marker("no_prefect_mock"):
-        yield
-        return
-
-    from app.main import container
-
-    async def _get_flow_run(flow_run_id: str) -> dict:
-        return {"id": flow_run_id, "state": {"type": "COMPLETED"}, "status": "COMPLETED"}
-
-    async def _get_flow_run_logs(flow_run_id: str, limit: int = 200) -> list[dict]:
-        return []
-
-    async def _list_task_runs(flow_run_id: str, limit: int = 200) -> list[dict]:
-        return []
-
-    async def _set_flow_run_state(flow_run_id: str, state_type: str) -> dict:
-        return {"state": {"type": state_type}}
-
-    _mock_prefect = MagicMock()
-    _mock_prefect.resolve_deployment_id = AsyncMock(return_value="mock-deployment-id")
-    _mock_prefect.create_flow_run_from_deployment = AsyncMock(
-        return_value={"id": "mock-flow-run-id", "state": {"type": "COMPLETED"}},
-    )
-    _mock_prefect.get_flow_run = AsyncMock(side_effect=_get_flow_run)
-    _mock_prefect.get_flow_run_logs = AsyncMock(side_effect=_get_flow_run_logs)
-    _mock_prefect.list_task_runs = AsyncMock(side_effect=_list_task_runs)
-    _mock_prefect.set_flow_run_state = AsyncMock(side_effect=_set_flow_run_state)
-    _mock_prefect.filter_flow_runs = AsyncMock(return_value=[])
-    _mock_prefect.resolve_flow_id = AsyncMock(return_value="mock-flow-id")
-    _mock_prefect.create_flow_run = AsyncMock(return_value={"id": "mock-flow-run-id"})
-    _mock_prefect.ensure_work_pool = AsyncMock(return_value={"name": "mock-pool"})
-    _mock_prefect.get_work_pool = AsyncMock(return_value={"name": "mock-pool"})
-    _mock_prefect.list_work_pools = AsyncMock(return_value=[])
-    _mock_prefect.close = AsyncMock()
-
-    container.prefect_client.override(providers.Object(_mock_prefect))
-    yield
-    container.prefect_client.reset_override()
-
-
-# ---------------------------------------------------------------------------
-# LLM client override for non-LLM tests
-#
-# PredictionService and VQA runtime depend on OpenAICompatibleLlmClient.
-# This mock provides deterministic responses so tests don't need a
-# configured LLM provider.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True, scope="function")
-def _mock_llm_client(request):
-    if request.node.get_closest_marker("no_llm_mock"):
-        yield
-        return
-
-    from app.main import container
-
-    async def _answer_vqa(*, image_bytes: bytes, question: str, system_prompt: str) -> str:
-        return "mock vqa answer"
-
-    _mock_llm = MagicMock()
-    _mock_llm.answer_vqa = AsyncMock(side_effect=_answer_vqa)
-
-    container.llm_client.override(providers.Object(_mock_llm))
-    yield
-    container.llm_client.reset_override()
-
-
-# ---------------------------------------------------------------------------
 # Preset registry helper
 #
 # After the preset refactor, presets are loaded from YAML files on disk
@@ -457,45 +255,73 @@ def _mock_llm_client(request):
 PRESET_ID = "resnet50-cls-v1"
 
 
-@pytest.fixture(autouse=True, scope="function")
-def _ensure_preset_registry():
-    """Ensure the file-backed preset registry is loaded before each test.
+# ---------------------------------------------------------------------------
+# Shared test helpers
+#
+# Many test files define their own _create_dataset / _create_sample / _create_job
+# helpers with identical patterns.  Import these from conftest when you need
+# a quick dataset/sample/job and don't require special configuration.
+# ---------------------------------------------------------------------------
 
-    The registry is normally loaded in the FastAPI lifespan, which runs
-    when ``TestClient(app)`` enters its context.  This fixture eagerly
-    loads it so that tests that access the registry outside the TestClient
-    context (rare) also work.
-    """
-    from app.main import container
-
-    registry = container.preset_registry()
-    if registry.count == 0:
-        registry.load()
-    yield
+import io as _io
+import json as _json
 
 
-@pytest.fixture(autouse=True, scope="function")
-def _dispose_db_resources():
-    db_url = f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
-    os.environ["DATABASE_URL"] = db_url
+def create_dataset(client, name="test-ds", task_spec=None):
+    """Create a dataset via the API and return its ID."""
+    if task_spec is None:
+        task_spec = {"task_type": "classification", "label_space": ["cat", "dog"]}
+    resp = client.post("/api/v1/datasets", json={"name": name, "task_spec": task_spec})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
 
-    from app.core.config import load_config
-    from app.main import container
-    import app.api.deps as _deps
 
-    load_config.cache_clear()
-    container.reset_singletons()
-    _deps._session_factory = None
+def create_sample(client, dataset_id, image_uris=None, metadata=None):
+    """Create a sample in the given dataset and return its ID."""
+    body: dict = {}
+    if image_uris is not None:
+        body["image_uris"] = image_uris
+    if metadata is not None:
+        body["metadata"] = metadata
+    resp = client.post(f"/api/v1/datasets/{dataset_id}/samples", json=body or {})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
 
-    _cleanup_old_test_dbs()
 
-    yield
+def create_job(client, dataset_id, preset_id=None):
+    """Create a training job for the given dataset and return its ID."""
+    if preset_id is None:
+        preset_id = PRESET_ID
+    resp = client.post(
+        "/api/v1/training-jobs",
+        json={"dataset_id": dataset_id, "preset_id": preset_id},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
 
-    async def _dispose() -> None:
-        engine = container.db_engine()
-        await engine.dispose()
 
-    asyncio.run(_dispose())
-    load_config.cache_clear()
-    container.reset_singletons()
-    _deps._session_factory = None
+def upload_model(client, job_id):
+    """Upload a minimal model artifact and return its ID."""
+    metadata = _json.dumps({
+        "name": "test-model",
+        "format": "pytorch",
+        "job_id": job_id,
+        "template_id": "image-classifier",
+        "profile_id": "resnet50-cls-v1",
+        "model_spec": {
+            "framework": "pytorch",
+            "architecture": "resnet50",
+            "base_model": "torchvision/resnet50",
+        },
+        "compatibility": {
+            "dataset_types": ["image_classification"],
+            "task_types": ["classification"],
+            "prediction_targets": ["image_classification"],
+            "label_space": ["cat", "dog"],
+        },
+    })
+    resp = client.post("/api/v1/models/upload", data={
+        "metadata": metadata,
+    }, files={"file": ("model.pt", _io.BytesIO(b"fake-model"), "application/octet-stream")})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]

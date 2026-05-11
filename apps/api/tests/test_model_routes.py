@@ -8,66 +8,17 @@ Covers:
 """
 from __future__ import annotations
 
-import io
-import json
-
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import PRESET_ID
-
-_TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
-
-
-def _create_dataset(c: TestClient) -> str:
-    resp = c.post("/api/v1/datasets", json={
-        "name": "model-route-ds",
-        "dataset_type": "image_classification",
-        "task_spec": _TASK_SPEC,
-    })
-    assert resp.status_code == 200
-    return resp.json()["id"]
-
-
-def _create_job(c: TestClient, dataset_id: str) -> str:
-    resp = c.post("/api/v1/training-jobs", json={
-        "dataset_id": dataset_id,
-        "preset_id": PRESET_ID,
-    })
-    assert resp.status_code == 200
-    return resp.json()["id"]
-
-
-def _upload_model(c: TestClient, job_id: str) -> str:
-    resp = c.post("/api/v1/models/upload", data={
-        "metadata": json.dumps({
-            "name": "test-model",
-            "format": "pytorch",
-            "job_id": job_id,
-            "template_id": "image-classifier",
-            "profile_id": "resnet50-cls-v1",
-            "model_spec": {
-                "framework": "pytorch",
-                "architecture": "resnet50",
-                "base_model": "torchvision/resnet50",
-            },
-            "compatibility": {
-                "dataset_types": ["image_classification"],
-                "task_types": ["classification"],
-                "prediction_targets": ["image_classification"],
-                "label_space": ["cat", "dog"],
-            },
-        }),
-    }, files={"file": ("model.pt", io.BytesIO(b"fake-model-data"), "application/octet-stream")})
-    assert resp.status_code == 200
-    return resp.json()["id"]
+from tests.conftest import create_dataset, create_job, upload_model
 
 
 def _setup(c: TestClient) -> tuple[str, str, str]:
     """Returns (dataset_id, job_id, model_id)."""
-    dataset_id = _create_dataset(c)
-    job_id = _create_job(c, dataset_id)
-    model_id = _upload_model(c, job_id)
+    dataset_id = create_dataset(c)
+    job_id = create_job(c, dataset_id)
+    model_id = upload_model(c, job_id)
     return dataset_id, job_id, model_id
 
 

@@ -55,7 +55,7 @@ api-tests:
   extends: .default
   stage: test
   script:
-    - uv run pytest apps/api/tests/
+    - uv run pytest apps/api/
 
 # ── Frontend tests ─────────────────────────────────
 

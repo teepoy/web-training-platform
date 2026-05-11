@@ -10,3 +10,4 @@ apps/web/node_modules
 *.db
 .sisyphus
 .claude
+*_test.py
