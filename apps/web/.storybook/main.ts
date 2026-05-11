@@ -36,6 +36,14 @@ const config: StorybookConfig = {
         __dirname,
         "../../../libs/plugin-sdk/src/index.ts",
       ),
+      "@platform/web-ui": path.resolve(
+        __dirname,
+        "../../../libs/web-ui/src/index.ts",
+      ),
+      "@platform/web-data": path.resolve(
+        __dirname,
+        "../../../libs/web-data/src/index.ts",
+      ),
     };
 
     config.resolve.dedupe = [...(config.resolve.dedupe || []), "vue"];

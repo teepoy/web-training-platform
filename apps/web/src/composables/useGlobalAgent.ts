@@ -14,7 +14,8 @@ import type { ChatEntry, AgentPanelDescriptor, AgentContext } from '../types'
 import { streamGlobalAgentChat } from '@platform/web-data/agent'
 import { useAuthStore } from '../stores/auth'
 
-export type AgentChatStatus = 'idle' | 'streaming' | 'error'
+import type { AgentChatStatus } from '@platform/web-ui'
+export type { AgentChatStatus }
 
 /** Injection key for ClassifyView to read agent panels. */
 export const GLOBAL_AGENT_PANELS_KEY: InjectionKey<Ref<AgentPanelDescriptor[]>> =

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NDrawer, NDrawerContent, NImage, NDescriptions, NDescriptionsItem, NEmpty, NTag } from 'naive-ui'
-import type { PreviewItem } from '../../types/components'
+import type { PreviewItem } from '@platform/web-data/preview'
 
 const props = defineProps<{
   show: boolean

@@ -21,7 +21,7 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
-} from '../stores/sampleBrowser'
+} from '@platform/web-ui'
 import { pluginRegistry } from '../core/registry'
 
 const route = useRoute()

@@ -47,10 +47,11 @@ const virtualizer = useVirtualizer({
   overscan: 3,
 });
 
-/** Resolve the optional width for a column, defaulting to flex-1. */
+/** Resolve the optional width for a column, defaulting to flex-1 (or 120px for image). */
 function colStyle(col: BlinkColumnDef): Record<string, string> {
-  if (col.width) {
-    return { flex: `0 0 ${col.width}px`, minWidth: "0" };
+  const w = col.width ?? (col.kind === "image" ? 120 : undefined);
+  if (w) {
+    return { flex: `0 0 ${w}px`, minWidth: "0" };
   }
   return { flex: "1", minWidth: "0" };
 }
@@ -124,7 +125,14 @@ function colStyle(col: BlinkColumnDef): Record<string, string> {
                 class="bt-cell"
                 :style="colStyle(col)"
               >
-                <span class="bt-cell-text">{{
+                <img
+                  v-if="col.kind === 'image'"
+                  :src="rows[vRow.index].cells[col.key]"
+                  class="bt-cell-img"
+                  loading="lazy"
+                  alt=""
+                />
+                <span v-else class="bt-cell-text">{{
                   rows[vRow.index].cells[col.key]
                 }}</span>
               </div>
@@ -296,6 +304,15 @@ function colStyle(col: BlinkColumnDef): Record<string, string> {
   overflow: hidden;
   text-overflow: ellipsis;
   width: 100%;
+}
+
+.bt-cell-img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #111;
+  display: block;
 }
 
 /* ── Empty state ─────────────────────────────────────────── */

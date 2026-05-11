@@ -10,7 +10,7 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
-} from "../../stores/sampleBrowser";
+} from "@platform/web-ui";
 
 const props = defineProps<{
   panels: SidebarPanelDescriptor[];

@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { computed, inject, type Ref } from 'vue'
 import { resolveImageUris } from "../../utils/image-adapters";
-import type { AnnotationGridItem } from "../../types/sidebar-widgets";
+import type { SidebarAnnotationGridItem } from "../../types/sidebar-widgets";
 
 const props = defineProps<{
   data?: Record<string, unknown> | null
@@ -37,7 +37,7 @@ interface SamplePreview {
   label?: string
 }
 
-const classifyItems = inject<Ref<AnnotationGridItem[]>>("classify-grid-items", computed(() => []))
+const classifyItems = inject<Ref<SidebarAnnotationGridItem[]>>("classify-grid-items", computed(() => []))
 
 const viewerData = computed<SampleViewerData | null>(() => {
   if (!props.data) return null

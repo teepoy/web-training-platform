@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import PreviewItemDrawer from "./PreviewItemDrawer.vue";
-import type { PreviewItem } from "../../types/components";
+import type { PreviewItem } from "@platform/web-data/preview";
 
 const validItem: PreviewItem = {
   upstream_item_id: "upstream-001",

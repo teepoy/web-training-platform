@@ -27,7 +27,7 @@
               <n-alert type="error" title="Failed to load sample" />
             </div>
             <template v-else-if="sample">
-              <div v-if="resolvedUris.length === 0 || (resolvedUris.length === 1 && resolvedUris[0] === fallbackPlaceholder)">
+              <div v-if="resolvedUris.length === 0 || (resolvedUris.length === 1 && resolvedUris[0] === FALLBACK_PLACEHOLDER)">
                 <n-empty description="No images" />
               </div>
               <n-image-group v-else>
@@ -304,7 +304,7 @@ import {
 } from "naive-ui";
 import { getSample, listAnnotationsForSample, createAnnotation, updateAnnotation, deleteAnnotation, uploadSampleImage, getSimilarity } from "@platform/web-data/samples";
 import type { SimilarityResponse } from "@platform/web-data/samples";
-import { resolveImageUris } from "../utils/imageAdapters";
+import { resolveImageUris, FALLBACK_PLACEHOLDER } from "@platform/web-ui";
 import type { Annotation } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -321,12 +321,6 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "select-sample", sampleId: string): void;
 }>();
-
-// ---------------------------------------------------------------------------
-// Fallback placeholder (must match imageAdapters.ts internal constant)
-// ---------------------------------------------------------------------------
-const fallbackPlaceholder =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%23e0e0e0'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%23999' font-size='10'%3ENo img%3C/text%3E%3C/svg%3E";
 
 // ---------------------------------------------------------------------------
 // Query client
@@ -495,10 +489,10 @@ async function doFindSimilar() {
           const sample = await getSample(nb.sample_id);
           const previewUri = sample.image_uris.length > 0
             ? resolveImageUris(sample.image_uris)[0]
-            : fallbackPlaceholder;
+            : FALLBACK_PLACEHOLDER;
           return { sample_id: nb.sample_id, score: nb.score, previewUri };
         } catch {
-          return { sample_id: nb.sample_id, score: nb.score, previewUri: fallbackPlaceholder };
+          return { sample_id: nb.sample_id, score: nb.score, previewUri: FALLBACK_PLACEHOLDER };
         }
       })
     );

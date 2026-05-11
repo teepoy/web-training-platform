@@ -147,6 +147,9 @@ importers:
       '@platform/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      '@platform/web-data':
+        specifier: workspace:*
+        version: link:../web-data
       '@storybook/addon-essentials':
         specifier: 8.6.18
         version: 8.6.18(@types/react@19.2.14)(storybook@8.6.18)

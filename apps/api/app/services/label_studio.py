@@ -21,7 +21,10 @@ and Label Studio's structured annotation JSON format.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +212,9 @@ class LabelStudioClient:
     # Tasks
     # ------------------------------------------------------------------
 
-    async def create_task(self, project_id: int, data: dict[str, object]) -> dict[str, object]:
+    async def create_task(
+        self, project_id: int, data: dict[str, object]
+    ) -> dict[str, object]:
         """Create a single task in a project.
 
         Parameters
@@ -235,7 +240,10 @@ class LabelStudioClient:
             raise _wrap_sdk_error(exc) from exc
 
     async def import_tasks(
-        self, project_id: int, tasks: list[dict[str, object]], return_task_ids: bool = True
+        self,
+        project_id: int,
+        tasks: list[dict[str, object]],
+        return_task_ids: bool = True,
     ) -> dict[str, object]:
         """Bulk import tasks into a project.
 
@@ -327,7 +335,9 @@ class LabelStudioClient:
     # Annotations
     # ------------------------------------------------------------------
 
-    async def create_annotation(self, task_id: int, result: list[dict[str, object]]) -> dict[str, object]:
+    async def create_annotation(
+        self, task_id: int, result: list[dict[str, object]]
+    ) -> dict[str, object]:
         """Create an annotation on a task.
 
         Parameters

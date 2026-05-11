@@ -14,7 +14,7 @@ export interface ClassifyDashboardContext {
   refetch: () => void;
 }
 
-export interface AnnotationGridItem {
+export interface SidebarAnnotationGridItem {
   id: string;
   imageSrcs?: string[];
   draftLabel?: string | null;

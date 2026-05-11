@@ -9,9 +9,9 @@
 -->
 <script setup lang="ts">
 import { inject, computed, type Ref } from 'vue'
-import type { AnnotationGridItem } from "../../types/sidebar-widgets";
+import type { SidebarAnnotationGridItem } from "../../types/sidebar-widgets";
 
-const gridItems = inject<Ref<AnnotationGridItem[]>>('pr-grid-items')
+const gridItems = inject<Ref<SidebarAnnotationGridItem[]>>('pr-grid-items')
 
 const total = computed(() => gridItems?.value.length ?? 0)
 

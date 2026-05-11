@@ -52,7 +52,7 @@ class MockResizeObserver {
 
 import BlinkTable from "./BlinkTable.vue";
 import BlinkImageCell from "./BlinkImageCell.vue";
-import { blinkRows, extraColumns } from "./fixtures";
+import { blinkRows, extraColumns, imageColumns } from "./fixtures";
 
 function mountBlinkTable(props?: Record<string, unknown>) {
   return mount(BlinkTable, {
@@ -198,5 +198,29 @@ describe("BlinkTable", () => {
     // Blink column should be back
     expect(wrapper.find(".bt-header-cell--image").exists()).toBe(true);
     expect(wrapper.findComponent(BlinkImageCell).exists()).toBe(true);
+  });
+
+  // -----------------------------------------------------------------------
+  // 7. Image columns render <img> tags when kind is "image"
+  // -----------------------------------------------------------------------
+  it("renders img tags for image-kind columns", async () => {
+    const wrapper = mountBlinkTable({ columns: imageColumns });
+    await nextTick();
+
+    // Image columns should render <img> elements, not <span>
+    const imgs = wrapper.findAll(".bt-cell-img");
+    expect(imgs.length).toBeGreaterThan(0);
+
+    // Each image column in each row should have a valid src
+    imgs.forEach((img) => {
+      expect(img.attributes("src")).toBeTruthy();
+    });
+
+    // The header labels should match column titles
+    const headerLabels = wrapper.findAll(".bt-header-label");
+    const titles = headerLabels.map((el) => el.text());
+    expect(titles).toContain("Image 1");
+    expect(titles).toContain("Image 2");
+    expect(titles).toContain("Image 3");
   });
 });

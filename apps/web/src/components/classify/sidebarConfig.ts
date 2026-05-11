@@ -167,6 +167,26 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
       },
     },
   },
+  {
+    id: "blink-table",
+    component: "blink-table",
+    title: "Blink Comparison",
+    order: 17,
+    size: "large",
+    collapsed: true,
+    props: {
+      data: {
+        inline: {
+          rows: [],
+          columns: [],
+        },
+      },
+      config: {
+        blinkIntervalMs: 1000,
+        initialBlinkEnabled: true,
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -224,6 +244,26 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
     order: 20,
     size: "compact",
     props: {},
+  },
+  {
+    id: "blink-table",
+    component: "blink-table",
+    title: "Blink Comparison",
+    order: 25,
+    size: "large",
+    collapsed: true,
+    props: {
+      data: {
+        inline: {
+          rows: [],
+          columns: [],
+        },
+      },
+      config: {
+        blinkIntervalMs: 1000,
+        initialBlinkEnabled: true,
+      },
+    },
   },
 ];
 

@@ -42,10 +42,6 @@ import type {
   User,
   UserWithOrgs,
   VersionExportResponse,
-  PreviewSession,
-  PreviewItemsPage,
-  PreviewPersistScope,
-  PreviewPersistStatus,
   WaferPointsQueryResponse,
 } from "./types";
 import type { ApiError as ApiErrorType } from "./types";
@@ -1175,65 +1171,4 @@ export async function* streamGlobalAgentChat(
       }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Preview session API
-// ---------------------------------------------------------------------------
-
-export async function createPreviewSession(
-  collectionRef: string,
-): Promise<PreviewSession> {
-  const res = await fetch(`${API_BASE}/preview-sessions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ collection_ref: collectionRef }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function getPreviewSession(
-  sessionId: string,
-): Promise<PreviewSession> {
-  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function listPreviewItems(
-  sessionId: string,
-  cursor: string | null,
-  limit: number,
-): Promise<PreviewItemsPage> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (cursor) params.set("cursor", cursor);
-  const res = await fetch(
-    `${API_BASE}/preview-sessions/${sessionId}/items?${params}`,
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function startPreviewPersist(
-  sessionId: string,
-  scope: PreviewPersistScope,
-): Promise<PreviewPersistStatus> {
-  const res = await fetch(`${API_BASE}/preview-sessions/${sessionId}/persist`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scope }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function getPreviewPersistStatus(
-  sessionId: string,
-): Promise<PreviewPersistStatus> {
-  const res = await fetch(
-    `${API_BASE}/preview-sessions/${sessionId}/persist-status`,
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
 }

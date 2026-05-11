@@ -11,6 +11,12 @@ export const extraColumns: BlinkColumnDef[] = [
   { key: "score", title: "Score" },
 ];
 
+export const imageColumns: BlinkColumnDef[] = [
+  { key: "img_0", title: "Image 1", kind: "image", width: 120 },
+  { key: "img_1", title: "Image 2", kind: "image", width: 120 },
+  { key: "img_2", title: "Image 3", kind: "image", width: 120 },
+];
+
 const filenames = [
   "IMG_20240301_001.jpg",
   "IMG_20240301_002.jpg",
@@ -69,6 +75,9 @@ export const blinkRows: BlinkRow[] = Array.from(
       filename: filenames[i],
       status: statuses[i],
       score: scores[i],
+      img_0: `https://picsum.photos/160/120?random=${i}`,
+      img_1: `https://picsum.photos/160/120?random=${i + 100}`,
+      img_2: `https://picsum.photos/160/120?random=${i + 200}`,
     },
   }),
 );

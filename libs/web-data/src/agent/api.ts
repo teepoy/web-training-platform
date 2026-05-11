@@ -51,10 +51,6 @@ export interface WaferPointsQueryResponse {
   total: number;
 }
 
-export function getSurfaceState(sessionId: string, surfaceId: string): Promise<SurfaceStateDocument> {
-  return req(`/sessions/${sessionId}/surfaces/${surfaceId}`);
-}
-
 export function setSurfacePanel(
   sessionId: string,
   surfaceId: string,
@@ -73,21 +69,6 @@ export function removeSurfacePanel(
 ): Promise<SurfaceStateDocument> {
   return req(`/sessions/${sessionId}/surfaces/${surfaceId}/panels/${panelId}`, {
     method: "DELETE",
-  });
-}
-
-export function exportSurfaceState(sessionId: string, surfaceId: string): Promise<SurfaceStateDocument> {
-  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/export`);
-}
-
-export function importSurfaceState(
-  sessionId: string,
-  surfaceId: string,
-  doc: SurfaceStateDocument,
-): Promise<SurfaceStateDocument> {
-  return req(`/sessions/${sessionId}/surfaces/${surfaceId}/import`, {
-    method: "POST",
-    body: JSON.stringify(doc),
   });
 }
 
@@ -162,31 +143,6 @@ function buildSSEHeaders(): Record<string, string> {
     headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
-}
-
-/**
- * POST-based SSE streaming for per-dataset agent chat.
- * Returns an async generator of parsed SSE events.
- */
-export async function* streamAgentChat(
-  datasetId: string,
-  userMessage: string,
-  signal?: AbortSignal,
-): AsyncGenerator<SSEFrame> {
-  const resp = await fetch(`${getApiBase()}/datasets/${datasetId}/agent/chat`, {
-    method: "POST",
-    headers: buildSSEHeaders(),
-    body: JSON.stringify({ message: userMessage }),
-    signal,
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new ApiError(text || resp.statusText, resp.status);
-  }
-
-  const reader = resp.body!.getReader();
-  yield* parseSSEStream(reader);
 }
 
 /**

@@ -24,12 +24,6 @@ export interface ChatEntry {
 
 export type AgentChatStatus = "idle" | "streaming" | "error";
 
-export interface PreviewItem {
-  upstream_item_id: string;
-  image_uris: string[];
-  metadata: Record<string, unknown>;
-}
-
 export interface AnnotationGridItem {
   id: string;
   imageSrcs: string[];

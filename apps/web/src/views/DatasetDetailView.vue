@@ -304,7 +304,8 @@ import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
 import { api } from "../api";
-import { resolveImageUris } from "../utils/imageAdapters";
+import { resolveImageUris, buildBlinkTableData } from "@platform/web-ui";
+import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
 import { datasetPanels } from "../components/classify/sidebarConfig";
@@ -313,7 +314,7 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
-} from "../stores/sampleBrowser";
+} from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import {
@@ -433,23 +434,50 @@ const waferPoints = computed<WaferPoint[]>(() => {
     .filter((point): point is WaferPoint => point !== null);
 });
 
+const blinkTableData = computed(() => {
+  const multiSamples: BlinkSampleInput[] = browserSamples.value
+    .filter((s) => s.imageSrcs.length > 1)
+    .map((s) => ({
+      id: s.id,
+      imageSrcs: s.imageSrcs,
+      metadata: s.metadata,
+      label: s.currentLabel ?? undefined,
+    }));
+  return buildBlinkTableData(multiSamples);
+});
+
 const datasetSidebarPanels = computed(() =>
   datasetPanels.map((panel) => {
-    if (panel.id !== "wafer-map") {
-      return panel;
-    }
-
-    return {
-      ...panel,
-      props: {
-        ...panel.props,
-        data: {
-          inline: {
-            points: waferPoints.value,
+    if (panel.id === "wafer-map") {
+      return {
+        ...panel,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              points: waferPoints.value,
+            },
           },
         },
-      },
-    };
+      };
+    }
+
+    if (panel.id === "blink-table") {
+      return {
+        ...panel,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              rows: blinkTableData.value.rows,
+              columns: blinkTableData.value.columns,
+            },
+          },
+        },
+      };
+    }
+
+    return panel;
   })
 );
 

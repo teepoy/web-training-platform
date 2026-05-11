@@ -12,6 +12,7 @@ export interface BlinkColumnDef {
   key: string;
   title: string;
   width?: number;
+  kind?: "text" | "image";
 }
 
 export interface BlinkTableProps {

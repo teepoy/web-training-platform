@@ -18,6 +18,7 @@ import {
   predictionSummaryPlugin,
   sampleViewerPlugin,
   waferMapPlugin,
+  blinkTablePlugin,
 } from "@platform/web-ui";
 
 import { manualImportPlugin } from "./import-manual";
@@ -41,6 +42,7 @@ pluginRegistry.registerSidebarWidget(predictionSummaryPlugin);
 pluginRegistry.registerSidebarWidget(waferMapPlugin);
 pluginRegistry.registerSidebarWidget(interactiveScatterPlugin);
 pluginRegistry.registerSidebarWidget(browserSummaryPlugin);
+pluginRegistry.registerSidebarWidget(blinkTablePlugin);
 
 pluginRegistry.registerImporter(manualImportPlugin);
 pluginRegistry.registerImporter(importDatasetManualPlugin);

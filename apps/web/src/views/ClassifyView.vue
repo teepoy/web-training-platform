@@ -255,7 +255,8 @@ import type {
   TrainingJob,
   WaferPoint,
 } from "../types";
-import { resolveImageUris } from "../utils/imageAdapters";
+import { resolveImageUris, buildBlinkTableData } from "@platform/web-ui";
+import type { BlinkSampleInput } from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import { SampleBrowser } from "@platform/web-ui";
@@ -272,7 +273,7 @@ import {
 import { useClassifyDashboard } from "../composables/useClassifyDashboard";
 import { GLOBAL_AGENT_PANELS_KEY } from "../composables/useGlobalAgent";
 import { useOrgStore } from "../stores/org";
-import { useSampleBrowserPrefs } from "../stores/sampleBrowser";
+import { useSampleBrowserPrefs } from "@platform/web-ui";
 
 interface ReviewRow {
   key: string;
@@ -1084,6 +1085,18 @@ const waferPoints = computed<WaferPoint[]>(() => {
     .filter((point): point is WaferPoint => point !== null);
 });
 
+const blinkTableData = computed(() => {
+  const items = isReviewMode.value ? reviewGridItems.value : annotationGridItems.value;
+  const multiSamples: BlinkSampleInput[] = items
+    .filter((item) => item.imageSrcs.length > 1)
+    .map((item) => ({
+      id: item.id,
+      imageSrcs: item.imageSrcs,
+      metadata: item.metadata ?? {},
+      label: item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? undefined,
+    }));
+  return buildBlinkTableData(multiSamples);
+});
 
 
 const staticPanels = computed(() => {
@@ -1097,6 +1110,21 @@ const staticPanels = computed(() => {
           data: {
             inline: {
               points: waferPoints.value,
+            },
+          },
+        },
+      };
+    }
+
+    if (panel.id === "blink-table") {
+      return {
+        ...panel,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              rows: blinkTableData.value.rows,
+              columns: blinkTableData.value.columns,
             },
           },
         },

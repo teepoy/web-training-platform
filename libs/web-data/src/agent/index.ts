@@ -1,12 +1,8 @@
 export {
-  getSurfaceState,
   setSurfacePanel,
   removeSurfacePanel,
-  exportSurfaceState,
-  importSurfaceState,
   queryDatasetData,
   queryWaferPoints,
-  streamAgentChat,
   streamGlobalAgentChat,
 } from "./api";
 export type {

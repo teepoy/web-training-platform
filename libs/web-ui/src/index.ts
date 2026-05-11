@@ -15,6 +15,30 @@ export { default as SampleBrowser } from "./components/sample-browser";
 export { default as TrainingChart } from "./components/training-chart";
 export { default as WidgetErrorBoundary } from "./components/widget-error-boundary";
 export { handleBrowserActivation } from "./utils/browser-activation";
+export {
+  COLLAPSED_SIDEBAR_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  useSampleBrowserPrefs,
+} from "./stores/sampleBrowser";
+export {
+  FALLBACK_PLACEHOLDER,
+  listImageAdapters,
+  registerImageAdapter,
+  resolveImageUri,
+  resolveImageUris,
+  unregisterImageAdapter,
+} from "./utils/image-adapters";
+export type { ImageAdapter } from "./utils/image-adapters";
+export { filterBrowserItems } from "./utils/browser-filter";
+export type { BrowserFilterParams } from "./utils/browser-filter";
+export { buildBlinkTableData } from "./utils/blink-table-data";
+export type {
+  BlinkSampleInput,
+  BlinkTableDataResult,
+  BuildBlinkTableDataOptions,
+} from "./utils/blink-table-data";
 export { useBlinkController } from "./composables/useBlinkController";
 export type {
   UseBlinkControllerOptions,
@@ -55,6 +79,7 @@ export { metricCardsPlugin } from "./plugins/sidebar-metric-cards";
 export { predictionSummaryPlugin } from "./plugins/sidebar-prediction-summary";
 export { sampleViewerPlugin } from "./plugins/sidebar-sample-viewer";
 export { waferMapPlugin } from "./plugins/sidebar-wafer-map";
+export { blinkTablePlugin } from "./plugins/sidebar-blink-table";
 
 export { default as AnnotationProgressWidget } from "./plugins/sidebar-annotation-progress/AnnotationProgressWidget.vue";
 export { default as BrowserSummaryWidget } from "./plugins/sidebar-browser-summary/BrowserSummaryWidget.vue";
@@ -67,13 +92,13 @@ export { default as MetricCardsWidget } from "./plugins/sidebar-metric-cards/Met
 export { default as PredictionSummaryWidget } from "./plugins/sidebar-prediction-summary/PredictionSummaryWidget.vue";
 export { default as SampleViewerWidget } from "./plugins/sidebar-sample-viewer/SampleViewerWidget.vue";
 export { default as WaferMapWidget } from "./plugins/sidebar-wafer-map/WaferMapWidget.vue";
+export { default as BlinkTableWidget } from "./plugins/sidebar-blink-table/BlinkTableWidget.vue";
 
 export type {
   AnnotationGridItem,
   AgentChatStatus,
   BrowserItem,
   ChatEntry,
-  PreviewItem,
   RunLog,
   SidebarPanelDescriptor,
   TrainingEvent,

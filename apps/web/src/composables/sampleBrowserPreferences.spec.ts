@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useSampleBrowserPrefs } from '../stores/sampleBrowser'
+import { useSampleBrowserPrefs } from '@platform/web-ui'
 
 // vitest runs in Node — stub localStorage with an in-memory implementation
 function createLocalStorageMock() {
