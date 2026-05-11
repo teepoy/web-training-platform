@@ -9,11 +9,17 @@ export { default as DatasetToolbar } from "./components/datasets/dataset-toolbar
 export { default as AgentChatDrawer } from "./components/agent-chat-drawer";
 export { default as AnnotationGrid } from "./components/annotation-grid";
 export { default as BrowserSidebar } from "./components/browser-sidebar";
+export { BlinkImageCell, BlinkTable } from "./components/blink-table";
 export { default as PreviewItemDrawer } from "./components/preview-item-drawer";
 export { default as SampleBrowser } from "./components/sample-browser";
 export { default as TrainingChart } from "./components/training-chart";
 export { default as WidgetErrorBoundary } from "./components/widget-error-boundary";
 export { handleBrowserActivation } from "./utils/browser-activation";
+export { useBlinkController } from "./composables/useBlinkController";
+export type {
+  UseBlinkControllerOptions,
+  UseBlinkControllerReturn,
+} from "./composables/useBlinkController";
 export type {
   ActivationCallbacks,
   ActivationEvent,
@@ -80,3 +86,10 @@ export type {
   MarkdownLogEntry,
   MetricCardItem,
 } from "./types/sidebar-widgets";
+
+export type {
+  BlinkColumnDef,
+  BlinkPhase,
+  BlinkRow,
+  BlinkTableProps,
+} from "./types/blink-table";
