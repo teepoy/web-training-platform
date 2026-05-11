@@ -114,3 +114,13 @@ cd apps/web
 pnpm run test:e2e
 ```
 *Note: E2E tests target `[data-sb-item]` and `[data-sb-id]` attributes for stable element selection.*
+
+## BlinkTable
+
+`BlinkTable` is a shared virtualized comparison table in `@platform/web-ui` (`libs/web-ui/src/components/blink-table/BlinkTable.vue`). It renders rows with a synchronized A/B image blink column using `@tanstack/vue-virtual`, plus a global toggle to show or hide the blink column. Every row must supply `imageA` and `imageB` as resolved URLs (the component does not resolve storage URIs). The composable `useBlinkController` drives the shared blink timer exposed as `BlinkPhase` (`'A' | 'B'`).
+
+**Key types** (from `libs/web-ui/src/types/blink-table.ts`): `BlinkRow` (`id`, `imageA`, `imageB`, `metadata`, `cells`), `BlinkColumnDef` (`key`, `title`, optional `width`), `BlinkTableProps` (`rows`, `columns`, optional `blinkIntervalMs` / `initialBlinkEnabled`).
+
+**Storybook story**: `web-ui/components/BlinkTable` — review new work there before wiring into any surface.
+
+**Status**: component and Storybook only. `BlinkTable` is **NOT** mounted into any dataset detail, classify, or preview page. Integration into a concrete app surface is a separate future task.
