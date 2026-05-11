@@ -107,7 +107,7 @@ def _mock_ls_client(request):
         return
 
     module_name = getattr(request.module, "__name__", "").rsplit(".", 1)[-1]
-    if module_name.startswith("test_ls_") or module_name == "test_label_studio_client":
+    if module_name.startswith("test_ls_"):
         yield
         return
 
