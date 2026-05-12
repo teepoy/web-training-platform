@@ -260,6 +260,7 @@ import {
   useSampleBrowserPrefs,
   injectWaferPanelData,
   normalizeWaferPoint,
+  resolveImageUris,
   useDataPipeline as createDataPipeline,
   DATA_PIPELINE_KEY,
 } from "@platform/web-ui";

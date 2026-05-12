@@ -303,7 +303,7 @@ import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
 import { api } from "../api";
-import { resolveImageUris, buildBlinkTableData, createDataPipeline, DATA_PIPELINE_KEY, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
+import { resolveImageUris, buildBlinkTableData, useDataPipeline as createDataPipeline, DATA_PIPELINE_KEY, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
