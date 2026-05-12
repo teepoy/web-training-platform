@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const labelDistributionPlugin = defineSidebarPlugin({
   key: "label-distribution",
   component: defineAsyncComponent(
-    () => import("./LabelDistributionWidget.vue"),
+    () => import("../../components/label-distribution/LabelDistributionWidget.vue"),
   ),
   contract: {
     displayName: "Label Distribution",

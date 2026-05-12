@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const markdownLogPlugin = defineSidebarPlugin({
   key: "markdown-log",
   component: defineAsyncComponent(
-    () => import("./MarkdownLogWidget.vue"),
+    () => import("../../components/markdown-log/MarkdownLogWidget.vue"),
   ),
   contract: {
     displayName: "Markdown Log",

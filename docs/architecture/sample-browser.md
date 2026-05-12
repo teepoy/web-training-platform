@@ -44,7 +44,9 @@ User presentation choices are persisted to `localStorage` across all surfaces vi
 
 ## Sidebar Shell & Panel Presets
 
-The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a neutral shell for dashboard widgets. It injects a `BROWSER_DASHBOARD_KEY` context that widgets use to resolve stats. App surfaces pass the plugin component resolver and persisted sidebar width into the shared shell.
+The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a collapsible sidebar shell. It accepts a `panels` array and a `componentResolver` prop, then delegates all panel rendering to `PanelHost` internally. App surfaces pass the plugin component resolver and persisted sidebar width into the shared shell.
+
+`BrowserSidebar` also provides `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY` as a fallback, but pages using the page-level provider model (see below) can pass `:context` and `:interaction` props to share the same reactive state across both in-sidebar and out-of-sidebar widgets.
 
 ### Panel Presets (`sidebarConfig.ts`)
 | Preset          | Surface  | Purpose                  | Included Widgets                                       |
@@ -54,6 +56,67 @@ The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a neutr
 | `previewPanels` | Preview  | Remote data inspection   | distribution, **wafer-map**, summary                   |
 
 *Note: All surfaces use `wafer-map` for spatial metadata visualization (wafer_x, wafer_y). Classify and Dataset surfaces resolve points via the dataset-level `queryWaferPoints` API, while Preview resolves points from session-loaded item metadata.*
+
+## Panel Host — Decoupled Panel Rendering
+
+`PanelHost` (`libs/web-ui/src/components/panel-host/PanelHost.vue`) is a standalone component that renders a list of `SidebarPanelDescriptor[]` outside of any sidebar shell. It preserves all panel sub-element rendering: headers, collapse/expand, agent badges, `WidgetErrorBoundary` wrapping, and component resolution via a resolver prop.
+
+When provided with `context` and `interaction` props, `PanelHost` injects `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY` so widgets resolve the same reactive context regardless of whether they sit inside or outside a `BrowserSidebar`.
+
+`BrowserSidebar` now delegates to `PanelHost` internally:
+- **Before**: `BrowserSidebar` rendered panels inline with its own provide() calls
+- **After**: `BrowserSidebar` delegates to `<PanelHost :panels="panels" :componentResolver="..." :context="context" :interaction="interactionContext" />`
+
+This means any surface can use `PanelHost` directly to render widget panels in an arbitrary page region — a toolbar, a bottom drawer, a floating modal — without a sidebar shell. All CSS selectors (`.cs-panel`, `.cs-panel__header`, etc.) are self-contained in `PanelHost` and do not depend on a `.cs` sidebar wrapper.
+
+## Page-Level Provider Model
+
+Before the decoupling, `BrowserSidebar` owned the `provide()` calls for `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY`. This meant only widgets nested inside the sidebar could inject dashboard context and interaction state.
+
+The new model moves these injection keys to the page root via `usePagePanels`:
+
+### `usePagePanels` composable
+
+**Location**: `libs/web-ui/src/composables/usePagePanels.ts`
+
+Called once per page in `<script setup>`. Provides both keys at page level so any widget anywhere in the component tree can inject the same dashboard context and interaction state:
+
+```ts
+const { interactionContext, interactionState, dispatchIntent, dashboard } = usePagePanels({
+  dashboardContext: myDashboardContext,
+  classifyDashboard?: myClassifyDashboard,  // legacy bridge
+  onIntent?: (intent, updatedState) => { /* page-specific side effects */ },
+});
+```
+
+- `interactionContext` is passed to `BrowserSidebar`'s `:interaction` prop for shared state between in-sidebar and out-of-sidebar widgets
+- `dashboard` is a `ShallowReactive<Record<string, unknown>>` kept in sync with the source via `watch` + `Object.assign`
+- The optional `classifyDashboard` bridge provides the legacy string key (`"classifyDashboard"`) for widgets that still use it (LabelDistributionWidget, AnnotationProgressWidget)
+
+### `PageProvider` component
+
+**Location**: `libs/web-ui/src/components/page-provider/PageProvider.vue`
+
+For pages built around templates rather than `<script setup>`, `<PageProvider>` wraps `usePagePanels` and exposes the same return values via scoped slot props (`:interaction`, `:dashboard`).
+
+### `useWaferHelpers` composable
+
+**Location**: `libs/web-ui/src/composables/useWaferHelpers.ts`
+
+Shared wafer coordinate utilities extracted from per-surface duplication. Exports:
+- `metadataNumber(metadata, key)` — safe numeric extraction from metadata records
+- `metadataString(metadata, key)` — safe string extraction from metadata records
+- `normalizeWaferPoint(point)` — validates and normalizes a `WaferPoint` (identical logic previously duplicated in ClassifyView and DatasetDetailView)
+- `injectWaferPanelData(panels, points, collectionKey?)` — finds the `wafer-map` panel in a descriptor array and injects inline wafer points with the correct collection key per surface
+
+### Adopted pages
+
+Three pages use the new provider model:
+| Page | Provider method | Collection key |
+|------|----------------|----------------|
+| `ClassifyView` | `usePagePanels` in `<script setup>` | `"classify-samples"` |
+| `DatasetDetailView` | `usePagePanels` in `<script setup>` | `"browser-items"` |
+| `PreviewClassifyView` | `usePagePanels` in `<script setup>` | `"browser-items"` |
 
 ### Wafer coordinate convention
 
@@ -93,10 +156,20 @@ The `useBrowserFilter` composable provides a pure computed pipeline for filterin
 | File                                               | Role                                |
 | -------------------------------------------------- | ----------------------------------- |
 | `libs/web-ui/src/components/sample-browser/SampleBrowser.vue` | Shared virtualized browser core     |
-| `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Neutral sidebar shell               |
-| `src/stores/sampleBrowser.ts`                      | Presentation preference persistence |
-| `src/composables/useBrowserFilter.ts`              | Browser-scope filtering logic       |
-| `src/components/classify/sidebarConfig.ts`         | Panel registry and surface presets  |
+| `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Neutral sidebar shell (delegates to PanelHost) |
+| `libs/web-ui/src/components/panel-host/PanelHost.vue` | Standalone panel renderer — usable anywhere |
+| `libs/web-ui/src/composables/usePagePanels.ts`     | Page-level provider for dashboard + interaction keys |
+| `libs/web-ui/src/components/page-provider/PageProvider.vue` | Template-friendly wrapper for usePagePanels |
+| `libs/web-ui/src/composables/useWaferHelpers.ts`   | Shared wafer coordinate utilities |
+| `libs/web-ui/src/components/<name>/`              | Widget .vue components (12 widgets, moved from plugins/) |
+| `libs/web-ui/src/plugins/sidebar-<name>/index.ts`  | Thin plugin descriptor wrappers (12 plugins, .vue moved out) |
+| `apps/web/src/stores/sampleBrowser.ts`             | Presentation preference persistence |
+| `apps/web/src/composables/useBrowserFilter.ts`     | Browser-scope filtering logic       |
+| `apps/web/src/components/classify/sidebarConfig.ts` | Panel registry and surface presets  |
+
+### Taxonomy note
+
+Widget implementation (.vue) files now live in `libs/web-ui/src/components/<name>/` — they are general-purpose shared components, not sidebar-specific. The plugin descriptors in `libs/web-ui/src/plugins/sidebar-<name>/index.ts` are thin wrappers that import the component and export a `defineSidebarPlugin()` descriptor. This separation means widgets can be rendered via `PanelHost` in any page region, imported directly by other components, or registered as sidebar plugins — all from the same source file.
 
 ## Testing
 

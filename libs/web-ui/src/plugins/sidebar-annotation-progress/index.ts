@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const annotationProgressPlugin = defineSidebarPlugin({
   key: "annotation-progress",
   component: defineAsyncComponent(
-    () => import("./AnnotationProgressWidget.vue"),
+    () => import("../../components/annotation-progress/AnnotationProgressWidget.vue"),
   ),
   contract: {
     displayName: "Annotation Progress",

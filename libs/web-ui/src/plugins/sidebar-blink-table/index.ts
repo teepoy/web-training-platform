@@ -3,7 +3,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 
 export const blinkTablePlugin = defineSidebarPlugin({
   key: "blink-table",
-  component: defineAsyncComponent(() => import("./BlinkTableWidget.vue")),
+  component: defineAsyncComponent(() => import("../../components/blink-table/BlinkTableWidget.vue")),
   contract: {
     displayName: "Blink Table",
     description:

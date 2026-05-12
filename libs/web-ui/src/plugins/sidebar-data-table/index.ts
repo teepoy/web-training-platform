@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const dataTablePlugin = defineSidebarPlugin({
   key: "data-table",
   component: defineAsyncComponent(
-    () => import("./DataTableWidget.vue"),
+    () => import("../../components/data-table/DataTableWidget.vue"),
   ),
   contract: {
     displayName: "Data Table",

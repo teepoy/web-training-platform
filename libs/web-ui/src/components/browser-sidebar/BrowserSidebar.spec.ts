@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defineComponent, h } from "vue";
 import { mount } from "@vue/test-utils";
 import BrowserSidebar from "./BrowserSidebar.vue";
+import PanelHost from "../panel-host/PanelHost.vue";
 import type { SidebarPanelDescriptor } from "../../types/components";
 
 const MockWidget = defineComponent({
@@ -128,5 +129,48 @@ describe("BrowserSidebar", () => {
 
     expect(wrapper.emitted("update:collapsed")).toBeTruthy();
     expect(wrapper.emitted("update:collapsed")![0]).toEqual([true]);
+  });
+
+  it("delegates panel rendering to PanelHost", () => {
+    const wrapper = mount(BrowserSidebar, {
+      props: {
+        panels: mockPanels,
+        context: mockContext,
+        componentResolver,
+      },
+    });
+
+    // PanelHost is rendered inside BrowserSidebar
+    const panelHost = wrapper.findComponent(PanelHost);
+    expect(panelHost.exists()).toBe(true);
+
+    // PanelHost receives the panels, context, and componentResolver
+    expect(panelHost.props("panels")).toEqual(mockPanels);
+    expect(panelHost.props("context")).toEqual(mockContext);
+    expect(panelHost.props("componentResolver")).toBe(componentResolver);
+
+    // PanelHost receives a valid interaction context (auto-computed by BrowserSidebar)
+    const interaction = panelHost.props("interaction");
+    expect(interaction).toBeDefined();
+    expect(interaction?.state).toBeDefined();
+    expect(typeof interaction?.dispatch).toBe("function");
+  });
+
+  it("hides PanelHost when sidebar is collapsed", () => {
+    const wrapper = mount(BrowserSidebar, {
+      props: {
+        panels: mockPanels,
+        context: mockContext,
+        componentResolver,
+        collapsed: true,
+      },
+    });
+
+    // PanelHost should not be rendered when sidebar is collapsed
+    const panelHost = wrapper.findComponent(PanelHost);
+    expect(panelHost.exists()).toBe(false);
+
+    // Toggle button still present so sidebar can be expanded
+    expect(wrapper.find(".cs-header__toggle").exists()).toBe(true);
   });
 });

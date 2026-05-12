@@ -21,6 +21,10 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
+  usePagePanels,
+  injectWaferPanelData,
+  metadataNumber,
+  metadataString,
 } from '@platform/web-ui'
 import { pluginRegistry } from '../core/registry'
 
@@ -36,6 +40,13 @@ const sessionError = ref<string | null>(null)
 const sessionLoading = ref(true)
 
 const loader = usePreviewLoader({ sessionId: sessionId.value, pageSize: 20 })
+
+const { dashboard } = usePagePanels({
+  dashboardContext: computed(() => ({
+    totalLoaded: loader.loadedCount.value,
+    filteredCount: loader.loadedCount.value,
+  })),
+})
 
 const showPersistModal = ref(false)
 const persistScope = ref<PreviewPersistScope>('entire_collection')
@@ -59,16 +70,6 @@ const browserItems = computed<BrowserItem[]>(() => {
   }))
 })
 
-function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
-  const value = Number(metadata[key])
-  return Number.isFinite(value) ? value : null
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string | null {
-  const value = metadata[key]
-  return typeof value === 'string' && value.trim().length > 0 ? value : null
-}
-
 const previewWaferPoints = computed<WaferPoint[]>(() => {
   return loader.items.value.flatMap((item) => {
     const x = metadataNumber(item.metadata, 'wafer_x')
@@ -84,24 +85,9 @@ const previewWaferPoints = computed<WaferPoint[]>(() => {
   })
 })
 
-const previewSidebarPanels = computed(() => {
-  return previewPanels.map((panel) => {
-    if (panel.id !== 'wafer-map') {
-      return panel
-    }
-    return {
-      ...panel,
-      props: {
-        ...panel.props,
-        data: {
-          inline: {
-            points: previewWaferPoints.value,
-          },
-        },
-      },
-    }
-  })
-})
+const previewSidebarPanels = computed(() =>
+  injectWaferPanelData(previewPanels, previewWaferPoints.value, 'browser-items'),
+)
 
 function selectItem(item: PreviewItem) {
   selectedItem.value = item
@@ -189,7 +175,7 @@ async function handlePersist() {
           <div style="flex: 1; min-height: 0; display: flex;">
             <BrowserSidebar
               :panels="previewSidebarPanels"
-              :context="{ totalLoaded: loader.loadedCount.value, filteredCount: loader.loadedCount.value } as unknown as Record<string, unknown>"
+              :context="dashboard"
               :collapsed="prefs.sidebarCollapsed"
               :sidebar-width="prefs.sidebarWidth"
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"

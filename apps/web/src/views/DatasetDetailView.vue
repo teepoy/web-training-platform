@@ -91,8 +91,8 @@
             />
             <BrowserSidebar
               :panels="datasetSidebarPanels"
-              :context="browserSidebarContext as unknown as Record<string, unknown>"
-              :interaction="datasetInteraction"
+              :context="pageDashboard"
+              :interaction="interactionContext"
               :collapsed="prefs.sidebarCollapsed"
               :sidebar-width="prefs.sidebarWidth"
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"
@@ -295,7 +295,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onMounted, provide } from "vue";
+import { ref, computed, h, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
@@ -304,7 +304,7 @@ import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
 import { api } from "../api";
-import { resolveImageUris, buildBlinkTableData } from "@platform/web-ui";
+import { resolveImageUris, buildBlinkTableData, usePagePanels, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
@@ -317,12 +317,6 @@ import {
 } from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
-import {
-  reduceCollectionIntent,
-  reduceLabelFilterIntent,
-  type SidebarWidgetInteractionContext,
-  type SidebarWidgetInteractionState,
-} from "../components/classify/widgetContract";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import { pluginRegistry } from "../core/registry";
@@ -358,149 +352,12 @@ const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
 // ---------------------------------------------------------------------------
 // Samples tab
 // ---------------------------------------------------------------------------
-const datasetInteractionState = ref<SidebarWidgetInteractionState>({
-  activeLabelFilter: null,
-  selectedLabels: [],
-  collections: {},
-});
-
-const waferFilterIds = computed<string[] | null>(() => {
-  const collection = datasetInteractionState.value.collections?.["browser-items"];
-  if (!collection || collection.filter.mode !== "selected-only") return null;
-  return collection.filter.ids.length > 0 ? collection.filter.ids : null;
-});
-
-const sampleLoader = useSampleLoader({ datasetId: id, sampleIds: waferFilterIds });
-
-const browserSamples = computed<BrowserItem[]>(() =>
-  sampleLoader.samples.value.map((sample) => ({
-    id: sample.id,
-    imageSrcs: resolveImageUris(sample.image_uris),
-    metadata: sample.metadata ?? {},
-    sourceKind: "dataset",
-    currentLabel: sample.latest_annotation?.label ?? null,
-    draftLabel: null,
-    predictionLabel: null,
-    predictionConfidence: null,
-    predictionId: null,
-    activationLabel: null,
-  }))
-);
-
-const datasetInteraction = computed<SidebarWidgetInteractionContext>(() => ({
-  state: datasetInteractionState.value,
-  dispatch: (intent) => {
-    datasetInteractionState.value = {
-      ...datasetInteractionState.value,
-      activeLabelFilter: reduceLabelFilterIntent(datasetInteractionState.value.activeLabelFilter, intent),
-      collections: reduceCollectionIntent(datasetInteractionState.value.collections, intent),
-    };
-  },
-}));
-
-const { filteredItems: filteredSamples } = useBrowserFilter(browserSamples, datasetInteractionState);
-
-const waferPointsQuery = useQuery({
-  queryKey: computed(() => ["dataset", id.value, "wafer-points"]),
-  queryFn: () => queryWaferPoints(id.value),
-  retry: false,
-});
-
-function normalizeWaferPoint(point: WaferPoint): WaferPoint | null {
-  if (typeof point.id !== "string" || point.id.trim().length === 0) {
-    return null;
-  }
-
-  const x = Number(point.x);
-  const y = Number(point.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return null;
-  }
-
-  const value = Number(point.value);
-
-  return {
-    id: point.id,
-    x,
-    y,
-    ...(Number.isFinite(value) ? { value } : {}),
-  };
-}
-
-const waferPoints = computed<WaferPoint[]>(() => {
-  const points = waferPointsQuery.data.value?.points ?? [];
-  return points
-    .map((point) => normalizeWaferPoint(point))
-    .filter((point): point is WaferPoint => point !== null);
-});
-
-const blinkTableData = computed(() => {
-  const multiSamples: BlinkSampleInput[] = browserSamples.value
-    .filter((s) => s.imageSrcs.length > 1)
-    .map((s) => ({
-      id: s.id,
-      imageSrcs: s.imageSrcs,
-      metadata: s.metadata,
-      label: s.currentLabel ?? undefined,
-    }));
-  return buildBlinkTableData(multiSamples);
-});
-
-const datasetSidebarPanels = computed(() =>
-  datasetPanels.map((panel) => {
-    if (panel.id === "wafer-map") {
-      return {
-        ...panel,
-        props: {
-          ...panel.props,
-          data: {
-            inline: {
-              points: waferPoints.value,
-            },
-          },
-        },
-      };
-    }
-
-    if (panel.id === "blink-table") {
-      return {
-        ...panel,
-        props: {
-          ...panel.props,
-          data: {
-            inline: {
-              rows: blinkTableData.value.rows,
-              columns: blinkTableData.value.columns,
-            },
-          },
-        },
-      };
-    }
-
-    return panel;
-  })
-);
-
-const browserSidebarStats = computed(() => {
-  const labelCounts: Record<string, number> = {};
-  let annotatedSamples = 0;
-
-  for (const sample of sampleLoader.samples.value) {
-    const label = sample.latest_annotation?.label ?? null;
-    if (!label) {
-      continue;
-    }
-    annotatedSamples += 1;
-    labelCounts[label] = (labelCounts[label] ?? 0) + 1;
-  }
-
-  return {
-    total_samples: sampleLoader.totalCount.value,
-    annotated_samples: annotatedSamples,
-    unlabeled_samples: Math.max(sampleLoader.totalCount.value - annotatedSamples, 0),
-    label_counts: labelCounts,
-  };
-});
+// ---------------------------------------------------------------------------
+// Page-level dashboard + interaction context (provided via usePagePanels)
+// The dashboard object has lazy getters so widgets see live values after
+// sampleLoader / browserSidebarStats are defined.
+// ---------------------------------------------------------------------------
+const pageDashboardData = ref<Record<string, unknown>>({});
 
 const browserSidebarDashboard = {
   get stats() {
@@ -527,12 +384,130 @@ const browserSidebarDashboard = {
   refetch: () => sampleLoader.reset(),
 };
 
-provide("classifyDashboard", browserSidebarDashboard);
+const { interactionContext, interactionState, dashboard: pageDashboard } = usePagePanels({
+  dashboardContext: pageDashboardData,
+  classifyDashboard: browserSidebarDashboard,
+});
 
-const browserSidebarContext = computed(() => ({
-  totalLoaded: sampleLoader.samples.value.length,
-  filteredCount: filteredSamples.value.length,
-}));
+// ---------------------------------------------------------------------------
+// Wafer filter bridge: reads shared interaction-state collections so
+// wafer-map selections drive sample loading via useSampleLoader.
+// ---------------------------------------------------------------------------
+const waferFilterIds = computed<string[] | null>(() => {
+  const collection = interactionState.value.collections?.["browser-items"];
+  if (!collection || collection.filter.mode !== "selected-only") return null;
+  return collection.filter.ids.length > 0 ? collection.filter.ids : null;
+});
+
+const sampleLoader = useSampleLoader({ datasetId: id, sampleIds: waferFilterIds });
+
+const browserSamples = computed<BrowserItem[]>(() =>
+  sampleLoader.samples.value.map((sample) => ({
+    id: sample.id,
+    imageSrcs: resolveImageUris(sample.image_uris),
+    metadata: sample.metadata ?? {},
+    sourceKind: "dataset",
+    currentLabel: sample.latest_annotation?.label ?? null,
+    draftLabel: null,
+    predictionLabel: null,
+    predictionConfidence: null,
+    predictionId: null,
+    activationLabel: null,
+  }))
+);
+
+const { filteredItems: filteredSamples } = useBrowserFilter(browserSamples, interactionState);
+
+const browserSidebarStats = computed(() => {
+  const labelCounts: Record<string, number> = {};
+  let annotatedSamples = 0;
+
+  for (const sample of sampleLoader.samples.value) {
+    const label = sample.latest_annotation?.label ?? null;
+    if (!label) {
+      continue;
+    }
+    annotatedSamples += 1;
+    labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+  }
+
+  return {
+    total_samples: sampleLoader.totalCount.value,
+    annotated_samples: annotatedSamples,
+    unlabeled_samples: Math.max(sampleLoader.totalCount.value - annotatedSamples, 0),
+    label_counts: labelCounts,
+  };
+});
+
+// Populate the page-level dashboard ref once all reactive sources are defined.
+watch(
+  [() => sampleLoader.samples.value.length, filteredSamples, browserSidebarStats],
+  () => {
+    pageDashboardData.value = {
+      totalLoaded: sampleLoader.samples.value.length,
+      filteredCount: filteredSamples.value.length,
+      stats: browserSidebarStats.value,
+      isLoading: sampleLoader.isLoading.value && sampleLoader.samples.value.length === 0,
+      isError: false,
+      errorMessage: null,
+      draftCount: 0,
+      selectedCount: 0,
+      labelSpace: labelSpace.value,
+      refetch: () => sampleLoader.reset(),
+    };
+  },
+  { immediate: true },
+);
+
+const waferPointsQuery = useQuery({
+  queryKey: computed(() => ["dataset", id.value, "wafer-points"]),
+  queryFn: () => queryWaferPoints(id.value),
+  retry: false,
+});
+
+const waferPoints = computed<WaferPoint[]>(() => {
+  const points = waferPointsQuery.data.value?.points ?? [];
+  return points
+    .map((point) => normalizeWaferPoint(point))
+    .filter((point): point is WaferPoint => point !== null);
+});
+
+const blinkTableData = computed(() => {
+  const multiSamples: BlinkSampleInput[] = browserSamples.value
+    .filter((s) => s.imageSrcs.length > 1)
+    .map((s) => ({
+      id: s.id,
+      imageSrcs: s.imageSrcs,
+      metadata: s.metadata,
+      label: s.currentLabel ?? undefined,
+    }));
+  return buildBlinkTableData(multiSamples);
+});
+
+const datasetSidebarPanels = computed(() => {
+  const waferInjected = injectWaferPanelData(
+    datasetPanels,
+    waferPoints.value,
+    "browser-items",
+  );
+  return waferInjected.map((panel) => {
+    if (panel.id === "blink-table") {
+      return {
+        ...panel,
+        props: {
+          ...panel.props,
+          data: {
+            inline: {
+              rows: blinkTableData.value.rows,
+              columns: blinkTableData.value.columns,
+            },
+          },
+        },
+      };
+    }
+    return panel;
+  });
+});
 
 const featureSamplesQuery = useQuery({
   queryKey: computed(() => ["feature-samples", id.value]),

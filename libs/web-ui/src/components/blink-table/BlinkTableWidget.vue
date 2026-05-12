@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { BlinkTable } from "../../components/blink-table";
+import { BlinkTable } from "./";
 import type { BlinkRow, BlinkColumnDef } from "../../types/blink-table";
 
 const props = defineProps<{
@@ -39,7 +39,7 @@ const initialBlinkEnabled = computed(() =>
     <BlinkTable
       v-if="inlineData.rows && inlineData.rows.length > 0"
       :rows="inlineData.rows"
-      :columns="inlineData.columns"
+      :columns="inlineData.columns ?? []"
       :blinkIntervalMs="blinkIntervalMs"
       :initialBlinkEnabled="initialBlinkEnabled"
     />

@@ -1,3 +1,4 @@
+export { default as PanelHost } from "./components/panel-host";
 export { default as PluginFlowModal } from "./components/plugin-flow-modal";
 export { default as PluginTypeSelector } from "./components/plugin-type-selector";
 export type { PluginCard, PluginKind } from "./plugin-flow";
@@ -44,6 +45,19 @@ export type {
   UseBlinkControllerOptions,
   UseBlinkControllerReturn,
 } from "./composables/useBlinkController";
+
+export { usePagePanels } from "./composables/usePagePanels";
+export type {
+  UsePagePanelsOptions,
+  UsePagePanelsReturn,
+} from "./composables/usePagePanels";
+export {
+  injectWaferPanelData,
+  metadataNumber,
+  metadataString,
+  normalizeWaferPoint,
+} from "./composables/useWaferHelpers";
+export { default as PageProvider } from "./components/page-provider/PageProvider.vue";
 export type {
   ActivationCallbacks,
   ActivationEvent,
@@ -81,18 +95,18 @@ export { sampleViewerPlugin } from "./plugins/sidebar-sample-viewer";
 export { waferMapPlugin } from "./plugins/sidebar-wafer-map";
 export { blinkTablePlugin } from "./plugins/sidebar-blink-table";
 
-export { default as AnnotationProgressWidget } from "./plugins/sidebar-annotation-progress/AnnotationProgressWidget.vue";
-export { default as BrowserSummaryWidget } from "./plugins/sidebar-browser-summary/BrowserSummaryWidget.vue";
-export { default as DataTableWidget } from "./plugins/sidebar-data-table/DataTableWidget.vue";
-export { default as GenericEChartsWidget } from "./plugins/sidebar-echarts-generic/GenericEChartsWidget.vue";
-export { default as InteractiveScatterWidget } from "./plugins/sidebar-interactive-scatter/InteractiveScatterWidget.vue";
-export { default as LabelDistributionWidget } from "./plugins/sidebar-label-distribution/LabelDistributionWidget.vue";
-export { default as MarkdownLogWidget } from "./plugins/sidebar-markdown-log/MarkdownLogWidget.vue";
-export { default as MetricCardsWidget } from "./plugins/sidebar-metric-cards/MetricCardsWidget.vue";
-export { default as PredictionSummaryWidget } from "./plugins/sidebar-prediction-summary/PredictionSummaryWidget.vue";
-export { default as SampleViewerWidget } from "./plugins/sidebar-sample-viewer/SampleViewerWidget.vue";
-export { default as WaferMapWidget } from "./plugins/sidebar-wafer-map/WaferMapWidget.vue";
-export { default as BlinkTableWidget } from "./plugins/sidebar-blink-table/BlinkTableWidget.vue";
+export { default as AnnotationProgressWidget } from "./components/annotation-progress/AnnotationProgressWidget.vue";
+export { default as BrowserSummaryWidget } from "./components/browser-summary/BrowserSummaryWidget.vue";
+export { default as DataTableWidget } from "./components/data-table/DataTableWidget.vue";
+export { default as GenericEChartsWidget } from "./components/echarts-generic/GenericEChartsWidget.vue";
+export { default as InteractiveScatterWidget } from "./components/interactive-scatter/InteractiveScatterWidget.vue";
+export { default as LabelDistributionWidget } from "./components/label-distribution/LabelDistributionWidget.vue";
+export { default as MarkdownLogWidget } from "./components/markdown-log/MarkdownLogWidget.vue";
+export { default as MetricCardsWidget } from "./components/metric-cards/MetricCardsWidget.vue";
+export { default as PredictionSummaryWidget } from "./components/prediction-summary/PredictionSummaryWidget.vue";
+export { default as SampleViewerWidget } from "./components/sample-viewer/SampleViewerWidget.vue";
+export { default as WaferMapWidget } from "./components/wafer-map/WaferMapWidget.vue";
+export { default as BlinkTableWidget } from "./components/blink-table/BlinkTableWidget.vue";
 
 export type {
   AnnotationGridItem,
@@ -102,14 +116,15 @@ export type {
   RunLog,
   SidebarPanelDescriptor,
   TrainingEvent,
+  WaferPoint,
 } from "./types/components";
 
 export type {
-  AnnotationGridItem as SidebarAnnotationGridItem,
   ClassifyDashboardContext,
   ClassifyDashboardStats,
   MarkdownLogEntry,
   MetricCardItem,
+  SidebarAnnotationGridItem,
 } from "./types/sidebar-widgets";
 
 export type {

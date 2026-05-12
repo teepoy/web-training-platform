@@ -167,8 +167,8 @@
 
       <ClassifySidebar
         :panels="mergedPanels"
-        :context="dashboardContext"
-        :interaction="sidebarInteraction"
+        :context="pageDashboard"
+        :interaction="interactionContext"
         :collapsed="prefs.sidebarCollapsed"
         @update:collapsed="prefs.setSidebarCollapsed"
       />
@@ -255,25 +255,24 @@ import type {
   TrainingJob,
   WaferPoint,
 } from "../types";
-import { resolveImageUris, buildBlinkTableData } from "@platform/web-ui";
+import {
+  resolveImageUris,
+  buildBlinkTableData,
+  SampleBrowser,
+  useSampleBrowserPrefs,
+  usePagePanels,
+  injectWaferPanelData,
+  normalizeWaferPoint,
+} from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
-import { SampleBrowser } from "@platform/web-ui";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
 import TaskInsightModal from "../components/TaskInsightModal.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
-import {
-  reduceCollectionIntent,
-  reduceLabelFilterIntent,
-  type SidebarWidgetIntent,
-  type SidebarWidgetInteractionContext,
-  type SidebarWidgetInteractionState,
-} from "../components/classify/widgetContract";
 import { useClassifyDashboard } from "../composables/useClassifyDashboard";
 import { GLOBAL_AGENT_PANELS_KEY } from "../composables/useGlobalAgent";
 import { useOrgStore } from "../stores/org";
-import { useSampleBrowserPrefs } from "@platform/web-ui";
 
 interface ReviewRow {
   key: string;
@@ -448,74 +447,6 @@ function toAnnotationGridItem(sample: HydratedSample): AnnotationGridItem {
   };
 }
 
-const interactionState = ref<SidebarWidgetInteractionState>({
-  activeLabelFilter: labelFilter.value,
-  selectedLabels: labelFilter.value ? [labelFilter.value] : [],
-  collections: {},
-});
-
-watch(labelFilter, (nextLabel) => {
-  interactionState.value = {
-    ...interactionState.value,
-    activeLabelFilter: nextLabel,
-    selectedLabels: nextLabel ? [nextLabel] : [],
-  };
-});
-
-const selectedSidebarSampleIds = computed(() => {
-  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
-  if (filterIds.length > 0) {
-    return filterIds;
-  }
-  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
-});
-
-const selectedSidebarSampleHydrationIds = computed(() => {
-  const selectedIds = selectedSidebarSampleIds.value;
-  if (selectedIds.length === 0 || selectedIds.length > PREVIEW_HYDRATION_CAP) {
-    return [] as string[];
-  }
-  const activeIds = new Set(activeGridItems.value.map((item) => item.id));
-  return selectedIds.filter((id) => !activeIds.has(id));
-});
-
-const selectedSidebarHydrationQuery = useQuery({
-  queryKey: computed(() => [
-    "dataset",
-    datasetId.value,
-    "selected-sample-hydration",
-    selectedSidebarSampleHydrationIds.value.join(","),
-  ]),
-  queryFn: async () => {
-    const samples = await Promise.all(
-      selectedSidebarSampleHydrationIds.value.map((sampleId) => getSample(sampleId)),
-    );
-    return samples;
-  },
-  enabled: computed(() => selectedSidebarSampleHydrationIds.value.length > 0),
-  retry: false,
-});
-
-const hydratedGridItems = computed<AnnotationGridItem[]>(() => {
-  if (selectedSidebarSampleHydrationIds.value.length === 0) {
-    return [];
-  }
-  return (selectedSidebarHydrationQuery.data.value ?? []).map((sample) => toAnnotationGridItem(sample));
-});
-
-const providedGridItems = computed<AnnotationGridItem[]>(() => {
-  if (hydratedGridItems.value.length === 0) {
-    return activeGridItems.value;
-  }
-  const merged = new Map(activeGridItems.value.map((item) => [item.id, item] as const));
-  hydratedGridItems.value.forEach((item) => {
-    if (!merged.has(item.id)) {
-      merged.set(item.id, item);
-    }
-  });
-  return Array.from(merged.values());
-});
-
 const browserItems = computed<BrowserItem[]>(() =>
   activeGridItems.value.map((item) => ({
     id: item.id,
@@ -530,14 +461,6 @@ const browserItems = computed<BrowserItem[]>(() =>
     activationLabel: null,
   })),
 );
-
-const { filteredItems: filteredBrowserItems } = useBrowserFilter(
-  browserItems,
-  interactionState,
-  "classify-samples"
-);
-
-provide<Ref<AnnotationGridItem[]>>("classify-grid-items", providedGridItems);
 
 const activeTotalCount = computed(() =>
   isReviewMode.value ? reviewGridItems.value.length : totalCount.value,
@@ -1030,6 +953,96 @@ const dashboardContext = useClassifyDashboard(
   labelSpace,
 );
 
+const {
+  interactionContext,
+  interactionState,
+  dispatchIntent,
+  dashboard: pageDashboard,
+} = usePagePanels({
+  dashboardContext: dashboardContext as unknown as Record<string, unknown>,
+  classifyDashboard: dashboardContext,
+  onIntent: (_intent, updatedState) => {
+    if (!isReviewMode.value && labelFilter.value !== updatedState.activeLabelFilter) {
+      labelFilter.value = updatedState.activeLabelFilter;
+    }
+  },
+});
+
+// Bidirectional sync: user changes labelFilter dropdown → interaction state
+watch(labelFilter, (nextLabel) => {
+  if (interactionState.value.activeLabelFilter !== nextLabel) {
+    dispatchIntent({
+      type: "apply-filter",
+      operation: nextLabel ? "replace" : "clear",
+      values: nextLabel ? [nextLabel] : [],
+    });
+  }
+});
+
+// --- Interaction-dependent code (must come after usePagePanels) ---
+
+const selectedSidebarSampleIds = computed(() => {
+  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
+  if (filterIds.length > 0) {
+    return filterIds;
+  }
+  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
+});
+
+const selectedSidebarSampleHydrationIds = computed(() => {
+  const selectedIds = selectedSidebarSampleIds.value;
+  if (selectedIds.length === 0 || selectedIds.length > PREVIEW_HYDRATION_CAP) {
+    return [] as string[];
+  }
+  const activeIds = new Set(activeGridItems.value.map((item) => item.id));
+  return selectedIds.filter((id) => !activeIds.has(id));
+});
+
+const selectedSidebarHydrationQuery = useQuery({
+  queryKey: computed(() => [
+    "dataset",
+    datasetId.value,
+    "selected-sample-hydration",
+    selectedSidebarSampleHydrationIds.value.join(","),
+  ]),
+  queryFn: async () => {
+    const samples = await Promise.all(
+      selectedSidebarSampleHydrationIds.value.map((sampleId) => getSample(sampleId)),
+    );
+    return samples;
+  },
+  enabled: computed(() => selectedSidebarSampleHydrationIds.value.length > 0),
+  retry: false,
+});
+
+const hydratedGridItems = computed<AnnotationGridItem[]>(() => {
+  if (selectedSidebarSampleHydrationIds.value.length === 0) {
+    return [];
+  }
+  return (selectedSidebarHydrationQuery.data.value ?? []).map((sample) => toAnnotationGridItem(sample));
+});
+
+const providedGridItems = computed<AnnotationGridItem[]>(() => {
+  if (hydratedGridItems.value.length === 0) {
+    return activeGridItems.value;
+  }
+  const merged = new Map(activeGridItems.value.map((item) => [item.id, item] as const));
+  hydratedGridItems.value.forEach((item) => {
+    if (!merged.has(item.id)) {
+      merged.set(item.id, item);
+    }
+  });
+  return Array.from(merged.values());
+});
+
+const { filteredItems: filteredBrowserItems } = useBrowserFilter(
+  browserItems,
+  interactionState,
+  "classify-samples",
+);
+
+provide<Ref<AnnotationGridItem[]>>("classify-grid-items", providedGridItems);
+
 const waferPointsQuery = useQuery({
   queryKey: computed(() => ["dataset", datasetId.value, "wafer-points"]),
   queryFn: () => queryWaferPoints(datasetId.value),
@@ -1045,38 +1058,6 @@ const reviewPanel: SidebarPanelDescriptor = {
   props: {},
   order: 5,
 };
-
-function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
-  const value = metadata[key];
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string | null {
-  const value = metadata[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function normalizeWaferPoint(point: WaferPoint): WaferPoint | null {
-  if (typeof point.id !== "string" || point.id.trim().length === 0) {
-    return null;
-  }
-
-  const x = Number(point.x);
-  const y = Number(point.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return null;
-  }
-
-  const value = Number(point.value);
-
-  return {
-    id: point.id,
-    x,
-    y,
-    ...(Number.isFinite(value) ? { value } : {}),
-  };
-}
 
 const waferPoints = computed<WaferPoint[]>(() => {
   const points = waferPointsQuery.data.value?.points ?? [];
@@ -1101,21 +1082,8 @@ const blinkTableData = computed(() => {
 
 const staticPanels = computed(() => {
   const basePanels = isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels;
-  return basePanels.map((panel) => {
-    if (panel.id === "wafer-map") {
-      return {
-        ...panel,
-        props: {
-          ...panel.props,
-          data: {
-            inline: {
-              points: waferPoints.value,
-            },
-          },
-        },
-      };
-    }
-
+  const withWafer = injectWaferPanelData(basePanels, waferPoints.value, "classify-samples");
+  return withWafer.map((panel) => {
     if (panel.id === "blink-table") {
       return {
         ...panel,
@@ -1130,7 +1098,6 @@ const staticPanels = computed(() => {
         },
       };
     }
-
     return panel;
   });
 });
@@ -1138,24 +1105,6 @@ const staticPanels = computed(() => {
 const mergedPanels = computed(() =>
   mergePanels(staticPanels.value, globalAgentPanels.value),
 );
-
-function handleSidebarIntent(intent: SidebarWidgetIntent): void {
-  interactionState.value = {
-    ...interactionState.value,
-    activeLabelFilter: reduceLabelFilterIntent(interactionState.value.activeLabelFilter, intent),
-    collections: reduceCollectionIntent(interactionState.value.collections, intent),
-  };
-  if (!isReviewMode.value) {
-    labelFilter.value = interactionState.value.activeLabelFilter;
-  }
-}
-
-
-
-const sidebarInteraction = computed<SidebarWidgetInteractionContext>(() => ({
-  state: interactionState.value,
-  dispatch: handleSidebarIntent,
-}));
 
 const syncToLsMutation = useMutation({
   mutationFn: () => syncAnnotationsToLs(datasetId.value),

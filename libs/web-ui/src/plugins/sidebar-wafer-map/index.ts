@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const waferMapPlugin = defineSidebarPlugin({
   key: "wafer-map",
   component: defineAsyncComponent(
-    () => import("./WaferMapWidget.vue"),
+    () => import("../../components/wafer-map/WaferMapWidget.vue"),
   ),
   contract: {
     displayName: "Wafer Map",

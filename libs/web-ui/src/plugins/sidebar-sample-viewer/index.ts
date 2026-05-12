@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const sampleViewerPlugin = defineSidebarPlugin({
   key: "sample-viewer",
   component: defineAsyncComponent(
-    () => import("./SampleViewerWidget.vue"),
+    () => import("../../components/sample-viewer/SampleViewerWidget.vue"),
   ),
   contract: {
     displayName: "Sample Viewer",

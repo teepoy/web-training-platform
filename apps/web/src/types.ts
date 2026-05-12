@@ -7,7 +7,6 @@ export {
   type AnnotationGridItem,
   type BrowserItem,
   type ChatEntry,
-  type PreviewItem,
   type RunLog,
   type SidebarPanelDescriptor,
   type TrainingEvent,

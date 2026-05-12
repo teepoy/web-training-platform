@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const metricCardsPlugin = defineSidebarPlugin({
   key: "metric-cards",
   component: defineAsyncComponent(
-    () => import("./MetricCardsWidget.vue"),
+    () => import("../../components/metric-cards/MetricCardsWidget.vue"),
   ),
   contract: {
     displayName: "Metric Cards",

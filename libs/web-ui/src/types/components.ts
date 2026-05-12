@@ -48,6 +48,13 @@ export interface BrowserItem {
   activationLabel: string | null;
 }
 
+export interface WaferPoint {
+  id: string;
+  x: number;
+  y: number;
+  value?: number;
+}
+
 export interface SidebarPanelDescriptor {
   id: string;
   component: string;
