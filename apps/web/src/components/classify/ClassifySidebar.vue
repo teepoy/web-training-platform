@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { BrowserSidebar } from "@platform/web-ui";
 import type { SidebarPanelDescriptor } from "./sidebarConfig";
-import type { SidebarWidgetInteractionContext } from "./widgetContract";
 import { widgetRegistry } from "../../core/registry";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
@@ -13,7 +12,6 @@ import {
 const props = defineProps<{
   panels: SidebarPanelDescriptor[];
   context: Record<string, unknown>;
-  interaction?: SidebarWidgetInteractionContext;
   collapsed?: boolean;
 }>();
 
@@ -28,7 +26,6 @@ const prefs = useSampleBrowserPrefs();
   <BrowserSidebar
     :panels="props.panels"
     :context="props.context"
-    :interaction="props.interaction"
     :collapsed="props.collapsed"
     :sidebar-width="prefs.sidebarWidth"
     :min-sidebar-width="MIN_SIDEBAR_WIDTH"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
@@ -21,10 +21,11 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
-  usePagePanels,
   injectWaferPanelData,
   metadataNumber,
   metadataString,
+  useDataPipeline as createDataPipeline,
+  DATA_PIPELINE_KEY,
 } from '@platform/web-ui'
 import { widgetRegistry } from '../core/registry'
 
@@ -40,13 +41,6 @@ const sessionError = ref<string | null>(null)
 const sessionLoading = ref(true)
 
 const loader = usePreviewLoader({ sessionId: sessionId.value, pageSize: 20 })
-
-const { dashboard } = usePagePanels({
-  dashboardContext: computed(() => ({
-    totalLoaded: loader.loadedCount.value,
-    filteredCount: loader.loadedCount.value,
-  })),
-})
 
 const showPersistModal = ref(false)
 const persistScope = ref<PreviewPersistScope>('entire_collection')
@@ -69,6 +63,11 @@ const browserItems = computed<BrowserItem[]>(() => {
     activationLabel: null,
   }))
 })
+
+// ── DataPipeline (wafer-map is read-only, no filtering) ──
+const pipeline = createDataPipeline<BrowserItem>(browserItems)
+pipeline.register('wafer-map')
+provide(DATA_PIPELINE_KEY, pipeline)
 
 const previewWaferPoints = computed<WaferPoint[]>(() => {
   return loader.items.value.flatMap((item) => {
@@ -175,7 +174,6 @@ async function handlePersist() {
           <div style="flex: 1; min-height: 0; display: flex;">
             <BrowserSidebar
               :panels="previewSidebarPanels"
-              :context="dashboard"
               :collapsed="prefs.sidebarCollapsed"
               :sidebar-width="prefs.sidebarWidth"
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"

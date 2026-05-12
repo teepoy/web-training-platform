@@ -144,16 +144,9 @@ describe("BrowserSidebar", () => {
     const panelHost = wrapper.findComponent(PanelHost);
     expect(panelHost.exists()).toBe(true);
 
-    // PanelHost receives the panels, context, and componentResolver
+    // PanelHost receives the panels and componentResolver
     expect(panelHost.props("panels")).toEqual(mockPanels);
-    expect(panelHost.props("context")).toEqual(mockContext);
     expect(panelHost.props("componentResolver")).toBe(componentResolver);
-
-    // PanelHost receives a valid interaction context (auto-computed by BrowserSidebar)
-    const interaction = panelHost.props("interaction");
-    expect(interaction).toBeDefined();
-    expect(interaction?.state).toBeDefined();
-    expect(typeof interaction?.dispatch).toBe("function");
   });
 
   it("hides PanelHost when sidebar is collapsed", () => {

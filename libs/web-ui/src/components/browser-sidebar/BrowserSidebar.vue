@@ -1,11 +1,6 @@
 <script setup lang="ts">
-import { provide, ref, computed, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import type { Component } from "vue";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  BROWSER_DASHBOARD_KEY,
-  type SidebarWidgetInteractionContext,
-} from "@platform/widget-sdk";
 import type { SidebarPanelDescriptor } from "../../types/components";
 import PanelHost from "../panel-host/PanelHost.vue";
 
@@ -21,7 +16,6 @@ const COLLAPSED_SIDEBAR_WIDTH = 36;
 const props = defineProps<{
   panels: SidebarPanelDescriptor[];
   context: Record<string, unknown>;
-  interaction?: SidebarWidgetInteractionContext;
   collapsed?: boolean;
   componentResolver?: (key: string) => Component | null | undefined;
   sidebarWidth?: number;
@@ -34,26 +28,6 @@ const emit = defineEmits<{
   "update:collapsed": [value: boolean];
   "update:sidebarWidth": [value: number];
 }>();
-
-// ---------------------------------------------------------------------------
-// Provide context to widgets
-// ---------------------------------------------------------------------------
-
-provide(BROWSER_DASHBOARD_KEY, props.context);
-
-const fallbackInteraction = computed<SidebarWidgetInteractionContext>(() => ({
-  state: {
-    activeLabelFilter: null,
-    selectedLabels: [],
-  },
-  dispatch: () => undefined,
-}));
-
-const interactionContext = computed(
-  () => props.interaction ?? fallbackInteraction.value,
-);
-
-provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionContext);
 
 // Sidebar-level collapse toggle
 const sidebarCollapsed = computed({
@@ -142,8 +116,6 @@ const currentWidth = computed(() => {
       v-if="!sidebarCollapsed"
       :panels="panels"
       :componentResolver="props.componentResolver"
-      :context="props.context"
-      :interaction="interactionContext"
     />
   </aside>
 </template>

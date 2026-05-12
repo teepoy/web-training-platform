@@ -6,26 +6,15 @@
   agent badges, WidgetErrorBoundary wrapping, and component resolution
   via a resolver prop.
 
-  When provided, `context` and `interaction` props are injected so widgets
-  resolve BROWSER_DASHBOARD_KEY and SIDEBAR_WIDGET_INTERACTION_KEY
-  regardless of whether the host sits inside or outside a BrowserSidebar.
-
   CSS classes (.cs-panel, .cs-panel__header, etc.) are preserved verbatim
   for selector compatibility. All styles are self-contained (scoped);
   PanelHost does NOT depend on a `.cs` sidebar shell.
 -->
 <script setup lang="ts">
 import {
-  provide,
   ref,
-  computed,
   type Component,
 } from "vue";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  BROWSER_DASHBOARD_KEY,
-  type SidebarWidgetInteractionContext,
-} from "@platform/widget-sdk";
 import type { SidebarPanelDescriptor } from "../../types/components";
 import WidgetErrorBoundary from "../widget-error-boundary/WidgetErrorBoundary.vue";
 
@@ -36,32 +25,7 @@ import WidgetErrorBoundary from "../widget-error-boundary/WidgetErrorBoundary.vu
 const props = defineProps<{
   panels: SidebarPanelDescriptor[];
   componentResolver?: (key: string) => Component | null | undefined;
-  context?: Record<string, unknown>;
-  interaction?: SidebarWidgetInteractionContext;
 }>();
-
-// ---------------------------------------------------------------------------
-// Provide context to widgets (optional — only when props are explicitly passed)
-// ---------------------------------------------------------------------------
-
-if (props.context !== undefined) {
-  provide(BROWSER_DASHBOARD_KEY, props.context);
-}
-
-const fallbackInteraction = computed<SidebarWidgetInteractionContext>(() => ({
-  state: {
-    activeLabelFilter: null,
-    selectedLabels: [],
-    collections: {},
-  },
-  dispatch: () => undefined,
-}));
-
-const interactionContext = computed(
-  () => props.interaction ?? fallbackInteraction.value,
-);
-
-provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionContext);
 
 // ---------------------------------------------------------------------------
 // Panel collapse state (per panel)

@@ -138,13 +138,6 @@ export const defaultPanels: SidebarPanelDescriptor[] = [
         },
       },
       config: {
-        interaction: {
-          collection: "classify-samples",
-          entity: "sample",
-          emitSelection: true,
-          followSelection: true,
-          filterFromSelection: true,
-        },
         dataKey: "wafer-points",
         maxPoints: 100000,
       },
@@ -226,13 +219,6 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
         },
       },
       config: {
-        interaction: {
-          collection: "browser-items",
-          entity: "sample",
-          emitSelection: true,
-          followSelection: true,
-          filterFromSelection: true,
-        },
         dataKey: "wafer-points",
         maxPoints: 100000,
       },
@@ -302,13 +288,6 @@ export const previewPanels: SidebarPanelDescriptor[] = [
         },
       },
       config: {
-        interaction: {
-          collection: "browser-items",
-          entity: "sample",
-          emitSelection: false,
-          followSelection: false,
-          filterFromSelection: false,
-        },
         maxPoints: 100000,
       },
     },
