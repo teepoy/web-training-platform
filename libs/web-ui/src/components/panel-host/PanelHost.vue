@@ -25,7 +25,7 @@ import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   BROWSER_DASHBOARD_KEY,
   type SidebarWidgetInteractionContext,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 import type { SidebarPanelDescriptor } from "../../types/components";
 import WidgetErrorBoundary from "../widget-error-boundary/WidgetErrorBoundary.vue";
 

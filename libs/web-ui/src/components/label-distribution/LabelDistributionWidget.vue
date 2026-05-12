@@ -21,7 +21,7 @@ import type { ClassifyDashboardContext } from "../../types/sidebar-widgets";
 import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetIntent,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 use([CanvasRenderer, GridComponent, BarChart, TooltipComponent]);
 

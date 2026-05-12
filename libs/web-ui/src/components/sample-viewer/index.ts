@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const sampleViewerPlugin = defineSidebarPlugin({
+export const sampleViewerPlugin = defineDashboardWidget({
   key: "sample-viewer",
   component: defineAsyncComponent(
     () => import("./SampleViewerWidget.vue"),

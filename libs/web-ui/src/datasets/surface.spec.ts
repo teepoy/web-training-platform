@@ -30,8 +30,8 @@ function buildSurface(
     datasets?: DatasetListItem[];
     currentOrgId?: string | null;
     user?: DatasetListUser | null;
-    importerPlugins?: Array<{ id: string; label: string; component: object }>;
-    previewLauncherPlugins?: Array<{ id: string; label: string; component: object }>;
+    importerFlows?: Array<{ id: string; label: string; component: object }>;
+    previewLauncherFlows?: Array<{ id: string; label: string; component: object }>;
   } = {},
 ) {
   const onViewDataset = vi.fn();
@@ -44,8 +44,8 @@ function buildSurface(
     error: ref(null),
     currentOrgId: ref(opts.currentOrgId ?? "org-1"),
     user: ref(opts.user ?? makeUser()),
-    importerPlugins: ref(opts.importerPlugins ?? []),
-    previewLauncherPlugins: ref(opts.previewLauncherPlugins ?? []),
+    importerFlows: ref(opts.importerFlows ?? []),
+    previewLauncherFlows: ref(opts.previewLauncherFlows ?? []),
     onViewDataset,
     onTogglePublic,
     onDeleteDataset,
@@ -157,10 +157,10 @@ describe("useDatasetListSurface", () => {
       const importer = { id: "stub-importer", label: "Stub Importer", component: {} };
       const preview = { id: "stub-preview", label: "Stub Preview", component: {} };
 
-      const { surface } = buildSurface({ importerPlugins: [importer], previewLauncherPlugins: [preview] });
+      const { surface } = buildSurface({ importerFlows: [importer], previewLauncherFlows: [preview] });
 
-      expect(surface.toolbarProps.value.importerPlugins).toEqual([importer]);
-      expect(surface.toolbarProps.value.previewLauncherPlugins).toEqual([preview]);
+      expect(surface.toolbarProps.value.importerFlows).toEqual([importer]);
+      expect(surface.toolbarProps.value.previewLauncherFlows).toEqual([preview]);
     });
   });
 

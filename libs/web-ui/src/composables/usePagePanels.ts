@@ -32,7 +32,7 @@ import {
   type SidebarWidgetInteractionContext,
   type SidebarWidgetInteractionState,
   type SidebarWidgetIntent,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 import type { ClassifyDashboardContext } from "../types/sidebar-widgets";
 
 export interface UsePagePanelsOptions {

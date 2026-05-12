@@ -8,7 +8,7 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "test:widgets": "vitest run src/components/classify/widget*.spec.ts src/composables/*.spec.ts",
-    "test:plugins": "vitest run src/plugins/*.spec.ts src/plugins/**/*.spec.ts",
+    "test:registrations": "vitest run src/registrations/*.spec.ts src/registrations/**/*.spec.ts",
     "test:all": "vitest run src/**/*.spec.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@platform/api-contract": "workspace:*",
-    "@platform/plugin-sdk": "workspace:*",
+    "@platform/widget-sdk": "workspace:*",
     "@platform/web-data": "workspace:*",
     "@platform/web-ui": "workspace:*",
     "@tanstack/vue-query": "^5.66.9",

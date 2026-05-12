@@ -17,7 +17,7 @@ The architecture consists of four main parts:
 
 The host component is responsible for:
 - Fetching the list of datasets using Vue Query.
-- Initializing `useDatasetListSurface` from `@platform/web-ui` with fetched data, plugin registry results, and event handlers.
+- Initializing `useDatasetListSurface` from `@platform/web-ui` with fetched data, widget registry results, and event handlers.
 - Determining the `activeTaskType` (currently based on the first dataset in the list).
 - Resolving the `activeShim` component via the registry.
 - Rendering the `DatasetPageShell` and the resolved shim.
@@ -39,15 +39,15 @@ The `resolveDatasetShim` function provides the resolution logic, including fallb
 
 ### 3. Shared UI Package: `@platform/web-ui`
 
-The `libs/web-ui` package owns reusable frontend UI and helpers that are not tied to app routing, API clients, stores, or the singleton plugin registry.
+The `libs/web-ui` package owns reusable frontend UI and helpers that are not tied to app routing, API clients, stores, or the singleton widget registry.
 
 The package provides:
 - **Normalized Data**: Datasets with consistent field types.
 - **Permissions**: `isSuperadmin`, `canDelete`, etc.
-- **UI Components**: `DatasetPageShell`, `DatasetToolbar`, `DatasetTable`, `DatasetRowActions`, `PluginFlowModal`, and `PluginTypeSelector`.
+- **UI Components**: `DatasetPageShell`, `DatasetToolbar`, `DatasetTable`, `DatasetRowActions`, `FlowModal`, and `FlowTypeSelector`.
 - **Dataset Helpers**: `useDatasetListSurface` and `buildDatasetColumns` for shared table/action behavior.
 
-The web app remains responsible for API calls, Vue Query, routing, auth/org stores, and reading registered plugins from `pluginRegistry`.
+The web app remains responsible for API calls, Vue Query, routing, auth/org stores, and reading registered widgets from `widgetRegistry`.
 
 ### 4. Shims
 
@@ -62,7 +62,7 @@ To add support for a new task type (e.g., `object-detection`):
 
 1.  **Create the Shim**:
     Create `apps/web/src/views/datasets/shims/ObjectDetectionDatasetsShim.vue`. You can copy `ClassificationDatasetsShim.vue` as a starting point.
-    
+
 2.  **Register the Shim**:
     Update `apps/web/src/views/datasets/registry.ts`:
     ```typescript

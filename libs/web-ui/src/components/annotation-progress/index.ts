@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const annotationProgressPlugin = defineSidebarPlugin({
+export const annotationProgressPlugin = defineDashboardWidget({
   key: "annotation-progress",
   component: defineAsyncComponent(
     () => import("./AnnotationProgressWidget.vue"),

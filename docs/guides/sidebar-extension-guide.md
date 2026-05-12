@@ -9,9 +9,9 @@ How to extend the sample browser sidebar: add new widgets, register new data sou
   └── WidgetErrorBoundary.vue   ← per-panel crash fence
         └── <YourWidget>.vue    ← Vue component resolved by component key
 
-src/plugins/index.ts            ← explicit widget registration barrel
+src/registrations/index.ts            ← explicit widget registration barrel
 sidebarConfig.ts                ← per-surface panel presets
-@platform/plugin-sdk            ← shared types: intents, interaction context, injection keys
+@platform/widget-sdk            ← shared types: intents, interaction context, injection keys
 ```
 
 The sidebar is data-agnostic. It receives two things from the owning view:
@@ -28,7 +28,7 @@ The sidebar is data-agnostic. It receives two things from the owning view:
 
 Create reusable first-party widgets in `libs/web-ui/src/plugins/sidebar-my-widget/MyWidget.vue`.
 
-Create app-specific widgets in `apps/web/src/plugins/sidebar-my-widget/MyWidget.vue` only when they need app-local API clients, stores, or routes.
+Create app-specific widgets in `apps/web/src/registrations/sidebar-my-widget/MyWidget.vue` only when they need app-local API clients, stores, or routes.
 
 ### Minimal template
 
@@ -44,7 +44,7 @@ Create app-specific widgets in `apps/web/src/plugins/sidebar-my-widget/MyWidget.
 -->
 <script setup lang="ts">
 import { inject } from 'vue'
-import { BROWSER_DASHBOARD_KEY } from '@platform/plugin-sdk'
+import { BROWSER_DASHBOARD_KEY } from '@platform/widget-sdk'
 
 const props = withDefaults(defineProps<{
   myProp?: string
@@ -73,7 +73,7 @@ If your widget needs to know the active label filter or react to spatial selecti
 
 ```ts
 import { inject, computed } from 'vue'
-import { SIDEBAR_WIDGET_INTERACTION_KEY } from '@platform/plugin-sdk'
+import { SIDEBAR_WIDGET_INTERACTION_KEY } from '@platform/widget-sdk'
 
 const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY)
 const activeLabel = computed(() => interactionRef?.value.state.activeLabelFilter ?? null)
@@ -109,15 +109,15 @@ function handleClick(id: string) {
 
 ---
 
-## Step 2 — Export and Register the Plugin Descriptor
+## Step 2 — Export and Register the Widget Descriptor
 
 Create `libs/web-ui/src/plugins/sidebar-my-widget/index.ts` for reusable widgets:
 
 ```ts
 import { defineAsyncComponent } from 'vue'
-import { defineSidebarPlugin } from '@platform/plugin-sdk'
+import { defineDashboardWidget } from '@platform/widget-sdk'
 
-export const myWidgetPlugin = defineSidebarPlugin({
+export const myWidget = defineDashboardWidget({
   key: 'my-widget',
   component: defineAsyncComponent(() => import('./MyWidget.vue')),
   contract: {
@@ -140,12 +140,12 @@ export const myWidgetPlugin = defineSidebarPlugin({
 })
 ```
 
-Export reusable descriptors from `libs/web-ui/src/index.ts`, then import and register the descriptor in `apps/web/src/plugins/index.ts`:
+Export reusable descriptors from `libs/web-ui/src/index.ts`, then import and register the descriptor in `apps/web/src/registrations/index.ts`:
 
 ```ts
-import { myWidgetPlugin } from '@platform/web-ui'
+import { myWidget } from '@platform/web-ui'
 
-pluginRegistry.registerSidebarWidget(myWidgetPlugin)
+widgetRegistry.registerWidget(myWidget)
 ```
 
 ---
@@ -165,7 +165,7 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
   // ... existing panels ...
   {
     id: 'my-panel',             // unique per surface; reused as collapse key
-    component: 'my-widget',     // must match the registered plugin key
+    component: 'my-widget',     // must match the registered widget key
     title: 'My Panel',
     order: 30,                  // lower = higher in the sidebar; default 50
     size: 'compact',            // 'compact' | 'normal' | 'large' — hint for agent panels
@@ -454,9 +454,9 @@ const sidebarContext = computed(() => ({
 ## Checklist
 
 - [ ] Widget `.vue` file created in `./widgets/`
-- [ ] Descriptor exported from `src/plugins/sidebar-<name>/index.ts`
-- [ ] Descriptor registered in `src/plugins/index.ts`
-- [ ] `defineSidebarWidget` used (validates contract shape)
+- [ ] Descriptor exported from `src/registrations/sidebar-<name>/index.ts`
+- [ ] Descriptor registered in `src/registrations/index.ts`
+- [ ] `defineDashboardWidget` used (validates contract shape)
 - [ ] `contract.capabilities.reads` and `contract.capabilities.emits` accurately declared
 - [ ] At least one `selfTests` entry written
 - [ ] Panel descriptor added to the target surface preset (`defaultPanels`, `datasetPanels`, or `previewPanels`)

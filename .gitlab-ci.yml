@@ -59,11 +59,11 @@ api-tests:
 
 # ── Frontend tests ─────────────────────────────────
 
-plugin-sdk-tests:
+widget-sdk-tests:
   extends: .frontend
   stage: test-frontend
   script:
-    - pnpm test:plugin-sdk
+    - pnpm test:widget-sdk
 
 web-ui-tests:
   extends: .frontend

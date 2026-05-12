@@ -3,7 +3,7 @@ import path from "path";
 
 const config: StorybookConfig = {
   stories: [
-    "../src/plugins/**/*.stories.ts",
+    "../src/registrations/**/*.stories.ts",
     "../../../libs/web-ui/src/**/*.stories.ts",
   ],
   staticDirs: ["./public"],
@@ -52,10 +52,10 @@ const config: StorybookConfig = {
         ),
       },
       {
-        find: "@platform/plugin-sdk",
+        find: "@platform/widget-sdk",
         replacement: path.resolve(
           __dirname,
-          "../../../libs/plugin-sdk/src/index.ts",
+          "../../../libs/widget-sdk/src/index.ts",
         ),
       },
       {

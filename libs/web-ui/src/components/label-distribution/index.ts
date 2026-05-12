@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const labelDistributionPlugin = defineSidebarPlugin({
+export const labelDistributionPlugin = defineDashboardWidget({
   key: "label-distribution",
   component: defineAsyncComponent(
     () => import("./LabelDistributionWidget.vue"),

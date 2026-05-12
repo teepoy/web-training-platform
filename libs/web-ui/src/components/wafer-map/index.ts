@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const waferMapPlugin = defineSidebarPlugin({
+export const waferMapPlugin = defineDashboardWidget({
   key: "wafer-map",
   component: defineAsyncComponent(
     () => import("./WaferMapWidget.vue"),

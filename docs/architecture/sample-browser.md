@@ -44,7 +44,7 @@ User presentation choices are persisted to `localStorage` across all surfaces vi
 
 ## Sidebar Shell & Panel Presets
 
-The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a collapsible sidebar shell. It accepts a `panels` array and a `componentResolver` prop, then delegates all panel rendering to `PanelHost` internally. App surfaces pass the plugin component resolver and persisted sidebar width into the shared shell.
+The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a collapsible sidebar shell. It accepts a `panels` array and a `componentResolver` prop, then delegates all panel rendering to `PanelHost` internally. App surfaces pass the widget component resolver and persisted sidebar width into the shared shell.
 
 `BrowserSidebar` also provides `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY` as a fallback, but pages using the page-level provider model (see below) can pass `:context` and `:interaction` props to share the same reactive state across both in-sidebar and out-of-sidebar widgets.
 
@@ -162,14 +162,14 @@ The `useBrowserFilter` composable provides a pure computed pipeline for filterin
 | `libs/web-ui/src/components/page-provider/PageProvider.vue` | Template-friendly wrapper for usePagePanels |
 | `libs/web-ui/src/composables/useWaferHelpers.ts`   | Shared wafer coordinate utilities |
 | `libs/web-ui/src/components/<name>/`              | Widget .vue components (12 widgets, moved from plugins/) |
-| `libs/web-ui/src/plugins/sidebar-<name>/index.ts`  | Thin plugin descriptor wrappers (12 plugins, .vue moved out) |
+| `libs/web-ui/src/plugins/sidebar-<name>/index.ts`  | Thin widget descriptor wrappers (12 widgets, .vue moved out) |
 | `apps/web/src/stores/sampleBrowser.ts`             | Presentation preference persistence |
 | `apps/web/src/composables/useBrowserFilter.ts`     | Browser-scope filtering logic       |
 | `apps/web/src/components/classify/sidebarConfig.ts` | Panel registry and surface presets  |
 
 ### Taxonomy note
 
-Widget implementation (.vue) files now live in `libs/web-ui/src/components/<name>/` — they are general-purpose shared components, not sidebar-specific. The plugin descriptors in `libs/web-ui/src/plugins/sidebar-<name>/index.ts` are thin wrappers that import the component and export a `defineSidebarPlugin()` descriptor. This separation means widgets can be rendered via `PanelHost` in any page region, imported directly by other components, or registered as sidebar plugins — all from the same source file.
+Widget implementation (.vue) files now live in `libs/web-ui/src/components/<name>/` — they are general-purpose shared components, not sidebar-specific. The widget descriptors in `libs/web-ui/src/plugins/sidebar-<name>/index.ts` are thin wrappers that import the component and export a `defineDashboardWidget()` descriptor. This separation means widgets can be rendered via `PanelHost` in any page region, imported directly by other components, or registered as sidebar widgets — all from the same source file.
 
 ## Testing
 

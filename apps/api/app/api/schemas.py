@@ -878,7 +878,7 @@ class AgentPanelDescriptor(BaseModel):
     """Describes a single panel that the agent wants to render on a display surface."""
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9\-]*$", max_length=80)
-    component: str = Field(description="Key into the frontend plugin registry")
+    component: str = Field(description="Key into the frontend widget registry")
     title: str = Field(max_length=120)
     order: int = Field(default=50, ge=0)
     collapsed: bool = False

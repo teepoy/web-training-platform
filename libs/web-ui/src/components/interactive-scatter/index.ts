@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const interactiveScatterPlugin = defineSidebarPlugin({
+export const interactiveScatterPlugin = defineDashboardWidget({
   key: "interactive-scatter",
   component: defineAsyncComponent(
     () => import("./InteractiveScatterWidget.vue"),

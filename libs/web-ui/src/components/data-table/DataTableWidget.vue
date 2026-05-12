@@ -13,7 +13,7 @@ import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetIntent,
   type SidebarWidgetInteractionConfig,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 const props = defineProps<{
   data?: Record<string, unknown> | null;

@@ -20,7 +20,7 @@ nav:
       - Sample Browser: architecture/sample-browser.md
       - Task Tracker: architecture/task-tracker.md
   - Guides:
-      - Plugin Extension Guide: guides/plugin-extension-guide.md
+      - Extension Guide: guides/extension-guide.md
       - Sidebar Extension Guide: guides/sidebar-extension-guide.md
       - Preview Dataset Mode: guides/preview-dataset-mode.md
       - Export Bundle: guides/export-bundle.md

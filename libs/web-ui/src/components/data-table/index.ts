@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const dataTablePlugin = defineSidebarPlugin({
+export const dataTablePlugin = defineDashboardWidget({
   key: "data-table",
   component: defineAsyncComponent(
     () => import("./DataTableWidget.vue"),

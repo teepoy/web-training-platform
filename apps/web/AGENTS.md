@@ -11,7 +11,7 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Routes                         | `src/router.ts`                                                         | `/datasets`, `/jobs`                                                                         |
 | API + SSE                      | `src/api.ts`                                                            | Hardcoded `API_BASE`, EventSource helper                                                     |
 | Shared types                   | `src/types.ts` + `src/contracts.ts`                                     | Classification-first shapes                                                                  |
-| Dataset workflow               | `src/views/DatasetsView.vue`                                            | Import dataset via `PluginFlowModal`                                                         |
+| Dataset workflow               | `src/views/DatasetsView.vue`                                            | Import dataset via `FlowModal`                                                         |
 | Job workflow                   | `src/views/JobsView.vue`                                                | Start job, consume SSE                                                                       |
 | Job detail metrics             | `src/views/JobDetailView.vue` + `../../libs/web-ui/src/components/training-chart/TrainingChart.vue` | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present                 |
 | Schedule list                  | `src/views/SchedulesView.vue`                                           | CRUD + create modal + pause/resume/delete                                                    |
@@ -21,7 +21,7 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Classify sidebar               | `src/components/classify/`                                              | Widget config, sidebar shell wrapper; see Classify Sidebar Architecture section              |
 | Agent chat drawer              | `../../libs/web-ui/src/components/agent-chat-drawer/AgentChatDrawer.vue` | Floating chat UI for agent interaction                                                       |
 | Widget implementations         | `../../libs/web-ui/src/components/<name>/`                              | Widget .vue source files — general-purpose shared components                                 |
-| Plugin descriptor wrappers     | `../../libs/web-ui/src/components/<name>/index.ts`                      | Plugin descriptors co-located with .vue components; each widget directory is self-contained  |
+| Widget descriptor wrappers     | `../../libs/web-ui/src/components/<name>/index.ts`                      | Widget descriptors co-located with .vue components; each widget directory is self-contained  |
 | Shared browser core            | `../../libs/web-ui/src/components/sample-browser/SampleBrowser.vue`     | Shared virtualized browser core                                                              |
 | Sidebar shell                  | `../../libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`   | Neutral sidebar shell (delegates panels to PanelHost)                                        |
 | Panel host                     | `../../libs/web-ui/src/components/panel-host/PanelHost.vue`             | Standalone panel renderer — usable anywhere in a page                                        |
@@ -39,7 +39,7 @@ The `DatasetsView.vue` uses a shim-based architecture to render specialized list
 | --------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
 | Host                  | `src/views/DatasetsView.vue`                 | Thin container; resolves shim via registry; provides data via adapter       |
 | Registry              | `src/views/datasets/registry.ts`             | `DATASET_SHIM_REGISTRY` map and `resolveDatasetShim` logic                  |
-| Shared UI package     | `../../libs/web-ui/src/`                     | `@platform/web-ui` components, plugin flow UI, and dataset-list helpers     |
+| Shared UI package     | `../../libs/web-ui/src/`                     | `@platform/web-ui` components, flow UI, and dataset-list helpers     |
 | Classification Shim   | `src/views/datasets/shims/ClassificationDatasetsShim.vue` | Default list view for classification tasks                                  |
 | VQA Shim              | `src/views/datasets/shims/VqaDatasetsShim.vue` | Specialized list view for VQA tasks                                         |
 
@@ -68,8 +68,8 @@ The classify page (`/datasets/:id/classify`) is the one-stop classification work
 
 **How to add a new widget:**
 1. Create the .vue component in `../../libs/web-ui/src/components/<name>/<Name>Widget.vue` for reusable first-party widgets, or `src/components/<name>/<Name>Widget.vue` if the widget is app-specific.
-2. Create a plugin descriptor in the same component directory: `../../libs/web-ui/src/components/<name>/index.ts` (reusable) or `src/components/<name>/index.ts` (app-specific), importing the component from `./` and exporting a named descriptor via `defineSidebarPlugin({...})`. The component directory now contains both the .vue source and its plugin descriptor, self-contained.
-3. Export reusable descriptors from `../../libs/web-ui/src/index.ts`, then import and register the descriptor in `src/plugins/index.ts`.
+2. Create a widget descriptor in the same component directory: `../../libs/web-ui/src/components/<name>/index.ts` (reusable) or `src/components/<name>/index.ts` (app-specific), importing the component from `./` and exporting a named descriptor via `defineDashboardWidget({...})`. The component directory now contains both the .vue source and its widget descriptor, self-contained.
+3. Export reusable descriptors from `../../libs/web-ui/src/index.ts`, then import and register the descriptor in `src/registrations/index.ts`.
 4. Add a `SidebarPanelDescriptor` entry to `defaultPanels` (or a custom panels array) with the matching `component` key and any `props`.
 5. (Optional) Use `<PanelHost :panels="myPanels" :componentResolver="..." />` to render the same panel descriptors anywhere in the page — a toolbar, a drawer, or a floating panel — sharing state with sidebar widgets via `usePagePanels`.
 

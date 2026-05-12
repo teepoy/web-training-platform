@@ -112,7 +112,7 @@ from app.api.deps import (
 )
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
-from app.plugins.registry import PLUGIN_ROUTERS
+from app.routers.registry import EXTENSION_ROUTERS
 from app.db.models import (
     OrgMembershipORM,
     OrganizationORM,
@@ -209,8 +209,8 @@ app.add_middleware(
 
 container = Container()
 
-for plugin_router in PLUGIN_ROUTERS:
-    app.include_router(plugin_router)
+for extension_router in EXTENSION_ROUTERS:
+    app.include_router(extension_router)
 
 
 def _make_ls_image_url(uri: str) -> str:

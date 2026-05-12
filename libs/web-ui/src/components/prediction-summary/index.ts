@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const predictionSummaryPlugin = defineSidebarPlugin({
+export const predictionSummaryPlugin = defineDashboardWidget({
   key: "prediction-summary",
   component: defineAsyncComponent(
     () => import("./PredictionSummaryWidget.vue"),

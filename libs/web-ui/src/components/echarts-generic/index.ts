@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const echartsGenericPlugin = defineSidebarPlugin({
+export const echartsGenericPlugin = defineDashboardWidget({
   key: "echarts-generic",
   component: defineAsyncComponent(
     () => import("./GenericEChartsWidget.vue"),

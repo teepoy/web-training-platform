@@ -98,7 +98,7 @@
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"
               :max-sidebar-width="MAX_SIDEBAR_WIDTH"
               :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-              :component-resolver="(key) => pluginRegistry.getSidebarComponent(key) ?? null"
+              :component-resolver="(key) => widgetRegistry.getWidgetComponent(key) ?? null"
               @update:collapsed="prefs.setSidebarCollapsed"
               @update:sidebar-width="prefs.setSidebarWidth"
             />
@@ -109,7 +109,7 @@
         <!-- TAB 2: Export -->
         <!-- ============================================================ -->
         <n-tab-pane name="export" tab="Export">
-          <n-empty v-if="exporterPlugins.length === 0" description="No export plugins available." style="margin-top: 24px" />
+          <n-empty v-if="exporterFlows.length === 0" description="No export plugins available." style="margin-top: 24px" />
           <div v-else style="display: flex; justify-content: center; padding: 24px 0">
             <n-button type="primary" @click="showExportFlow = true">Export Dataset</n-button>
           </div>
@@ -273,18 +273,18 @@
         @select-sample="(sid: string) => { selectedSampleId = sid }"
       />
 
-      <PluginFlowModal
+      <FlowModal
         v-model:show="showImportFlow"
-        :plugins="importerPlugins"
+        :flows="importerFlows"
         kind="import"
         title="Import Samples"
         :dataset-id="id"
         @complete="handleImporterComplete"
       />
 
-      <PluginFlowModal
+      <FlowModal
         v-model:show="showExportFlow"
-        :plugins="exporterPlugins"
+        :flows="exporterFlows"
         kind="export"
         title="Export Dataset"
         :dataset-id="id"
@@ -299,7 +299,7 @@ import { ref, computed, h, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
-import { BrowserSidebar, PluginFlowModal, SampleBrowser, type PluginCard } from "@platform/web-ui";
+import { BrowserSidebar, FlowModal, SampleBrowser, type FlowCard } from "@platform/web-ui";
 import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
@@ -319,7 +319,7 @@ import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
-import { pluginRegistry } from "../core/registry";
+import { widgetRegistry } from "../core/registry";
 
 // ---------------------------------------------------------------------------
 // Route / Router
@@ -519,8 +519,8 @@ const featureSamplesQuery = useQuery({
 const showImportFlow = ref(false);
 const showExportFlow = ref(false);
 
-const importerPlugins = computed<PluginCard[]>(() =>
-  pluginRegistry.getImporters("dataset").map((p) => ({
+const importerFlows = computed<FlowCard[]>(() =>
+  widgetRegistry.getImporters("dataset").map((p) => ({
     id: p.id,
     label: p.label,
     description: p.description,
@@ -529,8 +529,8 @@ const importerPlugins = computed<PluginCard[]>(() =>
   }))
 );
 
-const exporterPlugins = computed<PluginCard[]>(() =>
-  pluginRegistry.getExporters("dataset").map((p) => ({
+const exporterFlows = computed<FlowCard[]>(() =>
+  widgetRegistry.getExporters("dataset").map((p) => ({
     id: p.id,
     label: p.label,
     description: p.description,

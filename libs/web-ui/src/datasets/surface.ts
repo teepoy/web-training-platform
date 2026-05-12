@@ -6,11 +6,11 @@ import type {
   BuildDatasetColumnsOptions,
   DatasetListItem,
   DatasetListUser,
-  DatasetPlugin,
+  DatasetFlow,
   UseDatasetListSurfaceOptions,
   UseDatasetListSurfaceResult,
 } from "./types";
-import type { PluginCard } from "../plugin-flow";
+import type { FlowCard } from "../flow";
 
 export function resolveDefaultDatasetTaskType(
   taskType: string | null | undefined,
@@ -31,7 +31,7 @@ function normalizeDataset<TDataset extends DatasetListItem>(
   };
 }
 
-function toPluginCard(plugin: DatasetPlugin): PluginCard {
+function toFlowCard(plugin: DatasetFlow): FlowCard {
   return {
     id: plugin.id,
     label: plugin.label,
@@ -177,11 +177,11 @@ export function useDatasetListSurface<
   }));
 
   const toolbarProps = computed(() => ({
-    importerPlugins: (unref(options.importerPlugins) ?? []).map((plugin) =>
-      toPluginCard(plugin),
+    importerFlows: (unref(options.importerFlows) ?? []).map((plugin) =>
+      toFlowCard(plugin),
     ),
-    previewLauncherPlugins: (unref(options.previewLauncherPlugins) ?? []).map(
-      (plugin) => toPluginCard(plugin),
+    previewLauncherFlows: (unref(options.previewLauncherFlows) ?? []).map(
+      (plugin) => toFlowCard(plugin),
     ),
   }));
 

@@ -12,7 +12,7 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@platform/plugin-sdk": ["../../libs/plugin-sdk/src/index.ts"],
+      "@platform/widget-sdk": ["../../libs/widget-sdk/src/index.ts"],
       "@platform/web-ui": ["../../libs/web-ui/src/index.ts"],
       "@platform/web-data": ["../../libs/web-data/src/index.ts"],
       "@platform/web-data/*": ["../../libs/web-data/src/*"],

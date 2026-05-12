@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      "@platform/plugin-sdk": path.resolve(__dirname, "../plugin-sdk/src/index.ts"),
+      "@platform/widget-sdk": path.resolve(__dirname, "../widget-sdk/src/index.ts"),
       "@platform/web-data": path.resolve(__dirname, "../web-data/src"),
     },
   },

@@ -14,6 +14,6 @@ This documentation is organized for site navigation as well as repo browsing.
 ## Start Here
 
 - Read [Architecture Overview](architecture/overview.md) for the platform shape.
-- Read [Plugin Extension Guide](guides/plugin-extension-guide.md) for the current plugin model.
+- Read [Extension Guide](guides/extension-guide.md) for the current extension model.
 - Read [Smoke Test Checklist](guides/smoke-test.md) before manual verification.
 - Read [API Endpoints](reference/api-endpoints.md) for backend surface details.

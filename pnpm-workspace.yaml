@@ -1,6 +1,6 @@
 packages:
   - apps/web
-  - libs/plugin-sdk
+  - libs/widget-sdk
   - libs/web-ui
   - libs/api-contract
   - libs/web-data

@@ -9,7 +9,7 @@ const meta = {
   component: DatasetToolbar,
   args: {
     title: "Datasets",
-    importerPlugins: [
+    importerFlows: [
       {
         id: "import-manual",
         label: "Manual Import",
@@ -18,7 +18,7 @@ const meta = {
         component: MockPlugin,
       },
     ],
-    previewLauncherPlugins: [
+    previewLauncherFlows: [
       {
         id: "preview-upstream",
         label: "Upstream Preview",

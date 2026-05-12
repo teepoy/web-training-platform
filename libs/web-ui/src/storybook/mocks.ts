@@ -5,7 +5,7 @@ import {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetInteractionContext,
   type SidebarWidgetInteractionState,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 const defaultInteractionState: SidebarWidgetInteractionState = {
   activeLabelFilter: null,

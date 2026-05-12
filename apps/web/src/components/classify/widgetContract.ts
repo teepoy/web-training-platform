@@ -1,9 +1,9 @@
 /**
  * widgetContract.ts — backward-compatible re-export shim.
  *
- * All shared types and injection keys are now authoritative in @platform/plugin-sdk.
+ * All shared types and injection keys are now authoritative in @platform/widget-sdk.
  * This file re-exports them so existing imports keep working without change.
- * New code should import directly from @platform/plugin-sdk.
+ * New code should import directly from @platform/widget-sdk.
  */
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ export {
   SIDEBAR_WIDGET_INTERACTION_KEY,
   reduceCollectionIntent,
   reduceLabelFilterIntent,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 export type {
   SidebarWidgetContextKey,
@@ -36,12 +36,12 @@ export type {
   SidebarWidgetInteractionContext,
   SidebarWidgetCapability,
   SidebarWidgetSelfTestScenario,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 // ---------------------------------------------------------------------------
 // App-local legacy types kept for backward compat with sidebarConfig.ts
 // and the existing widget self-test infrastructure.
-// These will be removed once all widgets are migrated to SidebarPluginDescriptor.
+// These will be removed once all widgets are migrated to DashboardWidgetDescriptor.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -49,7 +49,7 @@ import type {
   SidebarWidgetIntentType,
   SidebarWidgetCapability,
   SidebarWidgetSelfTestScenario,
-} from "@platform/plugin-sdk";
+} from "@platform/widget-sdk";
 
 export interface SidebarWidgetAuthorContract {
   displayName: string;

@@ -26,7 +26,7 @@ import {
   metadataNumber,
   metadataString,
 } from '@platform/web-ui'
-import { pluginRegistry } from '../core/registry'
+import { widgetRegistry } from '../core/registry'
 
 const route = useRoute()
 const router = useRouter()
@@ -181,7 +181,7 @@ async function handlePersist() {
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"
               :max-sidebar-width="MAX_SIDEBAR_WIDTH"
               :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-              :component-resolver="(key) => pluginRegistry.getSidebarComponent(key) ?? null"
+              :component-resolver="(key) => widgetRegistry.getWidgetComponent(key) ?? null"
               @update:collapsed="prefs.setSidebarCollapsed"
               @update:sidebar-width="prefs.setSidebarWidth"
               style="border-left: none;"

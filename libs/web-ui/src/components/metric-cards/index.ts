@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const metricCardsPlugin = defineSidebarPlugin({
+export const metricCardsPlugin = defineDashboardWidget({
   key: "metric-cards",
   component: defineAsyncComponent(
     () => import("./MetricCardsWidget.vue"),

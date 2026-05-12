@@ -2,9 +2,9 @@ export { default as BlinkImageCell } from "./BlinkImageCell.vue";
 export { default as BlinkTable } from "./BlinkTable.vue";
 
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const blinkTablePlugin = defineSidebarPlugin({
+export const blinkTablePlugin = defineDashboardWidget({
   key: "blink-table",
   component: defineAsyncComponent(() => import("./BlinkTableWidget.vue")),
   contract: {

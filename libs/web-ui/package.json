@@ -12,7 +12,7 @@
     "build-storybook": "storybook build"
   },
   "peerDependencies": {
-    "@platform/plugin-sdk": "workspace:*",
+    "@platform/widget-sdk": "workspace:*",
     "@storybook/vue3": "8.6.18",
     "@tanstack/vue-virtual": "^3.13.23",
     "echarts": "^6.0.0",
@@ -22,7 +22,7 @@
     "vue-echarts": "^8.0.1"
   },
   "devDependencies": {
-    "@platform/plugin-sdk": "workspace:*",
+    "@platform/widget-sdk": "workspace:*",
     "@platform/web-data": "workspace:*",
     "@tanstack/vue-virtual": "^3.13.23",
     "@vitejs/plugin-vue": "^5.2.1",

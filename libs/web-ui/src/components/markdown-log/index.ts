@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const markdownLogPlugin = defineSidebarPlugin({
+export const markdownLogPlugin = defineDashboardWidget({
   key: "markdown-log",
   component: defineAsyncComponent(
     () => import("./MarkdownLogWidget.vue"),

@@ -1,7 +1,7 @@
 import { defineAsyncComponent } from "vue";
-import { defineSidebarPlugin } from "@platform/plugin-sdk";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
-export const browserSummaryPlugin = defineSidebarPlugin({
+export const browserSummaryPlugin = defineDashboardWidget({
   key: "browser-summary",
   component: defineAsyncComponent(
     () => import("./BrowserSummaryWidget.vue"),

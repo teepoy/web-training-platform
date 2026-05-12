@@ -496,16 +496,16 @@ export const api = {
       method: "POST",
     }),
 
-  // ---- Plugin routes ----
-  pluginImport: (
-    pluginId: string,
+  // ---- Extension routes ----
+  importViaCube: (
+    cubeId: string,
     body: {
       dataset_id: string;
       items: BulkCreateSampleItem[];
     },
   ) =>
     req<BulkCreateSampleResponse>(
-      `/plugins/${pluginId}/import`,
+      `/plugins/${cubeId}/import`,
       {
         method: "POST",
         body: JSON.stringify(body),
@@ -513,14 +513,14 @@ export const api = {
       120_000,
     ),
 
-  pluginExport: (
-    pluginId: string,
+  exportViaCube: (
+    cubeId: string,
     body: {
       dataset_id: string;
       [key: string]: unknown;
     },
   ) =>
-    req<Record<string, unknown>>(`/plugins/${pluginId}/export`, {
+    req<Record<string, unknown>>(`/plugins/${cubeId}/export`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

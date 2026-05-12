@@ -8,14 +8,14 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ./
 ├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
 ├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
-├── apps/api/app/plugins/  # Backend plugin routes — explicit registry.py
+├── apps/api/app/routers/  # Backend extension routes — explicit registry.py
 ├── apps/web/           # Vue 3 SPA — routes, API client, views
 ├── apps/web/.storybook/ # Storybook config + mock helpers
 ├── libs/web-ui/src/components/sample-browser/ # Shared virtualized browser core
-├── apps/web/src/core/  # Singleton plugin registry
-├── apps/web/src/plugins/  # Frontend plugin descriptors (one subdirectory per plugin)
+├── apps/web/src/core/  # Singleton widget registry
+├── apps/web/src/registrations/  # Frontend widget descriptors (one subdirectory per widget)
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
-├── libs/plugin-sdk/    # @platform/plugin-sdk — TypeScript plugin contract types & factories
+├── libs/widget-sdk/    # @platform/widget-sdk — TypeScript widget contract types & factories
 ├── libs/web-ui/        # @platform/web-ui — shared Vue/Naive UI components and composables
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── infra/k8s/          # minikube/kubeflow manifests
@@ -51,11 +51,11 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Ensure mock datasets    | `make ensure-mock-datasets`                         | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation)                    |
 | Compose dev entrypoint  | `make updev`                                        | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server                               |
 
-| Plugin SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/plugin-sdk/` (20 tests) |
+| Widget SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/widget-sdk/` (20 tests) |
 | Web UI package tests | `pnpm test:web-ui` | vitest in `libs/web-ui/` |
-| Plugin integration tests | `pnpm test:plugins` | vitest for plugin registrations |
-| Build plugin SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/plugin-sdk` |
-| **Storybook** | `pnpm storybook` | Plugin component stories on port 6006 |
+| Widget integration tests | `pnpm test:plugins` | vitest for widget registrations |
+| Build widget SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/widget-sdk` |
+| **Storybook** | `pnpm storybook` | Widget component stories on port 6006 |
 | Build Storybook | `pnpm build-storybook` | Static build of Storybook |
 
 Raw single-test (when Make is unavailable):
@@ -121,28 +121,28 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Preview TTL store         | `apps/api/app/services/preview_store.py`                                     | In-memory TTL session store                                         |
 | Upstream adapter          | `apps/api/app/services/preview_upstream.py`                                  | 50-item mock upstream; replace with real adapter                    |
 | Shared browser core       | `libs/web-ui/src/components/sample-browser/`                                 | Shared virtualized browser core                                     |
-| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`              | Shared sidebar shell with injected plugin resolver                  |
+| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`              | Shared sidebar shell with injected widget resolver                  |
 | Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                                       | Presentation persistence (layout, thumbSize)                        |
 | Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`                               | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
 | Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
-| Plugin SDK contracts      | `libs/plugin-sdk/src/`                                                       | TypeScript plugin type definitions and factories                    |
+| Widget SDK contracts      | `libs/widget-sdk/src/`                                                       | TypeScript widget type definitions and factories                    |
 | Web UI package            | `libs/web-ui/src/`                                                           | Shared Vue/Naive UI components and dataset-list helpers             |
-| Plugin SDK templates      | `libs/plugin-sdk/src/templates/`                                             | Copy-paste starter templates for new plugins                        |
-| Frontend plugin registry  | `apps/web/src/core/registry.ts`                                              | Singleton `pluginRegistry` instance                                 |
-| Frontend plugin barrel    | `apps/web/src/plugins/index.ts`                                              | Explicit registration of all plugins before app mount               |
-| Shared sidebar plugins    | `libs/web-ui/src/plugins/sidebar-*/`                                         | Thin plugin descriptors; .vue widgets now in `libs/web-ui/src/components/<name>/` |
-| Frontend import plugins   | `apps/web/src/plugins/import-*/`                                             | Import flow plugins (e.g. `import-manual`, `import-dataset-manual`) |
-| Frontend export plugins   | `apps/web/src/plugins/export-*/`                                             | Export flow plugins (e.g. `export-preview`, `export-persist`)       |
-| Frontend preview plugins  | `apps/web/src/plugins/preview-*/`                                            | Preview launcher plugins (e.g. `preview-upstream`)                  |
-| Plugin flow modal         | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`           | 2-step modal: select type, then execute component                   |
-| Plugin type selector      | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
-| Backend plugin registry   | `apps/api/app/plugins/registry.py`                                           | Explicit list of backend plugin routers                             |
-| Backend plugin routes     | `apps/api/app/plugins/*/router.py`                                           | One FastAPI router per backend plugin                               |
-| Plugin extension guide    | `docs/guides/plugin-extension-guide.md`                                      | Step-by-step guide for all 4 plugin types                           |
+| Widget SDK templates      | `libs/widget-sdk/src/templates/`                                             | Copy-paste starter templates for new widgets                        |
+| Frontend widget registry  | `apps/web/src/core/registry.ts`                                              | Singleton `widgetRegistry` instance                                 |
+| Frontend widget barrel    | `apps/web/src/registrations/index.ts`                                              | Explicit registration of all widgets before app mount               |
+| Shared sidebar widgets    | `libs/web-ui/src/components/<name>/index.ts`                           | Widget descriptors co-located with .vue components; self-contained directories |
+| Frontend importers        | `apps/web/src/registrations/import-*/`                                             | Import flow widgets (e.g. `import-manual`, `import-dataset-manual`) |
+| Frontend exporters        | `apps/web/src/registrations/export-*/`                                             | Export flow widgets (e.g. `export-preview`, `export-persist`)       |
+| Frontend preview launchers | `apps/web/src/registrations/preview-*/`                                            | Preview launcher descriptors (e.g. `preview-upstream`)                  |
+| Flow modal                | `libs/web-ui/src/components/flow-modal/FlowModal.vue`           | 2-step modal: select type, then execute component                   |
+| Flow type selector        | `libs/web-ui/src/components/flow-type-selector/FlowTypeSelector.vue`     | Card grid for selecting a flow type                               |
+| Backend extension registry | `apps/api/app/routers/registry.py`                                           | Explicit list of backend extension routers                             |
+| Backend extension routes  | `apps/api/app/routers/*/router.py`                                           | One FastAPI router per backend extension                               |
+| Extension guide           | `docs/guides/extension-guide.md`                                      | Step-by-step guide for all 4 extension types                           |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
 | Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
-| Plugin stories            | `apps/web/src/plugins/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts` | Story files for app plugins and shared web-ui components            |
+| Widget stories            | `apps/web/src/registrations/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts` | Story files for app widgets and shared web-ui components            |
 
 ## CODE MAP
 | Symbol                  | Type       | Location                                                                 | Role                                                         |
@@ -163,26 +163,26 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `MockUpstreamAdapter`   | service    | `apps/api/app/services/preview_upstream.py`                              | 50-item mock upstream; replace with real adapter             |
 | `usePreviewLoader`      | composable | `apps/web/src/composables/usePreviewLoader.ts`                           | Cursor-based preview item loader                             |
 | `PreviewClassifyView`   | view       | `apps/web/src/views/PreviewClassifyView.vue`                             | Preview workspace with grid + persist flow                   |
-| `pluginRegistry`        | singleton  | `apps/web/src/core/registry.ts`                                          | Runtime registry of all frontend plugins                     |
-| `createPluginRegistry`  | factory    | `libs/plugin-sdk/src/registry.ts`                                        | Creates the `PluginRegistry` instance                        |
+| `widgetRegistry`        | singleton  | `apps/web/src/core/registry.ts`                                          | Runtime registry of all frontend widgets                     |
+| `createDescriptorRegistry`  | factory    | `libs/widget-sdk/src/registry.ts`                                        | Creates the `DescriptorRegistry` instance                        |
 | `useDatasetListSurface` | composable | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset list normalization, permissions, and UI props |
 | `buildDatasetColumns`   | function   | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset table column/action factory                   |
-| `defineSidebarPlugin`   | factory    | `libs/plugin-sdk/src/sidebar.ts`                                         | Declares a sidebar widget plugin                             |
-| `defineImportPlugin`    | factory    | `libs/plugin-sdk/src/importer.ts`                                        | Declares an import flow plugin                               |
-| `defineExportPlugin`    | factory    | `libs/plugin-sdk/src/exporter.ts`                                        | Declares an export flow plugin                               |
-| `defineAgentSkill`      | factory    | `libs/plugin-sdk/src/agent.ts`                                           | Declares an agent skill plugin                               |
-| `definePreviewPlugin`   | factory    | `libs/plugin-sdk/src/preview.ts`                                         | Declares a preview launcher plugin                           |
-| `PluginFlowModal`       | component  | `libs/web-ui/src/components/plugin-flow-modal/PluginFlowModal.vue`       | 2-step modal: select type, then execute component            |
-| `PluginTypeSelector`    | component  | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue` | Card grid for selecting a plugin type                        |
+| `defineDashboardWidget`   | factory    | `libs/widget-sdk/src/sidebar.ts`                                         | Declares a dashboard widget                             |
+| `defineImporter`    | factory    | `libs/widget-sdk/src/importer.ts`                                        | Declares an importer                               |
+| `defineExporter`    | factory    | `libs/widget-sdk/src/exporter.ts`                                        | Declares an exporter                               |
+| `defineAgentSkill`      | factory    | `libs/widget-sdk/src/agent.ts`                                           | Declares an agent skill                               |
+| `definePreviewLauncher`   | factory    | `libs/widget-sdk/src/preview.ts`                                         | Declares a preview launcher                           |
+| `FlowModal`       | component  | `libs/web-ui/src/components/flow-modal/FlowModal.vue`       | 2-step modal: select type, then execute component            |
+| `FlowTypeSelector`    | component  | `libs/web-ui/src/components/flow-type-selector/FlowTypeSelector.vue` | Card grid for selecting a flow type                        |
 | `PanelHost`             | component  | `libs/web-ui/src/components/panel-host/PanelHost.vue`                     | Standalone panel renderer — renders SidebarPanelDescriptor[] anywhere |
 | `usePagePanels`         | composable | `libs/web-ui/src/composables/usePagePanels.ts`                            | Page-level provider for BROWSER_DASHBOARD_KEY + SIDEBAR_WIDGET_INTERACTION_KEY |
 | `PageProvider`          | component  | `libs/web-ui/src/components/page-provider/PageProvider.vue`               | Template-friendly wrapper for usePagePanels                   |
 | `useWaferHelpers`       | composable | `libs/web-ui/src/composables/useWaferHelpers.ts`                          | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
-| `PLUGIN_ROUTERS`        | list       | `apps/api/app/plugins/registry.py`                                       | Explicit list of all backend plugin routers                  |
-| `providePluginContext`  | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
-| `mockImportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for import plugin props               |
-| `mockExportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for export plugin props               |
-| `mockPreviewProps`      | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for preview launcher props            |
+| `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
+| `provideWidgetContext`  | decorator  | `apps/web/.storybook/mocks/widgetContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
+| `mockImportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for importer props               |
+| `mockExportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for exporter props               |
+| `mockPreviewProps`      | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for preview launcher props            |
 
 ## ANTI-PATTERNS — DO NOT
 
@@ -203,15 +203,15 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - VQA predictions are stored as Label Studio `textarea` results, not classification choices.
 - Prediction collection sync to LS is one-way and manual. Do not treat LS prediction IDs as durable platform provenance.
 
-### Plugin Architecture
-- Don't register plugins directly in `main.ts`, `BrowserSidebar.vue`, or `DatasetDetailView.vue` — always add to `apps/web/src/plugins/index.ts`.
-- Each plugin `index.ts` exports a named descriptor; the barrel file does the registration. Don't call `pluginRegistry.register*()` inside plugin modules.
-- Don't import widget `.vue` files statically in plugin `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
-- Don't bypass `pluginRegistry` for sidebar rendering — app surfaces pass `pluginRegistry.getSidebarComponent(key)` into the shared `BrowserSidebar.vue` resolver prop.
-- Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineSidebarPlugin` instead.
-- Don't import from `widgetContract.ts` for new plugin code — import from `@platform/plugin-sdk` directly; the shim is kept only for backward compatibility.
-- Don't add hardcoded import/export/preview modals to views — use `PluginFlowModal` and `PluginTypeSelector` for the 2-step plugin selection flow.
-- Backend plugin routes must live under `apps/api/app/plugins/<name>/router.py`; they must be added to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py` — don't manually import them in `main.py`.
+### Widget Architecture
+- Don't register widgets directly in `main.ts`, `BrowserSidebar.vue`, or `DatasetDetailView.vue` — always add to `apps/web/src/registrations/index.ts`.
+- Each registration `index.ts` exports a named descriptor; the barrel file does the registration. Don't call `widgetRegistry.register*()` inside registration modules.
+- Don't import widget `.vue` files statically in registration `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
+- Don't bypass `widgetRegistry` for sidebar rendering — app surfaces pass `widgetRegistry.getWidgetComponent(key)` into the shared `BrowserSidebar.vue` resolver prop.
+- Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineDashboardWidget` instead.
+- Don't import from `widgetContract.ts` for new widget code — import from `@platform/widget-sdk` directly; the shim is kept only for backward compatibility.
+- Don't add hardcoded import/export/preview modals to views — use `FlowModal` and `FlowTypeSelector` for the 2-step flow selection.
+- Backend extension routes must live under `apps/api/app/routers/<name>/router.py`; they must be added to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py` — don't manually import them in `main.py`.
 
 ### Code Quality
 - Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.
@@ -229,12 +229,12 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
-- Plugin SDK (`@platform/plugin-sdk`) is a workspace TypeScript package in `libs/plugin-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/plugin-sdk → ../../libs/plugin-sdk/src/index.ts`) and built with `tsup`.
-- To add a reusable first-party widget: create the .vue component in `libs/web-ui/src/components/<name>/<Name>Widget.vue`, create a thin plugin descriptor in `libs/web-ui/src/plugins/sidebar-<name>/index.ts` via `defineSidebarPlugin({...})`, export both the component default and the plugin descriptor from `libs/web-ui/src/index.ts`, then register the descriptor in `apps/web/src/plugins/index.ts`. Widget components are now general-purpose — they can be rendered via `PanelHost` anywhere in a page, imported directly by other components, or registered as sidebar plugins from the same source. App-specific widgets can still live under `apps/web/src/plugins/sidebar-<name>/`. See `docs/guides/plugin-extension-guide.md`.
-- To add a new importer: create `apps/web/src/plugins/import-<name>/index.ts`, export a named descriptor via `defineImportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Importers use `PluginFlowModal` with `kind="import"` for a 2-step type-selection flow.
-- To add a new exporter: create `apps/web/src/plugins/export-<name>/index.ts`, export a named descriptor via `defineExportPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Exporters use `PluginFlowModal` with `kind="export"`.
-- To add a new preview launcher: create `apps/web/src/plugins/preview-<name>/index.ts`, export a named descriptor via `definePreviewPlugin({...})`, then register in `apps/web/src/plugins/index.ts`. Preview launchers use `PluginTypeSelector` for a 2-step flow.
-- To add a new backend plugin route: create `apps/api/app/plugins/<name>/router.py` with an `APIRouter` named `router`, then add it to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py`.
+- Widget SDK (`@platform/widget-sdk`) is a workspace TypeScript package in `libs/widget-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/widget-sdk → ../../libs/widget-sdk/src/index.ts`) and built with `tsup`.
+- To add a reusable first-party widget: create the .vue component in `libs/web-ui/src/components/<name>/<Name>Widget.vue`, create a widget descriptor in `libs/web-ui/src/components/<name>/index.ts` via `defineDashboardWidget({...})`, export both the component default and the widget descriptor from `libs/web-ui/src/index.ts`, then register the descriptor in `apps/web/src/registrations/index.ts`. Widget components are now general-purpose — they can be rendered via `PanelHost` anywhere in a page, imported directly by other components, or registered as sidebar widgets from the same source. App-specific widgets can still live under `apps/web/src/registrations/sidebar-<name>/`. See `docs/guides/extension-guide.md`.
+- To add a new importer: create `apps/web/src/registrations/import-<name>/index.ts`, export a named descriptor via `defineImporter({...})`, then register in `apps/web/src/registrations/index.ts`. Importers use `FlowModal` with `kind="import"` for a 2-step type-selection flow.
+- To add a new exporter: create `apps/web/src/registrations/export-<name>/index.ts`, export a named descriptor via `defineExporter({...})`, then register in `apps/web/src/registrations/index.ts`. Exporters use `FlowModal` with `kind="export"`.
+- To add a new preview launcher: create `apps/web/src/registrations/preview-<name>/index.ts`, export a named descriptor via `definePreviewLauncher({...})`, then register in `apps/web/src/registrations/index.ts`. Preview launchers use `FlowTypeSelector` for a 2-step flow.
+- To add a new backend extension route: create `apps/api/app/routers/<name>/router.py` with an `APIRouter` named `router`, then add it to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py`.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.

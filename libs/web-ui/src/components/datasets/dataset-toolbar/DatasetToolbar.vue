@@ -2,13 +2,13 @@
 import { ref } from "vue";
 import { NButton, NH2, NSpace } from "naive-ui";
 
-import PluginFlowModal from "../../plugin-flow-modal/PluginFlowModal.vue";
-import type { PluginCard } from "../../../plugin-flow";
+import FlowModal from "../../flow-modal/FlowModal.vue";
+import type { FlowCard } from "../../../flow";
 
 const props = withDefaults(
   defineProps<{
-    importerPlugins: PluginCard[];
-    previewLauncherPlugins: PluginCard[];
+    importerFlows: FlowCard[];
+    previewLauncherFlows: FlowCard[];
     title?: string;
   }>(),
   {
@@ -49,17 +49,17 @@ function handlePreviewComplete(result: unknown): void {
       </n-space>
     </n-space>
 
-    <PluginFlowModal
+    <FlowModal
       v-model:show="showImportFlow"
-      :plugins="props.importerPlugins"
+      :flows="props.importerFlows"
       kind="import"
       title="Import Dataset"
       @complete="handleImportComplete"
     />
 
-    <PluginFlowModal
+    <FlowModal
       v-model:show="showPreviewFlow"
-      :plugins="props.previewLauncherPlugins"
+      :flows="props.previewLauncherFlows"
       kind="preview"
       title="Preview Dataset"
       @complete="handlePreviewComplete"

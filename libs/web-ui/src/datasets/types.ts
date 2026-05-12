@@ -1,7 +1,7 @@
 import type { Component, ComputedRef, Ref } from "vue";
 import type { DataTableColumns } from "naive-ui";
 
-import type { PluginCard } from "../plugin-flow";
+import type { FlowCard } from "../flow";
 
 export type MaybeRef<T> = T | Ref<T> | ComputedRef<T>;
 
@@ -26,7 +26,7 @@ export interface DatasetListUser {
   is_superadmin?: boolean;
 }
 
-export interface DatasetPlugin {
+export interface DatasetFlow {
   id: string;
   label: string;
   description?: string;
@@ -41,8 +41,8 @@ export interface DatasetPageShellProps {
 }
 
 export interface DatasetToolbarProps {
-  importerPlugins: PluginCard[];
-  previewLauncherPlugins: PluginCard[];
+  importerFlows: FlowCard[];
+  previewLauncherFlows: FlowCard[];
 }
 
 export interface DatasetListPermissions {
@@ -71,8 +71,8 @@ export interface UseDatasetListSurfaceOptions<
   error: MaybeRef<Error | null | undefined>;
   currentOrgId: MaybeRef<string | null>;
   user: MaybeRef<TUser | null>;
-  importerPlugins?: MaybeRef<DatasetPlugin[]>;
-  previewLauncherPlugins?: MaybeRef<DatasetPlugin[]>;
+  importerFlows?: MaybeRef<DatasetFlow[]>;
+  previewLauncherFlows?: MaybeRef<DatasetFlow[]>;
   taskTagType?: MaybeRef<"default" | "error" | "primary" | "info" | "success" | "warning">;
   resolveTaskType?: (taskType: string | null | undefined) => string;
   onViewDataset: (datasetId: string) => void;

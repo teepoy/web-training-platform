@@ -13,15 +13,15 @@ importers:
       '@platform/api-contract':
         specifier: workspace:*
         version: link:../../libs/api-contract
-      '@platform/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../libs/plugin-sdk
       '@platform/web-data':
         specifier: workspace:*
         version: link:../../libs/web-data
       '@platform/web-ui':
         specifier: workspace:*
         version: link:../../libs/web-ui
+      '@platform/widget-sdk':
+        specifier: workspace:*
+        version: link:../../libs/widget-sdk
       '@tanstack/vue-query':
         specifier: ^5.66.9
         version: 5.96.0(vue@3.5.31(typescript@5.7.3))
@@ -114,21 +114,6 @@ importers:
         specifier: ~5.7.3
         version: 5.7.3
 
-  libs/plugin-sdk:
-    devDependencies:
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(postcss@8.5.8)(typescript@5.7.3)
-      typescript:
-        specifier: ~5.7.3
-        version: 5.7.3
-      vitest:
-        specifier: ^4.1.2
-        version: 4.1.2(@types/node@22.19.15)(jsdom@26.1.0)(vite@6.4.1(@types/node@22.19.15))
-      vue:
-        specifier: ^3.5.13
-        version: 3.5.31(typescript@5.7.3)
-
   libs/web-data:
     devDependencies:
       '@platform/api-contract':
@@ -150,12 +135,12 @@ importers:
         specifier: 8.6.18
         version: 8.6.18(storybook@8.6.18)(vue@3.5.31(typescript@5.7.3))
     devDependencies:
-      '@platform/plugin-sdk':
-        specifier: workspace:*
-        version: link:../plugin-sdk
       '@platform/web-data':
         specifier: workspace:*
         version: link:../web-data
+      '@platform/widget-sdk':
+        specifier: workspace:*
+        version: link:../widget-sdk
       '@storybook/addon-essentials':
         specifier: 8.6.18
         version: 8.6.18(@types/react@19.2.14)(storybook@8.6.18)
@@ -207,6 +192,21 @@ importers:
       vue-echarts:
         specifier: ^8.0.1
         version: 8.0.1(echarts@6.0.0)(vue@3.5.31(typescript@5.7.3))
+
+  libs/widget-sdk:
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.8)(typescript@5.7.3)
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@22.19.15)(jsdom@26.1.0)(vite@6.4.1(@types/node@22.19.15))
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.31(typescript@5.7.3)
 
 packages:
 

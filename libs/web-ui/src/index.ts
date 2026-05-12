@@ -1,7 +1,7 @@
 export { default as PanelHost } from "./components/panel-host";
-export { default as PluginFlowModal } from "./components/plugin-flow-modal";
-export { default as PluginTypeSelector } from "./components/plugin-type-selector";
-export type { PluginCard, PluginKind } from "./plugin-flow";
+export { default as FlowModal } from "./components/flow-modal";
+export { default as FlowTypeSelector } from "./components/flow-type-selector";
+export type { FlowCard, FlowKind } from "./flow";
 
 export { default as DatasetPageShell } from "./components/datasets/dataset-page-shell";
 export { default as DatasetRowActions } from "./components/datasets/dataset-row-actions";
@@ -69,7 +69,7 @@ export type {
   DatasetListPermissions,
   DatasetListUser,
   DatasetPageShellProps,
-  DatasetPlugin,
+  DatasetFlow,
   DatasetToolbarProps,
   MaybeRef,
   UseDatasetListSurfaceOptions,

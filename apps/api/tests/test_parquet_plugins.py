@@ -7,14 +7,14 @@ import pyarrow.parquet as pq
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.plugins.import_parquet.router import (
+from app.routers.import_parquet.router import (
     _extract_image_uri,
     _find_image_columns,
     _find_label_column,
     _is_image_struct,
     _parquet_to_sample_items,
 )
-from app.plugins.export_parquet.router import _build_image_struct
+from app.routers.export_parquet.router import _build_image_struct
 
 
 # ---------------------------------------------------------------------------

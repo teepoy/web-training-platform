@@ -3,15 +3,15 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { NCard } from 'naive-ui'
-import { PluginTypeSelector, type PluginCard } from '@platform/web-ui'
-import { pluginRegistry } from '../core/registry'
-import type { PreviewLauncherDescriptor } from '@platform/plugin-sdk'
+import { FlowTypeSelector, type FlowCard } from '@platform/web-ui'
+import { widgetRegistry } from '../core/registry'
+import type { PreviewLauncherDescriptor } from '@platform/widget-sdk'
 
 const router = useRouter()
 const message = useMessage()
 
-const previewLaunchers = computed<PluginCard[]>(() =>
-  pluginRegistry.getPreviewLaunchers('preview').map((p) => ({
+const previewLaunchers = computed<FlowCard[]>(() =>
+  widgetRegistry.getPreviewLaunchers('preview').map((p) => ({
     id: p.id,
     label: p.label,
     description: p.description,
@@ -23,8 +23,8 @@ const previewLaunchers = computed<PluginCard[]>(() =>
 const selectedLauncher = ref<PreviewLauncherDescriptor | null>(null)
 const showLauncherForm = ref(false)
 
-function handleSelectLauncher(plugin: PluginCard) {
-  const launcher = pluginRegistry.getPreviewLaunchers('preview').find((p) => p.id === plugin.id)
+function handleSelectLauncher(plugin: FlowCard) {
+  const launcher = widgetRegistry.getPreviewLaunchers('preview').find((p) => p.id === plugin.id)
   if (launcher) {
     selectedLauncher.value = launcher
     showLauncherForm.value = true
@@ -50,8 +50,8 @@ function handleLauncherCancel() {
   <div style="display: flex; justify-content: center; padding: 48px 16px;">
     <NCard title="Preview Dataset" style="max-width: 560px; width: 100%;">
       <template v-if="!showLauncherForm">
-        <PluginTypeSelector
-          :plugins="previewLaunchers"
+        <FlowTypeSelector
+          :flows="previewLaunchers"
           title="Choose a preview source"
           @select="handleSelectLauncher"
         />

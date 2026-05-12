@@ -6,8 +6,8 @@
           :datasets="surface.datasets.value"
           :current-org-id="orgStore.currentOrgId"
           :is-superadmin="authStore.user?.is_superadmin ?? false"
-          :importer-plugins="surface.toolbarProps.value.importerPlugins"
-          :preview-launcher-plugins="surface.toolbarProps.value.previewLauncherPlugins"
+          :importer-flows="surface.toolbarProps.value.importerFlows"
+          :preview-launcher-flows="surface.toolbarProps.value.previewLauncherFlows"
         @import-complete="handleImportComplete"
         @preview-complete="handlePreviewComplete"
         @view="handleViewDataset"
@@ -29,7 +29,7 @@ import { listDatasets, deleteDataset } from "@platform/web-data/datasets";
 import type { Dataset, User } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
-import { pluginRegistry } from "../core/registry";
+import { widgetRegistry } from "../core/registry";
 import { resolveDatasetShim, resolveDatasetTaskType } from "./datasets/registry";
 import { getActiveDatasetTaskType } from "./datasets/selection";
 
@@ -93,8 +93,8 @@ function handleDeleteDataset(row: Dataset) {
   deleteDatasetMut.mutate(row.id);
 }
 
-const importerPlugins = computed(() => pluginRegistry.getImporters("dataset"));
-const previewLauncherPlugins = computed(() => pluginRegistry.getPreviewLaunchers("dataset-list"));
+const importerFlows = computed(() => widgetRegistry.getImporters("dataset"));
+const previewLauncherFlows = computed(() => widgetRegistry.getPreviewLaunchers("dataset-list"));
 
 const surface = useDatasetListSurface<Dataset, User>({
   datasets,
@@ -102,8 +102,8 @@ const surface = useDatasetListSurface<Dataset, User>({
   error,
   currentOrgId: computed(() => orgStore.currentOrgId),
   user: computed(() => authStore.user),
-  importerPlugins,
-  previewLauncherPlugins,
+  importerFlows,
+  previewLauncherFlows,
   resolveTaskType: resolveDatasetTaskType,
   onViewDataset: handleViewDataset,
   onTogglePublic: handleTogglePublic,

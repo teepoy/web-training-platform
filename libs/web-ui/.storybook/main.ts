@@ -30,7 +30,7 @@ const config: StorybookConfig = {
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@platform/plugin-sdk": path.resolve(__dirname, "../../plugin-sdk/src/index.ts"),
+      "@platform/widget-sdk": path.resolve(__dirname, "../../widget-sdk/src/index.ts"),
     };
 
     config.resolve.dedupe = [...(config.resolve.dedupe || []), "vue"];

@@ -17,8 +17,8 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../../libs/web-data/src/index.ts"),
       },
       {
-        find: "@platform/plugin-sdk",
-        replacement: path.resolve(__dirname, "../../libs/plugin-sdk/src/index.ts"),
+        find: "@platform/widget-sdk",
+        replacement: path.resolve(__dirname, "../../libs/widget-sdk/src/index.ts"),
       },
       {
         find: "@platform/web-ui",

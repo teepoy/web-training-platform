@@ -4,7 +4,7 @@
  * Architecture:
  *   Each panel in the sidebar is described by a `SidebarPanelDescriptor`.
  *   The descriptor carries a `component` key (resolved at render time via
- *   pluginRegistry.getSidebarComponent()), a human-readable `title`, and a
+ *   widgetRegistry.getWidgetComponent()), a human-readable `title`, and a
  *   flat `props` bag that controls the widget's behaviour.
  *
  * Agent operability:
@@ -14,9 +14,9 @@
  *
  * Extending:
  *   1. Create the .vue widget in `libs/web-ui/src/components/{name}/{Name}Widget.vue`.
- *   2. Create a thin plugin descriptor in `libs/web-ui/src/components/{name}/index.ts`
- *      that imports the component and exports a `defineSidebarPlugin({...})` descriptor.
- *   3. Export the descriptor from `@platform/web-ui` and register in `src/plugins/index.ts`.
+ *   2. Create a widget descriptor in `libs/web-ui/src/components/{name}/index.ts`
+ *      that imports the component and exports a `defineDashboardWidget({...})` descriptor.
+ *   3. Export the descriptor from `@platform/web-ui` and register in `src/registrations/index.ts`.
  *   4. Add a descriptor entry to the desired panel preset below.
  */
 
@@ -29,13 +29,13 @@ import type { AgentPanelDescriptor } from "../../types";
 export interface SidebarPanelDescriptor {
   /** Unique identifier for this panel instance. */
   id: string;
-  /** Key registered in pluginRegistry via registerSidebarWidget(). */
+  /** Key registered in widgetRegistry via registerWidget(). */
   component: string;
   /** Human-readable title shown in the panel header. */
   title: string;
   /**
    * Widget-specific props.  Flat key/value pairs — each widget documents
-   * the props it accepts in its own plugin directory.
+   * the props it accepts in its own component directory.
    */
   props: Record<string, unknown>;
   /** If true the panel starts collapsed. Default false. */

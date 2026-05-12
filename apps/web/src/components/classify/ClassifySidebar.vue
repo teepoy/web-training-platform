@@ -2,7 +2,7 @@
 import { BrowserSidebar } from "@platform/web-ui";
 import type { SidebarPanelDescriptor } from "./sidebarConfig";
 import type { SidebarWidgetInteractionContext } from "./widgetContract";
-import { pluginRegistry } from "../../core/registry";
+import { widgetRegistry } from "../../core/registry";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -34,7 +34,7 @@ const prefs = useSampleBrowserPrefs();
     :min-sidebar-width="MIN_SIDEBAR_WIDTH"
     :max-sidebar-width="MAX_SIDEBAR_WIDTH"
     :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-    :component-resolver="(key: string) => pluginRegistry.getSidebarComponent(key) ?? null"
+    :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null"
     @update:collapsed="emit('update:collapsed', $event)"
     @update:sidebar-width="prefs.setSidebarWidth"
   />
