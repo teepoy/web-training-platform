@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, shallowRef } from "vue";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 vi.mock("echarts/core", () => ({
   use: vi.fn(),
@@ -55,6 +56,25 @@ vi.mock("kdbush", () => ({
 
 import WaferMapWidget from "./WaferMapWidget.vue";
 
+const mockRegister = vi.fn((id: string) => ({
+  id,
+  parentId: null,
+  annotation: shallowRef(null),
+  annotate: vi.fn(),
+  clear: vi.fn(),
+}));
+
+const mockPipeline = {
+  rawItems: shallowRef([]),
+  register: mockRegister,
+  getNode: vi.fn(),
+  nodes: shallowRef({}),
+};
+
+const commonProvide = {
+  [DATA_PIPELINE_KEY as symbol]: mockPipeline,
+};
+
 const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
 
 interface ChartSeriesItem {
@@ -83,7 +103,7 @@ function stableChartOption(
 
 describe("WaferMapWidget scatterSize", () => {
   it("defaults to 1 when no config provided", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: undefined },
     });
     const wafer = chartOption(wrapper).series?.find(
@@ -93,7 +113,7 @@ describe("WaferMapWidget scatterSize", () => {
   });
 
   it("clamps 0 to 0.1", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: { scatterSize: 0 } },
     });
     const wafer = chartOption(wrapper).series?.find(
@@ -103,7 +123,7 @@ describe("WaferMapWidget scatterSize", () => {
   });
 
   it("clamps -5 to 0.1", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: { scatterSize: -5 } },
     });
     const wafer = chartOption(wrapper).series?.find(
@@ -113,7 +133,7 @@ describe("WaferMapWidget scatterSize", () => {
   });
 
   it("clamps 50 to 20", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: { scatterSize: 50 } },
     });
     const wafer = chartOption(wrapper).series?.find(
@@ -123,7 +143,7 @@ describe("WaferMapWidget scatterSize", () => {
   });
 
   it("uses the provided value when in range", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: { scatterSize: 5 } },
     });
     const wafer = chartOption(wrapper).series?.find(
@@ -135,7 +155,7 @@ describe("WaferMapWidget scatterSize", () => {
 
 describe("WaferMapWidget die-grid", () => {
   it("is present in series when dieGrid config provided", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: {
         data: null,
         config: {
@@ -157,7 +177,7 @@ describe("WaferMapWidget die-grid", () => {
   });
 
   it("is absent in series when dieGrid has zero dimensions", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: {
         data: null,
         config: {
@@ -179,7 +199,7 @@ describe("WaferMapWidget die-grid", () => {
 
 describe("WaferMapWidget viewport decoupling", () => {
   it("chartOption equals stableChartOption by reference", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: undefined },
     });
     const vm = wrapper.vm as Record<string, unknown>;
@@ -189,7 +209,7 @@ describe("WaferMapWidget viewport decoupling", () => {
 
 describe("WaferMapWidget stableChartOption defaults", () => {
   it("has default xAxis/yAxis boundaries set to ±DEFAULT_WAFER_RADIUS_NM", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: undefined },
     });
     const option = stableChartOption(wrapper);
@@ -201,7 +221,7 @@ describe("WaferMapWidget stableChartOption defaults", () => {
   });
 
   it("includes wafer-boundary and wafer series by default", () => {
-    const wrapper = mount(WaferMapWidget, {
+    const wrapper = mount(WaferMapWidget, { global: { provide: commonProvide },
       props: { data: null, config: undefined },
     });
     const series = chartOption(wrapper).series;

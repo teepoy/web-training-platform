@@ -27,11 +27,7 @@ import { LineChart, ScatterChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import KDBush from "kdbush";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  type SidebarWidgetIntent,
-  type SidebarWidgetInteractionConfig,
-} from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 use([LineChart, ScatterChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -47,6 +43,15 @@ interface RawPointObject {
 }
 
 type RawPointTuple = [string, number, number, number?];
+
+type IdsOperation = "clear" | "replace" | "add" | "remove" | "toggle";
+
+interface WaferInteractionConfig {
+  collection?: string;
+  entity?: string;
+  emitSelection?: boolean;
+  filterFromSelection?: boolean;
+}
 
 interface WaferPoint {
   id: string;
@@ -75,7 +80,8 @@ const props = defineProps<{
   size?: "compact" | "normal" | "large";
 }>();
 
-const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
+const pipeline = inject(DATA_PIPELINE_KEY)!;
+const waferNode = pipeline.register("wafer-map");
 
 const chartRootRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<EChartsType | null>(null);
@@ -114,12 +120,12 @@ const waferRadius = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WAFER_RADIUS_NM;
 });
 
-const interactionConfig = computed<SidebarWidgetInteractionConfig | null>(() => {
+const interactionConfig = computed<WaferInteractionConfig | null>(() => {
   const raw = props.config?.interaction;
   if (!raw || typeof raw !== "object") {
     return null;
   }
-  return raw as SidebarWidgetInteractionConfig;
+  return raw as WaferInteractionConfig;
 });
 
 const maxPoints = computed(() => {
@@ -362,12 +368,7 @@ watch([pointIndex, benchmarkConfig], () => {
 }, { immediate: true, deep: true });
 
 const selectedIds = computed(() => {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return new Set<string>();
-  }
-  const ids = interaction?.value.state.collections?.[cfg.collection]?.selection.ids ?? [];
-  return new Set(ids);
+  return waferNode.annotation.value?.ids ?? new Set<string>();
 });
 
 const selectedCount = computed(() => selectedIds.value.size);
@@ -396,14 +397,10 @@ const waferBoundaryPoints = computed(() => {
   return points;
 });
 
-function emitIntent(intent: SidebarWidgetIntent): void {
-  interaction?.value.dispatch(intent);
-}
-
 function applyIdsOperation(
   currentIds: string[],
   values: string[],
-  operation: SidebarWidgetIntent["operation"],
+  operation: IdsOperation,
 ): string[] {
   const current = new Set(currentIds);
   const incoming = values.filter((value) => value.trim().length > 0);
@@ -440,54 +437,6 @@ function applyIdsOperation(
   return currentIds;
 }
 
-function selectionIntentType(entity: SidebarWidgetInteractionConfig["entity"]): SidebarWidgetIntent["type"] {
-  if (entity === "prediction") {
-    return "select-predictions";
-  }
-  return "select-samples";
-}
-
-function emitSelection(ids: string[], operation: SidebarWidgetIntent["operation"]): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.emitSelection || !cfg.collection) {
-    return;
-  }
-
-  emitIntent({
-    type: selectionIntentType(cfg.entity),
-    operation,
-    values: ids,
-    sourcePanelId: "wafer-map",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "selection",
-      sourceWidget: "scatter",
-    },
-  });
-}
-
-function emitFilter(ids: string[], operation: SidebarWidgetIntent["operation"]): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.filterFromSelection || !cfg.collection) {
-    return;
-  }
-
-  emitIntent({
-    type: "apply-filter",
-    operation,
-    values: ids,
-    sourcePanelId: "wafer-map",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "filter",
-      filterMode: ids.length > 0 ? "selected-only" : "all",
-      sourceWidget: "scatter",
-    },
-  });
-}
-
 function onPointClick(params: ECElementEvent): void {
   const data = Array.isArray(params.data) ? params.data : null;
   const pointId = data && typeof data[2] === "string" ? data[2] : null;
@@ -496,33 +445,16 @@ function onPointClick(params: ECElementEvent): void {
   }
 
   const mouseEvent = params.event?.event as MouseEvent | undefined;
-  const operation: SidebarWidgetIntent["operation"] =
+  const operation: IdsOperation =
     mouseEvent?.metaKey || mouseEvent?.ctrlKey ? "toggle" : "replace";
 
-  emitSelection([pointId], operation);
-  if (interactionConfig.value?.filterFromSelection) {
-    const nextSelection = applyIdsOperation(Array.from(selectedIds.value), [pointId], operation);
-    emitFilter(nextSelection, "replace");
-  }
+  const currentIds = Array.from(selectedIds.value);
+  const nextIds = applyIdsOperation(currentIds, [pointId], operation);
+  waferNode.annotate("selected", nextIds);
 }
 
 function clearSelectionAndFilter(): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return;
-  }
-  emitIntent({
-    type: "clear-selection",
-    operation: "clear",
-    values: [],
-    sourcePanelId: "wafer-map",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "both",
-      sourceWidget: "scatter",
-    },
-  });
+  waferNode.clear();
 }
 
 const viewport = ref({
@@ -631,13 +563,7 @@ function finishDragSelection(): void {
   }
 
   const ids = rangeSelectionFromDrag();
-  if (ids.length === 0) {
-    emitSelection([], "replace");
-    emitFilter([], "replace");
-  } else {
-    emitSelection(ids, "replace");
-    emitFilter(ids, "replace");
-  }
+  waferNode.annotate("selected", ids);
 
   dragState.value.active = false;
 }
