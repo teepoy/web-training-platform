@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const predictionSummaryPlugin = defineSidebarPlugin({
   key: "prediction-summary",
   component: defineAsyncComponent(
-    () => import("../../components/prediction-summary/PredictionSummaryWidget.vue"),
+    () => import("./PredictionSummaryWidget.vue"),
   ),
   contract: {
     displayName: "Prediction Summary",

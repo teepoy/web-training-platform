@@ -82,18 +82,18 @@ export {
   useDatasetListSurface,
 } from "./datasets/surface";
 
-export { annotationProgressPlugin } from "./plugins/sidebar-annotation-progress";
-export { browserSummaryPlugin } from "./plugins/sidebar-browser-summary";
-export { dataTablePlugin } from "./plugins/sidebar-data-table";
-export { echartsGenericPlugin } from "./plugins/sidebar-echarts-generic";
-export { interactiveScatterPlugin } from "./plugins/sidebar-interactive-scatter";
-export { labelDistributionPlugin } from "./plugins/sidebar-label-distribution";
-export { markdownLogPlugin } from "./plugins/sidebar-markdown-log";
-export { metricCardsPlugin } from "./plugins/sidebar-metric-cards";
-export { predictionSummaryPlugin } from "./plugins/sidebar-prediction-summary";
-export { sampleViewerPlugin } from "./plugins/sidebar-sample-viewer";
-export { waferMapPlugin } from "./plugins/sidebar-wafer-map";
-export { blinkTablePlugin } from "./plugins/sidebar-blink-table";
+export { annotationProgressPlugin } from "./components/annotation-progress";
+export { browserSummaryPlugin } from "./components/browser-summary";
+export { dataTablePlugin } from "./components/data-table";
+export { echartsGenericPlugin } from "./components/echarts-generic";
+export { interactiveScatterPlugin } from "./components/interactive-scatter";
+export { labelDistributionPlugin } from "./components/label-distribution";
+export { markdownLogPlugin } from "./components/markdown-log";
+export { metricCardsPlugin } from "./components/metric-cards";
+export { predictionSummaryPlugin } from "./components/prediction-summary";
+export { sampleViewerPlugin } from "./components/sample-viewer";
+export { waferMapPlugin } from "./components/wafer-map";
+export { blinkTablePlugin } from "./components/blink-table";
 
 export { default as AnnotationProgressWidget } from "./components/annotation-progress/AnnotationProgressWidget.vue";
 export { default as BrowserSummaryWidget } from "./components/browser-summary/BrowserSummaryWidget.vue";

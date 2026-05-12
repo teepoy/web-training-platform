@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const browserSummaryPlugin = defineSidebarPlugin({
   key: "browser-summary",
   component: defineAsyncComponent(
-    () => import("../../components/browser-summary/BrowserSummaryWidget.vue"),
+    () => import("./BrowserSummaryWidget.vue"),
   ),
   contract: {
     displayName: "Browser Summary",

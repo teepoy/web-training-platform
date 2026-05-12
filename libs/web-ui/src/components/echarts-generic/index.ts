@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const echartsGenericPlugin = defineSidebarPlugin({
   key: "echarts-generic",
   component: defineAsyncComponent(
-    () => import("../../components/echarts-generic/GenericEChartsWidget.vue"),
+    () => import("./GenericEChartsWidget.vue"),
   ),
   contract: {
     displayName: "Generic ECharts",

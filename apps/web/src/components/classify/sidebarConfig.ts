@@ -14,7 +14,7 @@
  *
  * Extending:
  *   1. Create the .vue widget in `libs/web-ui/src/components/{name}/{Name}Widget.vue`.
- *   2. Create a thin plugin descriptor in `libs/web-ui/src/plugins/sidebar-{name}/index.ts`
+ *   2. Create a thin plugin descriptor in `libs/web-ui/src/components/{name}/index.ts`
  *      that imports the component and exports a `defineSidebarPlugin({...})` descriptor.
  *   3. Export the descriptor from `@platform/web-ui` and register in `src/plugins/index.ts`.
  *   4. Add a descriptor entry to the desired panel preset below.

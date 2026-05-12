@@ -4,7 +4,7 @@ import { defineSidebarPlugin } from "@platform/plugin-sdk";
 export const interactiveScatterPlugin = defineSidebarPlugin({
   key: "interactive-scatter",
   component: defineAsyncComponent(
-    () => import("../../components/interactive-scatter/InteractiveScatterWidget.vue"),
+    () => import("./InteractiveScatterWidget.vue"),
   ),
   contract: {
     displayName: "Interactive Scatter",
