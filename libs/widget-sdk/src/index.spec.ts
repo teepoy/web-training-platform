@@ -7,10 +7,7 @@ import {
   defineAgentSkill,
   definePreviewLauncher,
   createDescriptorRegistry,
-  reduceLabelFilterIntent,
-  reduceCollectionIntent,
 } from "./index";
-import type { SidebarWidgetIntent } from "./sidebar";
 import * as widgetSdk from "./index";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -322,122 +319,13 @@ describe("createDescriptorRegistry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// reduceLabelFilterIntent
-// ---------------------------------------------------------------------------
-
-describe("reduceLabelFilterIntent", () => {
-  const baseIntent: SidebarWidgetIntent = {
-    type: "select-labels",
-    operation: "replace",
-    values: ["cat"],
-  };
-
-  it("replaces label on replace operation", () => {
-    expect(reduceLabelFilterIntent(null, baseIntent)).toBe("cat");
-    expect(reduceLabelFilterIntent("dog", baseIntent)).toBe("cat");
-  });
-
-  it("toggles off when same label clicked", () => {
-    const intent: SidebarWidgetIntent = { ...baseIntent, operation: "toggle" };
-    expect(reduceLabelFilterIntent("cat", intent)).toBeNull();
-    expect(reduceLabelFilterIntent("dog", intent)).toBe("cat");
-  });
-
-  it("clears on clear-selection", () => {
-    const intent: SidebarWidgetIntent = {
-      ...baseIntent,
-      type: "clear-selection",
-      operation: "clear",
-    };
-    expect(reduceLabelFilterIntent("cat", intent)).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// reduceCollectionIntent
-// ---------------------------------------------------------------------------
-
-describe("reduceCollectionIntent", () => {
-  it("creates collection state on first intent", () => {
-    const result = reduceCollectionIntent(undefined, {
-      type: "select-samples",
-      operation: "replace",
-      values: ["s1", "s2"],
-      metadata: {
-        collection: "browser-items",
-        entity: "sample",
-        target: "selection",
-      },
-    });
-    expect(result["browser-items"].selection.ids).toEqual(["s1", "s2"]);
-    expect(result["browser-items"].filter.mode).toBe("all");
-  });
-
-  it("applies filter when target=filter", () => {
-    const result = reduceCollectionIntent(undefined, {
-      type: "apply-filter",
-      operation: "replace",
-      values: ["s1"],
-      metadata: {
-        collection: "browser-items",
-        entity: "sample",
-        target: "filter",
-        filterMode: "selected-only",
-      },
-    });
-    expect(result["browser-items"].filter.mode).toBe("selected-only");
-    expect(result["browser-items"].filter.ids).toEqual(["s1"]);
-  });
-
-  it("clears collection on clear-selection", () => {
-    const existing = {
-      "browser-items": {
-        entity: "sample" as const,
-        selection: { ids: ["s1"], sourcePanelId: null, revision: 1 },
-        filter: {
-          ids: ["s1"],
-          mode: "selected-only" as const,
-          sourcePanelId: null,
-          revision: 1,
-        },
-      },
-    };
-    const result = reduceCollectionIntent(existing, {
-      type: "clear-selection",
-      operation: "clear",
-      values: [],
-      metadata: { collection: "browser-items" },
-    });
-    expect(result["browser-items"].selection.ids).toEqual([]);
-    expect(result["browser-items"].filter.mode).toBe("all");
-  });
-
-  it("no-ops when collection key is missing from metadata", () => {
-    const result = reduceCollectionIntent(
-      {
-        existing: {
-          entity: "sample",
-          selection: { ids: ["x"], sourcePanelId: null, revision: 0 },
-          filter: { ids: [], mode: "all", sourcePanelId: null, revision: 0 },
-        },
-      },
-      { type: "select-samples", operation: "replace", values: ["y"] },
-    );
-    expect(result["existing"].selection.ids).toEqual(["x"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Regression: source barrel exports all expected names
 // ---------------------------------------------------------------------------
 
 describe("source barrel export completeness", () => {
   const EXPECTED_EXPORTS = [
     "BROWSER_DASHBOARD_KEY",
-    "SIDEBAR_WIDGET_INTERACTION_KEY",
     "defineDashboardWidget",
-    "reduceLabelFilterIntent",
-    "reduceCollectionIntent",
     "defineImporter",
     "defineExporter",
     "defineAgentSkill",

@@ -1,37 +1,15 @@
 import type { Decorator } from "@storybook/vue3";
-import { computed, provide, shallowRef, type ComputedRef } from "vue";
+import { provide, shallowRef } from "vue";
 import {
   BROWSER_DASHBOARD_KEY,
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  type SidebarWidgetInteractionContext,
-  type SidebarWidgetInteractionState,
 } from "@platform/widget-sdk";
 import { DATA_PIPELINE_KEY, createDataPipeline } from "../composables/useDataPipeline";
-
-const defaultInteractionState: SidebarWidgetInteractionState = {
-  activeLabelFilter: null,
-  selectedLabels: [],
-  collections: {
-    samples: {
-      entity: "sample",
-      selection: { ids: [], sourcePanelId: null, revision: 0 },
-      filter: { mode: "all", ids: [], sourcePanelId: null, revision: 0 },
-    },
-    predictions: {
-      entity: "prediction",
-      selection: { ids: [], sourcePanelId: null, revision: 0 },
-      filter: { mode: "all", ids: [], sourcePanelId: null, revision: 0 },
-    },
-  },
-};
 
 export interface MockContextOverrides {
   classifyDashboard?: Record<string, unknown> | null;
   browserDashboard?: Record<string, unknown> | null;
-  interactionState?: Partial<SidebarWidgetInteractionState>;
   predictionGridItems?: Array<Record<string, unknown>>;
   classifyGridItems?: Array<Record<string, unknown>>;
-  onDispatch?: (intent: unknown) => void;
 }
 
 export function provideWebUiContext(
@@ -67,28 +45,14 @@ export function provideWebUiContext(
         overrides.browserDashboard ?? { totalLoaded: 120, filteredCount: 90 },
       );
 
-      const interactionState: SidebarWidgetInteractionState = {
-        ...defaultInteractionState,
-        ...(overrides.interactionState ?? {}),
-      };
-
-      const interactionCtx: ComputedRef<SidebarWidgetInteractionContext> =
-        computed(() => ({
-          state: interactionState,
-          dispatch: (overrides.onDispatch ?? (() => {})) as (
-            intent: unknown,
-          ) => void,
-        }));
-
-      provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionCtx);
       provide(DATA_PIPELINE_KEY, createDataPipeline(shallowRef([])));
       provide(
         "pr-grid-items",
-        computed(() => overrides.predictionGridItems ?? []),
+        () => overrides.predictionGridItems ?? [],
       );
       provide(
         "classify-grid-items",
-        computed(() => overrides.classifyGridItems ?? []),
+        () => overrides.classifyGridItems ?? [],
       );
 
       return {};

@@ -4,36 +4,18 @@
  * Public API surface for widget authors.
  */
 
-// Sidebar widget contracts + interaction system
+// Sidebar widget contracts
 export type {
   DashboardWidgetDescriptor,
   DashboardWidgetProps,
   WidgetContract,
   SidebarWidgetCapability,
   SidebarWidgetSelfTestScenario,
-  SidebarWidgetContextKey,
-  SidebarWidgetIntentType,
-  SidebarWidgetOperation,
-  SidebarWidgetCollectionEntity,
-  SidebarWidgetSource,
-  SidebarWidgetIntentTarget,
-  SidebarWidgetFilterMode,
-  SidebarWidgetIntentMetadata,
-  SidebarWidgetIntent,
-  SidebarWidgetCollectionSelectionState,
-  SidebarWidgetCollectionFilterState,
-  SidebarWidgetCollectionState,
-  SidebarWidgetInteractionState,
-  SidebarWidgetInteractionConfig,
-  SidebarWidgetInteractionContext,
 } from "./sidebar";
 
 export {
   BROWSER_DASHBOARD_KEY,
-  SIDEBAR_WIDGET_INTERACTION_KEY,
   defineDashboardWidget,
-  reduceLabelFilterIntent,
-  reduceCollectionIntent,
 } from "./sidebar";
 
 // Importer contracts

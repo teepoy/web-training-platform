@@ -13,27 +13,9 @@
 
 export {
   BROWSER_DASHBOARD_KEY,
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  reduceCollectionIntent,
-  reduceLabelFilterIntent,
 } from "@platform/widget-sdk";
 
 export type {
-  SidebarWidgetContextKey,
-  SidebarWidgetIntentType,
-  SidebarWidgetOperation,
-  SidebarWidgetCollectionEntity,
-  SidebarWidgetSource,
-  SidebarWidgetIntentTarget,
-  SidebarWidgetFilterMode,
-  SidebarWidgetIntentMetadata,
-  SidebarWidgetIntent,
-  SidebarWidgetCollectionSelectionState,
-  SidebarWidgetCollectionFilterState,
-  SidebarWidgetCollectionState,
-  SidebarWidgetInteractionState,
-  SidebarWidgetInteractionConfig,
-  SidebarWidgetInteractionContext,
   SidebarWidgetCapability,
   SidebarWidgetSelfTestScenario,
 } from "@platform/widget-sdk";
@@ -45,8 +27,6 @@ export type {
 // ---------------------------------------------------------------------------
 
 import type {
-  SidebarWidgetContextKey,
-  SidebarWidgetIntentType,
   SidebarWidgetCapability,
   SidebarWidgetSelfTestScenario,
 } from "@platform/widget-sdk";
@@ -87,7 +67,7 @@ export interface SidebarWidgetSelfTestResult {
   checks: SidebarWidgetSelfTestCheck[];
 }
 
-const VALID_CONTEXT_KEYS: SidebarWidgetContextKey[] = [
+const VALID_CONTEXT_KEYS: string[] = [
   "classify-dashboard",
   "interaction-state",
   "prediction-grid-items",
@@ -95,7 +75,7 @@ const VALID_CONTEXT_KEYS: SidebarWidgetContextKey[] = [
   "browser-items",
 ];
 
-const VALID_INTENT_TYPES: SidebarWidgetIntentType[] = [
+const VALID_INTENT_TYPES: string[] = [
   "select-samples",
   "select-labels",
   "select-predictions",
