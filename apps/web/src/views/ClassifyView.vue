@@ -168,7 +168,6 @@
       <ClassifySidebar
         :panels="mergedPanels"
         :context="pageDashboard"
-        :interaction="interactionContext"
         :collapsed="prefs.sidebarCollapsed"
         @update:collapsed="prefs.setSidebarCollapsed"
       />
@@ -200,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, watch, provide, h, type Ref } from "vue";
+import { ref, computed, inject, onMounted, watch, provide, h, shallowReactive, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, SelectOption } from "naive-ui";
@@ -256,17 +255,16 @@ import type {
   WaferPoint,
 } from "../types";
 import {
-  resolveImageUris,
   buildBlinkTableData,
   SampleBrowser,
   useSampleBrowserPrefs,
-  usePagePanels,
   injectWaferPanelData,
   normalizeWaferPoint,
+  useDataPipeline as createDataPipeline,
+  DATA_PIPELINE_KEY,
 } from "@platform/web-ui";
-import type { BlinkSampleInput } from "@platform/web-ui";
+import type { BlinkSampleInput, DataPipeline } from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
-import { useBrowserFilter } from "../composables/useBrowserFilter";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
 import TaskInsightModal from "../components/TaskInsightModal.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
@@ -338,11 +336,15 @@ const orderOptions = [
   { label: "Newest First", value: "created_at" },
 ] as SelectOption[];
 
+// ── Wafer filter bridge (defined early — synced with DataPipeline later) ──
+const waferFilterIds = ref<string[] | null>(null);
+
 const { samples, totalCount, isLoading, loadMore, reset: resetLoader } = useSampleLoader({
   datasetId: datasetId.value,
   pageSize: 100,
   labelFilter,
   orderBy,
+  sampleIds: waferFilterIds,
 });
 
 onMounted(() => {
@@ -953,40 +955,53 @@ const dashboardContext = useClassifyDashboard(
   labelSpace,
 );
 
-const {
-  interactionContext,
-  interactionState,
-  dispatchIntent,
-  dashboard: pageDashboard,
-} = usePagePanels({
-  dashboardContext: dashboardContext as unknown as Record<string, unknown>,
-  classifyDashboard: dashboardContext,
-  onIntent: (_intent, updatedState) => {
-    if (!isReviewMode.value && labelFilter.value !== updatedState.activeLabelFilter) {
-      labelFilter.value = updatedState.activeLabelFilter;
+const pageDashboard = shallowReactive<Record<string, unknown>>(
+  { ...(dashboardContext as unknown as Record<string, unknown>) },
+);
+
+watch(
+  () => dashboardContext,
+  (next) => {
+    const ctx = next as unknown as Record<string, unknown>;
+    for (const key of Object.keys(pageDashboard)) {
+      if (!(key in ctx)) {
+        delete pageDashboard[key];
+      }
     }
+    Object.assign(pageDashboard, ctx);
   },
-});
+);
 
-// Bidirectional sync: user changes labelFilter dropdown → interaction state
-watch(labelFilter, (nextLabel) => {
-  if (interactionState.value.activeLabelFilter !== nextLabel) {
-    dispatchIntent({
-      type: "apply-filter",
-      operation: nextLabel ? "replace" : "clear",
-      values: nextLabel ? [nextLabel] : [],
-    });
-  }
-});
+// ── DataPipeline for wafer-map ↔ gallery filtering ──
+const pipeline = createDataPipeline<BrowserItem>(browserItems);
+pipeline.register("wafer-map");
+const galleryNode = pipeline.register("gallery", "wafer-map");
+provide(DATA_PIPELINE_KEY, pipeline);
 
-// --- Interaction-dependent code (must come after usePagePanels) ---
+// Sync waferFilterIds ref from the DataPipeline (drives useSampleLoader)
+watch(
+  () => {
+    for (const ann of galleryNode.visibleAnnotations.value) {
+      if (ann.kind === "selected" && ann.ids.size > 0) return [...ann.ids];
+    }
+    return null;
+  },
+  (ids) => {
+    waferFilterIds.value = ids;
+  },
+  { immediate: true },
+);
+
+// ── DataPipeline-driven filtering and hydration ──
 
 const selectedSidebarSampleIds = computed(() => {
-  const filterIds = interactionState.value.collections?.["classify-samples"]?.filter.ids ?? [];
-  if (filterIds.length > 0) {
-    return filterIds;
+  for (const node of Object.values(pipeline.nodes.value)) {
+    const ann = node.annotation.value;
+    if (ann?.kind === "selected" && ann.ids.size > 0) {
+      return [...ann.ids];
+    }
   }
-  return interactionState.value.collections?.["classify-samples"]?.selection.ids ?? [];
+  return [] as string[];
 });
 
 const selectedSidebarSampleHydrationIds = computed(() => {
@@ -1035,10 +1050,16 @@ const providedGridItems = computed<AnnotationGridItem[]>(() => {
   return Array.from(merged.values());
 });
 
-const { filteredItems: filteredBrowserItems } = useBrowserFilter(
-  browserItems,
-  interactionState,
-  "classify-samples",
+const filterIds = computed(() => {
+  for (const ann of galleryNode.visibleAnnotations.value)
+    if (ann.kind === "selected") return ann.ids;
+  return null;
+});
+
+const filteredBrowserItems = computed(() =>
+  filterIds.value
+    ? browserItems.value.filter((i) => filterIds.value!.has(i.id))
+    : browserItems.value,
 );
 
 provide<Ref<AnnotationGridItem[]>>("classify-grid-items", providedGridItems);

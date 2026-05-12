@@ -92,7 +92,6 @@
             <BrowserSidebar
               :panels="datasetSidebarPanels"
               :context="pageDashboard"
-              :interaction="interactionContext"
               :collapsed="prefs.sidebarCollapsed"
               :sidebar-width="prefs.sidebarWidth"
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"
@@ -295,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onMounted, watch } from "vue";
+import { ref, computed, h, onMounted, watch, provide, shallowReactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
@@ -304,7 +303,7 @@ import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
 import { api } from "../api";
-import { resolveImageUris, buildBlinkTableData, usePagePanels, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
+import { resolveImageUris, buildBlinkTableData, createDataPipeline, DATA_PIPELINE_KEY, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
@@ -316,7 +315,6 @@ import {
   useSampleBrowserPrefs,
 } from "@platform/web-ui";
 import { useSampleLoader } from "../composables/useSampleLoader";
-import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import { widgetRegistry } from "../core/registry";
@@ -353,9 +351,7 @@ const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
 // Samples tab
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// Page-level dashboard + interaction context (provided via usePagePanels)
-// The dashboard object has lazy getters so widgets see live values after
-// sampleLoader / browserSidebarStats are defined.
+// Page-level dashboard (for BROWSER_DASHBOARD_KEY consumers like BrowserSummary)
 // ---------------------------------------------------------------------------
 const pageDashboardData = ref<Record<string, unknown>>({});
 
@@ -384,19 +380,27 @@ const browserSidebarDashboard = {
   refetch: () => sampleLoader.reset(),
 };
 
-const { interactionContext, interactionState, dashboard: pageDashboard } = usePagePanels({
-  dashboardContext: pageDashboardData,
-  classifyDashboard: browserSidebarDashboard,
-});
+// ---------------------------------------------------------------------------
+// DataPipeline: replace usePagePanels + useBrowserFilter with single DAG
+// WaferMap reads pipeline, annotates selected IDs; Gallery reads
+// visibleAnnotations to drive server-side sample loading.
+// ---------------------------------------------------------------------------
+const pageDashboard = shallowReactive<Record<string, unknown>>({});
 
-// ---------------------------------------------------------------------------
-// Wafer filter bridge: reads shared interaction-state collections so
-// wafer-map selections drive sample loading via useSampleLoader.
-// ---------------------------------------------------------------------------
+// Pipeline starts empty; synced with browserSamples after sample loading
+const pipelineItems = ref<BrowserItem[]>([]);
+const pipeline = createDataPipeline(pipelineItems);
+
+pipeline.register("wafer-map");
+const galleryNode = pipeline.register("gallery", "wafer-map");
+
+provide(DATA_PIPELINE_KEY, pipeline);
+
 const waferFilterIds = computed<string[] | null>(() => {
-  const collection = interactionState.value.collections?.["browser-items"];
-  if (!collection || collection.filter.mode !== "selected-only") return null;
-  return collection.filter.ids.length > 0 ? collection.filter.ids : null;
+  for (const ann of galleryNode.visibleAnnotations.value) {
+    if (ann.kind === "selected" && ann.ids.size > 0) return [...ann.ids];
+  }
+  return null;
 });
 
 const sampleLoader = useSampleLoader({ datasetId: id, sampleIds: waferFilterIds });
@@ -416,7 +420,14 @@ const browserSamples = computed<BrowserItem[]>(() =>
   }))
 );
 
-const { filteredItems: filteredSamples } = useBrowserFilter(browserSamples, interactionState);
+// Keep pipeline items in sync with loaded browser samples
+watch(browserSamples, (items) => {
+  pipelineItems.value = [...items];
+}, { immediate: true });
+
+// Server-side filtering via useSampleLoader handles WaferMap selection;
+// filteredSamples mirrors browserSamples for display compatibility
+const filteredSamples = computed(() => browserSamples.value);
 
 const browserSidebarStats = computed(() => {
   const labelCounts: Record<string, number> = {};
@@ -439,11 +450,11 @@ const browserSidebarStats = computed(() => {
   };
 });
 
-// Populate the page-level dashboard ref once all reactive sources are defined.
+// Populate the page-level dashboard reactively for BrowserSummary etc.
 watch(
   [() => sampleLoader.samples.value.length, filteredSamples, browserSidebarStats],
   () => {
-    pageDashboardData.value = {
+    Object.assign(pageDashboard, {
       totalLoaded: sampleLoader.samples.value.length,
       filteredCount: filteredSamples.value.length,
       stats: browserSidebarStats.value,
@@ -454,7 +465,7 @@ watch(
       selectedCount: 0,
       labelSpace: labelSpace.value,
       refetch: () => sampleLoader.reset(),
-    };
+    });
   },
   { immediate: true },
 );
