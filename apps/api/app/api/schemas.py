@@ -1052,3 +1052,31 @@ class PersistStatusResponse(BaseModel):
     imported_count: int
     remaining_count: int
     error: str | None
+
+
+# ---------------------------------------------------------------------------
+# OAuth schemas
+# ---------------------------------------------------------------------------
+
+
+class OAuthCallbackResponse(BaseModel):
+    action: str
+    access_token: str | None = None
+    user: UserResponse | None = None
+    state_token: str | None = None
+    email: str | None = None
+    name: str | None = None
+    provider: str | None = None
+    provider_id: str | None = None
+
+
+class OAuthRegisterRequest(BaseModel):
+    state_token: str
+    name: str
+
+
+# OAuth provider info
+class OAuthProviderInfo(BaseModel):
+    id: str
+    display_name: str
+    enabled: bool

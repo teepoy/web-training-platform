@@ -3,6 +3,8 @@ export {
   authLogin,
   authRegister,
   authMe,
+  authOAuthRegister,
+  fetchOAuthProviders,
   fetchHealthStatus,
 } from "./api";
 export type {
@@ -15,6 +17,9 @@ export type {
   PersonalAccessToken,
   PersonalAccessTokenCreated,
   OrgMember,
+  OAuthCallbackResponse,
+  OAuthProviderInfo,
+  OAuthRegisterRequest,
 } from "./api";
 
 export { authKeys } from "./keys";

@@ -110,6 +110,14 @@ export const useAuthStore = defineStore("auth", {
       await this.login(email, password);
     },
 
+    async oauthLogin(token: string) {
+      localStorage.setItem(TOKEN_KEY, token);
+      const userWithOrgs = await authMe(token);
+      this.token = token;
+      this.user = userWithOrgs;
+      localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+    },
+
     logout() {
       this.user = null;
       this.token = null;

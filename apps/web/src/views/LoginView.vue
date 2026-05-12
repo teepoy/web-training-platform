@@ -28,6 +28,21 @@
           Sign In
         </n-button>
       </n-form>
+      <div v-if="oauthProviders.length > 0" class="oauth-section">
+        <div class="oauth-divider">
+          <span class="oauth-divider-text">or continue with</span>
+        </div>
+        <div v-for="prov in oauthProviders" :key="prov.id" class="oauth-button-wrapper">
+          <n-button
+            secondary
+            block
+            tag="a"
+            :href="`${API_BASE}/auth/oauth/${prov.id}`"
+          >
+            Continue with {{ prov.display_name }}
+          </n-button>
+        </div>
+      </div>
       <div class="auth-link">
         Don't have an account?
         <router-link to="/register">Register</router-link>
@@ -37,10 +52,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
+import { API_BASE } from '../api'
+import { fetchOAuthProviders, type OAuthProviderInfo } from '@platform/web-data/auth'
 
 const router = useRouter()
 const message = useMessage()
@@ -51,6 +68,15 @@ const orgStore = useOrgStore()
 
 const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
+const oauthProviders = ref<OAuthProviderInfo[]>([])
+
+onMounted(async () => {
+  try {
+    oauthProviders.value = await fetchOAuthProviders()
+  } catch {
+    // Graceful degradation: no OAuth buttons shown
+  }
+})
 
 const formData = ref({
   email: '',
@@ -101,5 +127,33 @@ async function handleSubmit() {
   margin-top: 16px;
   text-align: center;
   font-size: 13px;
+}
+
+.oauth-section {
+  margin-top: 20px;
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.oauth-divider-text {
+  padding: 0 12px;
+}
+
+.oauth-button-wrapper {
+  margin-top: 8px;
 }
 </style>

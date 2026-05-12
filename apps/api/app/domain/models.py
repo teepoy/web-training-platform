@@ -122,6 +122,8 @@ class User(BaseModel):
     is_superadmin: bool = False
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    oauth_provider: str | None = None
+    oauth_provider_id: str | None = None
 
 
 class Organization(BaseModel):
