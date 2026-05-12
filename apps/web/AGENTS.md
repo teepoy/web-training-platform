@@ -21,7 +21,7 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, three route-level views
 | Classify sidebar               | `src/components/classify/`                                              | Widget config, sidebar shell wrapper; see Classify Sidebar Architecture section              |
 | Agent chat drawer              | `../../libs/web-ui/src/components/agent-chat-drawer/AgentChatDrawer.vue` | Floating chat UI for agent interaction                                                       |
 | Widget implementations         | `../../libs/web-ui/src/components/<name>/`                              | Widget .vue source files — general-purpose shared components                                 |
-| Plugin descriptor wrappers     | `../../libs/web-ui/src/plugins/sidebar-*/`                              | Thin plugin descriptors; .vue widgets moved to `components/<name>/`                          |
+| Plugin descriptor wrappers     | `../../libs/web-ui/src/components/<name>/index.ts`                      | Plugin descriptors co-located with .vue components; each widget directory is self-contained  |
 | Shared browser core            | `../../libs/web-ui/src/components/sample-browser/SampleBrowser.vue`     | Shared virtualized browser core                                                              |
 | Sidebar shell                  | `../../libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`   | Neutral sidebar shell (delegates panels to PanelHost)                                        |
 | Panel host                     | `../../libs/web-ui/src/components/panel-host/PanelHost.vue`             | Standalone panel renderer — usable anywhere in a page                                        |
@@ -68,7 +68,7 @@ The classify page (`/datasets/:id/classify`) is the one-stop classification work
 
 **How to add a new widget:**
 1. Create the .vue component in `../../libs/web-ui/src/components/<name>/<Name>Widget.vue` for reusable first-party widgets, or `src/components/<name>/<Name>Widget.vue` if the widget is app-specific.
-2. Create a thin plugin wrapper in `../../libs/web-ui/src/plugins/sidebar-<name>/index.ts` (reusable) or `src/plugins/sidebar-<name>/index.ts` (app-specific), importing the component from `components/<name>/` and exporting a named descriptor via `defineSidebarPlugin({...})`.
+2. Create a plugin descriptor in the same component directory: `../../libs/web-ui/src/components/<name>/index.ts` (reusable) or `src/components/<name>/index.ts` (app-specific), importing the component from `./` and exporting a named descriptor via `defineSidebarPlugin({...})`. The component directory now contains both the .vue source and its plugin descriptor, self-contained.
 3. Export reusable descriptors from `../../libs/web-ui/src/index.ts`, then import and register the descriptor in `src/plugins/index.ts`.
 4. Add a `SidebarPanelDescriptor` entry to `defaultPanels` (or a custom panels array) with the matching `component` key and any `props`.
 5. (Optional) Use `<PanelHost :panels="myPanels" :componentResolver="..." />` to render the same panel descriptors anywhere in the page — a toolbar, a drawer, or a floating panel — sharing state with sidebar widgets via `usePagePanels`.
