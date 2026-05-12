@@ -1,11 +1,12 @@
 import type { Decorator } from "@storybook/vue3";
-import { computed, provide, type ComputedRef } from "vue";
+import { computed, provide, shallowRef, type ComputedRef } from "vue";
 import {
   BROWSER_DASHBOARD_KEY,
   SIDEBAR_WIDGET_INTERACTION_KEY,
   type SidebarWidgetInteractionContext,
   type SidebarWidgetInteractionState,
 } from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY, createDataPipeline } from "../composables/useDataPipeline";
 
 const defaultInteractionState: SidebarWidgetInteractionState = {
   activeLabelFilter: null,
@@ -80,6 +81,7 @@ export function provideWebUiContext(
         }));
 
       provide(SIDEBAR_WIDGET_INTERACTION_KEY, interactionCtx);
+      provide(DATA_PIPELINE_KEY, createDataPipeline(shallowRef([])));
       provide(
         "pr-grid-items",
         computed(() => overrides.predictionGridItems ?? []),

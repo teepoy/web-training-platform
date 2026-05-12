@@ -9,11 +9,7 @@
 -->
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  type SidebarWidgetIntent,
-  type SidebarWidgetInteractionConfig,
-} from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 const props = defineProps<{
   data?: Record<string, unknown> | null;
@@ -21,16 +17,25 @@ const props = defineProps<{
   size?: "compact" | "normal" | "large";
 }>();
 
-const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
+const pipeline = inject(DATA_PIPELINE_KEY)!;
+const tableNode = pipeline.register("data-table");
 
 const maxRows = computed(() => Number(props.config?.maxRows ?? 100));
 
-const interactionConfig = computed<SidebarWidgetInteractionConfig | null>(() => {
+interface TableInteractionConfig {
+  collection?: string;
+  entity?: string;
+  emitSelection?: boolean;
+  filterFromSelection?: boolean;
+  followSelection?: boolean;
+}
+
+const interactionConfig = computed<TableInteractionConfig | null>(() => {
   const raw = props.config?.interaction;
   if (!raw || typeof raw !== "object") {
     return null;
   }
-  return raw as SidebarWidgetInteractionConfig;
+  return raw as TableInteractionConfig;
 });
 
 interface TableColumn {
@@ -122,12 +127,7 @@ function toggleSort(colIdx: number) {
 }
 
 const selectedIds = computed(() => {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return new Set<string>();
-  }
-  const ids = interaction?.value.state.collections?.[cfg.collection]?.selection.ids ?? [];
-  return new Set(ids);
+  return tableNode.annotation.value?.ids ?? new Set<string>();
 });
 
 const selectedRowCount = computed(() => selectedIds.value.size);
@@ -162,24 +162,7 @@ const sortedRows = computed<unknown[] | null>(() => {
 });
 
 const visibleRows = computed<unknown[] | null>(() => {
-  const rows = sortedRows.value;
-  if (!rows) {
-    return null;
-  }
-
-  const cfg = interactionConfig.value;
-  const data = tableData.value;
-  if (!cfg?.filterFromSelection || !cfg.collection || data?.mode !== "interactive") {
-    return rows;
-  }
-
-  const filterState = interaction?.value.state.collections?.[cfg.collection]?.filter;
-  if (!filterState || filterState.mode === "all") {
-    return rows;
-  }
-
-  const idSet = new Set(filterState.ids);
-  return (rows as InteractiveRow[]).filter((row) => idSet.has(row.id));
+  return sortedRows.value;
 });
 
 function valueForDisplay(row: unknown, colIdx: number): unknown {
@@ -197,17 +180,6 @@ function valueForDisplay(row: unknown, colIdx: number): unknown {
   return (row as unknown[])[colIdx];
 }
 
-function emitIntent(intent: SidebarWidgetIntent): void {
-  interaction?.value.dispatch(intent);
-}
-
-function selectionIntentType(entity: SidebarWidgetInteractionConfig["entity"]): SidebarWidgetIntent["type"] {
-  if (entity === "prediction") {
-    return "select-predictions";
-  }
-  return "select-samples";
-}
-
 function onRowClick(row: unknown, event: MouseEvent): void {
   const data = tableData.value;
   const cfg = interactionConfig.value;
@@ -216,35 +188,23 @@ function onRowClick(row: unknown, event: MouseEvent): void {
   }
 
   const rowId = (row as InteractiveRow).id;
-  const operation: SidebarWidgetIntent["operation"] =
-    event.metaKey || event.ctrlKey ? "toggle" : "replace";
+  const isToggle = event.metaKey || event.ctrlKey;
 
-  emitIntent({
-    type: selectionIntentType(cfg.entity),
-    operation,
-    values: [rowId],
-    sourcePanelId: "data-table",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "selection",
-    },
-  });
-
-  if (cfg.filterFromSelection && operation === "replace") {
-    emitIntent({
-      type: "apply-filter",
-      operation: "replace",
-      values: [rowId],
-      sourcePanelId: "data-table",
-      metadata: {
-        collection: cfg.collection,
-        entity: cfg.entity,
-        target: "filter",
-        filterMode: "selected-only",
-      },
-    });
+  let nextIds: string[];
+  if (isToggle) {
+    const current = new Set(selectedIds.value);
+    if (current.has(rowId)) {
+      current.delete(rowId);
+    } else {
+      current.add(rowId);
+    }
+    nextIds = Array.from(current);
+  } else {
+    nextIds = [rowId];
   }
+
+  const kind = cfg.entity === "prediction" ? "prediction-selected" : "selected";
+  tableNode.annotate(kind, nextIds);
 }
 
 function rowClass(row: unknown, rowIndex: number): Record<string, boolean> {
@@ -261,22 +221,8 @@ function rowClass(row: unknown, rowIndex: number): Record<string, boolean> {
   return classes;
 }
 
-function clearLinkedState(): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return;
-  }
-  emitIntent({
-    type: "clear-selection",
-    operation: "clear",
-    values: [],
-    sourcePanelId: "data-table",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "both",
-    },
-  });
+function clearSelection(): void {
+  tableNode.clear();
 }
 
 const containerHeight = computed(() => {
@@ -325,7 +271,7 @@ const containerHeight = computed(() => {
     </div>
     <div v-if="tableData" class="dtw-footer">
       <span>{{ (visibleRows?.length ?? 0) }} row{{ (visibleRows?.length ?? 0) === 1 ? "" : "s" }}</span>
-      <button v-if="selectedRowCount > 0" class="dtw-clear" @click="clearLinkedState">Clear</button>
+      <button v-if="selectedRowCount > 0" class="dtw-clear" @click="clearSelection">Clear</button>
     </div>
   </div>
 </template>

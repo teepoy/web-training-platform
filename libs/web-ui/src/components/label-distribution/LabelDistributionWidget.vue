@@ -18,10 +18,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import type { ClassifyDashboardContext } from "../../types/sidebar-widgets";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  type SidebarWidgetIntent,
-} from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 use([CanvasRenderer, GridComponent, BarChart, TooltipComponent]);
 
@@ -47,7 +44,8 @@ const props = withDefaults(
 // ---------------------------------------------------------------------------
 
 const ctx = inject<ClassifyDashboardContext>("classifyDashboard")!;
-const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
+const pipeline = inject(DATA_PIPELINE_KEY)!;
+const labelNode = pipeline.register("label-distribution");
 
 // ---------------------------------------------------------------------------
 // Colours
@@ -100,13 +98,11 @@ const totalLabeled = computed(() =>
   labelItems.value.reduce((s, i) => s + i.count, 0),
 );
 
-const activeLabelFilter = computed(
-  () => interaction?.value.state.activeLabelFilter ?? null,
-);
-
-function dispatchIntent(intent: SidebarWidgetIntent): void {
-  interaction?.value.dispatch(intent);
-}
+const activeLabelFilter = computed(() => {
+  const ann = labelNode.annotation.value;
+  if (!ann || ann.kind !== "labelFilter") return null;
+  return ann.ids.size > 0 ? [...ann.ids][0] : null;
+});
 
 function onChartClick(params: ECElementEvent): void {
   const label = typeof params.name === "string" ? params.name : null;
@@ -115,24 +111,18 @@ function onChartClick(params: ECElementEvent): void {
   }
 
   const originalEvent = params.event?.event as MouseEvent | undefined;
-  const operation =
-    originalEvent?.metaKey || originalEvent?.ctrlKey ? "toggle" : "replace";
+  const isToggle = originalEvent?.metaKey || originalEvent?.ctrlKey;
 
-  dispatchIntent({
-    type: "select-labels",
-    operation,
-    values: [label],
-    sourcePanelId: "label-distribution",
-  });
+  if (isToggle && label === activeLabelFilter.value) {
+    labelNode.clear();
+    return;
+  }
+
+  labelNode.annotate("labelFilter", [label]);
 }
 
 function clearActiveFilter(): void {
-  dispatchIntent({
-    type: "clear-selection",
-    operation: "clear",
-    values: [],
-    sourcePanelId: "label-distribution",
-  });
+  labelNode.clear();
 }
 
 // ---------------------------------------------------------------------------

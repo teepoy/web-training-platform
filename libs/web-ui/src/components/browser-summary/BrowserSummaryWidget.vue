@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
-import {
-  BROWSER_DASHBOARD_KEY,
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-} from "@platform/widget-sdk";
+import { BROWSER_DASHBOARD_KEY } from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 const props = withDefaults(
   defineProps<{
@@ -14,7 +12,8 @@ const props = withDefaults(
 );
 
 const browserDashboard = inject(BROWSER_DASHBOARD_KEY, null);
-const interactionCtx = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
+const pipeline = inject(DATA_PIPELINE_KEY)!;
+const summaryNode = pipeline.register("browser-summary");
 
 const resolvedTotal = computed<number | null>(() => {
   if (props.totalLoaded !== undefined) return props.totalLoaded;
@@ -29,7 +28,10 @@ const resolvedFiltered = computed<number | null>(() => {
 });
 
 const activeLabelFilter = computed<string | null>(() => {
-  return interactionCtx?.value?.state?.activeLabelFilter ?? null;
+  const annotations = summaryNode.visibleAnnotations.value;
+  const labelFilter = annotations.find((a) => a.kind === "labelFilter");
+  if (!labelFilter || labelFilter.ids.size === 0) return null;
+  return [...labelFilter.ids][0];
 });
 
 const summaryText = computed<string>(() => {
