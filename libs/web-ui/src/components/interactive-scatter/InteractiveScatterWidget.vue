@@ -31,11 +31,7 @@ import type { ECElementEvent } from "echarts/core";
 import { ScatterChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import {
-  SIDEBAR_WIDGET_INTERACTION_KEY,
-  type SidebarWidgetIntent,
-  type SidebarWidgetInteractionConfig,
-} from "@platform/widget-sdk";
+import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
 
 use([ScatterChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
@@ -54,14 +50,22 @@ const props = defineProps<{
   size?: "compact" | "normal" | "large";
 }>();
 
-const interaction = inject(SIDEBAR_WIDGET_INTERACTION_KEY, null);
+const pipeline = inject(DATA_PIPELINE_KEY)!;
+const scatterNode = pipeline.register("interactive-scatter");
 
-const interactionConfig = computed<SidebarWidgetInteractionConfig | null>(() => {
+interface ScatterInteractionConfig {
+  collection?: string;
+  entity?: string;
+  emitSelection?: boolean;
+  filterFromSelection?: boolean;
+}
+
+const interactionConfig = computed<ScatterInteractionConfig | null>(() => {
   const raw = props.config?.interaction;
   if (!raw || typeof raw !== "object") {
     return null;
   }
-  return raw as SidebarWidgetInteractionConfig;
+  return raw as ScatterInteractionConfig;
 });
 
 const maxPoints = computed(() => {
@@ -112,66 +116,51 @@ const normalizedPoints = computed<ScatterPoint[]>(() => {
   return parsed;
 });
 
+type IdsOperation = "clear" | "replace" | "add" | "remove" | "toggle";
+
+function applyIdsOperation(
+  currentIds: string[],
+  values: string[],
+  operation: IdsOperation,
+): string[] {
+  const current = new Set(currentIds);
+  const incoming = values.filter((value) => value.trim().length > 0);
+
+  if (operation === "clear") {
+    return [];
+  }
+
+  if (operation === "replace") {
+    return [...new Set(incoming)];
+  }
+
+  if (operation === "add") {
+    incoming.forEach((value) => current.add(value));
+    return Array.from(current);
+  }
+
+  if (operation === "remove") {
+    incoming.forEach((value) => current.delete(value));
+    return Array.from(current);
+  }
+
+  if (operation === "toggle") {
+    incoming.forEach((value) => {
+      if (current.has(value)) {
+        current.delete(value);
+      } else {
+        current.add(value);
+      }
+    });
+    return Array.from(current);
+  }
+
+  return currentIds;
+}
+
 const selectedIds = computed(() => {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return new Set<string>();
-  }
-  const ids = interaction?.value.state.collections?.[cfg.collection]?.selection.ids ?? [];
-  return new Set(ids);
+  return scatterNode.annotation.value?.ids ?? new Set<string>();
 });
-
-function emitIntent(intent: SidebarWidgetIntent): void {
-  interaction?.value.dispatch(intent);
-}
-
-function selectionIntentType(entity: SidebarWidgetInteractionConfig["entity"]): SidebarWidgetIntent["type"] {
-  if (entity === "prediction") {
-    return "select-predictions";
-  }
-  return "select-samples";
-}
-
-function emitSelection(ids: string[], operation: SidebarWidgetIntent["operation"]): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.emitSelection || !cfg.collection) {
-    return;
-  }
-
-  emitIntent({
-    type: selectionIntentType(cfg.entity),
-    operation,
-    values: ids,
-    sourcePanelId: "interactive-scatter",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "selection",
-      sourceWidget: "scatter",
-    },
-  });
-}
-
-function emitFilter(ids: string[], operation: SidebarWidgetIntent["operation"]): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.filterFromSelection || !cfg.collection) {
-    return;
-  }
-
-  emitIntent({
-    type: "apply-filter",
-    operation,
-    values: ids,
-    sourcePanelId: "interactive-scatter",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "filter",
-      filterMode: ids.length > 0 ? "selected-only" : "all",
-      sourceWidget: "scatter",
-    },
-  });
-}
 
 function onChartClick(params: ECElementEvent): void {
   const row = Array.isArray(params.data) ? params.data : null;
@@ -181,33 +170,16 @@ function onChartClick(params: ECElementEvent): void {
   }
 
   const mouseEvent = params.event?.event as MouseEvent | undefined;
-  const operation: SidebarWidgetIntent["operation"] =
+  const operation: IdsOperation =
     mouseEvent?.metaKey || mouseEvent?.ctrlKey ? "toggle" : "replace";
 
-  emitSelection([pointId], operation);
-  if (operation === "replace") {
-    emitFilter([pointId], "replace");
-  }
+  const currentIds = Array.from(selectedIds.value);
+  const nextIds = applyIdsOperation(currentIds, [pointId], operation);
+  scatterNode.annotate("selected", nextIds);
 }
 
-function clearLinkedState(): void {
-  const cfg = interactionConfig.value;
-  if (!cfg?.collection) {
-    return;
-  }
-
-  emitIntent({
-    type: "clear-selection",
-    operation: "clear",
-    values: [],
-    sourcePanelId: "interactive-scatter",
-    metadata: {
-      collection: cfg.collection,
-      entity: cfg.entity,
-      target: "both",
-      sourceWidget: "scatter",
-    },
-  });
+function clearSelectionAndFilter(): void {
+  scatterNode.clear();
 }
 
 const groupedSeries = computed(() => {
@@ -329,7 +301,7 @@ const chartOption = computed<EChartsOption>(() => ({
       <div class="isw-footer">
         <span>{{ normalizedPoints.length }} point{{ normalizedPoints.length === 1 ? "" : "s" }}</span>
         <span v-if="selectedIds.size > 0">{{ selectedIds.size }} selected</span>
-        <button v-if="selectedIds.size > 0" class="isw-clear" @click="clearLinkedState">Clear</button>
+        <button v-if="selectedIds.size > 0" class="isw-clear" @click="clearSelectionAndFilter">Clear</button>
       </div>
     </template>
   </div>
