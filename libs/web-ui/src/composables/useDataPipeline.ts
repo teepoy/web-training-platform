@@ -5,6 +5,7 @@ import {
   shallowRef,
   computed,
 } from "vue";
+import type { InjectionKey } from "vue";
 
 export interface Annotation<TId = string> {
   kind: string;
@@ -30,6 +31,8 @@ export interface DataPipeline<
   getNode: (id: string) => DataNode<TId> | undefined;
   nodes: ShallowRef<Record<string, DataNode<TId>>>;
 }
+
+export const DATA_PIPELINE_KEY: InjectionKey<DataPipeline<any, any>> = Symbol("dataPipeline");
 
 export function createDataPipeline<TItem extends { id: string }>(
   rawItems: Ref<TItem[]>,

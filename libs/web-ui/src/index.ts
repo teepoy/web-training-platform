@@ -46,6 +46,9 @@ export type {
   UseBlinkControllerReturn,
 } from "./composables/useBlinkController";
 
+export { createDataPipeline as useDataPipeline, DATA_PIPELINE_KEY } from "./composables/useDataPipeline";
+export type { Annotation, DataNode, DataPipeline } from "./composables/useDataPipeline";
+
 export { usePagePanels } from "./composables/usePagePanels";
 export type {
   UsePagePanelsOptions,
