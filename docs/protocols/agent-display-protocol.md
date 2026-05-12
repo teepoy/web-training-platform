@@ -209,22 +209,6 @@ Two tiers:
 
 The metadata block is assembled at session start and included in the system prompt.
 
-## MCP Server
-
-The `libs/mcp-server/` package exposes platform tools via the Model Context Protocol for external agent access:
-
-```bash
-FINETUNE_API_URL=http://localhost:8000/api/v1 finetune-mcp
-```
-
-**Read tools:** `list_datasets`, `get_dataset`, `query_data`, `list_jobs`, `get_job`, `list_presets`, `list_models`, `list_prediction_jobs`, `list_schedules`
-
-**Write tools:** `create_dataset`, `create_job`, `cancel_job`, `run_predictions`, `create_schedule`, `delete_schedule`
-
-**Agent tools:** `agent_chat` — send a message to the platform's built-in global AI agent and receive its response. Supports `session_id` for conversation continuity and `context` for page-aware responses.
-
-**Surface tools:** `get_surface_state`, `set_panel`, `remove_panel`, `export_surface`, `import_surface`
-
 ## Constraints
 
 - Max 8 panels per surface

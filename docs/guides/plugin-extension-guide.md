@@ -129,16 +129,3 @@ To add a new backend plugin route:
 
 There are currently no built-in backend plugin routes. Existing import and
 export plugins use the typed frontend API client against core API endpoints.
-
-## MCP server plugin auto-discovery
-
-MCP plugin modules are auto-discovered from `libs/mcp-server/finetune_mcp/plugins/` by:
-
-- `libs/mcp-server/finetune_mcp/plugins/loader.py`
-
-Each plugin module can export:
-
-- `TOOLS: list[Tool]`
-- `HANDLERS: dict[str, Callable[[dict[str, Any]], Any]]`
-
-Loaded plugin tools are merged into MCP tool listing and dispatch in `libs/mcp-server/finetune_mcp/server.py`.

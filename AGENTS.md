@@ -18,8 +18,6 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ├── libs/plugin-sdk/    # @platform/plugin-sdk — TypeScript plugin contract types & factories
 ├── libs/web-ui/        # @platform/web-ui — shared Vue/Naive UI components and composables
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
-├── libs/mcp-server/    # MCP server — exposes platform tools to external agents
-├── libs/mcp-server/finetune_mcp/plugins/  # MCP tool plugins — auto-discovered by loader.py
 ├── infra/k8s/          # minikube/kubeflow manifests
 ├── infra/compose/      # docker compose smoke stack
 └── docs/               # architecture and endpoint notes
@@ -114,7 +112,6 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Schedule service          | `apps/api/app/services/scheduler.py`                                         |
 | Agent runtime             | `apps/api/app/agent/`                                                        |
 | Agent display protocol    | `docs/protocols/agent-display-protocol.md`                                   |                                                                     |
-| MCP server                | `libs/mcp-server/`                                                           |                                                                     |
 | Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`                                   |                                                                     |
 | Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`                                 |                                                                     |
 | Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue`       |                                                                     |
@@ -142,7 +139,6 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Plugin type selector      | `libs/web-ui/src/components/plugin-type-selector/PluginTypeSelector.vue`     | Card grid for selecting a plugin type                               |
 | Backend plugin registry   | `apps/api/app/plugins/registry.py`                                           | Explicit list of backend plugin routers                             |
 | Backend plugin routes     | `apps/api/app/plugins/*/router.py`                                           | One FastAPI router per backend plugin                               |
-| MCP plugin loader         | `libs/mcp-server/finetune_mcp/plugins/loader.py`                             | Auto-discovers modules with `TOOLS` + `dispatch()`                  |
 | Plugin extension guide    | `docs/guides/plugin-extension-guide.md`                                      | Step-by-step guide for all 4 plugin types                           |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
 | Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
@@ -160,7 +156,6 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `ClassifyAgent`         | service    | `apps/api/app/agent/runtime.py`                                          | LLM tool-calling loop for classify sidebar                   |
 | `GlobalAgent`           | service    | `apps/api/app/agent/global_runtime.py`                                   | Platform-wide LLM agent (read/write/sidebar)                 |
 | `useGlobalAgent`        | composable | `apps/web/src/composables/useGlobalAgent.ts`                             | Global agent chat + panel injection                          |
-| `PlatformClient`        | MCP        | `libs/mcp-server/finetune_mcp/client.py`                                 | HTTP client for MCP server                                   |
 | `router`                | Vue Router | `apps/web/src/router.ts`                                                 | `/datasets`, `/jobs`, `/schedules`                           |
 | `FinetuneClient`        | SDK        | `libs/python-sdk/ftsdk/client.py`                                        | Sync HTTP wrapper                                            |
 | `PreviewService`        | service    | `apps/api/app/services/preview_service.py`                               | Session lifecycle, item pagination, persist handoff          |
@@ -184,7 +179,6 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PageProvider`          | component  | `libs/web-ui/src/components/page-provider/PageProvider.vue`               | Template-friendly wrapper for usePagePanels                   |
 | `useWaferHelpers`       | composable | `libs/web-ui/src/composables/useWaferHelpers.ts`                          | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
 | `PLUGIN_ROUTERS`        | list       | `apps/api/app/plugins/registry.py`                                       | Explicit list of all backend plugin routers                  |
-| `load_plugin_tools`     | function   | `libs/mcp-server/finetune_mcp/plugins/loader.py`                         | Returns merged MCP tool list from all plugin modules         |
 | `providePluginContext`  | decorator  | `apps/web/.storybook/mocks/pluginContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
 | `mockImportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for import plugin props               |
 | `mockExportProps`       | factory    | `apps/web/.storybook/mocks/pluginProps.ts`                               | Storybook mock factory for export plugin props               |
@@ -218,7 +212,6 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't import from `widgetContract.ts` for new plugin code — import from `@platform/plugin-sdk` directly; the shim is kept only for backward compatibility.
 - Don't add hardcoded import/export/preview modals to views — use `PluginFlowModal` and `PluginTypeSelector` for the 2-step plugin selection flow.
 - Backend plugin routes must live under `apps/api/app/plugins/<name>/router.py`; they must be added to `PLUGIN_ROUTERS` in `apps/api/app/plugins/registry.py` — don't manually import them in `main.py`.
-- MCP plugin modules must export `TOOLS: list[dict]` and `dispatch(name, args)` — the loader merges these automatically.
 
 ### Code Quality
 - Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.

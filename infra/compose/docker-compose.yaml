@@ -119,7 +119,6 @@ services:
       - "8000:8000"
     volumes:
       - ../../apps/api:/app/apps/api
-      - ../../libs/python-sdk:/app/libs/python-sdk
     command:
       [
         "/bin/sh",

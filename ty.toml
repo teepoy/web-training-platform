@@ -18,7 +18,6 @@ exclude = [
     "apps/api/alembic/versions/**",
     "apps/api/tests/**",
     "examples/**",
-    "libs/mcp-server/**",
     "libs/protos/**",
     "scripts/seed_imagenet_dev.py",
     "scripts/seed_imagenet_real.py",
