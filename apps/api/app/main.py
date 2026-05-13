@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from typing import cast
-from urllib.parse import urlencode
 
 import httpx
 from fastapi import (
@@ -20,7 +19,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
@@ -53,8 +52,6 @@ from app.api.schemas import (
     MembershipResponse,
     ModelResponse,
     ModelUploadTemplateResponse,
-    OAuthProviderInfo,
-    OAuthRegisterRequest,
     OrgResponse,
     PaginatedResponse,
     PersistExportResponse,
@@ -106,6 +103,9 @@ from app.api.schemas import (
     PreviewSessionResponse,
     PreviewItemsResponse,
     PreviewItemResponse,
+    SparseManifestSummary,
+    SparseShardSummary,
+    SparseSummaryResponse,
 )
 from app.api.deps import (
     get_current_org,
@@ -116,6 +116,8 @@ from app.api.deps import (
 from app.services.scheduler import SchedulerService, get_scheduler_service
 from app.container import Container
 from app.routers.registry import EXTENSION_ROUTERS
+from app.domain.dataset_payload import DatasetManifest
+from app.services.dataset_payload_store import DatasetPayloadStore
 from app.db.models import (
     OrgMembershipORM,
     OrganizationORM,
@@ -132,23 +134,15 @@ from app.domain.models import (
     TrainingJob,
     User,
 )
-from app.domain.types import DatasetType, TaskType
+from app.domain.types import DatasetStorageMode, DatasetType, TaskType
 from app.services.auth import (
     create_access_token,
     create_personal_access_token,
     hash_password,
     verify_password,
 )
-from app.services.oauth import (
-    build_authorize_url,
-    create_oauth_state_token,
-    decode_oauth_state_token,
-    exchange_code_for_token,
-    fetch_user_info,
-    generate_oauth_state,
-    get_oauth_provider_config,
-    register_oauth_user,
-)
+from app.services.dataset_capability_guard import assert_not_sparse
+from app.services.sparse_manifest import SparseManifestReader
 from app.services.compatibility import (
     UPLOAD_TEMPLATE_DEFINITIONS,
     validate_dataset_contract,
@@ -239,7 +233,12 @@ def _with_ls_url(dataset: Dataset) -> Dataset:
     """Compute ls_project_url at response time from config.
 
     Uses external_url (browser-facing) if available, falls back to url (internal).
+    Sparse datasets use a sentinel ``ls_project_id`` — no LS URL is returned.
     """
+    from app.domain.models import SPARSE_NO_LS
+
+    if dataset.ls_project_id == SPARSE_NO_LS:
+        return dataset
     cfg = container.config()
     # Prefer external_url for browser access, fall back to internal url
     ls_url = str(cfg.label_studio.external_url or cfg.label_studio.url).rstrip("/")
@@ -280,37 +279,54 @@ async def create_dataset(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # LS-first: create project, fail if LS fails
-    try:
-        from app.services.label_studio import LabelStudioClient as _LSC
+    from app.domain.models import SPARSE_NO_LS
 
-        ls_client = container.label_studio_client()
-        if payload.task_spec.task_type == TaskType.VQA:
-            label_config = _LSC.generate_vqa_config()
-        else:
-            label_config = _LSC.generate_image_classification_config(
-                payload.task_spec.label_space
-            )
-        project = await ls_client.create_project(payload.name, label_config)
-        ls_project_id = str(project.get("id", ""))
-        if not ls_project_id:
+    if payload.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        ls_project_id = SPARSE_NO_LS
+    else:
+        # LS-first: create project, fail if LS fails
+        try:
+            from app.services.label_studio import LabelStudioClient as _LSC
+
+            ls_client = container.label_studio_client()
+            if payload.task_spec.task_type == TaskType.VQA:
+                label_config = _LSC.generate_vqa_config()
+            else:
+                label_config = _LSC.generate_image_classification_config(
+                    payload.task_spec.label_space
+                )
+            project = await ls_client.create_project(payload.name, label_config)
+            ls_project_id = str(project.get("id", ""))
+            if not ls_project_id:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Label Studio project creation returned no ID.",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
             raise HTTPException(
-                status_code=502, detail="Label Studio project creation returned no ID."
+                status_code=502, detail=f"Label Studio project creation failed: {exc}"
             )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Label Studio project creation failed: {exc}"
-        )
     dataset = Dataset(
         name=payload.name,
         dataset_type=dataset_type,
         task_spec=payload.task_spec,
         org_id=org.id,
         ls_project_id=ls_project_id,
+        storage_mode=payload.storage_mode,
     )
     dataset = await container.repository().create_dataset(dataset)
+    if payload.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        manifest = DatasetManifest(
+            dataset_id=dataset.id,
+            storage_mode=dataset.storage_mode.value,
+            shard_count=0,
+            total_rows=0,
+        )
+        await DatasetPayloadStore(container.artifact_storage()).put_manifest(
+            manifest, org_id=org.id
+        )
     return _with_ls_url(dataset)
 
 
@@ -335,6 +351,75 @@ async def get_dataset(
     return _with_ls_url(dataset)
 
 
+@app.get(
+    "/api/v1/datasets/{dataset_id}/sparse-summary",
+    response_model=SparseSummaryResponse,
+)
+async def get_sparse_summary(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> SparseSummaryResponse:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if dataset.storage_mode != DatasetStorageMode.FILE_SHARD_SPARSE:
+        raise HTTPException(
+            status_code=409,
+            detail="This endpoint is for file_shard_sparse datasets only",
+        )
+
+    store = DatasetPayloadStore(container.artifact_storage())
+    try:
+        manifest = await store.get_manifest(dataset_id, org.id)
+    except (FileNotFoundError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset manifest not found — dataset payload may not be initialized",
+        )
+
+    reader = SparseManifestReader()
+    sample_rows: list[dict[str, object]] = []
+    if manifest.shards:
+        first_shard = manifest.shards[0]
+        try:
+            sample_rows = await reader.read_row_batch(
+                first_shard.uri,
+                0,
+                min(5, first_shard.row_count),
+                container.artifact_storage(),
+            )
+        except Exception as exc:
+            _logger.warning("Failed to read sample rows from shard 0: %s", exc)
+
+    return SparseSummaryResponse(
+        dataset_id=dataset.id,
+        name=dataset.name,
+        dataset_type=dataset.dataset_type.value,
+        storage_mode=dataset.storage_mode.value,
+        manifest=SparseManifestSummary(
+            shard_count=manifest.shard_count,
+            total_rows=manifest.total_rows,
+            schema_columns=[
+                {"name": c.name, "type": c.type}
+                for c in (manifest.schema_columns or [])
+            ],
+            created_at=manifest.created_at.isoformat(),
+        ),
+        shards=[
+            SparseShardSummary(
+                shard_index=s.shard_index,
+                row_count=s.row_count,
+                format=s.format,
+                byte_size=s.byte_size,
+            )
+            for s in manifest.shards
+        ],
+        sample_rows=sample_rows,
+    )
+
+
 @app.delete("/api/v1/datasets/{dataset_id}", status_code=204)
 async def delete_dataset(
     dataset_id: str,
@@ -347,17 +432,22 @@ async def delete_dataset(
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    if dataset.ls_project_id:
-        try:
-            await container.label_studio_client().delete_project(
-                int(dataset.ls_project_id)
-            )
-        except LabelStudioNotFoundError:
-            pass
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502, detail=f"Failed to delete Label Studio project: {exc}"
-            )
+    if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        store = DatasetPayloadStore(storage=container.artifact_storage())
+        await store.delete_dataset_payload(dataset_id, org_id=org.id)
+    else:
+        if dataset.ls_project_id:
+            try:
+                await container.label_studio_client().delete_project(
+                    int(dataset.ls_project_id)
+                )
+            except LabelStudioNotFoundError:
+                pass
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to delete Label Studio project: {exc}",
+                )
 
     deleted = await container.repository().delete_dataset(dataset_id, org_id=org.id)
     if not deleted:
@@ -420,6 +510,7 @@ async def create_sample(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     if not dataset.ls_project_id:
         raise HTTPException(
             status_code=500,
@@ -469,6 +560,7 @@ async def import_samples(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     if not dataset.ls_project_id:
         raise HTTPException(
             status_code=500,
@@ -555,6 +647,7 @@ async def import_vqa_samples(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     if dataset.task_spec.task_type != TaskType.VQA:
         raise HTTPException(status_code=400, detail="dataset task_type must be 'vqa'")
     if not dataset.ls_project_id:
@@ -626,6 +719,10 @@ async def list_samples(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> PaginatedResponse[Sample]:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     items, total = await container.repository().list_samples(
         dataset_id, offset=offset, limit=limit
     )
@@ -648,6 +745,7 @@ async def list_samples_with_labels_endpoint(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    assert_not_sparse(dataset)
     items, total = await container.repository().list_samples_with_labels(
         dataset_id=dataset_id,
         offset=offset,
@@ -672,6 +770,7 @@ async def get_annotation_stats(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    assert_not_sparse(dataset)
     stats = await container.repository().get_annotation_stats(dataset_id)
     return DatasetAnnotationStats(**stats)
 
@@ -819,6 +918,7 @@ async def bulk_create_annotations(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     created = 0
     for item in payload.annotations:
         ann = Annotation(
@@ -844,6 +944,7 @@ async def sync_annotations_to_ls(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    assert_not_sparse(dataset)
 
     if not dataset.ls_project_id:
         raise HTTPException(
@@ -915,6 +1016,7 @@ async def create_training_job(
     )
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     registry = container.preset_registry()
     preset = registry.get_preset(payload.preset_id)
     if preset is None:
@@ -1119,6 +1221,8 @@ async def _build_export_data(dataset_id: str):
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
+    assert_not_sparse(dataset)
+
     if not dataset.ls_project_id:
         raise HTTPException(
             status_code=500,
@@ -1213,6 +1317,7 @@ async def extract_features(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
 
     embed_model: str = (dataset.embed_config or {}).get(
         "model", "openai/clip-vit-base-patch32"
@@ -1274,8 +1379,10 @@ async def similarity_search(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ):
-    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     sample = await container.repository().get_sample(sample_id)
     if sample is None or sample.dataset_id != dataset_id:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -1290,8 +1397,10 @@ async def selection_metrics(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> dict:
-    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     samples, _ = await container.repository().list_samples(dataset_id, limit=100_000)
     sample_ids = [s.id for s in samples]
     fs = container.feature_ops()
@@ -1309,8 +1418,10 @@ async def uncovered_hints(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> dict:
-    if await container.repository().get_dataset(dataset_id, org_id=org.id) is None:
+    dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     return await container.feature_ops().uncovered_cluster_hints(dataset_id)
 
 
@@ -2023,6 +2134,13 @@ async def save_review_annotations(
     org: Organization = Depends(get_current_org),
 ) -> SaveReviewAnnotationsResponse:
     """Save reviewed predictions as annotations for a review action."""
+    action = await container.repository().get_review_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Review action not found")
+    dataset = await container.repository().get_dataset(action.dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    assert_not_sparse(dataset)
     try:
         items = [item.model_dump() for item in payload.items]
         (
@@ -2267,140 +2385,6 @@ async def login(payload: LoginRequest) -> LoginResponse:
         created_at=user_orm.created_at,
     )
     return LoginResponse(access_token=token, user=user_resp)
-
-
-@app.get("/api/v1/auth/oauth/{provider}")
-async def oauth_authorize(provider: str, request: Request) -> RedirectResponse:
-    provider_config = get_oauth_provider_config(provider)
-    if provider_config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown OAuth provider: {provider}"
-        )
-    if not provider_config.get("enabled", False):
-        raise HTTPException(status_code=404, detail="OAuth provider is disabled")
-    if not provider_config.get("client_id"):
-        raise HTTPException(
-            status_code=400, detail=f"OAuth provider '{provider}' is not configured"
-        )
-    state = generate_oauth_state()
-    redirect_uri = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
-    url = build_authorize_url(provider_config, state, redirect_uri)
-    response = RedirectResponse(url=url)
-    response.set_cookie(
-        key="oauth_state",
-        value=state,
-        max_age=600,
-        httponly=True,
-        samesite="lax",
-    )
-    return response
-
-
-@app.get("/api/v1/auth/oauth/{provider}/callback")
-async def oauth_callback(
-    provider: str,
-    code: str,
-    state: str,
-    error: str | None = None,
-    request: Request = None,  # type: ignore[assignment]
-) -> RedirectResponse:
-    provider_config = get_oauth_provider_config(provider)
-    if provider_config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown OAuth provider: {provider}"
-        )
-    if error:
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
-    state_cookie = request.cookies.get("oauth_state")
-    if not state_cookie or state_cookie != state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    redirect_uri = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
-    access_token = await exchange_code_for_token(provider_config, code, redirect_uri)
-    user_info = await fetch_user_info(provider_config, access_token)
-    user_info["provider"] = provider
-
-    cfg = container.config()
-    frontend_url = cfg.get("app", {}).get("frontend_url", "http://localhost:5173")
-
-    repo = container.repository()
-    if user_info.get("provider_id"):
-        user_orm = await repo.get_user_by_email(user_info["email"])
-    else:
-        user_orm = None
-
-    if user_orm is not None:
-        token = create_access_token({"sub": user_orm.id})
-        redirect_url = f"{frontend_url}/auth/oauth/success?token={token}"
-        response = RedirectResponse(url=redirect_url)
-        response.delete_cookie("oauth_state")
-        return response
-
-    state_token = create_oauth_state_token(user_info)
-    params = {
-        "state_token": state_token,
-        "email": user_info.get("email", ""),
-        "name": user_info.get("name", ""),
-        "provider": provider,
-        "provider_id": user_info.get("provider_id", ""),
-    }
-    redirect_url = f"{frontend_url}/auth/oauth/register?{urlencode(params)}"
-    response = RedirectResponse(url=redirect_url)
-    response.delete_cookie("oauth_state")
-    return response
-
-
-@app.post("/api/v1/auth/oauth/register", response_model=LoginResponse)
-async def oauth_register(payload: OAuthRegisterRequest) -> LoginResponse:
-    try:
-        user_info = decode_oauth_state_token(payload.state_token)
-    except Exception:
-        raise HTTPException(
-            status_code=400, detail="Invalid or expired registration token"
-        )
-    required = ["email", "name", "provider", "provider_id"]
-    for key in required:
-        if key not in user_info or not user_info[key]:
-            raise HTTPException(
-                status_code=400, detail=f"Missing required field: {key}"
-            )
-    repo = container.repository()
-    existing = await repo.get_user_by_email(user_info["email"])
-    if existing is not None:
-        raise HTTPException(
-            status_code=409, detail="A user with this email already exists"
-        )
-    user_orm = await register_oauth_user(
-        repo,
-        email=user_info["email"],
-        name=payload.name,
-        oauth_provider=user_info["provider"],
-        oauth_provider_id=user_info["provider_id"],
-    )
-    token = create_access_token({"sub": user_orm.id})
-    user_resp = UserResponse(
-        id=user_orm.id,
-        email=user_orm.email,
-        name=user_orm.name,
-        is_superadmin=user_orm.is_superadmin,
-        created_at=user_orm.created_at,
-    )
-    return LoginResponse(access_token=token, user=user_resp)
-
-
-@app.get("/api/v1/auth/oauth/providers", response_model=list[OAuthProviderInfo])
-async def list_oauth_providers() -> list[OAuthProviderInfo]:
-    cfg = container.config()
-    providers = []
-    for provider_id, prov in cfg.oauth.providers.items():
-        if prov.get("enabled", False) and prov.get("client_id"):
-            providers.append(
-                OAuthProviderInfo(
-                    id=provider_id,
-                    display_name=prov.get("display_name", provider_id),
-                    enabled=True,
-                )
-            )
-    return providers
 
 
 @app.get("/api/v1/auth/me", response_model=UserWithOrgsResponse)
@@ -3011,6 +2995,9 @@ async def query_dataset_data(
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if body.query_type == "wafer-points":
+        assert_not_sparse(dataset)
 
     from app.agent.tools import execute_query_data
 

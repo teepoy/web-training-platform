@@ -1,5 +1,6 @@
 export type TaskType = "classification" | "vqa";
 export type DatasetType = "image_classification" | "image_vqa";
+export type DatasetStorageMode = "db_full" | "file_shard_sparse";
 export type ModelFramework = "pytorch" | "dspy";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
@@ -63,6 +64,59 @@ export interface Dataset {
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
+  storage_mode: DatasetStorageMode;
+  capabilities?: Record<string, boolean>;
+}
+
+export interface SparseShardSummary {
+  shard_index: number;
+  row_count: number;
+  format: string;
+  byte_size: number;
+}
+
+export interface SparseManifestSummary {
+  shard_count: number;
+  total_rows: number;
+  schema_columns: Array<{ name: string; type: string }>;
+  created_at: string;
+}
+
+export interface SparseSummaryResponse {
+  dataset_id: string;
+  name: string;
+  dataset_type: string;
+  storage_mode: string;
+  manifest: SparseManifestSummary;
+  shards: SparseShardSummary[];
+  sample_rows: Array<Record<string, unknown>>;
+}
+
+export interface SparsePredictionResult {
+  locator: { shard_index: number; row_index: number };
+  predicted_label: string;
+  confidence?: number | null;
+  error?: string | null;
+}
+
+export interface SparsePredictionShard {
+  shard_uri: string;
+  shard_index: number;
+  model_id: string;
+  model_version?: string | null;
+  results: SparsePredictionResult[];
+  created_at: string;
+}
+
+export interface SparsePredictionJobResult {
+  job_id: string;
+  dataset_id: string;
+  model_id: string;
+  model_version?: string | null;
+  shards: SparsePredictionShard[];
+  total_processed: number;
+  total_successful: number;
+  created_at: string;
 }
 
 export interface Sample {

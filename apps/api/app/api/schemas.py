@@ -7,7 +7,7 @@ from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models import ModelSpec, TaskSpec
-from app.domain.types import DatasetType
+from app.domain.types import DatasetStorageMode, DatasetType
 
 T = TypeVar("T")
 
@@ -21,6 +21,7 @@ class CreateDatasetRequest(BaseModel):
     name: str
     dataset_type: DatasetType | None = None
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
+    storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
 
 
 class UpdateLabelSpaceRequest(BaseModel):
@@ -1055,28 +1056,29 @@ class PersistStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# OAuth schemas
+# Sparse summary
 # ---------------------------------------------------------------------------
 
 
-class OAuthCallbackResponse(BaseModel):
-    action: str
-    access_token: str | None = None
-    user: UserResponse | None = None
-    state_token: str | None = None
-    email: str | None = None
-    name: str | None = None
-    provider: str | None = None
-    provider_id: str | None = None
+class SparseShardSummary(BaseModel):
+    shard_index: int
+    row_count: int
+    format: str
+    byte_size: int
 
 
-class OAuthRegisterRequest(BaseModel):
-    state_token: str
+class SparseManifestSummary(BaseModel):
+    shard_count: int
+    total_rows: int
+    schema_columns: list[dict[str, str]]
+    created_at: str
+
+
+class SparseSummaryResponse(BaseModel):
+    dataset_id: str
     name: str
-
-
-# OAuth provider info
-class OAuthProviderInfo(BaseModel):
-    id: str
-    display_name: str
-    enabled: bool
+    dataset_type: str
+    storage_mode: str
+    manifest: SparseManifestSummary
+    shards: list[SparseShardSummary]
+    sample_rows: list[dict[str, object]]

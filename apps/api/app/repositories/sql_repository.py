@@ -51,7 +51,7 @@ from app.domain.models import (
     TrainingJob,
     TrainingPreset,
 )
-from app.domain.types import DatasetType, JobStatus
+from app.domain.types import DatasetStorageMode, DatasetType, JobStatus
 
 
 def _utcnow() -> datetime:
@@ -85,6 +85,7 @@ class SqlRepository:
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
                 ls_project_id=dataset.ls_project_id,
+                storage_mode=dataset.storage_mode.value,
             )
             session.add(row)
             await session.commit()
@@ -110,6 +111,7 @@ class SqlRepository:
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
                     ls_project_id=r.ls_project_id,
+                    storage_mode=cast(DatasetStorageMode, r.storage_mode),
                 )
                 for r in rows
             ]
@@ -134,6 +136,7 @@ class SqlRepository:
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
                 ls_project_id=row.ls_project_id,
+                storage_mode=cast(DatasetStorageMode, row.storage_mode),
             )
 
     async def update_dataset_embed_config(
@@ -264,6 +267,7 @@ class SqlRepository:
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
                 ls_project_id=row.ls_project_id,
+                storage_mode=cast(DatasetStorageMode, row.storage_mode),
             )
 
     async def set_dataset_public(self, dataset_id: str, is_public: bool) -> bool:

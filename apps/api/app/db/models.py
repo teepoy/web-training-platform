@@ -41,6 +41,9 @@ class DatasetORM(Base):
     )
     embed_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ls_project_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_mode: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="db_full", server_default="db_full"
+    )
 
 
 class SampleORM(Base):
@@ -66,9 +69,7 @@ class UserORM(Base):
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    oauth_provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_superadmin: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="0"
     )
@@ -76,8 +77,6 @@ class UserORM(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
-
-    __table_args__ = (UniqueConstraint("oauth_provider", "oauth_provider_id"),)
 
 
 class PersonalAccessTokenORM(Base):

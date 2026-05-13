@@ -322,7 +322,31 @@ class PredictionService:
         -------
         BatchPredictionResult
             Summary of prediction results including per-sample outcomes.
+
+        .. rubric:: Storage-mode behaviour
+
+        * ``db_full`` — all samples are materialised as ``SampleORM`` rows.
+          The paginated `list_samples` path or explicit `sample_ids` path
+          is used unchanged.
+        * ``file_shard_sparse`` (Phase 1) — ``list_samples`` returns no
+          rows, so `sample_ids=None` yields 0 processed samples and a
+          successful empty result.  This is the intentional Phase 1
+          behaviour: sparse datasets accept prediction job requests
+          without crash.
+        * ``file_shard_sparse`` (future) — will dispatch to
+          :func:`sparse_prediction.run_sparse_prediction` which reads
+          directly from shard payloads instead of iterating DB rows.
         """
+        # -----------------------------------------------------------------
+        # TODO(sparse-native-prediction): wire SparsePredictionRunner here
+        # once the full shard-to-predictor loop is implemented.
+        #
+        # Integration point:
+        #   from app.services.sparse_prediction import SparsePredictionRunner
+        #   if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        #       runner = SparsePredictionRunner(...)
+        #       return await runner.run(dataset, model, ...)
+        # -----------------------------------------------------------------
         started_at = datetime.now(UTC)
 
         # Get model info

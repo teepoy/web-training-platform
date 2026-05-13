@@ -12,6 +12,7 @@
         {{ datasetQuery.data.value?.name ?? datasetId }}
       </n-text>
       <n-tag v-if="isReviewMode" type="warning" size="small">Prediction Review Mode</n-tag>
+      <n-tag v-if="isSparse" type="info" size="small">Sparse Storage</n-tag>
       <div style="margin-left: auto; display: flex; align-items: center; gap: 12px">
         <n-text depth="3" style="white-space: nowrap">View</n-text>
         <n-radio-group v-model:value="prefs.layout" size="small">
@@ -23,6 +24,10 @@
         <n-text depth="3" style="white-space: nowrap">{{ prefs.thumbSize }}px</n-text>
       </div>
     </div>
+
+    <n-alert v-if="isSparse" type="warning" :bordered="false" style="margin-bottom: 4px">
+      Sparse dataset — prediction / reclassify workflows only. Full annotation and LS sync are not available.
+    </n-alert>
 
     <n-grid :cols="2" :x-gap="12" class="workflow-grid">
       <n-gi>
@@ -53,6 +58,9 @@
       </n-gi>
       <n-gi>
         <n-card title="Prediction Review" size="small">
+          <n-text v-if="isSparse" depth="3" style="font-size: 12px; display: block; margin-bottom: 8px">
+            Prediction jobs are supported. Per-sample review and LS sync are not available for sparse datasets.
+          </n-text>
           <n-space vertical>
             <n-select
               v-model:value="selectedModelId"
@@ -95,6 +103,16 @@
     </n-card>
 
     <div class="classify-body">
+      <!-- Sparse dataset: no per-sample browsing or annotation -->
+      <n-result
+        v-if="isSparse"
+        status="info"
+        title="Sparse Dataset"
+        description="Per-sample browsing and annotation are not available for file-backed sparse datasets. Use the prediction and training workflows above."
+        style="flex: 1; align-self: center"
+      />
+
+      <template v-else>
       <div ref="browserShellRef" class="classify-browser-shell" tabindex="-1" @keydown="onKeyDown">
         <SampleBrowser
           ref="gridRef"
@@ -132,14 +150,14 @@
                   <span v-if="idx < 9" class="classify-label-shortcut">{{ idx + 1 }}</span>
                 </div>
               </div>
-              <button v-if="!isReviewMode" class="classify-label-add" @click="showAddLabelModal = true">
+              <button v-if="!isReviewMode && !isSparse" class="classify-label-add" @click="showAddLabelModal = true">
                 + Add label
               </button>
             </div>
           </template>
           <template #bar-left>
             <template v-if="isReviewMode">
-              <n-button size="tiny" :loading="syncCollectionMutation.isPending.value" @click="syncCollectionToLs">
+              <n-button size="tiny" :loading="syncCollectionMutation.isPending.value" :disabled="isSparse" @click="syncCollectionToLs">
                 Sync to LS
               </n-button>
               <n-button size="tiny" @click="resetReviewEdits">Reset Edits</n-button>
@@ -171,6 +189,7 @@
         :collapsed="prefs.sidebarCollapsed"
         @update:collapsed="prefs.setSidebarCollapsed"
       />
+      </template>
     </div>
 
     <n-modal v-model:show="showAddLabelModal" preset="dialog" title="Add New Label">
@@ -318,6 +337,8 @@ const datasetQuery = useQuery({
 
 const selectedDataset = computed<Dataset | undefined>(() => datasetQuery.data.value);
 
+const isSparse = computed(() => selectedDataset.value?.storage_mode === "file_shard_sparse");
+
 const labelSpace = computed<string[]>(() => selectedDataset.value?.task_spec?.label_space ?? []);
 
 const labelFilter = ref<string | null>(null);
@@ -349,7 +370,9 @@ const { samples, totalCount, isLoading, loadMore, reset: resetLoader } = useSamp
 });
 
 onMounted(() => {
-  resetLoader();
+  if (!isSparse.value) {
+    resetLoader();
+  }
 
   if (route.query.previewPersistSession) {
     message.success('Dataset imported from preview session.');
@@ -1271,7 +1294,9 @@ watch(datasetId, () => {
   selectedIds.value = new Set();
   selectedCount.value = 0;
   gridRef.value?.clearSelection();
-  resetLoader();
+  if (!isSparse.value) {
+    resetLoader();
+  }
 });
 
 watch(isReviewMode, () => {

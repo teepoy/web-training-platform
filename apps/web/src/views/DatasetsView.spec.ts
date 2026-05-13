@@ -14,6 +14,7 @@ function makeDataset(taskType: Dataset["task_spec"]["task_type"]): Dataset {
       label_space: ["label-a"],
     },
     created_at: "2026-05-08T00:00:00.000Z",
+    storage_mode: "db_full",
   };
 }
 
@@ -23,6 +24,7 @@ function makeMalformedDataset(overrides: Omit<Partial<Dataset>, "task_spec"> & {
     name: overrides.name ?? "malformed dataset",
     dataset_type: overrides.dataset_type ?? "image_classification",
     created_at: overrides.created_at ?? "2026-05-08T00:00:00.000Z",
+    storage_mode: "db_full",
     ...overrides,
   } as Dataset;
 }
