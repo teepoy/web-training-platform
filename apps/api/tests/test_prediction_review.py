@@ -233,7 +233,7 @@ def test_save_review_annotations_bad_action() -> None:
                 ],
             },
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

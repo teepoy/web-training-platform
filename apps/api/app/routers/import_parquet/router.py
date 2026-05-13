@@ -12,6 +12,7 @@ from app.api.deps import get_current_org, get_current_user
 from app.api.schemas import BulkCreateSampleItem, BulkCreateSampleResponse
 from app.domain.models import Annotation, Organization, Sample, User
 from app.domain.types import TaskType
+from app.services.dataset_capability_guard import assert_not_sparse
 from app.services.label_studio import platform_annotation_to_ls
 
 router = APIRouter(prefix="/api/v1/plugins/import-parquet", tags=["plugins"])
@@ -148,6 +149,7 @@ async def import_parquet(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    assert_not_sparse(dataset)
     if not dataset.ls_project_id:
         raise HTTPException(
             status_code=500,

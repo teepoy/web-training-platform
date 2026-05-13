@@ -11,6 +11,14 @@
           <n-empty description="No sample selected" />
         </div>
 
+        <div v-else-if="isSparse" style="padding: 24px">
+          <n-result
+            status="info"
+            title="Sparse Dataset"
+            description="Detailed view not available for sparse datasets in this release."
+          />
+        </div>
+
         <div v-else style="padding: 0 4px">
           <!-- ================================================================ -->
           <!-- 1. Image Preview                                                  -->
@@ -310,12 +318,15 @@ import type { Annotation } from "../types";
 // ---------------------------------------------------------------------------
 // Props / Emits
 // ---------------------------------------------------------------------------
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   sampleId: string | null;
   datasetId: string;
   labelSpace: string[];
   show: boolean;
-}>();
+  sparse?: boolean;
+}>(), {
+  sparse: false,
+});
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -326,6 +337,8 @@ const emit = defineEmits<{
 // Query client
 // ---------------------------------------------------------------------------
 const qc = useQueryClient();
+
+const isSparse = computed(() => !!props.sparse);
 
 // ---------------------------------------------------------------------------
 // Fetch sample

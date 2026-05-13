@@ -8,9 +8,16 @@ from app.domain.types import JobStatus
 
 
 class ArtifactStorage(Protocol):
-    async def put_bytes(self, object_name: str, data: bytes, content_type: str = "application/octet-stream") -> str: ...
+    async def put_bytes(
+        self,
+        object_name: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> str: ...
 
     async def get_bytes(self, uri: str) -> bytes: ...
+
+    async def delete(self, uri: str) -> None: ...
 
 
 class TrainingExecutionEngine(Protocol):
@@ -18,7 +25,9 @@ class TrainingExecutionEngine(Protocol):
 
     async def status(self, external_job_id: str) -> JobStatus: ...
 
-    async def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]: ...
+    async def stream_events(
+        self, external_job_id: str
+    ) -> AsyncIterator[TrainingEvent]: ...
 
     async def cancel(self, external_job_id: str) -> bool: ...
 

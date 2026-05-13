@@ -2,6 +2,7 @@ import { req } from "../client/apiClient";
 
 export type TaskType = "classification" | "vqa";
 export type DatasetType = "image_classification" | "image_vqa";
+export type DatasetStorageMode = "db_full" | "file_shard_sparse";
 
 export interface TaskSpec {
   task_type: TaskType;
@@ -20,6 +21,8 @@ export interface Dataset {
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
+  storage_mode: DatasetStorageMode;
+  capabilities?: Record<string, boolean>;
 }
 
 export interface DatasetAnnotationStats {

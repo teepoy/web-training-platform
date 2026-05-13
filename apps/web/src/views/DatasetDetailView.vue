@@ -30,6 +30,7 @@
           <n-h2 style="margin: 0">{{ dataset.name }}</n-h2>
           <n-text depth="3" style="font-size: 12px">
             Task: {{ dataset.task_spec.task_type }} &nbsp;|&nbsp; ID: {{ dataset.id }}
+            <template v-if="isSparse"> &nbsp;|&nbsp; <n-tag type="info" size="small">Sparse Storage</n-tag></template>
           </n-text>
           <div v-if="dataset.ls_project_id" style="margin-top: 4px">
             <n-tag type="success" size="small">
@@ -64,45 +65,112 @@
         <!-- TAB 1: Samples -->
         <!-- ============================================================ -->
         <n-tab-pane name="samples" tab="Samples">
-          <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
-            <n-radio-group v-model:value="prefs.layout" size="small">
-              <n-radio-button value="grid">Grid</n-radio-button>
-              <n-radio-button value="list">List</n-radio-button>
-            </n-radio-group>
-            <n-button type="primary" @click="showImportFlow = true">
-              Add Sample
-            </n-button>
-          </div>
+          <!-- Sparse dataset: no per-sample browsing -->
+          <template v-if="isSparse">
+            <n-result
+              status="info"
+              title="Sparse Dataset"
+              description="This dataset uses file-backed sparse storage. Individual sample browsing is not available."
+              style="margin-top: 48px"
+            >
+              <template #footer>
+                <n-space vertical size="large" align="center" style="max-width: 700px; width: 100%">
+                  <n-spin v-if="sparseSummaryQuery.isLoading.value" size="small" />
 
-          <div class="ds-samples-layout">
-            <SampleBrowser
-              :items="filteredSamples"
-              :total-count="sampleLoader.totalCount.value"
-              :thumb-size="prefs.thumbSize"
-              :layout="prefs.layout"
-              :is-loading="sampleLoader.isLoading.value"
-              :selection-enabled="false"
-              :show-checkboxes="false"
-              :show-label-rail="false"
-              :show-bottom-bar="false"
-              activation-mode="open"
-              @open-item="openSampleDetail"
-              @load-more="sampleLoader.loadMore()"
-            />
-            <BrowserSidebar
-              :panels="datasetSidebarPanels"
-              :context="pageDashboard"
-              :interaction="interactionContext"
-              :collapsed="prefs.sidebarCollapsed"
-              :sidebar-width="prefs.sidebarWidth"
-              :min-sidebar-width="MIN_SIDEBAR_WIDTH"
-              :max-sidebar-width="MAX_SIDEBAR_WIDTH"
-              :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-              :component-resolver="(key) => widgetRegistry.getWidgetComponent(key) ?? null"
-              @update:collapsed="prefs.setSidebarCollapsed"
-              @update:sidebar-width="prefs.setSidebarWidth"
-            />
-          </div>
+                  <template v-else-if="sparseSummary">
+                    <n-card title="Manifest" size="small" style="width: 100%">
+                      <n-descriptions label-placement="left" :column="2" size="small" bordered>
+                        <n-descriptions-item label="Dataset">{{ sparseSummary.name }}</n-descriptions-item>
+                        <n-descriptions-item label="Type">{{ sparseSummary.dataset_type }}</n-descriptions-item>
+                        <n-descriptions-item label="Storage Mode">
+                          <n-tag type="info" size="small">{{ sparseSummary.storage_mode }}</n-tag>
+                        </n-descriptions-item>
+                        <n-descriptions-item label="Total Shards">{{ sparseSummary.manifest.shard_count }}</n-descriptions-item>
+                        <n-descriptions-item label="Total Rows">{{ sparseSummary.manifest.total_rows.toLocaleString() }}</n-descriptions-item>
+                        <n-descriptions-item label="Created">{{ new Date(sparseSummary.manifest.created_at).toLocaleString() }}</n-descriptions-item>
+                      </n-descriptions>
+                    </n-card>
+
+                    <n-card v-if="sparseSummary.manifest.schema_columns.length > 0" title="Schema" size="small" style="width: 100%">
+                      <n-data-table
+                        :columns="schemaColumns"
+                        :data="sparseSummary.manifest.schema_columns"
+                        :bordered="true"
+                        :single-line="false"
+                        size="small"
+                      />
+                    </n-card>
+
+                    <n-card v-if="sparseSummary.shards.length > 0" title="Shards" size="small" style="width: 100%">
+                      <n-data-table
+                        :columns="shardColumns"
+                        :data="sparseSummary.shards"
+                        :bordered="true"
+                        :single-line="false"
+                        size="small"
+                      />
+                    </n-card>
+
+                    <n-card v-if="sparseSummary.sample_rows.length > 0" title="Preview Rows (first shard)" size="small" style="width: 100%">
+                      <n-data-table
+                        :columns="sampleRowColumns"
+                        :data="sparseSummary.sample_rows"
+                        :bordered="true"
+                        :single-line="false"
+                        size="small"
+                        :max-height="300"
+                      />
+                    </n-card>
+                  </template>
+
+                  <n-text v-else depth="3">Unable to load sparse summary.</n-text>
+                </n-space>
+              </template>
+            </n-result>
+          </template>
+
+          <!-- Full dataset: sample browser -->
+          <template v-else>
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
+              <n-radio-group v-model:value="prefs.layout" size="small">
+                <n-radio-button value="grid">Grid</n-radio-button>
+                <n-radio-button value="list">List</n-radio-button>
+              </n-radio-group>
+              <n-button type="primary" @click="showImportFlow = true">
+                Add Sample
+              </n-button>
+            </div>
+
+            <div class="ds-samples-layout">
+              <SampleBrowser
+                :items="filteredSamples"
+                :total-count="sampleLoader.totalCount.value"
+                :thumb-size="prefs.thumbSize"
+                :layout="prefs.layout"
+                :is-loading="sampleLoader.isLoading.value"
+                :selection-enabled="false"
+                :show-checkboxes="false"
+                :show-label-rail="false"
+                :show-bottom-bar="false"
+                activation-mode="open"
+                @open-item="openSampleDetail"
+                @load-more="sampleLoader.loadMore()"
+              />
+              <BrowserSidebar
+                :panels="datasetSidebarPanels"
+                :context="pageDashboard"
+                :interaction="interactionContext"
+                :collapsed="prefs.sidebarCollapsed"
+                :sidebar-width="prefs.sidebarWidth"
+                :min-sidebar-width="MIN_SIDEBAR_WIDTH"
+                :max-sidebar-width="MAX_SIDEBAR_WIDTH"
+                :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
+                :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null"
+                @update:collapsed="prefs.setSidebarCollapsed"
+                @update:sidebar-width="prefs.setSidebarWidth"
+              />
+            </div>
+          </template>
         </n-tab-pane>
 
         <!-- ============================================================ -->
@@ -146,9 +214,12 @@
 
             <!-- ---- Panel 1: Extract Features ---- -->
             <n-card title="Extract Features" size="small">
-              <n-button type="primary" :loading="extractFeaturesLoading" @click="doExtractFeatures">
+              <n-button type="primary" :loading="extractFeaturesLoading" :disabled="isSparse" @click="doExtractFeatures">
                 Extract Features
               </n-button>
+              <n-text v-if="isSparse" depth="3" style="display: block; margin-top: 4px; font-size: 12px">
+                Not available for sparse datasets.
+              </n-text>
               <template v-if="extractFeaturesResult">
                 <n-space style="margin-top: 16px">
                   <n-statistic label="Job" :value="extractFeaturesResult.id" />
@@ -199,9 +270,12 @@
               <template #header-extra>
                 <n-tag type="warning">Mock Data</n-tag>
               </template>
-              <n-button type="primary" :loading="selectionMetricsLoading" @click="doSelectionMetrics">
+              <n-button type="primary" :loading="selectionMetricsLoading" :disabled="isSparse" @click="doSelectionMetrics">
                 Load Selection Metrics
               </n-button>
+              <n-text v-if="isSparse" depth="3" style="display: block; margin-top: 4px; font-size: 12px">
+                Not available for sparse datasets.
+              </n-text>
               <template v-if="selectionMetricsRows.length > 0">
                 <n-data-table
                   :columns="selectionMetricsColumns"
@@ -238,7 +312,7 @@
         <!-- ============================================================ -->
         <!-- TAB 4: Annotate -->
         <!-- ============================================================ -->
-        <n-tab-pane name="annotate" tab="Annotate">
+        <n-tab-pane v-if="!isSparse" name="annotate" tab="Annotate">
           <template v-if="dataset?.ls_project_url">
             <iframe
               :src="dataset.ls_project_url"
@@ -268,6 +342,7 @@
         :sampleId="selectedSampleId"
         :datasetId="id"
         :labelSpace="labelSpace"
+        :sparse="isSparse"
         :show="selectedSampleId !== null"
         @close="selectedSampleId = null"
         @select-sample="(sid: string) => { selectedSampleId = sid }"
@@ -319,6 +394,7 @@ import { useSampleLoader } from "../composables/useSampleLoader";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
+import type { SparseSummaryResponse } from "../types";
 import { widgetRegistry } from "../core/registry";
 
 // ---------------------------------------------------------------------------
@@ -342,6 +418,51 @@ const datasetQuery = useQuery({
 });
 
 const dataset = computed(() => datasetQuery.data.value as Dataset & { ls_project_url?: string | null });
+
+const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_sparse");
+
+const sparseSummaryQuery = useQuery({
+  queryKey: computed(() => ["sparse-summary", id.value]),
+  queryFn: () => api.getSparseSummary(id.value),
+  enabled: computed(() => isSparse.value),
+  retry: false,
+});
+
+const sparseSummary = computed(() => (sparseSummaryQuery.data.value as SparseSummaryResponse | undefined) ?? null);
+
+const schemaColumns: DataTableColumns<{ name: string; type: string }> = [
+  { title: "Column", key: "name", render: (row) => h("code", { style: "font-size: 12px" }, row.name) },
+  { title: "Type", key: "type", render: (row) => h("span", { style: "font-size: 12px" }, row.type) },
+];
+
+const shardColumns: DataTableColumns<{ shard_index: number; row_count: number; format: string; byte_size: number }> = [
+  { title: "Shard #", key: "shard_index", width: 90, render: (row) => h("span", {}, String(row.shard_index)) },
+  { title: "Rows", key: "row_count", width: 100, render: (row) => h("span", {}, row.row_count.toLocaleString()) },
+  { title: "Format", key: "format", width: 90, render: (row) => h("span", {}, row.format) },
+  { title: "Size", key: "byte_size", render: (row) => h("span", {}, formatBytes(row.byte_size)) },
+];
+
+const sampleRowColumns = computed<DataTableColumns<Record<string, unknown>>>(() => {
+  if (!sparseSummary.value?.sample_rows.length) return [];
+  const keys = Object.keys(sparseSummary.value.sample_rows[0] ?? {});
+  return keys.map((key) => ({
+    title: key,
+    key,
+    width: Math.max(80, Math.min(200, key.length * 10 + 40)),
+    render: (row: Record<string, unknown>) => {
+      const val = row[key];
+      if (val === null || val === undefined) return h("span", { style: "color: #999" }, "—");
+      const str = typeof val === "string" ? val : JSON.stringify(val);
+      return h("span", { style: "font-size: 12px; font-family: monospace" }, str.length > 80 ? str.slice(0, 80) + "…" : str);
+    },
+  }));
+});
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
 
 // ---------------------------------------------------------------------------
 // Drawer state

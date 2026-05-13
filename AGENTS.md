@@ -126,6 +126,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`                               | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
 | Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
+| Dataset storage modes     | `docs/architecture/dataset-storage-modes.md`                                 | Capability matrix for `db_full` vs `file_shard_sparse`, intent origin, and deferred scope |
+| Sparse dataset payload     | `apps/api/app/services/dataset_payload_store.py` + `apps/api/app/domain/dataset_payload.py` | Shard manifest, parquet payload storage, deterministic delete |
+| Sparse capability guards   | `apps/api/app/services/dataset_capability_guard.py`                           | `assert_not_sparse` guard for operations incompatible with `file_shard_sparse` |
 | Widget SDK contracts      | `libs/widget-sdk/src/`                                                       | TypeScript widget type definitions and factories                    |
 | Web UI package            | `libs/web-ui/src/`                                                           | Shared Vue/Naive UI components and dataset-list helpers             |
 | Widget SDK templates      | `libs/widget-sdk/src/templates/`                                             | Copy-paste starter templates for new widgets                        |
@@ -228,6 +231,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Presets are engineer-managed YAML (`apps/api/presets/`) and read-only via API/UI.
 - Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
+- `storage_mode` (`db_full` | `file_shard_sparse`) is the dataset-level distinction for storage semantics. It is orthogonal to `dataset_type` — a classification dataset and a VQA dataset can each be either mode. Never infer storage behavior from the semantic type; always branch on `storage_mode`.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
 - Widget SDK (`@platform/widget-sdk`) is a workspace TypeScript package in `libs/widget-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/widget-sdk → ../../libs/widget-sdk/src/index.ts`) and built with `tsup`.
 - To add a reusable first-party widget: create the .vue component in `libs/web-ui/src/components/<name>/<Name>Widget.vue`, create a widget descriptor in `libs/web-ui/src/components/<name>/index.ts` via `defineDashboardWidget({...})`, export both the component default and the widget descriptor from `libs/web-ui/src/index.ts`, then register the descriptor in `apps/web/src/registrations/index.ts`. Widget components are now general-purpose — they can be rendered via `PanelHost` anywhere in a page, imported directly by other components, or registered as sidebar widgets from the same source. App-specific widgets can still live under `apps/web/src/registrations/sidebar-<name>/`. See `docs/guides/extension-guide.md`.
@@ -263,6 +267,13 @@ No linter/formatter is configured. Follow these observed conventions exactly.
   - Run `ruff check apps/api --fix` for auto-fixable issues (unused imports, etc.).
   - If `ruff` is unavailable, use `uv tool run ruff check apps/api`.
 - These commands replace the former "no linter" convention. Treat type/lint errors the same as test failures.
+
+## DOCKER BUILD RULE
+- After modifying backend or frontend code, verify Docker images build successfully:
+  - **API**: `docker compose -f infra/compose/docker-compose.yaml build api`
+  - **Web**: `docker compose -f infra/compose/docker-compose.yaml build web`
+- Treat Docker build failures the same as test failures — fix before committing.
+- If Docker is unavailable, run `make build-web` for frontend build verification as fallback.
 
 ## COMMIT RULE
 - After completing code changes, remind the user to ask you to commit. Do not commit automatically — wait for the user to explicitly request it.

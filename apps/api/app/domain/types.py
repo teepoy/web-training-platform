@@ -8,6 +8,11 @@ class TaskType(str, Enum):
     VQA = "vqa"
 
 
+class DatasetStorageMode(str, Enum):
+    DB_FULL = "db_full"
+    FILE_SHARD_SPARSE = "file_shard_sparse"
+
+
 class DatasetType(str, Enum):
     IMAGE_CLASSIFICATION = "image_classification"
     IMAGE_VQA = "image_vqa"

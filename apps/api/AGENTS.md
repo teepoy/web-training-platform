@@ -19,6 +19,12 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Agent runtime | `app/agent/` | Surface store, metadata inference, prompt assembler, tools, runtime loop |
 | Agent routes | `app/main.py` (bottom) | Surface CRUD, data query, agent chat SSE endpoints |
 | Agent tests | `tests/test_agent.py` | 37 tests covering surface store, inference, assembler, routes, chat |
+| Sparse prediction service | `app/services/sparse_prediction.py` | Phase 2 stub — sparse-native prediction across shards (storage contract in module docstring) |
+| Sparse manifest reader | `app/services/sparse_manifest.py` | Reads parquet shard metadata and rows from in-memory bytes via `ArtifactStorage` |
+| Sparse sample access | `app/services/sparse_sample_access.py` | Protocol for resolving sample locators from file-backed shard storage |
+| Sparse capability guard | `app/services/dataset_capability_guard.py` | `assert_not_sparse` — raises 409 for ops incompatible with `file_shard_sparse` |
+| Dataset payload store | `app/services/dataset_payload_store.py` | Shard upload, manifest management, deterministic dataset payload delete |
+| Dataset payload domain | `app/domain/dataset_payload.py` | `DatasetManifest`, `ShardEntry`, `SampleLocator`, `SparsePredictionResult` and related models |
 
 ## STRUCTURE
 ```text
@@ -49,6 +55,7 @@ apps/api/
 - Don’t assume auth is enforced yet; OAuth config exists but route protection is not wired.
 - Don’t forget that several async services still wrap blocking client libraries; treat them as operationally fragile.
 - Don’t change schema only in ORM models; update Alembic too.
+- Don’t overload `dataset_type` with storage semantics — use `storage_mode` (`db_full` vs `file_shard_sparse`) to branch behavior. A classification dataset and a VQA dataset can each be either mode; storage behavior is never inferred from the semantic type.
 
 ## COMMANDS
 ```bash

@@ -5,10 +5,18 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from app.domain.types import DatasetType, JobStatus, ModelFramework, OrgRole, TaskType
+from app.domain.types import (
+    DatasetStorageMode,
+    DatasetType,
+    JobStatus,
+    ModelFramework,
+    OrgRole,
+    TaskType,
+)
 
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+SPARSE_NO_LS = "SPARSE_NO_LS"
 
 
 class ArtifactRef(BaseModel):
@@ -52,6 +60,8 @@ class Dataset(BaseModel):
     embed_config: dict = Field(default_factory=dict)
     ls_project_id: str | None = None
     ls_project_url: str | None = None
+    storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
+    capabilities: dict[str, bool] | None = None
 
 
 class Sample(BaseModel):

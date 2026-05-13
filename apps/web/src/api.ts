@@ -268,6 +268,7 @@ export interface CreateDatasetBody {
     label_space: string[];
     metadata_schema?: Record<string, { type: string; description: string }>;
   };
+  storage_mode?: string;
 }
 
 export interface CreateSampleBody {
@@ -401,6 +402,7 @@ export const api = {
           task_type: "classification",
           label_space: [],
         },
+        ...(body.storage_mode ? { storage_mode: body.storage_mode } : {}),
       }),
     }),
 
@@ -417,6 +419,11 @@ export const api = {
 
   getAnnotationStats: (datasetId: string) =>
     req<DatasetAnnotationStats>(`/datasets/${datasetId}/annotation-stats`),
+
+  getSparseSummary: (datasetId: string) =>
+    req<import("./types").SparseSummaryResponse>(
+      `/datasets/${datasetId}/sparse-summary`,
+    ),
 
   // ---- Samples ----
   listSamples: (datasetId: string, offset?: number, limit?: number) => {
