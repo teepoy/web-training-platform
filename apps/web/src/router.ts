@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from './stores/auth'
 import { useAuthStore } from './stores/auth'
 
-const AUTH_ROUTES = ['/login', '/register']
+const AUTH_ROUTES = ['/login', '/register', '/auth/oauth/success', '/auth/oauth/register']
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -10,6 +10,8 @@ export const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/login', component: () => import('./views/LoginView.vue') },
     { path: '/register', component: () => import('./views/RegisterView.vue') },
+    { path: '/auth/oauth/success', component: () => import('./views/OAuthCallbackView.vue') },
+    { path: '/auth/oauth/register', component: () => import('./views/OAuthRegisterView.vue') },
     { path: '/dashboard', component: () => import('./views/DashboardView.vue') },
     { path: '/tasks', component: () => import('./views/TaskExplorerView.vue') },
     { path: '/datasets', component: () => import('./views/DatasetsView.vue') },

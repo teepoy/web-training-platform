@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from typing import cast
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import (
@@ -19,7 +20,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 from app.api.schemas import (
     AddMemberRequest,
@@ -52,6 +53,8 @@ from app.api.schemas import (
     MembershipResponse,
     ModelResponse,
     ModelUploadTemplateResponse,
+    OAuthProviderInfo,
+    OAuthRegisterRequest,
     OrgResponse,
     PaginatedResponse,
     PersistExportResponse,
@@ -135,6 +138,16 @@ from app.services.auth import (
     create_personal_access_token,
     hash_password,
     verify_password,
+)
+from app.services.oauth import (
+    build_authorize_url,
+    create_oauth_state_token,
+    decode_oauth_state_token,
+    exchange_code_for_token,
+    fetch_user_info,
+    generate_oauth_state,
+    get_oauth_provider_config,
+    register_oauth_user,
 )
 from app.services.compatibility import (
     UPLOAD_TEMPLATE_DEFINITIONS,
@@ -2254,6 +2267,140 @@ async def login(payload: LoginRequest) -> LoginResponse:
         created_at=user_orm.created_at,
     )
     return LoginResponse(access_token=token, user=user_resp)
+
+
+@app.get("/api/v1/auth/oauth/{provider}")
+async def oauth_authorize(provider: str, request: Request) -> RedirectResponse:
+    provider_config = get_oauth_provider_config(provider)
+    if provider_config is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown OAuth provider: {provider}"
+        )
+    if not provider_config.get("enabled", False):
+        raise HTTPException(status_code=404, detail="OAuth provider is disabled")
+    if not provider_config.get("client_id"):
+        raise HTTPException(
+            status_code=400, detail=f"OAuth provider '{provider}' is not configured"
+        )
+    state = generate_oauth_state()
+    redirect_uri = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
+    url = build_authorize_url(provider_config, state, redirect_uri)
+    response = RedirectResponse(url=url)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/api/v1/auth/oauth/{provider}/callback")
+async def oauth_callback(
+    provider: str,
+    code: str,
+    state: str,
+    error: str | None = None,
+    request: Request = None,  # type: ignore[assignment]
+) -> RedirectResponse:
+    provider_config = get_oauth_provider_config(provider)
+    if provider_config is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown OAuth provider: {provider}"
+        )
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+    state_cookie = request.cookies.get("oauth_state")
+    if not state_cookie or state_cookie != state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    redirect_uri = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
+    access_token = await exchange_code_for_token(provider_config, code, redirect_uri)
+    user_info = await fetch_user_info(provider_config, access_token)
+    user_info["provider"] = provider
+
+    cfg = container.config()
+    frontend_url = cfg.get("app", {}).get("frontend_url", "http://localhost:5173")
+
+    repo = container.repository()
+    if user_info.get("provider_id"):
+        user_orm = await repo.get_user_by_email(user_info["email"])
+    else:
+        user_orm = None
+
+    if user_orm is not None:
+        token = create_access_token({"sub": user_orm.id})
+        redirect_url = f"{frontend_url}/auth/oauth/success?token={token}"
+        response = RedirectResponse(url=redirect_url)
+        response.delete_cookie("oauth_state")
+        return response
+
+    state_token = create_oauth_state_token(user_info)
+    params = {
+        "state_token": state_token,
+        "email": user_info.get("email", ""),
+        "name": user_info.get("name", ""),
+        "provider": provider,
+        "provider_id": user_info.get("provider_id", ""),
+    }
+    redirect_url = f"{frontend_url}/auth/oauth/register?{urlencode(params)}"
+    response = RedirectResponse(url=redirect_url)
+    response.delete_cookie("oauth_state")
+    return response
+
+
+@app.post("/api/v1/auth/oauth/register", response_model=LoginResponse)
+async def oauth_register(payload: OAuthRegisterRequest) -> LoginResponse:
+    try:
+        user_info = decode_oauth_state_token(payload.state_token)
+    except Exception:
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired registration token"
+        )
+    required = ["email", "name", "provider", "provider_id"]
+    for key in required:
+        if key not in user_info or not user_info[key]:
+            raise HTTPException(
+                status_code=400, detail=f"Missing required field: {key}"
+            )
+    repo = container.repository()
+    existing = await repo.get_user_by_email(user_info["email"])
+    if existing is not None:
+        raise HTTPException(
+            status_code=409, detail="A user with this email already exists"
+        )
+    user_orm = await register_oauth_user(
+        repo,
+        email=user_info["email"],
+        name=payload.name,
+        oauth_provider=user_info["provider"],
+        oauth_provider_id=user_info["provider_id"],
+    )
+    token = create_access_token({"sub": user_orm.id})
+    user_resp = UserResponse(
+        id=user_orm.id,
+        email=user_orm.email,
+        name=user_orm.name,
+        is_superadmin=user_orm.is_superadmin,
+        created_at=user_orm.created_at,
+    )
+    return LoginResponse(access_token=token, user=user_resp)
+
+
+@app.get("/api/v1/auth/oauth/providers", response_model=list[OAuthProviderInfo])
+async def list_oauth_providers() -> list[OAuthProviderInfo]:
+    cfg = container.config()
+    providers = []
+    for provider_id, prov in cfg.oauth.providers.items():
+        if prov.get("enabled", False) and prov.get("client_id"):
+            providers.append(
+                OAuthProviderInfo(
+                    id=provider_id,
+                    display_name=prov.get("display_name", provider_id),
+                    enabled=True,
+                )
+            )
+    return providers
 
 
 @app.get("/api/v1/auth/me", response_model=UserWithOrgsResponse)

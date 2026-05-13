@@ -55,6 +55,28 @@ export interface OrgMember {
   user: User;
 }
 
+export interface OAuthCallbackResponse {
+  action: "login" | "register";
+  access_token?: string | null;
+  user?: User | null;
+  state_token?: string | null;
+  email?: string | null;
+  name?: string | null;
+  provider?: string | null;
+  provider_id?: string | null;
+}
+
+export interface OAuthProviderInfo {
+  id: string;
+  display_name: string;
+  enabled: boolean;
+}
+
+export interface OAuthRegisterRequest {
+  state_token: string;
+  name: string;
+}
+
 export function fetchOrganizations(): Promise<Organization[]> {
   return req<Organization[]>("/organizations");
 }
@@ -79,6 +101,19 @@ export function authMe(token?: string | null): Promise<UserWithOrgs> {
     headers["Authorization"] = `Bearer ${token}`;
   }
   return req<UserWithOrgs>("/auth/me", { headers });
+}
+
+export function authOAuthRegister(
+  body: OAuthRegisterRequest,
+): Promise<LoginResponse> {
+  return req<LoginResponse>("/auth/oauth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchOAuthProviders(): Promise<OAuthProviderInfo[]> {
+  return req<OAuthProviderInfo[]>("/auth/oauth/providers");
 }
 
 export async function fetchHealthStatus(): Promise<{ status: string; auth_enabled: boolean }> {
