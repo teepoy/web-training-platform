@@ -11,4 +11,5 @@ export * from "./schedules";
 export * from "./orgs";
 export * from "./task-tracker";
 export * from "./agent";
+export * from "./sse";
 export * from "./types";
