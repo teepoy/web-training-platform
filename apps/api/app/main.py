@@ -24,8 +24,8 @@ _logger = logging.getLogger(__name__)
 
 
 async def _sync_file_presets_to_db() -> None:
-    registry = container.preset_registry()
-    repo = container.repository()
+    registry = container.infra.preset_registry()
+    repo = container.infra.repository()
     existing_default_org = await repo.get_organization(DEFAULT_ORG_ID)
     if existing_default_org is None:
         await repo.create_organization(
@@ -53,11 +53,11 @@ async def _sync_file_presets_to_db() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    cfg = container.config()
+    cfg = container.infra.config()
     if bool(cfg.db.auto_create):
-        await init_db(container.db_engine())
+        await init_db(container.infra.db_engine())
 
-    registry = container.preset_registry()
+    registry = container.infra.preset_registry()
     count = registry.load()
     _logger.info("Preset registry: %d presets loaded", count)
     await _sync_file_presets_to_db()
@@ -89,7 +89,7 @@ for r in DOMAIN_ROUTERS:
 
 @app.get("/health")
 def health() -> dict[str, str | bool]:
-    cfg = container.config()
+    cfg = container.infra.config()
     return {
         "status": "ok",
         "auth_enabled": bool(getattr(cfg.auth, "enabled", True)),
@@ -106,9 +106,9 @@ async def get_dashboard(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> DashboardResponse:
-    repo = container.repository()
-    cfg = container.config()
-    service_health = container.service_health()
+    repo = container.infra.repository()
+    cfg = container.infra.config()
+    service_health = container.platform.service_health()
 
     all_jobs = await repo.list_jobs(org_id=org.id)
     stats = JobQueueStats()
@@ -150,7 +150,7 @@ async def get_dashboard(
     if engine_name == "prefect":
         pool_name = str(cfg.prefect.work_pool_name)
         try:
-            prefect_client = container.prefect_client()
+            prefect_client = container.infra.prefect_client()
             pool_data = await prefect_client.get_work_pool(pool_name)
             prefect_connected = True
 

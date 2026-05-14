@@ -13,7 +13,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db")
+os.environ.setdefault(
+    "DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
+)
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -44,7 +46,7 @@ def _dispose_db_resources():
 
     load_config.cache_clear()
     container.reset_singletons()
-    _deps._session_factory = None
+    _deps._session_factory = None  # type: ignore
 
     yield
 
@@ -64,4 +66,4 @@ def _dispose_db_resources():
 
     load_config.cache_clear()
     container.reset_singletons()
-    _deps._session_factory = None
+    _deps._session_factory = None  # type: ignore

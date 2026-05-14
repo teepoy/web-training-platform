@@ -158,7 +158,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `SessionStore`          | service    | `apps/api/app/agent/session_store.py`                                    | In-memory conversation persistence (TTL-based)               |
 | `ClassifyAgent`         | service    | `apps/api/app/agent/runtime.py`                                          | LLM tool-calling loop for classify sidebar                   |
 | `GlobalAgent`           | service    | `apps/api/app/agent/global_runtime.py`                                   | Platform-wide LLM agent (read/write/sidebar)                 |
-| `useGlobalAgent`        | composable | `apps/web/src/composables/useGlobalAgent.ts`                             | Global agent chat + panel injection                          |
+| `useAgentCore`          | composable | `libs/web-ui/src/composables/useAgentCore.ts`                            | Shared SSE frame iteration, message accumulation, abort, status |
+| `useAgentAdapter`       | composable | `apps/web/src/features/agent/useAgentAdapter.ts`                         | App adapter: route context, auth wiring, panel orchestration |
 | `router`                | Vue Router | `apps/web/src/router.ts`                                                 | `/datasets`, `/jobs`, `/schedules`                           |
 | `FinetuneClient`        | SDK        | `libs/python-sdk/ftsdk/client.py`                                        | Sync HTTP wrapper                                            |
 | `PreviewService`        | service    | `apps/api/app/services/preview_service.py`                               | Session lifecycle, item pagination, persist handoff          |

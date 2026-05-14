@@ -52,6 +52,8 @@ export type {
 export { createDataPipeline as useDataPipeline, DATA_PIPELINE_KEY } from "./composables/useDataPipeline";
 export type { Annotation, DataNode, DataPipeline } from "./composables/useDataPipeline";
 
+export { useAgentCore } from "./composables/useAgentCore";
+export type { SSEFrame, UseAgentCoreOptions, UseAgentCoreReturn } from "./composables/useAgentCore";
 export { useClassifyDashboard } from "./composables/useClassifyDashboard";
 export { usePreviewLoader } from "./composables/usePreviewLoader";
 export type { UsePreviewLoaderOptions } from "./composables/usePreviewLoader";

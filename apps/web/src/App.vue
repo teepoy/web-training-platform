@@ -29,7 +29,7 @@
                 <span style="font-weight: 600; flex: 1">ML Training Platform</span>
                 <OrgSelector v-if="authStore.isAuthenticated" />
                 <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
-                
+
                 <!-- External service links -->
                 <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
                   Label Studio ↗
@@ -45,7 +45,7 @@
                     pgAdmin ↗
                   </n-button>
                 </template>
-                
+
                 <n-dropdown
                   trigger="click"
                   :options="avatarDropdownOptions"
@@ -88,7 +88,7 @@ import { useAuthStore } from './stores/auth'
 import { useOrgStore } from './stores/org'
 import { useTaskHandoff, syncWatchedTaskIds } from './composables/useTaskHandoff'
 import { useTaskHandoffState } from './composables/taskHandoffState'
-import { useGlobalAgent } from './composables/useGlobalAgent'
+import { useAgentAdapter } from './features/agent/useAgentAdapter'
 import { AgentChatDrawer } from '@platform/web-ui'
 import OrgSelector from './components/OrgSelector.vue'
 
@@ -100,7 +100,7 @@ const orgStore = useOrgStore()
 const queryClient = useQueryClient()
 const { watchedTaskIds } = useTaskHandoffState()
 const { watchTask, syncTask } = useTaskHandoff()
-const globalAgent = useGlobalAgent()
+const globalAgent = useAgentAdapter()
 
 const AUTH_PATHS = ['/login', '/register']
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))

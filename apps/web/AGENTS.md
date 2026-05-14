@@ -87,8 +87,8 @@ The classify page includes an AI agent sidebar system and floating chat drawer:
 | Piece                 | Location                                                               | Role                                                                           |
 | --------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | Chat drawer           | `../../libs/web-ui/src/components/agent-chat-drawer/AgentChatDrawer.vue` | FAB-toggled floating panel; sends messages, renders SSE events                 |
-| Surface composable    | `src/composables/useAgentSurface.ts`                                   | Manages agent panel state, refresh, import/export, live updates                |
-| Chat composable       | `src/composables/useAgentChat.ts`                                      | SSE streaming, conversation state, sidebar update emission                     |
+| Core composable       | `../../libs/web-ui/src/composables/useAgentCore.ts`                    | Transport-agnostic: SSE frame iteration, message accumulation, abort, status   |
+| App adapter           | `src/features/agent/useAgentAdapter.ts`                                | Route-derived context builder, auth session wiring, provide/inject panels      |
 | Widget error boundary | `../../libs/web-ui/src/components/widget-error-boundary/WidgetErrorBoundary.vue` | Catches widget render errors                                                   |
 | Generic ECharts       | `../../libs/web-ui/src/components/echarts-generic/GenericEChartsWidget.vue`         | Any ECharts chart from inline option object                                    |
 | Interactive scatter   | `../../libs/web-ui/src/components/interactive-scatter/InteractiveScatterWidget.vue` | Metadata-driven sample scatter plot with linked sidebar selection              |
@@ -99,7 +99,7 @@ The classify page includes an AI agent sidebar system and floating chat drawer:
 
 **Agent panels** are merged with static dashboard panels via `mergePanels()` in `sidebarConfig.ts`. Agent panels are visually distinguished with a left border accent and "AI" badge.
 
-**SSE pattern**: The agent chat uses `POST → SSE response stream` (not `EventSource`). The `streamAgentChat()` function in `api.ts` uses `fetch` + `ReadableStream` and parses SSE frames via an async generator. Event types: `agent-message`, `agent-action`, `sidebar-update`, `done`.
+**SSE pattern**: The agent chat uses `POST → SSE response stream` (not `EventSource`). `useAgentCore` iterates parsed SSE frames from an async generator factory; `useAgentAdapter` provides the factory with route-context and auth-session. `streamGlobalAgentChat()` in `@platform/web-data/agent` handles `fetch` + `ReadableStream`. Event types: `agent-message`, `agent-action`, `sidebar-update`, `done`.
 
 See `docs/protocols/agent-display-protocol.md` for the full protocol specification.
 
