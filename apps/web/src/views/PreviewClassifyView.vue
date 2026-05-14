@@ -27,7 +27,7 @@ import {
   useDataPipeline as createDataPipeline,
   DATA_PIPELINE_KEY,
 } from '@platform/web-ui'
-import { widgetRegistry } from '../core/registry'
+import { widgetComponentMap } from '../components/classify/widgetMap'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,7 +179,7 @@ async function handlePersist() {
               :min-sidebar-width="MIN_SIDEBAR_WIDTH"
               :max-sidebar-width="MAX_SIDEBAR_WIDTH"
               :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-              :component-resolver="(key) => widgetRegistry.getWidgetComponent(key) ?? null"
+              :component-resolver="(key) => widgetComponentMap[key] ?? null"
               @update:collapsed="prefs.setSidebarCollapsed"
               @update:sidebar-width="prefs.setSidebarWidth"
               style="border-left: none;"

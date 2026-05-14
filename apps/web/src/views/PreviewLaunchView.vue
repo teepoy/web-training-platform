@@ -1,34 +1,30 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { NCard } from 'naive-ui'
 import { FlowTypeSelector, type FlowCard } from '@platform/web-ui'
-import { widgetRegistry } from '../core/registry'
-import type { PreviewLauncherDescriptor } from '@platform/widget-sdk'
+import UpstreamPreviewLauncher from '../registrations/preview-upstream/UpstreamPreviewLauncher.vue'
 
 const router = useRouter()
 const message = useMessage()
 
-const previewLaunchers = computed<FlowCard[]>(() =>
-  widgetRegistry.getPreviewLaunchers('preview').map((p) => ({
-    id: p.id,
-    label: p.label,
-    description: p.description,
-    icon: p.icon,
-    component: p.component,
-  }))
-)
+const previewLaunchers: FlowCard[] = [
+  {
+    id: "preview-upstream",
+    label: "Upstream Collection",
+    description: "Browse a remote collection without importing it first.",
+    icon: "🔍",
+    component: UpstreamPreviewLauncher,
+  },
+]
 
-const selectedLauncher = ref<PreviewLauncherDescriptor | null>(null)
+const selectedLauncher = ref<FlowCard | null>(null)
 const showLauncherForm = ref(false)
 
 function handleSelectLauncher(plugin: FlowCard) {
-  const launcher = widgetRegistry.getPreviewLaunchers('preview').find((p) => p.id === plugin.id)
-  if (launcher) {
-    selectedLauncher.value = launcher
-    showLauncherForm.value = true
-  }
+  selectedLauncher.value = plugin
+  showLauncherForm.value = true
 }
 
 function handleLauncherComplete(result: unknown) {

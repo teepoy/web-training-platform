@@ -165,7 +165,7 @@
                 :min-sidebar-width="MIN_SIDEBAR_WIDTH"
                 :max-sidebar-width="MAX_SIDEBAR_WIDTH"
                 :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-                :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null"
+                :component-resolver="(key: string) => widgetComponentMap[key] ?? null"
                 @update:collapsed="prefs.setSidebarCollapsed"
                 @update:sidebar-width="prefs.setSidebarWidth"
               />
@@ -384,6 +384,12 @@ import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
 import { datasetPanels } from "../components/classify/sidebarConfig";
+import ManualImporter from "../registrations/import-manual/ManualImporter.vue";
+import ManualDatasetImporter from "../registrations/import-dataset-manual/ManualDatasetImporter.vue";
+import ParquetImporter from "../registrations/import-parquet/ParquetImporter.vue";
+import PersistExportPlugin from "../registrations/export-persist/PersistExportPlugin.vue";
+import ParquetExportPlugin from "../registrations/export-parquet/ParquetExportPlugin.vue";
+import PreviewExportPlugin from "../registrations/export-preview/PreviewExportPlugin.vue";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -395,7 +401,7 @@ import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
 import type { SparseSummaryResponse } from "../types";
-import { widgetRegistry } from "../core/registry";
+import { widgetComponentMap } from "../components/classify/widgetMap";
 
 // ---------------------------------------------------------------------------
 // Route / Router
@@ -640,25 +646,53 @@ const featureSamplesQuery = useQuery({
 const showImportFlow = ref(false);
 const showExportFlow = ref(false);
 
-const importerFlows = computed<FlowCard[]>(() =>
-  widgetRegistry.getImporters("dataset").map((p) => ({
-    id: p.id,
-    label: p.label,
-    description: p.description,
-    icon: p.icon,
-    component: p.component,
-  }))
-);
+const importerFlows: FlowCard[] = [
+  {
+    id: "import-manual",
+    label: "Manual Sample Entry",
+    description: "Create one sample at a time with URI, metadata, or uploaded image.",
+    icon: "✏️",
+    component: ManualImporter,
+  },
+  {
+    id: "import-dataset-manual",
+    label: "Import from JSON",
+    description: "Create a dataset by uploading a JSON file of sample items.",
+    icon: "📁",
+    component: ManualDatasetImporter,
+  },
+  {
+    id: "import-parquet",
+    label: "Import from Parquet",
+    description: "Import samples from a HuggingFace-compatible Parquet file (image struct with bytes/path columns).",
+    icon: "📦",
+    component: ParquetImporter,
+  },
+];
 
-const exporterFlows = computed<FlowCard[]>(() =>
-  widgetRegistry.getExporters("dataset").map((p) => ({
-    id: p.id,
-    label: p.label,
-    description: p.description,
-    icon: p.icon,
-    component: p.component,
-  }))
-);
+const exporterFlows: FlowCard[] = [
+  {
+    id: "export-persist",
+    label: "Persist Export",
+    description: "Persist dataset export artifact and return a URI.",
+    icon: "💾",
+    component: PersistExportPlugin,
+  },
+  {
+    id: "export-parquet",
+    label: "Export as Parquet",
+    description: "Export dataset samples and annotations as a HuggingFace-compatible Parquet file.",
+    icon: "📦",
+    component: ParquetExportPlugin,
+  },
+  {
+    id: "export-preview",
+    label: "Preview Export",
+    description: "Generate and inspect dataset export payload without persisting.",
+    icon: "👁️",
+    component: PreviewExportPlugin,
+  },
+];
 
 function handleImporterComplete() {
   showImportFlow.value = false;

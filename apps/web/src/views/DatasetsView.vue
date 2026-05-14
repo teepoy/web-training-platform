@@ -23,13 +23,16 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
-import { DatasetPageShell, useDatasetListSurface } from "@platform/web-ui";
+import { DatasetPageShell, useDatasetListSurface, type FlowCard } from "@platform/web-ui";
 import { toggleDatasetPublic } from "@platform/web-data/datasets";
 import { listDatasets, deleteDataset } from "@platform/web-data/datasets";
 import type { Dataset, User } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
-import { widgetRegistry } from "../core/registry";
+import ManualImporter from "../registrations/import-manual/ManualImporter.vue";
+import ManualDatasetImporter from "../registrations/import-dataset-manual/ManualDatasetImporter.vue";
+import ParquetImporter from "../registrations/import-parquet/ParquetImporter.vue";
+import UpstreamPreviewLauncher from "../registrations/preview-upstream/UpstreamPreviewLauncher.vue";
 import { resolveDatasetShim, resolveDatasetTaskType } from "./datasets/registry";
 import { getActiveDatasetTaskType } from "./datasets/selection";
 
@@ -93,8 +96,38 @@ function handleDeleteDataset(row: Dataset) {
   deleteDatasetMut.mutate(row.id);
 }
 
-const importerFlows = computed(() => widgetRegistry.getImporters("dataset"));
-const previewLauncherFlows = computed(() => widgetRegistry.getPreviewLaunchers("dataset-list"));
+const importerFlows = computed<FlowCard[]>(() => [
+  {
+    id: "import-manual",
+    label: "Manual Sample Entry",
+    description: "Create one sample at a time with URI, metadata, or uploaded image.",
+    icon: "✏️",
+    component: ManualImporter,
+  },
+  {
+    id: "import-dataset-manual",
+    label: "Import from JSON",
+    description: "Create a dataset by uploading a JSON file of sample items.",
+    icon: "📁",
+    component: ManualDatasetImporter,
+  },
+  {
+    id: "import-parquet",
+    label: "Import from Parquet",
+    description: "Import samples from a HuggingFace-compatible Parquet file (image struct with bytes/path columns).",
+    icon: "📦",
+    component: ParquetImporter,
+  },
+]);
+const previewLauncherFlows = computed<FlowCard[]>(() => [
+  {
+    id: "preview-upstream",
+    label: "Upstream Collection",
+    description: "Browse a remote collection without importing it first.",
+    icon: "🔍",
+    component: UpstreamPreviewLauncher,
+  },
+]);
 
 const surface = useDatasetListSurface<Dataset, User>({
   datasets,
