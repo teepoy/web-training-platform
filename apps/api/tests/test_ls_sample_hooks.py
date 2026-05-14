@@ -14,7 +14,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container, _make_ls_image_url
+from app.main import app, container
+from app.routers._common import _make_ls_image_url
 
 
 def _mock_config() -> MagicMock:
