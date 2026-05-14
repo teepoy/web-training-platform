@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from './stores/auth'
 import { useAuthStore } from './stores/auth'
+import { sandboxRoutes } from './sandbox/sandboxRoutes'
 
 const AUTH_ROUTES = ['/login', '/register', '/auth/oauth/success', '/auth/oauth/register']
 
@@ -25,6 +26,7 @@ export const router = createRouter({
     { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },
     { path: '/preview', name: 'preview-launch', component: () => import('./views/PreviewLaunchView.vue') },
     { path: '/preview/:sessionId', name: 'preview-classify', component: () => import('./views/PreviewClassifyView.vue') },
+    ...(import.meta.env.DEV ? sandboxRoutes : []),
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./views/NotFoundView.vue') },
   ],
 })
