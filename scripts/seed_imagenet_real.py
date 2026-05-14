@@ -43,7 +43,7 @@ import sys
 import time
 
 import httpx
-from seed_common import (
+from seed_maker.utils import (
     DEFAULT_COMPOSE_FILE,
     DEFAULT_ORG_NAME,
     DEFAULT_ORG_SLUG,
@@ -51,6 +51,8 @@ from seed_common import (
     DEFAULT_SEED_NAME,
     DEFAULT_SEED_PASSWORD,
     api_request,
+)
+from seed_maker.auth import (
     login_seed_user,
     promote_superadmin,
     register_seed_user,
@@ -1340,7 +1342,7 @@ Examples:
     max_samples = args.max_samples
     total_steps = 7 if not args.no_samples else 6
     print(f"\n{'=' * 50}")
-    print(f"  ImageNet-1K Real Seed Script")
+    print("  ImageNet-1K Real Seed Script")
     print(f"{'=' * 50}\n")
 
     api_url = args.api_url.rstrip("/")
@@ -1539,7 +1541,7 @@ Examples:
     # Summary
     # ------------------------------------------------------------------
     print(f"\n{'=' * 50}")
-    print(f"  Seed Summary (real mode)")
+    print("  Seed Summary (real mode)")
     print(f"{'=' * 50}")
     print(f"  Dataset:    {DATASET_NAME}")
     print(f"  Dataset ID: {dataset_id}")

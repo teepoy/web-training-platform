@@ -16,13 +16,15 @@ import argparse
 import sys
 
 import httpx
-from seed_common import (
+from seed_maker.utils import (
     DEFAULT_COMPOSE_FILE,
     DEFAULT_ORG_NAME,
     DEFAULT_ORG_SLUG,
     DEFAULT_SEED_EMAIL,
     DEFAULT_SEED_NAME,
     DEFAULT_SEED_PASSWORD,
+)
+from seed_maker.auth import (
     login_seed_user,
     promote_superadmin,
     register_seed_user,
@@ -56,7 +58,7 @@ training:
   optimizer: AdamW
   lr0: 0.001
   weight_decay: 0.0005
-  
+
 augment:
   hsv_h: 0.015
   hsv_s: 0.7
@@ -87,7 +89,7 @@ training:
   optimizer: AdamW
   lr0: 0.001
   weight_decay: 0.0005
-  
+
 augment:
   hsv_h: 0.015
   hsv_s: 0.7
@@ -110,14 +112,14 @@ augment:
 model:
   name: resnet18
   pretrained: true
-  
+
 training:
   epochs: 50
   batch_size: 32
   learning_rate: 0.001
   optimizer: Adam
   weight_decay: 0.0001
-  
+
 scheduler:
   name: CosineAnnealingLR
   T_max: 50
@@ -134,14 +136,14 @@ scheduler:
 model:
   name: resnet50
   pretrained: true
-  
+
 training:
   epochs: 50
   batch_size: 32
   learning_rate: 0.001
   optimizer: Adam
   weight_decay: 0.0001
-  
+
 scheduler:
   name: CosineAnnealingLR
   T_max: 50
