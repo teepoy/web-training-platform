@@ -4,9 +4,9 @@
 export interface Dataset {
   id: string;
   name: string;
-  dataset_type: string;
+  dataset_type: DatasetType;
   task_spec: {
-    task_type: string;
+    task_type: TaskType;
     label_space: string[];
     metadata_schema?: Record<string, { type: string; description: string }>;
   };
@@ -16,7 +16,7 @@ export interface Dataset {
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
-  storage_mode: string;
+  storage_mode: DatasetStorageMode;
   capabilities?: Record<string, boolean>;
 }
 
@@ -148,7 +148,7 @@ export interface TrainingJob {
   id: string;
   dataset_id: string;
   preset_id: string;
-  status: string;
+  status: JobStatus;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -271,8 +271,8 @@ export interface TaskTrackerDetail {
   id: string;
   task_kind: string;
   meta: Record<string, unknown>;
-  raw: Record<string, unknown>;
-  derived: Record<string, unknown>;
+  raw: TaskTrackerRawPayload;
+  derived: TaskTrackerDerived;
 }
 
 export interface CancelJobResponse {
@@ -574,13 +574,13 @@ export interface GlobalChatRequest {
 // Request body interfaces (mirrors apps/web/src/api.ts)
 export interface CreateDatasetBody {
   name: string;
-  dataset_type: string;
+  dataset_type: DatasetType;
   task_spec?: {
-    task_type: string;
+    task_type: TaskType;
     label_space: string[];
     metadata_schema?: Record<string, { type: string; description: string }>;
   };
-  storage_mode?: string;
+  storage_mode?: DatasetStorageMode;
 }
 
 export interface CreateSampleBody {
@@ -608,4 +608,278 @@ export interface UpdateScheduleBody {
   parameters?: Record<string, unknown>;
   description?: string;
   is_schedule_active?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Type aliases
+// ---------------------------------------------------------------------------
+export type TaskType = "classification" | "vqa";
+export type DatasetType = "image_classification" | "image_vqa";
+export type DatasetStorageMode = "db_full" | "file_shard_sparse";
+export type ModelFramework = "pytorch" | "dspy";
+export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type ScheduleStatus = "active" | "paused";
+export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";
+
+// ---------------------------------------------------------------------------
+// Task spec
+// ---------------------------------------------------------------------------
+export interface TaskSpec {
+  task_type: TaskType;
+  label_space: string[];
+  metadata_schema?: Record<string, { type: string; description: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Sparse prediction types
+// ---------------------------------------------------------------------------
+export interface SparsePredictionResult {
+  locator: { shard_index: number; row_index: number };
+  predicted_label: string;
+  confidence?: number | null;
+  error?: string | null;
+}
+
+export interface SparsePredictionShard {
+  shard_uri: string;
+  shard_index: number;
+  model_id: string;
+  model_version?: string | null;
+  results: SparsePredictionResult[];
+  created_at: string;
+}
+
+export interface SparsePredictionJobResult {
+  job_id: string;
+  dataset_id: string;
+  model_id: string;
+  model_version?: string | null;
+  shards: SparsePredictionShard[];
+  total_processed: number;
+  total_successful: number;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Model / Preset detail types
+// ---------------------------------------------------------------------------
+export interface ModelSpec {
+  architecture: string;
+  num_classes: number;
+}
+
+export interface PresetModelSource {
+  framework: string;
+  base_model: string;
+  source?: string | null;
+  checkpoint?: string | null;
+}
+
+export interface PresetTrainConfig {
+  process: string;
+  dataloader?: { ref: string } | null;
+  hyperparams?: Record<string, unknown>;
+}
+
+export interface PresetPredictTarget {
+  process: string;
+  label_space?: string[] | null;
+  threshold?: number | null;
+}
+
+export interface PresetPredictConfig {
+  targets: Record<string, PresetPredictTarget>;
+}
+
+export interface PresetRuntimeConfig {
+  gpu?: boolean;
+  min_vram_gb?: number | null;
+  env?: Record<string, string>;
+  queue?: string | null;
+}
+
+export interface PresetCompatibility {
+  dataset_types: string[];
+  task_types: string[];
+  prediction_targets: string[];
+}
+
+export interface ArtifactRef {
+  id: string;
+  uri: string;
+  kind: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SampleFeature {
+  sample_id: string;
+  embedding: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Common
+// ---------------------------------------------------------------------------
+export interface ApiError {
+  detail: string;
+  status: number;
+}
+
+export interface HealthStatus {
+  status: string;
+  auth_enabled: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard sub-types
+// ---------------------------------------------------------------------------
+export interface WorkPoolStatus {
+  name: string;
+  type: string;
+  is_paused: boolean;
+  concurrency_limit: number | null;
+  slots_used: number;
+  status: string;
+}
+
+export interface JobQueueStats {
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface RecentJobSummary {
+  id: string;
+  dataset_id: string;
+  preset_id: string;
+  status: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceStatus {
+  name: string;
+  kind: string;
+  status: string;
+  detail: string;
+  latency_ms: number | null;
+  endpoint: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Model upload types
+// ---------------------------------------------------------------------------
+export interface ModelCompatibility {
+  dataset_types: string[];
+  task_types: string[];
+  prediction_targets: string[];
+  label_space: string[];
+  embedding_dimension?: number | null;
+  normalized_output?: boolean | null;
+}
+
+export interface UploadedModelSpec {
+  framework: string;
+  architecture: string;
+  base_model: string;
+}
+
+export interface ModelUploadProfile {
+  id: string;
+  name: string;
+  model_spec: Record<string, string>;
+  default_prediction_targets: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Task tracker detail types
+// ---------------------------------------------------------------------------
+export interface TaskTrackerCheckResult {
+  key: string;
+  label: string;
+  status: string;
+  message: string;
+  value: string | null;
+}
+
+export interface TaskTrackerScorecard {
+  errors: number;
+  warnings: number;
+  checks: TaskTrackerCheckResult[];
+}
+
+export interface TaskTrackerNode {
+  key: string;
+  label: string;
+  status: string;
+  detail: string;
+  expected_start_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
+export interface TaskTrackerStage {
+  key: string;
+  label: string;
+  status: string;
+  summary: string;
+  nodes: TaskTrackerNode[];
+}
+
+export interface TaskTrackerSummaryMetrics {
+  total: number | null;
+  processed: number | null;
+  successful: number | null;
+  failed: number | null;
+  skipped: number | null;
+  rate_hint: string | null;
+}
+
+export interface TaskTrackerDeepLinks {
+  prefect_run_url: string | null;
+  prefect_deployment_url: string | null;
+  platform_job_url: string | null;
+}
+
+export interface TaskTrackerRawPayload {
+  platform_job: Record<string, unknown>;
+  flow_run: Record<string, unknown> | null;
+  deployment: Record<string, unknown> | null;
+  work_queue: Record<string, unknown> | null;
+  work_pool: Record<string, unknown> | null;
+  logs: Record<string, unknown>[];
+}
+
+export interface TaskTrackerDerived {
+  task_kind: string;
+  execution_kind: string;
+  display_status: string;
+  prefect_state: string | null;
+  stage: string;
+  active_node: string | null;
+  capacity_status: string;
+  queue_priority: number | null;
+  queue_priority_label: string;
+  queue_depth_ahead: number | null;
+  pool_concurrency_limit: number | null;
+  pool_slots_used: number | null;
+  stages: TaskTrackerStage[];
+  scorecard: TaskTrackerScorecard;
+  summary_metrics: TaskTrackerSummaryMetrics;
+  artifacts: Record<string, unknown>[];
+  dynamic_console_lines: string[];
+  deep_links: TaskTrackerDeepLinks;
+}
+
+// ---------------------------------------------------------------------------
+// Agent context
+// ---------------------------------------------------------------------------
+export interface AgentContext {
+  page: string;
+  dataset_id?: string | null;
+  job_id?: string | null;
+  schedule_id?: string | null;
+  extra?: Record<string, unknown>;
 }

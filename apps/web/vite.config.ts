@@ -24,10 +24,6 @@ export default defineConfig({
         find: "@platform/web-ui",
         replacement: path.resolve(__dirname, "../../libs/web-ui/src/index.ts"),
       },
-      {
-        find: "@platform/api-contract",
-        replacement: path.resolve(__dirname, "../../libs/api-contract/src/index.ts"),
-      },
     ],
   },
   server: {

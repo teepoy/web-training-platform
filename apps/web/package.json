@@ -17,7 +17,6 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@platform/api-contract": "workspace:*",
     "@platform/widget-sdk": "workspace:*",
     "@platform/web-data": "workspace:*",
     "@platform/web-ui": "workspace:*",

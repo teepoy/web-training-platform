@@ -15,8 +15,7 @@
       "@platform/widget-sdk": ["../../libs/widget-sdk/src/index.ts"],
       "@platform/web-ui": ["../../libs/web-ui/src/index.ts"],
       "@platform/web-data": ["../../libs/web-data/src/index.ts"],
-      "@platform/web-data/*": ["../../libs/web-data/src/*"],
-      "@platform/api-contract": ["../../libs/api-contract/src/index.ts"]
+      "@platform/web-data/*": ["../../libs/web-data/src/*"]
     },
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["node"]

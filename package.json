@@ -10,8 +10,6 @@
     "test:registrations": "pnpm --filter web test:registrations",
     "test:widget-sdk": "pnpm --filter @platform/widget-sdk test",
     "test:web-ui": "pnpm --filter @platform/web-ui test",
-    "generate:api-contract": "pnpm --filter @platform/api-contract generate",
-    "typecheck:api-contract": "pnpm --filter @platform/api-contract typecheck",
     "storybook": "pnpm --filter web storybook",
     "build-storybook": "pnpm --filter web build-storybook"
   }
