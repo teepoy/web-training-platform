@@ -9,15 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_current_org, get_current_user
 from app.domain.models import Organization, User
+from app.routers._common import get_container
 
 router = APIRouter(prefix="/api/v1/plugins/export-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
-
-
-def _get_container():
-    from app.main import container
-
-    return container
 
 
 def _build_image_struct(path: str, image_bytes: bytes | None = None) -> dict:
@@ -33,7 +28,7 @@ async def export_parquet(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> dict:
-    c = _get_container()
+    c = get_container()
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")

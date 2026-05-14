@@ -12,17 +12,12 @@ from app.api.deps import get_current_org, get_current_user
 from app.api.schemas import BulkCreateSampleItem, BulkCreateSampleResponse
 from app.domain.models import Annotation, Organization, Sample, User
 from app.domain.types import TaskType
+from app.routers._common import get_container
 from app.services.dataset_capability_guard import assert_not_sparse
 from app.services.label_studio import platform_annotation_to_ls
 
 router = APIRouter(prefix="/api/v1/plugins/import-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
-
-
-def _get_container():
-    from app.main import container
-
-    return container
 
 
 def _is_image_struct(value: object) -> TypeGuard[dict[str, object]]:
@@ -145,7 +140,7 @@ async def import_parquet(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> BulkCreateSampleResponse:
-    c = _get_container()
+    c = get_container()
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")

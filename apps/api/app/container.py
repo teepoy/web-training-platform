@@ -37,8 +37,6 @@ from app.services.preview_upstream_s3 import S3ZipPreviewUpstream
 
 
 class Container(containers.DeclarativeContainer):
-    wiring_config = containers.WiringConfiguration(modules=["app.main"])
-
     config = providers.Singleton(load_config)
 
     db_engine = providers.Singleton(
