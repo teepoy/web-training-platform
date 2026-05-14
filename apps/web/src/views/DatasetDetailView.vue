@@ -383,7 +383,7 @@ import { resolveImageUris, buildBlinkTableData, usePagePanels, normalizeWaferPoi
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
 import { SampleDetailDrawer } from "@platform/web-ui";
-import { datasetPanels } from "../components/classify/sidebarConfig";
+import { datasetPanels } from "../features/classify/config";
 import ManualImporter from "../registrations/import-manual/ManualImporter.vue";
 import ManualDatasetImporter from "../registrations/import-dataset-manual/ManualDatasetImporter.vue";
 import ParquetImporter from "../registrations/import-parquet/ParquetImporter.vue";

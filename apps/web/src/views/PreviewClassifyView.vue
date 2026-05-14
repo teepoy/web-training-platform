@@ -15,7 +15,7 @@ import {
 import { usePreviewLoader } from '@platform/web-ui'
 import type { BrowserItem, WaferPoint } from '../types'
 import { BrowserSidebar, PreviewItemDrawer, SampleBrowser } from '@platform/web-ui'
-import { previewPanels } from '../components/classify/sidebarConfig'
+import { previewPanels } from '../features/classify/config'
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   datasetPanels,
   previewPanels,
-} from "../components/classify/sidebarConfig";
+} from "../features/classify/config";
 
 const CLASSIFY_ONLY = ["annotation-progress", "sample-viewer", "selected-samples"];
 const REQUIRED_IN_DATASET_BROWSER = ["label-distribution", "wafer-map", "browser-summary"];
