@@ -92,7 +92,7 @@ import { computed, h } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
-import { api } from "../api";
+import { getDashboard } from "@platform/web-ui/api";
 import type { RecentJobSummary, ServiceStatus } from "../types";
 import { useOrgStore } from "../stores/org";
 
@@ -102,7 +102,7 @@ const orgStore = useOrgStore();
 
 const { data, isLoading } = useQuery({
   queryKey: computed(() => ["dashboard", orgStore.currentOrgId]),
-  queryFn: () => api.getDashboard(),
+  queryFn: () => getDashboard(),
   refetchInterval: 10000,
   enabled: computed(() => !!orgStore.currentOrgId),
 });

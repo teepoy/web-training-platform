@@ -20,7 +20,7 @@ import {
   useDialog,
   useThemeVars,
 } from "naive-ui";
-import { bulkCreateAnnotations, syncAnnotationsToLs } from "../../../api";
+import { bulkCreateAnnotations, syncAnnotationsToLs } from "@platform/web-ui/api";
 import { getDataset, updateLabelSpace } from "@platform/web-data/datasets";
 import { getSample, listSamplesWithLabels } from "@platform/web-data/samples";
 import { listModels, listJobs, listPresets, createJob } from "@platform/web-data/models";

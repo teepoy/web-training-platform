@@ -378,7 +378,7 @@ import { BrowserSidebar, FlowModal, SampleBrowser, type FlowCard } from "@platfo
 import { getDataset } from "@platform/web-data/datasets";
 import { listSamples, getSimilarity } from "@platform/web-data/samples";
 import { queryWaferPoints } from "@platform/web-data/agent";
-import { api } from "../api";
+import { getSparseSummary, updateEmbedConfig, extractFeatures, getSelectionMetrics, getUncoveredHints } from "@platform/web-ui/api";
 import { resolveImageUris, buildBlinkTableData, usePagePanels, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
@@ -399,7 +399,7 @@ import {
 import { useSampleLoader } from "@platform/web-ui";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
-import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";
+import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "@platform/web-ui/api";
 import type { SparseSummaryResponse } from "../types";
 import { widgetComponentMap } from "../components/classify/widgetMap";
 
@@ -429,7 +429,7 @@ const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_spar
 
 const sparseSummaryQuery = useQuery({
   queryKey: computed(() => ["sparse-summary", id.value]),
-  queryFn: () => api.getSparseSummary(id.value),
+  queryFn: () => getSparseSummary(id.value),
   enabled: computed(() => isSparse.value),
   retry: false,
 });
@@ -735,8 +735,8 @@ async function doApplyEmbedConfig() {
   embedConfigLoading.value = true;
   embedConfigSaved.value = false;
   try {
-await api.updateEmbedConfig(id.value, { model: embedConfigModel.value, dimension: embedConfigDimension.value });
-await api.extractFeatures(id.value, true);
+await updateEmbedConfig(id.value, { model: embedConfigModel.value, dimension: embedConfigDimension.value });
+await extractFeatures(id.value, true);
     embedConfigSaved.value = true;
   } finally {
     embedConfigLoading.value = false;
@@ -750,7 +750,7 @@ const extractFeaturesResult = ref<ExtractFeaturesResponse | null>(null);
 async function doExtractFeatures() {
   extractFeaturesLoading.value = true;
   try {
-    extractFeaturesResult.value = await api.extractFeatures(id.value);
+    extractFeaturesResult.value = await extractFeatures(id.value);
   } catch (e) {
     message.error(`Extract features failed: ${(e as Error).message}`);
   } finally {
@@ -839,7 +839,7 @@ const selectionMetricsColumns: DataTableColumns<SelectionMetricsRow> = [
 async function doSelectionMetrics() {
   selectionMetricsLoading.value = true;
   try {
-    selectionMetricsResult.value = await api.getSelectionMetrics(id.value);
+    selectionMetricsResult.value = await getSelectionMetrics(id.value);
   } catch (e) {
     message.error(`Selection metrics failed: ${(e as Error).message}`);
   } finally {
@@ -874,7 +874,7 @@ const clusterColumns: DataTableColumns<{ cluster_id: string; size: number; hint:
 async function doUncoveredClusters() {
   uncoveredClustersLoading.value = true;
   try {
-    uncoveredClustersResult.value = await api.getUncoveredHints(id.value);
+    uncoveredClustersResult.value = await getUncoveredHints(id.value);
   } catch (e) {
     message.error(`Uncovered clusters failed: ${(e as Error).message}`);
   } finally {
