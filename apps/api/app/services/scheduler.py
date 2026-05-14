@@ -55,14 +55,28 @@ logger = logging.getLogger(__name__)
 # Lazy repository singleton (avoids circular import from main.py)
 # ---------------------------------------------------------------------------
 
+_repository = None
 _local_schedule_runs: dict[str, list[dict[str, object]]] = {}
 
 
 def _get_repository():
-    """Return the container's SqlRepository singleton."""
-    from app.main import container
+    """Return a lazily-initialised SqlRepository singleton."""
+    global _repository
+    if _repository is None:
+        try:
+            from app.core.config import load_config
+            from app.db.session import create_engine, create_session_factory
+            from app.repositories.sql_repository import SqlRepository
 
-    return container.infra.repository
+            cfg = load_config()
+            engine = create_engine(str(cfg.db.url))
+            session_factory = create_session_factory(engine)
+            _repository = SqlRepository(session_factory=session_factory)
+        except Exception as exc:
+            logger.warning(
+                "Failed to initialise repository for SchedulerService: %s", exc
+            )
+    return _repository
 
 
 def _orm_to_dict(row: ScheduleORM) -> dict[str, object]:

@@ -86,7 +86,7 @@ def _mock_auth_deps(request):
 # After the LS-always-on migration, create_dataset always calls LS to create
 # a project.  Non-LS tests don't mock LS themselves, so we provide a global
 # mock that succeeds silently.  Tests in test_ls_*.py manage their own
-# overrides — they call container.infra.label_studio_client.override() directly
+# overrides — they call container.label_studio_client.override() directly
 # and reset it in their finally blocks.
 # ---------------------------------------------------------------------------
 
@@ -127,9 +127,9 @@ def _mock_ls_client(request):
     _mock_ls.list_annotations = AsyncMock(return_value=[])
     _mock_ls.export_project = AsyncMock(return_value=[])
 
-    container.infra.label_studio_client.override(providers.Object(_mock_ls))
+    container.label_studio_client.override(providers.Object(_mock_ls))
     yield
-    container.infra.label_studio_client.reset_override()
+    container.label_studio_client.reset_override()
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -179,9 +179,9 @@ def _mock_embedding_service(request):
     _mock_embedding.classify_batch = AsyncMock(side_effect=_classify_batch)
     _mock_embedding.health = AsyncMock(return_value=True)
 
-    container.infra.embedding_service.override(providers.Object(_mock_embedding))
+    container.embedding_service.override(providers.Object(_mock_embedding))
     yield
-    container.infra.embedding_service.reset_override()
+    container.embedding_service.reset_override()
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +237,9 @@ def _mock_inference_worker(request):
     _mock_worker.predict_batch = AsyncMock(side_effect=_predict_batch)
     _mock_worker.embed_batch = AsyncMock(side_effect=_embed_batch)
 
-    container.infra.inference_worker.override(providers.Object(_mock_worker))
+    container.inference_worker.override(providers.Object(_mock_worker))
     yield
-    container.infra.inference_worker.reset_override()
+    container.inference_worker.reset_override()
 
 
 # ---------------------------------------------------------------------------

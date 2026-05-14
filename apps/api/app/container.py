@@ -3,26 +3,31 @@ from __future__ import annotations
 
 from dependency_injector import containers, providers
 
-from app.container_modules.infra import InfraContainer
-from app.container_modules.datasets import ContainerDatasets
-from app.container_modules.training import ContainerTraining
-from app.container_modules.prediction import ContainerPrediction
-from app.container_modules.agent import ContainerAgent
-from app.container_modules.preview import ContainerPreview
-from app.container_modules.platform import ContainerPlatform
-
-from app.services.feature_ops import FeatureOpsService
-from app.services.artifacts import ArtifactService
+from app.core.config import load_config
+from app.db.session import create_engine, create_session_factory
+from app.repositories.sql_repository import SqlRepository
 from app.services.engines import KubeflowTrainingOperatorEngine, LocalProcessEngine
+from app.services.prefect_client import PrefectClient
 from app.services.prefect_engine import PrefectWorkPoolEngine
+from app.services.artifacts import ArtifactService
+from app.services.embedding import EmbeddingClient
+from app.services.llm import OpenAICompatibleLlmClient
+from app.services.feature_ops import FeatureOpsService
+from app.services.inference_worker import InferenceWorkerClient
 from app.services.kubeflow_client import KubeflowClient
+from app.services.label_studio import LabelStudioClient
 from app.services.model_service import ModelService
+from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
 from app.services.prediction_service import PredictionService
 from app.services.prediction_orchestrator import PredictionOrchestrator
 from app.services.service_health import ServiceHealthService
 from app.services.task_tracker import TaskTrackerService
 from app.services.auth import AuthService
+from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
+from app.db.ls_session import create_ls_engine, create_ls_session_factory
+from app.repositories.ls_read_repository import LsReadRepository
+from app.presets.registry import PresetRegistry
 from app.agent.session_store import SessionStore
 from app.agent.surface_store import SurfaceStore
 from app.services.preview_service import PreviewService
@@ -34,117 +39,181 @@ from app.services.preview_upstream_s3 import S3ZipPreviewUpstream
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(modules=["app.main"])
 
-    infra = providers.Container(InfraContainer)
-    datasets = providers.Container(ContainerDatasets)
-    training = providers.Container(ContainerTraining)
-    prediction = providers.Container(ContainerPrediction)
-    agent = providers.Container(ContainerAgent)
-    preview = providers.Container(ContainerPreview)
-    platform = providers.Container(ContainerPlatform)
+    config = providers.Singleton(load_config)
 
-    def __new__(cls):
-        obj = super().__new__(cls)
-        _wire_domain_providers(obj)
-        return obj
-
-
-def _wire_domain_providers(container: Container) -> None:
-    infra = container.infra
-
-    container.datasets().feature_ops = providers.Singleton(
-        FeatureOpsService,
-        repository=infra.repository,
-        embedding_service=infra.embedding_service,
-        inference_worker=infra.inference_worker,
+    db_engine = providers.Singleton(
+        create_engine,
+        db_url=providers.Callable(lambda cfg: cfg.db.url, config),
+        echo=providers.Callable(lambda cfg: bool(cfg.db.echo), config),
     )
-    container.datasets().artifacts = providers.Singleton(
-        ArtifactService,
-        storage=infra.artifact_storage,
-        repository=infra.repository,
+    session_factory = providers.Singleton(create_session_factory, engine=db_engine)
+    repository = providers.Singleton(SqlRepository, session_factory=session_factory)
+
+    minio_storage = providers.Singleton(
+        MinioArtifactStorage,
+        endpoint=providers.Callable(lambda cfg: cfg.storage.minio.endpoint, config),
+        access_key=providers.Callable(lambda cfg: cfg.storage.minio.access_key, config),
+        secret_key=providers.Callable(lambda cfg: cfg.storage.minio.secret_key, config),
+        bucket=providers.Callable(lambda cfg: cfg.storage.minio.bucket, config),
+        secure=providers.Callable(lambda cfg: bool(cfg.storage.minio.secure), config),
+    )
+    memory_storage = providers.Singleton(InMemoryArtifactStorage)
+    artifact_storage = providers.Selector(
+        providers.Callable(lambda cfg: cfg.storage.kind, config),
+        memory=memory_storage,
+        minio=minio_storage,
     )
 
     kubeflow_client = providers.Factory(
         KubeflowClient,
-        namespace=providers.Callable(lambda cfg: cfg.k8s.namespace, infra.config),
-        group=providers.Callable(lambda cfg: cfg.kubeflow.group, infra.config),
-        version=providers.Callable(lambda cfg: cfg.kubeflow.version, infra.config),
-        plural=providers.Callable(lambda cfg: cfg.kubeflow.plural, infra.config),
-        in_cluster=providers.Callable(
-            lambda cfg: bool(cfg.k8s.incluster), infra.config
-        ),
-        kubeconfig=providers.Callable(lambda cfg: cfg.k8s.kubeconfig, infra.config),
+        namespace=providers.Callable(lambda cfg: cfg.k8s.namespace, config),
+        group=providers.Callable(lambda cfg: cfg.kubeflow.group, config),
+        version=providers.Callable(lambda cfg: cfg.kubeflow.version, config),
+        plural=providers.Callable(lambda cfg: cfg.kubeflow.plural, config),
+        in_cluster=providers.Callable(lambda cfg: bool(cfg.k8s.incluster), config),
+        kubeconfig=providers.Callable(lambda cfg: cfg.k8s.kubeconfig, config),
     )
 
-    local_engine = providers.Singleton(
-        LocalProcessEngine, storage=infra.artifact_storage
-    )
+    local_engine = providers.Singleton(LocalProcessEngine, storage=artifact_storage)
     kubeflow_engine = providers.Singleton(
         KubeflowTrainingOperatorEngine,
         kubeflow_client=kubeflow_client,
-        image=providers.Callable(lambda cfg: cfg.kubeflow.image, infra.config),
-        storage=infra.artifact_storage,
+        image=providers.Callable(lambda cfg: cfg.kubeflow.image, config),
+        storage=artifact_storage,
+    )
+
+    prefect_client = providers.Singleton(
+        PrefectClient,
+        prefect_api_url=providers.Callable(lambda cfg: cfg.prefect.api_url, config),
+    )
+
+    preset_registry = providers.Singleton(
+        PresetRegistry,
+        presets_dir=providers.Callable(lambda cfg: cfg.presets.dir, config),
+        strict=providers.Callable(lambda cfg: bool(cfg.presets.strict), config),
     )
 
     prefect_engine = providers.Singleton(
         PrefectWorkPoolEngine,
-        prefect_client=infra.prefect_client,
+        prefect_client=prefect_client,
         work_pool_name=providers.Callable(
-            lambda cfg: cfg.prefect.work_pool_name, infra.config
+            lambda cfg: cfg.prefect.work_pool_name, config
         ),
         work_pool_type=providers.Callable(
-            lambda cfg: cfg.prefect.work_pool_type, infra.config
+            lambda cfg: cfg.prefect.work_pool_type, config
         ),
-        flow_name=providers.Callable(lambda cfg: cfg.prefect.flow_name, infra.config),
+        flow_name=providers.Callable(lambda cfg: cfg.prefect.flow_name, config),
         concurrency_limit=providers.Callable(
-            lambda cfg: int(cfg.prefect.concurrency_limit), infra.config
+            lambda cfg: int(cfg.prefect.concurrency_limit), config
         ),
-        preset_registry=infra.preset_registry,
+        preset_registry=preset_registry,
     )
 
     execution_engine = providers.Selector(
-        providers.Callable(lambda cfg: cfg.execution.engine, infra.config),
+        providers.Callable(lambda cfg: cfg.execution.engine, config),
         local=local_engine,
         kubeflow=kubeflow_engine,
         prefect=prefect_engine,
     )
 
-    computed_artifacts = providers.Singleton(
-        ArtifactService,
-        storage=infra.artifact_storage,
-        repository=infra.repository,
+    notification_sink = providers.Singleton(
+        WebhookNotificationSink,
+        endpoint=providers.Callable(
+            lambda cfg: cfg.notification.webhook.endpoint, config
+        ),
+        timeout_seconds=providers.Callable(
+            lambda cfg: cfg.notification.webhook.timeout_seconds, config
+        ),
     )
 
-    container.training().orchestrator = providers.Singleton(
+    label_studio_client = providers.Singleton(
+        LabelStudioClient,
+        url=providers.Callable(lambda cfg: cfg.label_studio.url, config),
+        api_key=providers.Callable(lambda cfg: cfg.label_studio.api_key, config),
+    )
+
+    ls_engine = providers.Singleton(
+        create_ls_engine,
+        database_url=providers.Callable(
+            lambda cfg: cfg.label_studio.database_url, config
+        ),
+    )
+    ls_session_factory = providers.Singleton(
+        create_ls_session_factory,
+        engine=ls_engine,
+    )
+    ls_read_repository = providers.Singleton(
+        LsReadRepository,
+        session_factory=ls_session_factory,
+    )
+
+    embedding_service = providers.Singleton(
+        EmbeddingClient,
+        grpc_target=providers.Callable(lambda cfg: cfg.embedding.grpc_target, config),
+    )
+    llm_client = providers.Singleton(
+        OpenAICompatibleLlmClient,
+        base_url=providers.Callable(lambda cfg: cfg.llm.base_url, config),
+        api_key=providers.Callable(lambda cfg: cfg.llm.api_key, config),
+        model=providers.Callable(lambda cfg: cfg.llm.model, config),
+        timeout_seconds=providers.Callable(
+            lambda cfg: float(cfg.llm.timeout_seconds), config
+        ),
+    )
+    inference_worker = providers.Singleton(
+        InferenceWorkerClient,
+        base_url=providers.Callable(lambda cfg: cfg.inference.base_url, config),
+    )
+    feature_ops = providers.Singleton(
+        FeatureOpsService,
+        repository=repository,
+        embedding_service=embedding_service,
+        inference_worker=inference_worker,
+    )
+    artifacts = providers.Singleton(
+        ArtifactService, storage=artifact_storage, repository=repository
+    )
+    orchestrator = providers.Singleton(
         TrainingOrchestrator,
         engine=execution_engine,
-        notification_sink=infra.notification_sink,
-        repository=infra.repository,
-        artifact_service=computed_artifacts,
+        notification_sink=notification_sink,
+        repository=repository,
+        artifact_service=artifacts,
     )
-    container.training().model_service = providers.Singleton(
+    model_service = providers.Singleton(
         ModelService,
-        repository=infra.repository,
-        artifact_storage=infra.artifact_storage,
+        repository=repository,
+        artifact_storage=artifact_storage,
     )
-
-    container.prediction().prediction_service = providers.Singleton(
+    prediction_service = providers.Singleton(
         PredictionService,
-        repository=infra.repository,
-        artifact_storage=infra.artifact_storage,
-        config=infra.config,
-        embedding_client=infra.embedding_service,
-        llm_client=infra.llm_client,
-        inference_worker=infra.inference_worker,
+        repository=repository,
+        artifact_storage=artifact_storage,
+        config=config,
+        embedding_client=embedding_service,
+        llm_client=llm_client,
+        inference_worker=inference_worker,
     )
-    container.prediction().prediction_orchestrator = providers.Singleton(
+    prediction_orchestrator = providers.Singleton(
         PredictionOrchestrator,
-        prefect_client=infra.prefect_client,
-        repository=infra.repository,
+        prefect_client=prefect_client,
+        repository=repository,
     )
-
-    container.agent().surface_store = providers.Singleton(SurfaceStore)
-    container.agent().session_store = providers.Singleton(SessionStore)
-
+    service_health = providers.Singleton(
+        ServiceHealthService,
+        config=config,
+        prefect_client=prefect_client,
+        embedding_client=embedding_service,
+    )
+    task_tracker = providers.Singleton(
+        TaskTrackerService,
+        repository=repository,
+        prefect_client=prefect_client,
+        config=config,
+    )
+    auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
+    surface_store: providers.Singleton[SurfaceStore] = providers.Singleton(SurfaceStore)
+    session_store: providers.Singleton[SessionStore] = providers.Singleton(SessionStore)
     mock_upstream = providers.Singleton(MockUpstreamAdapter)
 
     def _make_s3_upstream():
@@ -161,29 +230,15 @@ def _wire_domain_providers(container: Container) -> None:
             upstreams["s3"] = s3
         return upstreams
 
-    container.preview().preview_upstream = providers.Singleton(
+    preview_upstream: providers.Singleton[PreviewUpstreamRouter] = providers.Singleton(
         PreviewUpstreamRouter,
         upstreams=providers.Callable(
             _make_upstreams, mock=mock_upstream, s3=s3_upstream
         ),
     )
-    container.preview().preview_store = providers.Singleton(PreviewStore)
-    container.preview().preview_service = providers.Singleton(
+    preview_store: providers.Singleton[PreviewStore] = providers.Singleton(PreviewStore)
+    preview_service: providers.Singleton[PreviewService] = providers.Singleton(
         PreviewService,
-        store=container.preview().preview_store,
-        upstream=container.preview().preview_upstream,
-    )
-
-    container.platform().auth_service = providers.Singleton(AuthService)
-    container.platform().service_health = providers.Singleton(
-        ServiceHealthService,
-        config=infra.config,
-        prefect_client=infra.prefect_client,
-        embedding_client=infra.embedding_service,
-    )
-    container.platform().task_tracker = providers.Singleton(
-        TaskTrackerService,
-        repository=infra.repository,
-        prefect_client=infra.prefect_client,
-        config=infra.config,
+        store=preview_store,
+        upstream=preview_upstream,
     )

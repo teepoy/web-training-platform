@@ -14,22 +14,27 @@ from app.db.models import (
     PersonalAccessTokenORM,
     UserORM,
 )
+from app.db.session import create_engine, create_session_factory
 from app.domain.models import Organization, User
 from app.services.auth import decode_access_token, verify_personal_access_token
 
 # ---------------------------------------------------------------------------
-# Container-backed session factory (avoids per-request engine churn)
+# Lazy module-level engine + session factory (avoids per-request engine churn)
 # ---------------------------------------------------------------------------
 
+_session_factory = None
 _DEV_USER_ID = "00000000-0000-0000-0000-000000000002"
 _DEV_ORG_ID = "00000000-0000-0000-0000-000000000001"
 _DEV_ORG_SLUG = "dev-no-auth"
 
 
 def _get_session_factory():
-    from app.main import container
-
-    return container.infra.session_factory()
+    global _session_factory
+    if _session_factory is None:
+        cfg = load_config()
+        engine = create_engine(str(cfg.db.url))
+        _session_factory = create_session_factory(engine)
+    return _session_factory
 
 
 def _auth_enabled() -> bool:
