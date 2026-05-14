@@ -382,7 +382,7 @@ import { api } from "../api";
 import { resolveImageUris, buildBlinkTableData, usePagePanels, normalizeWaferPoint, injectWaferPanelData } from "@platform/web-ui";
 import type { BlinkSampleInput } from "@platform/web-ui";
 import type { BrowserItem, Dataset, WaferPoint } from "../types";
-import SampleDetailDrawer from "../components/SampleDetailDrawer.vue";
+import { SampleDetailDrawer } from "@platform/web-ui";
 import { datasetPanels } from "../components/classify/sidebarConfig";
 import ManualImporter from "../registrations/import-manual/ManualImporter.vue";
 import ManualDatasetImporter from "../registrations/import-dataset-manual/ManualDatasetImporter.vue";
@@ -396,7 +396,7 @@ import {
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
 } from "@platform/web-ui";
-import { useSampleLoader } from "../composables/useSampleLoader";
+import { useSampleLoader } from "@platform/web-ui";
 import { useBrowserFilter } from "../composables/useBrowserFilter";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "../api";

@@ -313,7 +313,7 @@ import {
 import { getSample, listAnnotationsForSample, createAnnotation, updateAnnotation, deleteAnnotation, uploadSampleImage, getSimilarity } from "@platform/web-data/samples";
 import type { SimilarityResponse } from "@platform/web-data/samples";
 import { resolveImageUris, FALLBACK_PLACEHOLDER } from "@platform/web-ui";
-import type { Annotation } from "../types";
+import type { Annotation } from "../../api";
 
 // ---------------------------------------------------------------------------
 // Props / Emits

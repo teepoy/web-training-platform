@@ -30,13 +30,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, provide, ref, watch } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import type { DataTableColumns, SelectOption } from 'naive-ui'
 import { NButton, NTag } from 'naive-ui'
 import { listTrackedTasks } from '@platform/web-data/task-tracker'
-import TaskInsightModal from '../components/TaskInsightModal.vue'
-import { useTaskHandoff } from '../composables/useTaskHandoff'
+import { TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from '@platform/web-ui'
+import { useTaskHandoff, useTaskStream } from '../composables/useTaskHandoff'
 import { useTaskHandoffState } from '../composables/taskHandoffState'
 import type { TaskTrackerSummary } from '../types'
 import { useOrgStore } from '../stores/org'
@@ -48,6 +48,9 @@ const showModal = ref(false)
 const selectedTask = ref<TaskTrackerSummary | null>(null)
 const { watchedTasks, watchTask, unwatchTask, syncTask } = useTaskHandoff()
 const { addTaskId, removeTaskId } = useTaskHandoffState()
+
+provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId))
+provide(TASK_INSIGHT_STREAM_KEY, useTaskStream)
 
 const handoffIds = computed(() => new Set(Object.keys(watchedTasks.value)))
 

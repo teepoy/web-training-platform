@@ -143,13 +143,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch, type InjectionKey, type Ref } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
 import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '@platform/web-data/task-tracker'
-import type { TaskTrackerNode, TaskTrackerSummary } from '../types'
-import { useTaskStream } from '../composables/useTaskHandoff'
-import { useOrgStore } from '../stores/org'
+import type { TaskTrackerNode, TaskTrackerSummary } from '../../api'
+
+export const TASK_INSIGHT_ORG_ID_KEY: InjectionKey<Ref<string | null>> = Symbol('task-insight-org-id')
+export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
+  (taskId: Ref<string | null>, callback: (payload: unknown) => void) => void
+> = Symbol('task-insight-stream')
 
 const props = defineProps<{
   show: boolean
@@ -164,10 +167,10 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const queryClient = useQueryClient()
-const orgStore = useOrgStore()
+const currentOrgId = inject(TASK_INSIGHT_ORG_ID_KEY, ref(null))
 
 const { data: detail, isLoading } = useTrackedTaskQuery(
-  () => (props.show && props.task?.id && orgStore.currentOrgId ? props.task.id : null),
+  () => (props.show && props.task?.id && currentOrgId.value ? props.task.id : null),
 )
 
 const streamedDetail = ref<typeof detail.value | null>(null)
@@ -180,12 +183,15 @@ watch(detail, (value) => {
 
 const activeDetail = computed(() => streamedDetail.value ?? detail.value ?? null)
 
-useTaskStream(
-  computed(() => (props.show && props.task?.id ? props.task.id : null)),
-  (payload) => {
-    streamedDetail.value = payload
-  },
-)
+const stream = inject(TASK_INSIGHT_STREAM_KEY, null)
+if (stream) {
+  stream(
+    computed(() => (props.show && props.task?.id ? props.task.id : null)),
+    (payload) => {
+      streamedDetail.value = payload
+    },
+  )
+}
 
 const rawCancel = useCancelTrackedTaskMutation()
 

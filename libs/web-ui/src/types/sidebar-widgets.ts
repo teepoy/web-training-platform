@@ -1,16 +1,15 @@
-export interface ClassifyDashboardStats {
-  total_samples: number;
-  annotated_samples: number;
-  unlabeled_samples: number;
-  label_counts?: Record<string, number>;
-}
+import type { DatasetAnnotationStats } from "../api/types";
+
+export type { DatasetAnnotationStats as ClassifyDashboardStats };
 
 export interface ClassifyDashboardContext {
-  stats: ClassifyDashboardStats | null;
+  stats: DatasetAnnotationStats | null;
   isLoading: boolean;
   isError: boolean;
+  errorMessage: string | null;
   draftCount: number;
   selectedCount: number;
+  labelSpace: string[];
   refetch: () => void;
 }
 

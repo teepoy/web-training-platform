@@ -138,7 +138,7 @@ import {
 } from "@platform/web-data/models";
 import type { UpdateScheduleBody } from "@platform/web-data/models";
 import type { ScheduleRun } from "../types";
-import RunLogViewer from "../components/RunLogViewer.vue";
+import { RunLogViewer } from "@platform/web-ui";
 
 const route = useRoute();
 const router = useRouter();

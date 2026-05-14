@@ -12,7 +12,7 @@ import {
   type PreviewPersistScope,
   type PreviewItem,
 } from '@platform/web-data/preview'
-import { usePreviewLoader } from '../composables/usePreviewLoader'
+import { usePreviewLoader } from '@platform/web-ui'
 import type { BrowserItem, WaferPoint } from '../types'
 import { BrowserSidebar, PreviewItemDrawer, SampleBrowser } from '@platform/web-ui'
 import { previewPanels } from '../components/classify/sidebarConfig'

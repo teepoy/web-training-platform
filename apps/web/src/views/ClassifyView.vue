@@ -284,12 +284,11 @@ import {
   DATA_PIPELINE_KEY,
 } from "@platform/web-ui";
 import type { BlinkSampleInput, DataPipeline } from "@platform/web-ui";
-import { useSampleLoader } from "../composables/useSampleLoader";
+import { useClassifyDashboard, useSampleLoader, TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@platform/web-ui";
 import ClassifySidebar from "../components/classify/ClassifySidebar.vue";
-import TaskInsightModal from "../components/TaskInsightModal.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../components/classify/sidebarConfig";
-import { useClassifyDashboard } from "../composables/useClassifyDashboard";
 import { GLOBAL_AGENT_PANELS_KEY } from "../composables/useGlobalAgent";
+import { useTaskStream } from "../composables/useTaskHandoff";
 import { useOrgStore } from "../stores/org";
 
 interface ReviewRow {
@@ -1001,6 +1000,8 @@ const pipeline = createDataPipeline<BrowserItem>(browserItems);
 pipeline.register("wafer-map");
 const galleryNode = pipeline.register("gallery", "wafer-map");
 provide(DATA_PIPELINE_KEY, pipeline);
+provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
+provide(TASK_INSIGHT_STREAM_KEY, useTaskStream);
 
 // Sync waferFilterIds ref from the DataPipeline (drives useSampleLoader)
 watch(

@@ -9,30 +9,8 @@
 import { computed, isRef, ref, type Ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { getAnnotationStats } from '@platform/web-data/datasets'
-import type { DatasetAnnotationStats } from '../types'
-
-// ---------------------------------------------------------------------------
-// Merged context that widgets receive
-// ---------------------------------------------------------------------------
-
-export interface ClassifyDashboardContext {
-  /** Server-side annotation stats (null while loading or on error). */
-  stats: DatasetAnnotationStats | null
-  /** Whether the stats query is currently loading. */
-  isLoading: boolean
-  /** Whether the stats query encountered an error. */
-  isError: boolean
-  /** Error message when the stats query fails. */
-  errorMessage: string | null
-  /** Number of samples with a pending local draft label. */
-  draftCount: number
-  /** Number of currently selected sample rows. */
-  selectedCount: number
-  /** Dataset label space (from the dataset query). */
-  labelSpace: string[]
-  /** Refetch stats from the server. */
-  refetch: () => void
-}
+import type { DatasetAnnotationStats } from '../api'
+import type { ClassifyDashboardContext } from '../types/sidebar-widgets'
 
 // ---------------------------------------------------------------------------
 // Composable

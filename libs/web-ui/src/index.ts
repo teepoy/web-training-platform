@@ -16,6 +16,9 @@ export { BlinkImageCell, BlinkTable } from "./components/blink-table";
 export { default as PreviewItemDrawer } from "./components/preview-item-drawer";
 export { default as SampleBrowser } from "./components/sample-browser";
 export { default as TrainingChart } from "./components/training-chart";
+export { default as RunLogViewer } from "./components/run-log-viewer";
+export { default as SampleDetailDrawer } from "./components/sample-detail-drawer";
+export { default as TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "./components/task-insight-modal";
 export { default as WidgetErrorBoundary } from "./components/widget-error-boundary";
 export { handleBrowserActivation } from "./utils/browser-activation";
 export {
@@ -48,6 +51,12 @@ export type {
 
 export { createDataPipeline as useDataPipeline, DATA_PIPELINE_KEY } from "./composables/useDataPipeline";
 export type { Annotation, DataNode, DataPipeline } from "./composables/useDataPipeline";
+
+export { useClassifyDashboard } from "./composables/useClassifyDashboard";
+export { usePreviewLoader } from "./composables/usePreviewLoader";
+export type { UsePreviewLoaderOptions } from "./composables/usePreviewLoader";
+export { useSampleLoader } from "./composables/useSampleLoader";
+export type { UseSampleLoaderOptions } from "./composables/useSampleLoader";
 
 export {
   injectWaferPanelData,
