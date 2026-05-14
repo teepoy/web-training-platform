@@ -127,8 +127,8 @@ def _seed_prediction_setup(
         "label_space": labels,
     }).encode()
 
-    repo = app_container.repository()
-    storage = app_container.artifact_storage()
+    repo = app_container.infra.repository()
+    storage = app_container.infra.artifact_storage()
 
     asyncio.run(storage.put_bytes(model_object_name, model_payload))
     model_uri = f"memory://{model_object_name}"
@@ -166,7 +166,7 @@ def _create_prediction_job_record(dataset_id: str, model_id: str) -> str:
         target="image_classification",
         org_id=DEFAULT_ORG_ID,
     )
-    asyncio.run(app_container.repository().create_prediction_job(job, org_id=DEFAULT_ORG_ID))
+    asyncio.run(app_container.infra.repository().create_prediction_job(job, org_id=DEFAULT_ORG_ID))
     return job.id
 
 

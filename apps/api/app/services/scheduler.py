@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Container-backed repository (avoids parallel DI path)
+# Lazy repository singleton (avoids circular import from main.py)
 # ---------------------------------------------------------------------------
 
 _local_schedule_runs: dict[str, list[dict[str, object]]] = {}

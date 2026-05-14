@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from pathlib import Path
@@ -29,7 +28,7 @@ def _ensure_preset_registry():
     """
     from app.main import container
 
-    registry = container.preset_registry()
+    registry = container.infra.preset_registry()
     if registry.count == 0:
         registry.load()
     yield
@@ -43,26 +42,6 @@ def _dispose_db_resources():
     from app.core.config import load_config
     from app.main import container
     import app.api.deps as _deps
-
-    load_config.cache_clear()
-    container.reset_singletons()
-    _deps._session_factory = None  # type: ignore
-
-    yield
-
-    async def _dispose() -> None:
-        engine = container.db_engine()
-        await engine.dispose()
-
-    asyncio.run(_dispose())
-
-    _db_path = db_url.removeprefix("sqlite+aiosqlite:///")
-    for _suffix in ("", "-wal", "-shm"):
-        _p = Path(_db_path + _suffix)
-        try:
-            _p.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     load_config.cache_clear()
     container.reset_singletons()

@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from dependency_injector import containers, providers
-
 from app.core.config import load_config
 from app.db.session import create_engine, create_session_factory
 from app.repositories.sql_repository import SqlRepository
@@ -18,11 +16,7 @@ from app.presets.registry import PresetRegistry
 
 
 class InfraContainer(containers.DeclarativeContainer):
-    """Shared infrastructure providers — config, DB, storage, external clients."""
-
     config = providers.Singleton(load_config)
-
-    # ── Database ──────────────────────────────────────────────────────
     db_engine = providers.Singleton(
         create_engine,
         db_url=providers.Callable(lambda cfg: cfg.db.url, config),
@@ -30,8 +24,6 @@ class InfraContainer(containers.DeclarativeContainer):
     )
     session_factory = providers.Singleton(create_session_factory, engine=db_engine)
     repository = providers.Singleton(SqlRepository, session_factory=session_factory)
-
-    # ── Artifact storage ──────────────────────────────────────────────
     minio_storage = providers.Singleton(
         MinioArtifactStorage,
         endpoint=providers.Callable(lambda cfg: cfg.storage.minio.endpoint, config),
@@ -46,20 +38,15 @@ class InfraContainer(containers.DeclarativeContainer):
         memory=memory_storage,
         minio=minio_storage,
     )
-
-    # ── Prefect ───────────────────────────────────────────────────────
     prefect_client = providers.Singleton(
         PrefectClient,
         prefect_api_url=providers.Callable(lambda cfg: cfg.prefect.api_url, config),
     )
-
-    # ── Label Studio ──────────────────────────────────────────────────
     label_studio_client = providers.Singleton(
         LabelStudioClient,
         url=providers.Callable(lambda cfg: cfg.label_studio.url, config),
         api_key=providers.Callable(lambda cfg: cfg.label_studio.api_key, config),
     )
-
     ls_engine = providers.Singleton(
         create_ls_engine,
         database_url=providers.Callable(
@@ -67,15 +54,11 @@ class InfraContainer(containers.DeclarativeContainer):
         ),
     )
     ls_session_factory = providers.Singleton(
-        create_ls_session_factory,
-        engine=ls_engine,
+        create_ls_session_factory, engine=ls_engine
     )
     ls_read_repository = providers.Singleton(
-        LsReadRepository,
-        session_factory=ls_session_factory,
+        LsReadRepository, session_factory=ls_session_factory
     )
-
-    # ── External services ─────────────────────────────────────────────
     embedding_service = providers.Singleton(
         EmbeddingClient,
         grpc_target=providers.Callable(lambda cfg: cfg.embedding.grpc_target, config),
@@ -93,14 +76,11 @@ class InfraContainer(containers.DeclarativeContainer):
         InferenceWorkerClient,
         base_url=providers.Callable(lambda cfg: cfg.inference.base_url, config),
     )
-
-    # ── Presets & notifications ──────────────────────────────────────
     preset_registry = providers.Singleton(
         PresetRegistry,
         presets_dir=providers.Callable(lambda cfg: cfg.presets.dir, config),
         strict=providers.Callable(lambda cfg: bool(cfg.presets.strict), config),
     )
-
     notification_sink = providers.Singleton(
         WebhookNotificationSink,
         endpoint=providers.Callable(

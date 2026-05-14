@@ -5,30 +5,21 @@ from typing import TYPE_CHECKING
 
 from prefect import flow, get_run_logger, task
 
-from app.domain.models import PredictionEvent, Sample
+from app.domain.models import PredictionEvent
 from app.domain.types import JobStatus
 
 if TYPE_CHECKING:
-    from app.repositories.sql_repository import SqlRepository
-    from app.services.feature_ops import FeatureOpsService
-    from app.services.prediction_service import PredictionService
-    from app.storage.interfaces import ArtifactStorage
+    pass
 
 
 @task(name="predict-chunk")
 async def predict_chunk(
-    model_id: str,
-    org_id: str,
-    target: str,
-    prompt: str | None,
-    sample_ids: list[str],
-    prediction_service: PredictionService,
-    repository: SqlRepository,
-) -> list[dict]:
+    model_id, org_id, target, prompt, sample_ids, prediction_service, repository
+):
     model = await repository.get_model(model_id, org_id)
     if model is None:
         raise ValueError(f"Model not found: {model_id}")
-    samples: list[Sample] = []
+    samples = []
     for sample_id in sample_ids:
         sample = await repository.get_sample(sample_id)
         if sample is not None:
@@ -49,16 +40,16 @@ async def predict_chunk(
 
 @task(name="embed-chunk")
 async def embed_chunk(
-    dataset_id: str,
-    org_id: str,
-    embed_model: str,
-    force: bool,
-    sample_ids: list[str],
-    repository: SqlRepository,
-    feature_ops: FeatureOpsService,
-    artifact_storage: ArtifactStorage,
-) -> dict:
-    samples: list[Sample] = []
+    dataset_id,
+    org_id,
+    embed_model,
+    force,
+    sample_ids,
+    repository,
+    feature_ops,
+    artifact_storage,
+):
+    samples = []
     for sample_id in sample_ids:
         sample = await repository.get_sample(sample_id)
         if sample is not None and sample.dataset_id == dataset_id:
@@ -72,25 +63,22 @@ async def embed_chunk(
             "status": "completed",
         }
     return await feature_ops.extract_features_via_worker(
-        samples=samples,
-        embed_model=embed_model,
-        force=force,
-        storage=artifact_storage,
+        samples=samples, embed_model=embed_model, force=force, storage=artifact_storage
     )
 
 
 @task(name="persist-chunk")
 async def persist_chunk_results(
-    job_id: str,
-    model_id: str,
-    org_id: str,
-    target: str,
-    model_version: str | None,
-    sample_ids: list[str],
-    worker_results: list[dict],
-    prediction_service: PredictionService,
-    repository: SqlRepository,
-) -> dict:
+    job_id,
+    model_id,
+    org_id,
+    target,
+    model_version,
+    sample_ids,
+    worker_results,
+    prediction_service,
+    repository,
+):
     model = await repository.get_model(model_id, org_id)
     if model is None:
         raise ValueError(f"Model not found: {model_id}")
@@ -98,7 +86,7 @@ async def persist_chunk_results(
     worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
     successful = 0
     failed = 0
-    predictions: list[dict] = []
+    predictions = []
     for sample_id in sample_ids:
         sample = await repository.get_sample(sample_id)
         if sample is None:
@@ -140,29 +128,21 @@ async def persist_chunk_results(
 
 
 async def run_prediction_job(
-    job_id: str,
-    dataset_id: str,
-    model_id: str,
-    org_id: str,
-    target: str,
-    model_version: str | None,
-    sample_ids: list[str] | None,
-    prompt: str | None = None,
-) -> dict:
+    job_id, dataset_id, model_id, org_id, target, model_version, sample_ids, prompt=None
+):
     from app.container import Container
 
     container = Container()
-    repo: SqlRepository = container.infra.repository()
+    repo = container.infra.repository()
     dataset = await repo.get_dataset(dataset_id, org_id)
     if dataset is None:
         raise ValueError(f"Dataset not found: {dataset_id}")
-
     if sample_ids:
         selected_ids = [
             sid for sid in sample_ids if await repo.get_sample(sid) is not None
         ]
     else:
-        selected_ids: list[str] = []
+        selected_ids = []
         offset = 0
         page_size = 100
         while True:
@@ -173,12 +153,10 @@ async def run_prediction_job(
             offset += page_size
             if offset >= total:
                 break
-
     prediction_service = container.prediction.prediction_service()
     feature_ops = container.datasets.feature_ops()
     artifact_storage = container.infra.artifact_storage()
-
-    summary: dict = {
+    summary = {
         "model_id": model_id,
         "dataset_id": dataset_id,
         "total_samples": len(selected_ids),
@@ -198,7 +176,6 @@ async def run_prediction_job(
             payload={"total_samples": len(selected_ids)},
         )
     )
-
     chunk_size = 32
     for start in range(0, len(selected_ids), chunk_size):
         current_job = await repo.get_prediction_job(job_id, org_id=org_id)
@@ -268,7 +245,6 @@ async def run_prediction_job(
         await repo.update_prediction_job_status(
             job_id, JobStatus.RUNNING, summary=summary
         )
-
     summary["completed_at"] = datetime.now(UTC).isoformat()
     await repo.update_prediction_job_status(
         job_id, JobStatus.COMPLETED, summary=summary
@@ -286,16 +262,16 @@ async def run_prediction_job(
 
 @flow(name="predict-job")
 async def predict_job(
-    job_id: str,
-    dataset_id: str,
-    model_id: str,
-    org_id: str,
-    created_by: str = "system",
-    target: str = "image_classification",
-    model_version: str | None = None,
-    sample_ids: list[str] | None = None,
-    prompt: str | None = None,
-) -> dict:
+    job_id,
+    dataset_id,
+    model_id,
+    org_id,
+    created_by="system",
+    target="image_classification",
+    model_version=None,
+    sample_ids=None,
+    prompt=None,
+):
     logger = get_run_logger()
     logger.info(
         "Starting predict-job: job_id=%s dataset_id=%s model_id=%s org_id=%s target=%s created_by=%s",

@@ -3,14 +3,13 @@ from __future__ import annotations
 
 from dependency_injector import containers, providers
 
-from app.container.infra import InfraContainer
-
-from app.container.datasets import ContainerDatasets
-from app.container.training import ContainerTraining
-from app.container.prediction import ContainerPrediction
-from app.container.agent import ContainerAgent
-from app.container.preview import ContainerPreview
-from app.container.platform import ContainerPlatform
+from app.container_modules.infra import InfraContainer
+from app.container_modules.datasets import ContainerDatasets
+from app.container_modules.training import ContainerTraining
+from app.container_modules.prediction import ContainerPrediction
+from app.container_modules.agent import ContainerAgent
+from app.container_modules.preview import ContainerPreview
+from app.container_modules.platform import ContainerPlatform
 
 from app.services.feature_ops import FeatureOpsService
 from app.services.artifacts import ArtifactService
@@ -52,7 +51,6 @@ class Container(containers.DeclarativeContainer):
 def _wire_domain_providers(container: Container) -> None:
     infra = container.infra
 
-    # ── Datasets domain ─────────────────────────────────────────
     container.datasets().feature_ops = providers.Singleton(
         FeatureOpsService,
         repository=infra.repository,
@@ -65,7 +63,6 @@ def _wire_domain_providers(container: Container) -> None:
         repository=infra.repository,
     )
 
-    # ── Training domain ─────────────────────────────────────────
     kubeflow_client = providers.Factory(
         KubeflowClient,
         namespace=providers.Callable(lambda cfg: cfg.k8s.namespace, infra.config),
@@ -130,7 +127,6 @@ def _wire_domain_providers(container: Container) -> None:
         artifact_storage=infra.artifact_storage,
     )
 
-    # ── Prediction domain ────────────────────────────────────────
     container.prediction().prediction_service = providers.Singleton(
         PredictionService,
         repository=infra.repository,
@@ -146,11 +142,9 @@ def _wire_domain_providers(container: Container) -> None:
         repository=infra.repository,
     )
 
-    # ── Agent domain ────────────────────────────────────────────
     container.agent().surface_store = providers.Singleton(SurfaceStore)
     container.agent().session_store = providers.Singleton(SessionStore)
 
-    # ── Preview domain ─────────────────────────────────────────
     mock_upstream = providers.Singleton(MockUpstreamAdapter)
 
     def _make_s3_upstream():
@@ -180,7 +174,6 @@ def _wire_domain_providers(container: Container) -> None:
         upstream=container.preview().preview_upstream,
     )
 
-    # ── Platform domain ─────────────────────────────────────────
     container.platform().auth_service = providers.Singleton(AuthService)
     container.platform().service_health = providers.Singleton(
         ServiceHealthService,

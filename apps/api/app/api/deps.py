@@ -29,7 +29,7 @@ _DEV_ORG_SLUG = "dev-no-auth"
 def _get_session_factory():
     from app.main import container
 
-    return container.infra.session_factory
+    return container.infra.session_factory()
 
 
 def _auth_enabled() -> bool:
