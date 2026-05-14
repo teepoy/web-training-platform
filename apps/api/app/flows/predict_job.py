@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingImports=false
 
 from datetime import UTC, datetime
 
@@ -9,6 +10,16 @@ from app.domain.models import PredictionEvent, Sample
 from app.domain.types import JobStatus
 
 
+_flow_container: Container | None = None
+
+
+def _get_flow_container() -> Container:
+    global _flow_container
+    if _flow_container is None:
+        _flow_container = Container()
+    return _flow_container
+
+
 @task(name="predict-chunk")
 async def predict_chunk(
     model_id: str,
@@ -17,7 +28,7 @@ async def predict_chunk(
     prompt: str | None,
     sample_ids: list[str],
 ) -> list[dict]:
-    container = Container()
+    container = _get_flow_container()
     svc = container.prediction_service()
     model = await container.repository().get_model(model_id, org_id)
     if model is None:
@@ -49,7 +60,7 @@ async def embed_chunk(
     force: bool,
     sample_ids: list[str],
 ) -> dict:
-    container = Container()
+    container = _get_flow_container()
     repo = container.repository()
     svc = container.feature_ops()
     samples: list[Sample] = []
@@ -83,7 +94,7 @@ async def persist_chunk_results(
     sample_ids: list[str],
     worker_results: list[dict],
 ) -> dict:
-    container = Container()
+    container = _get_flow_container()
     svc = container.prediction_service()
     repo = container.repository()
     model = await repo.get_model(model_id, org_id)
@@ -144,7 +155,7 @@ async def run_prediction_job(
     sample_ids: list[str] | None,
     prompt: str | None = None,
 ) -> dict:
-    container = Container()
+    container = _get_flow_container()
     repo = container.repository()
     dataset = await repo.get_dataset(dataset_id, org_id)
     if dataset is None:

@@ -42,11 +42,9 @@ def _dispose_db_resources():
 
     from app.core.config import load_config
     from app.main import container
-    import app.api.deps as _deps
 
     load_config.cache_clear()
     container.reset_singletons()
-    _deps._session_factory = None
 
     yield
 
@@ -66,4 +64,3 @@ def _dispose_db_resources():
 
     load_config.cache_clear()
     container.reset_singletons()
-    _deps._session_factory = None
