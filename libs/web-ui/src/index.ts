@@ -1,3 +1,5 @@
+export * from "./api";
+
 export { default as PanelHost } from "./components/panel-host";
 export { default as FlowModal } from "./components/flow-modal";
 export { default as FlowTypeSelector } from "./components/flow-type-selector";
