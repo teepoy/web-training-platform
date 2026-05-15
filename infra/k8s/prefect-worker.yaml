@@ -1,34 +1,35 @@
+# Prefect V2 CPU-only worker — orchestrates flow execution via Prefect queues.
+# GPU workloads (train/predict/embed) are delegated to the gpu-worker HTTP API.
+# This deployment MUST NOT request GPU resources or NVIDIA scheduling selectors.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: embedding-worker
+  name: prefect-worker
   namespace: finetune
+  labels:
+    app: prefect-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: embedding-worker
+      app: prefect-worker
   template:
     metadata:
       labels:
-        app: embedding-worker
+        app: prefect-worker
     spec:
       containers:
-        - name: embedding-worker
-          image: finetune-worker:latest
+        - name: prefect-worker
+          image: finetune-prefect-worker:latest
           imagePullPolicy: IfNotPresent
           command: ["uv", "run", "python", "-m", "app.flows.serve"]
           env:
-            - name: PREFECT_API_URL
-              value: "http://prefect-server.finetune.svc.cluster.local:4200/api"
-            - name: PLATFORM_API_URL
-              value: "http://finetune-api.finetune.svc.cluster.local:8000"
             - name: WORKER_MODE
-              value: v2
+              value: "v2"
             - name: WORK_POOL_NAME
-              value: embed-pool
+              value: "default-pool"
             - name: WORK_QUEUE_NAME
-              value: embed-batch
+              value: "optimize-llm-cpu"
           envFrom:
             - configMapRef:
                 name: finetune-config

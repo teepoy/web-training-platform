@@ -1,0 +1,147 @@
+{
+  "id": null,
+  "uid": "finetune-runtime-logs",
+  "title": "Runtime Logs",
+  "tags": ["finetune"],
+  "schemaVersion": 36,
+  "version": 1,
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s",
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log Volume by Service",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 1, "fillOpacity": 20, "stacking": {"mode": "value"}}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"api|gpu-worker|prefect-worker\"}[2m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Error Log Rate by Service",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"api|gpu-worker|prefect-worker\"} |~ \"(?i)error\"[2m]))",
+          "legendFormat": "errors - {{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "API Logs",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{service=\"api\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "GPU Worker Logs",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{service=\"gpu-worker\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Prefect Worker Logs",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{service=\"prefect-worker\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Error Logs (All Services)",
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"api|gpu-worker|prefect-worker\"} |~ \"(?i)error\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+# PodMonitors — Prometheus Operator scrape definitions.
+# These CRDs require kube-prometheus-stack (or prometheus-operator) to be installed.
+# When the operator is deployed with the 'release: monitoring' label selector,
+# these PodMonitors are automatically discovered and scraped.
+#
+# Without the operator, Prometheus falls back to static_configs in its own
+# prometheus.yml ConfigMap (see prometheus.yaml).
+#
+# Install prerequisite:
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     --namespace finetune \
+#     --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: finetune-api
+  namespace: finetune
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: finetune-api
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gpu-worker
+  namespace: finetune
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: gpu-worker
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: prefect-exporter
+  namespace: finetune
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: prefect-exporter
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

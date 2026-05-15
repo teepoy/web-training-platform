@@ -1,0 +1,461 @@
+# Grafana — visualization dashboards.
+# Pre-provisioned with Prometheus and Loki datasources.
+# Default credentials: admin / admin (change via env vars or secrets).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: finetune
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.finetune.svc.cluster.local:9090
+        isDefault: true
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.finetune.svc.cluster.local:3100
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: finetune
+data:
+  dashboard.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: finetune
+data:
+  gpu-runtime.json: |
+    {
+      "id": null,
+      "uid": "finetune-gpu-runtime",
+      "title": "GPU Runtime",
+      "tags": ["finetune"],
+      "schemaVersion": 36,
+      "version": 1,
+      "time": {"from": "now-6h", "to": "now"},
+      "refresh": "30s",
+      "templating": {"list": []},
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "GPU Worker Health",
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]
+            }
+          },
+          "targets": [{"expr": "up{job=\"gpu-worker\"}", "legendFormat": "gpu-worker", "refId": "A"}]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "GPU Memory Utilization %",
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]
+            }
+          },
+          "targets": [{"expr": "100 * (DCGM_FI_DEV_FB_USED or vector(0)) / ((DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) or vector(1))", "legendFormat": "GPU FB Memory %", "refId": "A"}]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "GPU Utilization %",
+          "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]
+            }
+          },
+          "targets": [{"expr": "DCGM_FI_DEV_GPU_UTIL or vector(0)", "legendFormat": "GPU Util %", "refId": "A"}]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Container Restarts (15m)",
+          "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]
+            }
+          },
+          "targets": [{"expr": "increase(kube_pod_container_status_restarts_total{container=\"gpu-worker\"}[15m]) or vector(0)", "legendFormat": "Restarts", "refId": "A"}]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "GPU Worker Request Rate",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "rate(http_requests_total{job=\"gpu-worker\"}[2m])", "legendFormat": "{{method}} {{handler}}", "refId": "A"}]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "GPU Worker Request Latency (p50/p95/p99)",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"gpu-worker\"}[2m]))", "legendFormat": "p50", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"gpu-worker\"}[2m]))", "legendFormat": "p95", "refId": "B"},
+            {"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"gpu-worker\"}[2m]))", "legendFormat": "p99", "refId": "C"}
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "GPU Memory (Used / Free)",
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "(DCGM_FI_DEV_FB_USED * 1048576) or vector(0)", "legendFormat": "Used", "refId": "A"},
+            {"expr": "(DCGM_FI_DEV_FB_FREE * 1048576) or vector(0)", "legendFormat": "Free", "refId": "B"}
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "GPU Worker CPU / Memory",
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "rate(container_cpu_usage_seconds_total{name=~\".*gpu-worker.*\"}[2m])", "legendFormat": "CPU cores", "refId": "A"},
+            {"expr": "container_memory_usage_bytes{name=~\".*gpu-worker.*\"}", "legendFormat": "Memory bytes", "refId": "B"}
+          ]
+        }
+      ]
+    }
+  prefect-runtime.json: |
+    {
+      "id": null,
+      "uid": "finetune-prefect-runtime",
+      "title": "Prefect Service Runtime",
+      "tags": ["finetune"],
+      "schemaVersion": 36,
+      "version": 1,
+      "time": {"from": "now-6h", "to": "now"},
+      "refresh": "30s",
+      "templating": {"list": []},
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Prefect Health",
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+          },
+          "targets": [{"expr": "prefect_health", "legendFormat": "Prefect", "refId": "A"}]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "API Health",
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+          },
+          "targets": [{"expr": "up{job=\"api\"}", "legendFormat": "API", "refId": "A"}]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Prefect Exporter Health",
+          "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+          },
+          "targets": [{"expr": "up{job=\"prefect-exporter\"}", "legendFormat": "Exporter", "refId": "A"}]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Work Queue Depth",
+          "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "auto",
+            "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 100}]}
+          },
+          "targets": [{"expr": "sum(prefect_work_queue_depth)", "legendFormat": "Total Depth", "refId": "A"}]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Flow Runs by State",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"lineWidth": 1, "fillOpacity": 20, "stacking": {"mode": "value"}}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "prefect_flow_runs_total{state=\"COMPLETED\"}", "legendFormat": "Completed", "refId": "A"},
+            {"expr": "prefect_flow_runs_total{state=\"FAILED\"}", "legendFormat": "Failed", "refId": "B"},
+            {"expr": "prefect_flow_runs_total{state=\"RUNNING\"}", "legendFormat": "Running", "refId": "C"},
+            {"expr": "prefect_flow_runs_total{state=\"PENDING\"}", "legendFormat": "Pending", "refId": "D"},
+            {"expr": "prefect_flow_runs_total{state=\"CRASHED\"}", "legendFormat": "Crashed", "refId": "E"}
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Work Queue Depth by Queue",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "prefect_work_queue_depth", "legendFormat": "{{work_queue_name}}", "refId": "A"}]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Flow Run Duration (p50/p95)",
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, rate(prefect_flow_run_duration_seconds_bucket[5m]))", "legendFormat": "Duration p50", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, rate(prefect_flow_run_duration_seconds_bucket[5m]))", "legendFormat": "Duration p95", "refId": "B"}
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Flow Run Queue Time (p50/p95)",
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, rate(prefect_flow_run_queue_time_seconds_bucket[5m]))", "legendFormat": "Queue Time p50", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, rate(prefect_flow_run_queue_time_seconds_bucket[5m]))", "legendFormat": "Queue Time p95", "refId": "B"}
+          ]
+        }
+      ]
+    }
+  runtime-logs.json: |
+    {
+      "id": null,
+      "uid": "finetune-runtime-logs",
+      "title": "Runtime Logs",
+      "tags": ["finetune"],
+      "schemaVersion": 36,
+      "version": 1,
+      "time": {"from": "now-6h", "to": "now"},
+      "refresh": "30s",
+      "templating": {"list": []},
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Log Volume by Service",
+          "gridPos": {"x": 0, "y": 0, "w": 24, "h": 6},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"lineWidth": 1, "fillOpacity": 20, "stacking": {"mode": "value"}}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "sum by (service) (rate({service=~\"api|gpu-worker|prefect-worker\"}[2m]))", "legendFormat": "{{service}}", "refId": "A"}]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Error Log Rate by Service",
+          "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"lineWidth": 1, "fillOpacity": 10}}},
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"expr": "sum by (service) (rate({service=~\"api|gpu-worker|prefect-worker\"} |~ \"(?i)error\"[2m]))", "legendFormat": "errors - {{service}}", "refId": "A"}]
+        },
+        {
+          "id": 3,
+          "type": "logs",
+          "title": "API Logs",
+          "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "options": {"showTime": true, "showLabels": false, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none", "enableLogDetails": true},
+          "targets": [{"expr": "{service=\"api\"}", "legendFormat": "", "refId": "A"}]
+        },
+        {
+          "id": 4,
+          "type": "logs",
+          "title": "GPU Worker Logs",
+          "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "options": {"showTime": true, "showLabels": false, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none", "enableLogDetails": true},
+          "targets": [{"expr": "{service=\"gpu-worker\"}", "legendFormat": "", "refId": "A"}]
+        },
+        {
+          "id": 5,
+          "type": "logs",
+          "title": "Prefect Worker Logs",
+          "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "options": {"showTime": true, "showLabels": false, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none", "enableLogDetails": true},
+          "targets": [{"expr": "{service=\"prefect-worker\"}", "legendFormat": "", "refId": "A"}]
+        },
+        {
+          "id": 6,
+          "type": "logs",
+          "title": "Error Logs (All Services)",
+          "gridPos": {"x": 0, "y": 28, "w": 24, "h": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none", "enableLogDetails": true},
+          "targets": [{"expr": "{service=~\"api|gpu-worker|prefect-worker\"} |~ \"(?i)error\"", "legendFormat": "", "refId": "A"}]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: finetune
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.5.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboard.yaml
+              subPath: dashboard.yaml
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: finetune
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http

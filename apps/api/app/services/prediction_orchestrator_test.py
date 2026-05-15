@@ -69,7 +69,7 @@ async def test_start_embedding_job_uses_embed_batch_deployment() -> None:
     repository = AsyncMock()
     job = PredictionJob(
         dataset_id="dataset-1",
-        model_id="embedding-worker",
+        model_id="gpu-worker",
         created_by="user-1",
         org_id="org-1",
         target="embedding",

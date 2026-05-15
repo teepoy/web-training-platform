@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from dependency_injector import containers, providers
 
-from app.core.config import load_config
+from app.core.config import load_config, _resolve_gpu_worker_url
 from app.db.ls_session import create_ls_engine, create_ls_session_factory
 from app.db.session import create_engine, create_session_factory
 from app.repositories.ls_read_repository import LsReadRepository
 from app.repositories.sql_repository import SqlRepository
 from app.services.embedding import EmbeddingClient
 from app.services.inference_worker import InferenceWorkerClient
+from app.services.gpu_worker import GpuWorkerClient
 from app.services.kubeflow_client import KubeflowClient
 from app.services.label_studio import LabelStudioClient
 from app.services.llm import OpenAICompatibleLlmClient
@@ -89,4 +90,8 @@ class InfraContainer(containers.DeclarativeContainer):
     inference_worker = providers.Singleton(
         InferenceWorkerClient,
         base_url=providers.Callable(lambda cfg: cfg.inference.base_url, config),
+    )
+    gpu_worker = providers.Singleton(
+        GpuWorkerClient,
+        base_url=providers.Callable(lambda cfg: _resolve_gpu_worker_url(cfg), config),
     )

@@ -91,7 +91,7 @@ services:
         condition: service_healthy
       embedding:
         condition: service_healthy
-      inference-worker:
+      gpu-worker:
         condition: service_healthy
       label-studio:
         condition: service_healthy
@@ -103,7 +103,7 @@ services:
       PREFECT_API_URL: http://prefect-server:4200/api
       PREFECT_UI_URL: http://localhost:4200
       EMBEDDING_GRPC_TARGET: embedding:50051
-      INFERENCE_BASE_URL: http://inference-worker:8010
+      GPU_WORKER_BASE_URL: http://gpu-worker:8010
       LABEL_STUDIO_URL: "http://label-studio:8080"
       LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
@@ -138,12 +138,16 @@ services:
       retries: 12
       start_period: 20s
 
-  training-worker-gpu:
+  prefect-worker:
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile
     depends_on:
       prefect-server:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     environment:
       APP_CONFIG_PROFILE: dev
@@ -151,7 +155,7 @@ services:
       PLATFORM_API_URL: http://api:8000
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
       EMBEDDING_GRPC_TARGET: embedding:50051
-      INFERENCE_BASE_URL: http://inference-worker:8010
+      GPU_WORKER_BASE_URL: http://gpu-worker:8010
       LABEL_STUDIO_URL: "http://label-studio:8080"
       LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
@@ -160,97 +164,12 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: finetune-artifacts
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
       WORKER_MODE: v2
-      WORK_POOL_NAME: training-pool
-      WORK_QUEUE_NAME: train-gpu
-    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
-    restart: on-failure
-
-  training-worker-dspy:
-    build:
-      context: ../..
-      dockerfile: apps/worker/Dockerfile
-    depends_on:
-      prefect-server:
-        condition: service_healthy
-    environment:
-      APP_CONFIG_PROFILE: dev
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PLATFORM_API_URL: http://api:8000
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      EMBEDDING_GRPC_TARGET: embedding:50051
-      INFERENCE_BASE_URL: http://inference-worker:8010
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      WORKER_MODE: v2
-      WORK_POOL_NAME: training-pool
+      WORK_POOL_NAME: default-pool
       WORK_QUEUE_NAME: optimize-llm-cpu
-    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
-    restart: on-failure
-
-  prediction-worker:
-    build:
-      context: ../..
-      dockerfile: apps/worker/Dockerfile
-    depends_on:
-      prefect-server:
-        condition: service_healthy
-      inference-worker:
-        condition: service_healthy
-    environment:
-      APP_CONFIG_PROFILE: dev
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PLATFORM_API_URL: http://api:8000
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      EMBEDDING_GRPC_TARGET: embedding:50051
-      INFERENCE_BASE_URL: http://inference-worker:8010
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      WORKER_MODE: v2
-      WORK_POOL_NAME: predict-pool
-      WORK_QUEUE_NAME: predict-batch
-    command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
-    restart: on-failure
-
-  embedding-worker:
-    build:
-      context: ../..
-      dockerfile: apps/worker/Dockerfile
-    depends_on:
-      prefect-server:
-        condition: service_healthy
-      inference-worker:
-        condition: service_healthy
-    environment:
-      APP_CONFIG_PROFILE: dev
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PLATFORM_API_URL: http://api:8000
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      EMBEDDING_GRPC_TARGET: embedding:50051
-      INFERENCE_BASE_URL: http://inference-worker:8010
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      WORKER_MODE: v2
-      WORK_POOL_NAME: embed-pool
-      WORK_QUEUE_NAME: embed-batch
     command: ["/app/.venv/bin/python", "-m", "app.flows.serve"]
     restart: on-failure
 
@@ -264,14 +183,29 @@ services:
       - "5173:80"
     restart: on-failure
 
-  inference-worker:
+  gpu-worker:
     build:
       context: ../..
       dockerfile: apps/inference/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      embedding:
+        condition: service_healthy
     environment:
-      LLM_BASE_URL: http://host.docker.internal:11434/v1
-      LLM_API_KEY: local-dev-token
-      LLM_MODEL: llava
+      APP_CONFIG_PROFILE: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      EMBEDDING_GRPC_TARGET: embedding:50051
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-local-dev-token}
+      LLM_MODEL: ${LLM_MODEL:-llava}
+      TRAINING_TIMEOUT_SECONDS: "7200"
     ports:
       - "8010:8010"
     healthcheck:
@@ -334,8 +268,139 @@ services:
       - ./pgadmin-pgpass:/pgpass:ro
     restart: on-failure
 
+  # ═══════════════════════════════════════════════════════════════════
+  # Observability Stack — --profile observability
+  # ═══════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    profiles: ["observability"]
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:3.4.0
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.4.0
+    profiles: ["observability"]
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: ["observability"]
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    profiles: ["observability"]
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - '--port=8080'
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: ["observability"]
+    command:
+      - '--path.rootfs=/host'
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+  prefect-exporter:
+    image: prefecthq/prefect:3.6.25-python3.12
+    profiles: ["observability"]
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      EXPORTER_PORT: "8000"
+    command:
+      - python
+      - /exporter/exporter.py
+    volumes:
+      - ./observability/prefect-exporter/exporter.py:/exporter/exporter.py:ro
+    restart: unless-stopped
+    depends_on:
+      - prefect-server
+
+  # ═══════════════════════════════════════════════════════════════════
+  # GPU Monitoring — --profile gpu  (Linux + NVIDIA only)
+  # ═══════════════════════════════════════════════════════════════════
+  dcgm-exporter:
+    image: nvidia/dcgm-exporter:3.4.1-3.6.2-ubuntu22.04
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    restart: unless-stopped
+
 volumes:
   pgdata:
   minio-data:
   ls-data:
   pgadmin-data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  alertmanager_data:

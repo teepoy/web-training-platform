@@ -1,0 +1,126 @@
+# Prometheus — metrics collection and alerting engine.
+# Scrapes platform services via static K8s DNS targets (renders without CRDs).
+# For ServiceMonitor/PodMonitor-based discovery, see podmonitors.yaml and
+# install kube-prometheus-stack first.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: finetune
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        monitor: finetune-platform
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager.finetune.svc.cluster.local:9093
+
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'api'
+        static_configs:
+          - targets: ['finetune-api.finetune.svc.cluster.local:8000']
+        metrics_path: '/metrics'
+
+      - job_name: 'gpu-worker'
+        static_configs:
+          - targets: ['gpu-worker.finetune.svc.cluster.local:8010']
+        metrics_path: '/metrics'
+
+      - job_name: 'prefect-exporter'
+        static_configs:
+          - targets: ['prefect-exporter.finetune.svc.cluster.local:8000']
+        metrics_path: '/metrics'
+
+      - job_name: 'alertmanager'
+        static_configs:
+          - targets: ['alertmanager.finetune.svc.cluster.local:9093']
+
+      - job_name: 'dcgm-exporter'
+        static_configs:
+          - targets: ['dcgm-exporter.finetune.svc.cluster.local:9400']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: finetune
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.0
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+            - '--web.console.templates=/usr/share/prometheus/consoles'
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-rules
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: finetune
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http

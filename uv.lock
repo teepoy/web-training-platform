@@ -1277,19 +1277,30 @@ dependencies = [
     { name = "httpx" },
     { name = "litellm" },
     { name = "pillow" },
+    { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
     { name = "litellm", specifier = ">=1.30.0" },
     { name = "pillow", specifier = ">=11.0.0" },
+    { name = "prometheus-client", specifier = ">=0.24.0" },
     { name = "pydantic", specifier = ">=2.11.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "uvicorn", specifier = ">=0.35.0" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "finetune-worker"

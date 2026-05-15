@@ -1,0 +1,98 @@
+# Alertmanager — alert routing and notification.
+# Dev-null receiver by default; configure Slack/PagerDuty/webhook for production.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: finetune
+data:
+  alertmanager.yml: |
+    route:
+      receiver: 'dev-null'
+      group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+
+    receivers:
+      - name: 'dev-null'
+
+      # Uncomment and configure for production alerting.
+      # Example webhook receiver (e.g. for Slack via incoming webhooks or a generic relay):
+      # - name: 'webhook'
+      #   webhook_configs:
+      #     - url: 'http://your-webhook-endpoint/alert'
+      #       send_resolved: true
+
+    inhibit_rules:
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: finetune
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.28.0
+          args:
+            - '--config.file=/etc/alertmanager/alertmanager.yml'
+            - '--storage.path=/alertmanager'
+          ports:
+            - containerPort: 9093
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: finetune
+  labels:
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093
+      name: http

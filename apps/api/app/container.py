@@ -9,6 +9,8 @@ from app.services.prefect_client import PrefectClient
 from app.services.prefect_engine import PrefectWorkPoolEngine
 from app.services.artifacts import ArtifactService
 from app.services.feature_ops import FeatureOpsService
+from app.services.kubeflow_client import KubeflowClient
+from app.services.label_studio import LabelStudioClient
 from app.services.model_service import ModelService
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
@@ -110,6 +112,7 @@ class Container(InfraContainer):
         repository=InfraContainer.repository,
         embedding_service=InfraContainer.embedding_service,
         inference_worker=InfraContainer.inference_worker,
+        gpu_worker=InfraContainer.gpu_worker,
     )
     artifacts = providers.Singleton(
         ArtifactService,
@@ -136,6 +139,7 @@ class Container(InfraContainer):
         embedding_client=InfraContainer.embedding_service,
         llm_client=InfraContainer.llm_client,
         inference_worker=InfraContainer.inference_worker,
+        gpu_worker=InfraContainer.gpu_worker,
     )
     prediction_orchestrator = providers.Singleton(
         PredictionOrchestrator,

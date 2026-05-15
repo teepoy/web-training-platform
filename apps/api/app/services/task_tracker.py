@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.domain.types import JobStatus
 from app.services.scheduler import SchedulerService
@@ -277,19 +277,25 @@ class TaskTrackerService:
         derived = await self._derive(
             task, flow_run, deployment, task_runs, work_queue, work_pool, logs
         )
+        gpu_job_id = await self._gpu_job_id(task)
+        meta = {
+            "dataset_id": task.dataset_id,
+            "model_id": task.model_id,
+            "preset_id": task.preset_id,
+            "external_job_id": task.external_job_id,
+            "platform_job_id": task.platform_job.id,
+            "schedule_id": task.schedule_id,
+            "source": "prefect+platform",
+        }
+        if gpu_job_id is not None:
+            meta["gpu_job_id"] = gpu_job_id
         return TaskTrackerDetailResponse(
             id=task.platform_job.id,
             task_kind=task.task_kind,
-            meta={
-                "dataset_id": task.dataset_id,
-                "model_id": task.model_id,
-                "preset_id": task.preset_id,
-                "external_job_id": task.external_job_id,
-                "schedule_id": task.schedule_id,
-                "source": "prefect+platform",
-            },
+            meta=meta,
             raw=TaskTrackerRawPayload(
                 platform_job=task.raw_platform_job,
+                gpu_job_id=gpu_job_id,
                 flow_run=flow_run,
                 deployment=deployment,
                 work_queue=work_queue,
@@ -298,6 +304,52 @@ class TaskTrackerService:
             ),
             derived=derived,
         )
+
+    async def _gpu_job_id(self, task: _TaskRecord) -> str | None:
+        for payload in self._platform_payload_candidates(task):
+            gpu_job_id = self._find_gpu_job_id(payload)
+            if gpu_job_id is not None:
+                return gpu_job_id
+
+        list_events = getattr(self._repository, "list_events", None)
+        if task.task_kind == "prediction":
+            list_events = getattr(self._repository, "list_prediction_events", None)
+        if list_events is None:
+            return None
+        try:
+            events = await list_events(task.platform_job.id)
+        except Exception:
+            return None
+
+        for event in events:
+            gpu_job_id = self._find_gpu_job_id(getattr(event, "payload", None))
+            if gpu_job_id is not None:
+                return gpu_job_id
+        return None
+
+    def _platform_payload_candidates(self, task: _TaskRecord) -> list[object]:
+        platform_job = task.platform_job
+        candidates: list[object] = [task.raw_platform_job]
+        for attr in ("summary", "metadata"):
+            value = getattr(platform_job, attr, None)
+            if value is not None:
+                candidates.append(value)
+        return candidates
+
+    def _find_gpu_job_id(self, payload: object) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        data = cast(dict[str, object], payload)
+        value = data.get("gpu_job_id")
+        if isinstance(value, str) and value:
+            return value
+        if value is not None:
+            return str(value)
+        for key in ("summary", "metadata", "gpu", "worker", "response", "result"):
+            nested = self._find_gpu_job_id(data.get(key))
+            if nested is not None:
+                return nested
+        return None
 
     async def _derive(
         self,
@@ -508,12 +560,8 @@ class TaskTrackerService:
         ):
             return self._display_status_from_prefect(str(platform_job.state_type))
         if prefect_state is None:
-            status_val: Any = getattr(platform_job, "status", "queued")
-            return (
-                str(status_val.value)
-                if hasattr(status_val, "value")
-                else str(status_val)
-            )
+            status = getattr(platform_job, "status", "queued")
+            return status.value if isinstance(status, JobStatus) else str(status)
         return self._display_status_from_prefect(prefect_state)
 
     def _display_status_from_prefect(self, prefect_state: str) -> str:

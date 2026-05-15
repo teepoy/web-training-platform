@@ -1,0 +1,80 @@
+# DCGM exporter — NVIDIA GPU metrics collection.
+# Deploys as a DaemonSet ONLY on GPU nodes via node affinity + toleration.
+# CPU-only nodes are excluded by the nvidia.com/gpu resource check.
+# Prerequisites:
+#   - NVIDIA GPU Operator or nvidia-device-plugin deployed on GPU nodes
+#   - nvidia.com/gpu resource must be allocatable on GPU nodes
+#   - Node label feature.node.kubernetes.io/pci-0300_10de.present (NVIDIA GPU present)
+#     is auto-applied by NFD (Node Feature Discovery) or can be set manually.
+#     If NFD is unavailable, label GPU nodes with: kubectl label node <name> nvidia.com/gpu.present=true
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dcgm-exporter
+  namespace: finetune
+  labels:
+    app: dcgm-exporter
+spec:
+  selector:
+    matchLabels:
+      app: dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: dcgm-exporter
+    spec:
+      # GPU-node affinity: only schedule where NVIDIA GPU is present.
+      # Uses the NFD label (auto-applied by Node Feature Discovery).
+      # Fallback: label GPU nodes manually with nvidia.com/gpu.present=true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: In
+                    values:
+                      - "true"
+      # Tolerate NVIDIA GPU taints (e.g. nvidia.com/gpu)
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: dcgm-exporter
+          image: nvcr.io/nvidia/k8s/dcgm-exporter:4.0.0
+          ports:
+            - containerPort: 9400
+              name: metrics
+          env:
+            - name: DCGM_EXPORTER_LISTEN
+              value: ":9400"
+            - name: DCGM_EXPORTER_KUBERNETES
+              value: "true"
+          securityContext:
+            capabilities:
+              add: ["SYS_ADMIN"]
+          volumeMounts:
+            - name: pod-gpu-resources
+              mountPath: /var/lib/kubelet/pod-resources
+              readOnly: true
+      volumes:
+        - name: pod-gpu-resources
+          hostPath:
+            path: /var/lib/kubelet/pod-resources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcgm-exporter
+  namespace: finetune
+  labels:
+    app: dcgm-exporter
+spec:
+  selector:
+    app: dcgm-exporter
+  ports:
+    - port: 9400
+      targetPort: 9400
+      name: metrics

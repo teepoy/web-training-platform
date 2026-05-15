@@ -86,7 +86,16 @@ embedding:
   grpc_target: "localhost:50051"
 
 inference:
+  # Deprecated — use gpu_worker.base_url instead.
+  # Kept for backward compatibility; will be removed in a future release.
   base_url: "http://localhost:8010"
+
+gpu_worker:
+  # V1 "fat-enough" GPU worker HTTP API base URL.
+  # The GPU worker exposes train/predict/embed endpoints. In V1 it reuses
+  # existing runtime/package code and artifact/config access.
+  # Required in dev/prod; test profile skips validation.
+  base_url: ""
 
 llm:
   # litellm-backed.  Model string controls provider routing:

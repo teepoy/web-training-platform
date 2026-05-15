@@ -612,6 +612,7 @@ class TaskTrackerDeepLinks(BaseModel):
 
 class TaskTrackerRawPayload(BaseModel):
     platform_job: dict = Field(default_factory=dict)
+    gpu_job_id: str | None = None
     flow_run: dict | None = None
     deployment: dict | None = None
     work_queue: dict | None = None

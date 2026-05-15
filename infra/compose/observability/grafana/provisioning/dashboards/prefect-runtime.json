@@ -1,0 +1,236 @@
+{
+  "id": null,
+  "uid": "finetune-prefect-runtime",
+  "title": "Prefect Service Runtime",
+  "tags": ["finetune"],
+  "schemaVersion": 36,
+  "version": 1,
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s",
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Prefect Health",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "red", "value": null},
+            {"color": "green", "value": 1}
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "prefect_health",
+          "legendFormat": "Prefect",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "API Health",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "red", "value": null},
+            {"color": "green", "value": 1}
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"api\"}",
+          "legendFormat": "API",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Prefect Exporter Health",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "red", "value": null},
+            {"color": "green", "value": 1}
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"prefect-exporter\"}",
+          "legendFormat": "Exporter",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Work Queue Depth",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 10},
+            {"color": "red", "value": 100}
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(prefect_work_queue_depth)",
+          "legendFormat": "Total Depth",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Flow Runs by State",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 1, "fillOpacity": 20, "stacking": {"mode": "value"}}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "prefect_flow_runs_total{state=\"COMPLETED\"}",
+          "legendFormat": "Completed",
+          "refId": "A"
+        },
+        {
+          "expr": "prefect_flow_runs_total{state=\"FAILED\"}",
+          "legendFormat": "Failed",
+          "refId": "B"
+        },
+        {
+          "expr": "prefect_flow_runs_total{state=\"RUNNING\"}",
+          "legendFormat": "Running",
+          "refId": "C"
+        },
+        {
+          "expr": "prefect_flow_runs_total{state=\"PENDING\"}",
+          "legendFormat": "Pending",
+          "refId": "D"
+        },
+        {
+          "expr": "prefect_flow_runs_total{state=\"CRASHED\"}",
+          "legendFormat": "Crashed",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Work Queue Depth by Queue",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "prefect_work_queue_depth",
+          "legendFormat": "{{work_queue_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Flow Run Duration (p50/p95)",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(prefect_flow_run_duration_seconds_bucket[5m]))",
+          "legendFormat": "Duration p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(prefect_flow_run_duration_seconds_bucket[5m]))",
+          "legendFormat": "Duration p95",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Flow Run Queue Time (p50/p95)",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(prefect_flow_run_queue_time_seconds_bucket[5m]))",
+          "legendFormat": "Queue Time p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(prefect_flow_run_queue_time_seconds_bucket[5m]))",
+          "legendFormat": "Queue Time p95",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

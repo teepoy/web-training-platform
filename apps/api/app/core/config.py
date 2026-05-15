@@ -12,6 +12,27 @@ def _require(value: str, field_name: str) -> None:
         raise RuntimeError(f"Missing required config: {field_name}")
 
 
+def _resolve_gpu_worker_url(cfg: DictConfig) -> str:
+    """Resolve GPU worker URL from gpu_worker.base_url, falling back to inference.base_url.
+
+    The `inference.base_url` key is deprecated and will be removed in a future release.
+    New deployments must set `gpu_worker.base_url`.
+    """
+    gpu_url = str(cfg.get("gpu_worker", {}).get("base_url", ""))
+    if gpu_url:
+        return gpu_url
+    inference_url = str(cfg.get("inference", {}).get("base_url", ""))
+    if inference_url:
+        import warnings
+        warnings.warn(
+            "inference.base_url is deprecated; use gpu_worker.base_url instead",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return inference_url
+    return ""
+
+
 def _validate_runtime_config(cfg: DictConfig, profile: str) -> None:
     env = str(cfg.app.env)
     engine = str(cfg.execution.engine)
@@ -45,7 +66,7 @@ def _validate_runtime_config(cfg: DictConfig, profile: str) -> None:
     _require(str(cfg.label_studio.url), "label_studio.url")
     _require(str(cfg.label_studio.api_key), "label_studio.api_key")
     _require(str(cfg.label_studio.database_url), "label_studio.database_url")
-    _require(str(cfg.inference.base_url), "inference.base_url")
+    _require(_resolve_gpu_worker_url(cfg), "gpu_worker.base_url")
 
 
 def _config_root() -> Path:
@@ -101,6 +122,9 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     inference_base_url = os.getenv("INFERENCE_BASE_URL")
     if inference_base_url:
         cfg.inference.base_url = inference_base_url
+    gpu_worker_base_url = os.getenv("GPU_WORKER_BASE_URL")
+    if gpu_worker_base_url:
+        cfg.gpu_worker.base_url = gpu_worker_base_url
     llm_base_url = os.getenv("LLM_BASE_URL")
     if llm_base_url:
         cfg.llm.base_url = llm_base_url

@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import base64
+import logging
 from typing import TYPE_CHECKING
 
 from app.domain.models import Sample
 from app.services.embedding import EmbeddingClient
+from app.services.gpu_worker import GpuWorkerClient
 from app.services.inference_worker import InferenceWorkerClient
 
 if TYPE_CHECKING:
     from app.repositories.sql_repository import SqlRepository
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureOpsService:
@@ -18,10 +22,12 @@ class FeatureOpsService:
         repository: SqlRepository | None = None,
         embedding_service: EmbeddingClient | None = None,
         inference_worker: InferenceWorkerClient | None = None,
+        gpu_worker: GpuWorkerClient | None = None,
     ):
         self._repo = repository
         self._embedding_service = embedding_service
         self._inference_worker = inference_worker
+        self._gpu_worker = gpu_worker
 
     async def extract_features(
         self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
@@ -67,6 +73,13 @@ class FeatureOpsService:
             "status": "completed",
         }
 
+    def _resolve_worker(self) -> GpuWorkerClient | InferenceWorkerClient:
+        if self._gpu_worker is not None:
+            return self._gpu_worker
+        if self._inference_worker is not None:
+            return self._inference_worker
+        raise ValueError("No worker client is configured (both gpu_worker and inference_worker are None)")
+
     async def extract_features_via_worker(
         self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
     ) -> dict:
@@ -109,9 +122,15 @@ class FeatureOpsService:
                 "embedding_model": embed_model,
                 "status": "completed",
             }
-        if self._inference_worker is None:
-            raise ValueError("Inference worker is not configured")
-        embeddings = await self._inference_worker.embed_batch(
+        worker = self._resolve_worker()
+        worker_kind = "GPU" if worker is self._gpu_worker else "inference"
+        logger.info(
+            "%s worker embed_batch: model=%s samples=%d",
+            worker_kind,
+            embed_model,
+            len(payload_samples),
+        )
+        embeddings = await worker.embed_batch(
             model_name=embed_model, samples=payload_samples
         )
         embedding_map = {str(item.get("sample_id", "")): item for item in embeddings}

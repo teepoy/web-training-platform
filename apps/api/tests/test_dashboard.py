@@ -91,16 +91,10 @@ def test_dashboard_response_shape() -> None:
                 assert field in service
 
 
-def test_dashboard_reports_prediction_worker_down_when_batch_deployment_missing() -> None:
+def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
     prefect_client = AsyncMock()
     prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
-
-    async def _resolve_deployment_id(name: str) -> str | None:
-        if name == "predict-job-batch-deployment":
-            return None
-        return f"deployment-for-{name}"
-
-    prefect_client.resolve_deployment_id.side_effect = _resolve_deployment_id
+    prefect_client.list_work_queues.side_effect = Exception("no work queues available")
     embedding_client = AsyncMock()
     embedding_client.health.return_value = True
     service_health = ServiceHealthService(
@@ -115,19 +109,18 @@ def test_dashboard_reports_prediction_worker_down_when_batch_deployment_missing(
             r = c.get("/api/v1/dashboard")
         assert r.status_code == 200
         services = {service["name"]: service for service in r.json()["services"]}
-        assert services["prediction-worker"]["status"] == "down"
-        assert "predict-job-batch-deployment" in services["prediction-worker"]["detail"]
-        assert services["training-worker-gpu"]["status"] == "healthy"
-        assert services["training-worker-dspy"]["status"] == "healthy"
-        assert services["embedding-worker"]["status"] == "healthy"
+        assert services["prefect-worker"]["status"] == "down"
+        assert "no work queues available" in services["prefect-worker"]["detail"]
+        assert "gpu-worker" in services
+        assert services["embedding"]["status"] == "healthy"
     finally:
         container.service_health.reset_override()
 
 
-def test_dashboard_reports_prediction_worker_healthy_when_batch_deployment_exists() -> None:
+def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> None:
     prefect_client = AsyncMock()
     prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
-    prefect_client.resolve_deployment_id.side_effect = lambda name: f"deployment-for-{name}"
+    prefect_client.list_work_queues.side_effect = lambda _work_pool_name: [{"name": "default"}]
     embedding_client = AsyncMock()
     embedding_client.health.return_value = True
     service_health = ServiceHealthService(
@@ -142,8 +135,9 @@ def test_dashboard_reports_prediction_worker_healthy_when_batch_deployment_exist
             r = c.get("/api/v1/dashboard")
         assert r.status_code == 200
         services = {service["name"]: service for service in r.json()["services"]}
-        assert services["prediction-worker"]["status"] == "healthy"
-        assert "predict-job-batch-deployment" in services["prediction-worker"]["detail"]
-        assert services["embedding-worker"]["status"] == "healthy"
+        assert services["prefect-worker"]["status"] == "healthy"
+        assert "1 work queue(s)" in services["prefect-worker"]["detail"]
+        assert "gpu-worker" in services
+        assert services["embedding"]["status"] == "healthy"
     finally:
         container.service_health.reset_override()

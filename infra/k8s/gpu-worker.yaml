@@ -1,25 +1,37 @@
+# GPU worker runtime API — handles train/predict/embed workloads via HTTP.
+# This is the ONLY runtime deployment that requests nvidia.com/gpu.
+# Observability/debug containers (e.g. DCGM exporter) are separate and
+# managed by Task 18.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference-worker
+  name: gpu-worker
   namespace: finetune
+  labels:
+    app: gpu-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: inference-worker
+      app: gpu-worker
   template:
     metadata:
       labels:
-        app: inference-worker
+        app: gpu-worker
     spec:
       containers:
-        - name: inference-worker
-          image: finetune-inference:latest
+        - name: gpu-worker
+          image: finetune-gpu-worker:latest
           imagePullPolicy: IfNotPresent
           command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8010"]
           ports:
             - containerPort: 8010
+              name: http
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+            limits:
+              nvidia.com/gpu: "1"
           readinessProbe:
             httpGet:
               path: /health
@@ -32,15 +44,23 @@ spec:
               port: 8010
             initialDelaySeconds: 15
             periodSeconds: 15
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: inference-worker
+  name: gpu-worker
   namespace: finetune
+  labels:
+    app: gpu-worker
 spec:
   selector:
-    app: inference-worker
+    app: gpu-worker
   ports:
     - port: 8010
       targetPort: 8010
+      name: http

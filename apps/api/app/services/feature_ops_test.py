@@ -77,7 +77,7 @@ async def test_extract_features_via_worker_raises_when_worker_missing_for_select
     service = FeatureOpsService(repository=repository, inference_worker=None)
     samples = [Sample(id="sample-1", dataset_id="dataset-1", image_uris=["data:image/png;base64,AA=="])]
 
-    with pytest.raises(ValueError, match="Inference worker is not configured"):
+    with pytest.raises(ValueError, match="No worker client is configured"):
         await service.extract_features_via_worker(
             samples=samples,
             embed_model="clip-test",

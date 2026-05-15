@@ -1,0 +1,58 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+
+    # ── Relabeling ──────────────────────────────────────────────────────────
+    # Goal: keep only low-cardinality labels in Loki.
+    # High-cardinality values (job ids, container IDs, network addresses) stay
+    # in log content — never promoted to stream labels.
+    relabel_configs:
+      # 1. Map container name (e.g. /api, /gpu-worker) → `container` label.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+      # 2. Extract `service` from container name — strip leading slash.
+      #    Normalises names like /finetune-api-1 → api via regex group.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(?:finetune[-_])?(.+?)(?:[-_]\d+)?$'
+        target_label: 'service'
+        replacement: '${1}'
+
+      # 3. Drop ALL __meta_docker_* labels to prevent them from becoming
+      #    Loki stream labels.  Only the labels we explicitly set above survive.
+      - action: labeldrop
+        regex: '__meta_docker_.*'
+
+    # ── Pipeline stages ─────────────────────────────────────────────────────
+    # Add static low-cardinality labels after relabeling.
+    pipeline_stages:
+      # Tag every log line with the environment — used for multi-env Loki setups.
+      - static_labels:
+          env: finetune
+
+      # Parse JSON log lines so that structured fields (e.g. job_id,
+      # platform_job_id, gpu_job_id) are accessible via Loki's `|` filter
+      # syntax WITHOUT being promoted to stream labels.
+      - json:
+          expressions:
+            level: level
+            logger: logger
+            # NOTE: job ids are intentionally NOT mapped to labels.
+            # Use  {service="api"} |= "platform_job_id=<id>"  to filter.
+
+      # Promote `level` from JSON to a Loki label (low cardinality: info/warn/error/debug).
+      - labels:
+          level:

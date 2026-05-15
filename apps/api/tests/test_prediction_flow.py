@@ -15,10 +15,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.domain.models import ArtifactRef, PredictionJob
@@ -341,3 +342,136 @@ def test_persist_chunk_results_writes_predictions() -> None:
         assert result["successful"] == 2
         assert result["failed"] == 0
         assert len(result["predictions"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests — GPU worker invocation (isolated mocks, Task 14)
+# ---------------------------------------------------------------------------
+
+
+def _isolated_gpu_worker_patch(app_container):
+    """Override GPU and inference worker with fresh mocks for one test.
+
+    Returns ``(mock_gpu, mock_inference, cleanup)`` where ``cleanup`` is a
+    zero-arg callable that resets both overrides.
+    """
+    mock_gpu = MagicMock()
+    mock_gpu.predict_batch = AsyncMock(
+        side_effect=lambda **kwargs: [
+            {"sample_id": s["sample_id"], "label": "cat", "confidence": 0.9}
+            for s in kwargs.get("samples", [])
+        ]
+    )
+    mock_gpu.embed_batch = AsyncMock(
+        side_effect=lambda **kwargs: [
+            {"sample_id": s["sample_id"], "embedding": [0.1, 0.2]}
+            for s in kwargs.get("samples", [])
+        ]
+    )
+    mock_inference = MagicMock()
+    mock_inference.predict_batch = AsyncMock(return_value=[])
+    mock_inference.embed_batch = AsyncMock(return_value=[])
+
+    app_container.gpu_worker.override(providers.Object(mock_gpu))
+    app_container.inference_worker.override(providers.Object(mock_inference))
+
+    def _cleanup() -> None:
+        app_container.gpu_worker.reset_override()
+        app_container.inference_worker.reset_override()
+
+    return mock_gpu, mock_inference, _cleanup
+
+
+def test_predict_chunk_calls_gpu_worker_predict_batch() -> None:
+    """predict_chunk invokes GPU worker predict_batch, NOT inference worker."""
+    with TestClient(app) as c:
+        dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
+        from app.main import container as _app_container
+        from app.flows.predict_job import predict_chunk
+
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        try:
+            with _use_app_container():
+                worker_results = asyncio.run(
+                    predict_chunk.fn(
+                        model_id=model_id,
+                        org_id=DEFAULT_ORG_ID,
+                        target="image_classification",
+                        prompt=None,
+                        sample_ids=sample_ids,
+                    )
+                )
+
+            assert isinstance(worker_results, list)
+            assert len(worker_results) == 3
+            mock_gpu.predict_batch.assert_awaited_once()
+            mock_inference.predict_batch.assert_not_awaited()
+            # Verify call arguments
+            call_kwargs = mock_gpu.predict_batch.call_args.kwargs
+            assert call_kwargs["model_id"] == model_id
+            assert call_kwargs["target"] == "image_classification"
+            assert len(call_kwargs["samples"]) == 3
+        finally:
+            cleanup()
+
+
+def test_embed_chunk_calls_gpu_worker_embed_batch() -> None:
+    """embed_chunk invokes GPU worker embed_batch, NOT inference worker."""
+    with TestClient(app) as c:
+        dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
+        from app.main import container as _app_container
+        from app.flows.predict_job import embed_chunk
+
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        try:
+            with _use_app_container():
+                chunk_summary = asyncio.run(
+                    embed_chunk.fn(
+                        dataset_id=dataset_id,
+                        org_id=DEFAULT_ORG_ID,
+                        embed_model="test-embed-model",
+                        force=False,
+                        sample_ids=sample_ids,
+                    )
+                )
+
+            assert isinstance(chunk_summary, dict)
+            assert chunk_summary.get("embedding_model") == "test-embed-model"
+            mock_gpu.embed_batch.assert_awaited_once()
+            mock_inference.embed_batch.assert_not_awaited()
+            # Verify call arguments
+            call_kwargs = mock_gpu.embed_batch.call_args.kwargs
+            assert call_kwargs["model_name"] == "test-embed-model"
+            assert len(call_kwargs["samples"]) == 3
+        finally:
+            cleanup()
+
+
+def test_run_prediction_job_prefers_gpu_worker_over_inference() -> None:
+    """run_prediction_job uses GPU worker even when inference worker is also configured."""
+    with TestClient(app) as c:
+        dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=4)
+        job_id = _create_prediction_job_record(dataset_id, model_id)
+        from app.main import container as _app_container
+        from app.flows.predict_job import run_prediction_job
+
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        try:
+            with _use_app_container():
+                result = asyncio.run(
+                    run_prediction_job(
+                        job_id=job_id,
+                        dataset_id=dataset_id,
+                        model_id=model_id,
+                        org_id=DEFAULT_ORG_ID,
+                        target="image_classification",
+                        model_version=None,
+                        sample_ids=None,
+                    )
+                )
+
+            assert result["total_samples"] == 4
+            mock_gpu.predict_batch.assert_awaited_once()
+            mock_inference.predict_batch.assert_not_awaited()
+        finally:
+            cleanup()

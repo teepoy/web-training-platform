@@ -51,6 +51,7 @@ markers = [
     "no_ls_override: skip the global Label Studio client override for this test",
     "no_embedding_override: skip the global embedding service override for this test",
     "no_inference_override: skip the global inference worker override for this test",
+    "no_gpu_worker_override: skip the global GPU worker override for this test",
 ]
 
 [dependency-groups]

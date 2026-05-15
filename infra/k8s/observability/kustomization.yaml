@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: finetune
+resources:
+  - prometheus.yaml
+  - prometheus-rules.yaml
+  - alertmanager.yaml
+  - loki.yaml
+  - promtail.yaml
+  - grafana.yaml
+  - prefect-exporter.yaml
+  - dcgm-exporter.yaml

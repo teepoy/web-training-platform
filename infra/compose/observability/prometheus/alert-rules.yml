@@ -1,0 +1,71 @@
+groups:
+  - name: finetune
+    rules:
+      # 1. GPU worker unreachable — fires when Prometheus cannot scrape the gpu-worker target.
+      - alert: GPUWorkerDown
+        expr: up{job="gpu-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          group: finetune
+        annotations:
+          summary: "GPU worker is down"
+          description: "Prometheus cannot reach the gpu-worker scrape target for more than 2 minutes."
+
+      # 2. Prefect exporter unreachable — fires when the custom Prefect health exporter is absent.
+      - alert: PrefectExporterDown
+        expr: up{job="prefect-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          group: finetune
+        annotations:
+          summary: "Prefect exporter is down"
+          description: "The prefect-exporter scrape target has been unreachable for more than 2 minutes."
+
+      # 3. Prefect work queue depth too high — indicates a processing backlog.
+      - alert: QueueBacklogHigh
+        expr: prefect_work_queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+          group: finetune
+        annotations:
+          summary: "Prefect work queue backlog is high"
+          description: "prefect_work_queue_depth has exceeded 100 for more than 5 minutes (current: {{ $value }})."
+
+      # 4. GPU worker OOM / crash-loop — detects repeated container restarts.
+      # cAdvisor exposes container_start_time_seconds; changes() counts restarts within the window.
+      - alert: GPUWorkerOOM
+        expr: changes(container_start_time_seconds{name=~".*gpu-worker.*"}[15m]) > 3
+        for: 1m
+        labels:
+          severity: critical
+          group: finetune
+        annotations:
+          summary: "GPU worker is restart-looping (possible OOM)"
+          description: "GPU worker container has restarted more than 3 times in the last 15 minutes."
+
+      # 5. DCGM GPU memory high — fires when framebuffer utilisation exceeds 90%.
+      # Uses `or vector(0)` so the rule evaluates to 0 (no alert) when DCGM metrics are absent,
+      # avoiding "no data" evaluation errors on hosts without a GPU or without dcgm-exporter.
+      - alert: DcgmGpuMemoryHigh
+        expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 0.9) or vector(0)
+        for: 5m
+        labels:
+          severity: warning
+          group: finetune
+        annotations:
+          summary: "GPU framebuffer memory utilisation is above 90%"
+          description: "GPU framebuffer usage exceeds 90% for more than 5 minutes (current: {{ $value | humanizePercentage }})."
+
+      # 6. Any platform service in a restart loop — broad safety net across api, gpu-worker, prefect-worker.
+      - alert: ServiceRestartLoop
+        expr: changes(container_start_time_seconds{name=~".*(finetune-api|finetune_api|gpu-worker|prefect-worker).*"}[10m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          group: finetune
+        annotations:
+          summary: "Platform service is in a restart loop"
+          description: "Container {{ $labels.name }} has restarted more than 5 times in the last 10 minutes."

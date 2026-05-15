@@ -38,6 +38,7 @@ from app.presets.runtime import (
 )
 from app.services.compatibility import validate_model_prediction, validate_model_review
 from app.services.embedding import EmbeddingClient
+from app.services.gpu_worker import GpuWorkerClient
 from app.services.inference_worker import InferenceWorkerClient
 from app.services.llm import OpenAICompatibleLlmClient
 from app.services.label_studio import (
@@ -129,6 +130,7 @@ class PredictionService:
         embedding_client: EmbeddingClient | None = None,
         llm_client: OpenAICompatibleLlmClient | None = None,
         inference_worker: InferenceWorkerClient | None = None,
+        gpu_worker: GpuWorkerClient | None = None,
     ) -> None:
         self.repository = repository
         self.artifact_storage = artifact_storage
@@ -137,6 +139,7 @@ class PredictionService:
         self._embedding_client = embedding_client
         self._llm_client = llm_client
         self._inference_worker = inference_worker
+        self._gpu_worker = gpu_worker
 
     def _get_ls_client(self) -> LabelStudioClient:
         """Lazy initialization of Label Studio client."""
@@ -461,13 +464,31 @@ class PredictionService:
         )
 
     def _should_use_inference_worker(self) -> bool:
+        """Check if any worker (GPU or inference) is available for prediction.
+
+        Prefer ``gpu_worker`` when configured; fall back to ``inference_worker``
+        for backward compatibility.  Always returns ``False`` in test mode so
+        that route-level tests exercise the local predictor path.
+        """
         try:
-            return (
-                str(self.config.app.env) != "test"
-                and self._inference_worker is not None
-            )
+            env = str(self.config.app.env)
         except Exception:
-            return self._inference_worker is not None
+            env = ""
+        if env == "test":
+            return False
+        return self._gpu_worker is not None or self._inference_worker is not None
+
+    def _resolve_worker(self) -> GpuWorkerClient | InferenceWorkerClient:
+        """Return the preferred worker client for prediction calls.
+
+        GPU worker takes priority.  Falls back to legacy inference worker if
+        no GPU worker is configured.
+        """
+        if self._gpu_worker is not None:
+            return self._gpu_worker
+        if self._inference_worker is not None:
+            return self._inference_worker
+        raise ValueError("No worker client is configured (both gpu_worker and inference_worker are None)")
 
     async def _predict_via_worker(
         self,
@@ -478,8 +499,7 @@ class PredictionService:
         target: str,
         prompt: str | None,
     ) -> list[dict[str, Any]]:
-        if self._inference_worker is None:
-            raise ValueError("Inference worker is not configured")
+        worker = self._resolve_worker()
         model_bytes = await self.artifact_storage.get_bytes(model.uri)
         payload_samples: list[dict[str, Any]] = []
         for sample in samples:
@@ -507,7 +527,15 @@ class PredictionService:
                 }
             )
         metadata = model.metadata if isinstance(model.metadata, dict) else {}
-        return await self._inference_worker.predict_batch(
+        worker_kind = "GPU" if worker is self._gpu_worker else "inference"
+        logger.info(
+            "%s worker predict_batch: model=%s target=%s samples=%d",
+            worker_kind,
+            model.id,
+            target,
+            len(samples),
+        )
+        return await worker.predict_batch(
             model_id=model.id,
             model_uri=model.uri,
             model_format=model.format,

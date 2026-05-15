@@ -5,11 +5,67 @@ import io
 import json
 import math
 import os
+import subprocess
+import threading
+import time
 from typing import Any
 
-from fastapi import FastAPI
-import httpx
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+from app.job_registry import JobRegistry, JobConflictError
+from app.train_handler import run_training_background, cancel_training
+
+# ── GPU detection (best-effort, graceful degradation) ──────────────
+
+def _detect_gpu_info() -> dict[str, object]:
+    gpu_info: dict[str, object] = {"available": False, "reason": "CUDA not available"}
+
+    try:
+        import torch
+    except ImportError:
+        return gpu_info
+
+    try:
+        cuda_available = torch.cuda.is_available()
+    except Exception:
+        return gpu_info
+
+    if not cuda_available:
+        return gpu_info
+
+    try:
+        subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True, text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return gpu_info
+
+    device_count = torch.cuda.device_count()
+    device_name = torch.cuda.get_device_name(0) if device_count > 0 else "unknown"
+    return {
+        "available": True,
+        "device_count": device_count,
+        "device_name": device_name,
+    }
+
+# ── Prometheus metrics ─────────────────────────────────────────────
+
+from app.metrics import (
+    get_metrics,
+    jobs_active as _m_jobs_active,
+    jobs_total as _m_jobs_total,
+    job_duration_seconds as _m_job_duration,  # noqa: F401 — used by Task 8 (training execution)
+    prediction_batch_duration_seconds as _m_predict_duration,
+    embedding_batch_duration_seconds as _m_embed_duration,
+    TASK_KIND_TRAINING,
+    TASK_KIND_PREDICTION,  # noqa: F401 — used by future prediction metrics
+    TASK_KIND_EMBEDDING,  # noqa: F401 — used by future embedding metrics
+)
+
+# ── Job registry (V1 in-memory, lost on restart) ───────────────────
+
+_job_registry = JobRegistry()
+
+# ── Stub helpers (shared with existing predict / embed) ────────────
 
 
 def _image_embedding_from_bytes(image_bytes: bytes, dim: int = 64) -> list[float]:
@@ -86,6 +142,10 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
     return content.strip()
 
 
+# ── Request / Response models ──────────────────────────────────────
+
+# -- Predict (existing, unchanged) --
+
 class PredictModelPayload(BaseModel):
     id: str
     uri: str
@@ -122,6 +182,8 @@ class PredictResponse(BaseModel):
     predictions: list[PredictResponseItem] = Field(default_factory=list)
 
 
+# -- Embed (existing, unchanged) --
+
 class EmbedSamplePayload(BaseModel):
     sample_id: str
     image_bytes_b64: str | None = None
@@ -142,26 +204,170 @@ class EmbedResponse(BaseModel):
     embeddings: list[EmbedResponseItem] = Field(default_factory=list)
 
 
-app = FastAPI(title="Finetune Inference Worker", version="0.1.0")
+# -- Train (new) --
+
+class TrainRequest(BaseModel):
+    platform_job_id: str
+    preset_id: str
+    dataset_id: str
+    model_id: str = ""
+    hyperparameters: dict[str, Any] = Field(default_factory=dict)
+    artifact_prefix: str = ""
+
+
+class TrainSubmitResponse(BaseModel):
+    job_id: str
+    status: str
+    position: int = 0
+
+
+class TrainResubmitResponse(BaseModel):
+    job_id: str
+    status: str
+    detail: str
+
+
+class TrainStatusResponse(BaseModel):
+    job_id: str
+    platform_job_id: str
+    status: str
+    progress: float
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    updated_at: str | None = None
+
+
+class TrainCancelResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+class TrainLogsResponse(BaseModel):
+    job_id: str
+    logs: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ── App ────────────────────────────────────────────────────────────
+
+app = FastAPI(title="Finetune GPU Worker", version="0.1.0")
+
+
+# ── Health ─────────────────────────────────────────────────────────
 
 
 @app.get("/health")
 def health() -> dict[str, object]:
     return {
         "status": "ok",
-        "service": "inference-worker",
-        "capabilities": [
-            "predict-single",
-            "predict-batch",
-            "embed-single",
-            "embed-batch",
-        ],
-        "cache": {"policy": "warm-default", "loaded_models": 0},
+        "service": "gpu-worker",
+        "capabilities": ["train", "predict", "embed"],
+        "gpu_info": _detect_gpu_info(),
+        "ready_for_training": not _job_registry.has_active_training(),
     }
+
+
+# ── Metrics ────────────────────────────────────────────────────────
+
+
+@app.get("/metrics")
+def metrics() -> Any:
+    from fastapi.responses import Response
+
+    return Response(content=get_metrics(), media_type="text/plain; charset=utf-8")
+
+
+# ── Train ──────────────────────────────────────────────────────────
+
+
+@app.post(
+    "/v1/train",
+    response_model=TrainSubmitResponse | TrainResubmitResponse,
+    status_code=202,
+)
+def train_submit(payload: TrainRequest) -> Any:
+    from fastapi.responses import JSONResponse
+
+    try:
+        record, is_duplicate = _job_registry.submit(payload.platform_job_id)
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    if is_duplicate:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "job_id": record.gpu_job_id,
+                "status": "already_submitted",
+                "detail": "Job with this platform_job_id already exists",
+            },
+        )
+
+    _m_jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(1)
+    _m_jobs_total.labels(task_kind=TASK_KIND_TRAINING, status="pending").inc()
+
+    t = threading.Thread(
+        target=run_training_background,
+        args=(
+            _job_registry,
+            record.gpu_job_id,
+            payload.platform_job_id,
+            payload.dataset_id,
+            payload.preset_id,
+        ),
+        daemon=True,
+    )
+    t.start()
+
+    return TrainSubmitResponse(
+        job_id=record.gpu_job_id,
+        status="accepted",
+        position=0,
+    )
+
+
+@app.get("/v1/train/{job_id}", response_model=TrainStatusResponse)
+def train_status(job_id: str) -> TrainStatusResponse:
+    record = _job_registry.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
+    d = record.to_dict()
+    return TrainStatusResponse(**d)
+
+
+@app.post("/v1/train/{job_id}/cancel", response_model=TrainCancelResponse)
+def train_cancel(job_id: str) -> TrainCancelResponse:
+    try:
+        record = _job_registry.cancel(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
+    except JobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    cancel_training(job_id)
+
+    _m_jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(0)
+    _m_jobs_total.labels(task_kind=TASK_KIND_TRAINING, status="cancelled").inc()
+
+    return TrainCancelResponse(job_id=record.gpu_job_id, status="cancelled")
+
+
+@app.get("/v1/train/{job_id}/logs", response_model=TrainLogsResponse)
+def train_logs(job_id: str, tail: int = 100) -> TrainLogsResponse:
+    try:
+        logs = _job_registry.get_logs(job_id, tail=tail)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
+    return TrainLogsResponse(job_id=job_id, logs=logs)
+
+
+# ── Predict ────────────────────────────────────────────────────────
 
 
 @app.post("/v1/predict", response_model=PredictResponse)
 async def predict(payload: PredictRequest) -> PredictResponse:
+    t0 = time.monotonic()
     model_bytes = base64.b64decode(payload.model.content_b64)
     metadata = (
         payload.model.metadata if isinstance(payload.model.metadata, dict) else {}
@@ -206,6 +412,7 @@ async def predict(payload: PredictRequest) -> PredictResponse:
                 predictions.append(
                     PredictResponseItem(sample_id=sample.sample_id, error=str(exc))
                 )
+        _m_predict_duration.observe(time.monotonic() - t0)
         return PredictResponse(predictions=predictions)
 
     try:
@@ -269,11 +476,16 @@ async def predict(payload: PredictRequest) -> PredictResponse:
             )
         )
 
+    _m_predict_duration.observe(time.monotonic() - t0)
     return PredictResponse(predictions=predictions)
+
+
+# ── Embed ──────────────────────────────────────────────────────────
 
 
 @app.post("/v1/embed", response_model=EmbedResponse)
 def embed(payload: EmbedRequest) -> EmbedResponse:
+    t0 = time.monotonic()
     embeddings: list[EmbedResponseItem] = []
     for sample in payload.samples:
         if not sample.image_bytes_b64:
@@ -290,4 +502,5 @@ def embed(payload: EmbedRequest) -> EmbedResponse:
                 embedding=_image_embedding_from_bytes(image_bytes),
             )
         )
+    _m_embed_duration.observe(time.monotonic() - t0)
     return EmbedResponse(embeddings=embeddings)

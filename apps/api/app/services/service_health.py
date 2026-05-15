@@ -6,6 +6,7 @@ import httpx
 from omegaconf import DictConfig
 from pydantic import BaseModel
 
+from app.core.config import _resolve_gpu_worker_url
 from app.services.embedding import EmbeddingClient
 from app.services.prefect_client import PrefectClient
 
@@ -20,19 +21,7 @@ class ServiceCheckResult(BaseModel):
 
 
 class ServiceHealthService:
-    _WORKER_DEPLOYMENTS = {
-        "training-worker-gpu": "train-job-torch-deployment",
-        "training-worker-dspy": "train-job-dspy-deployment",
-        "prediction-worker": "predict-job-batch-deployment",
-        "embedding-worker": "embed-job-batch-deployment",
-    }
-
-    def __init__(
-        self,
-        config: DictConfig,
-        prefect_client: PrefectClient,
-        embedding_client: EmbeddingClient,
-    ) -> None:
+    def __init__(self, config: DictConfig, prefect_client: PrefectClient, embedding_client: EmbeddingClient) -> None:
         self._config = config
         self._prefect_client = prefect_client
         self._embedding_client = embedding_client
@@ -44,28 +33,15 @@ class ServiceHealthService:
             await self._check_prefect(),
             await self._check_label_studio(),
             await self._check_embedding(),
-            await self._check_training_worker("training-worker-gpu"),
-            await self._check_training_worker("training-worker-dspy"),
-            await self._check_training_worker("prediction-worker"),
-            await self._check_training_worker("embedding-worker"),
-            await self._check_inference_worker(),
+            await self._check_prefect_worker(),
+            await self._check_gpu_worker(),
         ]
 
     async def _check_postgres(self) -> ServiceCheckResult:
         db_url = str(self._config.db.url)
         if not db_url.startswith("postgresql"):
-            return ServiceCheckResult(
-                name="postgres",
-                kind="database",
-                status="down",
-                detail="non-PostgreSQL database configured",
-            )
-        return ServiceCheckResult(
-            name="postgres",
-            kind="database",
-            status="healthy",
-            detail="PostgreSQL configured",
-        )
+            return ServiceCheckResult(name="postgres", kind="database", status="down", detail="non-PostgreSQL database configured")
+        return ServiceCheckResult(name="postgres", kind="database", status="healthy", detail="PostgreSQL configured")
 
     async def _check_object_storage(self) -> ServiceCheckResult:
         endpoint = str(self._config.storage.minio.endpoint)
@@ -83,38 +59,17 @@ class ServiceHealthService:
                 endpoint=endpoint,
             )
         except Exception as exc:
-            return ServiceCheckResult(
-                name="object-storage",
-                kind="storage",
-                status="down",
-                detail=str(exc),
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="object-storage", kind="storage", status="down", detail=str(exc), endpoint=endpoint)
 
     async def _check_prefect(self) -> ServiceCheckResult:
         endpoint = str(self._config.prefect.api_url)
         start = time.perf_counter()
         try:
-            await self._prefect_client.get_work_pool(
-                str(self._config.prefect.work_pool_name)
-            )
+            await self._prefect_client.get_work_pool(str(self._config.prefect.work_pool_name))
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(
-                name="prefect",
-                kind="orchestrator",
-                status="healthy",
-                detail="work pool reachable",
-                latency_ms=latency_ms,
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="prefect", kind="orchestrator", status="healthy", detail="work pool reachable", latency_ms=latency_ms, endpoint=endpoint)
         except Exception as exc:
-            return ServiceCheckResult(
-                name="prefect",
-                kind="orchestrator",
-                status="down",
-                detail=str(exc),
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="prefect", kind="orchestrator", status="down", detail=str(exc), endpoint=endpoint)
 
     async def _check_label_studio(self) -> ServiceCheckResult:
         endpoint = str(self._config.label_studio.url)
@@ -123,22 +78,9 @@ class ServiceHealthService:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{endpoint.rstrip('/')}/health")
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(
-                name="label-studio",
-                kind="annotation",
-                status="healthy" if response.is_success else "degraded",
-                detail=f"HTTP {response.status_code}",
-                latency_ms=latency_ms,
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="label-studio", kind="annotation", status="healthy" if response.is_success else "degraded", detail=f"HTTP {response.status_code}", latency_ms=latency_ms, endpoint=endpoint)
         except Exception as exc:
-            return ServiceCheckResult(
-                name="label-studio",
-                kind="annotation",
-                status="down",
-                detail=str(exc),
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="label-studio", kind="annotation", status="down", detail=str(exc), endpoint=endpoint)
 
     async def _check_embedding(self) -> ServiceCheckResult:
         endpoint = str(self._config.embedding.grpc_target)
@@ -146,93 +88,93 @@ class ServiceHealthService:
         try:
             healthy = await self._embedding_client.health()
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(
-                name="embedding",
-                kind="worker",
-                status="healthy" if healthy else "degraded",
-                detail="gRPC health"
-                if healthy
-                else "embedding healthcheck returned false",
-                latency_ms=latency_ms,
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="embedding", kind="worker", status="healthy" if healthy else "degraded", detail="gRPC health" if healthy else "embedding healthcheck returned false", latency_ms=latency_ms, endpoint=endpoint)
         except Exception as exc:
-            return ServiceCheckResult(
-                name="embedding",
-                kind="worker",
-                status="down",
-                detail=str(exc),
-                endpoint=endpoint,
-            )
+            return ServiceCheckResult(name="embedding", kind="worker", status="down", detail=str(exc), endpoint=endpoint)
 
-    async def _check_training_worker(self, worker_name: str) -> ServiceCheckResult:
+    async def _check_prefect_worker(self) -> ServiceCheckResult:
+        """Check Prefect worker health via work pool and work queue availability."""
         endpoint = str(self._config.prefect.api_url)
-        deployment_name = self._WORKER_DEPLOYMENTS.get(worker_name)
-        if not deployment_name:
-            return ServiceCheckResult(
-                name=worker_name,
-                kind="worker",
-                status="down",
-                detail="no deployment mapped for worker",
-                endpoint=endpoint,
-            )
+        work_pool_name = str(self._config.prefect.work_pool_name)
         start = time.perf_counter()
         try:
-            deployment_id = await self._prefect_client.resolve_deployment_id(
-                deployment_name
-            )
+            await self._prefect_client.get_work_pool(work_pool_name)
+            queues = await self._prefect_client.list_work_queues(work_pool_name)
             latency_ms = int((time.perf_counter() - start) * 1000)
-            if deployment_id is None:
-                return ServiceCheckResult(
-                    name=worker_name,
-                    kind="worker",
-                    status="down",
-                    detail=f"Prefect deployment is not registered: {deployment_name}",
-                    latency_ms=latency_ms,
-                    endpoint=endpoint,
-                )
+            queue_count = len(queues) if isinstance(queues, list) else 0
             return ServiceCheckResult(
-                name=worker_name,
+                name="prefect-worker",
                 kind="worker",
-                status="healthy",
-                detail=f"Prefect deployment registered: {deployment_name}",
+                status="healthy" if queue_count > 0 else "degraded",
+                detail=f"work pool reachable, {queue_count} work queue(s)",
                 latency_ms=latency_ms,
                 endpoint=endpoint,
             )
         except Exception as exc:
             return ServiceCheckResult(
-                name=worker_name,
+                name="prefect-worker",
                 kind="worker",
                 status="down",
                 detail=str(exc),
                 endpoint=endpoint,
             )
 
-    async def _check_inference_worker(self) -> ServiceCheckResult:
-        endpoint = str(getattr(self._config.inference, "base_url", "")).rstrip("/")
+    async def _check_gpu_worker(self) -> ServiceCheckResult:
+        """Check GPU worker health via /health endpoint, parsing gpu_info.available.
+
+        Non-GPU environments report "degraded" (available but no GPU),
+        not "down" — the stack remains operational.
+        """
+        endpoint = _resolve_gpu_worker_url(self._config).rstrip("/")
         start = time.perf_counter()
         if not endpoint:
             return ServiceCheckResult(
-                name="inference-worker",
+                name="gpu-worker",
                 kind="worker",
                 status="down",
-                detail="inference.base_url is not configured",
+                detail="gpu_worker.base_url is not configured",
             )
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{endpoint}/health")
             latency_ms = int((time.perf_counter() - start) * 1000)
+            if not response.is_success:
+                return ServiceCheckResult(
+                    name="gpu-worker",
+                    kind="worker",
+                    status="degraded",
+                    detail=f"HTTP {response.status_code}",
+                    latency_ms=latency_ms,
+                    endpoint=endpoint,
+                )
+            # Parse gpu_info.available from the /health response
+            try:
+                body = response.json()
+                gpu_info = body.get("gpu_info", {})
+                gpu_available = gpu_info.get("available", False)
+            except Exception:
+                gpu_available = False
+
+            if gpu_available:
+                return ServiceCheckResult(
+                    name="gpu-worker",
+                    kind="worker",
+                    status="healthy",
+                    detail="GPU available",
+                    latency_ms=latency_ms,
+                    endpoint=endpoint,
+                )
             return ServiceCheckResult(
-                name="inference-worker",
+                name="gpu-worker",
                 kind="worker",
-                status="healthy" if response.is_success else "degraded",
-                detail=f"HTTP {response.status_code}",
+                status="degraded",
+                detail="GPU not available (non-GPU environment)",
                 latency_ms=latency_ms,
                 endpoint=endpoint,
             )
         except Exception as exc:
             return ServiceCheckResult(
-                name="inference-worker",
+                name="gpu-worker",
                 kind="worker",
                 status="down",
                 detail=str(exc),

@@ -25,6 +25,22 @@ The backend returns two layers:
 
 This keeps the UI flexible without throwing away Prefect fields too early.
 
+### Task Tracker vs Observability Stack
+
+The Task Tracker is a **product task view**. It answers questions like "what stage is my training job in?" and "did the prediction job finish?". It is not an operations monitoring tool.
+
+The observability responsibilities are split across several systems:
+
+| System | Role | Scope |
+|--------|------|-------|
+| **Task Tracker** | Product task detail | Per-job status, stages, checks, queue position, output summaries |
+| **Prefect UI** | Flow orchestration detail | Flow runs, task runs, logs, deployment management |
+| **Prometheus** | Operations metrics | Low-cardinality aggregate metrics: queue depth, request rate, error rate, GPU utilization |
+| **Grafana / Loki** | Operations dashboards and logs | Correlated log search, service-level dashboards, alert visualization |
+| **Alertmanager** | Alert routing | Threshold-based alerts on queue backpressure, worker health, error spikes |
+
+Task Tracker is NOT Prometheus. It does not store time-series metrics or emit alerts. It provides a business-facing view over individual tasks. Prometheus avoids high-cardinality labels (job IDs, dataset IDs, user IDs) because those belong in the Task Tracker product view and in Prefect logs, not in the metrics pipeline.
+
 ## APIs
 
 - `GET /api/v1/task-tracker/tasks`
@@ -62,16 +78,14 @@ Platform persistence remains the source for:
 
 ## Work Pool And Queue Semantics
 
-The current topology uses dedicated work pools for runtime isolation and queue-level priority control.
+The target topology uses CPU/orchestration queues consumed by the `prefect-worker`, while GPU execution (train, predict, embed) is delegated to the `gpu-worker` via HTTP API calls.
 
-- work pools and queues:
-  - `training-pool`
-    - `train-gpu`
-    - `optimize-llm-cpu`
-  - `predict-pool`
-    - `predict-batch`
-  - `embed-pool`
-    - `embed-batch`
+CPU queues consumed by the Prefect worker:
+
+- `training-pool`
+  - `optimize-llm-cpu` (DSPy optimization, CPU-bound)
+
+GPU execution is no longer queued through Prefect work pools. The Prefect flow submits work to the GPU worker via `POST /v1/train`, `POST /v1/predict`, or `POST /v1/embed` and polls for status. The GPU worker manages its own single-job queue for training.
 
 Queue priority is displayed as read-only metadata from Prefect work queue objects.
 
@@ -83,6 +97,10 @@ The tracker also exposes a derived capacity label:
 - `unknown`
 
 Capacity is derived from Prefect work pool slot usage and concurrency limit.
+
+### GPU Worker Correlation
+
+In the target architecture, each GPU worker job has a `gpu_job_id` (local to the GPU worker) in addition to the platform `platform_job_id` and the Prefect `flow_run_id`. The Task Tracker may correlate these IDs in a future update to provide richer runtime detail, but in V1 the tracker continues using Prefect flow run state as the primary runtime source. GPU worker status transitions are reflected through Prefect flow logs and the platform job status table.
 
 ## Stage Model
 

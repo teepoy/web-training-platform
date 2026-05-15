@@ -26,11 +26,18 @@ Deployments created through the platform UI (which hit the Prefect REST API
 directly) will also appear on the server.  The runner only executes runs for
 its own served deployments — this is a known limitation.
 
-V2 strategy
------------
+V2 strategy (CPU-only)
+----------------------
+The V2 worker is a CPU-only Prefect process worker. GPU workloads (training,
+prediction, embedding) are delegated to the GPU worker HTTP API and no longer
+consume Prefect queues.
+
 The worker first bootstraps the deployment it owns, then starts a Prefect
 worker process for the matching work queue. This keeps deployment ownership
 aligned with queue ownership.
+
+Currently the V2 worker only owns the DSPy CPU queue (``optimize-llm-cpu``).
+The ``drain-dataset`` flow continues to execute via the V1 embedded runner path.
 
 Set ``WORKER_MODE=v2`` to activate this path.
 
@@ -39,7 +46,7 @@ Environment variables
 PREFECT_API_URL     — Prefect server URL (set by compose).
 PLATFORM_API_URL    — Platform API URL for flow callbacks (e.g. ``http://api:8000``).
 WORKER_MODE         — ``v1`` (default) or ``v2``.
-WORK_POOL_NAME      — Work pool name for V2 mode (default ``training-pool``).
+WORK_POOL_NAME      — Work pool name for V2 mode (default ``default-pool``).
 WORK_QUEUE_NAME     — Work queue name for V2 mode (required for specialized workers).
 """
 
@@ -60,20 +67,17 @@ from app.flows.train_job import train_job  # noqa: F401 — register flow for V2
 from app.services.prefect_client import PrefectClient
 
 
-_GPU_QUEUE = "train-gpu"
+# GPU queues (train-gpu, predict-batch, embed-batch) are retired in V2.
+# GPU workloads now route through the GPU worker HTTP API instead of Prefect queues.
+# Only CPU-bound queues remain for the Prefect worker.
 _DSPY_QUEUE = "optimize-llm-cpu"
-_PREDICT_QUEUE = "predict-batch"
-_EMBED_QUEUE = "embed-batch"
 _DEPLOYMENT_ROOT = "/app/apps/api"
 _FLOW_ENTRYPOINT = "app/flows/train_job.py:train_job"
 _DRAIN_ENTRYPOINT = "app/flows/drain_dataset.py:drain_dataset"
 _PREDICT_ENTRYPOINT = "app/flows/predict_job.py:predict_job"
 
 _QUEUE_POOLS = {
-    _GPU_QUEUE: "training-pool",
-    _DSPY_QUEUE: "training-pool",
-    _PREDICT_QUEUE: "predict-pool",
-    _EMBED_QUEUE: "embed-pool",
+    _DSPY_QUEUE: "default-pool",
 }
 
 
@@ -101,22 +105,13 @@ async def _ensure_work_pool(pool_name: str) -> None:
 
 async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
     deployment: Any | None = None
-    deployment_name = ""
 
     effective_pool_name = _QUEUE_POOLS.get(queue_name, pool_name)
     await _ensure_work_pool(effective_pool_name)
     cfg = load_config()
     client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
 
-    if queue_name == _GPU_QUEUE:
-        deployment_name = "train-job-torch-deployment"
-        deployment = await train_job.ato_deployment(
-            name=deployment_name,
-            description="Torch runtime deployment for train-job flow (managed by delegated worker)",
-            work_pool_name=effective_pool_name,
-            work_queue_name=queue_name,
-        )
-    elif queue_name == _DSPY_QUEUE:
+    if queue_name == _DSPY_QUEUE:
         deployment_name = "train-job-dspy-deployment"
         deployment = await train_job.ato_deployment(
             name=deployment_name,
@@ -124,26 +119,10 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
             work_pool_name=effective_pool_name,
             work_queue_name=queue_name,
         )
-    elif queue_name == _PREDICT_QUEUE:
-        deployment_name = "predict-job-batch-deployment"
-        deployment = await predict_job.ato_deployment(
-            name=deployment_name,
-            description="Prediction runtime deployment for predict-job flow (managed by delegated worker)",
-            work_pool_name=effective_pool_name,
-            work_queue_name=queue_name,
-        )
-    elif queue_name == _EMBED_QUEUE:
-        deployment_name = "embed-job-batch-deployment"
-        deployment = await predict_job.ato_deployment(
-            name=deployment_name,
-            description="Embedding runtime deployment for predict-job flow (managed by delegated worker)",
-            work_pool_name=effective_pool_name,
-            work_queue_name=queue_name,
-        )
 
     if deployment is None:
         raise RuntimeError(
-            f"Unsupported WORK_QUEUE_NAME '{queue_name}'. Expected one of: {_GPU_QUEUE}, {_DSPY_QUEUE}, {_PREDICT_QUEUE}, {_EMBED_QUEUE}."
+            f"Unsupported WORK_QUEUE_NAME '{queue_name}'. Expected: {_DSPY_QUEUE}."
         )
 
     await deployment.aapply(work_pool_name=effective_pool_name)
@@ -239,7 +218,7 @@ async def main_v2() -> None:
     The worker subprocess inherits the current Python environment so all
     flows (``train_job``, ``drain_dataset``) are importable.
     """
-    pool_name = os.getenv("WORK_POOL_NAME", "training-pool")
+    pool_name = os.getenv("WORK_POOL_NAME", "default-pool")
     queue_name = os.getenv("WORK_QUEUE_NAME")
     if not queue_name:
         raise RuntimeError("WORK_QUEUE_NAME must be set for delegated worker mode")
