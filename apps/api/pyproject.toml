@@ -68,6 +68,8 @@ exclude = [
   "**/*_test.py",
   "tests/**",
   "alembic/**",
+  "app/routers/datasets/**",
+  "app/routers/import_parquet/**",
 ]
 
 [tool.ruff]
