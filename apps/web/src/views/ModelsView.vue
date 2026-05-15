@@ -143,9 +143,10 @@ import { ref, computed, h, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption, UploadFileInfo } from "naive-ui";
 import { useMessage, NTag, NButton, NSpace } from "naive-ui";
-import { listModels, deleteModel, uploadModel, listModelUploadTemplates, listJobs } from "@platform/web-data/models";
-import { listDatasets } from "@platform/web-data/datasets";
-import { getApiBase } from "@platform/web-data/client";
+import { listModels, deleteModel, uploadModel, listModelUploadTemplates } from "@platform/web-ui/api/models";
+import { listJobs } from "@platform/web-ui/api/jobs";
+import { listDatasets } from "@platform/web-ui/api/datasets";
+import { getApiBase } from "@platform/web-ui/api/client";
 import type { Model, ModelUploadTemplate, UploadModelMetadata } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
@@ -400,7 +401,7 @@ const uploadMutation = useMutation({
     };
     return uploadModel(
       uploadForm.value.file,
-      metadata as unknown as Record<string, unknown>,
+      metadata as unknown as UploadModelMetadata,
     );
   },
   onSuccess: () => {

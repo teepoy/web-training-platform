@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import PreviewItemDrawer from "./PreviewItemDrawer.vue";
-import type { PreviewItem } from "@platform/web-data/preview";
+import type { PreviewItem } from "@platform/web-ui/api/preview";
 
 const sampleItem: PreviewItem = {
   upstream_item_id: "upstream-001",

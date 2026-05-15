@@ -10,11 +10,11 @@ export default defineConfig({
     alias: [
       {
         find: /^@platform\/web-data\/(.+)$/,
-        replacement: path.resolve(__dirname, "../../libs/web-data/src/$1/index.ts"),
+        replacement: path.resolve(__dirname, "../../libs/web-ui/src/api/$1.ts"),
       },
       {
         find: "@platform/web-data",
-        replacement: path.resolve(__dirname, "../../libs/web-data/src/index.ts"),
+        replacement: path.resolve(__dirname, "../../libs/web-ui/src/api/index.ts"),
       },
       {
         find: "@platform/widget-sdk",

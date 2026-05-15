@@ -1,9 +1,20 @@
 import { useQuery, useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { listTrackedTasks, getTrackedTask, cancelTrackedTask } from "./api";
-import { taskTrackerKeys } from "./keys";
+import {
+  listTrackedTasks,
+  getTrackedTask,
+  cancelTrackedTask,
+} from "../task-tracker";
 
-export function useTrackedTasksQuery(kind?: () => "training" | "prediction" | undefined) {
+export const taskTrackerKeys = {
+  all: ["task-tracker"] as const,
+  list: (kind?: string) => ["task-tracker", "list", kind ?? "all"] as const,
+  detail: (id: string) => ["task-tracker", "detail", id] as const,
+};
+
+export function useTrackedTasksQuery(
+  kind?: () => "training" | "prediction" | undefined,
+) {
   return useQuery({
     queryKey: computed(() => taskTrackerKeys.list(kind?.())),
     queryFn: () => listTrackedTasks(kind?.()),

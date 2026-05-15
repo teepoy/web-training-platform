@@ -8,7 +8,7 @@
 
 import { computed, isRef, ref, type Ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
-import { getAnnotationStats } from '@platform/web-data/datasets'
+import { getAnnotationStats } from '@platform/web-ui/api/datasets'
 import type { DatasetAnnotationStats } from '../api'
 import type { ClassifyDashboardContext } from '../types/sidebar-widgets'
 

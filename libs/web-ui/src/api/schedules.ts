@@ -70,3 +70,5 @@ export function getRunLogs(runId: string, limit?: number): Promise<RunLog[]> {
   const qs = limit !== undefined ? `?limit=${limit}` : "";
   return req<RunLog[]>(`/runs/${runId}/logs${qs}`);
 }
+
+export type { UpdateScheduleBody } from "./types";

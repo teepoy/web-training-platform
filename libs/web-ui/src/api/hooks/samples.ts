@@ -3,13 +3,25 @@ import { computed } from "vue";
 import {
   getSample,
   listAnnotationsForSample,
+  uploadSampleImage,
+} from "../samples";
+import {
+  createAnnotation,
   updateAnnotation,
   deleteAnnotation,
-  createAnnotation,
-  uploadSampleImage,
-  getSimilarity,
-} from "./api";
-import { sampleKeys } from "./keys";
+} from "../annotations";
+import { getSimilarity } from "../datasets";
+
+export const sampleKeys = {
+  all: ["samples"] as const,
+  list: (datasetId: string, filters?: Record<string, unknown>) =>
+    ["samples", "list", datasetId, filters ?? {}] as const,
+  detail: (sampleId: string) => ["samples", "detail", sampleId] as const,
+  annotations: (sampleId: string) =>
+    ["samples", "annotations", sampleId] as const,
+  similarity: (datasetId: string, sampleId: string, k?: number) =>
+    ["samples", "similarity", datasetId, sampleId, k ?? 5] as const,
+};
 
 export function useSampleQuery(sampleId: () => string | null) {
   return useQuery({

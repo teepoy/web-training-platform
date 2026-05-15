@@ -135,8 +135,8 @@ import {
   pauseSchedule,
   resumeSchedule,
   listScheduleRuns,
-} from "@platform/web-data/models";
-import type { UpdateScheduleBody } from "@platform/web-data/models";
+  type UpdateScheduleBody,
+} from "@platform/web-ui/api/schedules";
 import type { ScheduleRun } from "../types";
 import { RunLogViewer } from "@platform/web-ui";
 

@@ -27,7 +27,7 @@ import {
   streamGlobalAgentChat,
   type AgentPanelDescriptor,
   type AgentContext,
-} from "@platform/web-data/agent";
+} from "@platform/web-ui/api/agent";
 import { useAuthStore } from "../../stores/auth";
 
 export type { AgentChatStatus, ChatEntry };

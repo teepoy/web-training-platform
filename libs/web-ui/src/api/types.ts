@@ -372,13 +372,65 @@ export interface Organization {
   created_at: string;
 }
 
+export type OrgRole = "admin" | "member";
+
+export interface OrgMembership {
+  id: string;
+  user_id: string;
+  org_id: string;
+  role: OrgRole;
+  created_at: string;
+}
+
 export interface UserWithOrgs extends User {
-  organizations: Array<{ id: string; user_id: string; org_id: string; role: string; created_at: string }>;
+  organizations: OrgMembership[];
 }
 
 export interface LoginResponse {
   access_token: string;
   user: User;
+}
+
+export interface PersonalAccessToken {
+  id: string;
+  user_id: string;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface PersonalAccessTokenCreated extends PersonalAccessToken {
+  token: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  org_id: string;
+  role: OrgRole;
+  user: User;
+}
+
+export interface OAuthCallbackResponse {
+  action: "login" | "register";
+  access_token?: string | null;
+  user?: User | null;
+  state_token?: string | null;
+  email?: string | null;
+  name?: string | null;
+  provider?: string | null;
+  provider_id?: string | null;
+}
+
+export interface OAuthProviderInfo {
+  id: string;
+  display_name: string;
+  enabled: boolean;
+}
+
+export interface OAuthRegisterRequest {
+  state_token: string;
+  name: string;
 }
 
 // Prediction types

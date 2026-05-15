@@ -53,7 +53,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { useOrgStore } from '../stores/org'
-import { authOAuthRegister } from '@platform/web-data/auth'
+import { authOAuthRegister } from '@platform/web-ui/api/auth'
 
 const router = useRouter()
 const route = useRoute()

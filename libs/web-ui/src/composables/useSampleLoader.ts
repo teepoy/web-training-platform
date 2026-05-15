@@ -13,7 +13,8 @@
  */
 
 import { ref, computed, type Ref, watch, isRef } from 'vue'
-import { fetchSampleSlice, listSamplesWithLabels, type PaginatedResponse, type SampleWithLabels } from '@platform/web-data/samples'
+import { fetchSampleSlice } from '@platform/web-ui/api/datasets'
+import { listSamplesWithLabels, type PaginatedResponse, type SampleWithLabels } from '@platform/web-ui/api/samples'
 
 export interface UseSampleLoaderOptions {
   datasetId: string | Ref<string>

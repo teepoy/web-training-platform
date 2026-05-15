@@ -54,3 +54,8 @@ export function importSurfaceState(
     body: JSON.stringify(doc),
   });
 }
+
+export { queryWaferPoints } from "./datasets";
+
+export { streamGlobalAgentChat } from "./sse";
+export type { AgentPanelDescriptor, AgentContext } from "./types";

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { usePreviewLoader } from './usePreviewLoader'
-import { listPreviewItems } from '@platform/web-data/preview'
+import { listPreviewItems } from '@platform/web-ui/api/preview'
 
-vi.mock('@platform/web-data/preview', () => ({
+vi.mock('@platform/web-ui/api/preview', () => ({
   listPreviewItems: vi.fn(),
 }))
 

@@ -155,7 +155,7 @@ export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
 import { computed, inject, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
-import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '@platform/web-data/task-tracker'
+import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '@platform/web-ui/api/hooks'
 import type { TaskTrackerNode, TaskTrackerSummary } from '../../api'
 
 const props = defineProps<{

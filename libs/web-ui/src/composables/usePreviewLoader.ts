@@ -1,5 +1,5 @@
 import { ref, computed, watch, type Ref } from 'vue'
-import { listPreviewItems, type PreviewItem } from '@platform/web-data/preview'
+import { listPreviewItems, type PreviewItem } from '@platform/web-ui/api/preview'
 
 export interface UsePreviewLoaderOptions {
   sessionId: string | Ref<string>

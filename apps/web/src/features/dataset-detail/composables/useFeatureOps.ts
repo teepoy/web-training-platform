@@ -1,7 +1,8 @@
 import { computed, h, ref, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
-import { listSamples, getSimilarity, type SimilarityResponse } from "@platform/web-data/samples";
+import { listSamples } from "@platform/web-ui/api/samples"
+import { getSimilarity, type SimilarityResponse } from "@platform/web-ui/api/datasets";
 import { updateEmbedConfig, extractFeatures, getSelectionMetrics, getUncoveredHints } from "@platform/web-ui/api";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "@platform/web-ui/api";
 

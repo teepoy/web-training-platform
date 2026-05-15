@@ -21,9 +21,10 @@ import {
   useThemeVars,
 } from "naive-ui";
 import { bulkCreateAnnotations, syncAnnotationsToLs } from "@platform/web-ui/api";
-import { getDataset, updateLabelSpace } from "@platform/web-data/datasets";
-import { getSample, listSamplesWithLabels } from "@platform/web-data/samples";
-import { listModels, listJobs, listPresets, createJob } from "@platform/web-data/models";
+import { getDataset, updateLabelSpace } from "@platform/web-ui/api/datasets";
+import { getSample, listSamplesWithLabels } from "@platform/web-ui/api/samples";
+import { listModels } from "@platform/web-ui/api/models";
+import { listJobs, listPresets, createJob } from "@platform/web-ui/api/jobs";
 import {
   listPredictionJobs,
   listPredictionJobPredictions,
@@ -34,8 +35,8 @@ import {
   syncPredictionCollection,
   createReviewAction as createReviewActionApi,
   saveReviewAnnotations,
-} from "@platform/web-data/predictions";
-import { queryWaferPoints } from "@platform/web-data/agent";
+} from "@platform/web-ui/api/predictions";
+import { queryWaferPoints } from "@platform/web-ui/api/agent";
 import type {
   AnnotationGridItem,
   BrowserItem,

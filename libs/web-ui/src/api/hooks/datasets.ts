@@ -1,7 +1,19 @@
 import { useQuery, useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { listDatasets, getDataset, getAnnotationStats, deleteDataset } from "./api";
-import { datasetKeys } from "./keys";
+import {
+  listDatasets,
+  getDataset,
+  getAnnotationStats,
+  deleteDataset,
+} from "../datasets";
+
+export const datasetKeys = {
+  all: ["datasets"] as const,
+  list: (orgId?: string | null) => ["datasets", "list", orgId ?? ""] as const,
+  detail: (id: string) => ["datasets", "detail", id] as const,
+  annotationStats: (id: string) =>
+    ["datasets", "annotation-stats", id] as const,
+};
 
 export function useDatasetsQuery(orgId: () => string | null) {
   return useQuery({

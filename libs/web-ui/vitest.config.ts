@@ -7,7 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@platform/widget-sdk": path.resolve(__dirname, "../widget-sdk/src/index.ts"),
-      "@platform/web-data": path.resolve(__dirname, "../web-data/src"),
+      "@platform/web-ui": path.resolve(__dirname, "../../libs/web-ui/src"),
+      "@platform/web-data": path.resolve(__dirname, "../../libs/web-ui/src/api"),
     },
   },
   test: {

@@ -7,8 +7,17 @@ import {
   startPreviewPersist,
   getPreviewPersistStatus,
   type PreviewPersistScope,
-} from "./api";
-import { previewKeys } from "./keys";
+} from "../preview";
+
+export const previewKeys = {
+  all: ["preview"] as const,
+  session: (sessionId: string) =>
+    [...previewKeys.all, "session", sessionId] as const,
+  items: (sessionId: string, cursor: string | null, limit: number) =>
+    [...previewKeys.all, "items", sessionId, { cursor, limit }] as const,
+  persistStatus: (sessionId: string) =>
+    [...previewKeys.all, "persist-status", sessionId] as const,
+};
 
 export function usePreviewSessionQuery(sessionId: () => string | null) {
   return useQuery({
@@ -35,7 +44,10 @@ export function usePreviewItemsQuery(
     ),
     queryFn: ({ queryKey }) => {
       const id = (queryKey as readonly unknown[])[2] as string;
-      const c = (queryKey as readonly unknown[])[3] as { cursor: string | null; limit: number };
+      const c = (queryKey as readonly unknown[])[3] as {
+        cursor: string | null;
+        limit: number;
+      };
       return listPreviewItems(id, c.cursor, c.limit);
     },
     enabled: computed(() => !!sessionId()),

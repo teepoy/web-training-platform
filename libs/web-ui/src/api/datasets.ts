@@ -268,3 +268,5 @@ export async function fetchSampleSlice(
 }
 
 export { getApiBase };
+
+export type { SimilarityResponse } from "./types";

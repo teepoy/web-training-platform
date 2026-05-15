@@ -13,10 +13,10 @@
     "baseUrl": ".",
     "paths": {
       "@platform/widget-sdk": ["../../libs/widget-sdk/src/index.ts"],
-"@platform/web-ui": ["../../libs/web-ui/src/index.ts"],
-"@platform/web-ui/*": ["../../libs/web-ui/src/*"],
-"@platform/web-data": ["../../libs/web-data/src/index.ts"],
-      "@platform/web-data/*": ["../../libs/web-data/src/*"]
+      "@platform/web-ui": ["../../libs/web-ui/src/index.ts"],
+      "@platform/web-ui/*": ["../../libs/web-ui/src/*"],
+      "@platform/web-data": ["../../libs/web-ui/src/api/index.ts"],
+      "@platform/web-data/*": ["../../libs/web-ui/src/api/*"]
     },
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["node"]

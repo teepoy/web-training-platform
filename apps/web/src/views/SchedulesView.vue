@@ -87,7 +87,7 @@ import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
-import { listSchedules, createSchedule, deleteSchedule, pauseSchedule, resumeSchedule } from "@platform/web-data/models";
+import { listSchedules, createSchedule, deleteSchedule, pauseSchedule, resumeSchedule } from "@platform/web-ui/api/schedules";
 import type { Schedule } from "../types";
 import { useOrgStore } from "../stores/org";
 

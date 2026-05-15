@@ -57,7 +57,7 @@ import { useRouter } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { API_BASE } from '@platform/web-ui/api'
-import { fetchOAuthProviders, type OAuthProviderInfo } from '@platform/web-data/auth'
+import { fetchOAuthProviders, type OAuthProviderInfo } from '@platform/web-ui/api/auth'
 
 const router = useRouter()
 const message = useMessage()

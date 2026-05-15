@@ -103,22 +103,16 @@ export function syncPredictionCollection(
   );
 }
 
-export function createReviewAction(
-  datasetId: string,
-  modelId: string,
-  modelVersion?: string | null,
-  collectionId?: string | null,
-  syncTag?: string | null,
-): Promise<ReviewAction> {
+export function createReviewAction(params: {
+  dataset_id: string;
+  model_id: string;
+  model_version?: string | null;
+  collection_id?: string | null;
+  sync_tag?: string | null;
+}): Promise<ReviewAction> {
   return req<ReviewAction>("/prediction-reviews", {
     method: "POST",
-    body: JSON.stringify({
-      dataset_id: datasetId,
-      model_id: modelId,
-      ...(modelVersion ? { model_version: modelVersion } : {}),
-      ...(collectionId ? { collection_id: collectionId } : {}),
-      ...(syncTag ? { sync_tag: syncTag } : {}),
-    }),
+    body: JSON.stringify(params),
   });
 }
 
@@ -185,3 +179,7 @@ export function persistReviewExport(
     },
   );
 }
+
+export type { PredictionJob, PredictionResult, PredictionEvent, RunPredictionRequest, PredictSingleRequest, ReviewAction, AnnotationVersion, SaveReviewAnnotationItem, SaveReviewAnnotationsResponse, PredictionCollection, CreatePredictionCollectionRequest, SyncPredictionCollectionResponse, VersionExportResponse } from "./types";
+
+export type { ExportFormat } from "./types";

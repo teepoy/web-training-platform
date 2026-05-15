@@ -106,7 +106,7 @@ export {
   type PredictionCollection, type CreatePredictionCollectionRequest,
   type SyncPredictionCollectionResponse,
   type ExportFormat, type VersionExportResponse,
-} from "@platform/web-data/predictions";
+} from "@platform/web-ui/api/predictions";
 
 // ---------------------------------------------------------------------------
 // Auth (from @platform/web-data)
@@ -115,7 +115,7 @@ export {
   type OrgRole, type User, type Organization,
   type OrgMembership, type UserWithOrgs, type LoginResponse,
   type PersonalAccessToken, type PersonalAccessTokenCreated, type OrgMember,
-} from "@platform/web-data/auth";
+} from "@platform/web-ui/api/auth";
 
 // ---------------------------------------------------------------------------
 // Preview (from @platform/web-data)
@@ -123,7 +123,7 @@ export {
 export {
   type PreviewSession, type PreviewItemsPage,
   type PreviewPersistScope, type PreviewPersistStatus,
-} from "@platform/web-data/preview";
+} from "@platform/web-ui/api/preview";
 
 // ---------------------------------------------------------------------------
 // App-local UI contracts

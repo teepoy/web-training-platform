@@ -16,7 +16,7 @@ import {
   type PreviewSession,
   type PreviewPersistScope,
   type PreviewItem,
-} from "@platform/web-data/preview";
+} from "@platform/web-ui/api/preview";
 import {
   usePreviewLoader,
   useSampleBrowserPrefs,

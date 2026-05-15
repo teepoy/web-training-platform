@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Organization } from '../types'
-import { fetchOrganizations } from '@platform/web-data/auth'
+import { fetchOrganizations } from '@platform/web-ui/api/orgs'
 
 const ORG_KEY = 'current_org_id'
 

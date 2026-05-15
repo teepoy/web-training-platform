@@ -1,6 +1,6 @@
 import { computed, onMounted, provide, ref, watch, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
-import { queryWaferPoints } from "@platform/web-data/agent";
+import { queryWaferPoints } from "@platform/web-ui/api/agent";
 import { BROWSER_DASHBOARD_KEY } from "@platform/widget-sdk";
 import {
   buildBlinkTableData,

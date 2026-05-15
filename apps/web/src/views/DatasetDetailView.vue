@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { BrowserSidebar, FlowModal, SampleBrowser, SampleDetailDrawer, type FlowCard } from "@platform/web-ui";
-import { getDataset } from "@platform/web-data/datasets";
+import { getDataset } from "@platform/web-ui/api/datasets";
 import { getSparseSummary } from "@platform/web-ui/api/datasets";
 import { COLLAPSED_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, useSampleBrowserPrefs } from "@platform/web-ui";
 import type { Dataset, SparseSummaryResponse } from "../types";

@@ -33,7 +33,7 @@
 import { computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { NCard, NSpin, NTag, NText } from "naive-ui";
-import { getRunLogs } from "@platform/web-data/models";
+import { getRunLogs } from "@platform/web-ui/api/schedules";
 import type { RunLog } from "../../api";
 
 // ---------------------------------------------------------------------------

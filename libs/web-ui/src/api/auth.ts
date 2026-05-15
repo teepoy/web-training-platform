@@ -4,6 +4,8 @@ import type {
   LoginResponse,
   User,
   UserWithOrgs,
+  OAuthRegisterRequest,
+  OAuthProviderInfo,
 } from "./types";
 
 export function authLogin(
@@ -35,6 +37,19 @@ export function authMe(token?: string | null): Promise<UserWithOrgs> {
   return req<UserWithOrgs>("/auth/me", { headers });
 }
 
+export function authOAuthRegister(
+  body: OAuthRegisterRequest,
+): Promise<LoginResponse> {
+  return req<LoginResponse>("/auth/oauth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchOAuthProviders(): Promise<OAuthProviderInfo[]> {
+  return req<OAuthProviderInfo[]>("/auth/oauth/providers");
+}
+
 export async function fetchHealthStatus(): Promise<{
   status: string;
   auth_enabled: boolean;
@@ -45,3 +60,5 @@ export async function fetchHealthStatus(): Promise<{
   }
   return r.json() as Promise<{ status: string; auth_enabled: boolean }>;
 }
+
+export type { LoginResponse, User, UserWithOrgs, Organization, OrgRole, OrgMembership, PersonalAccessToken, PersonalAccessTokenCreated, OrgMember, OAuthCallbackResponse, OAuthProviderInfo, OAuthRegisterRequest } from "./types";

@@ -310,8 +310,10 @@ import {
   NSpace,
   NAlert,
 } from "naive-ui";
-import { getSample, listAnnotationsForSample, createAnnotation, updateAnnotation, deleteAnnotation, uploadSampleImage, getSimilarity } from "@platform/web-data/samples";
-import type { SimilarityResponse } from "@platform/web-data/samples";
+import { getSample, listAnnotationsForSample, uploadSampleImage } from "@platform/web-ui/api/samples";
+import { createAnnotation, updateAnnotation, deleteAnnotation } from "@platform/web-ui/api/annotations";
+import { getSimilarity } from "@platform/web-ui/api/datasets";
+import type { SimilarityResponse } from "@platform/web-ui/api/datasets";
 import { resolveImageUris, FALLBACK_PLACEHOLDER } from "@platform/web-ui";
 import type { Annotation } from "../../api";
 

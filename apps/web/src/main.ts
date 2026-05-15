@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
-import { configureTransport } from "@platform/web-data/client";
+import { configureTransport } from "@platform/web-ui/api/client";
 
 import "./style.css";
 import App from "./App.vue";

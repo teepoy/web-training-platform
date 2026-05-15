@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import { NInput, NButton, NSpace, NAlert } from 'naive-ui'
-import { createPreviewSession } from '@platform/web-data/preview'
+import { createPreviewSession } from '@platform/web-ui/api/preview'
 import type { PreviewLauncherRequiredProps } from '@platform/widget-sdk'
 
 const props = defineProps<PreviewLauncherRequiredProps>()

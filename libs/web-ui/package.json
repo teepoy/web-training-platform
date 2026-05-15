@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*"
   },
   "scripts": {
     "test": "vitest run",
@@ -23,7 +24,7 @@
   },
   "devDependencies": {
     "@platform/widget-sdk": "workspace:*",
-    "@platform/web-data": "workspace:*",
+
     "@tanstack/vue-virtual": "^3.13.23",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",

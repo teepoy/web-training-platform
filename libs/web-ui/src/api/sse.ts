@@ -2,6 +2,7 @@
 // Shared SSE (Server-Sent Events) primitives for POST-based streaming.
 // Canonical source for SSEFrame, parseSSEStream, buildSSEHeaders, and
 // streamGlobalAgentChat.
+// Also includes EventSource-based helpers for job/task streaming.
 // ---------------------------------------------------------------------------
 
 import { getApiBase, getAuthToken, ApiError } from "./client";
@@ -83,4 +84,15 @@ export async function* streamGlobalAgentChat(
 
   const reader = resp.body!.getReader();
   yield* parseSSEStream(reader);
+}
+
+export function buildTrackedTaskEventSource(taskId: string): EventSource {
+  const params = new URLSearchParams();
+  const token = getAuthToken();
+  if (token) {
+    params.set("token", token);
+  }
+  return new EventSource(
+    `${getApiBase()}/task-tracker/tasks/${taskId}/stream?${params.toString()}`,
+  );
 }

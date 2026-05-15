@@ -86,3 +86,5 @@ export function listSamplesWithLabels(
     `/datasets/${datasetId}/samples-with-labels?${params.toString()}`,
   );
 }
+
+export type { PaginatedResponse, SampleWithLabels } from "./types";
