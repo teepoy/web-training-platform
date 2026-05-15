@@ -151,7 +151,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Symbol                  | Type       | Location                                                                 | Role                                                         |
 | ----------------------- | ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `app`                   | FastAPI    | `apps/api/app/main.py`                                                   | HTTP/SSE entrypoint                                          |
-| `Container`             | DI         | `apps/api/app/container.py`                                              | Wires engine/storage/repo                                    |
+| `Container`             | DI         | `apps/api/app/container.py`                                              | Wires engine/storage/repo; `WiringConfiguration` enables `@inject` on route handlers |
 | `TrainingOrchestrator`  | service    | `apps/api/app/services/orchestrator.py`                                  | Job persistence + notifications                              |
 | `SchedulerService`      | service    | `apps/api/app/services/scheduler.py`                                     | Prefect REST client                                          |
 | `SurfaceStore`          | service    | `apps/api/app/agent/surface_store.py`                                    | In-memory agent panel state                                  |
@@ -240,6 +240,12 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - To add a new exporter: create `apps/web/src/registrations/export-<name>/index.ts`, export a named descriptor via `defineExporter({...})`, then register in `apps/web/src/registrations/index.ts`. Exporters use `FlowModal` with `kind="export"`.
 - To add a new preview launcher: create `apps/web/src/registrations/preview-<name>/index.ts`, export a named descriptor via `definePreviewLauncher({...})`, then register in `apps/web/src/registrations/index.ts`. Preview launchers use `FlowTypeSelector` for a 2-step flow.
 - To add a new backend extension route: create `apps/api/app/routers/<name>/router.py` with an `APIRouter` named `router`, then add it to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py`.
+
+### Route Handler DI Patterns
+- **Preferred** (simple routers, 1-2 services per handler): `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]`. Requires adding the module to `WiringConfiguration` in `app/container.py`. Injected params must precede all `= Depends(...)` / `= Query(...)` params with defaults.
+- **Pragmatic** (complex routers, 3+ services): `c = Depends(get_container)` — `get_container()` returns typed `Container` (via lazy `from app.main import container`). Available from `app.routers._common`.
+- Both patterns coexist; choose per handler. `deps.py` and `scheduler.py` keep `get_container()` (infrastructure, not routes).
+- `# type: ignore` comments are NOT recognized by `ty`; suppress pre-existing type-gap diagnostics via pyproject.toml `[tool.ty.src.exclude]`.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.

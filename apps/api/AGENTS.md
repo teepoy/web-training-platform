@@ -7,7 +7,9 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Task | Location | Notes |
 |------|----------|-------|
 | HTTP routes | `app/main.py` | Main API surface, SSE, export persist endpoint |
-| Dependency wiring | `app/container.py` | Engine/storage/repository selection |
+| Dependency wiring | `app/container.py` | Engine/storage/repo selection; `WiringConfiguration` for `@inject` |
+| Container accessors | `app/routers/_common.py` | `get_container() -> Container` (typed, lazy-import) |
+| Route dependency injection | `app/container.py` (`WiringConfiguration`) | `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]` for simple routers |
 | Config profile logic | `app/core/config.py` + `config/*.yaml` | Env overrides plus profile merge |
 | DB session/bootstrap | `app/db/session.py` | Async engine, session factory, optional auto-create in tests |
 | Schema/migrations | `app/db/models.py` + `alembic/` | Use migration files for non-smoke envs |
@@ -48,6 +50,11 @@ apps/api/
 - `APP_CONFIG_PROFILE=test` is the test-only profile. Supported runtime profiles are `dev` and `prod`.
 - `db.auto_create` is only a test convenience; dev/prod should use Alembic.
 - `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect and MinIO/S3-compatible storage.
+
+### DI Injection
+- **Simple routers** (1-2 services/handler): use `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]`. Module must be in `Container.wiring_config.modules`. Injected params before `= Depends(...)` / `= Query(...)` params.
+- **Complex routers** (3+ services/handler): use `c = Depends(get_container)`. `get_container()` returns typed `Container` (import guard `.app.main` lazily).
+- **Infrastructure** (`deps.py`, `scheduler.py`): continue using `get_container()` directly in function body.
 
 ## ANTI-PATTERNS
 - Don’t add new route-level persistence shortcuts; keep handlers thin and push logic into services/repository.
