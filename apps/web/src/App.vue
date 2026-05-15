@@ -139,6 +139,7 @@ const menuOptions = [
   { label: 'Models', key: '/models' },
   { label: 'Preset Catalog', key: '/presets' },
   { label: 'Schedules', key: '/schedules' },
+  { label: 'Settings', key: '/settings' },
 ]
 
 const userInitials = computed(() =>
@@ -150,6 +151,7 @@ const avatarDropdownOptions = computed(() => {
     { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
     { type: 'divider' as const, key: 'd1' },
     { label: 'Profile', key: 'profile', disabled: true },
+    { label: 'Settings', key: 'settings', disabled: false },
   ]
   if (authStore.authEnabled) {
     options.push({ label: 'Logout', key: 'logout', disabled: false })
@@ -158,6 +160,10 @@ const avatarDropdownOptions = computed(() => {
 })
 
 function handleAvatarSelect(key: string) {
+  if (key === 'settings') {
+    router.push('/settings')
+    return
+  }
   if (key === 'logout') {
     authStore.logout()
     router.push('/login')

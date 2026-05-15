@@ -26,6 +26,7 @@ export const router = createRouter({
     { path: '/schedules/:id', component: () => import('./views/ScheduleDetailView.vue') },
     { path: '/preview', name: 'preview-launch', component: () => import('./views/PreviewLaunchView.vue') },
     { path: '/preview/:sessionId', name: 'preview-classify', component: () => import('./views/PreviewClassifyView.vue') },
+    { path: '/settings', component: () => import('./views/SettingsView.vue') },
     ...(import.meta.env.DEV ? sandboxRoutes : []),
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./views/NotFoundView.vue') },
   ],
