@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.container import Container
+
 from app.domain.models import Dataset
 from app.domain.types import DatasetType, TaskType
 
 
-def get_container():
+def get_container() -> Container:
     """Lazy container accessor — import happens at call time, not module load."""
     from app.main import container
 

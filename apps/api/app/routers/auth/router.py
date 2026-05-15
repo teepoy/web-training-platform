@@ -1,5 +1,6 @@
-from __future__ import annotations
+from typing import Annotated
 
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.api.deps import get_current_user, require_superadmin
@@ -18,9 +19,10 @@ from app.api.schemas import (
     UserResponse,
     UserWithOrgsResponse,
 )
+from app.container import Container
 from app.db.models import OrgMembershipORM, OrganizationORM, UserORM
 from app.domain.models import User
-from app.routers._common import get_container
+from app.repositories.sql_repository import SqlRepository
 from app.services.auth import (
     create_access_token,
     create_personal_access_token,
@@ -37,9 +39,11 @@ router = APIRouter(prefix="/api/v1", tags=["auth"])
 
 
 @router.post("/auth/register", response_model=UserResponse, status_code=201)
-async def register(payload: RegisterRequest) -> UserResponse:
-    c = get_container()
-    repo = c.repository()
+@inject
+async def register(
+    payload: RegisterRequest,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
+) -> UserResponse:
     existing = await repo.get_user_by_email(payload.email)
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -60,9 +64,11 @@ async def register(payload: RegisterRequest) -> UserResponse:
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-async def login(payload: LoginRequest) -> LoginResponse:
-    c = get_container()
-    repo = c.repository()
+@inject
+async def login(
+    payload: LoginRequest,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
+) -> LoginResponse:
     user_orm = await repo.get_user_by_email(payload.email)
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -80,11 +86,11 @@ async def login(payload: LoginRequest) -> LoginResponse:
 
 
 @router.get("/auth/me", response_model=UserWithOrgsResponse)
+@inject
 async def auth_me(
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> UserWithOrgsResponse:
-    c = get_container()
-    repo = c.repository()
     memberships = await repo.get_user_orgs(current_user.id)
     orgs = [
         MembershipResponse(
@@ -111,13 +117,13 @@ async def auth_me(
 
 
 @router.post("/auth/tokens", response_model=TokenCreatedResponse, status_code=201)
+@inject
 async def create_token(
     payload: CreateTokenRequest,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> TokenCreatedResponse:
-    c = get_container()
     plaintext, pat_orm = create_personal_access_token(current_user.id, payload.name)
-    repo = c.repository()
     pat_orm = await repo.create_pat(pat_orm)
     return TokenCreatedResponse(
         id=pat_orm.id,
@@ -128,11 +134,11 @@ async def create_token(
 
 
 @router.get("/auth/tokens", response_model=list[TokenResponse])
+@inject
 async def list_tokens(
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> list[TokenResponse]:
-    c = get_container()
-    repo = c.repository()
     pats = await repo.list_personal_access_tokens(current_user.id)
     return [
         TokenResponse(
@@ -146,12 +152,12 @@ async def list_tokens(
 
 
 @router.delete("/auth/tokens/{token_id}", status_code=204)
+@inject
 async def delete_token(
     token_id: str,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    c = get_container()
-    repo = c.repository()
     deleted = await repo.delete_personal_access_token(token_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Token not found")
@@ -164,13 +170,13 @@ async def delete_token(
 
 
 @router.post("/organizations", response_model=OrgResponse, status_code=201)
+@inject
 async def create_organization(
     payload: CreateOrgRequest,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> OrgResponse:
     await require_superadmin(current_user=current_user)
-    c = get_container()
-    repo = c.repository()
     slug = payload.slug if payload.slug else payload.name.lower().replace(" ", "-")
     existing = await repo.get_organization_by_slug(slug)
     if existing is not None:
@@ -190,11 +196,11 @@ async def create_organization(
 
 
 @router.get("/organizations", response_model=list[OrgResponse])
+@inject
 async def list_organizations(
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> list[OrgResponse]:
-    c = get_container()
-    repo = c.repository()
     if current_user.is_superadmin:
         orgs = await repo.list_all_organizations()
         return [
@@ -213,13 +219,13 @@ async def list_organizations(
     response_model=MemberResponse,
     status_code=201,
 )
+@inject
 async def add_org_member(
     org_id: str,
     payload: AddMemberRequest,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> MemberResponse:
-    c = get_container()
-    repo = c.repository()
     org = await repo.get_organization(org_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -248,12 +254,12 @@ async def add_org_member(
 
 
 @router.get("/organizations/{org_id}/members", response_model=list[MemberResponse])
+@inject
 async def list_org_members(
     org_id: str,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> list[MemberResponse]:
-    c = get_container()
-    repo = c.repository()
     org = await repo.get_organization(org_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -276,13 +282,13 @@ async def list_org_members(
 
 
 @router.delete("/organizations/{org_id}/members/{user_id}", status_code=204)
+@inject
 async def remove_org_member(
     org_id: str,
     user_id: str,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    c = get_container()
-    repo = c.repository()
     org = await repo.get_organization(org_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")

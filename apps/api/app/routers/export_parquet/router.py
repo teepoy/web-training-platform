@@ -1,15 +1,17 @@
-from __future__ import annotations
-
 import io
 import logging
+from typing import Annotated
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_current_org, get_current_user
+from app.container import Container
+from app.domain.interfaces import ArtifactStorage
 from app.domain.models import Organization, User
-from app.routers._common import get_container
+from app.repositories.sql_repository import SqlRepository
 
 router = APIRouter(prefix="/api/v1/plugins/export-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
@@ -23,21 +25,23 @@ def _build_image_struct(path: str, image_bytes: bytes | None = None) -> dict:
 
 
 @router.post("/export")
+@inject
 async def export_parquet(
     dataset_id: str,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
+    storage: Annotated[ArtifactStorage, Depends(Provide[Container.artifact_storage])],
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> dict:
-    c = get_container()
-    dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
+    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
-    samples, _ = await c.repository().list_samples(dataset_id, limit=100_000)
+    samples, _ = await repo.list_samples(dataset_id, limit=100_000)
 
     annotations_by_sample: dict[str, list[str]] = {}
     for sample in samples:
-        anns = await c.repository().list_annotations_for_sample(sample.id)
+        anns = await repo.list_annotations_for_sample(sample.id)
         labels = [a.label for a in anns]
         annotations_by_sample[sample.id] = labels
 
@@ -84,7 +88,7 @@ async def export_parquet(
     parquet_bytes = buf.getvalue()
 
     filename = f"{dataset.name.replace(' ', '_')}_export.parquet"
-    uri = await c.artifact_storage().put_bytes(
+    uri = await storage.put_bytes(
         f"exports/{dataset_id}/{filename}",
         parquet_bytes,
         content_type="application/octet-stream",

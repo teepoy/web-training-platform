@@ -1,7 +1,7 @@
 from __future__ import annotations
 # pyright: reportMissingImports=false
 
-from dependency_injector import providers
+from dependency_injector import containers, providers
 
 from app.containers.infra import InfraContainer
 from app.services.engines import KubeflowTrainingOperatorEngine, LocalProcessEngine
@@ -31,6 +31,18 @@ from app.services.preview_upstream_s3 import S3ZipPreviewUpstream
 
 
 class Container(InfraContainer):
+    wiring_config = containers.WiringConfiguration(
+        modules=[
+            "app.routers.task_tracker.router",
+            "app.routers.import_parquet.router",
+            "app.routers.export_parquet.router",
+            "app.routers.auth.router",
+            "app.routers.models.router",
+            "app.routers.preview.router",
+            "app.routers.agent.router",
+        ],
+    )
+
     local_engine = providers.Singleton(
         LocalProcessEngine, storage=InfraContainer.artifact_storage
     )

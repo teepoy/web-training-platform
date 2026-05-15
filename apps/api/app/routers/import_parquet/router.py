@@ -1,20 +1,20 @@
-from __future__ import annotations
-
 import io
 import logging
-from typing import TypeGuard
+from typing import Annotated, TypeGuard
 
 import pyarrow.parquet as pq
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pyarrow import Table as ArrowTable
 
 from app.api.deps import get_current_org, get_current_user
 from app.api.schemas import BulkCreateSampleItem, BulkCreateSampleResponse
+from app.container import Container
 from app.domain.models import Annotation, Organization, Sample, User
 from app.domain.types import TaskType
-from app.routers._common import get_container
+from app.repositories.sql_repository import SqlRepository
 from app.services.dataset_capability_guard import assert_not_sparse
-from app.services.label_studio import platform_annotation_to_ls
+from app.services.label_studio import LabelStudioClient, platform_annotation_to_ls
 
 router = APIRouter(prefix="/api/v1/plugins/import-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
@@ -134,14 +134,18 @@ def _parquet_to_sample_items(
 
 
 @router.post("/import", response_model=BulkCreateSampleResponse)
+@inject
 async def import_parquet(
     dataset_id: str,
+    repo: Annotated[SqlRepository, Depends(Provide[Container.repository])],
+    ls_client: Annotated[
+        LabelStudioClient, Depends(Provide[Container.label_studio_client])
+    ],
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> BulkCreateSampleResponse:
-    c = get_container()
-    dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
+    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     assert_not_sparse(dataset)
@@ -184,7 +188,7 @@ async def import_parquet(
         ls_tasks.append(task_data)
 
     try:
-        imported = await c.label_studio_client().import_tasks(
+        imported = await ls_client.import_tasks(
             int(dataset.ls_project_id),
             ls_tasks,
             return_task_ids=True,
@@ -211,18 +215,18 @@ async def import_parquet(
         )
         for idx, item in enumerate(items)
     ]
-    created = await c.repository().create_samples(samples)
+    created = await repo.create_samples(samples)
 
     for idx, item in enumerate(items):
         if item.label is None:
             continue
         sample = created[idx]
         if sample.ls_task_id is not None:
-            await c.label_studio_client().create_annotation(
+            await ls_client.create_annotation(
                 sample.ls_task_id,
                 platform_annotation_to_ls(item.label),
             )
-        await c.repository().create_annotation(
+        await repo.create_annotation(
             Annotation(
                 sample_id=sample.id,
                 label=item.label,
