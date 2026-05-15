@@ -70,6 +70,7 @@ const page = injectPreviewPage();
         <div style="flex: 1; min-height: 0; display: flex;">
           <BrowserSidebar
             :panels="page.previewSidebarPanels.value"
+            :context="{}"
             :collapsed="page.prefs.sidebarCollapsed"
             :sidebar-width="page.prefs.sidebarWidth"
             :min-sidebar-width="MIN_SIDEBAR_WIDTH"

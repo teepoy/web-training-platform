@@ -21,10 +21,20 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../../libs/widget-sdk/src/index.ts"),
       },
       {
+        find: /^@platform\/web-ui\/(.+)$/,
+        replacement: path.resolve(__dirname, "../../libs/web-ui/src/$1"),
+      },
+      {
         find: "@platform/web-ui",
         replacement: path.resolve(__dirname, "../../libs/web-ui/src/index.ts"),
       },
     ],
+  },
+  optimizeDeps: {
+    // Exclude full echarts bundle to prevent double-registration of components
+    // (modular echarts/core + echarts/charts etc. are pre-bundled separately;
+    // loading the full bundle on top causes registerInternalOptionCreator assertions)
+    exclude: ["echarts"],
   },
   server: {
     port: 5173,

@@ -3,7 +3,9 @@ import {
   onMounted,
   computed,
   provide,
+  inject,
   type Ref,
+  type ComputedRef,
   type InjectionKey,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -23,6 +25,7 @@ import {
   metadataString,
   useDataPipeline as createDataPipeline,
   DATA_PIPELINE_KEY,
+  type SidebarPanelDescriptor,
 } from "@platform/web-ui";
 import type { BrowserItem, WaferPoint } from "../../../types";
 import { previewPanels } from "../../classify/config";
@@ -46,9 +49,7 @@ export interface PreviewPageState {
   showDrawer: Ref<boolean>;
 
   browserItems: Ref<BrowserItem[]>;
-  previewSidebarPanels: ReturnType<
-    typeof injectWaferPanelData
-  >;
+  previewSidebarPanels: ComputedRef<SidebarPanelDescriptor[]>;
   prefs: ReturnType<typeof useSampleBrowserPrefs>;
 
   selectItem: (item: PreviewItem) => void;

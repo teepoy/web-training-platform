@@ -1,5 +1,6 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
 import type { TaskTrackerDetail, TaskTrackerSummary } from '../types'
+import { getTrackedTask } from '@platform/web-ui/api/task-tracker'
 
 const watchedTasks = ref<Record<string, TaskTrackerSummary>>({})
 const previousStatuses = new Map<string, string>()
@@ -111,10 +112,9 @@ export async function syncWatchedTaskIds(
   taskIds: string[],
   onDetail: (detail: TaskTrackerDetail) => void,
 ) {
-  const { api } = await import('../api')
   for (const taskId of taskIds) {
     try {
-      const detail = await api.getTrackedTask(taskId)
+      const detail = await getTrackedTask(taskId)
       onDetail(detail)
     } catch {
       /* ignore stale watched ids */

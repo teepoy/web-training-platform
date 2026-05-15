@@ -72,8 +72,5 @@ declare module 'vue' {
     PredictModal: typeof import('./src/components/PredictModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    RunLogViewer: typeof import('./src/components/RunLogViewer.vue')['default']
-    SampleDetailDrawer: typeof import('./src/components/SampleDetailDrawer.vue')['default']
-    TaskInsightModal: typeof import('./src/components/TaskInsightModal.vue')['default']
   }
 }

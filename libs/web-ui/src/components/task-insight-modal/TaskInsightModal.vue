@@ -142,17 +142,21 @@
   </n-modal>
 </template>
 
+<script lang="ts">
+import type { InjectionKey, Ref } from 'vue'
+import type { TaskTrackerDetail } from '../../api'
+export const TASK_INSIGHT_ORG_ID_KEY: InjectionKey<Ref<string | null>> = Symbol('task-insight-org-id')
+export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
+  (taskId: Ref<string | null>, callback: (payload: TaskTrackerDetail) => void) => void
+> = Symbol('task-insight-stream')
+</script>
+
 <script setup lang="ts">
-import { computed, inject, ref, watch, type InjectionKey, type Ref } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
 import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '@platform/web-data/task-tracker'
 import type { TaskTrackerNode, TaskTrackerSummary } from '../../api'
-
-export const TASK_INSIGHT_ORG_ID_KEY: InjectionKey<Ref<string | null>> = Symbol('task-insight-org-id')
-export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
-  (taskId: Ref<string | null>, callback: (payload: unknown) => void) => void
-> = Symbol('task-insight-stream')
 
 const props = defineProps<{
   show: boolean

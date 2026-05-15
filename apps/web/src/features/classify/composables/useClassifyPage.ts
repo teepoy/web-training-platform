@@ -615,9 +615,9 @@ export function useClassifyPage() {
       message.success(
         `Synced ${data.synced_count} predictions to Label Studio`,
       );
-      if (data.failed_count > 0) {
+      if ((data.skipped_count ?? 0) > 0) {
         message.warning(
-          `${data.failed_count} predictions were skipped during sync`,
+          `${data.skipped_count} predictions were skipped during sync`,
         );
       }
     },

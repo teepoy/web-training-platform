@@ -29,10 +29,10 @@ import { listDatasets, deleteDataset } from "@platform/web-data/datasets";
 import type { Dataset, User } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
-import ManualImporter from "../registrations/import-manual/ManualImporter.vue";
-import ManualDatasetImporter from "../registrations/import-dataset-manual/ManualDatasetImporter.vue";
-import ParquetImporter from "../registrations/import-parquet/ParquetImporter.vue";
-import UpstreamPreviewLauncher from "../registrations/preview-upstream/UpstreamPreviewLauncher.vue";
+import ManualImporter from "../features/dataset-detail/components/ManualImporter.vue";
+import ManualDatasetImporter from "../features/dataset-detail/components/ManualDatasetImporter.vue";
+import ParquetImporter from "../features/dataset-detail/components/ParquetImporter.vue";
+import UpstreamPreviewLauncher from "../features/preview/components/UpstreamPreviewLauncher.vue";
 import { resolveDatasetShim, resolveDatasetTaskType } from "./datasets/registry";
 import { getActiveDatasetTaskType } from "./datasets/selection";
 
