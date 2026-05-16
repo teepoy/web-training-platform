@@ -139,6 +139,7 @@ const menuOptions = [
   { label: 'Models', key: '/models' },
   { label: 'Preset Catalog', key: '/presets' },
   { label: 'Schedules', key: '/schedules' },
+  { label: 'Sensors', key: '/sensors' },
   { label: 'Settings', key: '/settings' },
 ]
 

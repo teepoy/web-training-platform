@@ -8,6 +8,7 @@ export * from "./jobs";
 export * from "./models";
 export * from "./predictions";
 export * from "./schedules";
+export * from "./sensors";
 export * from "./orgs";
 export * from "./task-tracker";
 export * from "./agent";
