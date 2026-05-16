@@ -5,6 +5,7 @@ write tools (create dataset, start training, run predictions, create schedule,
 cancel job), and sidebar tools (set_panel, remove_panel, get_surface_state)
 that are only active on the classify page.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,16 +31,19 @@ _logger = logging.getLogger(__name__)
 # Tool definition helpers
 # ---------------------------------------------------------------------------
 
+
 def _fn(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "function",
-        "function": {"name": name, "description": description, "parameters": parameters},
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+        },
     }
 
 
-def _obj(
-    props: dict[str, Any], required: list[str] | None = None
-) -> dict[str, Any]:
+def _obj(props: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     schema: dict[str, Any] = {"type": "object", "properties": props}
     if required:
         schema["required"] = required
@@ -64,10 +68,15 @@ READ_TOOLS: list[dict[str, Any]] = [
     _fn(
         "list_training_jobs",
         "List training jobs. Optionally filter by dataset_id or status.",
-        _obj({
-            "dataset_id": {"type": "string", "description": "Filter by dataset"},
-            "status": {"type": "string", "enum": ["pending", "running", "completed", "failed", "cancelled"]},
-        }),
+        _obj(
+            {
+                "dataset_id": {"type": "string", "description": "Filter by dataset"},
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "running", "completed", "failed", "cancelled"],
+                },
+            }
+        ),
     ),
     _fn(
         "get_training_job",
@@ -119,7 +128,10 @@ READ_TOOLS: list[dict[str, Any]] = [
                         "prediction-summary",
                     ],
                 },
-                "params": {"type": "object", "description": "Query-specific parameters"},
+                "params": {
+                    "type": "object",
+                    "description": "Query-specific parameters",
+                },
             },
             required=["dataset_id", "query_type"],
         ),
@@ -139,7 +151,10 @@ WRITE_TOOLS: list[dict[str, Any]] = [
         ),
         _obj(
             {
-                "name": {"type": "string", "description": "Human-readable dataset name"},
+                "name": {
+                    "type": "string",
+                    "description": "Human-readable dataset name",
+                },
                 "task_type": {
                     "type": "string",
                     "enum": ["classification", "vqa"],
@@ -195,8 +210,14 @@ WRITE_TOOLS: list[dict[str, Any]] = [
         _obj(
             {
                 "name": {"type": "string"},
-                "flow_name": {"type": "string", "description": "Prefect flow name (e.g. 'train-job')"},
-                "cron": {"type": "string", "description": "Cron expression (e.g. '0 2 * * *')"},
+                "flow_name": {
+                    "type": "string",
+                    "description": "Prefect flow name (e.g. 'train-job')",
+                },
+                "cron": {
+                    "type": "string",
+                    "description": "Cron expression (e.g. '0 2 * * *')",
+                },
                 "parameters": {"type": "object", "description": "Flow parameters"},
                 "description": {"type": "string"},
             },
@@ -205,10 +226,7 @@ WRITE_TOOLS: list[dict[str, Any]] = [
     ),
     _fn(
         "cancel_training_job",
-        (
-            "Cancel a running training job. "
-            "Always confirm with the user before calling."
-        ),
+        ("Cancel a running training job. Always confirm with the user before calling."),
         _obj({"job_id": {"type": "string"}}, required=["job_id"]),
     ),
 ]
@@ -235,7 +253,10 @@ SIDEBAR_TOOLS: list[dict[str, Any]] = [
                     ],
                 },
                 "title": {"type": "string"},
-                "data": {"type": "object", "description": "Inline data: {inline: <payload>}"},
+                "data": {
+                    "type": "object",
+                    "description": "Inline data: {inline: <payload>}",
+                },
                 "config": {"type": "object"},
                 "order": {"type": "integer", "minimum": 0},
                 "size": {"type": "string", "enum": ["compact", "normal", "large"]},
@@ -320,7 +341,11 @@ async def execute_get_dataset(
 
 
 async def execute_list_training_jobs(
-    *, repository: SqlRepository, org_id: str, dataset_id: str | None = None, status: str | None = None
+    *,
+    repository: SqlRepository,
+    org_id: str,
+    dataset_id: str | None = None,
+    status: str | None = None,
 ) -> dict[str, Any]:
     jobs = await repository.list_jobs(org_id=org_id)
     results = []
@@ -329,14 +354,16 @@ async def execute_list_training_jobs(
             continue
         if status and str(j.status).lower() != status.lower():
             continue
-        results.append({
-            "id": j.id,
-            "dataset_id": j.dataset_id,
-            "preset_id": j.preset_id,
-            "status": str(j.status),
-            "created_by": j.created_by,
-            "created_at": j.created_at.isoformat() if j.created_at else None,
-        })
+        results.append(
+            {
+                "id": j.id,
+                "dataset_id": j.dataset_id,
+                "preset_id": j.preset_id,
+                "status": str(j.status),
+                "created_by": j.created_by,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+        )
     return {"jobs": results, "count": len(results)}
 
 
@@ -356,9 +383,7 @@ async def execute_get_training_job(
     }
 
 
-async def execute_list_presets(
-    *, preset_registry: PresetRegistry
-) -> dict[str, Any]:
+async def execute_list_presets(*, preset_registry: PresetRegistry) -> dict[str, Any]:
     presets = preset_registry.list_presets()
     return {
         "presets": [
@@ -450,10 +475,16 @@ async def execute_get_dashboard(
 
 
 async def execute_query_data(
-    *, dataset_id: str, query_type: str, params: dict[str, Any] | None, repository: SqlRepository, org_id: str
+    *,
+    dataset_id: str,
+    query_type: str,
+    params: dict[str, Any] | None,
+    repository: SqlRepository,
+    org_id: str,
 ) -> dict[str, Any]:
     """Reuse the classify-agent query_data implementation."""
     from app.agent.tools import execute_query_data as _classify_query
+
     dataset = await repository.get_dataset(dataset_id, org_id=org_id)
     if dataset is None:
         return {"error": f"Dataset '{dataset_id}' not found"}
@@ -468,6 +499,7 @@ async def execute_query_data(
 # ---------------------------------------------------------------------------
 # Tool implementations — writes
 # ---------------------------------------------------------------------------
+
 
 async def execute_create_dataset(
     *,
@@ -484,11 +516,16 @@ async def execute_create_dataset(
     from app.domain.types import DatasetType, TaskType
 
     tt = TaskType.VQA if task_type == "vqa" else TaskType.CLASSIFICATION
-    ds_type = DatasetType.IMAGE_VQA if tt == TaskType.VQA else DatasetType.IMAGE_CLASSIFICATION
+    ds_type = (
+        DatasetType.IMAGE_VQA
+        if tt == TaskType.VQA
+        else DatasetType.IMAGE_CLASSIFICATION
+    )
 
     # Create LS project
     try:
         from app.services.label_studio import LabelStudioClient as _LSC
+
         if tt == TaskType.VQA:
             label_config = _LSC.generate_vqa_config()
         else:
@@ -531,7 +568,9 @@ async def execute_start_training_job(
     if preset is None:
         return {"error": f"Preset '{preset_id}' not found"}
     if not getattr(preset, "trainable", True):
-        return {"error": f"Preset '{preset_id}' is inference-only and does not support training"}
+        return {
+            "error": f"Preset '{preset_id}' is inference-only and does not support training"
+        }
 
     job = TrainingJob(
         dataset_id=dataset_id,
@@ -540,7 +579,12 @@ async def execute_start_training_job(
         org_id=org_id,
     )
     started = await orchestrator.start_job(job)
-    return {"id": started.id, "status": str(started.status), "dataset_id": dataset_id, "preset_id": preset_id}
+    return {
+        "id": started.id,
+        "status": str(started.status),
+        "dataset_id": dataset_id,
+        "preset_id": preset_id,
+    }
 
 
 async def execute_run_predictions(
@@ -568,7 +612,12 @@ async def execute_run_predictions(
         org_id=org_id,
     )
     started = await prediction_orchestrator.start_job(job)
-    return {"id": started.id, "status": str(started.status), "dataset_id": dataset_id, "model_id": model_id}
+    return {
+        "id": started.id,
+        "status": str(started.status),
+        "dataset_id": dataset_id,
+        "model_id": model_id,
+    }
 
 
 async def execute_create_schedule(
@@ -593,7 +642,12 @@ async def execute_create_schedule(
             parameters=parameters or {},
             description=description or "",
         )
-        return {"id": raw.get("id"), "name": raw.get("name"), "cron": raw.get("cron"), "status": "created"}
+        return {
+            "id": raw.get("id"),
+            "name": raw.get("name"),
+            "cron": raw.get("cron"),
+            "status": "created",
+        }
     except Exception as exc:
         return {"error": f"Failed to create schedule: {exc}"}
 
@@ -612,12 +666,15 @@ async def execute_cancel_training_job(
     ok = await orchestrator.cancel_job(job_id)
     if ok:
         return {"id": job_id, "status": "cancelled"}
-    return {"error": f"Could not cancel job '{job_id}' — it may already be completed or not running."}
+    return {
+        "error": f"Could not cancel job '{job_id}' — it may already be completed or not running."
+    }
 
 
 # ---------------------------------------------------------------------------
 # Tool implementations — sidebar
 # ---------------------------------------------------------------------------
+
 
 async def execute_set_panel(
     *,

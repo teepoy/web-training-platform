@@ -14,6 +14,7 @@ Design notes
   transitions and new log lines until the run reaches a terminal state.
 - ``collect_artifacts`` reads artifact payload emitted by the flow run state.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -91,17 +92,18 @@ class PrefectWorkPoolEngine:
 
     async def _ensure_deployment(self, deployment_name: str) -> str:
         """Resolve the deployment ID, caching it for subsequent calls.
-        
+
         Raises HTTPException if deployment is not found.
         """
         if deployment_name not in self._deployment_ids:
             deployment_id = await self._client.resolve_deployment_id(deployment_name)
             if deployment_id is None:
                 from fastapi import HTTPException
+
                 raise HTTPException(
                     status_code=503,
                     detail=f"Deployment '{deployment_name}' not found. "
-                           "The embedded Prefect runner may still be starting up.",
+                    "The embedded Prefect runner may still be starting up.",
                 )
             self._deployment_ids[deployment_name] = deployment_id
         return self._deployment_ids[deployment_name]
@@ -281,7 +283,9 @@ class PrefectWorkPoolEngine:
                     ArtifactRef(
                         uri=a["uri"],
                         kind=a.get("kind", "artifact"),
-                        metadata=a.get("metadata", {}) if isinstance(a.get("metadata", {}), dict) else {},
+                        metadata=a.get("metadata", {})
+                        if isinstance(a.get("metadata", {}), dict)
+                        else {},
                     )
                     for a in state_data["artifacts"]
                     if isinstance(a, dict) and a.get("uri")

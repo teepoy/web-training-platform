@@ -141,7 +141,9 @@ class LocalProcessEngine:
                 ArtifactRef(
                     uri=str(uri),
                     kind=str(item.get("kind", "artifact")),
-                    metadata=item.get("metadata", {}) if isinstance(item.get("metadata", {}), dict) else {},
+                    metadata=item.get("metadata", {})
+                    if isinstance(item.get("metadata", {}), dict)
+                    else {},
                 )
             )
         return refs
@@ -194,21 +196,45 @@ class KubeflowTrainingOperatorEngine:
 
     async def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]:
         job_id = external_job_id.replace("ft-", "")
-        yield TrainingEvent(job_id=job_id, message="kubeflow job accepted", payload={"phase": "accepted"})
+        yield TrainingEvent(
+            job_id=job_id,
+            message="kubeflow job accepted",
+            payload={"phase": "accepted"},
+        )
         last_phase = ""
         while True:
-            phase = await self.kubeflow_client.get_job_phase(external_job_id) if self.kubeflow_client else "Failed"
+            phase = (
+                await self.kubeflow_client.get_job_phase(external_job_id)
+                if self.kubeflow_client
+                else "Failed"
+            )
             if phase != last_phase:
-                yield TrainingEvent(job_id=job_id, message=f"kubeflow phase: {phase}", payload={"phase": phase})
+                yield TrainingEvent(
+                    job_id=job_id,
+                    message=f"kubeflow phase: {phase}",
+                    payload={"phase": phase},
+                )
                 last_phase = phase
             if phase == "Succeeded":
-                yield TrainingEvent(job_id=job_id, message="training completed", payload={"status": "completed"})
+                yield TrainingEvent(
+                    job_id=job_id,
+                    message="training completed",
+                    payload={"status": "completed"},
+                )
                 break
             if phase == "Failed":
-                yield TrainingEvent(job_id=job_id, message="training failed", payload={"status": "failed"})
+                yield TrainingEvent(
+                    job_id=job_id,
+                    message="training failed",
+                    payload={"status": "failed"},
+                )
                 break
             if phase in {"Stopped", "Terminated"}:
-                yield TrainingEvent(job_id=job_id, message="training cancelled", payload={"status": "cancelled"})
+                yield TrainingEvent(
+                    job_id=job_id,
+                    message="training cancelled",
+                    payload={"status": "cancelled"},
+                )
                 break
             await asyncio.sleep(2)
 
@@ -224,7 +250,9 @@ class KubeflowTrainingOperatorEngine:
             logs = await self.kubeflow_client.get_job_logs(external_job_id)
             last_line = logs.strip().splitlines()[-1] if logs.strip() else ""
             payload = json.loads(last_line) if last_line.startswith("{") else {}
-            artifacts = payload.get("artifacts", []) if isinstance(payload, dict) else []
+            artifacts = (
+                payload.get("artifacts", []) if isinstance(payload, dict) else []
+            )
             refs: list[ArtifactRef] = []
             for item in artifacts:
                 if not isinstance(item, dict):
@@ -236,7 +264,9 @@ class KubeflowTrainingOperatorEngine:
                     ArtifactRef(
                         uri=str(uri),
                         kind=str(item.get("kind", "artifact")),
-                        metadata=item.get("metadata", {}) if isinstance(item.get("metadata", {}), dict) else {},
+                        metadata=item.get("metadata", {})
+                        if isinstance(item.get("metadata", {}), dict)
+                        else {},
                     )
                 )
             return refs

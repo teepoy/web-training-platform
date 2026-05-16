@@ -33,19 +33,23 @@ class PredictionOrchestrator:
         if isinstance(data, list):
             return {}
         if hasattr(data, "model_dump"):
-            dumped = data.model_dump()
+            dumped = data.model_dump()  # pyright: ignore[reportOptionalMemberAccess]
             return dumped if isinstance(dumped, dict) else {}
         if hasattr(data, "dict"):
-            dumped = data.dict()
+            dumped = data.dict()  # pyright: ignore[reportOptionalMemberAccess]
             return dumped if isinstance(dumped, dict) else {}
         return {}
 
     async def start_job(self, job: PredictionJob) -> PredictionJob:
         await self._repository.create_prediction_job(job)
         deployment_name = self._deployment_name_for_target(str(job.target))
-        deployment_id = await self._prefect_client.resolve_deployment_id(deployment_name)
+        deployment_id = await self._prefect_client.resolve_deployment_id(
+            deployment_name
+        )
         if deployment_id is None:
-            raise ValueError(f"Prediction deployment is not registered: {deployment_name}")
+            raise ValueError(
+                f"Prediction deployment is not registered: {deployment_name}"
+            )
         run = await self._prefect_client.create_flow_run_from_deployment(
             deployment_id=deployment_id,
             parameters={
@@ -59,8 +63,13 @@ class PredictionOrchestrator:
                 "sample_ids": job.sample_ids,
                 "prompt": (
                     job.summary.get("prompt")
-                    if isinstance(job.summary, dict) and job.summary.get("prompt") is not None
-                    else (job.summary.get("embed_model") if isinstance(job.summary, dict) else None)
+                    if isinstance(job.summary, dict)
+                    and job.summary.get("prompt") is not None
+                    else (
+                        job.summary.get("embed_model")
+                        if isinstance(job.summary, dict)
+                        else None
+                    )
                 ),
             },
             idempotency_key=job.id,
@@ -76,7 +85,9 @@ class PredictionOrchestrator:
         )
         await self._repository.add_prediction_event(start_event)
         asyncio.create_task(self._poll_run(job.id, external_id))
-        return (await self._repository.get_prediction_job(job.id, org_id=job.org_id)) or job
+        return (
+            await self._repository.get_prediction_job(job.id, org_id=job.org_id)
+        ) or job
 
     async def _poll_run(self, job_id: str, external_id: str) -> None:
         last_log_count = 0
@@ -117,13 +128,19 @@ class PredictionOrchestrator:
             if existing_job is not None and isinstance(existing_job.summary, dict):
                 summary = existing_job.summary
         if state == "COMPLETED":
-            await self._repository.update_prediction_job_status(job_id, JobStatus.COMPLETED, summary=summary)
+            await self._repository.update_prediction_job_status(
+                job_id, JobStatus.COMPLETED, summary=summary
+            )
             status = "completed"
         elif state == "CANCELLED":
-            await self._repository.update_prediction_job_status(job_id, JobStatus.CANCELLED, summary=summary)
+            await self._repository.update_prediction_job_status(
+                job_id, JobStatus.CANCELLED, summary=summary
+            )
             status = "cancelled"
         else:
-            await self._repository.update_prediction_job_status(job_id, JobStatus.FAILED, summary=summary)
+            await self._repository.update_prediction_job_status(
+                job_id, JobStatus.FAILED, summary=summary
+            )
             status = "failed"
         await self._repository.add_prediction_event(
             PredictionEvent(
@@ -139,8 +156,12 @@ class PredictionOrchestrator:
         if job is None or not job.external_job_id:
             return False
         try:
-            await self._prefect_client.set_flow_run_state(job.external_job_id, "CANCELLING")
-            await self._repository.update_prediction_job_status(job_id, JobStatus.CANCELLED)
+            await self._prefect_client.set_flow_run_state(
+                job.external_job_id, "CANCELLING"
+            )
+            await self._repository.update_prediction_job_status(
+                job_id, JobStatus.CANCELLED
+            )
             await self._repository.add_prediction_event(
                 PredictionEvent(
                     job_id=job_id,

@@ -951,10 +951,10 @@ async def list_model_upload_templates(
                     name=str(profile.get("name", "")),
                     model_spec=profile.get("model_spec", {})
                     if isinstance(profile.get("model_spec", {}), dict)
-                    else {},  # ty:ignore[invalid-argument-type]
+                    else {},  # pyright: ignore[reportArgumentType]
                     default_prediction_targets=profile.get(
                         "default_prediction_targets", []
-                    ),  # ty:ignore[invalid-argument-type]
+                    ),  # pyright: ignore[reportArgumentType]
                 )
                 for profile in template.profiles
             ],

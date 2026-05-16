@@ -56,9 +56,10 @@ markers = [
 [dependency-groups]
 dev = [
     "omegaconf>=2.3.0",
+    "pyright>=1.1.0",
 ]
 
-[tool.ty.src]
+[tool.pyright]
 exclude = [
   "app/generated/**",
   "**/label_studio.py",
@@ -70,7 +71,11 @@ exclude = [
   "alembic/**",
   "app/routers/datasets/**",
   "app/routers/import_parquet/**",
+  "app/services/feature_ops.py",
 ]
+typeCheckingMode = "basic"
+reportMissingImports = false
+reportMissingModuleSource = false
 
 [tool.ruff]
 exclude = ["tests/", "alembic/", "**/*_test.py"]

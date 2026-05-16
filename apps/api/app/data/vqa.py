@@ -23,7 +23,9 @@ class VqaDatasetAdapter:
                     "sample_id": str(item.get("sample_id", "")),
                     "image_uri": str(item.get("image_uri", "")),
                     "question": str(item.get("question", "")),
-                    "answer": str(item.get("answer", "")) if item.get("answer") is not None else None,
+                    "answer": str(item.get("answer", ""))
+                    if item.get("answer") is not None
+                    else None,
                 }
             )
         self._records = normalized

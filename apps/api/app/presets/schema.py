@@ -7,6 +7,7 @@ at startup and exposes a read-only catalog to users.
 Required sections: model, train, predict.
 Optional sections: test, convert, runtime, io.
 """
+
 from __future__ import annotations
 
 from typing import Any

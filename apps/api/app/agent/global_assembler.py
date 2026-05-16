@@ -4,6 +4,7 @@ Enriches the ``global_prompt_template.md`` with user/org context, platform
 statistics, and — when the user is on a dataset page — dataset-specific
 details.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,9 @@ def _load_template() -> str:
     return _template_cache
 
 
-def _build_context_block(context: AgentContext, dataset_info: dict[str, Any] | None) -> str:
+def _build_context_block(
+    context: AgentContext, dataset_info: dict[str, Any] | None
+) -> str:
     """Build the context block that describes what the user is looking at."""
     lines: list[str] = []
 
@@ -38,7 +41,9 @@ def _build_context_block(context: AgentContext, dataset_info: dict[str, Any] | N
                 lines.append(f"  - Labels: {', '.join(label_space[:30])}")
             ann = dataset_info.get("annotation_stats")
             if ann:
-                lines.append(f"  - Annotated: {ann.get('annotated_samples', 0)}/{ann.get('total_samples', 0)}")
+                lines.append(
+                    f"  - Annotated: {ann.get('annotated_samples', 0)}/{ann.get('total_samples', 0)}"
+                )
 
     if context.job_id:
         lines.append(f"- Active job: `{context.job_id}`")

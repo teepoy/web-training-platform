@@ -5,6 +5,7 @@ Two tiers:
   2. Polars scan — sample N rows, load into a Polars DataFrame, read the
      inferred schema.  Purely mechanical: no LLM, no heuristics.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -47,9 +48,18 @@ def _scan_with_polars(
             n_unique=col.n_unique(),
             sample_values=col.drop_nulls().unique().head(5).to_list(),
         )
-        if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-                     pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-                     pl.Float32, pl.Float64):
+        if dtype in (
+            pl.Int8,
+            pl.Int16,
+            pl.Int32,
+            pl.Int64,
+            pl.UInt8,
+            pl.UInt16,
+            pl.UInt32,
+            pl.UInt64,
+            pl.Float32,
+            pl.Float64,
+        ):
             info.min = col.min()
             info.max = col.max()
         result[col_name] = info
@@ -121,7 +131,9 @@ def build_metadata_block(
             for key, info in inferred.items():
                 if key not in declared:
                     examples = ", ".join(repr(v) for v in info.sample_values[:3])
-                    lines.append(f"  - `{key}` ({info.type}, {info.n_unique} distinct) — e.g. {examples}")
+                    lines.append(
+                        f"  - `{key}` ({info.type}, {info.n_unique} distinct) — e.g. {examples}"
+                    )
         lines.append("  (Schema declared by dataset creator)")
     elif inferred:
         for key, info in inferred.items():

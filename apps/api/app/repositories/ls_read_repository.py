@@ -3,6 +3,7 @@
 Queries the Label Studio ``task`` and ``task_completion`` tables directly
 to retrieve annotations without going through the LS REST API.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -66,9 +67,7 @@ class LsReadRepository:
             )
         return result
 
-    async def get_tasks_for_project(
-        self, project_id: int
-    ) -> list[dict[str, Any]]:
+    async def get_tasks_for_project(self, project_id: int) -> list[dict[str, Any]]:
         """Return all tasks for a Label Studio project.
 
         Parameters

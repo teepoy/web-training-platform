@@ -36,14 +36,18 @@ class PreviewStore:
 
     def _enforce_cap(self) -> None:
         while len(self._sessions) > self._max_sessions:
-            oldest_key = min(self._sessions, key=lambda k: self._sessions[k].last_active)
+            oldest_key = min(
+                self._sessions, key=lambda k: self._sessions[k].last_active
+            )
             self._drop_session(oldest_key)
 
     def _truncate_items(self, session: PreviewSession) -> None:
         if len(session.items) > self._max_items:
             session.items = session.items[-self._max_items :]
 
-    def _append_unique_items(self, session_id: str, session: PreviewSession, items: list) -> None:
+    def _append_unique_items(
+        self, session_id: str, session: PreviewSession, items: list
+    ) -> None:
         seen = self._seen_item_ids.setdefault(session_id, set())
         for item in items:
             if item.upstream_item_id in seen:
@@ -103,7 +107,9 @@ class PreviewStore:
             session.touch()
             return session.start_persist()
 
-    async def set_persist_status(self, session_id: str, status: PreviewPersistStatus) -> None:
+    async def set_persist_status(
+        self, session_id: str, status: PreviewPersistStatus
+    ) -> None:
         async with self._lock:
             self._evict_stale()
             session = self._sessions.get(session_id)

@@ -6,14 +6,24 @@ from kubernetes.client.exceptions import ApiException
 
 
 class KubeflowClient:
-    def __init__(self, namespace: str, group: str, version: str, plural: str, in_cluster: bool = False, kubeconfig: str | None = None) -> None:
+    def __init__(
+        self,
+        namespace: str,
+        group: str,
+        version: str,
+        plural: str,
+        in_cluster: bool = False,
+        kubeconfig: str | None = None,
+    ) -> None:
         self.namespace = namespace
         self.group = group
         self.version = version
         self.plural = plural
         self.available = True
         try:
-            self._api_client = self._build_api_client(in_cluster=in_cluster, kubeconfig=kubeconfig)
+            self._api_client = self._build_api_client(
+                in_cluster=in_cluster, kubeconfig=kubeconfig
+            )
             self._custom_api = client.CustomObjectsApi(self._api_client)
         except Exception:
             self.available = False
@@ -27,7 +37,9 @@ class KubeflowClient:
             config.load_kube_config(config_file=kubeconfig)
         return client.ApiClient()
 
-    async def submit_pytorch_job(self, job_name: str, image: str, command: list[str] | None = None) -> str:
+    async def submit_pytorch_job(
+        self, job_name: str, image: str, command: list[str] | None = None
+    ) -> str:
         if not self.available or self._custom_api is None:
             raise RuntimeError("kubeflow client unavailable")
         container_spec: dict = {
@@ -47,13 +59,7 @@ class KubeflowClient:
                     "Master": {
                         "replicas": 1,
                         "restartPolicy": "Never",
-                        "template": {
-                            "spec": {
-                                "containers": [
-                                    container_spec
-                                ]
-                            }
-                        },
+                        "template": {"spec": {"containers": [container_spec]}},
                     }
                 }
             },
@@ -77,7 +83,8 @@ class KubeflowClient:
             plural=self.plural,
             name=job_name,
         )
-        conditions = obj.get("status", {}).get("conditions", [])
+        status = obj.get("status", {}) if isinstance(obj, dict) else {}
+        conditions = status.get("conditions", []) if isinstance(status, dict) else []
         if not conditions:
             return "Running"
         return conditions[-1].get("type", "Running")

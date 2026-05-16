@@ -55,12 +55,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Platform CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    sa = subparsers.add_parser("create-superadmin", help="Create or promote a superadmin user")
+    sa = subparsers.add_parser(
+        "create-superadmin", help="Create or promote a superadmin user"
+    )
     sa.add_argument("--email", required=True)
     sa.add_argument("--password", required=True)
     sa.add_argument("--name", required=True)
 
-    subparsers.add_parser("reset-app-data", help="Drop and recreate all application tables")
+    subparsers.add_parser(
+        "reset-app-data", help="Drop and recreate all application tables"
+    )
 
     args = parser.parse_args()
     if args.command == "create-superadmin":

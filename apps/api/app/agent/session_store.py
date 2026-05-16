@@ -6,6 +6,7 @@ on access.
 
 Thread-safe via ``asyncio.Lock``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -72,7 +73,9 @@ class SessionStore:
     def _enforce_cap(self) -> None:
         """If we're over the max, drop the oldest session."""
         while len(self._sessions) > self._max_sessions:
-            oldest_key = min(self._sessions, key=lambda k: self._sessions[k].last_active)
+            oldest_key = min(
+                self._sessions, key=lambda k: self._sessions[k].last_active
+            )
             del self._sessions[oldest_key]
 
     def _truncate_messages(self, session: Session) -> None:

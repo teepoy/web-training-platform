@@ -4,6 +4,7 @@ The template is a Markdown file with ``{placeholders}`` that get filled with
 dataset-specific context at session start.  The metadata section uses either
 declared schema (from ``task_spec.metadata_schema``) or Polars-inferred types.
 """
+
 from __future__ import annotations
 
 import json
@@ -66,9 +67,7 @@ def assemble_prompt(
     # Parse declared metadata into schema models
     declared: dict[str, DeclaredMetadataKey] | None = None
     if declared_metadata:
-        declared = {
-            k: DeclaredMetadataKey(**v) for k, v in declared_metadata.items()
-        }
+        declared = {k: DeclaredMetadataKey(**v) for k, v in declared_metadata.items()}
 
     # Infer types via Polars (or pure-Python fallback)
     inferred: dict[str, MetadataKeyInfo] | None = None

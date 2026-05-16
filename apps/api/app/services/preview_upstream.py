@@ -11,7 +11,9 @@ class UpstreamAdapter(ABC):
     async def resolve_collection(self, collection_ref: str) -> dict[str, Any]: ...
 
     @abstractmethod
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage: ...
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage: ...
 
     @abstractmethod
     async def estimate_total(self, collection_ref: str) -> int | None: ...
@@ -34,7 +36,9 @@ class PreviewUpstreamRouter(UpstreamAdapter):
     def __init__(self, upstreams: dict[str, UpstreamAdapter]) -> None:
         self._upstreams = upstreams
         if self.DEFAULT_SCHEME not in self._upstreams:
-            raise ValueError(f"PreviewUpstreamRouter requires a '{self.DEFAULT_SCHEME}' upstream")
+            raise ValueError(
+                f"PreviewUpstreamRouter requires a '{self.DEFAULT_SCHEME}' upstream"
+            )
 
     def _resolve(self, collection_ref: str) -> tuple[UpstreamAdapter, str]:
         if ":" in collection_ref:
@@ -48,7 +52,9 @@ class PreviewUpstreamRouter(UpstreamAdapter):
         upstream, ref = self._resolve(collection_ref)
         return await upstream.resolve_collection(ref)
 
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage:
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
         upstream, ref = self._resolve(collection_ref)
         return await upstream.fetch_page(ref, cursor, limit)
 
@@ -67,14 +73,18 @@ class MockUpstreamAdapter(UpstreamAdapter):
             raise ValueError("collection_ref must not be empty")
         return {"collection_ref": collection_ref, "type": "mock"}
 
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage:
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
         offset = int(cursor) if cursor else 0
         items: list[PreviewItem] = []
         for i in range(offset, min(offset + limit, self.TOTAL)):
             items.append(
                 PreviewItem(
                     upstream_item_id=f"{collection_ref}-{i}",
-                    image_uris=[f"https://picsum.photos/seed/{collection_ref}-{i}/400/300"],
+                    image_uris=[
+                        f"https://picsum.photos/seed/{collection_ref}-{i}/400/300"
+                    ],
                     metadata={"index": i, "collection": collection_ref},
                 )
             )

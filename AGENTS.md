@@ -267,9 +267,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Always run `make test` after modify code files and resolve any error.
 
 ## TYPE CHECK & LINT RULE
-- After modifying Python code, run `ty check apps/api` from repo root. Resolve all newly introduced diagnostics.
-  - Use `# type: ignore` (not bracket syntax) to suppress false positives from third-party stub issues.
-  - If `ty` is unavailable, use `uv tool run ty check apps/api`.
+- After modifying Python code, run `uv run --directory apps/api pyright .` from repo root. Resolve all newly introduced diagnostics.
+  - Use `# pyright: ignore[...]` or `# type: ignore[report...]` to suppress false positives from third-party stub issues.
+  - If `pyright` is unavailable, use `uv tool run pyright apps/api`.
 - After modifying Python code, run `ruff check apps/api` from repo root. Fix all newly introduced errors.
   - Run `ruff check apps/api --fix` for auto-fixable issues (unused imports, etc.).
   - If `ruff` is unavailable, use `uv tool run ruff check apps/api`.

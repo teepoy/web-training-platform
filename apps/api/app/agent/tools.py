@@ -4,6 +4,7 @@ Each tool is a plain async function that takes structured kwargs and returns
 a dict result.  The ``TOOL_DEFINITIONS`` list provides the OpenAI-compatible
 function schema that goes into the LLM ``tools`` parameter.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,12 +26,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "query_data",
-                "description": (
-                    "Run a read-only data query against the current dataset. "
-                    "Supported query_type: annotation-stats, sample-slice, "
-                    "metadata-histogram, recent-annotations, prediction-summary, "
-                    "wafer-points."
-                ),
+            "description": (
+                "Run a read-only data query against the current dataset. "
+                "Supported query_type: annotation-stats, sample-slice, "
+                "metadata-histogram, recent-annotations, prediction-summary, "
+                "wafer-points."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

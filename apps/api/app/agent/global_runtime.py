@@ -13,6 +13,7 @@ The ``GlobalAgent`` extends the agent pattern established by
 
 Events are yielded as they happen so the caller can stream them over SSE.
 """
+
 from __future__ import annotations
 
 import json
@@ -163,6 +164,7 @@ class GlobalAgent:
         if context.dataset_id:
             try:
                 from app.agent.global_tools import execute_get_dataset as _get_ds
+
                 dataset_info = await _get_ds(
                     dataset_id=context.dataset_id,
                     repository=self._repository,
@@ -176,6 +178,7 @@ class GlobalAgent:
         platform_stats: dict[str, Any] | None = None
         try:
             from app.agent.global_tools import execute_get_dashboard as _get_dash
+
             platform_stats = await _get_dash(repository=self._repository, org_id=org_id)
         except Exception:
             _logger.debug("Failed to get platform stats", exc_info=True)
@@ -204,7 +207,9 @@ class GlobalAgent:
             await self._surface_store.clear_ephemeral(session_id, surface_id)
 
         # Collect new messages produced this turn for later persistence
-        new_messages: list[AllMessageValues] = [{"role": "user", "content": user_message}]
+        new_messages: list[AllMessageValues] = [
+            {"role": "user", "content": user_message}
+        ]
 
         max_iterations = 10
         for _ in range(max_iterations):
@@ -243,7 +248,8 @@ class GlobalAgent:
 
                     # Execute the tool
                     result = await self._execute_tool(
-                        tool_name, args,
+                        tool_name,
+                        args,
                         session_id=session_id,
                         surface_id=surface_id,
                         org_id=org_id,
@@ -255,7 +261,9 @@ class GlobalAgent:
 
                     # If sidebar mutation, emit update
                     if tool_name in ("set_panel", "remove_panel") and surface_id:
-                        state = await self._surface_store.get_state(session_id, surface_id)
+                        state = await self._surface_store.get_state(
+                            session_id, surface_id
+                        )
                         yield AgentSidebarUpdate(
                             surface_id=surface_id,
                             panels=[p.model_dump(mode="json") for p in state.panels],
@@ -300,7 +308,8 @@ class GlobalAgent:
             # -- Read tools --
             if name == "list_datasets":
                 return await execute_list_datasets(
-                    repository=self._repository, org_id=org_id,
+                    repository=self._repository,
+                    org_id=org_id,
                 )
             if name == "get_dataset":
                 return await execute_get_dataset(
@@ -448,7 +457,7 @@ class GlobalAgent:
         if name == "list_datasets":
             return f"Listed {result.get('count', '?')} datasets"
         if name == "get_dataset":
-            return f"Got dataset \"{result.get('name', '?')}\""
+            return f'Got dataset "{result.get("name", "?")}"'
         if name == "list_training_jobs":
             return f"Listed {result.get('count', '?')} training jobs"
         if name == "get_training_job":
@@ -472,21 +481,21 @@ class GlobalAgent:
 
         # Write tools
         if name == "create_dataset":
-            return f"Created dataset \"{result.get('name', '?')}\" ({result.get('id', '?')[:8]}…)"
+            return f'Created dataset "{result.get("name", "?")}" ({result.get("id", "?")[:8]}…)'
         if name == "start_training_job":
             return f"Started training job {result.get('id', '?')[:8]}…"
         if name == "run_predictions":
             return f"Started prediction job {result.get('id', '?')[:8]}…"
         if name == "create_schedule":
-            return f"Created schedule \"{result.get('name', '?')}\""
+            return f'Created schedule "{result.get("name", "?")}"'
         if name == "cancel_training_job":
             return f"Cancelled job {result.get('id', '?')[:8]}…"
 
         # Sidebar tools
         if name == "set_panel":
-            return f"Added panel \"{args.get('id', '?')}\" ({args.get('component', '?')})"
+            return f'Added panel "{args.get("id", "?")}" ({args.get("component", "?")})'
         if name == "remove_panel":
-            return f"Removed panel \"{args.get('panel_id', '?')}\""
+            return f'Removed panel "{args.get("panel_id", "?")}"'
         if name == "get_surface_state":
             n = len(result.get("panels", []))
             return f"Read sidebar state ({n} panels)"

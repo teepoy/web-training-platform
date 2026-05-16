@@ -7,6 +7,7 @@ of querying the database.
 
 Supports optional hot-reload via :meth:`reload` (config-only change path).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -85,10 +86,17 @@ class PresetRegistry:
                     )
                 self._presets[entry.spec.id] = entry
                 loaded += 1
-                logger.info("Loaded preset '%s' (v%s) from %s", entry.spec.id, entry.spec.version, preset_file)
+                logger.info(
+                    "Loaded preset '%s' (v%s) from %s",
+                    entry.spec.id,
+                    entry.spec.version,
+                    preset_file,
+                )
             except Exception as exc:
                 if self._strict:
-                    raise PresetRegistryError(f"Failed to load {preset_file}: {exc}") from exc
+                    raise PresetRegistryError(
+                        f"Failed to load {preset_file}: {exc}"
+                    ) from exc
                 logger.warning("Skipping invalid preset %s: %s", preset_file, exc)
 
         logger.info("Preset registry loaded: %d presets from %s", loaded, self._root)
@@ -158,7 +166,9 @@ class PresetRegistry:
                 "base_model": spec.model.base_model,
             },
             "omegaconf_yaml": "",
-            "dataloader_ref": spec.train.dataloader.ref if spec.train.dataloader else "",
+            "dataloader_ref": spec.train.dataloader.ref
+            if spec.train.dataloader
+            else "",
             "org_id": None,
         }
 

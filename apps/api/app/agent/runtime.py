@@ -6,6 +6,7 @@ repeat until the LLM produces a final text response with no tool calls.
 
 Events are yielded as they happen so the caller can stream them over SSE.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,12 +38,14 @@ _logger = logging.getLogger(__name__)
 @dataclass
 class AgentMessage:
     """Text response from the agent."""
+
     content: str
 
 
 @dataclass
 class AgentAction:
     """Agent performed a tool call."""
+
     tool: str
     summary: str
     result: dict[str, Any] | None = None
@@ -51,6 +54,7 @@ class AgentAction:
 @dataclass
 class AgentSidebarUpdate:
     """Sidebar state changed — surface_store was mutated."""
+
     surface_id: str
     panels: list[dict[str, Any]]
 
@@ -58,6 +62,7 @@ class AgentSidebarUpdate:
 @dataclass
 class AgentDone:
     """Agent finished processing this turn."""
+
     pass
 
 
@@ -125,7 +130,9 @@ class ClassifyAgent:
                 )
             except Exception as e:
                 _logger.exception("LLM call failed")
-                yield AgentMessage(content=f"Sorry, I encountered an error communicating with the AI model: {e}")
+                yield AgentMessage(
+                    content=f"Sorry, I encountered an error communicating with the AI model: {e}"
+                )
                 break
 
             choice = response.get("choices", [{}])[0]
@@ -223,9 +230,9 @@ class ClassifyAgent:
             extra = f" key={params['key']}" if "key" in params else ""
             return f"Queried {qt}{extra}"
         elif name == "set_panel":
-            return f"Added panel \"{args.get('id', '?')}\" ({args.get('component', '?')})"
+            return f'Added panel "{args.get("id", "?")}" ({args.get("component", "?")})'
         elif name == "remove_panel":
-            return f"Removed panel \"{args.get('panel_id', '?')}\""
+            return f'Removed panel "{args.get("panel_id", "?")}"'
         elif name == "get_surface_state":
             n = len(result.get("panels", []))
             return f"Read sidebar state ({n} panels)"

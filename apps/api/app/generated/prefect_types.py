@@ -29,597 +29,597 @@ from pydantic import (
 class APISettings(BaseModel):
     url: Optional[str] = Field(
         None,
-        description='The URL of the Prefect API. If not set, the client will attempt to infer it.',
-        title='Url',
+        description="The URL of the Prefect API. If not set, the client will attempt to infer it.",
+        title="Url",
     )
     auth_string: Optional[SecretStr] = Field(
         None,
-        description='The auth string used for basic authentication with a self-hosted Prefect API. Should be kept secret.',
-        title='Auth String',
+        description="The auth string used for basic authentication with a self-hosted Prefect API. Should be kept secret.",
+        title="Auth String",
     )
     key: Optional[SecretStr] = Field(
         None,
-        description='The API key used for authentication with the Prefect API. Should be kept secret.',
-        title='Key',
+        description="The API key used for authentication with the Prefect API. Should be kept secret.",
+        title="Key",
     )
     tls_insecure_skip_verify: Optional[bool] = Field(
         False,
-        description='If `True`, disables SSL checking to allow insecure requests. Setting to False is recommended only during development. For example, when using self-signed certificates.',
-        title='Tls Insecure Skip Verify',
+        description="If `True`, disables SSL checking to allow insecure requests. Setting to False is recommended only during development. For example, when using self-signed certificates.",
+        title="Tls Insecure Skip Verify",
     )
     ssl_cert_file: Optional[str] = Field(
         None,
-        description='This configuration settings option specifies the path to an SSL certificate file.',
-        title='Ssl Cert File',
+        description="This configuration settings option specifies the path to an SSL certificate file.",
+        title="Ssl Cert File",
     )
     enable_http2: Optional[bool] = Field(
         False,
-        description='If true, enable support for HTTP/2 for communicating with an API. If the API does not support HTTP/2, this will have no effect and connections will be made via HTTP/1.1.',
-        title='Enable Http2',
+        description="If true, enable support for HTTP/2 for communicating with an API. If the API does not support HTTP/2, this will have no effect and connections will be made via HTTP/1.1.",
+        title="Enable Http2",
     )
     request_timeout: Optional[float] = Field(
         60,
-        description='The default timeout for requests to the API',
-        title='Request Timeout',
+        description="The default timeout for requests to the API",
+        title="Request Timeout",
     )
 
 
 class Artifact(BaseModel):
-    id: Optional[UUID] = Field(None, title='Id')
-    created: Optional[AwareDatetime] = Field(None, title='Created')
-    updated: Optional[AwareDatetime] = Field(None, title='Updated')
+    id: Optional[UUID] = Field(None, title="Id")
+    created: Optional[AwareDatetime] = Field(None, title="Created")
+    updated: Optional[AwareDatetime] = Field(None, title="Updated")
     key: Optional[str] = Field(
         None,
-        description='An optional unique reference key for this artifact.',
-        title='Key',
+        description="An optional unique reference key for this artifact.",
+        title="Key",
     )
     type: Optional[str] = Field(
         None,
         description="An identifier that describes the shape of the data field. e.g. 'result', 'table', 'markdown'",
-        title='Type',
+        title="Type",
     )
     description: Optional[str] = Field(
         None,
-        description='A markdown-enabled description of the artifact.',
-        title='Description',
+        description="A markdown-enabled description of the artifact.",
+        title="Description",
     )
     data: Optional[Union[dict[str, Any], Any]] = Field(
         None,
-        description='Data associated with the artifact, e.g. a result.; structure depends on the artifact type.',
-        title='Data',
+        description="Data associated with the artifact, e.g. a result.; structure depends on the artifact type.",
+        title="Data",
     )
     metadata_: Optional[dict[str, str]] = Field(
         None,
-        description='User-defined artifact metadata. Content must be string key and value pairs.',
-        title='Metadata',
+        description="User-defined artifact metadata. Content must be string key and value pairs.",
+        title="Metadata",
     )
     flow_run_id: Optional[UUID] = Field(
         None,
-        description='The flow run associated with the artifact.',
-        title='Flow Run Id',
+        description="The flow run associated with the artifact.",
+        title="Flow Run Id",
     )
     task_run_id: Optional[UUID] = Field(
         None,
-        description='The task run associated with the artifact.',
-        title='Task Run Id',
+        description="The task run associated with the artifact.",
+        title="Task Run Id",
     )
 
 
 class ArtifactCollection(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     key: str = Field(
         ...,
-        description='An optional unique reference key for this artifact.',
-        title='Key',
+        description="An optional unique reference key for this artifact.",
+        title="Key",
     )
     latest_id: UUID = Field(
         ...,
-        description='The latest artifact ID associated with the key.',
-        title='Latest Id',
+        description="The latest artifact ID associated with the key.",
+        title="Latest Id",
     )
     type: Optional[str] = Field(
         None,
         description="An identifier that describes the shape of the data field. e.g. 'result', 'table', 'markdown'",
-        title='Type',
+        title="Type",
     )
     description: Optional[str] = Field(
         None,
-        description='A markdown-enabled description of the artifact.',
-        title='Description',
+        description="A markdown-enabled description of the artifact.",
+        title="Description",
     )
     data: Optional[Union[dict[str, Any], Any]] = Field(
         None,
-        description='Data associated with the artifact, e.g. a result.; structure depends on the artifact type.',
-        title='Data',
+        description="Data associated with the artifact, e.g. a result.; structure depends on the artifact type.",
+        title="Data",
     )
     metadata_: Optional[dict[str, str]] = Field(
         None,
-        description='User-defined artifact metadata. Content must be string key and value pairs.',
-        title='Metadata',
+        description="User-defined artifact metadata. Content must be string key and value pairs.",
+        title="Metadata",
     )
     flow_run_id: Optional[UUID] = Field(
         None,
-        description='The flow run associated with the artifact.',
-        title='Flow Run Id',
+        description="The flow run associated with the artifact.",
+        title="Flow Run Id",
     )
     task_run_id: Optional[UUID] = Field(
         None,
-        description='The task run associated with the artifact.',
-        title='Task Run Id',
+        description="The task run associated with the artifact.",
+        title="Task Run Id",
     )
 
 
 class ArtifactCollectionFilterFlowRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run IDs to include', title='Any'
+        None, description="A list of flow run IDs to include", title="Any"
     )
 
 
 class ArtifactCollectionFilterKey(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of artifact keys to include', title='Any'
+        None, description="A list of artifact keys to include", title="Any"
     )
     like_: Optional[str] = Field(
         None,
-        description='A string to match artifact keys against. This can include SQL wildcard characters like `%` and `_`.',
-        examples=['my-artifact-%'],
-        title='Like',
+        description="A string to match artifact keys against. This can include SQL wildcard characters like `%` and `_`.",
+        examples=["my-artifact-%"],
+        title="Like",
     )
     exists_: Optional[bool] = Field(
         None,
-        description='If `true`, only include artifacts with a non-null key. If `false`, only include artifacts with a null key. Should return all rows in the ArtifactCollection table if specified.',
-        title='Exists',
+        description="If `true`, only include artifacts with a non-null key. If `false`, only include artifacts with a null key. Should return all rows in the ArtifactCollection table if specified.",
+        title="Exists",
     )
 
 
 class ArtifactCollectionFilterLatestId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of artifact ids to include', title='Any'
+        None, description="A list of artifact ids to include", title="Any"
     )
 
 
 class ArtifactCollectionFilterTaskRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of task run IDs to include', title='Any'
+        None, description="A list of task run IDs to include", title="Any"
     )
 
 
 class ArtifactCollectionFilterType(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of artifact types to include', title='Any'
+        None, description="A list of artifact types to include", title="Any"
     )
     not_any_: Optional[list[str]] = Field(
-        None, description='A list of artifact types to exclude', title='Not Any'
+        None, description="A list of artifact types to exclude", title="Not Any"
     )
 
 
 class ArtifactCollectionSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    ID_DESC = 'ID_DESC'
-    KEY_DESC = 'KEY_DESC'
-    KEY_ASC = 'KEY_ASC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    ID_DESC = "ID_DESC"
+    KEY_DESC = "KEY_DESC"
+    KEY_ASC = "KEY_ASC"
 
 
 class ArtifactCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     key: Optional[str] = Field(
         None,
-        description='An optional unique reference key for this artifact.',
-        title='Key',
+        description="An optional unique reference key for this artifact.",
+        title="Key",
     )
     type: Optional[str] = Field(
         None,
         description="An identifier that describes the shape of the data field. e.g. 'result', 'table', 'markdown'",
-        title='Type',
+        title="Type",
     )
     description: Optional[str] = Field(
         None,
-        description='A markdown-enabled description of the artifact.',
-        title='Description',
+        description="A markdown-enabled description of the artifact.",
+        title="Description",
     )
     data: Optional[Union[dict[str, Any], Any]] = Field(
         None,
-        description='Data associated with the artifact, e.g. a result.; structure depends on the artifact type.',
-        title='Data',
+        description="Data associated with the artifact, e.g. a result.; structure depends on the artifact type.",
+        title="Data",
     )
     metadata_: Optional[dict[str, str]] = Field(
         None,
-        description='User-defined artifact metadata. Content must be string key and value pairs.',
-        title='Metadata',
+        description="User-defined artifact metadata. Content must be string key and value pairs.",
+        title="Metadata",
     )
     flow_run_id: Optional[UUID] = Field(
         None,
-        description='The flow run associated with the artifact.',
-        title='Flow Run Id',
+        description="The flow run associated with the artifact.",
+        title="Flow Run Id",
     )
     task_run_id: Optional[UUID] = Field(
         None,
-        description='The task run associated with the artifact.',
-        title='Task Run Id',
+        description="The task run associated with the artifact.",
+        title="Task Run Id",
     )
 
 
 class ArtifactFilterFlowRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run IDs to include', title='Any'
+        None, description="A list of flow run IDs to include", title="Any"
     )
 
 
 class ArtifactFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of artifact ids to include', title='Any'
+        None, description="A list of artifact ids to include", title="Any"
     )
 
 
 class ArtifactFilterKey(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of artifact keys to include', title='Any'
+        None, description="A list of artifact keys to include", title="Any"
     )
     like_: Optional[str] = Field(
         None,
-        description='A string to match artifact keys against. This can include SQL wildcard characters like `%` and `_`.',
-        examples=['my-artifact-%'],
-        title='Like',
+        description="A string to match artifact keys against. This can include SQL wildcard characters like `%` and `_`.",
+        examples=["my-artifact-%"],
+        title="Like",
     )
     exists_: Optional[bool] = Field(
         None,
-        description='If `true`, only include artifacts with a non-null key. If `false`, only include artifacts with a null key.',
-        title='Exists',
+        description="If `true`, only include artifacts with a non-null key. If `false`, only include artifacts with a null key.",
+        title="Exists",
     )
 
 
 class ArtifactFilterTaskRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of task run IDs to include', title='Any'
+        None, description="A list of task run IDs to include", title="Any"
     )
 
 
 class ArtifactFilterType(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of artifact types to include', title='Any'
+        None, description="A list of artifact types to include", title="Any"
     )
     not_any_: Optional[list[str]] = Field(
-        None, description='A list of artifact types to exclude', title='Not Any'
+        None, description="A list of artifact types to exclude", title="Not Any"
     )
 
 
 class ArtifactSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    ID_DESC = 'ID_DESC'
-    KEY_DESC = 'KEY_DESC'
-    KEY_ASC = 'KEY_ASC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    ID_DESC = "ID_DESC"
+    KEY_DESC = "KEY_DESC"
+    KEY_ASC = "KEY_ASC"
 
 
 class ArtifactUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    data: Optional[Union[dict[str, Any], Any]] = Field(None, title='Data')
-    description: Optional[str] = Field(None, title='Description')
-    metadata_: Optional[dict[str, str]] = Field(None, title='Metadata')
+    data: Optional[Union[dict[str, Any], Any]] = Field(None, title="Data")
+    description: Optional[str] = Field(None, title="Description")
+    metadata_: Optional[dict[str, str]] = Field(None, title="Metadata")
 
 
 class AutomationFilterCreated(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include automations created before this datetime',
-        title='Before',
+        description="Only include automations created before this datetime",
+        title="Before",
     )
 
 
 class AutomationFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='Only include automations with names that match any of these strings',
-        title='Any',
+        description="Only include automations with names that match any of these strings",
+        title="Any",
     )
 
 
 class AutomationPartialUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     enabled: Optional[bool] = Field(
-        True, description='Whether this automation will be evaluated', title='Enabled'
+        True, description="Whether this automation will be evaluated", title="Enabled"
     )
 
 
 class AutomationSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    NAME_ASC = 'NAME_ASC'
-    NAME_DESC = 'NAME_DESC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    NAME_ASC = "NAME_ASC"
+    NAME_DESC = "NAME_DESC"
 
 
 class BlockDocumentCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: Optional[constr(pattern=r'^[^/%&><]+$')] = Field(
+    name: Optional[constr(pattern=r"^[^/%&><]+$")] = Field(
         None,
         description="The block document's name. Not required for anonymous block documents.",
-        title='Name',
+        title="Name",
     )
     data: Optional[dict[str, Any]] = Field(
-        None, description="The block document's data", title='Data'
+        None, description="The block document's data", title="Data"
     )
     block_schema_id: UUID = Field(
-        ..., description='A block schema ID', title='Block Schema Id'
+        ..., description="A block schema ID", title="Block Schema Id"
     )
     block_type_id: UUID = Field(
-        ..., description='A block type ID', title='Block Type Id'
+        ..., description="A block type ID", title="Block Type Id"
     )
     is_anonymous: Optional[bool] = Field(
         False,
-        description='Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically)',
-        title='Is Anonymous',
+        description="Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically)",
+        title="Is Anonymous",
     )
 
 
 class BlockDocumentFilterBlockTypeId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of block type ids to include', title='Any'
+        None, description="A list of block type ids to include", title="Any"
     )
 
 
 class BlockDocumentFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of block ids to include', title='Any'
+        None, description="A list of block ids to include", title="Any"
     )
 
 
 class BlockDocumentFilterIsAnonymous(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     eq_: Optional[bool] = Field(
         None,
-        description='Filter block documents for only those that are or are not anonymous.',
-        title='Eq',
+        description="Filter block documents for only those that are or are not anonymous.",
+        title="Eq",
     )
 
 
 class BlockDocumentFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of block names to include', title='Any'
+        None, description="A list of block names to include", title="Any"
     )
     like_: Optional[str] = Field(
         None,
-        description='A string to match block names against. This can include SQL wildcard characters like `%` and `_`.',
-        examples=['my-block%'],
-        title='Like',
+        description="A string to match block names against. This can include SQL wildcard characters like `%` and `_`.",
+        examples=["my-block%"],
+        title="Like",
     )
 
 
 class BlockDocumentSort(Enum):
-    NAME_DESC = 'NAME_DESC'
-    NAME_ASC = 'NAME_ASC'
-    BLOCK_TYPE_AND_NAME_ASC = 'BLOCK_TYPE_AND_NAME_ASC'
+    NAME_DESC = "NAME_DESC"
+    NAME_ASC = "NAME_ASC"
+    BLOCK_TYPE_AND_NAME_ASC = "BLOCK_TYPE_AND_NAME_ASC"
 
 
 class BlockDocumentUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     block_schema_id: Optional[UUID] = Field(
-        None, description='A block schema ID', title='Block Schema Id'
+        None, description="A block schema ID", title="Block Schema Id"
     )
     data: Optional[dict[str, Any]] = Field(
-        None, description="The block document's data", title='Data'
+        None, description="The block document's data", title="Data"
     )
-    merge_existing_data: Optional[bool] = Field(True, title='Merge Existing Data')
+    merge_existing_data: Optional[bool] = Field(True, title="Merge Existing Data")
 
 
 class BlockSchemaCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     fields: Optional[dict[str, Any]] = Field(
-        None, description="The block schema's field schema", title='Fields'
+        None, description="The block schema's field schema", title="Fields"
     )
     block_type_id: UUID = Field(
-        ..., description='A block type ID', title='Block Type Id'
+        ..., description="A block type ID", title="Block Type Id"
     )
     capabilities: Optional[list[str]] = Field(
-        None, description='A list of Block capabilities', title='Capabilities'
+        None, description="A list of Block capabilities", title="Capabilities"
     )
     version: Optional[str] = Field(
-        'non-versioned',
-        description='Human readable identifier for the block schema',
-        title='Version',
+        "non-versioned",
+        description="Human readable identifier for the block schema",
+        title="Version",
     )
 
 
 class BlockSchemaFilterBlockTypeId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of block type ids to include', title='Any'
+        None, description="A list of block type ids to include", title="Any"
     )
 
 
 class BlockSchemaFilterCapabilities(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of block capabilities. Block entities will be returned only if an associated block schema has a superset of the defined capabilities.',
-        examples=[['write-storage', 'read-storage']],
-        title='All',
+        description="A list of block capabilities. Block entities will be returned only if an associated block schema has a superset of the defined capabilities.",
+        examples=[["write-storage", "read-storage"]],
+        title="All",
     )
 
 
 class BlockSchemaFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of IDs to include', title='Any'
+        None, description="A list of IDs to include", title="Any"
     )
 
 
 class BlockSchemaFilterVersion(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of block schema versions.',
-        examples=[['2.0.0', '2.1.0']],
-        title='Any',
+        description="A list of block schema versions.",
+        examples=[["2.0.0", "2.1.0"]],
+        title="Any",
     )
 
 
 class BlockType(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description="A block type's name", title='Name'
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="A block type's name", title="Name"
     )
-    slug: str = Field(..., description="A block type's slug", title='Slug')
+    slug: str = Field(..., description="A block type's slug", title="Slug")
     logo_url: Optional[str] = Field(
-        None, description="Web URL for the block type's logo", title='Logo Url'
+        None, description="Web URL for the block type's logo", title="Logo Url"
     )
     documentation_url: Optional[str] = Field(
         None,
         description="Web URL for the block type's documentation",
-        title='Documentation Url',
+        title="Documentation Url",
     )
     description: Optional[str] = Field(
         None,
         description="A short blurb about the corresponding block's intended use",
-        title='Description',
+        title="Description",
     )
     code_example: Optional[str] = Field(
         None,
-        description='A code snippet demonstrating use of the corresponding block',
-        title='Code Example',
+        description="A code snippet demonstrating use of the corresponding block",
+        title="Code Example",
     )
     is_protected: Optional[bool] = Field(
         False,
-        description='Protected block types cannot be modified via API.',
-        title='Is Protected',
+        description="Protected block types cannot be modified via API.",
+        title="Is Protected",
     )
 
 
 class BlockTypeCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description="A block type's name", title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="A block type's name", title="Name"
     )
-    slug: str = Field(..., description="A block type's slug", title='Slug')
+    slug: str = Field(..., description="A block type's slug", title="Slug")
     logo_url: Optional[str] = Field(
-        None, description="Web URL for the block type's logo", title='Logo Url'
+        None, description="Web URL for the block type's logo", title="Logo Url"
     )
     documentation_url: Optional[str] = Field(
         None,
         description="Web URL for the block type's documentation",
-        title='Documentation Url',
+        title="Documentation Url",
     )
     description: Optional[str] = Field(
         None,
         description="A short blurb about the corresponding block's intended use",
-        title='Description',
+        title="Description",
     )
     code_example: Optional[str] = Field(
         None,
-        description='A code snippet demonstrating use of the corresponding block',
-        title='Code Example',
+        description="A code snippet demonstrating use of the corresponding block",
+        title="Code Example",
     )
 
 
 class BlockTypeFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match. For example,  passing 'marvin' will match 'marvin', 'sad-Marvin', and 'marvin-robot'.",
-        examples=['marvin'],
-        title='Like',
+        examples=["marvin"],
+        title="Like",
     )
 
 
 class BlockTypeFilterSlug(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of slugs to match', title='Any'
+        None, description="A list of slugs to match", title="Any"
     )
 
 
 class BlockTypeUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    logo_url: Optional[str] = Field(None, title='Logo Url')
-    documentation_url: Optional[str] = Field(None, title='Documentation Url')
-    description: Optional[str] = Field(None, title='Description')
-    code_example: Optional[str] = Field(None, title='Code Example')
+    logo_url: Optional[str] = Field(None, title="Logo Url")
+    documentation_url: Optional[str] = Field(None, title="Documentation Url")
+    description: Optional[str] = Field(None, title="Description")
+    code_example: Optional[str] = Field(None, title="Code Example")
 
 
 class BodyBulkDecrementActiveSlotsV2ConcurrencyLimitsDecrementPost(BaseModel):
-    slots: PositiveInt = Field(..., title='Slots')
-    names: list[str] = Field(..., title='Names')
-    occupancy_seconds: Optional[PositiveFloat] = Field(None, title='Occupancy Seconds')
-    create_if_missing: Optional[bool] = Field(None, title='Create If Missing')
+    slots: PositiveInt = Field(..., title="Slots")
+    names: list[str] = Field(..., title="Names")
+    occupancy_seconds: Optional[PositiveFloat] = Field(None, title="Occupancy Seconds")
+    create_if_missing: Optional[bool] = Field(None, title="Create If Missing")
 
 
 class BodyBulkDecrementActiveSlotsWithLeaseV2ConcurrencyLimitsDecrementWithLeasePost(
@@ -627,57 +627,57 @@ class BodyBulkDecrementActiveSlotsWithLeaseV2ConcurrencyLimitsDecrementWithLease
 ):
     lease_id: UUID = Field(
         ...,
-        description='The ID of the lease corresponding to the concurrency limits to decrement.',
-        title='Lease Id',
+        description="The ID of the lease corresponding to the concurrency limits to decrement.",
+        title="Lease Id",
     )
 
 
 class Mode(Enum):
-    concurrency = 'concurrency'
-    rate_limit = 'rate_limit'
+    concurrency = "concurrency"
+    rate_limit = "rate_limit"
 
 
 class BodyBulkIncrementActiveSlotsV2ConcurrencyLimitsIncrementPost(BaseModel):
-    slots: PositiveInt = Field(..., title='Slots')
-    names: list[str] = Field(..., title='Names')
-    mode: Optional[Mode] = Field('concurrency', title='Mode')
-    create_if_missing: Optional[bool] = Field(None, title='Create If Missing')
+    slots: PositiveInt = Field(..., title="Slots")
+    names: list[str] = Field(..., title="Names")
+    mode: Optional[Mode] = Field("concurrency", title="Mode")
+    create_if_missing: Optional[bool] = Field(None, title="Create If Missing")
 
 
 class BodyCountDeploymentsByFlowUiFlowsCountDeploymentsPost(BaseModel):
-    flow_ids: list[UUID] = Field(..., title='Flow Ids')
+    flow_ids: list[UUID] = Field(..., title="Flow Ids")
 
 
 class BodyCountTaskRunsByFlowRunUiFlowRunsCountTaskRunsPost(BaseModel):
-    flow_run_ids: list[UUID] = Field(..., title='Flow Run Ids')
+    flow_run_ids: list[UUID] = Field(..., title="Flow Run Ids")
 
 
 class BodyCreateFlowRunInputFlowRunsIdInputPost(BaseModel):
-    key: str = Field(..., description='The input key', title='Key')
-    value: str = Field(..., description='The value of the input', title='Value')
+    key: str = Field(..., description="The input key", title="Key")
+    value: str = Field(..., description="The value of the input", title="Value")
     sender: Optional[str] = Field(
-        None, description='The sender of the input', title='Sender'
+        None, description="The sender of the input", title="Sender"
     )
 
 
 class BodyDecrementConcurrencyLimitsV1ConcurrencyLimitsDecrementPost(BaseModel):
     names: list[str] = Field(
-        ..., description='The tags to release a slot for', title='Names'
+        ..., description="The tags to release a slot for", title="Names"
     )
     task_run_id: UUID = Field(
         ...,
-        description='The ID of the task run releasing the slot',
-        title='Task Run Id',
+        description="The ID of the task run releasing the slot",
+        title="Task Run Id",
     )
 
 
 class BodyFilterFlowRunInputFlowRunsIdInputFilterPost(BaseModel):
-    prefix: str = Field(..., description='The input key prefix', title='Prefix')
+    prefix: str = Field(..., description="The input key prefix", title="Prefix")
     limit: Optional[int] = Field(
-        1, description='The maximum number of results to return', title='Limit'
+        1, description="The maximum number of results to return", title="Limit"
     )
     exclude_keys: Optional[list[str]] = Field(
-        [], description='Exclude inputs with these keys', title='Exclude Keys'
+        [], description="Exclude inputs with these keys", title="Exclude Keys"
     )
 
 
@@ -686,399 +686,399 @@ class BodyGetScheduledFlowRunsForDeploymentsDeploymentsGetScheduledFlowRunsPost(
 ):
     deployment_ids: list[UUID] = Field(
         ...,
-        description='The deployment IDs to get scheduled runs for',
-        title='Deployment Ids',
+        description="The deployment IDs to get scheduled runs for",
+        title="Deployment Ids",
     )
     scheduled_before: Optional[AwareDatetime] = Field(
         None,
-        description='The maximum time to look for scheduled flow runs',
-        title='Scheduled Before',
+        description="The maximum time to look for scheduled flow runs",
+        title="Scheduled Before",
     )
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyGetScheduledFlowRunsWorkPoolsNameGetScheduledFlowRunsPost(BaseModel):
     work_queue_names: Optional[list[str]] = Field(
-        None, description='The names of work pool queues', title='Work Queue Names'
+        None, description="The names of work pool queues", title="Work Queue Names"
     )
     scheduled_before: Optional[AwareDatetime] = Field(
         None,
-        description='The maximum time to look for scheduled flow runs',
-        title='Scheduled Before',
+        description="The maximum time to look for scheduled flow runs",
+        title="Scheduled Before",
     )
     scheduled_after: Optional[AwareDatetime] = Field(
         None,
-        description='The minimum time to look for scheduled flow runs',
-        title='Scheduled After',
+        description="The minimum time to look for scheduled flow runs",
+        title="Scheduled After",
     )
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyIncrementConcurrencyLimitsV1ConcurrencyLimitsIncrementPost(BaseModel):
     names: list[str] = Field(
-        ..., description='The tags to acquire a slot for', title='Names'
+        ..., description="The tags to acquire a slot for", title="Names"
     )
     task_run_id: UUID = Field(
         ...,
-        description='The ID of the task run acquiring the slot',
-        title='Task Run Id',
+        description="The ID of the task run acquiring the slot",
+        title="Task Run Id",
     )
 
 
 class BodyNextRunsByFlowUiFlowsNextRunsPost(BaseModel):
-    flow_ids: list[UUID] = Field(..., title='Flow Ids')
+    flow_ids: list[UUID] = Field(..., title="Flow Ids")
 
 
 class BodyReadAllConcurrencyLimitsV2V2ConcurrencyLimitsFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadConcurrencyLimitsConcurrencyLimitsFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadSavedSearchesSavedSearchesFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkPoolConcurrencyStatusWorkPoolsNameConcurrencyStatusPost(BaseModel):
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     flow_run_limit: Optional[conint(ge=0, le=200)] = Field(
-        10, description='Max flow runs per queue', title='Flow Run Limit'
+        10, description="Max flow runs per queue", title="Flow Run Limit"
     )
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkQueueConcurrencyStatusWorkQueuesIdConcurrencyStatusPost(BaseModel):
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkQueueRunsWorkQueuesIdGetRunsPost(BaseModel):
     scheduled_before: Optional[AwareDatetime] = Field(
         None,
-        description='Only flow runs scheduled to start before this time will be returned.',
-        title='Scheduled Before',
+        description="Only flow runs scheduled to start before this time will be returned.",
+        title="Scheduled Before",
     )
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyRenewConcurrencyLeaseV2ConcurrencyLimitsLeasesLeaseIdRenewPost(BaseModel):
     lease_duration: Optional[confloat(ge=60.0, le=86400.0)] = Field(
-        300, description='The duration of the lease in seconds.', title='Lease Duration'
+        300, description="The duration of the lease in seconds.", title="Lease Duration"
     )
 
 
 class BodyResetConcurrencyLimitByTagConcurrencyLimitsTagTagResetPost(BaseModel):
     slot_override: Optional[list[UUID]] = Field(
         None,
-        description='Manual override for active concurrency limit slots.',
-        title='Slot Override',
+        description="Manual override for active concurrency limit slots.",
+        title="Slot Override",
     )
 
 
 class BodyResumeFlowRunFlowRunsIdResumePost(BaseModel):
-    run_input: Optional[dict[str, Any]] = Field(None, title='Run Input')
+    run_input: Optional[dict[str, Any]] = Field(None, title="Run Input")
 
 
 class BodyScheduleDeploymentDeploymentsIdSchedulePost(BaseModel):
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The earliest date to schedule', title='Start Time'
+        None, description="The earliest date to schedule", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The latest date to schedule', title='End Time'
+        None, description="The latest date to schedule", title="End Time"
     )
     min_time: Optional[float] = Field(
         None,
-        description='Runs will be scheduled until at least this long after the `start_time`',
-        title='Min Time',
+        description="Runs will be scheduled until at least this long after the `start_time`",
+        title="Min Time",
     )
     min_runs: Optional[int] = Field(
-        None, description='The minimum number of runs to schedule', title='Min Runs'
+        None, description="The minimum number of runs to schedule", title="Min Runs"
     )
     max_runs: Optional[int] = Field(
-        None, description='The maximum number of runs to schedule', title='Max Runs'
+        None, description="The maximum number of runs to schedule", title="Max Runs"
     )
 
 
 class BodyValidateObjUiSchemasValidatePost(BaseModel):
-    schema_: dict[str, Any] = Field(..., alias='schema', title='Schema')
-    values: dict[str, Any] = Field(..., title='Values')
+    schema_: dict[str, Any] = Field(..., alias="schema", title="Schema")
+    values: dict[str, Any] = Field(..., title="Values")
 
 
 class BodyWorkerHeartbeatWorkPoolsWorkPoolNameWorkersHeartbeatPost(BaseModel):
-    name: str = Field(..., description='The worker process name', title='Name')
+    name: str = Field(..., description="The worker process name", title="Name")
     heartbeat_interval_seconds: Optional[int] = Field(
         None,
         description="The worker's heartbeat interval in seconds",
-        title='Heartbeat Interval Seconds',
+        title="Heartbeat Interval Seconds",
     )
 
 
 class CLISettings(BaseModel):
     colors: Optional[bool] = Field(
         True,
-        description='If True, use colors in CLI output. If `False`, output will not include colors codes.',
-        title='Colors',
+        description="If True, use colors in CLI output. If `False`, output will not include colors codes.",
+        title="Colors",
     )
     prompt: Optional[bool] = Field(
         None,
-        description='If `True`, use interactive prompts in CLI commands. If `False`, no interactive prompts will be used. If `None`, the value will be dynamically determined based on the presence of an interactive-enabled terminal.',
-        title='Prompt',
+        description="If `True`, use interactive prompts in CLI commands. If `False`, no interactive prompts will be used. If `None`, the value will be dynamically determined based on the presence of an interactive-enabled terminal.",
+        title="Prompt",
     )
     wrap_lines: Optional[bool] = Field(
         True,
-        description='If `True`, wrap text by inserting new lines in long lines in CLI output. If `False`, output will not be wrapped.',
-        title='Wrap Lines',
+        description="If `True`, wrap text by inserting new lines in long lines in CLI output. If `False`, output will not be wrapped.",
+        title="Wrap Lines",
     )
 
 
 class CallWebhook(BaseModel):
-    type: Literal['call-webhook'] = Field('call-webhook', title='Type')
+    type: Literal["call-webhook"] = Field("call-webhook", title="Type")
     block_document_id: UUID = Field(
         ...,
-        description='The identifier of the webhook block to use',
-        title='Block Document Id',
+        description="The identifier of the webhook block to use",
+        title="Block Document Id",
     )
     payload: Optional[str] = Field(
-        '',
-        description='An optional templatable payload to send when calling the webhook.',
-        title='Payload',
+        "",
+        description="An optional templatable payload to send when calling the webhook.",
+        title="Payload",
     )
 
 
 class CancelFlowRun(BaseModel):
-    type: Literal['cancel-flow-run'] = Field('cancel-flow-run', title='Type')
+    type: Literal["cancel-flow-run"] = Field("cancel-flow-run", title="Type")
 
 
 class ClientMetricsSettings(BaseModel):
     enabled: Optional[bool] = Field(
         False,
-        description='Whether or not to enable Prometheus metrics in the client.',
-        title='Enabled',
+        description="Whether or not to enable Prometheus metrics in the client.",
+        title="Enabled",
     )
     port: Optional[int] = Field(
         4201,
-        description='The port to expose the client Prometheus metrics on.',
-        title='Port',
+        description="The port to expose the client Prometheus metrics on.",
+        title="Port",
     )
 
 
 class ClientSettings(BaseModel):
     max_retries: Optional[conint(ge=0)] = Field(
         5,
-        description='\n        The maximum number of retries to perform on failed HTTP requests.\n        Defaults to 5. Set to 0 to disable retries.\n        See `PREFECT_CLIENT_RETRY_EXTRA_CODES` for details on which HTTP status codes are\n        retried.\n        ',
-        title='Max Retries',
+        description="\n        The maximum number of retries to perform on failed HTTP requests.\n        Defaults to 5. Set to 0 to disable retries.\n        See `PREFECT_CLIENT_RETRY_EXTRA_CODES` for details on which HTTP status codes are\n        retried.\n        ",
+        title="Max Retries",
     )
     retry_jitter_factor: Optional[confloat(ge=0.0)] = Field(
         0.2,
-        description='\n        A value greater than or equal to zero to control the amount of jitter added to retried\n        client requests. Higher values introduce larger amounts of jitter.\n        Set to 0 to disable jitter. See `clamped_poisson_interval` for details on the how jitter\n        can affect retry lengths.\n        ',
-        title='Retry Jitter Factor',
+        description="\n        A value greater than or equal to zero to control the amount of jitter added to retried\n        client requests. Higher values introduce larger amounts of jitter.\n        Set to 0 to disable jitter. See `clamped_poisson_interval` for details on the how jitter\n        can affect retry lengths.\n        ",
+        title="Retry Jitter Factor",
     )
     retry_extra_codes: Optional[
         Union[str, conint(ge=100, le=599), list[conint(ge=100, le=599)]]
     ] = Field(
         None,
-        description='\n        A list of extra HTTP status codes to retry on. Defaults to an empty list.\n        429, 502 and 503 are always retried. Please note that not all routes are idempotent and retrying\n        may result in unexpected behavior.\n        ',
-        examples=['404,429,503', '429', [404, 429, 503]],
-        title='Retry Extra Codes',
+        description="\n        A list of extra HTTP status codes to retry on. Defaults to an empty list.\n        429, 502 and 503 are always retried. Please note that not all routes are idempotent and retrying\n        may result in unexpected behavior.\n        ",
+        examples=["404,429,503", "429", [404, 429, 503]],
+        title="Retry Extra Codes",
     )
     csrf_support_enabled: Optional[bool] = Field(
         True,
-        description='\n        Determines if CSRF token handling is active in the Prefect client for API\n        requests.\n\n        When enabled (`True`), the client automatically manages CSRF tokens by\n        retrieving, storing, and including them in applicable state-changing requests\n        ',
-        title='Csrf Support Enabled',
+        description="\n        Determines if CSRF token handling is active in the Prefect client for API\n        requests.\n\n        When enabled (`True`), the client automatically manages CSRF tokens by\n        retrieving, storing, and including them in applicable state-changing requests\n        ",
+        title="Csrf Support Enabled",
     )
     custom_headers: Optional[dict[str, str]] = Field(
         None,
         description="\n        Custom HTTP headers to include with every API request to the Prefect server.\n        Headers are specified as key-value pairs. Note that headers like 'User-Agent'\n        and CSRF-related headers are managed by Prefect and cannot be overridden.\n        ",
-        examples=[{'X-Custom-Header': 'value'}, {'Authorization': 'Bearer token'}],
-        title='Custom Headers',
+        examples=[{"X-Custom-Header": "value"}, {"Authorization": "Bearer token"}],
+        title="Custom Headers",
     )
     server_version_check_enabled: Optional[bool] = Field(
         True,
         description="\n        Whether the client should check the server's API version on startup.\n        When disabled, the client will skip the call to /admin/version that\n        normally runs once per client context entry.  This is useful for worker\n        subprocesses that inherit a known-compatible server configuration and\n        do not need to repeat the version handshake.\n        ",
-        title='Server Version Check Enabled',
+        title="Server Version Check Enabled",
     )
     metrics: Optional[ClientMetricsSettings] = None
 
 
 class CloudSettings(BaseModel):
     api_url: Optional[str] = Field(
-        'https://api.prefect.cloud/api',
-        description='API URL for Prefect Cloud. Used for authentication with Prefect Cloud.',
-        title='Api Url',
+        "https://api.prefect.cloud/api",
+        description="API URL for Prefect Cloud. Used for authentication with Prefect Cloud.",
+        title="Api Url",
     )
     enable_orchestration_telemetry: Optional[bool] = Field(
         True,
-        description='Whether or not to enable orchestration telemetry.',
-        title='Enable Orchestration Telemetry',
+        description="Whether or not to enable orchestration telemetry.",
+        title="Enable Orchestration Telemetry",
     )
     max_log_size: Optional[int] = Field(
         25000,
-        description='Maximum size in characters for a single log when sending logs to Prefect Cloud.',
-        title='Max Log Size',
+        description="Maximum size in characters for a single log when sending logs to Prefect Cloud.",
+        title="Max Log Size",
     )
     ui_url: Optional[str] = Field(
         None,
-        description='The URL of the Prefect Cloud UI. If not set, the client will attempt to infer it.',
-        title='Ui Url',
+        description="The URL of the Prefect Cloud UI. If not set, the client will attempt to infer it.",
+        title="Ui Url",
     )
 
 
 class Require(Enum):
-    any = 'any'
-    all = 'all'
+    any = "any"
+    all = "all"
 
 
 class Type(Enum):
-    flow_run = 'flow_run'
-    task_run = 'task_run'
-    deployment = 'deployment'
+    flow_run = "flow_run"
+    task_run = "task_run"
+    deployment = "deployment"
 
 
 class ConcurrencyLeaseHolder(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    type: Type = Field(..., title='Type')
-    id: UUID = Field(..., title='Id')
+    type: Type = Field(..., title="Type")
+    id: UUID = Field(..., title="Id")
 
 
 class ConcurrencyLimit(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     tag: str = Field(
-        ..., description='A tag the concurrency limit is applied to.', title='Tag'
+        ..., description="A tag the concurrency limit is applied to.", title="Tag"
     )
     concurrency_limit: int = Field(
-        ..., description='The concurrency limit.', title='Concurrency Limit'
+        ..., description="The concurrency limit.", title="Concurrency Limit"
     )
     active_slots: Optional[list[UUID]] = Field(
         None,
-        description='A list of active run ids using a concurrency slot',
-        title='Active Slots',
+        description="A list of active run ids using a concurrency slot",
+        title="Active Slots",
     )
 
 
 class ConcurrencyLimitCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     tag: str = Field(
-        ..., description='A tag the concurrency limit is applied to.', title='Tag'
+        ..., description="A tag the concurrency limit is applied to.", title="Tag"
     )
     concurrency_limit: int = Field(
-        ..., description='The concurrency limit.', title='Concurrency Limit'
+        ..., description="The concurrency limit.", title="Concurrency Limit"
     )
 
 
 class ConcurrencyLimitStrategy(Enum):
-    ENQUEUE = 'ENQUEUE'
-    CANCEL_NEW = 'CANCEL_NEW'
+    ENQUEUE = "ENQUEUE"
+    CANCEL_NEW = "CANCEL_NEW"
 
 
 class ConcurrencyLimitV2(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     active: Optional[bool] = Field(
-        True, description='Whether the concurrency limit is active.', title='Active'
+        True, description="Whether the concurrency limit is active.", title="Active"
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the concurrency limit.', title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the concurrency limit.", title="Name"
     )
-    limit: int = Field(..., description='The concurrency limit.', title='Limit')
+    limit: int = Field(..., description="The concurrency limit.", title="Limit")
     active_slots: Optional[int] = Field(
-        0, description='The number of active slots.', title='Active Slots'
+        0, description="The number of active slots.", title="Active Slots"
     )
     denied_slots: Optional[int] = Field(
-        0, description='The number of denied slots.', title='Denied Slots'
+        0, description="The number of denied slots.", title="Denied Slots"
     )
     slot_decay_per_second: Optional[float] = Field(
         0,
-        description='The decay rate for active slots when used as a rate limit.',
-        title='Slot Decay Per Second',
+        description="The decay rate for active slots when used as a rate limit.",
+        title="Slot Decay Per Second",
     )
     avg_slot_occupancy_seconds: Optional[float] = Field(
         2,
-        description='The average amount of time a slot is occupied.',
-        title='Avg Slot Occupancy Seconds',
+        description="The average amount of time a slot is occupied.",
+        title="Avg Slot Occupancy Seconds",
     )
 
 
 class ConcurrencyLimitV2Create(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     active: Optional[bool] = Field(
-        True, description='Whether the concurrency limit is active.', title='Active'
+        True, description="Whether the concurrency limit is active.", title="Active"
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the concurrency limit.', title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the concurrency limit.", title="Name"
     )
     limit: conint(ge=0) = Field(
-        ..., description='The concurrency limit.', title='Limit'
+        ..., description="The concurrency limit.", title="Limit"
     )
     active_slots: Optional[conint(ge=0)] = Field(
-        0, description='The number of active slots.', title='Active Slots'
+        0, description="The number of active slots.", title="Active Slots"
     )
     denied_slots: Optional[conint(ge=0)] = Field(
-        0, description='The number of denied slots.', title='Denied Slots'
+        0, description="The number of denied slots.", title="Denied Slots"
     )
     slot_decay_per_second: Optional[confloat(ge=0.0)] = Field(
         0,
-        description='The decay rate for active slots when used as a rate limit.',
-        title='Slot Decay Per Second',
+        description="The decay rate for active slots when used as a rate limit.",
+        title="Slot Decay Per Second",
     )
 
 
 class ConcurrencyLimitV2Update(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    active: Optional[bool] = Field(None, title='Active')
-    name: Optional[constr(pattern=r'^[^/%&><]+$')] = Field(None, title='Name')
-    limit: Optional[conint(ge=0)] = Field(None, title='Limit')
-    active_slots: Optional[conint(ge=0)] = Field(None, title='Active Slots')
-    denied_slots: Optional[conint(ge=0)] = Field(None, title='Denied Slots')
+    active: Optional[bool] = Field(None, title="Active")
+    name: Optional[constr(pattern=r"^[^/%&><]+$")] = Field(None, title="Name")
+    limit: Optional[conint(ge=0)] = Field(None, title="Limit")
+    active_slots: Optional[conint(ge=0)] = Field(None, title="Active Slots")
+    denied_slots: Optional[conint(ge=0)] = Field(None, title="Denied Slots")
     slot_decay_per_second: Optional[confloat(ge=0.0)] = Field(
-        None, title='Slot Decay Per Second'
+        None, title="Slot Decay Per Second"
     )
 
 
@@ -1086,1178 +1086,1178 @@ class ConcurrencyOptions(BaseModel):
     collision_strategy: ConcurrencyLimitStrategy
     grace_period_seconds: Optional[conint(ge=60, le=86400)] = Field(
         None,
-        description='Grace period in seconds for infrastructure to start before concurrency slots are revoked. If not set, falls back to server setting.',
-        title='Grace Period Seconds',
+        description="Grace period in seconds for infrastructure to start before concurrency slots are revoked. If not set, falls back to server setting.",
+        title="Grace Period Seconds",
     )
 
 
 class Constant(BaseModel):
-    input_type: Literal['constant'] = Field('constant', title='Input Type')
-    type: str = Field(..., title='Type')
+    input_type: Literal["constant"] = Field("constant", title="Input Type")
+    type: str = Field(..., title="Type")
 
 
 class CountByState(BaseModel):
-    COMPLETED: Optional[int] = Field(0, title='Completed')
-    PENDING: Optional[int] = Field(0, title='Pending')
-    RUNNING: Optional[int] = Field(0, title='Running')
-    FAILED: Optional[int] = Field(0, title='Failed')
-    CANCELLED: Optional[int] = Field(0, title='Cancelled')
-    CRASHED: Optional[int] = Field(0, title='Crashed')
-    PAUSED: Optional[int] = Field(0, title='Paused')
-    CANCELLING: Optional[int] = Field(0, title='Cancelling')
-    SCHEDULED: Optional[int] = Field(0, title='Scheduled')
+    COMPLETED: Optional[int] = Field(0, title="Completed")
+    PENDING: Optional[int] = Field(0, title="Pending")
+    RUNNING: Optional[int] = Field(0, title="Running")
+    FAILED: Optional[int] = Field(0, title="Failed")
+    CANCELLED: Optional[int] = Field(0, title="Cancelled")
+    CRASHED: Optional[int] = Field(0, title="Crashed")
+    PAUSED: Optional[int] = Field(0, title="Paused")
+    CANCELLING: Optional[int] = Field(0, title="Cancelling")
+    SCHEDULED: Optional[int] = Field(0, title="Scheduled")
 
 
 class Countable(Enum):
-    day = 'day'
-    time = 'time'
-    event = 'event'
-    resource = 'resource'
+    day = "day"
+    time = "time"
+    event = "event"
+    resource = "resource"
 
 
 class CreatedBy(BaseModel):
     id: Optional[UUID] = Field(
-        None, description='The id of the creator of the object.', title='Id'
+        None, description="The id of the creator of the object.", title="Id"
     )
     type: Optional[str] = Field(
-        None, description='The type of the creator of the object.', title='Type'
+        None, description="The type of the creator of the object.", title="Type"
     )
     display_value: Optional[str] = Field(
-        None, description='The display value for the creator.', title='Display Value'
+        None, description="The display value for the creator.", title="Display Value"
     )
 
 
 class CronSchedule(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    cron: str = Field(..., examples=['0 0 * * *'], title='Cron')
+    cron: str = Field(..., examples=["0 0 * * *"], title="Cron")
     timezone: Optional[str] = Field(
-        None, examples=['America/New_York'], title='Timezone'
+        None, examples=["America/New_York"], title="Timezone"
     )
     day_or: Optional[bool] = Field(
         True,
-        description='Control croniter behavior for handling day and day_of_week entries.',
-        title='Day Or',
+        description="Control croniter behavior for handling day and day_of_week entries.",
+        title="Day Or",
     )
 
 
 class CsrfToken(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    token: str = Field(..., description='The CSRF token', title='Token')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    token: str = Field(..., description="The CSRF token", title="Token")
     client: str = Field(
-        ..., description='The client id associated with the CSRF token', title='Client'
+        ..., description="The client id associated with the CSRF token", title="Client"
     )
     expiration: AwareDatetime = Field(
-        ..., description='The expiration time of the CSRF token', title='Expiration'
+        ..., description="The expiration time of the CSRF token", title="Expiration"
     )
 
 
 class DeploymentBulkDeleteResponse(BaseModel):
-    deleted: Optional[list[UUID]] = Field(None, title='Deleted')
+    deleted: Optional[list[UUID]] = Field(None, title="Deleted")
 
 
 class DeploymentFilterConcurrencyLimit(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     ge_: Optional[int] = Field(
         None,
-        description='Only include deployments with a concurrency limit greater than or equal to this value',
-        title='Ge',
+        description="Only include deployments with a concurrency limit greater than or equal to this value",
+        title="Ge",
     )
     le_: Optional[int] = Field(
         None,
-        description='Only include deployments with a concurrency limit less than or equal to this value',
-        title='Le',
+        description="Only include deployments with a concurrency limit less than or equal to this value",
+        title="Le",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include deployments without a concurrency limit',
-        title='Is Null',
+        description="If true, only include deployments without a concurrency limit",
+        title="Is Null",
     )
 
 
 class DeploymentFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of deployment ids to include', title='Any'
+        None, description="A list of deployment ids to include", title="Any"
     )
     not_any_: Optional[list[UUID]] = Field(
-        None, description='A list of deployment ids to exclude', title='Not Any'
+        None, description="A list of deployment ids to exclude", title="Not Any"
     )
 
 
 class DeploymentFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of deployment names to include',
-        examples=[['my-deployment-1', 'my-deployment-2']],
-        title='Any',
+        description="A list of deployment names to include",
+        examples=[["my-deployment-1", "my-deployment-2"]],
+        title="Any",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match. For example,  passing 'marvin' will match 'marvin', 'sad-Marvin', and 'marvin-robot'.",
-        examples=['marvin'],
-        title='Like',
+        examples=["marvin"],
+        title="Like",
     )
 
 
 class DeploymentFilterPaused(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     eq_: Optional[bool] = Field(
-        None, description='Only returns where deployment is/is not paused', title='Eq'
+        None, description="Only returns where deployment is/is not paused", title="Eq"
     )
 
 
 class DeploymentFilterWorkQueueName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of work queue names to include',
-        examples=[['work_queue_1', 'work_queue_2']],
-        title='Any',
+        description="A list of work queue names to include",
+        examples=[["work_queue_1", "work_queue_2"]],
+        title="Any",
     )
 
 
 class DeploymentOrFlowNameFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match on deployment or flow names. For example, passing 'example' might match deployments or flows with 'example' in their names.",
-        title='Like',
+        title="Like",
     )
 
 
 class DeploymentSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    NAME_ASC = 'NAME_ASC'
-    NAME_DESC = 'NAME_DESC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    NAME_ASC = "NAME_ASC"
+    NAME_DESC = "NAME_DESC"
 
 
 class DeploymentStatus(Enum):
-    READY = 'READY'
-    NOT_READY = 'NOT_READY'
+    READY = "READY"
+    NOT_READY = "NOT_READY"
 
 
 class DeploymentsSettings(BaseModel):
     default_work_pool_name: Optional[str] = Field(
         None,
-        description='The default work pool to use when creating deployments.',
-        title='Default Work Pool Name',
+        description="The default work pool to use when creating deployments.",
+        title="Default Work Pool Name",
     )
     default_docker_build_namespace: Optional[str] = Field(
         None,
-        description='The default Docker namespace to use when building images.',
+        description="The default Docker namespace to use when building images.",
         examples=[
-            'my-dockerhub-registry',
-            '4999999999999.dkr.ecr.us-east-2.amazonaws.com/my-ecr-repo',
+            "my-dockerhub-registry",
+            "4999999999999.dkr.ecr.us-east-2.amazonaws.com/my-ecr-repo",
         ],
-        title='Default Docker Build Namespace',
+        title="Default Docker Build Namespace",
     )
 
 
 class DoNothing(BaseModel):
-    type: Literal['do-nothing'] = Field('do-nothing', title='Type')
+    type: Literal["do-nothing"] = Field("do-nothing", title="Type")
 
 
 class Edge(BaseModel):
-    id: UUID = Field(..., title='Id')
+    id: UUID = Field(..., title="Id")
 
 
 class EventCount(BaseModel):
-    value: str = Field(..., description='The value to use for filtering', title='Value')
+    value: str = Field(..., description="The value to use for filtering", title="Value")
     label: str = Field(
-        ..., description='The value to display for this count', title='Label'
+        ..., description="The value to display for this count", title="Label"
     )
-    count: int = Field(..., description='The count of matching events', title='Count')
+    count: int = Field(..., description="The count of matching events", title="Count")
     start_time: AwareDatetime = Field(
-        ..., description='The start time of this group of events', title='Start Time'
+        ..., description="The start time of this group of events", title="Start Time"
     )
     end_time: AwareDatetime = Field(
-        ..., description='The end time of this group of events', title='End Time'
+        ..., description="The end time of this group of events", title="End Time"
     )
 
 
 class EventIDFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     id: Optional[list[UUID]] = Field(
-        None, description='Only include events with one of these IDs', title='Id'
+        None, description="Only include events with one of these IDs", title="Id"
     )
 
 
 class EventNameFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     prefix: Optional[list[str]] = Field(
         None,
-        description='Only include events matching one of these prefixes',
-        title='Prefix',
+        description="Only include events matching one of these prefixes",
+        title="Prefix",
     )
     exclude_prefix: Optional[list[str]] = Field(
         None,
-        description='Exclude events matching one of these prefixes',
-        title='Exclude Prefix',
+        description="Exclude events matching one of these prefixes",
+        title="Exclude Prefix",
     )
     name: Optional[list[str]] = Field(
         None,
-        description='Only include events matching one of these names exactly',
-        title='Name',
+        description="Only include events matching one of these names exactly",
+        title="Name",
     )
     exclude_name: Optional[list[str]] = Field(
         None,
-        description='Exclude events matching one of these names exactly',
-        title='Exclude Name',
+        description="Exclude events matching one of these names exactly",
+        title="Exclude Name",
     )
 
 
 class EventOccurredFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     since: Optional[AwareDatetime] = Field(
         None,
-        description='Only include events after this time (inclusive)',
-        title='Since',
+        description="Only include events after this time (inclusive)",
+        title="Since",
     )
     until: Optional[AwareDatetime] = Field(
         None,
-        description='Only include events prior to this time (inclusive)',
-        title='Until',
+        description="Only include events prior to this time (inclusive)",
+        title="Until",
     )
 
 
 class EventOrder(Enum):
-    ASC = 'ASC'
-    DESC = 'DESC'
+    ASC = "ASC"
+    DESC = "DESC"
 
 
 class EventTextFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     query: constr(max_length=200) = Field(
         ...,
-        description='Text search query string',
+        description="Text search query string",
         examples=[
-            'error',
-            'error -debug',
+            "error",
+            "error -debug",
             '"connection timeout"',
-            '+required -excluded',
+            "+required -excluded",
         ],
-        title='Query',
+        title="Query",
     )
 
 
 class Posture(Enum):
-    Reactive = 'Reactive'
-    Proactive = 'Proactive'
+    Reactive = "Reactive"
+    Proactive = "Proactive"
 
 
 class EventsSettings(BaseModel):
     worker_max_queue_size: Optional[conint(ge=0)] = Field(
         0,
-        description='\n        Maximum number of events that can be queued for delivery to the\n        Prefect server. When the queue is full, new events are dropped with\n        a warning. Set to 0 for unbounded (the default).\n\n        Warning: setting this value too low may result in data loss as events\n        will be silently dropped when the queue is full.\n        ',
-        title='Worker Max Queue Size',
+        description="\n        Maximum number of events that can be queued for delivery to the\n        Prefect server. When the queue is full, new events are dropped with\n        a warning. Set to 0 for unbounded (the default).\n\n        Warning: setting this value too low may result in data loss as events\n        will be silently dropped when the queue is full.\n        ",
+        title="Worker Max Queue Size",
     )
 
 
 class ExperimentsSettings(BaseModel):
     warn: Optional[bool] = Field(
         True,
-        description='If `True`, warn on usage of experimental features.',
-        title='Warn',
+        description="If `True`, warn on usage of experimental features.",
+        title="Warn",
     )
 
 
 class Flow(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the flow', examples=['my-flow'], title='Name'
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the flow", examples=["my-flow"], title="Name"
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of flow tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of flow tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
 
 
 class FlowBulkDeleteResponse(BaseModel):
-    deleted: Optional[list[UUID]] = Field(None, title='Deleted')
+    deleted: Optional[list[UUID]] = Field(None, title="Deleted")
 
 
 class FlowCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the flow', examples=['my-flow'], title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the flow", examples=["my-flow"], title="Name"
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of flow tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of flow tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
 
 
 class FlowFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow ids to include', title='Any'
+        None, description="A list of flow ids to include", title="Any"
     )
     not_any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow ids to exclude', title='Not Any'
+        None, description="A list of flow ids to exclude", title="Not Any"
     )
 
 
 class FlowFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of flow names to include',
-        examples=[['my-flow-1', 'my-flow-2']],
-        title='Any',
+        description="A list of flow names to include",
+        examples=[["my-flow-1", "my-flow-2"]],
+        title="Any",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match. For example,  passing 'marvin' will match 'marvin', 'sad-Marvin', and 'marvin-robot'.",
-        examples=['marvin'],
-        title='Like',
+        examples=["marvin"],
+        title="Like",
     )
 
 
 class FlowPaginationResponse(BaseModel):
-    results: list[Flow] = Field(..., title='Results')
-    count: int = Field(..., title='Count')
-    limit: int = Field(..., title='Limit')
-    pages: int = Field(..., title='Pages')
-    page: int = Field(..., title='Page')
+    results: list[Flow] = Field(..., title="Results")
+    count: int = Field(..., title="Count")
+    limit: int = Field(..., title="Limit")
+    pages: int = Field(..., title="Pages")
+    page: int = Field(..., title="Page")
 
 
 class FlowRunBulkDeleteResponse(BaseModel):
-    deleted: Optional[list[UUID]] = Field(None, title='Deleted')
+    deleted: Optional[list[UUID]] = Field(None, title="Deleted")
 
 
 class Status(Enum):
-    CREATED = 'CREATED'
-    FAILED = 'FAILED'
+    CREATED = "CREATED"
+    FAILED = "FAILED"
 
 
 class FlowRunCreateResult(BaseModel):
-    flow_run_id: Optional[UUID] = Field(None, title='Flow Run Id')
-    status: Status = Field(..., title='Status')
-    error: Optional[str] = Field(None, title='Error')
+    flow_run_id: Optional[UUID] = Field(None, title="Flow Run Id")
+    status: Status = Field(..., title="Status")
+    error: Optional[str] = Field(None, title="Error")
 
 
 class FlowRunFilterEndTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs ending at or before this time',
-        title='Before',
+        description="Only include flow runs ending at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs ending at or after this time',
-        title='After',
+        description="Only include flow runs ending at or after this time",
+        title="After",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only return flow runs without an end time',
-        title='Is Null',
+        description="If true, only return flow runs without an end time",
+        title="Is Null",
     )
 
 
 class FlowRunFilterExpectedStartTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs scheduled to start at or before this time',
-        title='Before',
+        description="Only include flow runs scheduled to start at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs scheduled to start at or after this time',
-        title='After',
+        description="Only include flow runs scheduled to start at or after this time",
+        title="After",
     )
 
 
 class FlowRunFilterFlowVersion(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of flow run flow_versions to include', title='Any'
+        None, description="A list of flow run flow_versions to include", title="Any"
     )
 
 
 class FlowRunFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run ids to include', title='Any'
+        None, description="A list of flow run ids to include", title="Any"
     )
     not_any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run ids to exclude', title='Not Any'
+        None, description="A list of flow run ids to exclude", title="Not Any"
     )
 
 
 class FlowRunFilterIdempotencyKey(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of flow run idempotency keys to include', title='Any'
+        None, description="A list of flow run idempotency keys to include", title="Any"
     )
     not_any_: Optional[list[str]] = Field(
         None,
-        description='A list of flow run idempotency keys to exclude',
-        title='Not Any',
+        description="A list of flow run idempotency keys to exclude",
+        title="Not Any",
     )
 
 
 class FlowRunFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of flow run names to include',
-        examples=[['my-flow-run-1', 'my-flow-run-2']],
-        title='Any',
+        description="A list of flow run names to include",
+        examples=[["my-flow-run-1", "my-flow-run-2"]],
+        title="Any",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match. For example,  passing 'marvin' will match 'marvin', 'sad-Marvin', and 'marvin-robot'.",
-        examples=['marvin'],
-        title='Like',
+        examples=["marvin"],
+        title="Like",
     )
 
 
 class FlowRunFilterNextScheduledStartTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs with a next_scheduled_start_time or before this time',
-        title='Before',
+        description="Only include flow runs with a next_scheduled_start_time or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs with a next_scheduled_start_time at or after this time',
-        title='After',
+        description="Only include flow runs with a next_scheduled_start_time at or after this time",
+        title="After",
     )
 
 
 class FlowRunFilterStartTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs starting at or before this time',
-        title='Before',
+        description="Only include flow runs starting at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include flow runs starting at or after this time',
-        title='After',
+        description="Only include flow runs starting at or after this time",
+        title="After",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only return flow runs without a start time',
-        title='Is Null',
+        description="If true, only return flow runs without a start time",
+        title="Is Null",
     )
 
 
 class FlowRunFilterStateName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of flow run state names to include', title='Any'
+        None, description="A list of flow run state names to include", title="Any"
     )
     not_any_: Optional[list[str]] = Field(
-        None, description='A list of flow run state names to exclude', title='Not Any'
+        None, description="A list of flow run state names to exclude", title="Not Any"
     )
 
 
 class FlowRunInput(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     flow_run_id: UUID = Field(
         ...,
-        description='The flow run ID associated with the input.',
-        title='Flow Run Id',
+        description="The flow run ID associated with the input.",
+        title="Flow Run Id",
     )
-    key: str = Field(..., description='The key of the input.', title='Key')
-    value: str = Field(..., description='The value of the input.', title='Value')
+    key: str = Field(..., description="The key of the input.", title="Key")
+    value: str = Field(..., description="The value of the input.", title="Value")
     sender: Optional[str] = Field(
-        None, description='The sender of the input.', title='Sender'
+        None, description="The sender of the input.", title="Sender"
     )
 
 
 class RetryType(Enum):
-    in_process = 'in_process'
-    reschedule = 'reschedule'
+    in_process = "in_process"
+    reschedule = "reschedule"
 
 
 class FlowRunPolicy(BaseModel):
     max_retries: Optional[int] = Field(
         0,
-        description='The maximum number of retries. Field is not used. Please use `retries` instead.',
-        title='Max Retries',
+        description="The maximum number of retries. Field is not used. Please use `retries` instead.",
+        title="Max Retries",
     )
     retry_delay_seconds: Optional[float] = Field(
         0,
-        description='The delay between retries. Field is not used. Please use `retry_delay` instead.',
-        title='Retry Delay Seconds',
+        description="The delay between retries. Field is not used. Please use `retry_delay` instead.",
+        title="Retry Delay Seconds",
     )
     retries: Optional[int] = Field(
-        None, description='The number of retries.', title='Retries'
+        None, description="The number of retries.", title="Retries"
     )
     retry_delay: Optional[int] = Field(
         None,
-        description='The delay time between retries, in seconds.',
-        title='Retry Delay',
+        description="The delay time between retries, in seconds.",
+        title="Retry Delay",
     )
     pause_keys: Optional[list[str]] = Field(
-        None, description='Tracks pauses this run has observed.', title='Pause Keys'
+        None, description="Tracks pauses this run has observed.", title="Pause Keys"
     )
     resuming: Optional[bool] = Field(
         False,
-        description='Indicates if this run is resuming from a pause.',
-        title='Resuming',
+        description="Indicates if this run is resuming from a pause.",
+        title="Resuming",
     )
     retry_type: Optional[RetryType] = Field(
         None,
-        description='The type of retry this run is undergoing.',
-        title='Retry Type',
+        description="The type of retry this run is undergoing.",
+        title="Retry Type",
     )
 
 
 class FlowRunResult(BaseModel):
-    input_type: Literal['flow_run'] = Field('flow_run', title='Input Type')
-    id: UUID = Field(..., title='Id')
+    input_type: Literal["flow_run"] = Field("flow_run", title="Input Type")
+    id: UUID = Field(..., title="Id")
 
 
 class FlowRunSort(Enum):
-    ID_DESC = 'ID_DESC'
-    START_TIME_ASC = 'START_TIME_ASC'
-    START_TIME_DESC = 'START_TIME_DESC'
-    EXPECTED_START_TIME_ASC = 'EXPECTED_START_TIME_ASC'
-    EXPECTED_START_TIME_DESC = 'EXPECTED_START_TIME_DESC'
-    NAME_ASC = 'NAME_ASC'
-    NAME_DESC = 'NAME_DESC'
-    NEXT_SCHEDULED_START_TIME_ASC = 'NEXT_SCHEDULED_START_TIME_ASC'
-    END_TIME_DESC = 'END_TIME_DESC'
+    ID_DESC = "ID_DESC"
+    START_TIME_ASC = "START_TIME_ASC"
+    START_TIME_DESC = "START_TIME_DESC"
+    EXPECTED_START_TIME_ASC = "EXPECTED_START_TIME_ASC"
+    EXPECTED_START_TIME_DESC = "EXPECTED_START_TIME_DESC"
+    NAME_ASC = "NAME_ASC"
+    NAME_DESC = "NAME_DESC"
+    NEXT_SCHEDULED_START_TIME_ASC = "NEXT_SCHEDULED_START_TIME_ASC"
+    END_TIME_DESC = "END_TIME_DESC"
 
 
 class FlowRunUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: Optional[str] = Field(None, title='Name')
-    flow_version: Optional[str] = Field(None, title='Flow Version')
-    parameters: Optional[dict[str, Any]] = Field(None, title='Parameters')
+    name: Optional[str] = Field(None, title="Name")
+    flow_version: Optional[str] = Field(None, title="Flow Version")
+    parameters: Optional[dict[str, Any]] = Field(None, title="Parameters")
     empirical_policy: Optional[FlowRunPolicy] = None
-    tags: Optional[list[str]] = Field(None, title='Tags')
-    infrastructure_pid: Optional[str] = Field(None, title='Infrastructure Pid')
-    job_variables: Optional[dict[str, Any]] = Field(None, title='Job Variables')
+    tags: Optional[list[str]] = Field(None, title="Tags")
+    infrastructure_pid: Optional[str] = Field(None, title="Infrastructure Pid")
+    job_variables: Optional[dict[str, Any]] = Field(None, title="Job Variables")
 
 
 class FlowSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    NAME_ASC = 'NAME_ASC'
-    NAME_DESC = 'NAME_DESC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    NAME_ASC = "NAME_ASC"
+    NAME_DESC = "NAME_DESC"
 
 
 class FlowUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of flow tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of flow tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
 
 
 class FlowsSettings(BaseModel):
     heartbeat_frequency: Optional[conint(ge=30)] = Field(
         180,
-        description='Number of seconds between flow run heartbeats. Heartbeats are used to detect crashed flow runs.',
-        title='Heartbeat Frequency',
+        description="Number of seconds between flow run heartbeats. Heartbeats are used to detect crashed flow runs.",
+        title="Heartbeat Frequency",
     )
     default_retries: Optional[conint(ge=0)] = Field(
         0,
-        description='This value sets the default number of retries for all flows.',
-        title='Default Retries',
+        description="This value sets the default number of retries for all flows.",
+        title="Default Retries",
     )
     default_retry_delay_seconds: Optional[Union[int, float, list[float]]] = Field(
         0,
-        description='This value sets the default retry delay seconds for all flows.',
-        title='Default Retry Delay Seconds',
+        description="This value sets the default retry delay seconds for all flows.",
+        title="Default Retry Delay Seconds",
     )
 
 
 class GlobalConcurrencyLimitResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     active: Optional[bool] = Field(
         True,
-        description='Whether the global concurrency limit is active.',
-        title='Active',
+        description="Whether the global concurrency limit is active.",
+        title="Active",
     )
     name: str = Field(
-        ..., description='The name of the global concurrency limit.', title='Name'
+        ..., description="The name of the global concurrency limit.", title="Name"
     )
-    limit: int = Field(..., description='The concurrency limit.', title='Limit')
+    limit: int = Field(..., description="The concurrency limit.", title="Limit")
     active_slots: int = Field(
-        ..., description='The number of active slots.', title='Active Slots'
+        ..., description="The number of active slots.", title="Active Slots"
     )
     slot_decay_per_second: Optional[float] = Field(
         2,
-        description='The decay rate for active slots when used as a rate limit.',
-        title='Slot Decay Per Second',
+        description="The decay rate for active slots when used as a rate limit.",
+        title="Slot Decay Per Second",
     )
 
 
 class GraphArtifact(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: AwareDatetime = Field(..., title='Created')
-    key: Optional[str] = Field(..., title='Key')
-    type: Optional[str] = Field(..., title='Type')
-    is_latest: bool = Field(..., title='Is Latest')
-    data: Any = Field(..., title='Data')
+    id: UUID = Field(..., title="Id")
+    created: AwareDatetime = Field(..., title="Created")
+    key: Optional[str] = Field(..., title="Key")
+    type: Optional[str] = Field(..., title="Type")
+    is_latest: bool = Field(..., title="Is Latest")
+    data: Any = Field(..., title="Data")
 
 
 class LoggingLevel(Enum):
-    DEBUG = 'DEBUG'
-    INFO = 'INFO'
-    WARNING = 'WARNING'
-    ERROR = 'ERROR'
-    CRITICAL = 'CRITICAL'
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class InternalSettings(BaseModel):
     logging_level: Optional[LoggingLevel] = Field(
-        'ERROR',
+        "ERROR",
         description="The default logging level for Prefect's internal machinery loggers.",
-        title='Logging Level',
+        title="Logging Level",
     )
 
 
 class IntervalSchedule(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    interval: float = Field(..., title='Interval')
+    interval: float = Field(..., title="Interval")
     anchor_date: Optional[AwareDatetime] = Field(
-        None, examples=['2020-01-01T00:00:00Z'], title='Anchor Date'
+        None, examples=["2020-01-01T00:00:00Z"], title="Anchor Date"
     )
     timezone: Optional[str] = Field(
-        None, examples=['America/New_York'], title='Timezone'
+        None, examples=["America/New_York"], title="Timezone"
     )
 
 
 class Log(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: str = Field(..., description='The logger name.', title='Name')
-    level: int = Field(..., description='The log level.', title='Level')
-    message: str = Field(..., description='The log message.', title='Message')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: str = Field(..., description="The logger name.", title="Name")
+    level: int = Field(..., description="The log level.", title="Level")
+    message: str = Field(..., description="The log message.", title="Message")
     timestamp: AwareDatetime = Field(
-        ..., description='The log timestamp.', title='Timestamp'
+        ..., description="The log timestamp.", title="Timestamp"
     )
     flow_run_id: Optional[UUID] = Field(
         None,
-        description='The flow run ID associated with the log.',
-        title='Flow Run Id',
+        description="The flow run ID associated with the log.",
+        title="Flow Run Id",
     )
     task_run_id: Optional[UUID] = Field(
         None,
-        description='The task run ID associated with the log.',
-        title='Task Run Id',
+        description="The task run ID associated with the log.",
+        title="Task Run Id",
     )
 
 
 class LogCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: str = Field(..., description='The logger name.', title='Name')
-    level: int = Field(..., description='The log level.', title='Level')
-    message: str = Field(..., description='The log message.', title='Message')
+    name: str = Field(..., description="The logger name.", title="Name")
+    level: int = Field(..., description="The log level.", title="Level")
+    message: str = Field(..., description="The log message.", title="Message")
     timestamp: AwareDatetime = Field(
-        ..., description='The log timestamp.', title='Timestamp'
+        ..., description="The log timestamp.", title="Timestamp"
     )
-    flow_run_id: Optional[UUID] = Field(None, title='Flow Run Id')
-    task_run_id: Optional[UUID] = Field(None, title='Task Run Id')
+    flow_run_id: Optional[UUID] = Field(None, title="Flow Run Id")
+    task_run_id: Optional[UUID] = Field(None, title="Task Run Id")
 
 
 class LogFilterFlowRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run IDs to include', title='Any'
+        None, description="A list of flow run IDs to include", title="Any"
     )
 
 
 class LogFilterLevel(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     ge_: Optional[int] = Field(
         None,
-        description='Include logs with a level greater than or equal to this level',
+        description="Include logs with a level greater than or equal to this level",
         examples=[20],
-        title='Ge',
+        title="Ge",
     )
     le_: Optional[int] = Field(
         None,
-        description='Include logs with a level less than or equal to this level',
+        description="Include logs with a level less than or equal to this level",
         examples=[50],
-        title='Le',
+        title="Le",
     )
 
 
 class LogFilterTaskRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of task run IDs to include', title='Any'
+        None, description="A list of task run IDs to include", title="Any"
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include logs without a task run id',
-        title='Is Null',
+        description="If true, only include logs without a task run id",
+        title="Is Null",
     )
 
 
 class LogFilterTextSearch(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     query: constr(max_length=200) = Field(
         ...,
-        description='Text search query string',
+        description="Text search query string",
         examples=[
-            'error',
-            'error -debug',
+            "error",
+            "error -debug",
             '"connection timeout"',
-            '+required -excluded',
+            "+required -excluded",
         ],
-        title='Query',
+        title="Query",
     )
 
 
 class LogFilterTimestamp(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include logs with a timestamp at or before this time',
-        title='Before',
+        description="Only include logs with a timestamp at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include logs with a timestamp at or after this time',
-        title='After',
+        description="Only include logs with a timestamp at or after this time",
+        title="After",
     )
 
 
 class LogSort(Enum):
-    TIMESTAMP_ASC = 'TIMESTAMP_ASC'
-    TIMESTAMP_DESC = 'TIMESTAMP_DESC'
+    TIMESTAMP_ASC = "TIMESTAMP_ASC"
+    TIMESTAMP_DESC = "TIMESTAMP_DESC"
 
 
 class Level(Enum):
-    DEBUG = 'DEBUG'
-    INFO = 'INFO'
-    WARNING = 'WARNING'
-    ERROR = 'ERROR'
-    CRITICAL = 'CRITICAL'
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class WhenMissingFlow(Enum):
-    warn = 'warn'
-    error = 'error'
-    ignore = 'ignore'
+    warn = "warn"
+    error = "error"
+    ignore = "ignore"
 
 
 class LoggingToAPISettings(BaseModel):
     enabled: Optional[bool] = Field(
-        True, description='If `True`, logs will be sent to the API.', title='Enabled'
+        True, description="If `True`, logs will be sent to the API.", title="Enabled"
     )
     batch_interval: Optional[float] = Field(
         2,
-        description='The number of seconds between batched writes of logs to the API.',
-        title='Batch Interval',
+        description="The number of seconds between batched writes of logs to the API.",
+        title="Batch Interval",
     )
     batch_size: Optional[int] = Field(
         4000000,
-        description='The number of logs to batch before sending to the API.',
-        title='Batch Size',
+        description="The number of logs to batch before sending to the API.",
+        title="Batch Size",
     )
     max_log_size: Optional[int] = Field(
         1000000,
-        description='The maximum size in characters for a single log. When connected to Prefect Cloud, this value is capped at `PREFECT_CLOUD_MAX_LOG_SIZE` (default 25,000).',
-        title='Max Log Size',
+        description="The maximum size in characters for a single log. When connected to Prefect Cloud, this value is capped at `PREFECT_CLOUD_MAX_LOG_SIZE` (default 25,000).",
+        title="Max Log Size",
     )
     when_missing_flow: Optional[WhenMissingFlow] = Field(
-        'warn',
+        "warn",
         description='\n        Controls the behavior when loggers attempt to send logs to the API handler from outside of a flow.\n        \n        All logs sent to the API must be associated with a flow run. The API log handler can\n        only be used outside of a flow by manually providing a flow run identifier. Logs\n        that are not associated with a flow run will not be sent to the API. This setting can\n        be used to determine if a warning or error is displayed when the identifier is missing.\n\n        The following options are available:\n\n        - "warn": Log a warning message.\n        - "error": Raise an error.\n        - "ignore": Do not log a warning message or raise an error.\n        ',
-        title='When Missing Flow',
+        title="When Missing Flow",
     )
 
 
 class MinimalConcurrencyLimitResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    name: str = Field(..., title='Name')
-    limit: int = Field(..., title='Limit')
+    id: UUID = Field(..., title="Id")
+    name: str = Field(..., title="Name")
+    limit: int = Field(..., title="Limit")
 
 
 class Kind(Enum):
-    flow_run = 'flow-run'
-    task_run = 'task-run'
+    flow_run = "flow-run"
+    task_run = "task-run"
 
 
 class Operator(Enum):
-    and_ = 'and_'
-    or_ = 'or_'
+    and_ = "and_"
+    or_ = "or_"
 
 
 class Parameter(BaseModel):
-    input_type: Literal['parameter'] = Field('parameter', title='Input Type')
-    name: str = Field(..., title='Name')
+    input_type: Literal["parameter"] = Field("parameter", title="Input Type")
+    name: str = Field(..., title="Name")
 
 
 class Source(Enum):
-    selected = 'selected'
-    inferred = 'inferred'
+    selected = "selected"
+    inferred = "inferred"
 
 
 class PauseAutomation(BaseModel):
-    type: Literal['pause-automation'] = Field('pause-automation', title='Type')
+    type: Literal["pause-automation"] = Field("pause-automation", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected automation (given by `automation_id`), or to an automation that is inferred from the triggering event.  If the source is 'inferred', the `automation_id` may not be set.  If the source is 'selected', the `automation_id` must be set.",
-        title='Source',
+        title="Source",
     )
     automation_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the automation to act on',
-        title='Automation Id',
+        description="The identifier of the automation to act on",
+        title="Automation Id",
     )
 
 
 class PauseDeployment(BaseModel):
-    type: Literal['pause-deployment'] = Field('pause-deployment', title='Type')
+    type: Literal["pause-deployment"] = Field("pause-deployment", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected deployment (given by `deployment_id`), or to a deployment that is inferred from the triggering event.  If the source is 'inferred', the `deployment_id` may not be set.  If the source is 'selected', the `deployment_id` must be set.",
-        title='Source',
+        title="Source",
     )
     deployment_id: Optional[UUID] = Field(
-        None, description='The identifier of the deployment', title='Deployment Id'
+        None, description="The identifier of the deployment", title="Deployment Id"
     )
 
 
 class PauseWorkPool(BaseModel):
-    type: Literal['pause-work-pool'] = Field('pause-work-pool', title='Type')
+    type: Literal["pause-work-pool"] = Field("pause-work-pool", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected work pool (given by `work_pool_id`), or to a work pool that is inferred from the triggering event.  If the source is 'inferred', the `work_pool_id` may not be set.  If the source is 'selected', the `work_pool_id` must be set.",
-        title='Source',
+        title="Source",
     )
     work_pool_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the work pool to pause',
-        title='Work Pool Id',
+        description="The identifier of the work pool to pause",
+        title="Work Pool Id",
     )
 
 
 class PauseWorkQueue(BaseModel):
-    type: Literal['pause-work-queue'] = Field('pause-work-queue', title='Type')
+    type: Literal["pause-work-queue"] = Field("pause-work-queue", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected work queue (given by `work_queue_id`), or to a work queue that is inferred from the triggering event.  If the source is 'inferred', the `work_queue_id` may not be set.  If the source is 'selected', the `work_queue_id` must be set.",
-        title='Source',
+        title="Source",
     )
     work_queue_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the work queue to pause',
-        title='Work Queue Id',
+        description="The identifier of the work queue to pause",
+        title="Work Queue Id",
     )
 
 
 class PluginsSettings(BaseModel):
     enabled: Optional[bool] = Field(
-        False, description='Enable the plugin system.', title='Enabled'
+        False, description="Enable the plugin system.", title="Enabled"
     )
     allow: Optional[list[str]] = Field(
         None,
-        description='Comma-separated list of plugin names to allow. If set, only these plugins will be loaded.',
-        title='Allow',
+        description="Comma-separated list of plugin names to allow. If set, only these plugins will be loaded.",
+        title="Allow",
     )
     deny: Optional[list[str]] = Field(
         None,
-        description='Comma-separated list of plugin names to deny. These plugins will not be loaded.',
-        title='Deny',
+        description="Comma-separated list of plugin names to deny. These plugins will not be loaded.",
+        title="Deny",
     )
     setup_timeout_seconds: Optional[float] = Field(
         20,
-        description='Maximum time in seconds for all plugins to complete their setup hooks.',
-        title='Setup Timeout Seconds',
+        description="Maximum time in seconds for all plugins to complete their setup hooks.",
+        title="Setup Timeout Seconds",
     )
     strict: Optional[bool] = Field(
         False,
-        description='If True, exit if a required plugin fails during setup.',
-        title='Strict',
+        description="If True, exit if a required plugin fails during setup.",
+        title="Strict",
     )
     safe_mode: Optional[bool] = Field(
         False,
-        description='If True, load plugins but do not execute their hooks. Useful for testing.',
-        title='Safe Mode',
+        description="If True, load plugins but do not execute their hooks. Useful for testing.",
+        title="Safe Mode",
     )
 
 
 class QueueFilter(BaseModel):
     tags: Optional[list[str]] = Field(
         None,
-        description='Only include flow runs with these tags in the work queue.',
-        title='Tags',
+        description="Only include flow runs with these tags in the work queue.",
+        title="Tags",
     )
     deployment_ids: Optional[list[UUID]] = Field(
         None,
-        description='Only include flow runs from these deployments in the work queue.',
-        title='Deployment Ids',
+        description="Only include flow runs from these deployments in the work queue.",
+        title="Deployment Ids",
     )
 
 
 class RRuleSchedule(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    rrule: str = Field(..., title='Rrule')
+    rrule: str = Field(..., title="Rrule")
     timezone: Optional[
         constr(
-            pattern=r'Africa/Abidjan|Africa/Accra|Africa/Addis_Ababa|Africa/Algiers|Africa/Asmara|Africa/Asmera|Africa/Bamako|Africa/Bangui|Africa/Banjul|Africa/Bissau|Africa/Blantyre|Africa/Brazzaville|Africa/Bujumbura|Africa/Cairo|Africa/Casablanca|Africa/Ceuta|Africa/Conakry|Africa/Dakar|Africa/Dar_es_Salaam|Africa/Djibouti|Africa/Douala|Africa/El_Aaiun|Africa/Freetown|Africa/Gaborone|Africa/Harare|Africa/Johannesburg|Africa/Juba|Africa/Kampala|Africa/Khartoum|Africa/Kigali|Africa/Kinshasa|Africa/Lagos|Africa/Libreville|Africa/Lome|Africa/Luanda|Africa/Lubumbashi|Africa/Lusaka|Africa/Malabo|Africa/Maputo|Africa/Maseru|Africa/Mbabane|Africa/Mogadishu|Africa/Monrovia|Africa/Nairobi|Africa/Ndjamena|Africa/Niamey|Africa/Nouakchott|Africa/Ouagadougou|Africa/Porto-Novo|Africa/Sao_Tome|Africa/Timbuktu|Africa/Tripoli|Africa/Tunis|Africa/Windhoek|America/Adak|America/Anchorage|America/Anguilla|America/Antigua|America/Araguaina|America/Argentina/Buenos_Aires|America/Argentina/Catamarca|America/Argentina/ComodRivadavia|America/Argentina/Cordoba|America/Argentina/Jujuy|America/Argentina/La_Rioja|America/Argentina/Mendoza|America/Argentina/Rio_Gallegos|America/Argentina/Salta|America/Argentina/San_Juan|America/Argentina/San_Luis|America/Argentina/Tucuman|America/Argentina/Ushuaia|America/Aruba|America/Asuncion|America/Atikokan|America/Atka|America/Bahia|America/Bahia_Banderas|America/Barbados|America/Belem|America/Belize|America/Blanc-Sablon|America/Boa_Vista|America/Bogota|America/Boise|America/Buenos_Aires|America/Cambridge_Bay|America/Campo_Grande|America/Cancun|America/Caracas|America/Catamarca|America/Cayenne|America/Cayman|America/Chicago|America/Chihuahua|America/Ciudad_Juarez|America/Coral_Harbour|America/Cordoba|America/Costa_Rica|America/Coyhaique|America/Creston|America/Cuiaba|America/Curacao|America/Danmarkshavn|America/Dawson|America/Dawson_Creek|America/Denver|America/Detroit|America/Dominica|America/Edmonton|America/Eirunepe|America/El_Salvador|America/Ensenada|America/Fort_Nelson|America/Fort_Wayne|America/Fortaleza|America/Glace_Bay|America/Godthab|America/Goose_Bay|America/Grand_Turk|America/Grenada|America/Guadeloupe|America/Guatemala|America/Guayaquil|America/Guyana|America/Halifax|America/Havana|America/Hermosillo|America/Indiana/Indianapolis|America/Indiana/Knox|America/Indiana/Marengo|America/Indiana/Petersburg|America/Indiana/Tell_City|America/Indiana/Vevay|America/Indiana/Vincennes|America/Indiana/Winamac|America/Indianapolis|America/Inuvik|America/Iqaluit|America/Jamaica|America/Jujuy|America/Juneau|America/Kentucky/Louisville|America/Kentucky/Monticello|America/Knox_IN|America/Kralendijk|America/La_Paz|America/Lima|America/Los_Angeles|America/Louisville|America/Lower_Princes|America/Maceio|America/Managua|America/Manaus|America/Marigot|America/Martinique|America/Matamoros|America/Mazatlan|America/Mendoza|America/Menominee|America/Merida|America/Metlakatla|America/Mexico_City|America/Miquelon|America/Moncton|America/Monterrey|America/Montevideo|America/Montreal|America/Montserrat|America/Nassau|America/New_York|America/Nipigon|America/Nome|America/Noronha|America/North_Dakota/Beulah|America/North_Dakota/Center|America/North_Dakota/New_Salem|America/Nuuk|America/Ojinaga|America/Panama|America/Pangnirtung|America/Paramaribo|America/Phoenix|America/Port-au-Prince|America/Port_of_Spain|America/Porto_Acre|America/Porto_Velho|America/Puerto_Rico|America/Punta_Arenas|America/Rainy_River|America/Rankin_Inlet|America/Recife|America/Regina|America/Resolute|America/Rio_Branco|America/Rosario|America/Santa_Isabel|America/Santarem|America/Santiago|America/Santo_Domingo|America/Sao_Paulo|America/Scoresbysund|America/Shiprock|America/Sitka|America/St_Barthelemy|America/St_Johns|America/St_Kitts|America/St_Lucia|America/St_Thomas|America/St_Vincent|America/Swift_Current|America/Tegucigalpa|America/Thule|America/Thunder_Bay|America/Tijuana|America/Toronto|America/Tortola|America/Vancouver|America/Virgin|America/Whitehorse|America/Winnipeg|America/Yakutat|America/Yellowknife|Antarctica/Casey|Antarctica/Davis|Antarctica/DumontDUrville|Antarctica/Macquarie|Antarctica/Mawson|Antarctica/McMurdo|Antarctica/Palmer|Antarctica/Rothera|Antarctica/South_Pole|Antarctica/Syowa|Antarctica/Troll|Antarctica/Vostok|Arctic/Longyearbyen|Asia/Aden|Asia/Almaty|Asia/Amman|Asia/Anadyr|Asia/Aqtau|Asia/Aqtobe|Asia/Ashgabat|Asia/Ashkhabad|Asia/Atyrau|Asia/Baghdad|Asia/Bahrain|Asia/Baku|Asia/Bangkok|Asia/Barnaul|Asia/Beirut|Asia/Bishkek|Asia/Brunei|Asia/Calcutta|Asia/Chita|Asia/Choibalsan|Asia/Chongqing|Asia/Chungking|Asia/Colombo|Asia/Dacca|Asia/Damascus|Asia/Dhaka|Asia/Dili|Asia/Dubai|Asia/Dushanbe|Asia/Famagusta|Asia/Gaza|Asia/Harbin|Asia/Hebron|Asia/Ho_Chi_Minh|Asia/Hong_Kong|Asia/Hovd|Asia/Irkutsk|Asia/Istanbul|Asia/Jakarta|Asia/Jayapura|Asia/Jerusalem|Asia/Kabul|Asia/Kamchatka|Asia/Karachi|Asia/Kashgar|Asia/Kathmandu|Asia/Katmandu|Asia/Khandyga|Asia/Kolkata|Asia/Krasnoyarsk|Asia/Kuala_Lumpur|Asia/Kuching|Asia/Kuwait|Asia/Macao|Asia/Macau|Asia/Magadan|Asia/Makassar|Asia/Manila|Asia/Muscat|Asia/Nicosia|Asia/Novokuznetsk|Asia/Novosibirsk|Asia/Omsk|Asia/Oral|Asia/Phnom_Penh|Asia/Pontianak|Asia/Pyongyang|Asia/Qatar|Asia/Qostanay|Asia/Qyzylorda|Asia/Rangoon|Asia/Riyadh|Asia/Saigon|Asia/Sakhalin|Asia/Samarkand|Asia/Seoul|Asia/Shanghai|Asia/Singapore|Asia/Srednekolymsk|Asia/Taipei|Asia/Tashkent|Asia/Tbilisi|Asia/Tehran|Asia/Tel_Aviv|Asia/Thimbu|Asia/Thimphu|Asia/Tokyo|Asia/Tomsk|Asia/Ujung_Pandang|Asia/Ulaanbaatar|Asia/Ulan_Bator|Asia/Urumqi|Asia/Ust-Nera|Asia/Vientiane|Asia/Vladivostok|Asia/Yakutsk|Asia/Yangon|Asia/Yekaterinburg|Asia/Yerevan|Atlantic/Azores|Atlantic/Bermuda|Atlantic/Canary|Atlantic/Cape_Verde|Atlantic/Faeroe|Atlantic/Faroe|Atlantic/Jan_Mayen|Atlantic/Madeira|Atlantic/Reykjavik|Atlantic/South_Georgia|Atlantic/St_Helena|Atlantic/Stanley|Australia/ACT|Australia/Adelaide|Australia/Brisbane|Australia/Broken_Hill|Australia/Canberra|Australia/Currie|Australia/Darwin|Australia/Eucla|Australia/Hobart|Australia/LHI|Australia/Lindeman|Australia/Lord_Howe|Australia/Melbourne|Australia/NSW|Australia/North|Australia/Perth|Australia/Queensland|Australia/South|Australia/Sydney|Australia/Tasmania|Australia/Victoria|Australia/West|Australia/Yancowinna|Brazil/Acre|Brazil/DeNoronha|Brazil/East|Brazil/West|CET|CST6CDT|Canada/Atlantic|Canada/Central|Canada/Eastern|Canada/Mountain|Canada/Newfoundland|Canada/Pacific|Canada/Saskatchewan|Canada/Yukon|Chile/Continental|Chile/EasterIsland|Cuba|EET|EST|EST5EDT|Egypt|Eire|Etc/GMT|Etc/GMT+0|Etc/GMT+1|Etc/GMT+10|Etc/GMT+11|Etc/GMT+12|Etc/GMT+2|Etc/GMT+3|Etc/GMT+4|Etc/GMT+5|Etc/GMT+6|Etc/GMT+7|Etc/GMT+8|Etc/GMT+9|Etc/GMT-0|Etc/GMT-1|Etc/GMT-10|Etc/GMT-11|Etc/GMT-12|Etc/GMT-13|Etc/GMT-14|Etc/GMT-2|Etc/GMT-3|Etc/GMT-4|Etc/GMT-5|Etc/GMT-6|Etc/GMT-7|Etc/GMT-8|Etc/GMT-9|Etc/GMT0|Etc/Greenwich|Etc/UCT|Etc/UTC|Etc/Universal|Etc/Zulu|Europe/Amsterdam|Europe/Andorra|Europe/Astrakhan|Europe/Athens|Europe/Belfast|Europe/Belgrade|Europe/Berlin|Europe/Bratislava|Europe/Brussels|Europe/Bucharest|Europe/Budapest|Europe/Busingen|Europe/Chisinau|Europe/Copenhagen|Europe/Dublin|Europe/Gibraltar|Europe/Guernsey|Europe/Helsinki|Europe/Isle_of_Man|Europe/Istanbul|Europe/Jersey|Europe/Kaliningrad|Europe/Kiev|Europe/Kirov|Europe/Kyiv|Europe/Lisbon|Europe/Ljubljana|Europe/London|Europe/Luxembourg|Europe/Madrid|Europe/Malta|Europe/Mariehamn|Europe/Minsk|Europe/Monaco|Europe/Moscow|Europe/Nicosia|Europe/Oslo|Europe/Paris|Europe/Podgorica|Europe/Prague|Europe/Riga|Europe/Rome|Europe/Samara|Europe/San_Marino|Europe/Sarajevo|Europe/Saratov|Europe/Simferopol|Europe/Skopje|Europe/Sofia|Europe/Stockholm|Europe/Tallinn|Europe/Tirane|Europe/Tiraspol|Europe/Ulyanovsk|Europe/Uzhgorod|Europe/Vaduz|Europe/Vatican|Europe/Vienna|Europe/Vilnius|Europe/Volgograd|Europe/Warsaw|Europe/Zagreb|Europe/Zaporozhye|Europe/Zurich|Factory|GB|GB-Eire|GMT|GMT+0|GMT-0|GMT0|Greenwich|HST|Hongkong|Iceland|Indian/Antananarivo|Indian/Chagos|Indian/Christmas|Indian/Cocos|Indian/Comoro|Indian/Kerguelen|Indian/Mahe|Indian/Maldives|Indian/Mauritius|Indian/Mayotte|Indian/Reunion|Iran|Israel|Jamaica|Japan|Kwajalein|Libya|MET|MST|MST7MDT|Mexico/BajaNorte|Mexico/BajaSur|Mexico/General|NZ|NZ-CHAT|Navajo|PRC|PST8PDT|Pacific/Apia|Pacific/Auckland|Pacific/Bougainville|Pacific/Chatham|Pacific/Chuuk|Pacific/Easter|Pacific/Efate|Pacific/Enderbury|Pacific/Fakaofo|Pacific/Fiji|Pacific/Funafuti|Pacific/Galapagos|Pacific/Gambier|Pacific/Guadalcanal|Pacific/Guam|Pacific/Honolulu|Pacific/Johnston|Pacific/Kanton|Pacific/Kiritimati|Pacific/Kosrae|Pacific/Kwajalein|Pacific/Majuro|Pacific/Marquesas|Pacific/Midway|Pacific/Nauru|Pacific/Niue|Pacific/Norfolk|Pacific/Noumea|Pacific/Pago_Pago|Pacific/Palau|Pacific/Pitcairn|Pacific/Pohnpei|Pacific/Ponape|Pacific/Port_Moresby|Pacific/Rarotonga|Pacific/Saipan|Pacific/Samoa|Pacific/Tahiti|Pacific/Tarawa|Pacific/Tongatapu|Pacific/Truk|Pacific/Wake|Pacific/Wallis|Pacific/Yap|Poland|Portugal|ROC|ROK|Singapore|Turkey|UCT|US/Alaska|US/Aleutian|US/Arizona|US/Central|US/East-Indiana|US/Eastern|US/Hawaii|US/Indiana-Starke|US/Michigan|US/Mountain|US/Pacific|US/Samoa|UTC|Universal|W-SU|WET|Zulu'
+            pattern=r"Africa/Abidjan|Africa/Accra|Africa/Addis_Ababa|Africa/Algiers|Africa/Asmara|Africa/Asmera|Africa/Bamako|Africa/Bangui|Africa/Banjul|Africa/Bissau|Africa/Blantyre|Africa/Brazzaville|Africa/Bujumbura|Africa/Cairo|Africa/Casablanca|Africa/Ceuta|Africa/Conakry|Africa/Dakar|Africa/Dar_es_Salaam|Africa/Djibouti|Africa/Douala|Africa/El_Aaiun|Africa/Freetown|Africa/Gaborone|Africa/Harare|Africa/Johannesburg|Africa/Juba|Africa/Kampala|Africa/Khartoum|Africa/Kigali|Africa/Kinshasa|Africa/Lagos|Africa/Libreville|Africa/Lome|Africa/Luanda|Africa/Lubumbashi|Africa/Lusaka|Africa/Malabo|Africa/Maputo|Africa/Maseru|Africa/Mbabane|Africa/Mogadishu|Africa/Monrovia|Africa/Nairobi|Africa/Ndjamena|Africa/Niamey|Africa/Nouakchott|Africa/Ouagadougou|Africa/Porto-Novo|Africa/Sao_Tome|Africa/Timbuktu|Africa/Tripoli|Africa/Tunis|Africa/Windhoek|America/Adak|America/Anchorage|America/Anguilla|America/Antigua|America/Araguaina|America/Argentina/Buenos_Aires|America/Argentina/Catamarca|America/Argentina/ComodRivadavia|America/Argentina/Cordoba|America/Argentina/Jujuy|America/Argentina/La_Rioja|America/Argentina/Mendoza|America/Argentina/Rio_Gallegos|America/Argentina/Salta|America/Argentina/San_Juan|America/Argentina/San_Luis|America/Argentina/Tucuman|America/Argentina/Ushuaia|America/Aruba|America/Asuncion|America/Atikokan|America/Atka|America/Bahia|America/Bahia_Banderas|America/Barbados|America/Belem|America/Belize|America/Blanc-Sablon|America/Boa_Vista|America/Bogota|America/Boise|America/Buenos_Aires|America/Cambridge_Bay|America/Campo_Grande|America/Cancun|America/Caracas|America/Catamarca|America/Cayenne|America/Cayman|America/Chicago|America/Chihuahua|America/Ciudad_Juarez|America/Coral_Harbour|America/Cordoba|America/Costa_Rica|America/Coyhaique|America/Creston|America/Cuiaba|America/Curacao|America/Danmarkshavn|America/Dawson|America/Dawson_Creek|America/Denver|America/Detroit|America/Dominica|America/Edmonton|America/Eirunepe|America/El_Salvador|America/Ensenada|America/Fort_Nelson|America/Fort_Wayne|America/Fortaleza|America/Glace_Bay|America/Godthab|America/Goose_Bay|America/Grand_Turk|America/Grenada|America/Guadeloupe|America/Guatemala|America/Guayaquil|America/Guyana|America/Halifax|America/Havana|America/Hermosillo|America/Indiana/Indianapolis|America/Indiana/Knox|America/Indiana/Marengo|America/Indiana/Petersburg|America/Indiana/Tell_City|America/Indiana/Vevay|America/Indiana/Vincennes|America/Indiana/Winamac|America/Indianapolis|America/Inuvik|America/Iqaluit|America/Jamaica|America/Jujuy|America/Juneau|America/Kentucky/Louisville|America/Kentucky/Monticello|America/Knox_IN|America/Kralendijk|America/La_Paz|America/Lima|America/Los_Angeles|America/Louisville|America/Lower_Princes|America/Maceio|America/Managua|America/Manaus|America/Marigot|America/Martinique|America/Matamoros|America/Mazatlan|America/Mendoza|America/Menominee|America/Merida|America/Metlakatla|America/Mexico_City|America/Miquelon|America/Moncton|America/Monterrey|America/Montevideo|America/Montreal|America/Montserrat|America/Nassau|America/New_York|America/Nipigon|America/Nome|America/Noronha|America/North_Dakota/Beulah|America/North_Dakota/Center|America/North_Dakota/New_Salem|America/Nuuk|America/Ojinaga|America/Panama|America/Pangnirtung|America/Paramaribo|America/Phoenix|America/Port-au-Prince|America/Port_of_Spain|America/Porto_Acre|America/Porto_Velho|America/Puerto_Rico|America/Punta_Arenas|America/Rainy_River|America/Rankin_Inlet|America/Recife|America/Regina|America/Resolute|America/Rio_Branco|America/Rosario|America/Santa_Isabel|America/Santarem|America/Santiago|America/Santo_Domingo|America/Sao_Paulo|America/Scoresbysund|America/Shiprock|America/Sitka|America/St_Barthelemy|America/St_Johns|America/St_Kitts|America/St_Lucia|America/St_Thomas|America/St_Vincent|America/Swift_Current|America/Tegucigalpa|America/Thule|America/Thunder_Bay|America/Tijuana|America/Toronto|America/Tortola|America/Vancouver|America/Virgin|America/Whitehorse|America/Winnipeg|America/Yakutat|America/Yellowknife|Antarctica/Casey|Antarctica/Davis|Antarctica/DumontDUrville|Antarctica/Macquarie|Antarctica/Mawson|Antarctica/McMurdo|Antarctica/Palmer|Antarctica/Rothera|Antarctica/South_Pole|Antarctica/Syowa|Antarctica/Troll|Antarctica/Vostok|Arctic/Longyearbyen|Asia/Aden|Asia/Almaty|Asia/Amman|Asia/Anadyr|Asia/Aqtau|Asia/Aqtobe|Asia/Ashgabat|Asia/Ashkhabad|Asia/Atyrau|Asia/Baghdad|Asia/Bahrain|Asia/Baku|Asia/Bangkok|Asia/Barnaul|Asia/Beirut|Asia/Bishkek|Asia/Brunei|Asia/Calcutta|Asia/Chita|Asia/Choibalsan|Asia/Chongqing|Asia/Chungking|Asia/Colombo|Asia/Dacca|Asia/Damascus|Asia/Dhaka|Asia/Dili|Asia/Dubai|Asia/Dushanbe|Asia/Famagusta|Asia/Gaza|Asia/Harbin|Asia/Hebron|Asia/Ho_Chi_Minh|Asia/Hong_Kong|Asia/Hovd|Asia/Irkutsk|Asia/Istanbul|Asia/Jakarta|Asia/Jayapura|Asia/Jerusalem|Asia/Kabul|Asia/Kamchatka|Asia/Karachi|Asia/Kashgar|Asia/Kathmandu|Asia/Katmandu|Asia/Khandyga|Asia/Kolkata|Asia/Krasnoyarsk|Asia/Kuala_Lumpur|Asia/Kuching|Asia/Kuwait|Asia/Macao|Asia/Macau|Asia/Magadan|Asia/Makassar|Asia/Manila|Asia/Muscat|Asia/Nicosia|Asia/Novokuznetsk|Asia/Novosibirsk|Asia/Omsk|Asia/Oral|Asia/Phnom_Penh|Asia/Pontianak|Asia/Pyongyang|Asia/Qatar|Asia/Qostanay|Asia/Qyzylorda|Asia/Rangoon|Asia/Riyadh|Asia/Saigon|Asia/Sakhalin|Asia/Samarkand|Asia/Seoul|Asia/Shanghai|Asia/Singapore|Asia/Srednekolymsk|Asia/Taipei|Asia/Tashkent|Asia/Tbilisi|Asia/Tehran|Asia/Tel_Aviv|Asia/Thimbu|Asia/Thimphu|Asia/Tokyo|Asia/Tomsk|Asia/Ujung_Pandang|Asia/Ulaanbaatar|Asia/Ulan_Bator|Asia/Urumqi|Asia/Ust-Nera|Asia/Vientiane|Asia/Vladivostok|Asia/Yakutsk|Asia/Yangon|Asia/Yekaterinburg|Asia/Yerevan|Atlantic/Azores|Atlantic/Bermuda|Atlantic/Canary|Atlantic/Cape_Verde|Atlantic/Faeroe|Atlantic/Faroe|Atlantic/Jan_Mayen|Atlantic/Madeira|Atlantic/Reykjavik|Atlantic/South_Georgia|Atlantic/St_Helena|Atlantic/Stanley|Australia/ACT|Australia/Adelaide|Australia/Brisbane|Australia/Broken_Hill|Australia/Canberra|Australia/Currie|Australia/Darwin|Australia/Eucla|Australia/Hobart|Australia/LHI|Australia/Lindeman|Australia/Lord_Howe|Australia/Melbourne|Australia/NSW|Australia/North|Australia/Perth|Australia/Queensland|Australia/South|Australia/Sydney|Australia/Tasmania|Australia/Victoria|Australia/West|Australia/Yancowinna|Brazil/Acre|Brazil/DeNoronha|Brazil/East|Brazil/West|CET|CST6CDT|Canada/Atlantic|Canada/Central|Canada/Eastern|Canada/Mountain|Canada/Newfoundland|Canada/Pacific|Canada/Saskatchewan|Canada/Yukon|Chile/Continental|Chile/EasterIsland|Cuba|EET|EST|EST5EDT|Egypt|Eire|Etc/GMT|Etc/GMT+0|Etc/GMT+1|Etc/GMT+10|Etc/GMT+11|Etc/GMT+12|Etc/GMT+2|Etc/GMT+3|Etc/GMT+4|Etc/GMT+5|Etc/GMT+6|Etc/GMT+7|Etc/GMT+8|Etc/GMT+9|Etc/GMT-0|Etc/GMT-1|Etc/GMT-10|Etc/GMT-11|Etc/GMT-12|Etc/GMT-13|Etc/GMT-14|Etc/GMT-2|Etc/GMT-3|Etc/GMT-4|Etc/GMT-5|Etc/GMT-6|Etc/GMT-7|Etc/GMT-8|Etc/GMT-9|Etc/GMT0|Etc/Greenwich|Etc/UCT|Etc/UTC|Etc/Universal|Etc/Zulu|Europe/Amsterdam|Europe/Andorra|Europe/Astrakhan|Europe/Athens|Europe/Belfast|Europe/Belgrade|Europe/Berlin|Europe/Bratislava|Europe/Brussels|Europe/Bucharest|Europe/Budapest|Europe/Busingen|Europe/Chisinau|Europe/Copenhagen|Europe/Dublin|Europe/Gibraltar|Europe/Guernsey|Europe/Helsinki|Europe/Isle_of_Man|Europe/Istanbul|Europe/Jersey|Europe/Kaliningrad|Europe/Kiev|Europe/Kirov|Europe/Kyiv|Europe/Lisbon|Europe/Ljubljana|Europe/London|Europe/Luxembourg|Europe/Madrid|Europe/Malta|Europe/Mariehamn|Europe/Minsk|Europe/Monaco|Europe/Moscow|Europe/Nicosia|Europe/Oslo|Europe/Paris|Europe/Podgorica|Europe/Prague|Europe/Riga|Europe/Rome|Europe/Samara|Europe/San_Marino|Europe/Sarajevo|Europe/Saratov|Europe/Simferopol|Europe/Skopje|Europe/Sofia|Europe/Stockholm|Europe/Tallinn|Europe/Tirane|Europe/Tiraspol|Europe/Ulyanovsk|Europe/Uzhgorod|Europe/Vaduz|Europe/Vatican|Europe/Vienna|Europe/Vilnius|Europe/Volgograd|Europe/Warsaw|Europe/Zagreb|Europe/Zaporozhye|Europe/Zurich|Factory|GB|GB-Eire|GMT|GMT+0|GMT-0|GMT0|Greenwich|HST|Hongkong|Iceland|Indian/Antananarivo|Indian/Chagos|Indian/Christmas|Indian/Cocos|Indian/Comoro|Indian/Kerguelen|Indian/Mahe|Indian/Maldives|Indian/Mauritius|Indian/Mayotte|Indian/Reunion|Iran|Israel|Jamaica|Japan|Kwajalein|Libya|MET|MST|MST7MDT|Mexico/BajaNorte|Mexico/BajaSur|Mexico/General|NZ|NZ-CHAT|Navajo|PRC|PST8PDT|Pacific/Apia|Pacific/Auckland|Pacific/Bougainville|Pacific/Chatham|Pacific/Chuuk|Pacific/Easter|Pacific/Efate|Pacific/Enderbury|Pacific/Fakaofo|Pacific/Fiji|Pacific/Funafuti|Pacific/Galapagos|Pacific/Gambier|Pacific/Guadalcanal|Pacific/Guam|Pacific/Honolulu|Pacific/Johnston|Pacific/Kanton|Pacific/Kiritimati|Pacific/Kosrae|Pacific/Kwajalein|Pacific/Majuro|Pacific/Marquesas|Pacific/Midway|Pacific/Nauru|Pacific/Niue|Pacific/Norfolk|Pacific/Noumea|Pacific/Pago_Pago|Pacific/Palau|Pacific/Pitcairn|Pacific/Pohnpei|Pacific/Ponape|Pacific/Port_Moresby|Pacific/Rarotonga|Pacific/Saipan|Pacific/Samoa|Pacific/Tahiti|Pacific/Tarawa|Pacific/Tongatapu|Pacific/Truk|Pacific/Wake|Pacific/Wallis|Pacific/Yap|Poland|Portugal|ROC|ROK|Singapore|Turkey|UCT|US/Alaska|US/Aleutian|US/Arizona|US/Central|US/East-Indiana|US/Eastern|US/Hawaii|US/Indiana-Starke|US/Michigan|US/Mountain|US/Pacific|US/Samoa|UTC|Universal|W-SU|WET|Zulu"
         )
-    ] = Field('UTC', title='Timezone')
+    ] = Field("UTC", title="Timezone")
 
 
 class ResultsSettings(BaseModel):
     default_serializer: Optional[str] = Field(
-        'pickle',
-        description='The default serializer to use when not otherwise specified.',
-        title='Default Serializer',
+        "pickle",
+        description="The default serializer to use when not otherwise specified.",
+        title="Default Serializer",
     )
     persist_by_default: Optional[bool] = Field(
         False,
-        description='The default setting for persisting results when not otherwise specified.',
-        title='Persist By Default',
+        description="The default setting for persisting results when not otherwise specified.",
+        title="Persist By Default",
     )
     default_storage_block: Optional[str] = Field(
         None,
-        description='The `block-type/block-document` slug of a block to use as the default result storage.',
-        title='Default Storage Block',
+        description="The `block-type/block-document` slug of a block to use as the default result storage.",
+        title="Default Storage Block",
     )
     local_storage_path: Optional[Path] = Field(
         None,
-        description='The default location for locally persisted results. Defaults to $PREFECT_HOME/storage.',
-        title='Local Storage Path',
+        description="The default location for locally persisted results. Defaults to $PREFECT_HOME/storage.",
+        title="Local Storage Path",
     )
 
 
 class ResumeAutomation(BaseModel):
-    type: Literal['resume-automation'] = Field('resume-automation', title='Type')
+    type: Literal["resume-automation"] = Field("resume-automation", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected automation (given by `automation_id`), or to an automation that is inferred from the triggering event.  If the source is 'inferred', the `automation_id` may not be set.  If the source is 'selected', the `automation_id` must be set.",
-        title='Source',
+        title="Source",
     )
     automation_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the automation to act on',
-        title='Automation Id',
+        description="The identifier of the automation to act on",
+        title="Automation Id",
     )
 
 
 class ResumeDeployment(BaseModel):
-    type: Literal['resume-deployment'] = Field('resume-deployment', title='Type')
+    type: Literal["resume-deployment"] = Field("resume-deployment", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected deployment (given by `deployment_id`), or to a deployment that is inferred from the triggering event.  If the source is 'inferred', the `deployment_id` may not be set.  If the source is 'selected', the `deployment_id` must be set.",
-        title='Source',
+        title="Source",
     )
     deployment_id: Optional[UUID] = Field(
-        None, description='The identifier of the deployment', title='Deployment Id'
+        None, description="The identifier of the deployment", title="Deployment Id"
     )
 
 
 class ResumeFlowRun(BaseModel):
-    type: Literal['resume-flow-run'] = Field('resume-flow-run', title='Type')
+    type: Literal["resume-flow-run"] = Field("resume-flow-run", title="Type")
 
 
 class ResumeWorkPool(BaseModel):
-    type: Literal['resume-work-pool'] = Field('resume-work-pool', title='Type')
+    type: Literal["resume-work-pool"] = Field("resume-work-pool", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected work pool (given by `work_pool_id`), or to a work pool that is inferred from the triggering event.  If the source is 'inferred', the `work_pool_id` may not be set.  If the source is 'selected', the `work_pool_id` must be set.",
-        title='Source',
+        title="Source",
     )
     work_pool_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the work pool to pause',
-        title='Work Pool Id',
+        description="The identifier of the work pool to pause",
+        title="Work Pool Id",
     )
 
 
 class ResumeWorkQueue(BaseModel):
-    type: Literal['resume-work-queue'] = Field('resume-work-queue', title='Type')
+    type: Literal["resume-work-queue"] = Field("resume-work-queue", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected work queue (given by `work_queue_id`), or to a work queue that is inferred from the triggering event.  If the source is 'inferred', the `work_queue_id` may not be set.  If the source is 'selected', the `work_queue_id` must be set.",
-        title='Source',
+        title="Source",
     )
     work_queue_id: Optional[UUID] = Field(
         None,
-        description='The identifier of the work queue to pause',
-        title='Work Queue Id',
+        description="The identifier of the work queue to pause",
+        title="Work Queue Id",
     )
 
 
 class RunDeployment(BaseModel):
-    type: Literal['run-deployment'] = Field('run-deployment', title='Type')
+    type: Literal["run-deployment"] = Field("run-deployment", title="Type")
     source: Optional[Source] = Field(
-        'selected',
+        "selected",
         description="Whether this Action applies to a specific selected deployment (given by `deployment_id`), or to a deployment that is inferred from the triggering event.  If the source is 'inferred', the `deployment_id` may not be set.  If the source is 'selected', the `deployment_id` must be set.",
-        title='Source',
+        title="Source",
     )
     deployment_id: Optional[UUID] = Field(
-        None, description='The identifier of the deployment', title='Deployment Id'
+        None, description="The identifier of the deployment", title="Deployment Id"
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
         description="The parameters to pass to the deployment, or None to use the deployment's default parameters",
-        title='Parameters',
+        title="Parameters",
     )
     job_variables: Optional[dict[str, Any]] = Field(
         None,
         description="The job variables to pass to the created flow run, or None to use the deployment's default job variables",
-        title='Job Variables',
+        title="Job Variables",
     )
     schedule_after: Optional[float] = Field(
         None,
-        description='The amount of time to wait before running the deployment. Defaults to running the deployment immediately.',
-        title='Schedule After',
+        description="The amount of time to wait before running the deployment. Defaults to running the deployment immediately.",
+        title="Schedule After",
     )
 
 
 class LogLevel(Enum):
-    DEBUG = 'DEBUG'
-    INFO = 'INFO'
-    WARNING = 'WARNING'
-    ERROR = 'ERROR'
-    CRITICAL = 'CRITICAL'
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class RunnerServerSettings(BaseModel):
     enable: Optional[bool] = Field(
         False,
         description="Whether or not to enable the runner's webserver.",
-        title='Enable',
+        title="Enable",
     )
     host: Optional[str] = Field(
-        'localhost',
+        "localhost",
         description="The host address the runner's webserver should bind to.",
-        title='Host',
+        title="Host",
     )
     port: Optional[int] = Field(
         8080,
         description="The port the runner's webserver should bind to.",
-        title='Port',
+        title="Port",
     )
     log_level: Optional[LogLevel] = Field(
-        'ERROR',
+        "ERROR",
         description="The log level of the runner's webserver.",
-        title='Log Level',
+        title="Log Level",
     )
     missed_polls_tolerance: Optional[int] = Field(
         2,
-        description='Number of missed polls before a runner is considered unhealthy by its webserver.',
-        title='Missed Polls Tolerance',
+        description="Number of missed polls before a runner is considered unhealthy by its webserver.",
+        title="Missed Polls Tolerance",
     )
 
 
 class RunnerSettings(BaseModel):
     process_limit: Optional[int] = Field(
         5,
-        description='Maximum number of processes a runner will execute in parallel.',
-        title='Process Limit',
+        description="Maximum number of processes a runner will execute in parallel.",
+        title="Process Limit",
     )
     poll_frequency: Optional[int] = Field(
         10,
-        description='Number of seconds a runner should wait between queries for scheduled work.',
-        title='Poll Frequency',
+        description="Number of seconds a runner should wait between queries for scheduled work.",
+        title="Poll Frequency",
     )
     crash_on_cancellation_failure: Optional[bool] = Field(
         False,
-        description='Whether to crash flow runs and shut down the runner when cancellation observing fails. When enabled, if both websocket and polling mechanisms for detecting cancellation events fail, all in-flight flow runs will be marked as crashed and the runner will shut down. When disabled (default), the runner will log an error but continue executing flow runs.',
-        title='Crash On Cancellation Failure',
+        description="Whether to crash flow runs and shut down the runner when cancellation observing fails. When enabled, if both websocket and polling mechanisms for detecting cancellation events fail, all in-flight flow runs will be marked as crashed and the runner will shut down. When disabled (default), the runner will log an error but continue executing flow runs.",
+        title="Crash On Cancellation Failure",
     )
     server: Optional[RunnerServerSettings] = None
 
@@ -2265,61 +2265,61 @@ class RunnerSettings(BaseModel):
 class SQLAlchemyTLSSettings(BaseModel):
     enabled: Optional[bool] = Field(
         False,
-        description='Controls whether connected to mTLS enabled PostgreSQL when using a PostgreSQL database with the Prefect backend.',
-        title='Enabled',
+        description="Controls whether connected to mTLS enabled PostgreSQL when using a PostgreSQL database with the Prefect backend.",
+        title="Enabled",
     )
     ca_file: Optional[str] = Field(
         None,
-        description='This configuration settings option specifies the path to PostgreSQL client certificate authority file.',
-        title='Ca File',
+        description="This configuration settings option specifies the path to PostgreSQL client certificate authority file.",
+        title="Ca File",
     )
     cert_file: Optional[str] = Field(
         None,
-        description='This configuration settings option specifies the path to PostgreSQL client certificate file.',
-        title='Cert File',
+        description="This configuration settings option specifies the path to PostgreSQL client certificate file.",
+        title="Cert File",
     )
     key_file: Optional[str] = Field(
         None,
-        description='This configuration settings option specifies the path to PostgreSQL client key file.',
-        title='Key File',
+        description="This configuration settings option specifies the path to PostgreSQL client key file.",
+        title="Key File",
     )
     check_hostname: Optional[bool] = Field(
         True,
-        description='This configuration settings option specifies whether to verify PostgreSQL server hostname.',
-        title='Check Hostname',
+        description="This configuration settings option specifies whether to verify PostgreSQL server hostname.",
+        title="Check Hostname",
     )
 
 
 class SavedSearchFilter(BaseModel):
     object: str = Field(
-        ..., description='The object over which to filter.', title='Object'
+        ..., description="The object over which to filter.", title="Object"
     )
     property: str = Field(
         ...,
-        description='The property of the object on which to filter.',
-        title='Property',
+        description="The property of the object on which to filter.",
+        title="Property",
     )
-    type: str = Field(..., description='The type of the property.', title='Type')
+    type: str = Field(..., description="The type of the property.", title="Type")
     operation: str = Field(
         ...,
-        description='The operator to apply to the object. For example, `equals`.',
-        title='Operation',
+        description="The operator to apply to the object. For example, `equals`.",
+        title="Operation",
     )
     value: Any = Field(
-        ..., description='A JSON-compatible value for the filter.', title='Value'
+        ..., description="A JSON-compatible value for the filter.", title="Value"
     )
 
 
 class SendNotification(BaseModel):
-    type: Literal['send-notification'] = Field('send-notification', title='Type')
+    type: Literal["send-notification"] = Field("send-notification", title="Type")
     block_document_id: UUID = Field(
         ...,
-        description='The identifier of the notification block to use',
-        title='Block Document Id',
+        description="The identifier of the notification block to use",
+        title="Block Document Id",
     )
-    subject: Optional[str] = Field('Prefect automated notification', title='Subject')
+    subject: Optional[str] = Field("Prefect automated notification", title="Subject")
     body: str = Field(
-        ..., description='The text of the notification to send', title='Body'
+        ..., description="The text of the notification to send", title="Body"
     )
 
 
@@ -2327,646 +2327,646 @@ class ServerAPISettings(BaseModel):
     auth_string: Optional[SecretStr] = Field(
         None,
         description="A string to use for basic authentication with the API in the form 'user:password'.",
-        title='Auth String',
+        title="Auth String",
     )
     host: Optional[str] = Field(
-        '127.0.0.1',
+        "127.0.0.1",
         description="The API's host address (defaults to `127.0.0.1`).",
-        title='Host',
+        title="Host",
     )
     port: Optional[int] = Field(
-        4200, description="The API's port address (defaults to `4200`).", title='Port'
+        4200, description="The API's port address (defaults to `4200`).", title="Port"
     )
     base_path: Optional[str] = Field(
         None,
-        description='The base URL path to serve the API under.',
-        examples=['/v2/api'],
-        title='Base Path',
+        description="The base URL path to serve the API under.",
+        examples=["/v2/api"],
+        title="Base Path",
     )
     default_limit: Optional[int] = Field(
         200,
-        description='The default limit applied to queries that can return multiple objects, such as `POST /flow_runs/filter`.',
-        title='Default Limit',
+        description="The default limit applied to queries that can return multiple objects, such as `POST /flow_runs/filter`.",
+        title="Default Limit",
     )
     keepalive_timeout: Optional[int] = Field(
         5,
         description="\n        The API's keep alive timeout (defaults to `5`).\n        Refer to https://www.uvicorn.org/settings/#timeouts for details.\n\n        When the API is hosted behind a load balancer, you may want to set this to a value\n        greater than the load balancer's idle timeout.\n\n        Note this setting only applies when calling `prefect server start`; if hosting the\n        API with another tool you will need to configure this there instead.\n        ",
-        title='Keepalive Timeout',
+        title="Keepalive Timeout",
     )
     csrf_protection_enabled: Optional[bool] = Field(
         False,
-        description='\n        Controls the activation of CSRF protection for the Prefect server API.\n\n        When enabled (`True`), the server enforces CSRF validation checks on incoming\n        state-changing requests (POST, PUT, PATCH, DELETE), requiring a valid CSRF\n        token to be included in the request headers or body. This adds a layer of\n        security by preventing unauthorized or malicious sites from making requests on\n        behalf of authenticated users.\n\n        It is recommended to enable this setting in production environments where the\n        API is exposed to web clients to safeguard against CSRF attacks.\n\n        Note: Enabling this setting requires corresponding support in the client for\n        CSRF token management. See PREFECT_CLIENT_CSRF_SUPPORT_ENABLED for more.\n        ',
-        title='Csrf Protection Enabled',
+        description="\n        Controls the activation of CSRF protection for the Prefect server API.\n\n        When enabled (`True`), the server enforces CSRF validation checks on incoming\n        state-changing requests (POST, PUT, PATCH, DELETE), requiring a valid CSRF\n        token to be included in the request headers or body. This adds a layer of\n        security by preventing unauthorized or malicious sites from making requests on\n        behalf of authenticated users.\n\n        It is recommended to enable this setting in production environments where the\n        API is exposed to web clients to safeguard against CSRF attacks.\n\n        Note: Enabling this setting requires corresponding support in the client for\n        CSRF token management. See PREFECT_CLIENT_CSRF_SUPPORT_ENABLED for more.\n        ",
+        title="Csrf Protection Enabled",
     )
     csrf_token_expiration: Optional[timedelta] = Field(
-        'PT1H',
-        description='\n        Specifies the duration for which a CSRF token remains valid after being issued\n        by the server.\n\n        The default expiration time is set to 1 hour, which offers a reasonable\n        compromise. Adjust this setting based on your specific security requirements\n        and usage patterns.\n        ',
-        title='Csrf Token Expiration',
+        "PT1H",
+        description="\n        Specifies the duration for which a CSRF token remains valid after being issued\n        by the server.\n\n        The default expiration time is set to 1 hour, which offers a reasonable\n        compromise. Adjust this setting based on your specific security requirements\n        and usage patterns.\n        ",
+        title="Csrf Token Expiration",
     )
     cors_allowed_origins: Optional[str] = Field(
-        '*',
-        description='\n        A comma-separated list of origins that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all origins.\n        ',
-        title='Cors Allowed Origins',
+        "*",
+        description="\n        A comma-separated list of origins that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all origins.\n        ",
+        title="Cors Allowed Origins",
     )
     cors_allowed_methods: Optional[str] = Field(
-        '*',
-        description='\n        A comma-separated list of methods that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all methods.\n        ',
-        title='Cors Allowed Methods',
+        "*",
+        description="\n        A comma-separated list of methods that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all methods.\n        ",
+        title="Cors Allowed Methods",
     )
     cors_allowed_headers: Optional[str] = Field(
-        '*',
-        description='\n        A comma-separated list of headers that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all headers.\n        ',
-        title='Cors Allowed Headers',
+        "*",
+        description="\n        A comma-separated list of headers that are authorized to make cross-origin requests to the API.\n\n        By default, this is set to `*`, which allows requests from all headers.\n        ",
+        title="Cors Allowed Headers",
     )
     max_parameter_size: Optional[conint(ge=0)] = Field(
         524288,
-        description='The maximum size of parameters (in bytes, JSON-serialized) that can be stored on a flow run or deployment. Set to 0 to disable the limit.',
-        title='Max Parameter Size',
+        description="The maximum size of parameters (in bytes, JSON-serialized) that can be stored on a flow run or deployment. Set to 0 to disable the limit.",
+        title="Max Parameter Size",
     )
 
 
 class ServerConcurrencySettings(BaseModel):
     lease_storage: Optional[str] = Field(
-        'prefect.server.concurrency.lease_storage.memory',
-        description='The module to use for storing concurrency limit leases.',
-        title='Lease Storage',
+        "prefect.server.concurrency.lease_storage.memory",
+        description="The module to use for storing concurrency limit leases.",
+        title="Lease Storage",
     )
     initial_deployment_lease_duration: Optional[confloat(ge=30.0, le=3600.0)] = Field(
         300,
-        description='Initial duration for deployment concurrency lease in seconds.',
-        title='Initial Deployment Lease Duration',
+        description="Initial duration for deployment concurrency lease in seconds.",
+        title="Initial Deployment Lease Duration",
     )
     maximum_concurrency_slot_wait_seconds: Optional[confloat(ge=0.0)] = Field(
         30,
-        description='The maximum number of seconds to wait before retrying when a concurrency slot cannot be acquired.',
-        title='Maximum Concurrency Slot Wait Seconds',
+        description="The maximum number of seconds to wait before retrying when a concurrency slot cannot be acquired.",
+        title="Maximum Concurrency Slot Wait Seconds",
     )
 
 
 class Driver(Enum):
-    postgresql_asyncpg = 'postgresql+asyncpg'
-    sqlite_aiosqlite = 'sqlite+aiosqlite'
+    postgresql_asyncpg = "postgresql+asyncpg"
+    sqlite_aiosqlite = "sqlite+aiosqlite"
 
 
 class ServerDefaultResultStorage(BaseModel):
     default_result_storage_block_id: Optional[UUID] = Field(
         None,
-        description='The block document ID of the server default result storage block.',
-        title='Default Result Storage Block Id',
+        description="The block document ID of the server default result storage block.",
+        title="Default Result Storage Block Id",
     )
 
 
 class ServerDefaultResultStorageUpdate(BaseModel):
     default_result_storage_block_id: UUID = Field(
         ...,
-        description='The block document ID of the server default result storage block.',
-        title='Default Result Storage Block Id',
+        description="The block document ID of the server default result storage block.",
+        title="Default Result Storage Block Id",
     )
 
 
 class ServerDeploymentsSettings(BaseModel):
     concurrency_slot_wait_seconds: Optional[confloat(ge=0.0)] = Field(
         30,
-        description='The number of seconds to wait before retrying when a deployment flow run cannot secure a concurrency slot from the server.',
-        title='Concurrency Slot Wait Seconds',
+        description="The number of seconds to wait before retrying when a deployment flow run cannot secure a concurrency slot from the server.",
+        title="Concurrency Slot Wait Seconds",
     )
 
 
 class ServerDocketSettings(BaseModel):
     name: Optional[str] = Field(
-        'prefect-server', description='The name of the Docket instance.', title='Name'
+        "prefect-server", description="The name of the Docket instance.", title="Name"
     )
     url: Optional[str] = Field(
-        'memory://',
-        description='The URL of the Redis server to use for Docket.',
-        title='Url',
+        "memory://",
+        description="The URL of the Redis server to use for Docket.",
+        title="Url",
     )
 
 
 class ServerEphemeralSettings(BaseModel):
     enabled: Optional[bool] = Field(
         False,
-        description='\n        Controls whether or not a subprocess server can be started when no API URL is provided.\n        ',
-        title='Enabled',
+        description="\n        Controls whether or not a subprocess server can be started when no API URL is provided.\n        ",
+        title="Enabled",
     )
     startup_timeout_seconds: Optional[int] = Field(
         20,
-        description='\n        The number of seconds to wait for the server to start when ephemeral mode is enabled.\n        Defaults to `20`.\n        ',
-        title='Startup Timeout Seconds',
+        description="\n        The number of seconds to wait for the server to start when ephemeral mode is enabled.\n        Defaults to `20`.\n        ",
+        title="Startup Timeout Seconds",
     )
 
 
 class ServerEventsSettings(BaseModel):
     stream_out_enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to stream events out to the API via websockets.',
-        title='Stream Out Enabled',
+        description="Whether or not to stream events out to the API via websockets.",
+        title="Stream Out Enabled",
     )
     related_resource_cache_ttl: Optional[timedelta] = Field(
-        'PT5M',
-        description='The number of seconds to cache related resources for in the API.',
-        title='Related Resource Cache Ttl',
+        "PT5M",
+        description="The number of seconds to cache related resources for in the API.",
+        title="Related Resource Cache Ttl",
     )
     maximum_labels_per_resource: Optional[int] = Field(
         500,
-        description='The maximum number of labels a resource may have.',
-        title='Maximum Labels Per Resource',
+        description="The maximum number of labels a resource may have.",
+        title="Maximum Labels Per Resource",
     )
     maximum_related_resources: Optional[int] = Field(
         100,
-        description='The maximum number of related resources an Event may have.',
-        title='Maximum Related Resources',
+        description="The maximum number of related resources an Event may have.",
+        title="Maximum Related Resources",
     )
     maximum_size_bytes: Optional[int] = Field(
         1500000,
-        description='The maximum size of an Event when serialized to JSON',
-        title='Maximum Size Bytes',
+        description="The maximum size of an Event when serialized to JSON",
+        title="Maximum Size Bytes",
     )
     expired_bucket_buffer: Optional[timedelta] = Field(
-        'PT1M',
-        description='The amount of time to retain expired automation buckets',
-        title='Expired Bucket Buffer',
+        "PT1M",
+        description="The amount of time to retain expired automation buckets",
+        title="Expired Bucket Buffer",
     )
     proactive_granularity: Optional[timedelta] = Field(
-        'PT5S',
-        description='How frequently proactive automations are evaluated',
-        title='Proactive Granularity',
+        "PT5S",
+        description="How frequently proactive automations are evaluated",
+        title="Proactive Granularity",
     )
     retention_period: Optional[timedelta] = Field(
-        'P7D',
-        description='The amount of time to retain events in the database.',
-        title='Retention Period',
+        "P7D",
+        description="The amount of time to retain events in the database.",
+        title="Retention Period",
     )
     maximum_websocket_backfill: Optional[timedelta] = Field(
-        'PT15M',
-        description='The maximum range to look back for backfilling events for a websocket subscriber.',
-        title='Maximum Websocket Backfill',
+        "PT15M",
+        description="The maximum range to look back for backfilling events for a websocket subscriber.",
+        title="Maximum Websocket Backfill",
     )
     websocket_backfill_page_size: Optional[PositiveInt] = Field(
         250,
-        description='The page size for the queries to backfill events for websocket subscribers.',
-        title='Websocket Backfill Page Size',
+        description="The page size for the queries to backfill events for websocket subscribers.",
+        title="Websocket Backfill Page Size",
     )
     messaging_broker: Optional[str] = Field(
-        'prefect.server.utilities.messaging.memory',
-        description='Which message broker implementation to use for the messaging system, should point to a module that exports a Publisher and Consumer class.',
-        title='Messaging Broker',
+        "prefect.server.utilities.messaging.memory",
+        description="Which message broker implementation to use for the messaging system, should point to a module that exports a Publisher and Consumer class.",
+        title="Messaging Broker",
     )
     messaging_cache: Optional[str] = Field(
-        'prefect.server.utilities.messaging.memory',
-        description='Which cache implementation to use for the events system. Should point to a module that exports a Cache class.',
-        title='Messaging Cache',
+        "prefect.server.utilities.messaging.memory",
+        description="Which cache implementation to use for the events system. Should point to a module that exports a Cache class.",
+        title="Messaging Cache",
     )
     causal_ordering: Optional[str] = Field(
-        'prefect.server.events.ordering.memory',
-        description='Which causal ordering implementation to use for the events system. Should point to a module that exports a CausalOrdering class.',
-        title='Causal Ordering',
+        "prefect.server.events.ordering.memory",
+        description="Which causal ordering implementation to use for the events system. Should point to a module that exports a CausalOrdering class.",
+        title="Causal Ordering",
     )
     maximum_event_name_length: Optional[PositiveInt] = Field(
         1024,
-        description='The maximum length of an event name.',
-        title='Maximum Event Name Length',
+        description="The maximum length of an event name.",
+        title="Maximum Event Name Length",
     )
 
 
 class ServerFlowRunGraphSettings(BaseModel):
     max_nodes: Optional[int] = Field(
         10000,
-        description='The maximum size of a flow run graph on the v2 API',
-        title='Max Nodes',
+        description="The maximum size of a flow run graph on the v2 API",
+        title="Max Nodes",
     )
     max_artifacts: Optional[int] = Field(
         10000,
-        description='The maximum number of artifacts to show on a flow run graph on the v2 API',
-        title='Max Artifacts',
+        description="The maximum number of artifacts to show on a flow run graph on the v2 API",
+        title="Max Artifacts",
     )
 
 
 class ServerLogsSettings(BaseModel):
     stream_out_enabled: Optional[bool] = Field(
         False,
-        description='Whether or not to stream logs out to the API via websockets.',
-        title='Stream Out Enabled',
+        description="Whether or not to stream logs out to the API via websockets.",
+        title="Stream Out Enabled",
     )
     stream_publishing_enabled: Optional[bool] = Field(
         False,
-        description='Whether or not to publish logs to the streaming system.',
-        title='Stream Publishing Enabled',
+        description="Whether or not to publish logs to the streaming system.",
+        title="Stream Publishing Enabled",
     )
 
 
 class ServerServicesCancellationCleanupSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the cancellation cleanup service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the cancellation cleanup service in the server application.",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         20,
-        description='The cancellation cleanup service will look for non-terminal tasks and subflows this often. Defaults to `20`.',
-        title='Loop Seconds',
+        description="The cancellation cleanup service will look for non-terminal tasks and subflows this often. Defaults to `20`.",
+        title="Loop Seconds",
     )
 
 
 class ServerServicesDBVacuumSettings(BaseModel):
     enabled: Optional[Union[list[str], bool]] = Field(
-        ['events'],
+        ["events"],
         description="Comma-separated set of vacuum types to enable. Valid values: 'events', 'flow_runs'. Defaults to 'events'. For backward compatibility, 'true' maps to 'events,flow_runs' and 'false' maps to 'events'. Event vacuum also requires event_persister.enabled (the default).",
-        title='Enabled',
+        title="Enabled",
     )
     loop_seconds: Optional[PositiveFloat] = Field(
         3600,
-        description='The database vacuum service will run this often, in seconds. Defaults to `3600` (1 hour).',
-        title='Loop Seconds',
+        description="The database vacuum service will run this often, in seconds. Defaults to `3600` (1 hour).",
+        title="Loop Seconds",
     )
     retention_period: Optional[timedelta] = Field(
-        'P90D',
-        description='How old a flow run must be (based on end_time) before it is eligible for deletion. Accepts seconds. Minimum 1 hour. Defaults to 90 days.',
-        title='Retention Period',
+        "P90D",
+        description="How old a flow run must be (based on end_time) before it is eligible for deletion. Accepts seconds. Minimum 1 hour. Defaults to 90 days.",
+        title="Retention Period",
     )
     batch_size: Optional[PositiveInt] = Field(
         200,
-        description='The number of records to delete per database transaction. Defaults to `200`.',
-        title='Batch Size',
+        description="The number of records to delete per database transaction. Defaults to `200`.",
+        title="Batch Size",
     )
     event_retention_overrides: Optional[dict[str, timedelta]] = Field(
-        {'prefect.flow-run.heartbeat': 'P7D'},
+        {"prefect.flow-run.heartbeat": "P7D"},
         description="Per-event-type retention period overrides. Keys are event type strings (e.g. 'prefect.flow-run.heartbeat'), values are retention periods in seconds. Event types not listed fall back to server.events.retention_period. Each override is capped by the global events retention period.",
-        title='Event Retention Overrides',
+        title="Event Retention Overrides",
     )
 
 
 class ServerServicesEventLoggerSettings(BaseModel):
     enabled: Optional[bool] = Field(
         False,
-        description='Whether or not to start the event logger service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the event logger service in the server application.",
+        title="Enabled",
     )
 
 
 class ServerServicesEventPersisterSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the event persister service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the event persister service in the server application.",
+        title="Enabled",
     )
     batch_size: Optional[PositiveInt] = Field(
         20,
-        description='The number of events the event persister will attempt to insert in one batch.',
-        title='Batch Size',
+        description="The number of events the event persister will attempt to insert in one batch.",
+        title="Batch Size",
     )
     read_batch_size: Optional[PositiveInt] = Field(
         1,
-        description='The number of events the event persister will attempt to read from the message broker in one batch.',
-        title='Read Batch Size',
+        description="The number of events the event persister will attempt to read from the message broker in one batch.",
+        title="Read Batch Size",
     )
     flush_interval: Optional[PositiveFloat] = Field(
         5,
-        description='The maximum number of seconds between flushes of the event persister.',
-        title='Flush Interval',
+        description="The maximum number of seconds between flushes of the event persister.",
+        title="Flush Interval",
     )
     queue_max_size: Optional[PositiveInt] = Field(
         50000,
-        description='The maximum number of events that can be queued in memory for persistence. When the queue is full, new events will be dropped.',
-        title='Queue Max Size',
+        description="The maximum number of events that can be queued in memory for persistence. When the queue is full, new events will be dropped.",
+        title="Queue Max Size",
     )
     max_flush_retries: Optional[PositiveInt] = Field(
         5,
-        description='The maximum number of consecutive flush failures before events are dropped instead of being re-queued.',
-        title='Max Flush Retries',
+        description="The maximum number of consecutive flush failures before events are dropped instead of being re-queued.",
+        title="Max Flush Retries",
     )
 
 
 class ServerServicesForemanSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the foreman service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the foreman service in the server application.",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         15,
-        description='The foreman service will check for offline workers this often. Defaults to `15`.',
-        title='Loop Seconds',
+        description="The foreman service will check for offline workers this often. Defaults to `15`.",
+        title="Loop Seconds",
     )
     inactivity_heartbeat_multiple: Optional[int] = Field(
         3,
-        description='\n        The number of heartbeats that must be missed before a worker is marked as offline. Defaults to `3`.\n        ',
-        title='Inactivity Heartbeat Multiple',
+        description="\n        The number of heartbeats that must be missed before a worker is marked as offline. Defaults to `3`.\n        ",
+        title="Inactivity Heartbeat Multiple",
     )
     fallback_heartbeat_interval_seconds: Optional[int] = Field(
         30,
         description="\n        The number of seconds to use for online/offline evaluation if a worker's heartbeat\n        interval is not set. Defaults to `30`.\n        ",
-        title='Fallback Heartbeat Interval Seconds',
+        title="Fallback Heartbeat Interval Seconds",
     )
     deployment_last_polled_timeout_seconds: Optional[int] = Field(
         60,
-        description='\n        The number of seconds before a deployment is marked as not ready if it has not been\n        polled. Defaults to `60`.\n        ',
-        title='Deployment Last Polled Timeout Seconds',
+        description="\n        The number of seconds before a deployment is marked as not ready if it has not been\n        polled. Defaults to `60`.\n        ",
+        title="Deployment Last Polled Timeout Seconds",
     )
     work_queue_last_polled_timeout_seconds: Optional[int] = Field(
         60,
-        description='\n        The number of seconds before a work queue is marked as not ready if it has not been\n        polled. Defaults to `60`.\n        ',
-        title='Work Queue Last Polled Timeout Seconds',
+        description="\n        The number of seconds before a work queue is marked as not ready if it has not been\n        polled. Defaults to `60`.\n        ",
+        title="Work Queue Last Polled Timeout Seconds",
     )
 
 
 class ServerServicesLateRunsSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the late runs service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the late runs service in the server application.",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         5,
-        description='\n        The late runs service will look for runs to mark as late this often. Defaults to `5`.\n        ',
-        title='Loop Seconds',
+        description="\n        The late runs service will look for runs to mark as late this often. Defaults to `5`.\n        ",
+        title="Loop Seconds",
     )
     after_seconds: Optional[timedelta] = Field(
-        'PT15S',
-        description='\n        The late runs service will mark runs as late after they have exceeded their scheduled start time by this many seconds. Defaults to `5` seconds.\n        ',
-        title='After Seconds',
+        "PT15S",
+        description="\n        The late runs service will mark runs as late after they have exceeded their scheduled start time by this many seconds. Defaults to `5` seconds.\n        ",
+        title="After Seconds",
     )
 
 
 class ServerServicesPauseExpirationsSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='\n        Whether or not to start the paused flow run expiration service in the server\n        application. If disabled, paused flows that have timed out will remain in a Paused state\n        until a resume attempt.\n        ',
-        title='Enabled',
+        description="\n        Whether or not to start the paused flow run expiration service in the server\n        application. If disabled, paused flows that have timed out will remain in a Paused state\n        until a resume attempt.\n        ",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         5,
-        description='\n        The pause expiration service will look for runs to mark as failed this often. Defaults to `5`.\n        ',
-        title='Loop Seconds',
+        description="\n        The pause expiration service will look for runs to mark as failed this often. Defaults to `5`.\n        ",
+        title="Loop Seconds",
     )
 
 
 class ServerServicesRepossessorSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the repossessor service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the repossessor service in the server application.",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         15,
-        description='The repossessor service will look for expired leases this often. Defaults to `15`.',
-        title='Loop Seconds',
+        description="The repossessor service will look for expired leases this often. Defaults to `15`.",
+        title="Loop Seconds",
     )
 
 
 class ServerServicesSchedulerSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the scheduler service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the scheduler service in the server application.",
+        title="Enabled",
     )
     loop_seconds: Optional[float] = Field(
         60,
-        description='\n        The scheduler loop interval, in seconds. This determines\n        how often the scheduler will attempt to schedule new flow runs, but has no\n        impact on how quickly either flow runs or task runs are actually executed.\n        Defaults to `60`.\n        ',
-        title='Loop Seconds',
+        description="\n        The scheduler loop interval, in seconds. This determines\n        how often the scheduler will attempt to schedule new flow runs, but has no\n        impact on how quickly either flow runs or task runs are actually executed.\n        Defaults to `60`.\n        ",
+        title="Loop Seconds",
     )
     deployment_batch_size: Optional[int] = Field(
         100,
-        description='\n        The number of deployments the scheduler will attempt to\n        schedule in a single batch. If there are more deployments than the batch\n        size, the scheduler immediately attempts to schedule the next batch; it\n        does not sleep for `scheduler_loop_seconds` until it has visited every\n        deployment once. Defaults to `100`.\n        ',
-        title='Deployment Batch Size',
+        description="\n        The number of deployments the scheduler will attempt to\n        schedule in a single batch. If there are more deployments than the batch\n        size, the scheduler immediately attempts to schedule the next batch; it\n        does not sleep for `scheduler_loop_seconds` until it has visited every\n        deployment once. Defaults to `100`.\n        ",
+        title="Deployment Batch Size",
     )
     max_runs: Optional[int] = Field(
         100,
-        description='\n        The scheduler will attempt to schedule up to this many\n        auto-scheduled runs in the future. Note that runs may have fewer than\n        this many scheduled runs, depending on the value of\n        `scheduler_max_scheduled_time`.  Defaults to `100`.\n        ',
-        title='Max Runs',
+        description="\n        The scheduler will attempt to schedule up to this many\n        auto-scheduled runs in the future. Note that runs may have fewer than\n        this many scheduled runs, depending on the value of\n        `scheduler_max_scheduled_time`.  Defaults to `100`.\n        ",
+        title="Max Runs",
     )
     min_runs: Optional[int] = Field(
         3,
-        description='\n        The scheduler will attempt to schedule at least this many\n        auto-scheduled runs in the future. Note that runs may have more than\n        this many scheduled runs, depending on the value of\n        `scheduler_min_scheduled_time`.  Defaults to `3`.\n        ',
-        title='Min Runs',
+        description="\n        The scheduler will attempt to schedule at least this many\n        auto-scheduled runs in the future. Note that runs may have more than\n        this many scheduled runs, depending on the value of\n        `scheduler_min_scheduled_time`.  Defaults to `3`.\n        ",
+        title="Min Runs",
     )
     max_scheduled_time: Optional[timedelta] = Field(
-        'P100D',
-        description='\n        The scheduler will create new runs up to this far in the\n        future. Note that this setting will take precedence over\n        `scheduler_max_runs`: if a flow runs once a month and\n        `scheduler_max_scheduled_time` is three months, then only three runs will be\n        scheduled. Defaults to 100 days (`8640000` seconds).\n        ',
-        title='Max Scheduled Time',
+        "P100D",
+        description="\n        The scheduler will create new runs up to this far in the\n        future. Note that this setting will take precedence over\n        `scheduler_max_runs`: if a flow runs once a month and\n        `scheduler_max_scheduled_time` is three months, then only three runs will be\n        scheduled. Defaults to 100 days (`8640000` seconds).\n        ",
+        title="Max Scheduled Time",
     )
     min_scheduled_time: Optional[timedelta] = Field(
-        'PT1H',
-        description='\n        The scheduler will create new runs at least this far in the\n        future. Note that this setting will take precedence over `scheduler_min_runs`:\n        if a flow runs every hour and `scheduler_min_scheduled_time` is three hours,\n        then three runs will be scheduled even if `scheduler_min_runs` is 1. Defaults to\n        ',
-        title='Min Scheduled Time',
+        "PT1H",
+        description="\n        The scheduler will create new runs at least this far in the\n        future. Note that this setting will take precedence over `scheduler_min_runs`:\n        if a flow runs every hour and `scheduler_min_scheduled_time` is three hours,\n        then three runs will be scheduled even if `scheduler_min_runs` is 1. Defaults to\n        ",
+        title="Min Scheduled Time",
     )
     insert_batch_size: Optional[int] = Field(
         500,
-        description='\n        The number of runs the scheduler will attempt to insert in a single batch.\n        Defaults to `500`.\n        ',
-        title='Insert Batch Size',
+        description="\n        The number of runs the scheduler will attempt to insert in a single batch.\n        Defaults to `500`.\n        ",
+        title="Insert Batch Size",
     )
     recent_deployments_loop_seconds: Optional[float] = Field(
         5,
-        description='\n        The number of seconds the recent deployments scheduler will wait between checking for recently updated deployments. Defaults to `5`.\n        ',
-        title='Recent Deployments Loop Seconds',
+        description="\n        The number of seconds the recent deployments scheduler will wait between checking for recently updated deployments. Defaults to `5`.\n        ",
+        title="Recent Deployments Loop Seconds",
     )
 
 
 class ServerServicesTaskRunRecorderSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the task run recorder service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the task run recorder service in the server application.",
+        title="Enabled",
     )
     read_batch_size: Optional[PositiveInt] = Field(
         1,
-        description='The number of task runs the task run recorder will attempt to read from the message broker in one batch.',
-        title='Read Batch Size',
+        description="The number of task runs the task run recorder will attempt to read from the message broker in one batch.",
+        title="Read Batch Size",
     )
     batch_size: Optional[PositiveInt] = Field(
         1,
-        description='The number of task runs the task run recorder will attempt to insert in one batch.',
-        title='Batch Size',
+        description="The number of task runs the task run recorder will attempt to insert in one batch.",
+        title="Batch Size",
     )
     flush_interval: Optional[PositiveFloat] = Field(
         5,
-        description='The maximum number of seconds between flushes of the task run recorder.',
-        title='Flush Interval',
+        description="The maximum number of seconds between flushes of the task run recorder.",
+        title="Flush Interval",
     )
 
 
 class ServerServicesTriggersSettings(BaseModel):
     enabled: Optional[bool] = Field(
         True,
-        description='Whether or not to start the triggers service in the server application.',
-        title='Enabled',
+        description="Whether or not to start the triggers service in the server application.",
+        title="Enabled",
     )
     read_batch_size: Optional[PositiveInt] = Field(
         1,
-        description='The number of events the triggers service will attempt to read from the message broker in one batch.',
-        title='Read Batch Size',
+        description="The number of events the triggers service will attempt to read from the message broker in one batch.",
+        title="Read Batch Size",
     )
     pg_notify_reconnect_interval_seconds: Optional[int] = Field(
         10,
-        description='\n        The number of seconds to wait before reconnecting to the PostgreSQL NOTIFY/LISTEN \n        connection after an error. Only used when using PostgreSQL as the database.\n        Defaults to `10`.\n        ',
-        title='Pg Notify Reconnect Interval Seconds',
+        description="\n        The number of seconds to wait before reconnecting to the PostgreSQL NOTIFY/LISTEN \n        connection after an error. Only used when using PostgreSQL as the database.\n        Defaults to `10`.\n        ",
+        title="Pg Notify Reconnect Interval Seconds",
     )
     pg_notify_heartbeat_interval_seconds: Optional[int] = Field(
         5,
         description="\n        The number of seconds between heartbeat checks for the PostgreSQL NOTIFY/LISTEN \n        connection to ensure it's still alive. Only used when using PostgreSQL as the database.\n        Defaults to `5`.\n        ",
-        title='Pg Notify Heartbeat Interval Seconds',
+        title="Pg Notify Heartbeat Interval Seconds",
     )
 
 
 class ServerTasksSchedulingSettings(BaseModel):
     max_scheduled_queue_size: Optional[int] = Field(
         1000,
-        description='The maximum number of scheduled tasks to queue for submission.',
-        title='Max Scheduled Queue Size',
+        description="The maximum number of scheduled tasks to queue for submission.",
+        title="Max Scheduled Queue Size",
     )
     max_retry_queue_size: Optional[int] = Field(
         100,
-        description='The maximum number of retries to queue for submission.',
-        title='Max Retry Queue Size',
+        description="The maximum number of retries to queue for submission.",
+        title="Max Retry Queue Size",
     )
     pending_task_timeout: Optional[timedelta] = Field(
-        'PT0S',
-        description='How long before a PENDING task are made available to another task worker.',
-        title='Pending Task Timeout',
+        "PT0S",
+        description="How long before a PENDING task are made available to another task worker.",
+        title="Pending Task Timeout",
     )
 
 
 class ServerTasksSettings(BaseModel):
     tag_concurrency_slot_wait_seconds: Optional[confloat(ge=0.0)] = Field(
         10,
-        description='The number of seconds to wait before retrying when a task run cannot secure a concurrency slot from the server.',
-        title='Tag Concurrency Slot Wait Seconds',
+        description="The number of seconds to wait before retrying when a task run cannot secure a concurrency slot from the server.",
+        title="Tag Concurrency Slot Wait Seconds",
     )
     max_cache_key_length: Optional[int] = Field(
         2000,
-        description='The maximum number of characters allowed for a task run cache key.',
-        title='Max Cache Key Length',
+        description="The maximum number of characters allowed for a task run cache key.",
+        title="Max Cache Key Length",
     )
     scheduling: Optional[ServerTasksSchedulingSettings] = None
 
 
 class ServerUISettings(BaseModel):
     enabled: Optional[bool] = Field(
-        True, description='Whether or not to serve the Prefect UI.', title='Enabled'
+        True, description="Whether or not to serve the Prefect UI.", title="Enabled"
     )
     v2_enabled: Optional[bool] = Field(
         False,
-        description='Whether neutral UI entry points should default to the experimental V2 UI instead of V1 when the browser has no saved UI preference.',
-        title='V2 Enabled',
+        description="Whether neutral UI entry points should default to the experimental V2 UI instead of V1 when the browser has no saved UI preference.",
+        title="V2 Enabled",
     )
     api_url: Optional[str] = Field(
         None,
-        description='The connection url for communication from the UI to the API. Defaults to `PREFECT_API_URL` if set. Otherwise, the default URL is generated from `PREFECT_SERVER_API_HOST` and `PREFECT_SERVER_API_PORT`.',
-        title='Api Url',
+        description="The connection url for communication from the UI to the API. Defaults to `PREFECT_API_URL` if set. Otherwise, the default URL is generated from `PREFECT_SERVER_API_HOST` and `PREFECT_SERVER_API_PORT`.",
+        title="Api Url",
     )
     serve_base: Optional[str] = Field(
-        '/',
-        description='The base URL path to serve the Prefect UI from.',
-        title='Serve Base',
+        "/",
+        description="The base URL path to serve the Prefect UI from.",
+        title="Serve Base",
     )
     static_directory: Optional[str] = Field(
         None,
-        description='The directory to serve static files from. This should be used when running into permissions issues when attempting to serve the UI from the default directory (for example when running in a Docker container).',
-        title='Static Directory',
+        description="The directory to serve static files from. This should be used when running into permissions issues when attempting to serve the UI from the default directory (for example when running in a Docker container).",
+        title="Static Directory",
     )
     show_promotional_content: Optional[bool] = Field(
         True,
-        description='Whether or not to display promotional content in the UI, including upgrade prompts and marketing banners.',
-        title='Show Promotional Content',
+        description="Whether or not to display promotional content in the UI, including upgrade prompts and marketing banners.",
+        title="Show Promotional Content",
     )
 
 
 class SetStateStatus(Enum):
-    ACCEPT = 'ACCEPT'
-    REJECT = 'REJECT'
-    ABORT = 'ABORT'
-    WAIT = 'WAIT'
+    ACCEPT = "ACCEPT"
+    REJECT = "REJECT"
+    ABORT = "ABORT"
+    WAIT = "WAIT"
 
 
 class StateAbortDetails(BaseModel):
-    type: Literal['abort_details'] = Field(
-        'abort_details',
-        description='The type of state transition detail. Used to ensure pydantic does not coerce into a different type.',
-        title='Type',
+    type: Literal["abort_details"] = Field(
+        "abort_details",
+        description="The type of state transition detail. Used to ensure pydantic does not coerce into a different type.",
+        title="Type",
     )
     reason: Optional[str] = Field(
         None,
-        description='The reason why the state transition was aborted.',
-        title='Reason',
+        description="The reason why the state transition was aborted.",
+        title="Reason",
     )
 
 
 class StateAcceptDetails(BaseModel):
-    type: Literal['accept_details'] = Field(
-        'accept_details',
-        description='The type of state transition detail. Used to ensure pydantic does not coerce into a different type.',
-        title='Type',
+    type: Literal["accept_details"] = Field(
+        "accept_details",
+        description="The type of state transition detail. Used to ensure pydantic does not coerce into a different type.",
+        title="Type",
     )
 
 
 class StateDetails(BaseModel):
-    flow_run_id: Optional[UUID] = Field(None, title='Flow Run Id')
-    task_run_id: Optional[UUID] = Field(None, title='Task Run Id')
-    child_flow_run_id: Optional[UUID] = Field(None, title='Child Flow Run Id')
-    scheduled_time: Optional[AwareDatetime] = Field(None, title='Scheduled Time')
-    cache_key: Optional[str] = Field(None, title='Cache Key')
-    cache_expiration: Optional[AwareDatetime] = Field(None, title='Cache Expiration')
-    deferred: Optional[bool] = Field(False, title='Deferred')
-    untrackable_result: Optional[bool] = Field(False, title='Untrackable Result')
-    pause_timeout: Optional[AwareDatetime] = Field(None, title='Pause Timeout')
-    pause_reschedule: Optional[bool] = Field(False, title='Pause Reschedule')
-    pause_key: Optional[str] = Field(None, title='Pause Key')
-    run_input_keyset: Optional[dict[str, str]] = Field(None, title='Run Input Keyset')
-    refresh_cache: Optional[bool] = Field(None, title='Refresh Cache')
-    retriable: Optional[bool] = Field(None, title='Retriable')
-    transition_id: Optional[UUID] = Field(None, title='Transition Id')
-    task_parameters_id: Optional[UUID] = Field(None, title='Task Parameters Id')
-    traceparent: Optional[str] = Field(None, title='Traceparent')
+    flow_run_id: Optional[UUID] = Field(None, title="Flow Run Id")
+    task_run_id: Optional[UUID] = Field(None, title="Task Run Id")
+    child_flow_run_id: Optional[UUID] = Field(None, title="Child Flow Run Id")
+    scheduled_time: Optional[AwareDatetime] = Field(None, title="Scheduled Time")
+    cache_key: Optional[str] = Field(None, title="Cache Key")
+    cache_expiration: Optional[AwareDatetime] = Field(None, title="Cache Expiration")
+    deferred: Optional[bool] = Field(False, title="Deferred")
+    untrackable_result: Optional[bool] = Field(False, title="Untrackable Result")
+    pause_timeout: Optional[AwareDatetime] = Field(None, title="Pause Timeout")
+    pause_reschedule: Optional[bool] = Field(False, title="Pause Reschedule")
+    pause_key: Optional[str] = Field(None, title="Pause Key")
+    run_input_keyset: Optional[dict[str, str]] = Field(None, title="Run Input Keyset")
+    refresh_cache: Optional[bool] = Field(None, title="Refresh Cache")
+    retriable: Optional[bool] = Field(None, title="Retriable")
+    transition_id: Optional[UUID] = Field(None, title="Transition Id")
+    task_parameters_id: Optional[UUID] = Field(None, title="Task Parameters Id")
+    traceparent: Optional[str] = Field(None, title="Traceparent")
     deployment_concurrency_lease_id: Optional[UUID] = Field(
-        None, title='Deployment Concurrency Lease Id'
+        None, title="Deployment Concurrency Lease Id"
     )
 
 
 class StateRejectDetails(BaseModel):
-    type: Literal['reject_details'] = Field(
-        'reject_details',
-        description='The type of state transition detail. Used to ensure pydantic does not coerce into a different type.',
-        title='Type',
+    type: Literal["reject_details"] = Field(
+        "reject_details",
+        description="The type of state transition detail. Used to ensure pydantic does not coerce into a different type.",
+        title="Type",
     )
     reason: Optional[str] = Field(
         None,
-        description='The reason why the state transition was rejected.',
-        title='Reason',
+        description="The reason why the state transition was rejected.",
+        title="Reason",
     )
 
 
 class StateType(Enum):
-    SCHEDULED = 'SCHEDULED'
-    PENDING = 'PENDING'
-    RUNNING = 'RUNNING'
-    COMPLETED = 'COMPLETED'
-    FAILED = 'FAILED'
-    CANCELLED = 'CANCELLED'
-    CRASHED = 'CRASHED'
-    PAUSED = 'PAUSED'
-    CANCELLING = 'CANCELLING'
+    SCHEDULED = "SCHEDULED"
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    CRASHED = "CRASHED"
+    PAUSED = "PAUSED"
+    CANCELLING = "CANCELLING"
 
 
 class StateWaitDetails(BaseModel):
-    type: Literal['wait_details'] = Field(
-        'wait_details',
-        description='The type of state transition detail. Used to ensure pydantic does not coerce into a different type.',
-        title='Type',
+    type: Literal["wait_details"] = Field(
+        "wait_details",
+        description="The type of state transition detail. Used to ensure pydantic does not coerce into a different type.",
+        title="Type",
     )
     delay_seconds: int = Field(
         ...,
-        description='The length of time in seconds the client should wait before transitioning states.',
-        title='Delay Seconds',
+        description="The length of time in seconds the client should wait before transitioning states.",
+        title="Delay Seconds",
     )
     reason: Optional[str] = Field(
         None,
-        description='The reason why the state transition should wait.',
-        title='Reason',
+        description="The reason why the state transition should wait.",
+        title="Reason",
     )
 
 
 class SuspendFlowRun(BaseModel):
-    type: Literal['suspend-flow-run'] = Field('suspend-flow-run', title='Type')
+    type: Literal["suspend-flow-run"] = Field("suspend-flow-run", title="Type")
 
 
 class TaskRunCount(RootModel[Optional[dict[str, int]]]):
@@ -2975,900 +2975,900 @@ class TaskRunCount(RootModel[Optional[dict[str, int]]]):
 
 class TaskRunFilterEndTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs ending at or before this time',
-        title='Before',
+        description="Only include task runs ending at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs ending at or after this time',
-        title='After',
+        description="Only include task runs ending at or after this time",
+        title="After",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only return task runs without an end time',
-        title='Is Null',
+        description="If true, only return task runs without an end time",
+        title="Is Null",
     )
 
 
 class TaskRunFilterExpectedStartTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs expected to start at or before this time',
-        title='Before',
+        description="Only include task runs expected to start at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs expected to start at or after this time',
-        title='After',
+        description="Only include task runs expected to start at or after this time",
+        title="After",
     )
 
 
 class TaskRunFilterFlowRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of task run flow run ids to include', title='Any'
+        None, description="A list of task run flow run ids to include", title="Any"
     )
     is_null_: Optional[bool] = Field(
         False,
-        description='Filter for task runs with None as their flow run id',
-        title='Is Null',
+        description="Filter for task runs with None as their flow run id",
+        title="Is Null",
     )
 
 
 class TaskRunFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of task run ids to include', title='Any'
+        None, description="A list of task run ids to include", title="Any"
     )
 
 
 class TaskRunFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of task run names to include',
-        examples=[['my-task-run-1', 'my-task-run-2']],
-        title='Any',
+        description="A list of task run names to include",
+        examples=[["my-task-run-1", "my-task-run-2"]],
+        title="Any",
     )
     like_: Optional[str] = Field(
         None,
         description="A case-insensitive partial match. For example,  passing 'marvin' will match 'marvin', 'sad-Marvin', and 'marvin-robot'.",
-        examples=['marvin'],
-        title='Like',
+        examples=["marvin"],
+        title="Like",
     )
 
 
 class TaskRunFilterStartTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs starting at or before this time',
-        title='Before',
+        description="Only include task runs starting at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include task runs starting at or after this time',
-        title='After',
+        description="Only include task runs starting at or after this time",
+        title="After",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only return task runs without a start time',
-        title='Is Null',
+        description="If true, only return task runs without a start time",
+        title="Is Null",
     )
 
 
 class TaskRunFilterStateName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of task run state names to include', title='Any'
+        None, description="A list of task run state names to include", title="Any"
     )
 
 
 class TaskRunFilterStateType(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[StateType]] = Field(
-        None, description='A list of task run state types to include', title='Any'
+        None, description="A list of task run state types to include", title="Any"
     )
 
 
 class TaskRunFilterSubFlowRuns(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     exists_: Optional[bool] = Field(
         None,
-        description='If true, only include task runs that are subflow run parents; if false, exclude parent task runs',
-        title='Exists',
+        description="If true, only include task runs that are subflow run parents; if false, exclude parent task runs",
+        title="Exists",
     )
 
 
 class TaskRunFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Task runs will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Task runs will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include task runs without tags',
-        title='Is Null',
+        description="If true, only include task runs without tags",
+        title="Is Null",
     )
 
 
 class TaskRunPolicy(BaseModel):
     max_retries: Optional[int] = Field(
         0,
-        description='The maximum number of retries. Field is not used. Please use `retries` instead.',
-        title='Max Retries',
+        description="The maximum number of retries. Field is not used. Please use `retries` instead.",
+        title="Max Retries",
     )
     retry_delay_seconds: Optional[float] = Field(
         0,
-        description='The delay between retries. Field is not used. Please use `retry_delay` instead.',
-        title='Retry Delay Seconds',
+        description="The delay between retries. Field is not used. Please use `retry_delay` instead.",
+        title="Retry Delay Seconds",
     )
     retries: Optional[int] = Field(
-        None, description='The number of retries.', title='Retries'
+        None, description="The number of retries.", title="Retries"
     )
     retry_delay: Optional[Union[int, float, list[int], list[float]]] = Field(
         None,
-        description='A delay time or list of delay times between retries, in seconds.',
-        title='Retry Delay',
+        description="A delay time or list of delay times between retries, in seconds.",
+        title="Retry Delay",
     )
     retry_jitter_factor: Optional[float] = Field(
         None,
-        description='Determines the amount a retry should jitter',
-        title='Retry Jitter Factor',
+        description="Determines the amount a retry should jitter",
+        title="Retry Jitter Factor",
     )
 
 
 class TaskRunResult(BaseModel):
-    input_type: Literal['task_run'] = Field('task_run', title='Input Type')
-    id: UUID = Field(..., title='Id')
+    input_type: Literal["task_run"] = Field("task_run", title="Input Type")
+    id: UUID = Field(..., title="Id")
 
 
 class TaskRunSort(Enum):
-    ID_DESC = 'ID_DESC'
-    EXPECTED_START_TIME_ASC = 'EXPECTED_START_TIME_ASC'
-    EXPECTED_START_TIME_DESC = 'EXPECTED_START_TIME_DESC'
-    NAME_ASC = 'NAME_ASC'
-    NAME_DESC = 'NAME_DESC'
-    NEXT_SCHEDULED_START_TIME_ASC = 'NEXT_SCHEDULED_START_TIME_ASC'
-    END_TIME_DESC = 'END_TIME_DESC'
+    ID_DESC = "ID_DESC"
+    EXPECTED_START_TIME_ASC = "EXPECTED_START_TIME_ASC"
+    EXPECTED_START_TIME_DESC = "EXPECTED_START_TIME_DESC"
+    NAME_ASC = "NAME_ASC"
+    NAME_DESC = "NAME_DESC"
+    NEXT_SCHEDULED_START_TIME_ASC = "NEXT_SCHEDULED_START_TIME_ASC"
+    END_TIME_DESC = "END_TIME_DESC"
 
 
 class TaskRunUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: Optional[str] = Field(None, examples=['my-task-run'], title='Name')
+    name: Optional[str] = Field(None, examples=["my-task-run"], title="Name")
 
 
 class TaskWorkerFilter(BaseModel):
-    task_keys: list[str] = Field(..., title='Task Keys')
+    task_keys: list[str] = Field(..., title="Task Keys")
 
 
 class TaskWorkerResponse(BaseModel):
-    identifier: str = Field(..., title='Identifier')
-    task_keys: list[str] = Field(..., title='Task Keys')
-    timestamp: AwareDatetime = Field(..., title='Timestamp')
+    identifier: str = Field(..., title="Identifier")
+    task_keys: list[str] = Field(..., title="Task Keys")
+    timestamp: AwareDatetime = Field(..., title="Timestamp")
 
 
 class TasksRunnerSettings(BaseModel):
     thread_pool_max_workers: Optional[PositiveInt] = Field(
         None,
-        description='The maximum number of workers for ThreadPoolTaskRunner.',
-        title='Thread Pool Max Workers',
+        description="The maximum number of workers for ThreadPoolTaskRunner.",
+        title="Thread Pool Max Workers",
     )
     process_pool_max_workers: Optional[PositiveInt] = Field(
         None,
-        description='The maximum number of workers for ProcessPoolTaskRunner.',
-        title='Process Pool Max Workers',
+        description="The maximum number of workers for ProcessPoolTaskRunner.",
+        title="Process Pool Max Workers",
     )
 
 
 class TasksSchedulingSettings(BaseModel):
     default_storage_block: Optional[str] = Field(
         None,
-        description='The `block-type/block-document` slug of a block to use as the default storage for autonomous tasks.',
-        title='Default Storage Block',
+        description="The `block-type/block-document` slug of a block to use as the default storage for autonomous tasks.",
+        title="Default Storage Block",
     )
     delete_failed_submissions: Optional[bool] = Field(
         True,
-        description='Whether or not to delete failed task submissions from the database.',
-        title='Delete Failed Submissions',
+        description="Whether or not to delete failed task submissions from the database.",
+        title="Delete Failed Submissions",
     )
 
 
 class TasksSettings(BaseModel):
     refresh_cache: Optional[bool] = Field(
         False,
-        description='If `True`, enables a refresh of cached results: re-executing the task will refresh the cached results.',
-        title='Refresh Cache',
+        description="If `True`, enables a refresh of cached results: re-executing the task will refresh the cached results.",
+        title="Refresh Cache",
     )
     default_no_cache: Optional[bool] = Field(
         False,
-        description='If `True`, sets the default cache policy on all tasks to `NO_CACHE`.',
-        title='Default No Cache',
+        description="If `True`, sets the default cache policy on all tasks to `NO_CACHE`.",
+        title="Default No Cache",
     )
     disable_caching: Optional[bool] = Field(
         False,
-        description='If `True`, disables caching on all tasks regardless of cache policy.',
-        title='Disable Caching',
+        description="If `True`, disables caching on all tasks regardless of cache policy.",
+        title="Disable Caching",
     )
     default_retries: Optional[conint(ge=0)] = Field(
         0,
-        description='This value sets the default number of retries for all tasks.',
-        title='Default Retries',
+        description="This value sets the default number of retries for all tasks.",
+        title="Default Retries",
     )
     default_retry_delay_seconds: Optional[Union[str, int, float, list[float]]] = Field(
         0,
-        description='This value sets the default retry delay seconds for all tasks.',
-        title='Default Retry Delay Seconds',
+        description="This value sets the default retry delay seconds for all tasks.",
+        title="Default Retry Delay Seconds",
     )
     default_persist_result: Optional[bool] = Field(
         None,
-        description='If `True`, results will be persisted by default for all tasks. Set to `False` to disable persistence by default. Note that setting to `False` will override the behavior set by a parent flow or task.',
-        title='Default Persist Result',
+        description="If `True`, results will be persisted by default for all tasks. Set to `False` to disable persistence by default. Note that setting to `False` will override the behavior set by a parent flow or task.",
+        title="Default Persist Result",
     )
     runner: Optional[TasksRunnerSettings] = Field(
-        None, description='Settings for controlling task runner behavior'
+        None, description="Settings for controlling task runner behavior"
     )
     scheduling: Optional[TasksSchedulingSettings] = Field(
         None,
-        description='Settings for controlling client-side task scheduling behavior',
+        description="Settings for controlling client-side task scheduling behavior",
     )
 
 
 class TelemetrySettings(BaseModel):
     enable_resource_metrics: Optional[bool] = Field(
         True,
-        description='Whether to enable OS-level resource metric collection in flow run subprocesses.',
-        title='Enable Resource Metrics',
+        description="Whether to enable OS-level resource metric collection in flow run subprocesses.",
+        title="Enable Resource Metrics",
     )
     resource_metrics_interval_seconds: Optional[conint(ge=1)] = Field(
         10,
-        description='Interval in seconds between resource metric collections.',
-        title='Resource Metrics Interval Seconds',
+        description="Interval in seconds between resource metric collections.",
+        title="Resource Metrics Interval Seconds",
     )
 
 
 class TestingSettings(BaseModel):
     test_mode: Optional[bool] = Field(
         False,
-        description='If `True`, places the API in test mode. This may modify behavior to facilitate testing.',
-        title='Test Mode',
+        description="If `True`, places the API in test mode. This may modify behavior to facilitate testing.",
+        title="Test Mode",
     )
     unit_test_mode: Optional[bool] = Field(
         False,
-        description='This setting only exists to facilitate unit testing. If `True`, code is executing in a unit test context. Defaults to `False`.',
-        title='Unit Test Mode',
+        description="This setting only exists to facilitate unit testing. If `True`, code is executing in a unit test context. Defaults to `False`.",
+        title="Unit Test Mode",
     )
     unit_test_loop_debug: Optional[bool] = Field(
         True,
-        description='If `True` turns on debug mode for the unit testing event loop.',
-        title='Unit Test Loop Debug',
+        description="If `True` turns on debug mode for the unit testing event loop.",
+        title="Unit Test Loop Debug",
     )
     test_setting: Any = Field(
-        'FOO',
-        description='This setting only exists to facilitate unit testing. If in test mode, this setting will return its value. Otherwise, it returns `None`.',
-        title='Test Setting',
+        "FOO",
+        description="This setting only exists to facilitate unit testing. If in test mode, this setting will return its value. Otherwise, it returns `None`.",
+        title="Test Setting",
     )
 
 
 class TimeUnit(Enum):
-    week = 'week'
-    day = 'day'
-    hour = 'hour'
-    minute = 'minute'
-    second = 'second'
+    week = "week"
+    day = "day"
+    hour = "hour"
+    minute = "minute"
+    second = "second"
 
 
 class UpdatedBy(BaseModel):
     id: Optional[UUID] = Field(
-        None, description='The id of the updater of the object.', title='Id'
+        None, description="The id of the updater of the object.", title="Id"
     )
     type: Optional[str] = Field(
-        None, description='The type of the updater of the object.', title='Type'
+        None, description="The type of the updater of the object.", title="Type"
     )
     display_value: Optional[str] = Field(
-        None, description='The display value for the updater.', title='Display Value'
+        None, description="The display value for the updater.", title="Display Value"
     )
 
 
 class ValidationError(BaseModel):
-    loc: list[Union[str, int]] = Field(..., title='Location')
-    msg: str = Field(..., title='Message')
-    type: str = Field(..., title='Error Type')
-    input: Optional[Any] = Field(None, title='Input')
-    ctx: Optional[dict[str, Any]] = Field(None, title='Context')
+    loc: list[Union[str, int]] = Field(..., title="Location")
+    msg: str = Field(..., title="Message")
+    type: str = Field(..., title="Error Type")
+    input: Optional[Any] = Field(None, title="Input")
+    ctx: Optional[dict[str, Any]] = Field(None, title="Context")
 
 
 class Variable(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     name: constr(max_length=255) = Field(
         ...,
-        description='The name of the variable',
-        examples=['my-variable'],
-        title='Name',
+        description="The name of the variable",
+        examples=["my-variable"],
+        title="Name",
     )
     value: Optional[Union[str, int, bool, float, dict[str, Any], list]] = Field(
         ...,
-        description='The value of the variable',
-        examples=['my-value'],
-        title='Value',
+        description="The value of the variable",
+        examples=["my-value"],
+        title="Value",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of variable tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of variable tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
 
 
 class VariableCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     name: constr(max_length=255) = Field(
         ...,
-        description='The name of the variable',
-        examples=['my_variable'],
-        title='Name',
+        description="The name of the variable",
+        examples=["my_variable"],
+        title="Name",
     )
     value: Optional[Union[str, int, bool, float, dict[str, Any], list]] = Field(
         ...,
-        description='The value of the variable',
-        examples=['my-value'],
-        title='Value',
+        description="The value of the variable",
+        examples=["my-value"],
+        title="Value",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of variable tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of variable tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
 
 
 class VariableFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of variable ids to include', title='Any'
+        None, description="A list of variable ids to include", title="Any"
     )
 
 
 class VariableFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of variables names to include', title='Any'
+        None, description="A list of variables names to include", title="Any"
     )
     like_: Optional[str] = Field(
         None,
-        description='A string to match variable names against. This can include SQL wildcard characters like `%` and `_`.',
-        examples=['my_variable_%'],
-        title='Like',
+        description="A string to match variable names against. This can include SQL wildcard characters like `%` and `_`.",
+        examples=["my_variable_%"],
+        title="Like",
     )
 
 
 class VariableFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Variables will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Variables will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include Variables without tags',
-        title='Is Null',
+        description="If true, only include Variables without tags",
+        title="Is Null",
     )
 
 
 class VariableSort(Enum):
-    CREATED_DESC = 'CREATED_DESC'
-    UPDATED_DESC = 'UPDATED_DESC'
-    NAME_DESC = 'NAME_DESC'
-    NAME_ASC = 'NAME_ASC'
+    CREATED_DESC = "CREATED_DESC"
+    UPDATED_DESC = "UPDATED_DESC"
+    NAME_DESC = "NAME_DESC"
+    NAME_ASC = "NAME_ASC"
 
 
 class VariableUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: Optional[constr(max_length=255)] = Field(None, title='Name')
+    name: Optional[constr(max_length=255)] = Field(None, title="Name")
     value: Optional[Union[str, int, bool, float, dict[str, Any], list]] = Field(
         None,
-        description='The value of the variable',
-        examples=['my-value'],
-        title='Value',
+        description="The value of the variable",
+        examples=["my-value"],
+        title="Value",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of variable tags',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of variable tags",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
 
 
 class VersionInfo(BaseModel):
     model_config = ConfigDict(
-        extra='allow',
+        extra="allow",
     )
-    type: str = Field(..., description='The type of version info.', title='Type')
+    type: str = Field(..., description="The type of version info.", title="Type")
     version: str = Field(
-        ..., description='The version of the deployment.', title='Version'
+        ..., description="The version of the deployment.", title="Version"
     )
 
 
 class WorkPoolFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of work pool ids to include', title='Any'
+        None, description="A list of work pool ids to include", title="Any"
     )
 
 
 class WorkPoolFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of work pool names to include', title='Any'
+        None, description="A list of work pool names to include", title="Any"
     )
 
 
 class WorkPoolFilterType(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
-        None, description='A list of work pool types to include', title='Any'
+        None, description="A list of work pool types to include", title="Any"
     )
 
 
 class WorkPoolStatus(Enum):
-    READY = 'READY'
-    NOT_READY = 'NOT_READY'
-    PAUSED = 'PAUSED'
+    READY = "READY"
+    NOT_READY = "NOT_READY"
+    PAUSED = "PAUSED"
 
 
 class WorkPoolStorageConfiguration(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     bundle_upload_step: Optional[dict[str, Any]] = Field(
         None,
-        description='The step to use for uploading bundles to storage.',
-        title='Bundle Upload Step',
+        description="The step to use for uploading bundles to storage.",
+        title="Bundle Upload Step",
     )
     bundle_execution_step: Optional[dict[str, Any]] = Field(
         None,
-        description='The step to use for executing bundles.',
-        title='Bundle Execution Step',
+        description="The step to use for executing bundles.",
+        title="Bundle Execution Step",
     )
     default_result_storage_block_id: Optional[UUID] = Field(
         None,
-        description='The block document ID of the default result storage block.',
-        title='Default Result Storage Block Id',
+        description="The block document ID of the default result storage block.",
+        title="Default Result Storage Block Id",
     )
 
 
 class WorkPoolUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    description: Optional[str] = Field(None, title='Description')
-    is_paused: Optional[bool] = Field(None, title='Is Paused')
-    base_job_template: Optional[dict[str, Any]] = Field(None, title='Base Job Template')
-    concurrency_limit: Optional[conint(ge=0)] = Field(None, title='Concurrency Limit')
+    description: Optional[str] = Field(None, title="Description")
+    is_paused: Optional[bool] = Field(None, title="Is Paused")
+    base_job_template: Optional[dict[str, Any]] = Field(None, title="Base Job Template")
+    concurrency_limit: Optional[conint(ge=0)] = Field(None, title="Concurrency Limit")
     storage_configuration: Optional[WorkPoolStorageConfiguration] = Field(
-        None, description='The storage configuration for the work pool.'
+        None, description="The storage configuration for the work pool."
     )
 
 
 class WorkQueue(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the work queue.', title='Name'
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the work queue.", title="Name"
     )
     description: Optional[str] = Field(
-        '',
-        description='An optional description for the work queue.',
-        title='Description',
+        "",
+        description="An optional description for the work queue.",
+        title="Description",
     )
     is_paused: Optional[bool] = Field(
-        False, description='Whether or not the work queue is paused.', title='Is Paused'
+        False, description="Whether or not the work queue is paused.", title="Is Paused"
     )
     concurrency_limit: Optional[conint(ge=0)] = Field(
         None,
-        description='An optional concurrency limit for the work queue.',
-        title='Concurrency Limit',
+        description="An optional concurrency limit for the work queue.",
+        title="Concurrency Limit",
     )
     priority: Optional[PositiveInt] = Field(
         1,
         description="The queue's priority. Lower values are higher priority (1 is the highest).",
-        title='Priority',
+        title="Priority",
     )
     work_pool_id: Optional[UUID] = Field(
         None,
-        description='The work pool with which the queue is associated.',
-        title='Work Pool Id',
+        description="The work pool with which the queue is associated.",
+        title="Work Pool Id",
     )
     filter: Optional[QueueFilter] = Field(
-        None, description='DEPRECATED: Filter criteria for the work queue.'
+        None, description="DEPRECATED: Filter criteria for the work queue."
     )
     last_polled: Optional[AwareDatetime] = Field(
         None,
-        description='The last time an agent polled this queue for work.',
-        title='Last Polled',
+        description="The last time an agent polled this queue for work.",
+        title="Last Polled",
     )
 
 
 class WorkQueueCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the work queue.', title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the work queue.", title="Name"
     )
     description: Optional[str] = Field(
-        '',
-        description='An optional description for the work queue.',
-        title='Description',
+        "",
+        description="An optional description for the work queue.",
+        title="Description",
     )
     is_paused: Optional[bool] = Field(
-        False, description='Whether or not the work queue is paused.', title='Is Paused'
+        False, description="Whether or not the work queue is paused.", title="Is Paused"
     )
     concurrency_limit: Optional[conint(ge=0)] = Field(
         None,
         description="The work queue's concurrency limit.",
-        title='Concurrency Limit',
+        title="Concurrency Limit",
     )
     priority: Optional[PositiveInt] = Field(
         None,
         description="The queue's priority. Lower values are higher priority (1 is the highest).",
-        title='Priority',
+        title="Priority",
     )
     filter: Optional[QueueFilter] = Field(
-        None, description='DEPRECATED: Filter criteria for the work queue.'
+        None, description="DEPRECATED: Filter criteria for the work queue."
     )
 
 
 class WorkQueueFilterId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of work queue ids to include', title='Any'
+        None, description="A list of work queue ids to include", title="Any"
     )
 
 
 class WorkQueueFilterName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of work queue names to include',
-        examples=[['wq-1', 'wq-2']],
-        title='Any',
+        description="A list of work queue names to include",
+        examples=[["wq-1", "wq-2"]],
+        title="Any",
     )
     startswith_: Optional[list[str]] = Field(
         None,
         description="A list of case-insensitive starts-with matches. For example,  passing 'marvin' will match 'marvin', and 'Marvin-robot', but not 'sad-marvin'.",
-        examples=[['marvin', 'Marvin-robot']],
-        title='Startswith',
+        examples=[["marvin", "Marvin-robot"]],
+        title="Startswith",
     )
 
 
 class WorkQueueHealthPolicy(BaseModel):
     maximum_late_runs: Optional[int] = Field(
         0,
-        description='The maximum number of late runs in the work queue before it is deemed unhealthy. Defaults to `0`.',
-        title='Maximum Late Runs',
+        description="The maximum number of late runs in the work queue before it is deemed unhealthy. Defaults to `0`.",
+        title="Maximum Late Runs",
     )
     maximum_seconds_since_last_polled: Optional[int] = Field(
         60,
-        description='The maximum number of time in seconds elapsed since work queue has been polled before it is deemed unhealthy. Defaults to `60`.',
-        title='Maximum Seconds Since Last Polled',
+        description="The maximum number of time in seconds elapsed since work queue has been polled before it is deemed unhealthy. Defaults to `60`.",
+        title="Maximum Seconds Since Last Polled",
     )
 
 
 class WorkQueueStatus(Enum):
-    READY = 'READY'
-    NOT_READY = 'NOT_READY'
-    PAUSED = 'PAUSED'
+    READY = "READY"
+    NOT_READY = "NOT_READY"
+    PAUSED = "PAUSED"
 
 
 class WorkQueueStatusDetail(BaseModel):
     healthy: bool = Field(
-        ..., description='Whether or not the work queue is healthy.', title='Healthy'
+        ..., description="Whether or not the work queue is healthy.", title="Healthy"
     )
     late_runs_count: Optional[int] = Field(
         0,
-        description='The number of late flow runs in the work queue.',
-        title='Late Runs Count',
+        description="The number of late flow runs in the work queue.",
+        title="Late Runs Count",
     )
     last_polled: Optional[AwareDatetime] = Field(
         None,
-        description='The last time an agent polled this queue for work.',
-        title='Last Polled',
+        description="The last time an agent polled this queue for work.",
+        title="Last Polled",
     )
     health_check_policy: WorkQueueHealthPolicy = Field(
         ...,
-        description='The policy used to determine whether or not the work queue is healthy.',
+        description="The policy used to determine whether or not the work queue is healthy.",
     )
 
 
 class WorkQueueUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: Optional[str] = Field(None, title='Name')
-    description: Optional[str] = Field(None, title='Description')
+    name: Optional[str] = Field(None, title="Name")
+    description: Optional[str] = Field(None, title="Description")
     is_paused: Optional[bool] = Field(
-        False, description='Whether or not the work queue is paused.', title='Is Paused'
+        False, description="Whether or not the work queue is paused.", title="Is Paused"
     )
-    concurrency_limit: Optional[conint(ge=0)] = Field(None, title='Concurrency Limit')
-    priority: Optional[PositiveInt] = Field(None, title='Priority')
-    last_polled: Optional[AwareDatetime] = Field(None, title='Last Polled')
+    concurrency_limit: Optional[conint(ge=0)] = Field(None, title="Concurrency Limit")
+    priority: Optional[PositiveInt] = Field(None, title="Priority")
+    last_polled: Optional[AwareDatetime] = Field(None, title="Last Polled")
     filter: Optional[QueueFilter] = Field(
-        None, description='DEPRECATED: Filter criteria for the work queue.'
+        None, description="DEPRECATED: Filter criteria for the work queue."
     )
 
 
 class WorkerFilterLastHeartbeatTime(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     before_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include processes whose last heartbeat was at or before this time',
-        title='Before',
+        description="Only include processes whose last heartbeat was at or before this time",
+        title="Before",
     )
     after_: Optional[AwareDatetime] = Field(
         None,
-        description='Only include processes whose last heartbeat was at or after this time',
-        title='After',
+        description="Only include processes whose last heartbeat was at or after this time",
+        title="After",
     )
 
 
 class WorkerStatus(Enum):
-    ONLINE = 'ONLINE'
-    OFFLINE = 'OFFLINE'
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
 
 
 class WorkerWebserverSettings(BaseModel):
     host: Optional[str] = Field(
-        '0.0.0.0',
+        "0.0.0.0",
         description="The host address the worker's webserver should bind to.",
-        title='Host',
+        title="Host",
     )
     port: Optional[int] = Field(
         8080,
         description="The port the worker's webserver should bind to.",
-        title='Port',
+        title="Port",
     )
 
 
 class ArtifactCollectionFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     latest_id: Optional[ArtifactCollectionFilterLatestId] = Field(
-        None, description='Filter criteria for `Artifact.id`'
+        None, description="Filter criteria for `Artifact.id`"
     )
     key: Optional[ArtifactCollectionFilterKey] = Field(
-        None, description='Filter criteria for `Artifact.key`'
+        None, description="Filter criteria for `Artifact.key`"
     )
     flow_run_id: Optional[ArtifactCollectionFilterFlowRunId] = Field(
-        None, description='Filter criteria for `Artifact.flow_run_id`'
+        None, description="Filter criteria for `Artifact.flow_run_id`"
     )
     task_run_id: Optional[ArtifactCollectionFilterTaskRunId] = Field(
-        None, description='Filter criteria for `Artifact.task_run_id`'
+        None, description="Filter criteria for `Artifact.task_run_id`"
     )
     type: Optional[ArtifactCollectionFilterType] = Field(
-        None, description='Filter criteria for `Artifact.type`'
+        None, description="Filter criteria for `Artifact.type`"
     )
 
 
 class ArtifactFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[ArtifactFilterId] = Field(
-        None, description='Filter criteria for `Artifact.id`'
+        None, description="Filter criteria for `Artifact.id`"
     )
     key: Optional[ArtifactFilterKey] = Field(
-        None, description='Filter criteria for `Artifact.key`'
+        None, description="Filter criteria for `Artifact.key`"
     )
     flow_run_id: Optional[ArtifactFilterFlowRunId] = Field(
-        None, description='Filter criteria for `Artifact.flow_run_id`'
+        None, description="Filter criteria for `Artifact.flow_run_id`"
     )
     task_run_id: Optional[ArtifactFilterTaskRunId] = Field(
-        None, description='Filter criteria for `Artifact.task_run_id`'
+        None, description="Filter criteria for `Artifact.task_run_id`"
     )
     type: Optional[ArtifactFilterType] = Field(
-        None, description='Filter criteria for `Artifact.type`'
+        None, description="Filter criteria for `Artifact.type`"
     )
 
 
 class AutomationFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Automations will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Automations will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Automations will be returned if their tags contain any of the tags in the list',
-        examples=[['tag-1', 'tag-2']],
-        title='Any',
+        description="A list of tags. Automations will be returned if their tags contain any of the tags in the list",
+        examples=[["tag-1", "tag-2"]],
+        title="Any",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include automations without tags',
-        title='Is Null',
+        description="If true, only include automations without tags",
+        title="Is Null",
     )
 
 
 class BlockDocumentFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[BlockDocumentFilterId] = Field(
-        None, description='Filter criteria for `BlockDocument.id`'
+        None, description="Filter criteria for `BlockDocument.id`"
     )
     is_anonymous: Optional[BlockDocumentFilterIsAnonymous] = Field(
-        {'eq_': False},
-        description='Filter criteria for `BlockDocument.is_anonymous`. Defaults to excluding anonymous blocks.',
+        {"eq_": False},
+        description="Filter criteria for `BlockDocument.is_anonymous`. Defaults to excluding anonymous blocks.",
     )
     block_type_id: Optional[BlockDocumentFilterBlockTypeId] = Field(
-        None, description='Filter criteria for `BlockDocument.block_type_id`'
+        None, description="Filter criteria for `BlockDocument.block_type_id`"
     )
     name: Optional[BlockDocumentFilterName] = Field(
-        None, description='Filter criteria for `BlockDocument.name`'
+        None, description="Filter criteria for `BlockDocument.name`"
     )
 
 
 class BlockSchema(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     checksum: str = Field(
-        ..., description="The block schema's unique checksum", title='Checksum'
+        ..., description="The block schema's unique checksum", title="Checksum"
     )
     fields: Optional[dict[str, Any]] = Field(
-        None, description="The block schema's field schema", title='Fields'
+        None, description="The block schema's field schema", title="Fields"
     )
     block_type_id: Optional[UUID] = Field(
-        ..., description='A block type ID', title='Block Type Id'
+        ..., description="A block type ID", title="Block Type Id"
     )
     block_type: Optional[BlockType] = Field(
-        None, description='The associated block type'
+        None, description="The associated block type"
     )
     capabilities: Optional[list[str]] = Field(
-        None, description='A list of Block capabilities', title='Capabilities'
+        None, description="A list of Block capabilities", title="Capabilities"
     )
     version: Optional[str] = Field(
-        'non-versioned',
-        description='Human readable identifier for the block schema',
-        title='Version',
+        "non-versioned",
+        description="Human readable identifier for the block schema",
+        title="Version",
     )
 
 
 class BlockSchemaFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     block_type_id: Optional[BlockSchemaFilterBlockTypeId] = Field(
-        None, description='Filter criteria for `BlockSchema.block_type_id`'
+        None, description="Filter criteria for `BlockSchema.block_type_id`"
     )
     block_capabilities: Optional[BlockSchemaFilterCapabilities] = Field(
-        None, description='Filter criteria for `BlockSchema.capabilities`'
+        None, description="Filter criteria for `BlockSchema.capabilities`"
     )
     id: Optional[BlockSchemaFilterId] = Field(
-        None, description='Filter criteria for `BlockSchema.id`'
+        None, description="Filter criteria for `BlockSchema.id`"
     )
     version: Optional[BlockSchemaFilterVersion] = Field(
-        None, description='Filter criteria for `BlockSchema.version`'
+        None, description="Filter criteria for `BlockSchema.version`"
     )
 
 
 class BlockTypeFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     name: Optional[BlockTypeFilterName] = Field(
-        None, description='Filter criteria for `BlockType.name`'
+        None, description="Filter criteria for `BlockType.name`"
     )
     slug: Optional[BlockTypeFilterSlug] = Field(
-        None, description='Filter criteria for `BlockType.slug`'
+        None, description="Filter criteria for `BlockType.slug`"
     )
 
 
 class BodyBulkIncrementActiveSlotsWithLeaseV2ConcurrencyLimitsIncrementWithLeasePost(
     BaseModel
 ):
-    slots: PositiveInt = Field(..., title='Slots')
-    names: list[str] = Field(..., title='Names')
-    mode: Optional[Mode] = Field('concurrency', title='Mode')
+    slots: PositiveInt = Field(..., title="Slots")
+    names: list[str] = Field(..., title="Names")
+    mode: Optional[Mode] = Field("concurrency", title="Mode")
     lease_duration: Optional[confloat(ge=60.0, le=86400.0)] = Field(
-        300, description='The duration of the lease in seconds.', title='Lease Duration'
+        300, description="The duration of the lease in seconds.", title="Lease Duration"
     )
     holder: Optional[ConcurrencyLeaseHolder] = Field(
         None,
-        description='The holder of the lease with type (flow_run, task_run, or deployment) and id.',
+        description="The holder of the lease with type (flow_run, task_run, or deployment) and id.",
     )
 
 
@@ -3884,258 +3884,258 @@ class BodyReadBlockDocumentsBlockDocumentsFilterPost(BaseModel):
     block_schemas: Optional[BlockSchemaFilter] = None
     include_secrets: Optional[bool] = Field(
         False,
-        description='Whether to include sensitive values in the block document.',
-        title='Include Secrets',
+        description="Whether to include sensitive values in the block document.",
+        title="Include Secrets",
     )
-    sort: Optional[BlockDocumentSort] = 'NAME_ASC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[BlockDocumentSort] = "NAME_ASC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadBlockSchemasBlockSchemasFilterPost(BaseModel):
     block_schemas: Optional[BlockSchemaFilter] = None
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadBlockTypesBlockTypesFilterPost(BaseModel):
     block_types: Optional[BlockTypeFilter] = None
     block_schemas: Optional[BlockSchemaFilter] = None
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadTaskWorkersTaskWorkersFilterPost(BaseModel):
     task_worker_filter: Optional[TaskWorkerFilter] = Field(
-        None, description='The task worker filter'
+        None, description="The task worker filter"
     )
 
 
 class ChangeFlowRunState(BaseModel):
-    type: Literal['change-flow-run-state'] = Field(
-        'change-flow-run-state', title='Type'
+    type: Literal["change-flow-run-state"] = Field(
+        "change-flow-run-state", title="Type"
     )
     name: Optional[str] = Field(
         None,
-        description='The name of the state to change the flow run to',
-        title='Name',
+        description="The name of the state to change the flow run to",
+        title="Name",
     )
     state: StateType = Field(
-        ..., description='The type of the state to change the flow run to'
+        ..., description="The type of the state to change the flow run to"
     )
     message: Optional[str] = Field(
         None,
-        description='An optional message to associate with the state change',
-        title='Message',
+        description="An optional message to associate with the state change",
+        title="Message",
     )
     force: Optional[bool] = Field(
         False,
-        description='Force the state change even if the transition is not allowed',
-        title='Force',
+        description="Force the state change even if the transition is not allowed",
+        title="Force",
     )
 
 
 class ConcurrencyLimitWithLeaseResponse(BaseModel):
-    lease_id: UUID = Field(..., title='Lease Id')
-    limits: list[MinimalConcurrencyLimitResponse] = Field(..., title='Limits')
+    lease_id: UUID = Field(..., title="Lease Id")
+    limits: list[MinimalConcurrencyLimitResponse] = Field(..., title="Limits")
 
 
 class DeploymentFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Deployments will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Deployments will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of tags to include',
-        examples=[['tag-1', 'tag-2']],
-        title='Any',
+        description="A list of tags to include",
+        examples=[["tag-1", "tag-2"]],
+        title="Any",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include deployments without tags',
-        title='Is Null',
+        description="If true, only include deployments without tags",
+        title="Is Null",
     )
 
 
 class DeploymentSchedule(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     deployment_id: Optional[UUID] = Field(
         None,
-        description='The deployment id associated with this schedule.',
-        title='Deployment Id',
+        description="The deployment id associated with this schedule.",
+        title="Deployment Id",
     )
     schedule: Union[IntervalSchedule, CronSchedule, RRuleSchedule] = Field(
-        ..., description='The schedule for the deployment.', title='Schedule'
+        ..., description="The schedule for the deployment.", title="Schedule"
     )
     active: Optional[bool] = Field(
-        True, description='Whether or not the schedule is active.', title='Active'
+        True, description="Whether or not the schedule is active.", title="Active"
     )
     max_scheduled_runs: Optional[PositiveInt] = Field(
         None,
-        description='The maximum number of scheduled runs for the schedule.',
-        title='Max Scheduled Runs',
+        description="The maximum number of scheduled runs for the schedule.",
+        title="Max Scheduled Runs",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='A dictionary of parameter value overrides.',
-        title='Parameters',
+        description="A dictionary of parameter value overrides.",
+        title="Parameters",
     )
     slug: Optional[str] = Field(
-        None, description='A unique slug for the schedule.', title='Slug'
+        None, description="A unique slug for the schedule.", title="Slug"
     )
 
 
 class DeploymentScheduleCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     active: Optional[bool] = Field(
-        True, description='Whether or not the schedule is active.', title='Active'
+        True, description="Whether or not the schedule is active.", title="Active"
     )
     schedule: Union[IntervalSchedule, CronSchedule, RRuleSchedule] = Field(
-        ..., description='The schedule for the deployment.', title='Schedule'
+        ..., description="The schedule for the deployment.", title="Schedule"
     )
     max_scheduled_runs: Optional[PositiveInt] = Field(
         None,
-        description='The maximum number of scheduled runs for the schedule.',
-        title='Max Scheduled Runs',
+        description="The maximum number of scheduled runs for the schedule.",
+        title="Max Scheduled Runs",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='A dictionary of parameter value overrides.',
-        title='Parameters',
+        description="A dictionary of parameter value overrides.",
+        title="Parameters",
     )
     slug: Optional[str] = Field(
-        None, description='A unique identifier for the schedule.', title='Slug'
+        None, description="A unique identifier for the schedule.", title="Slug"
     )
     replaces: Optional[str] = Field(
         None,
-        description='The slug of an existing schedule that this schedule replaces. Used for renaming slugs.',
-        title='Replaces',
+        description="The slug of an existing schedule that this schedule replaces. Used for renaming slugs.",
+        title="Replaces",
     )
 
 
 class DeploymentScheduleUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     active: Optional[bool] = Field(
-        None, description='Whether or not the schedule is active.', title='Active'
+        None, description="Whether or not the schedule is active.", title="Active"
     )
     schedule: Optional[Union[IntervalSchedule, CronSchedule, RRuleSchedule]] = Field(
-        None, description='The schedule for the deployment.', title='Schedule'
+        None, description="The schedule for the deployment.", title="Schedule"
     )
     max_scheduled_runs: Optional[PositiveInt] = Field(
         None,
-        description='The maximum number of scheduled runs for the schedule.',
-        title='Max Scheduled Runs',
+        description="The maximum number of scheduled runs for the schedule.",
+        title="Max Scheduled Runs",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='A dictionary of parameter value overrides.',
-        title='Parameters',
+        description="A dictionary of parameter value overrides.",
+        title="Parameters",
     )
     slug: Optional[str] = Field(
-        None, description='A unique identifier for the schedule.', title='Slug'
+        None, description="A unique identifier for the schedule.", title="Slug"
     )
     replaces: Optional[str] = Field(
         None,
-        description='The slug of an existing schedule that this schedule replaces. Used for renaming slugs.',
-        title='Replaces',
+        description="The slug of an existing schedule that this schedule replaces. Used for renaming slugs.",
+        title="Replaces",
     )
 
 
 class DeploymentUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    version: Optional[str] = Field(None, title='Version')
-    description: Optional[str] = Field(None, title='Description')
+    version: Optional[str] = Field(None, title="Version")
+    description: Optional[str] = Field(None, title="Description")
     paused: Optional[bool] = Field(
-        False, description='Whether or not the deployment is paused.', title='Paused'
+        False, description="Whether or not the deployment is paused.", title="Paused"
     )
     schedules: Optional[list[DeploymentScheduleUpdate]] = Field(
-        None, description='A list of schedules for the deployment.', title='Schedules'
+        None, description="A list of schedules for the deployment.", title="Schedules"
     )
     concurrency_limit: Optional[PositiveInt] = Field(
         None,
         description="The deployment's concurrency limit.",
-        title='Concurrency Limit',
+        title="Concurrency Limit",
     )
     concurrency_options: Optional[ConcurrencyOptions] = Field(
         None, description="The deployment's concurrency options."
     )
     global_concurrency_limit_id: Optional[UUID] = Field(
         None,
-        description='The ID of the global concurrency limit to apply to the deployment.',
-        title='Global Concurrency Limit Id',
+        description="The ID of the global concurrency limit to apply to the deployment.",
+        title="Global Concurrency Limit Id",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='Parameters for flow runs scheduled by the deployment.',
-        title='Parameters',
+        description="Parameters for flow runs scheduled by the deployment.",
+        title="Parameters",
     )
     parameter_openapi_schema: Optional[dict[str, Any]] = Field(
         None,
-        description='The parameter schema of the flow, including defaults.',
-        title='Parameter Openapi Schema',
+        description="The parameter schema of the flow, including defaults.",
+        title="Parameter Openapi Schema",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of deployment tags.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of deployment tags.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
-    work_queue_name: Optional[str] = Field(None, title='Work Queue Name')
+    work_queue_name: Optional[str] = Field(None, title="Work Queue Name")
     work_pool_name: Optional[str] = Field(
         None,
         description="The name of the deployment's work pool.",
-        examples=['my-work-pool'],
-        title='Work Pool Name',
+        examples=["my-work-pool"],
+        title="Work Pool Name",
     )
-    path: Optional[str] = Field(None, title='Path')
+    path: Optional[str] = Field(None, title="Path")
     job_variables: Optional[dict[str, Any]] = Field(
         None,
         description="Overrides for the flow's infrastructure configuration.",
-        title='Job Variables',
+        title="Job Variables",
     )
-    pull_steps: Optional[list[dict[str, Any]]] = Field(None, title='Pull Steps')
-    entrypoint: Optional[str] = Field(None, title='Entrypoint')
-    storage_document_id: Optional[UUID] = Field(None, title='Storage Document Id')
+    pull_steps: Optional[list[dict[str, Any]]] = Field(None, title="Pull Steps")
+    entrypoint: Optional[str] = Field(None, title="Entrypoint")
+    storage_document_id: Optional[UUID] = Field(None, title="Storage Document Id")
     infrastructure_document_id: Optional[UUID] = Field(
-        None, title='Infrastructure Document Id'
+        None, title="Infrastructure Document Id"
     )
     enforce_parameter_schema: Optional[bool] = Field(
         None,
-        description='Whether or not the deployment should enforce the parameter schema.',
-        title='Enforce Parameter Schema',
+        description="Whether or not the deployment should enforce the parameter schema.",
+        title="Enforce Parameter Schema",
     )
     version_info: Optional[VersionInfo] = Field(
-        None, description='A description of this version of the deployment.'
+        None, description="A description of this version of the deployment."
     )
 
 
@@ -4143,595 +4143,595 @@ class Event(BaseModel):
     occurred: AwareDatetime = Field(
         ...,
         description="When the event happened from the sender's perspective",
-        title='Occurred',
+        title="Occurred",
     )
     event: str = Field(
-        ..., description='The name of the event that happened', title='Event'
+        ..., description="The name of the event that happened", title="Event"
     )
     resource: dict[str, str] = Field(
-        ..., description='The primary Resource this event concerns'
+        ..., description="The primary Resource this event concerns"
     )
     related: Optional[list[dict[str, str]]] = Field(
         None,
-        description='A list of additional Resources involved in this event',
-        title='Related',
+        description="A list of additional Resources involved in this event",
+        title="Related",
     )
     payload: Optional[dict[str, Any]] = Field(
         None,
-        description='An open-ended set of data describing what happened',
-        title='Payload',
+        description="An open-ended set of data describing what happened",
+        title="Payload",
     )
     id: UUID = Field(
-        ..., description='The client-provided identifier of this event', title='Id'
+        ..., description="The client-provided identifier of this event", title="Id"
     )
     follows: Optional[UUID] = Field(
         None,
-        description='The ID of an event that is known to have occurred prior to this one. If set, this may be used to establish a more precise ordering of causally-related events when they occur close enough together in time that the system may receive them out-of-order.',
-        title='Follows',
+        description="The ID of an event that is known to have occurred prior to this one. If set, this may be used to establish a more precise ordering of causally-related events when they occur close enough together in time that the system may receive them out-of-order.",
+        title="Follows",
     )
 
 
 class EventAnyResourceFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     id: Optional[list[str]] = Field(
-        None, description='Only include events for resources with these IDs', title='Id'
+        None, description="Only include events for resources with these IDs", title="Id"
     )
     id_prefix: Optional[list[str]] = Field(
         None,
-        description='Only include events for resources with IDs starting with these prefixes',
-        title='Id Prefix',
+        description="Only include events for resources with IDs starting with these prefixes",
+        title="Id Prefix",
     )
     labels: Optional[dict[str, Union[str, list[str]]]] = Field(
-        None, description='Only include events for related resources with these labels'
+        None, description="Only include events for related resources with these labels"
     )
 
 
 class EventRelatedFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     id: Optional[list[str]] = Field(
         None,
-        description='Only include events for related resources with these IDs',
-        title='Id',
+        description="Only include events for related resources with these IDs",
+        title="Id",
     )
     role: Optional[list[str]] = Field(
         None,
-        description='Only include events for related resources in these roles',
-        title='Role',
+        description="Only include events for related resources in these roles",
+        title="Role",
     )
     resources_in_roles: Optional[list[list]] = Field(
         None,
-        description='Only include events with specific related resources in specific roles',
-        title='Resources In Roles',
+        description="Only include events with specific related resources in specific roles",
+        title="Resources In Roles",
     )
     labels: Optional[dict[str, Union[str, list[str]]]] = Field(
-        None, description='Only include events for related resources with these labels'
+        None, description="Only include events for related resources with these labels"
     )
 
 
 class EventResourceFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     id: Optional[list[str]] = Field(
-        None, description='Only include events for resources with these IDs', title='Id'
+        None, description="Only include events for resources with these IDs", title="Id"
     )
     id_prefix: Optional[list[str]] = Field(
         None,
-        description='Only include events for resources with IDs starting with these prefixes.',
-        title='Id Prefix',
+        description="Only include events for resources with IDs starting with these prefixes.",
+        title="Id Prefix",
     )
     labels: Optional[dict[str, Union[str, list[str]]]] = Field(
-        None, description='Only include events for resources with these labels'
+        None, description="Only include events for resources with these labels"
     )
     distinct: Optional[bool] = Field(
         False,
-        description='Only include events for distinct resources',
-        title='Distinct',
+        description="Only include events for distinct resources",
+        title="Distinct",
     )
 
 
 class EventTrigger(BaseModel):
-    type: Literal['event'] = Field('event', title='Type')
+    type: Literal["event"] = Field("event", title="Type")
     id: Optional[UUID] = Field(
-        None, description='The unique ID of this trigger', title='Id'
+        None, description="The unique ID of this trigger", title="Id"
     )
     match: Optional[dict[str, Union[str, list[str]]]] = Field(
         None,
-        description='Labels for resources which this trigger will match.',
-        title='Match',
+        description="Labels for resources which this trigger will match.",
+        title="Match",
     )
     match_related: Optional[
         Union[dict[str, Union[str, list[str]]], list[dict[str, Union[str, list[str]]]]]
     ] = Field(
         None,
-        description='Labels for related resources which this trigger will match.',
-        title='Match Related',
+        description="Labels for related resources which this trigger will match.",
+        title="Match Related",
     )
     after: Optional[list[str]] = Field(
         None,
-        description='The event(s) which must first been seen to fire this trigger.  If empty, then fire this trigger immediately.  Events may include trailing wildcards, like `prefect.flow-run.*`',
-        title='After',
+        description="The event(s) which must first been seen to fire this trigger.  If empty, then fire this trigger immediately.  Events may include trailing wildcards, like `prefect.flow-run.*`",
+        title="After",
     )
     expect: Optional[list[str]] = Field(
         None,
-        description='The event(s) this trigger is expecting to see.  If empty, this trigger will match any event.  Events may include trailing wildcards, like `prefect.flow-run.*`',
-        title='Expect',
+        description="The event(s) this trigger is expecting to see.  If empty, this trigger will match any event.  Events may include trailing wildcards, like `prefect.flow-run.*`",
+        title="Expect",
     )
     for_each: Optional[list[str]] = Field(
         None,
         description='Evaluate the trigger separately for each distinct value of these labels on the resource.  By default, labels refer to the primary resource of the triggering event.  You may also refer to labels from related resources by specifying `related:<role>:<label>`.  This will use the value of that label for the first related resource in that role.  For example, `"for_each": ["related:flow:prefect.resource.id"]` would evaluate the trigger for each flow.',
-        title='For Each',
+        title="For Each",
     )
     posture: Posture = Field(
         ...,
-        description='The posture of this trigger, either Reactive or Proactive.  Reactive triggers respond to the _presence_ of the expected events, while Proactive triggers respond to the _absence_ of those expected events.',
-        title='Posture',
+        description="The posture of this trigger, either Reactive or Proactive.  Reactive triggers respond to the _presence_ of the expected events, while Proactive triggers respond to the _absence_ of those expected events.",
+        title="Posture",
     )
     threshold: Optional[int] = Field(
         1,
-        description='The number of events required for this trigger to fire (for Reactive triggers), or the number of events expected (for Proactive triggers)',
-        title='Threshold',
+        description="The number of events required for this trigger to fire (for Reactive triggers), or the number of events expected (for Proactive triggers)",
+        title="Threshold",
     )
     within: Optional[float] = Field(
         0,
-        description='The time period over which the events must occur.  For Reactive triggers, this may be as low as 0 seconds, but must be at least 10 seconds for Proactive triggers',
-        title='Within',
+        description="The time period over which the events must occur.  For Reactive triggers, this may be as low as 0 seconds, but must be at least 10 seconds for Proactive triggers",
+        title="Within",
     )
 
 
 class FlowFilterDeployment(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flows without deployments',
-        title='Is Null',
+        description="If true, only include flows without deployments",
+        title="Is Null",
     )
 
 
 class FlowFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Flows will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Flows will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     is_null_: Optional[bool] = Field(
-        None, description='If true, only include flows without tags', title='Is Null'
+        None, description="If true, only include flows without tags", title="Is Null"
     )
 
 
 class FlowRunBulkCreateResponse(BaseModel):
-    results: Optional[list[FlowRunCreateResult]] = Field(None, title='Results')
+    results: Optional[list[FlowRunCreateResult]] = Field(None, title="Results")
 
 
 class FlowRunFilterCreatedBy(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id_: Optional[list[UUID]] = Field(
-        None, description='A list of creator IDs to include', title='Id'
+        None, description="A list of creator IDs to include", title="Id"
     )
     type_: Optional[list[str]] = Field(
         None,
         description="A list of creator types to include. For example, 'DEPLOYMENT' for scheduled runs or 'AUTOMATION' for runs triggered by automations.",
-        examples=[['DEPLOYMENT', 'AUTOMATION']],
-        title='Type',
+        examples=[["DEPLOYMENT", "AUTOMATION"]],
+        title="Type",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flow runs without a creator',
-        title='Is Null',
+        description="If true, only include flow runs without a creator",
+        title="Is Null",
     )
 
 
 class FlowRunFilterDeploymentId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of flow run deployment ids to include', title='Any'
+        None, description="A list of flow run deployment ids to include", title="Any"
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flow runs without deployment ids',
-        title='Is Null',
+        description="If true, only include flow runs without deployment ids",
+        title="Is Null",
     )
 
 
 class FlowRunFilterParentFlowRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     any_: Optional[list[UUID]] = Field(
-        None, description='A list of parent flow run ids to include', title='Any'
+        None, description="A list of parent flow run ids to include", title="Any"
     )
 
 
 class FlowRunFilterParentTaskRunId(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     any_: Optional[list[UUID]] = Field(
         None,
-        description='A list of flow run parent_task_run_ids to include',
-        title='Any',
+        description="A list of flow run parent_task_run_ids to include",
+        title="Any",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flow runs without parent_task_run_id',
-        title='Is Null',
+        description="If true, only include flow runs without parent_task_run_id",
+        title="Is Null",
     )
 
 
 class FlowRunFilterStateType(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[StateType]] = Field(
-        None, description='A list of flow run state types to include', title='Any'
+        None, description="A list of flow run state types to include", title="Any"
     )
     not_any_: Optional[list[StateType]] = Field(
-        None, description='A list of flow run state types to exclude', title='Not Any'
+        None, description="A list of flow run state types to exclude", title="Not Any"
     )
 
 
 class FlowRunFilterTags(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     all_: Optional[list[str]] = Field(
         None,
-        description='A list of tags. Flow runs will be returned only if their tags are a superset of the list',
-        examples=[['tag-1', 'tag-2']],
-        title='All',
+        description="A list of tags. Flow runs will be returned only if their tags are a superset of the list",
+        examples=[["tag-1", "tag-2"]],
+        title="All",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of tags to include',
-        examples=[['tag-1', 'tag-2']],
-        title='Any',
+        description="A list of tags to include",
+        examples=[["tag-1", "tag-2"]],
+        title="Any",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flow runs without tags',
-        title='Is Null',
+        description="If true, only include flow runs without tags",
+        title="Is Null",
     )
 
 
 class FlowRunFilterWorkQueueName(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     any_: Optional[list[str]] = Field(
         None,
-        description='A list of work queue names to include',
-        examples=[['work_queue_1', 'work_queue_2']],
-        title='Any',
+        description="A list of work queue names to include",
+        examples=[["work_queue_1", "work_queue_2"]],
+        title="Any",
     )
     is_null_: Optional[bool] = Field(
         None,
-        description='If true, only include flow runs without work queue names',
-        title='Is Null',
+        description="If true, only include flow runs without work queue names",
+        title="Is Null",
     )
 
 
 class FlowRunSlotSummary(BaseModel):
-    id: UUID = Field(..., title='Id')
-    name: str = Field(..., title='Name')
+    id: UUID = Field(..., title="Id")
+    name: str = Field(..., title="Name")
     state_type: Optional[StateType] = None
-    state_name: Optional[str] = Field(None, title='State Name')
-    start_time: Optional[AwareDatetime] = Field(None, title='Start Time')
-    state_timestamp: Optional[AwareDatetime] = Field(None, title='State Timestamp')
-    time_in_current_state: Optional[float] = Field(None, title='Time In Current State')
+    state_name: Optional[str] = Field(None, title="State Name")
+    start_time: Optional[AwareDatetime] = Field(None, title="Start Time")
+    state_timestamp: Optional[AwareDatetime] = Field(None, title="State Timestamp")
+    time_in_current_state: Optional[float] = Field(None, title="Time In Current State")
 
 
 class GraphState(BaseModel):
-    id: UUID = Field(..., title='Id')
-    timestamp: AwareDatetime = Field(..., title='Timestamp')
+    id: UUID = Field(..., title="Id")
+    timestamp: AwareDatetime = Field(..., title="Timestamp")
     type: StateType
-    name: str = Field(..., title='Name')
+    name: str = Field(..., title="Name")
 
 
 class HTTPValidationError(BaseModel):
-    detail: Optional[list[ValidationError]] = Field(None, title='Detail')
+    detail: Optional[list[ValidationError]] = Field(None, title="Detail")
 
 
 class HistoryResponseState(BaseModel):
-    state_type: StateType = Field(..., description='The state type.')
-    state_name: str = Field(..., description='The state name.', title='State Name')
+    state_type: StateType = Field(..., description="The state type.")
+    state_name: str = Field(..., description="The state name.", title="State Name")
     count_runs: int = Field(
         ...,
-        description='The number of runs in the specified state during the interval.',
-        title='Count Runs',
+        description="The number of runs in the specified state during the interval.",
+        title="Count Runs",
     )
     sum_estimated_run_time: float = Field(
         ...,
-        description='The total estimated run time of all runs during the interval.',
-        title='Sum Estimated Run Time',
+        description="The total estimated run time of all runs during the interval.",
+        title="Sum Estimated Run Time",
     )
     sum_estimated_lateness: float = Field(
         ...,
-        description='The sum of differences between actual and expected start time during the interval.',
-        title='Sum Estimated Lateness',
+        description="The sum of differences between actual and expected start time during the interval.",
+        title="Sum Estimated Lateness",
     )
 
 
 class LogFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     level: Optional[LogFilterLevel] = Field(
-        None, description='Filter criteria for `Log.level`'
+        None, description="Filter criteria for `Log.level`"
     )
     timestamp: Optional[LogFilterTimestamp] = Field(
-        None, description='Filter criteria for `Log.timestamp`'
+        None, description="Filter criteria for `Log.timestamp`"
     )
     flow_run_id: Optional[LogFilterFlowRunId] = Field(
-        None, description='Filter criteria for `Log.flow_run_id`'
+        None, description="Filter criteria for `Log.flow_run_id`"
     )
     task_run_id: Optional[LogFilterTaskRunId] = Field(
-        None, description='Filter criteria for `Log.task_run_id`'
+        None, description="Filter criteria for `Log.task_run_id`"
     )
     text: Optional[LogFilterTextSearch] = Field(
-        None, description='Filter criteria for text search across log content'
+        None, description="Filter criteria for text search across log content"
     )
 
 
 class LoggingSettings(BaseModel):
     level: Optional[Level] = Field(
-        'INFO',
-        description='The default logging level for Prefect loggers.',
-        title='Level',
+        "INFO",
+        description="The default logging level for Prefect loggers.",
+        title="Level",
     )
     config_path: Optional[Path] = Field(
         None,
-        description='A path to a logging configuration file. Defaults to $PREFECT_HOME/logging.yml',
-        title='Config Path',
+        description="A path to a logging configuration file. Defaults to $PREFECT_HOME/logging.yml",
+        title="Config Path",
     )
     extra_loggers: Optional[Union[str, list[str]]] = Field(
         None,
-        description='Additional loggers to attach to Prefect logging at runtime.',
-        title='Extra Loggers',
+        description="Additional loggers to attach to Prefect logging at runtime.",
+        title="Extra Loggers",
     )
     log_prints: Optional[bool] = Field(
         False,
-        description='If `True`, `print` statements in flows and tasks will be redirected to the Prefect logger for the given run.',
-        title='Log Prints',
+        description="If `True`, `print` statements in flows and tasks will be redirected to the Prefect logger for the given run.",
+        title="Log Prints",
     )
     colors: Optional[bool] = Field(
         True,
-        description='If `True`, use colors in CLI output. If `False`, output will not include colors codes.',
-        title='Colors',
+        description="If `True`, use colors in CLI output. If `False`, output will not include colors codes.",
+        title="Colors",
     )
     markup: Optional[bool] = Field(
         False,
-        description='\n        Whether to interpret strings wrapped in square brackets as a style.\n        This allows styles to be conveniently added to log messages, e.g.\n        `[red]This is a red message.[/red]`. However, the downside is, if enabled,\n        strings that contain square brackets may be inaccurately interpreted and\n        lead to incomplete output, e.g.\n        `[red]This is a red message.[/red]` may be interpreted as\n        `[red]This is a red message.[/red]`.\n        ',
-        title='Markup',
+        description="\n        Whether to interpret strings wrapped in square brackets as a style.\n        This allows styles to be conveniently added to log messages, e.g.\n        `[red]This is a red message.[/red]`. However, the downside is, if enabled,\n        strings that contain square brackets may be inaccurately interpreted and\n        lead to incomplete output, e.g.\n        `[red]This is a red message.[/red]` may be interpreted as\n        `[red]This is a red message.[/red]`.\n        ",
+        title="Markup",
     )
     to_api: Optional[LoggingToAPISettings] = None
 
 
 class Node(BaseModel):
-    kind: Kind = Field(..., title='Kind')
-    id: UUID = Field(..., title='Id')
-    label: str = Field(..., title='Label')
+    kind: Kind = Field(..., title="Kind")
+    id: UUID = Field(..., title="Id")
+    label: str = Field(..., title="Label")
     state_type: StateType
-    start_time: AwareDatetime = Field(..., title='Start Time')
-    end_time: Optional[AwareDatetime] = Field(..., title='End Time')
-    parents: list[Edge] = Field(..., title='Parents')
-    children: list[Edge] = Field(..., title='Children')
-    encapsulating: list[Edge] = Field(..., title='Encapsulating')
-    artifacts: list[GraphArtifact] = Field(..., title='Artifacts')
+    start_time: AwareDatetime = Field(..., title="Start Time")
+    end_time: Optional[AwareDatetime] = Field(..., title="End Time")
+    parents: list[Edge] = Field(..., title="Parents")
+    children: list[Edge] = Field(..., title="Children")
+    encapsulating: list[Edge] = Field(..., title="Encapsulating")
+    artifacts: list[GraphArtifact] = Field(..., title="Artifacts")
 
 
 class ReceivedEvent(BaseModel):
     occurred: AwareDatetime = Field(
         ...,
         description="When the event happened from the sender's perspective",
-        title='Occurred',
+        title="Occurred",
     )
     event: str = Field(
-        ..., description='The name of the event that happened', title='Event'
+        ..., description="The name of the event that happened", title="Event"
     )
     resource: dict[str, str] = Field(
-        ..., description='The primary Resource this event concerns'
+        ..., description="The primary Resource this event concerns"
     )
     related: Optional[list[dict[str, str]]] = Field(
         None,
-        description='A list of additional Resources involved in this event',
-        title='Related',
+        description="A list of additional Resources involved in this event",
+        title="Related",
     )
     payload: Optional[dict[str, Any]] = Field(
         None,
-        description='An open-ended set of data describing what happened',
-        title='Payload',
+        description="An open-ended set of data describing what happened",
+        title="Payload",
     )
     id: UUID = Field(
-        ..., description='The client-provided identifier of this event', title='Id'
+        ..., description="The client-provided identifier of this event", title="Id"
     )
     follows: Optional[UUID] = Field(
         None,
-        description='The ID of an event that is known to have occurred prior to this one. If set, this may be used to establish a more precise ordering of causally-related events when they occur close enough together in time that the system may receive them out-of-order.',
-        title='Follows',
+        description="The ID of an event that is known to have occurred prior to this one. If set, this may be used to establish a more precise ordering of causally-related events when they occur close enough together in time that the system may receive them out-of-order.",
+        title="Follows",
     )
     received: Optional[AwareDatetime] = Field(
         None,
-        description='When the event was received by Prefect Cloud',
-        title='Received',
+        description="When the event was received by Prefect Cloud",
+        title="Received",
     )
 
 
 class SQLAlchemyConnectArgsSettings(BaseModel):
     application_name: Optional[str] = Field(
         None,
-        description='Controls the application_name field for connections opened from the connection pool when using a PostgreSQL database with the Prefect backend.',
-        title='Application Name',
+        description="Controls the application_name field for connections opened from the connection pool when using a PostgreSQL database with the Prefect backend.",
+        title="Application Name",
     )
     search_path: Optional[str] = Field(
         None,
         description="PostgreSQL schema name to set in search_path when using a PostgreSQL database with the Prefect backend. Note: The public schema should be included in the search path (e.g. 'myschema, public') to ensure that pg_trgm and other extensions remain available.",
-        title='Search Path',
+        title="Search Path",
     )
     statement_cache_size: Optional[int] = Field(
         None,
-        description='Controls statement cache size for PostgreSQL connections. Setting this to 0 is required when using PgBouncer in transaction mode. Defaults to None.',
-        title='Statement Cache Size',
+        description="Controls statement cache size for PostgreSQL connections. Setting this to 0 is required when using PgBouncer in transaction mode. Defaults to None.",
+        title="Statement Cache Size",
     )
     prepared_statement_cache_size: Optional[int] = Field(
         None,
         description="Controls the size of the statement cache for PostgreSQL connections. When set to 0, statement caching is disabled. Defaults to None to use SQLAlchemy's default behavior.",
-        title='Prepared Statement Cache Size',
+        title="Prepared Statement Cache Size",
     )
     tls: Optional[SQLAlchemyTLSSettings] = Field(
-        None, description='Settings for controlling SQLAlchemy mTLS behavior'
+        None, description="Settings for controlling SQLAlchemy mTLS behavior"
     )
 
 
 class SQLAlchemySettings(BaseModel):
     connect_args: Optional[SQLAlchemyConnectArgsSettings] = Field(
-        None, description='Settings for controlling SQLAlchemy connection behavior'
+        None, description="Settings for controlling SQLAlchemy connection behavior"
     )
     pool_size: Optional[int] = Field(
         5,
-        description='Controls connection pool size of database connection pools from the Prefect backend.',
-        title='Pool Size',
+        description="Controls connection pool size of database connection pools from the Prefect backend.",
+        title="Pool Size",
     )
     pool_recycle: Optional[int] = Field(
         3600,
-        description='This setting causes the pool to recycle connections after the given number of seconds has passed; set it to -1 to avoid recycling entirely.',
-        title='Pool Recycle',
+        description="This setting causes the pool to recycle connections after the given number of seconds has passed; set it to -1 to avoid recycling entirely.",
+        title="Pool Recycle",
     )
     pool_timeout: Optional[float] = Field(
         30,
-        description='Number of seconds to wait before giving up on getting a connection from the pool. Defaults to 30 seconds.',
-        title='Pool Timeout',
+        description="Number of seconds to wait before giving up on getting a connection from the pool. Defaults to 30 seconds.",
+        title="Pool Timeout",
     )
     max_overflow: Optional[int] = Field(
         10,
-        description='Controls maximum overflow of the connection pool. To prevent overflow, set to -1.',
-        title='Max Overflow',
+        description="Controls maximum overflow of the connection pool. To prevent overflow, set to -1.",
+        title="Max Overflow",
     )
 
 
 class SavedSearch(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: str = Field(..., description='The name of the saved search.', title='Name')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: str = Field(..., description="The name of the saved search.", title="Name")
     filters: Optional[list[SavedSearchFilter]] = Field(
-        None, description='The filter set for the saved search.', title='Filters'
+        None, description="The filter set for the saved search.", title="Filters"
     )
 
 
 class SavedSearchCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: str = Field(..., description='The name of the saved search.', title='Name')
+    name: str = Field(..., description="The name of the saved search.", title="Name")
     filters: Optional[list[SavedSearchFilter]] = Field(
-        None, description='The filter set for the saved search.', title='Filters'
+        None, description="The filter set for the saved search.", title="Filters"
     )
 
 
 class ServerDatabaseSettings(BaseModel):
     sqlalchemy: Optional[SQLAlchemySettings] = Field(
-        None, description='Settings for controlling SQLAlchemy behavior'
+        None, description="Settings for controlling SQLAlchemy behavior"
     )
     connection_url: Optional[SecretStr] = Field(
         None,
-        description='\n        A database connection URL in a SQLAlchemy-compatible\n        format. Prefect currently supports SQLite and Postgres. Note that all\n        Prefect database engines must use an async driver - for SQLite, use\n        `sqlite+aiosqlite` and for Postgres use `postgresql+asyncpg`.\n\n        SQLite in-memory databases can be used by providing the url\n        `sqlite+aiosqlite:///file::memory:?cache=shared&uri=true&check_same_thread=false`,\n        which will allow the database to be accessed by multiple threads. Note\n        that in-memory databases can not be accessed from multiple processes and\n        should only be used for simple tests.\n        ',
-        title='Connection Url',
+        description="\n        A database connection URL in a SQLAlchemy-compatible\n        format. Prefect currently supports SQLite and Postgres. Note that all\n        Prefect database engines must use an async driver - for SQLite, use\n        `sqlite+aiosqlite` and for Postgres use `postgresql+asyncpg`.\n\n        SQLite in-memory databases can be used by providing the url\n        `sqlite+aiosqlite:///file::memory:?cache=shared&uri=true&check_same_thread=false`,\n        which will allow the database to be accessed by multiple threads. Note\n        that in-memory databases can not be accessed from multiple processes and\n        should only be used for simple tests.\n        ",
+        title="Connection Url",
     )
     driver: Optional[Driver] = Field(
         None,
-        description='The database driver to use when connecting to the database. If not set, the driver will be inferred from the connection URL.',
-        title='Driver',
+        description="The database driver to use when connecting to the database. If not set, the driver will be inferred from the connection URL.",
+        title="Driver",
     )
     host: Optional[str] = Field(
-        None, description='The database server host.', title='Host'
+        None, description="The database server host.", title="Host"
     )
     port: Optional[int] = Field(
-        None, description='The database server port.', title='Port'
+        None, description="The database server port.", title="Port"
     )
     user: Optional[str] = Field(
         None,
-        description='The user to use when connecting to the database.',
-        title='User',
+        description="The user to use when connecting to the database.",
+        title="User",
     )
     name: Optional[str] = Field(
         None,
-        description='The name of the Prefect database on the remote server, or the path to the database file for SQLite.',
-        title='Name',
+        description="The name of the Prefect database on the remote server, or the path to the database file for SQLite.",
+        title="Name",
     )
     password: Optional[SecretStr] = Field(
         None,
-        description='The password to use when connecting to the database. Should be kept secret.',
-        title='Password',
+        description="The password to use when connecting to the database. Should be kept secret.",
+        title="Password",
     )
     echo: Optional[bool] = Field(
         False,
-        description='If `True`, SQLAlchemy will log all SQL issued to the database. Defaults to `False`.',
-        title='Echo',
+        description="If `True`, SQLAlchemy will log all SQL issued to the database. Defaults to `False`.",
+        title="Echo",
     )
     migrate_on_start: Optional[bool] = Field(
         True,
-        description='If `True`, the database will be migrated on application startup.',
-        title='Migrate On Start',
+        description="If `True`, the database will be migrated on application startup.",
+        title="Migrate On Start",
     )
     timeout: Optional[float] = Field(
         10,
-        description='A statement timeout, in seconds, applied to all database interactions made by the Prefect backend. Defaults to 10 seconds.',
-        title='Timeout',
+        description="A statement timeout, in seconds, applied to all database interactions made by the Prefect backend. Defaults to 10 seconds.",
+        title="Timeout",
     )
     connection_timeout: Optional[float] = Field(
         5,
-        description='A connection timeout, in seconds, applied to database connections. Defaults to `5`.',
-        title='Connection Timeout',
+        description="A connection timeout, in seconds, applied to database connections. Defaults to `5`.",
+        title="Connection Timeout",
     )
 
 
@@ -4751,755 +4751,755 @@ class ServerServicesSettings(BaseModel):
 
 class ServerSettings(BaseModel):
     logging_level: Optional[LoggingLevel] = Field(
-        'WARNING',
-        description='The default logging level for the Prefect API server.',
-        title='Logging Level',
+        "WARNING",
+        description="The default logging level for the Prefect API server.",
+        title="Logging Level",
     )
     analytics_enabled: Optional[bool] = Field(
         True,
-        description='\n        When enabled, Prefect sends anonymous data (e.g. count of flow runs, package version)\n        on server startup to help us improve our product.\n        ',
-        title='Analytics Enabled',
+        description="\n        When enabled, Prefect sends anonymous data (e.g. count of flow runs, package version)\n        on server startup to help us improve our product.\n        ",
+        title="Analytics Enabled",
     )
     metrics_enabled: Optional[bool] = Field(
         False,
-        description='Whether or not to enable Prometheus metrics in the API.',
-        title='Metrics Enabled',
+        description="Whether or not to enable Prometheus metrics in the API.",
+        title="Metrics Enabled",
     )
     log_retryable_errors: Optional[bool] = Field(
         False,
         description="If `True`, log retryable errors in the API and it's services.",
-        title='Log Retryable Errors',
+        title="Log Retryable Errors",
     )
     register_blocks_on_start: Optional[bool] = Field(
         True,
-        description='If set, any block types that have been imported will be registered with the backend on application startup. If not set, block types must be manually registered.',
-        title='Register Blocks On Start',
+        description="If set, any block types that have been imported will be registered with the backend on application startup. If not set, block types must be manually registered.",
+        title="Register Blocks On Start",
     )
     memoize_block_auto_registration: Optional[bool] = Field(
         True,
-        description='Controls whether or not block auto-registration on start',
-        title='Memoize Block Auto Registration',
+        description="Controls whether or not block auto-registration on start",
+        title="Memoize Block Auto Registration",
     )
     memo_store_path: Optional[Path] = Field(
         None,
-        description='Path to the memo store file. Defaults to $PREFECT_HOME/memo_store.toml',
-        title='Memo Store Path',
+        description="Path to the memo store file. Defaults to $PREFECT_HOME/memo_store.toml",
+        title="Memo Store Path",
     )
     deployment_schedule_max_scheduled_runs: Optional[int] = Field(
         50,
-        description='The maximum number of scheduled runs to create for a deployment.',
-        title='Deployment Schedule Max Scheduled Runs',
+        description="The maximum number of scheduled runs to create for a deployment.",
+        title="Deployment Schedule Max Scheduled Runs",
     )
     api: Optional[ServerAPISettings] = None
     concurrency: Optional[ServerConcurrencySettings] = Field(
         None,
-        description='Settings for controlling server-side concurrency limit handling',
+        description="Settings for controlling server-side concurrency limit handling",
     )
     database: Optional[ServerDatabaseSettings] = None
     deployments: Optional[ServerDeploymentsSettings] = Field(
-        None, description='Settings for controlling server deployments behavior'
+        None, description="Settings for controlling server deployments behavior"
     )
     docket: Optional[ServerDocketSettings] = Field(
-        None, description='Settings for controlling server Docket behavior'
+        None, description="Settings for controlling server Docket behavior"
     )
     ephemeral: Optional[ServerEphemeralSettings] = None
     events: Optional[ServerEventsSettings] = Field(
-        None, description='Settings for controlling server events behavior'
+        None, description="Settings for controlling server events behavior"
     )
     flow_run_graph: Optional[ServerFlowRunGraphSettings] = Field(
-        None, description='Settings for controlling flow run graph behavior'
+        None, description="Settings for controlling flow run graph behavior"
     )
     logs: Optional[ServerLogsSettings] = Field(
-        None, description='Settings for controlling server logs behavior'
+        None, description="Settings for controlling server logs behavior"
     )
     services: Optional[ServerServicesSettings] = Field(
-        None, description='Settings for controlling server services behavior'
+        None, description="Settings for controlling server services behavior"
     )
     tasks: Optional[ServerTasksSettings] = Field(
-        None, description='Settings for controlling server tasks behavior'
+        None, description="Settings for controlling server tasks behavior"
     )
     ui: Optional[ServerUISettings] = Field(
-        None, description='Settings for controlling server UI behavior'
+        None, description="Settings for controlling server UI behavior"
     )
 
 
 class SimpleFlowRun(BaseModel):
-    id: UUID = Field(..., description='The flow run id.', title='Id')
-    state_type: StateType = Field(..., description='The state type.')
+    id: UUID = Field(..., description="The flow run id.", title="Id")
+    state_type: StateType = Field(..., description="The state type.")
     timestamp: AwareDatetime = Field(
         ...,
         description="The start time of the run, or the expected start time if it hasn't run yet.",
-        title='Timestamp',
+        title="Timestamp",
     )
     duration: float = Field(
-        ..., description='The total run time of the run.', title='Duration'
+        ..., description="The total run time of the run.", title="Duration"
     )
     lateness: float = Field(
         ...,
-        description='The delay between the expected and actual start time.',
-        title='Lateness',
+        description="The delay between the expected and actual start time.",
+        title="Lateness",
     )
 
 
 class SimpleNextFlowRun(BaseModel):
-    id: UUID = Field(..., description='The flow run id.', title='Id')
-    flow_id: UUID = Field(..., description='The flow id.', title='Flow Id')
-    name: str = Field(..., description='The flow run name', title='Name')
-    state_name: str = Field(..., description='The state name.', title='State Name')
-    state_type: StateType = Field(..., description='The state type.')
+    id: UUID = Field(..., description="The flow run id.", title="Id")
+    flow_id: UUID = Field(..., description="The flow id.", title="Flow Id")
+    name: str = Field(..., description="The flow run name", title="Name")
+    state_name: str = Field(..., description="The state name.", title="State Name")
+    state_type: StateType = Field(..., description="The state type.")
     next_scheduled_start_time: AwareDatetime = Field(
         ...,
-        description='The next scheduled start time',
-        title='Next Scheduled Start Time',
+        description="The next scheduled start time",
+        title="Next Scheduled Start Time",
     )
 
 
 class State(BaseModel):
-    id: UUID = Field(..., title='Id')
+    id: UUID = Field(..., title="Id")
     type: StateType
-    name: Optional[str] = Field(None, title='Name')
-    timestamp: Optional[AwareDatetime] = Field(None, title='Timestamp')
-    message: Optional[str] = Field(None, examples=['Run started'], title='Message')
+    name: Optional[str] = Field(None, title="Name")
+    timestamp: Optional[AwareDatetime] = Field(None, title="Timestamp")
+    message: Optional[str] = Field(None, examples=["Run started"], title="Message")
     data: Any = Field(
         None,
-        description='Data associated with the state, e.g. a result. Content must be storable as JSON.',
-        title='Data',
+        description="Data associated with the state, e.g. a result. Content must be storable as JSON.",
+        title="Data",
     )
     state_details: Optional[StateDetails] = None
 
 
 class StateCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    type: StateType = Field(..., description='The type of the state to create')
+    type: StateType = Field(..., description="The type of the state to create")
     name: Optional[str] = Field(
-        None, description='The name of the state to create', title='Name'
+        None, description="The name of the state to create", title="Name"
     )
     message: Optional[str] = Field(
-        None, description='The message of the state to create', title='Message'
+        None, description="The message of the state to create", title="Message"
     )
-    data: Any = Field(None, description='The data of the state to create', title='Data')
+    data: Any = Field(None, description="The data of the state to create", title="Data")
     state_details: Optional[StateDetails] = Field(
-        None, description='The details of the state to create'
+        None, description="The details of the state to create"
     )
 
 
 class TaskRun(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: Optional[str] = Field(None, examples=['my-task-run'], title='Name')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: Optional[str] = Field(None, examples=["my-task-run"], title="Name")
     flow_run_id: Optional[UUID] = Field(
-        None, description='The flow run id of the task run.', title='Flow Run Id'
+        None, description="The flow run id of the task run.", title="Flow Run Id"
     )
     task_key: str = Field(
-        ..., description='A unique identifier for the task being run.', title='Task Key'
+        ..., description="A unique identifier for the task being run.", title="Task Key"
     )
     dynamic_key: str = Field(
         ...,
-        description='A dynamic key used to differentiate between multiple runs of the same task within the same flow run.',
-        title='Dynamic Key',
+        description="A dynamic key used to differentiate between multiple runs of the same task within the same flow run.",
+        title="Dynamic Key",
     )
     cache_key: Optional[str] = Field(
         None,
-        description='An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.',
-        title='Cache Key',
+        description="An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.",
+        title="Cache Key",
     )
     cache_expiration: Optional[AwareDatetime] = Field(
         None,
-        description='Specifies when the cached state should expire.',
-        title='Cache Expiration',
+        description="Specifies when the cached state should expire.",
+        title="Cache Expiration",
     )
     task_version: Optional[str] = Field(
-        None, description='The version of the task being run.', title='Task Version'
+        None, description="The version of the task being run.", title="Task Version"
     )
     empirical_policy: Optional[TaskRunPolicy] = None
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the task run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the task run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     state_id: Optional[UUID] = Field(
-        None, description='The id of the current task run state.', title='State Id'
+        None, description="The id of the current task run state.", title="State Id"
     )
     task_inputs: Optional[
         dict[str, list[Union[TaskRunResult, FlowRunResult, Parameter, Constant]]]
     ] = Field(
         None,
-        description='Tracks the source of inputs to a task run. Used for internal bookkeeping.',
-        title='Task Inputs',
+        description="Tracks the source of inputs to a task run. Used for internal bookkeeping.",
+        title="Task Inputs",
     )
     state_type: Optional[StateType] = Field(
-        None, description='The type of the current task run state.'
+        None, description="The type of the current task run state."
     )
     state_name: Optional[str] = Field(
-        None, description='The name of the current task run state.', title='State Name'
+        None, description="The name of the current task run state.", title="State Name"
     )
     run_count: Optional[int] = Field(
         0,
-        description='The number of times the task run has been executed.',
-        title='Run Count',
+        description="The number of times the task run has been executed.",
+        title="Run Count",
     )
     flow_run_run_count: Optional[int] = Field(
         0,
-        description='If the parent flow has retried, this indicates the flow retry this run is associated with.',
-        title='Flow Run Run Count',
+        description="If the parent flow has retried, this indicates the flow retry this run is associated with.",
+        title="Flow Run Run Count",
     )
     expected_start_time: Optional[AwareDatetime] = Field(
         None,
         description="The task run's expected start time.",
-        title='Expected Start Time',
+        title="Expected Start Time",
     )
     next_scheduled_start_time: Optional[AwareDatetime] = Field(
         None,
-        description='The next time the task run is scheduled to start.',
-        title='Next Scheduled Start Time',
+        description="The next time the task run is scheduled to start.",
+        title="Next Scheduled Start Time",
     )
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The actual start time.', title='Start Time'
+        None, description="The actual start time.", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The actual end time.', title='End Time'
+        None, description="The actual end time.", title="End Time"
     )
     total_run_time: Optional[float] = Field(
         0,
-        description='Total run time. If the task run was executed multiple times, the time of each run will be summed.',
-        title='Total Run Time',
+        description="Total run time. If the task run was executed multiple times, the time of each run will be summed.",
+        title="Total Run Time",
     )
     estimated_run_time: Optional[float] = Field(
         0,
-        description='A real-time estimate of total run time.',
-        title='Estimated Run Time',
+        description="A real-time estimate of total run time.",
+        title="Estimated Run Time",
     )
     estimated_start_time_delta: Optional[float] = Field(
         0,
-        description='The difference between actual and expected start time.',
-        title='Estimated Start Time Delta',
+        description="The difference between actual and expected start time.",
+        title="Estimated Start Time Delta",
     )
-    state: Optional[State] = Field(None, description='The current task run state.')
+    state: Optional[State] = Field(None, description="The current task run state.")
 
 
 class TaskRunCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     id: Optional[UUID] = Field(
         None,
-        description='The ID to assign to the task run. If not provided, a random UUID will be generated.',
-        title='Id',
+        description="The ID to assign to the task run. If not provided, a random UUID will be generated.",
+        title="Id",
     )
     state: Optional[StateCreate] = Field(
-        None, description='The state of the task run to create'
+        None, description="The state of the task run to create"
     )
-    name: Optional[str] = Field(None, examples=['my-task-run'], title='Name')
+    name: Optional[str] = Field(None, examples=["my-task-run"], title="Name")
     flow_run_id: Optional[UUID] = Field(
-        None, description='The flow run id of the task run.', title='Flow Run Id'
+        None, description="The flow run id of the task run.", title="Flow Run Id"
     )
     task_key: str = Field(
-        ..., description='A unique identifier for the task being run.', title='Task Key'
+        ..., description="A unique identifier for the task being run.", title="Task Key"
     )
     dynamic_key: str = Field(
         ...,
-        description='A dynamic key used to differentiate between multiple runs of the same task within the same flow run.',
-        title='Dynamic Key',
+        description="A dynamic key used to differentiate between multiple runs of the same task within the same flow run.",
+        title="Dynamic Key",
     )
     cache_key: Optional[str] = Field(
         None,
-        description='An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.',
-        title='Cache Key',
+        description="An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.",
+        title="Cache Key",
     )
     cache_expiration: Optional[AwareDatetime] = Field(
         None,
-        description='Specifies when the cached state should expire.',
-        title='Cache Expiration',
+        description="Specifies when the cached state should expire.",
+        title="Cache Expiration",
     )
     task_version: Optional[str] = Field(
-        None, description='The version of the task being run.', title='Task Version'
+        None, description="The version of the task being run.", title="Task Version"
     )
     empirical_policy: Optional[TaskRunPolicy] = None
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the task run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the task run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     task_inputs: Optional[
         dict[str, list[Union[TaskRunResult, FlowRunResult, Parameter, Constant]]]
-    ] = Field(None, description='The inputs to the task run.', title='Task Inputs')
+    ] = Field(None, description="The inputs to the task run.", title="Task Inputs")
 
 
 class TaskRunFilterState(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     type: Optional[TaskRunFilterStateType] = Field(
-        None, description='Filter criteria for `TaskRun.state_type`'
+        None, description="Filter criteria for `TaskRun.state_type`"
     )
     name: Optional[TaskRunFilterStateName] = Field(
-        None, description='Filter criteria for `TaskRun.state_name`'
+        None, description="Filter criteria for `TaskRun.state_name`"
     )
 
 
 class TaskRunResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     name: Optional[str] = Field(
         None,
-        description='The name of the task run. Defaults to a random slug if not specified.',
-        examples=['my-task-run'],
-        title='Name',
+        description="The name of the task run. Defaults to a random slug if not specified.",
+        examples=["my-task-run"],
+        title="Name",
     )
     flow_run_id: Optional[UUID] = Field(
         None,
-        description='The id of the flow run this task run belongs to.',
-        title='Flow Run Id',
+        description="The id of the flow run this task run belongs to.",
+        title="Flow Run Id",
     )
     task_key: str = Field(
-        ..., description='The key of the task this run represents.', title='Task Key'
+        ..., description="The key of the task this run represents.", title="Task Key"
     )
     state_id: Optional[UUID] = Field(
-        None, description="The id of the task run's current state.", title='State Id'
+        None, description="The id of the task run's current state.", title="State Id"
     )
     state: Optional[State] = Field(
-        None, description='The current state of the task run.'
+        None, description="The current state of the task run."
     )
     task_version: Optional[str] = Field(
         None,
-        description='The version of the task executed in this task run.',
-        examples=['1.0'],
-        title='Task Version',
+        description="The version of the task executed in this task run.",
+        examples=["1.0"],
+        title="Task Version",
     )
     task_inputs: Optional[
         dict[str, list[Union[TaskRunResult, FlowRunResult, Parameter, Constant]]]
-    ] = Field(None, description='Inputs provided to the task run.', title='Task Inputs')
+    ] = Field(None, description="Inputs provided to the task run.", title="Task Inputs")
     empirical_policy: Optional[TaskRunPolicy] = Field(
         None, description="The task run's empirical retry policy."
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the task run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the task run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The actual start time.', title='Start Time'
+        None, description="The actual start time.", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The actual end time.', title='End Time'
+        None, description="The actual end time.", title="End Time"
     )
     total_run_time: Optional[float] = Field(
         0,
-        description='Total run time. If the task run was executed multiple times, the time of each run will be summed.',
-        title='Total Run Time',
+        description="Total run time. If the task run was executed multiple times, the time of each run will be summed.",
+        title="Total Run Time",
     )
     estimated_run_time: Optional[float] = Field(
         0,
-        description='A real-time estimate of the total run time.',
-        title='Estimated Run Time',
+        description="A real-time estimate of the total run time.",
+        title="Estimated Run Time",
     )
     estimated_start_time_delta: Optional[float] = Field(
         0,
-        description='The difference between actual and expected start time.',
-        title='Estimated Start Time Delta',
+        description="The difference between actual and expected start time.",
+        title="Estimated Start Time Delta",
     )
 
 
 class UITaskRun(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: Optional[str] = Field(None, examples=['my-task-run'], title='Name')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: Optional[str] = Field(None, examples=["my-task-run"], title="Name")
     flow_run_id: Optional[UUID] = Field(
-        None, description='The flow run id of the task run.', title='Flow Run Id'
+        None, description="The flow run id of the task run.", title="Flow Run Id"
     )
     task_key: str = Field(
-        ..., description='A unique identifier for the task being run.', title='Task Key'
+        ..., description="A unique identifier for the task being run.", title="Task Key"
     )
     dynamic_key: str = Field(
         ...,
-        description='A dynamic key used to differentiate between multiple runs of the same task within the same flow run.',
-        title='Dynamic Key',
+        description="A dynamic key used to differentiate between multiple runs of the same task within the same flow run.",
+        title="Dynamic Key",
     )
     cache_key: Optional[str] = Field(
         None,
-        description='An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.',
-        title='Cache Key',
+        description="An optional cache key. If a COMPLETED state associated with this cache key is found, the cached COMPLETED state will be used instead of executing the task run.",
+        title="Cache Key",
     )
     cache_expiration: Optional[AwareDatetime] = Field(
         None,
-        description='Specifies when the cached state should expire.',
-        title='Cache Expiration',
+        description="Specifies when the cached state should expire.",
+        title="Cache Expiration",
     )
     task_version: Optional[str] = Field(
-        None, description='The version of the task being run.', title='Task Version'
+        None, description="The version of the task being run.", title="Task Version"
     )
     empirical_policy: Optional[TaskRunPolicy] = None
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the task run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the task run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     state_id: Optional[UUID] = Field(
-        None, description='The id of the current task run state.', title='State Id'
+        None, description="The id of the current task run state.", title="State Id"
     )
     task_inputs: Optional[
         dict[str, list[Union[TaskRunResult, FlowRunResult, Parameter, Constant]]]
     ] = Field(
         None,
-        description='Tracks the source of inputs to a task run. Used for internal bookkeeping.',
-        title='Task Inputs',
+        description="Tracks the source of inputs to a task run. Used for internal bookkeeping.",
+        title="Task Inputs",
     )
     state_type: Optional[StateType] = Field(
-        None, description='The type of the current task run state.'
+        None, description="The type of the current task run state."
     )
     state_name: Optional[str] = Field(
-        None, description='The name of the current task run state.', title='State Name'
+        None, description="The name of the current task run state.", title="State Name"
     )
     run_count: Optional[int] = Field(
         0,
-        description='The number of times the task run has been executed.',
-        title='Run Count',
+        description="The number of times the task run has been executed.",
+        title="Run Count",
     )
     flow_run_run_count: Optional[int] = Field(
         0,
-        description='If the parent flow has retried, this indicates the flow retry this run is associated with.',
-        title='Flow Run Run Count',
+        description="If the parent flow has retried, this indicates the flow retry this run is associated with.",
+        title="Flow Run Run Count",
     )
     expected_start_time: Optional[AwareDatetime] = Field(
         None,
         description="The task run's expected start time.",
-        title='Expected Start Time',
+        title="Expected Start Time",
     )
     next_scheduled_start_time: Optional[AwareDatetime] = Field(
         None,
-        description='The next time the task run is scheduled to start.',
-        title='Next Scheduled Start Time',
+        description="The next time the task run is scheduled to start.",
+        title="Next Scheduled Start Time",
     )
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The actual start time.', title='Start Time'
+        None, description="The actual start time.", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The actual end time.', title='End Time'
+        None, description="The actual end time.", title="End Time"
     )
     total_run_time: Optional[float] = Field(
         0,
-        description='Total run time. If the task run was executed multiple times, the time of each run will be summed.',
-        title='Total Run Time',
+        description="Total run time. If the task run was executed multiple times, the time of each run will be summed.",
+        title="Total Run Time",
     )
     estimated_run_time: Optional[float] = Field(
         0,
-        description='A real-time estimate of total run time.',
-        title='Estimated Run Time',
+        description="A real-time estimate of total run time.",
+        title="Estimated Run Time",
     )
     estimated_start_time_delta: Optional[float] = Field(
         0,
-        description='The difference between actual and expected start time.',
-        title='Estimated Start Time Delta',
+        description="The difference between actual and expected start time.",
+        title="Estimated Start Time Delta",
     )
-    state: Optional[State] = Field(None, description='The current task run state.')
-    flow_run_name: Optional[str] = Field(None, title='Flow Run Name')
+    state: Optional[State] = Field(None, description="The current task run state.")
+    flow_run_name: Optional[str] = Field(None, title="Flow Run Name")
 
 
 class VariableFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[VariableFilterId] = Field(
-        None, description='Filter criteria for `Variable.id`'
+        None, description="Filter criteria for `Variable.id`"
     )
     name: Optional[VariableFilterName] = Field(
-        None, description='Filter criteria for `Variable.name`'
+        None, description="Filter criteria for `Variable.name`"
     )
     tags: Optional[VariableFilterTags] = Field(
-        None, description='Filter criteria for `Variable.tags`'
+        None, description="Filter criteria for `Variable.tags`"
     )
 
 
 class WorkPoolCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the work pool.', title='Name'
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the work pool.", title="Name"
     )
     description: Optional[str] = Field(
-        None, description='The work pool description.', title='Description'
+        None, description="The work pool description.", title="Description"
     )
     type: Optional[str] = Field(
-        'prefect-agent', description='The work pool type.', title='Type'
+        "prefect-agent", description="The work pool type.", title="Type"
     )
     base_job_template: Optional[dict[str, Any]] = Field(
         None,
         description="The work pool's base job template.",
-        title='Base Job Template',
+        title="Base Job Template",
     )
     is_paused: Optional[bool] = Field(
         False,
-        description='Pausing the work pool stops the delivery of all work.',
-        title='Is Paused',
+        description="Pausing the work pool stops the delivery of all work.",
+        title="Is Paused",
     )
     concurrency_limit: Optional[conint(ge=0)] = Field(
         None,
-        description='A concurrency limit for the work pool.',
-        title='Concurrency Limit',
+        description="A concurrency limit for the work pool.",
+        title="Concurrency Limit",
     )
     storage_configuration: Optional[WorkPoolStorageConfiguration] = Field(
-        None, description='The storage configuration for the work pool.'
+        None, description="The storage configuration for the work pool."
     )
 
 
 class WorkPoolFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[WorkPoolFilterId] = Field(
-        None, description='Filter criteria for `WorkPool.id`'
+        None, description="Filter criteria for `WorkPool.id`"
     )
     name: Optional[WorkPoolFilterName] = Field(
-        None, description='Filter criteria for `WorkPool.name`'
+        None, description="Filter criteria for `WorkPool.name`"
     )
     type: Optional[WorkPoolFilterType] = Field(
-        None, description='Filter criteria for `WorkPool.type`'
+        None, description="Filter criteria for `WorkPool.type`"
     )
 
 
 class WorkPoolResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the work pool.', title='Name'
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the work pool.", title="Name"
     )
     description: Optional[str] = Field(
-        None, description='A description of the work pool.', title='Description'
+        None, description="A description of the work pool.", title="Description"
     )
-    type: str = Field(..., description='The work pool type.', title='Type')
+    type: str = Field(..., description="The work pool type.", title="Type")
     base_job_template: Optional[dict[str, Any]] = Field(
         None,
         description="The work pool's base job template.",
-        title='Base Job Template',
+        title="Base Job Template",
     )
     is_paused: Optional[bool] = Field(
         False,
-        description='Pausing the work pool stops the delivery of all work.',
-        title='Is Paused',
+        description="Pausing the work pool stops the delivery of all work.",
+        title="Is Paused",
     )
     concurrency_limit: Optional[conint(ge=0)] = Field(
         None,
-        description='A concurrency limit for the work pool.',
-        title='Concurrency Limit',
+        description="A concurrency limit for the work pool.",
+        title="Concurrency Limit",
     )
     status: Optional[WorkPoolStatus] = Field(
-        None, description='The current status of the work pool.'
+        None, description="The current status of the work pool."
     )
     default_queue_id: Optional[UUID] = Field(
         None,
         description="The id of the pool's default queue.",
-        title='Default Queue Id',
+        title="Default Queue Id",
     )
     storage_configuration: Optional[WorkPoolStorageConfiguration] = Field(
-        None, description='The storage configuration for the work pool.'
+        None, description="The storage configuration for the work pool."
     )
     active_slots: Optional[int] = Field(
         None,
-        description='The number of concurrency slots occupied by pending or running flow runs. None when concurrency_limit is not set.',
-        title='Active Slots',
+        description="The number of concurrency slots occupied by pending or running flow runs. None when concurrency_limit is not set.",
+        title="Active Slots",
     )
 
 
 class WorkQueueConcurrencyStatus(BaseModel):
-    active_slots: int = Field(..., title='Active Slots')
-    concurrency_limit: Optional[int] = Field(None, title='Concurrency Limit')
-    flow_runs: Optional[list[FlowRunSlotSummary]] = Field(None, title='Flow Runs')
+    active_slots: int = Field(..., title="Active Slots")
+    concurrency_limit: Optional[int] = Field(None, title="Concurrency Limit")
+    flow_runs: Optional[list[FlowRunSlotSummary]] = Field(None, title="Flow Runs")
     count: int = Field(
-        ..., description='Total number of slot-holding flow runs.', title='Count'
+        ..., description="Total number of slot-holding flow runs.", title="Count"
     )
-    limit: int = Field(..., description='Page size.', title='Limit')
-    pages: int = Field(..., description='Total number of pages.', title='Pages')
-    page: int = Field(..., description='Current page number (1-indexed).', title='Page')
+    limit: int = Field(..., description="Page size.", title="Limit")
+    pages: int = Field(..., description="Total number of pages.", title="Pages")
+    page: int = Field(..., description="Current page number (1-indexed).", title="Page")
 
 
 class WorkQueueConcurrencyStatusDetail(BaseModel):
-    queue_id: UUID = Field(..., title='Queue Id')
-    queue_name: str = Field(..., title='Queue Name')
-    active_slots: int = Field(..., title='Active Slots')
-    concurrency_limit: Optional[int] = Field(None, title='Concurrency Limit')
-    flow_runs: Optional[list[FlowRunSlotSummary]] = Field(None, title='Flow Runs')
+    queue_id: UUID = Field(..., title="Queue Id")
+    queue_name: str = Field(..., title="Queue Name")
+    active_slots: int = Field(..., title="Active Slots")
+    concurrency_limit: Optional[int] = Field(None, title="Concurrency Limit")
+    flow_runs: Optional[list[FlowRunSlotSummary]] = Field(None, title="Flow Runs")
     flow_run_count: Optional[int] = Field(
         None,
-        description='Total flow run count for this queue (may differ from len(flow_runs) when flow_run_limit is applied).',
-        title='Flow Run Count',
+        description="Total flow run count for this queue (may differ from len(flow_runs) when flow_run_limit is applied).",
+        title="Flow Run Count",
     )
 
 
 class WorkQueueFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[WorkQueueFilterId] = Field(
-        None, description='Filter criteria for `WorkQueue.id`'
+        None, description="Filter criteria for `WorkQueue.id`"
     )
     name: Optional[WorkQueueFilterName] = Field(
-        None, description='Filter criteria for `WorkQueue.name`'
+        None, description="Filter criteria for `WorkQueue.name`"
     )
 
 
 class WorkQueueResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: constr(pattern=r'^[^/%&><]+$') = Field(
-        ..., description='The name of the work queue.', title='Name'
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: constr(pattern=r"^[^/%&><]+$") = Field(
+        ..., description="The name of the work queue.", title="Name"
     )
     description: Optional[str] = Field(
-        '',
-        description='An optional description for the work queue.',
-        title='Description',
+        "",
+        description="An optional description for the work queue.",
+        title="Description",
     )
     is_paused: Optional[bool] = Field(
-        False, description='Whether or not the work queue is paused.', title='Is Paused'
+        False, description="Whether or not the work queue is paused.", title="Is Paused"
     )
     concurrency_limit: Optional[conint(ge=0)] = Field(
         None,
-        description='An optional concurrency limit for the work queue.',
-        title='Concurrency Limit',
+        description="An optional concurrency limit for the work queue.",
+        title="Concurrency Limit",
     )
     priority: Optional[PositiveInt] = Field(
         1,
         description="The queue's priority. Lower values are higher priority (1 is the highest).",
-        title='Priority',
+        title="Priority",
     )
     work_pool_id: Optional[UUID] = Field(
         None,
-        description='The work pool with which the queue is associated.',
-        title='Work Pool Id',
+        description="The work pool with which the queue is associated.",
+        title="Work Pool Id",
     )
     filter: Optional[QueueFilter] = Field(
-        None, description='DEPRECATED: Filter criteria for the work queue.'
+        None, description="DEPRECATED: Filter criteria for the work queue."
     )
     last_polled: Optional[AwareDatetime] = Field(
         None,
-        description='The last time an agent polled this queue for work.',
-        title='Last Polled',
+        description="The last time an agent polled this queue for work.",
+        title="Last Polled",
     )
     work_pool_name: Optional[str] = Field(
         None,
-        description='The name of the work pool the work pool resides within.',
-        title='Work Pool Name',
+        description="The name of the work pool the work pool resides within.",
+        title="Work Pool Name",
     )
-    status: Optional[WorkQueueStatus] = Field(None, description='The queue status.')
+    status: Optional[WorkQueueStatus] = Field(None, description="The queue status.")
     active_slots: Optional[int] = Field(
         None,
-        description='The number of concurrency slots currently in use. None when concurrency_limit is not set.',
-        title='Active Slots',
+        description="The number of concurrency slots currently in use. None when concurrency_limit is not set.",
+        title="Active Slots",
     )
 
 
 class WorkerFilterStatus(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     any_: Optional[list[WorkerStatus]] = Field(
-        None, description='A list of worker statuses to include', title='Any'
+        None, description="A list of worker statuses to include", title="Any"
     )
     not_any_: Optional[list[WorkerStatus]] = Field(
-        None, description='A list of worker statuses to exclude', title='Not Any'
+        None, description="A list of worker statuses to exclude", title="Not Any"
     )
 
 
 class WorkerResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: str = Field(..., description='The name of the worker.', title='Name')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: str = Field(..., description="The name of the worker.", title="Name")
     work_pool_id: UUID = Field(
         ...,
-        description='The work pool with which the queue is associated.',
-        title='Work Pool Id',
+        description="The work pool with which the queue is associated.",
+        title="Work Pool Id",
     )
     last_heartbeat_time: Optional[AwareDatetime] = Field(
         None,
-        description='The last time the worker process sent a heartbeat.',
-        title='Last Heartbeat Time',
+        description="The last time the worker process sent a heartbeat.",
+        title="Last Heartbeat Time",
     )
     heartbeat_interval_seconds: Optional[int] = Field(
         None,
-        description='The number of seconds to expect between heartbeats sent by the worker.',
-        title='Heartbeat Interval Seconds',
+        description="The number of seconds to expect between heartbeats sent by the worker.",
+        title="Heartbeat Interval Seconds",
     )
     status: Optional[WorkerStatus] = Field(
-        'OFFLINE', description='Current status of the worker.'
+        "OFFLINE", description="Current status of the worker."
     )
 
 
 class WorkerSettings(BaseModel):
     debug_mode: Optional[bool] = Field(
         False,
-        description='If True, enables debug mode for the worker only. Unlike PREFECT_DEBUG_MODE, this setting does not propagate to flow runs executed by the worker.',
-        title='Debug Mode',
+        description="If True, enables debug mode for the worker only. Unlike PREFECT_DEBUG_MODE, this setting does not propagate to flow runs executed by the worker.",
+        title="Debug Mode",
     )
     heartbeat_seconds: Optional[float] = Field(
         30,
-        description='Number of seconds a worker should wait between sending a heartbeat.',
-        title='Heartbeat Seconds',
+        description="Number of seconds a worker should wait between sending a heartbeat.",
+        title="Heartbeat Seconds",
     )
     query_seconds: Optional[float] = Field(
         10,
-        description='Number of seconds a worker should wait between queries for scheduled work.',
-        title='Query Seconds',
+        description="Number of seconds a worker should wait between queries for scheduled work.",
+        title="Query Seconds",
     )
     prefetch_seconds: Optional[float] = Field(
         10,
-        description='The number of seconds into the future a worker should query for scheduled work.',
-        title='Prefetch Seconds',
+        description="The number of seconds into the future a worker should query for scheduled work.",
+        title="Prefetch Seconds",
     )
     enable_cancellation: Optional[bool] = Field(
         False,
-        description='Enable worker-side flow run cancellation for pending flow runs. When enabled, the worker will terminate infrastructure for flow runs that are cancelled while still in PENDING state (before the runner starts).',
-        title='Enable Cancellation',
+        description="Enable worker-side flow run cancellation for pending flow runs. When enabled, the worker will terminate infrastructure for flow runs that are cancelled while still in PENDING state (before the runner starts).",
+        title="Enable Cancellation",
     )
     cancellation_poll_seconds: Optional[float] = Field(
         120,
-        description='Number of seconds between polls for cancelling flow runs. Used as a fallback when the WebSocket connection for real-time cancellation events is unavailable.',
-        title='Cancellation Poll Seconds',
+        description="Number of seconds between polls for cancelling flow runs. Used as a fallback when the WebSocket connection for real-time cancellation events is unavailable.",
+        title="Cancellation Poll Seconds",
     )
     webserver: Optional[WorkerWebserverSettings] = Field(
         None, description="Settings for a worker's webserver"
@@ -5508,59 +5508,59 @@ class WorkerSettings(BaseModel):
 
 class AutomationFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     name: Optional[AutomationFilterName] = Field(
-        None, description='Filter criteria for `Automation.name`'
+        None, description="Filter criteria for `Automation.name`"
     )
     created: Optional[AutomationFilterCreated] = Field(
-        None, description='Filter criteria for `Automation.created`'
+        None, description="Filter criteria for `Automation.created`"
     )
     tags: Optional[AutomationFilterTags] = Field(
-        None, description='Filter criteria for `Automation.tags`'
+        None, description="Filter criteria for `Automation.tags`"
     )
 
 
 class BlockDocument(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: Optional[constr(pattern=r'^[^/%&><]+$')] = Field(
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: Optional[constr(pattern=r"^[^/%&><]+$")] = Field(
         None,
         description="The block document's name. Not required for anonymous block documents.",
-        title='Name',
+        title="Name",
     )
     data: Optional[dict[str, Any]] = Field(
-        None, description="The block document's data", title='Data'
+        None, description="The block document's data", title="Data"
     )
     block_schema_id: UUID = Field(
-        ..., description='A block schema ID', title='Block Schema Id'
+        ..., description="A block schema ID", title="Block Schema Id"
     )
     block_schema: Optional[BlockSchema] = Field(
-        None, description='The associated block schema'
+        None, description="The associated block schema"
     )
     block_type_id: UUID = Field(
-        ..., description='A block type ID', title='Block Type Id'
+        ..., description="A block type ID", title="Block Type Id"
     )
     block_type_name: Optional[str] = Field(
-        None, description="The associated block type's name", title='Block Type Name'
+        None, description="The associated block type's name", title="Block Type Name"
     )
     block_type: Optional[BlockType] = Field(
-        None, description='The associated block type'
+        None, description="The associated block type"
     )
     block_document_references: Optional[dict[str, dict[str, Any]]] = Field(
         None,
         description="Record of the block document's references",
-        title='Block Document References',
+        title="Block Document References",
     )
     is_anonymous: Optional[bool] = Field(
         False,
-        description='Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically)',
-        title='Is Anonymous',
+        description="Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically)",
+        title="Is Anonymous",
     )
 
 
@@ -5573,871 +5573,871 @@ class BodyCountWorkPoolsWorkPoolsCountPost(BaseModel):
 
 
 class BodyReadAutomationsAutomationsFilterPost(BaseModel):
-    sort: Optional[AutomationSort] = 'NAME_ASC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[AutomationSort] = "NAME_ASC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     automations: Optional[AutomationFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadLogsLogsFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     logs: Optional[LogFilter] = None
-    sort: Optional[LogSort] = 'TIMESTAMP_ASC'
+    sort: Optional[LogSort] = "TIMESTAMP_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadVariablesVariablesFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     variables: Optional[VariableFilter] = None
-    sort: Optional[VariableSort] = 'NAME_ASC'
+    sort: Optional[VariableSort] = "NAME_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkPoolsWorkPoolsFilterPost(BaseModel):
     work_pools: Optional[WorkPoolFilter] = None
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkQueuesWorkPoolsWorkPoolNameQueuesFilterPost(BaseModel):
     work_queues: Optional[WorkQueueFilter] = None
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadWorkQueuesWorkQueuesFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     work_queues: Optional[WorkQueueFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodySetFlowRunStateFlowRunsIdSetStatePost(BaseModel):
-    state: StateCreate = Field(..., description='The intended state.')
+    state: StateCreate = Field(..., description="The intended state.")
     force: Optional[bool] = Field(
         False,
-        description='If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.',
-        title='Force',
+        description="If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.",
+        title="Force",
     )
 
 
 class BodySetTaskRunStateTaskRunsIdSetStatePost(BaseModel):
-    state: StateCreate = Field(..., description='The intended state.')
+    state: StateCreate = Field(..., description="The intended state.")
     force: Optional[bool] = Field(
         False,
-        description='If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.',
-        title='Force',
+        description="If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.",
+        title="Force",
     )
 
 
 class DependencyResult(BaseModel):
-    id: UUID = Field(..., title='Id')
-    name: str = Field(..., title='Name')
+    id: UUID = Field(..., title="Id")
+    name: str = Field(..., title="Name")
     upstream_dependencies: list[TaskRunResult] = Field(
-        ..., title='Upstream Dependencies'
+        ..., title="Upstream Dependencies"
     )
     state: Optional[State] = None
     expected_start_time: Optional[AwareDatetime] = Field(
-        ..., title='Expected Start Time'
+        ..., title="Expected Start Time"
     )
-    start_time: Optional[AwareDatetime] = Field(..., title='Start Time')
-    end_time: Optional[AwareDatetime] = Field(..., title='End Time')
-    total_run_time: Optional[float] = Field(..., title='Total Run Time')
-    estimated_run_time: Optional[float] = Field(..., title='Estimated Run Time')
-    untrackable_result: bool = Field(..., title='Untrackable Result')
+    start_time: Optional[AwareDatetime] = Field(..., title="Start Time")
+    end_time: Optional[AwareDatetime] = Field(..., title="End Time")
+    total_run_time: Optional[float] = Field(..., title="Total Run Time")
+    estimated_run_time: Optional[float] = Field(..., title="Estimated Run Time")
+    untrackable_result: bool = Field(..., title="Untrackable Result")
 
 
 class DeploymentCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     name: str = Field(
         ...,
-        description='The name of the deployment.',
-        examples=['my-deployment'],
-        title='Name',
+        description="The name of the deployment.",
+        examples=["my-deployment"],
+        title="Name",
     )
     flow_id: UUID = Field(
         ...,
-        description='The ID of the flow associated with the deployment.',
-        title='Flow Id',
+        description="The ID of the flow associated with the deployment.",
+        title="Flow Id",
     )
     paused: Optional[bool] = Field(
-        False, description='Whether or not the deployment is paused.', title='Paused'
+        False, description="Whether or not the deployment is paused.", title="Paused"
     )
     schedules: Optional[list[DeploymentScheduleCreate]] = Field(
-        None, description='A list of schedules for the deployment.', title='Schedules'
+        None, description="A list of schedules for the deployment.", title="Schedules"
     )
     concurrency_limit: Optional[PositiveInt] = Field(
         None,
         description="The deployment's concurrency limit.",
-        title='Concurrency Limit',
+        title="Concurrency Limit",
     )
     concurrency_options: Optional[ConcurrencyOptions] = Field(
         None, description="The deployment's concurrency options."
     )
     global_concurrency_limit_id: Optional[UUID] = Field(
         None,
-        description='The ID of the global concurrency limit to apply to the deployment.',
-        title='Global Concurrency Limit Id',
+        description="The ID of the global concurrency limit to apply to the deployment.",
+        title="Global Concurrency Limit Id",
     )
     enforce_parameter_schema: Optional[bool] = Field(
         True,
-        description='Whether or not the deployment should enforce the parameter schema.',
-        title='Enforce Parameter Schema',
+        description="Whether or not the deployment should enforce the parameter schema.",
+        title="Enforce Parameter Schema",
     )
     parameter_openapi_schema: Optional[dict[str, Any]] = Field(
         None,
-        description='The parameter schema of the flow, including defaults.',
-        title='Parameter Openapi Schema',
+        description="The parameter schema of the flow, including defaults.",
+        title="Parameter Openapi Schema",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='Parameters for flow runs scheduled by the deployment.',
-        title='Parameters',
+        description="Parameters for flow runs scheduled by the deployment.",
+        title="Parameters",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of deployment tags.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of deployment tags.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
-    pull_steps: Optional[list[dict[str, Any]]] = Field(None, title='Pull Steps')
-    work_queue_name: Optional[str] = Field(None, title='Work Queue Name')
+    pull_steps: Optional[list[dict[str, Any]]] = Field(None, title="Pull Steps")
+    work_queue_name: Optional[str] = Field(None, title="Work Queue Name")
     work_pool_name: Optional[str] = Field(
         None,
         description="The name of the deployment's work pool.",
-        examples=['my-work-pool'],
-        title='Work Pool Name',
+        examples=["my-work-pool"],
+        title="Work Pool Name",
     )
-    storage_document_id: Optional[UUID] = Field(None, title='Storage Document Id')
+    storage_document_id: Optional[UUID] = Field(None, title="Storage Document Id")
     infrastructure_document_id: Optional[UUID] = Field(
-        None, title='Infrastructure Document Id'
+        None, title="Infrastructure Document Id"
     )
-    description: Optional[str] = Field(None, title='Description')
-    path: Optional[str] = Field(None, title='Path')
-    version: Optional[str] = Field(None, title='Version')
-    entrypoint: Optional[str] = Field(None, title='Entrypoint')
+    description: Optional[str] = Field(None, title="Description")
+    path: Optional[str] = Field(None, title="Path")
+    version: Optional[str] = Field(None, title="Version")
+    entrypoint: Optional[str] = Field(None, title="Entrypoint")
     job_variables: Optional[dict[str, Any]] = Field(
         None,
         description="Overrides for the flow's infrastructure configuration.",
-        title='Job Variables',
+        title="Job Variables",
     )
     version_info: Optional[VersionInfo] = Field(
-        None, description='A description of this version of the deployment.'
+        None, description="A description of this version of the deployment."
     )
 
 
 class DeploymentFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[DeploymentFilterId] = Field(
-        None, description='Filter criteria for `Deployment.id`'
+        None, description="Filter criteria for `Deployment.id`"
     )
     name: Optional[DeploymentFilterName] = Field(
-        None, description='Filter criteria for `Deployment.name`'
+        None, description="Filter criteria for `Deployment.name`"
     )
     flow_or_deployment_name: Optional[DeploymentOrFlowNameFilter] = Field(
-        None, description='Filter criteria for `Deployment.name` or `Flow.name`'
+        None, description="Filter criteria for `Deployment.name` or `Flow.name`"
     )
     paused: Optional[DeploymentFilterPaused] = Field(
-        None, description='Filter criteria for `Deployment.paused`'
+        None, description="Filter criteria for `Deployment.paused`"
     )
     tags: Optional[DeploymentFilterTags] = Field(
-        None, description='Filter criteria for `Deployment.tags`'
+        None, description="Filter criteria for `Deployment.tags`"
     )
     work_queue_name: Optional[DeploymentFilterWorkQueueName] = Field(
-        None, description='Filter criteria for `Deployment.work_queue_name`'
+        None, description="Filter criteria for `Deployment.work_queue_name`"
     )
     concurrency_limit: Optional[DeploymentFilterConcurrencyLimit] = Field(
         None,
-        description='DEPRECATED: Prefer `Deployment.concurrency_limit_id` over `Deployment.concurrency_limit`. If provided, will be ignored for backwards-compatibility. Will be removed after December 2024.',
+        description="DEPRECATED: Prefer `Deployment.concurrency_limit_id` over `Deployment.concurrency_limit`. If provided, will be ignored for backwards-compatibility. Will be removed after December 2024.",
     )
 
 
 class DeploymentFlowRunCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     state: Optional[StateCreate] = Field(
-        None, description='The state of the flow run to create'
+        None, description="The state of the flow run to create"
     )
     name: Optional[str] = Field(
         None,
-        description='The name of the flow run. Defaults to a random slug if not specified.',
-        examples=['my-flow-run'],
-        title='Name',
+        description="The name of the flow run. Defaults to a random slug if not specified.",
+        examples=["my-flow-run"],
+        title="Name",
     )
-    parameters: Optional[dict[str, Any]] = Field(None, title='Parameters')
+    parameters: Optional[dict[str, Any]] = Field(None, title="Parameters")
     enforce_parameter_schema: Optional[bool] = Field(
         None,
-        description='Whether or not to enforce the parameter schema on this run.',
-        title='Enforce Parameter Schema',
+        description="Whether or not to enforce the parameter schema on this run.",
+        title="Enforce Parameter Schema",
     )
-    context: Optional[dict[str, Any]] = Field(None, title='Context')
+    context: Optional[dict[str, Any]] = Field(None, title="Context")
     infrastructure_document_id: Optional[UUID] = Field(
-        None, title='Infrastructure Document Id'
+        None, title="Infrastructure Document Id"
     )
     empirical_policy: Optional[FlowRunPolicy] = Field(
-        None, description='The empirical policy for the flow run.'
+        None, description="The empirical policy for the flow run."
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the flow run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the flow run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     idempotency_key: Optional[str] = Field(
         None,
-        description='An optional idempotency key. If a flow run with the same idempotency key has already been created, the existing flow run will be returned.',
-        title='Idempotency Key',
+        description="An optional idempotency key. If a flow run with the same idempotency key has already been created, the existing flow run will be returned.",
+        title="Idempotency Key",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
-    parent_task_run_id: Optional[UUID] = Field(None, title='Parent Task Run Id')
-    work_queue_name: Optional[str] = Field(None, title='Work Queue Name')
-    job_variables: Optional[dict[str, Any]] = Field(None, title='Job Variables')
+    parent_task_run_id: Optional[UUID] = Field(None, title="Parent Task Run Id")
+    work_queue_name: Optional[str] = Field(None, title="Work Queue Name")
+    job_variables: Optional[dict[str, Any]] = Field(None, title="Job Variables")
 
 
 class DeploymentResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
-    name: str = Field(..., description='The name of the deployment.', title='Name')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
+    name: str = Field(..., description="The name of the deployment.", title="Name")
     version: Optional[str] = Field(
-        None, description='An optional version for the deployment.', title='Version'
+        None, description="An optional version for the deployment.", title="Version"
     )
     description: Optional[str] = Field(
-        None, description='A description for the deployment.', title='Description'
+        None, description="A description for the deployment.", title="Description"
     )
     flow_id: UUID = Field(
-        ..., description='The flow id associated with the deployment.', title='Flow Id'
+        ..., description="The flow id associated with the deployment.", title="Flow Id"
     )
     paused: Optional[bool] = Field(
-        False, description='Whether or not the deployment is paused.', title='Paused'
+        False, description="Whether or not the deployment is paused.", title="Paused"
     )
     schedules: Optional[list[DeploymentSchedule]] = Field(
-        None, description='A list of schedules for the deployment.', title='Schedules'
+        None, description="A list of schedules for the deployment.", title="Schedules"
     )
     concurrency_limit: Optional[int] = Field(
         None,
-        description='DEPRECATED: Prefer `global_concurrency_limit`. Will always be None for backwards compatibility. Will be removed after December 2024.',
-        title='Concurrency Limit',
+        description="DEPRECATED: Prefer `global_concurrency_limit`. Will always be None for backwards compatibility. Will be removed after December 2024.",
+        title="Concurrency Limit",
     )
     global_concurrency_limit: Optional[GlobalConcurrencyLimitResponse] = Field(
         None,
-        description='The global concurrency limit object for enforcing the maximum number of flow runs that can be active at once.',
+        description="The global concurrency limit object for enforcing the maximum number of flow runs that can be active at once.",
     )
     concurrency_options: Optional[ConcurrencyOptions] = Field(
-        None, description='The concurrency options for the deployment.'
+        None, description="The concurrency options for the deployment."
     )
     job_variables: Optional[dict[str, Any]] = Field(
         None,
-        description='Overrides to apply to the base infrastructure block at runtime.',
-        title='Job Variables',
+        description="Overrides to apply to the base infrastructure block at runtime.",
+        title="Job Variables",
     )
     parameters: Optional[dict[str, Any]] = Field(
         None,
-        description='Parameters for flow runs scheduled by the deployment.',
-        title='Parameters',
+        description="Parameters for flow runs scheduled by the deployment.",
+        title="Parameters",
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the deployment',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the deployment",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     work_queue_name: Optional[str] = Field(
         None,
-        description='The work queue for the deployment. If no work queue is set, work will not be scheduled.',
-        title='Work Queue Name',
+        description="The work queue for the deployment. If no work queue is set, work will not be scheduled.",
+        title="Work Queue Name",
     )
     work_queue_id: Optional[UUID] = Field(
         None,
-        description='The id of the work pool queue to which this deployment is assigned.',
-        title='Work Queue Id',
+        description="The id of the work pool queue to which this deployment is assigned.",
+        title="Work Queue Id",
     )
     last_polled: Optional[AwareDatetime] = Field(
         None,
-        description='The last time the deployment was polled for status updates.',
-        title='Last Polled',
+        description="The last time the deployment was polled for status updates.",
+        title="Last Polled",
     )
     parameter_openapi_schema: Optional[dict[str, Any]] = Field(
         None,
-        description='The parameter schema of the flow, including defaults.',
-        title='Parameter Openapi Schema',
+        description="The parameter schema of the flow, including defaults.",
+        title="Parameter Openapi Schema",
     )
     path: Optional[str] = Field(
         None,
-        description='The path to the working directory for the workflow, relative to remote storage or an absolute path.',
-        title='Path',
+        description="The path to the working directory for the workflow, relative to remote storage or an absolute path.",
+        title="Path",
     )
     pull_steps: Optional[list[dict[str, Any]]] = Field(
         None,
-        description='Pull steps for cloning and running this deployment.',
-        title='Pull Steps',
+        description="Pull steps for cloning and running this deployment.",
+        title="Pull Steps",
     )
     entrypoint: Optional[str] = Field(
         None,
-        description='The path to the entrypoint for the workflow, relative to the `path`.',
-        title='Entrypoint',
+        description="The path to the entrypoint for the workflow, relative to the `path`.",
+        title="Entrypoint",
     )
     storage_document_id: Optional[UUID] = Field(
         None,
-        description='The block document defining storage used for this flow.',
-        title='Storage Document Id',
+        description="The block document defining storage used for this flow.",
+        title="Storage Document Id",
     )
     infrastructure_document_id: Optional[UUID] = Field(
         None,
-        description='The block document defining infrastructure to use for flow runs.',
-        title='Infrastructure Document Id',
+        description="The block document defining infrastructure to use for flow runs.",
+        title="Infrastructure Document Id",
     )
     created_by: Optional[CreatedBy] = Field(
-        None, description='Optional information about the creator of this deployment.'
+        None, description="Optional information about the creator of this deployment."
     )
     updated_by: Optional[UpdatedBy] = Field(
-        None, description='Optional information about the updater of this deployment.'
+        None, description="Optional information about the updater of this deployment."
     )
     work_pool_name: Optional[str] = Field(
         None,
         description="The name of the deployment's work pool.",
-        title='Work Pool Name',
+        title="Work Pool Name",
     )
     status: Optional[DeploymentStatus] = Field(
-        'NOT_READY', description='Whether the deployment is ready to run flows.'
+        "NOT_READY", description="Whether the deployment is ready to run flows."
     )
     enforce_parameter_schema: Optional[bool] = Field(
         True,
-        description='Whether or not the deployment should enforce the parameter schema.',
-        title='Enforce Parameter Schema',
+        description="Whether or not the deployment should enforce the parameter schema.",
+        title="Enforce Parameter Schema",
     )
 
 
 class EventFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     occurred: Optional[EventOccurredFilter] = Field(
-        None, description='Filter criteria for when the events occurred'
+        None, description="Filter criteria for when the events occurred"
     )
     event: Optional[EventNameFilter] = Field(
-        None, description='Filter criteria for the event name'
+        None, description="Filter criteria for the event name"
     )
     resource: Optional[EventResourceFilter] = Field(
-        None, description='Filter criteria for the resource of the event'
+        None, description="Filter criteria for the resource of the event"
     )
     related: Optional[Union[EventRelatedFilter, list[EventRelatedFilter]]] = Field(
         None,
-        description='Filter criteria for the related resources of the event',
-        title='Related',
+        description="Filter criteria for the related resources of the event",
+        title="Related",
     )
     any_resource: Optional[
         Union[EventAnyResourceFilter, list[EventAnyResourceFilter]]
     ] = Field(
         None,
-        description='Filter criteria for any resource involved in the event',
-        title='Any Resource',
+        description="Filter criteria for any resource involved in the event",
+        title="Any Resource",
     )
     id: Optional[EventIDFilter] = Field(
         None, description="Filter criteria for the events' ID"
     )
     text: Optional[EventTextFilter] = Field(
-        None, description='Filter criteria for text search across event content'
+        None, description="Filter criteria for text search across event content"
     )
     order: Optional[EventOrder] = Field(
-        'DESC', description='The order to return filtered events'
+        "DESC", description="The order to return filtered events"
     )
 
 
 class EventPage(BaseModel):
     events: list[ReceivedEvent] = Field(
-        ..., description='The Events matching the query', title='Events'
+        ..., description="The Events matching the query", title="Events"
     )
     total: int = Field(
-        ..., description='The total number of matching Events', title='Total'
+        ..., description="The total number of matching Events", title="Total"
     )
     next_page: Optional[AnyUrl] = Field(
         ...,
-        description='The URL for the next page of results, if there are more',
-        title='Next Page',
+        description="The URL for the next page of results, if there are more",
+        title="Next Page",
     )
 
 
 class FlowFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[FlowFilterId] = Field(
-        None, description='Filter criteria for `Flow.id`'
+        None, description="Filter criteria for `Flow.id`"
     )
     deployment: Optional[FlowFilterDeployment] = Field(
-        None, description='Filter criteria for Flow deployments'
+        None, description="Filter criteria for Flow deployments"
     )
     name: Optional[FlowFilterName] = Field(
-        None, description='Filter criteria for `Flow.name`'
+        None, description="Filter criteria for `Flow.name`"
     )
     tags: Optional[FlowFilterTags] = Field(
-        None, description='Filter criteria for `Flow.tags`'
+        None, description="Filter criteria for `Flow.tags`"
     )
 
 
 class FlowRun(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     name: Optional[str] = Field(
         None,
-        description='The name of the flow run. Defaults to a random slug if not specified.',
-        examples=['my-flow-run'],
-        title='Name',
+        description="The name of the flow run. Defaults to a random slug if not specified.",
+        examples=["my-flow-run"],
+        title="Name",
     )
     flow_id: UUID = Field(
-        ..., description='The id of the flow being run.', title='Flow Id'
+        ..., description="The id of the flow being run.", title="Flow Id"
     )
     state_id: Optional[UUID] = Field(
-        None, description="The id of the flow run's current state.", title='State Id'
+        None, description="The id of the flow run's current state.", title="State Id"
     )
     deployment_id: Optional[UUID] = Field(
         None,
-        description='The id of the deployment associated with this flow run, if available.',
-        title='Deployment Id',
+        description="The id of the deployment associated with this flow run, if available.",
+        title="Deployment Id",
     )
     deployment_version: Optional[str] = Field(
         None,
-        description='The version of the deployment associated with this flow run.',
-        examples=['1.0'],
-        title='Deployment Version',
+        description="The version of the deployment associated with this flow run.",
+        examples=["1.0"],
+        title="Deployment Version",
     )
     work_queue_name: Optional[str] = Field(
         None,
-        description='The work queue that handled this flow run.',
-        title='Work Queue Name',
+        description="The work queue that handled this flow run.",
+        title="Work Queue Name",
     )
     flow_version: Optional[str] = Field(
         None,
-        description='The version of the flow executed in this flow run.',
-        examples=['1.0'],
-        title='Flow Version',
+        description="The version of the flow executed in this flow run.",
+        examples=["1.0"],
+        title="Flow Version",
     )
     parameters: Optional[dict[str, Any]] = Field(
-        None, description='Parameters for the flow run.', title='Parameters'
+        None, description="Parameters for the flow run.", title="Parameters"
     )
     idempotency_key: Optional[str] = Field(
         None,
-        description='An optional idempotency key for the flow run. Used to ensure the same flow run is not created multiple times.',
-        title='Idempotency Key',
+        description="An optional idempotency key for the flow run. Used to ensure the same flow run is not created multiple times.",
+        title="Idempotency Key",
     )
     context: Optional[dict[str, Any]] = Field(
         None,
-        description='Additional context for the flow run.',
-        examples=[{'my_var': 'my_value'}],
-        title='Context',
+        description="Additional context for the flow run.",
+        examples=[{"my_var": "my_value"}],
+        title="Context",
     )
     empirical_policy: Optional[FlowRunPolicy] = None
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags on the flow run',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags on the flow run",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     parent_task_run_id: Optional[UUID] = Field(
         None,
         description="If the flow run is a subflow, the id of the 'dummy' task in the parent flow used to track subflow state.",
-        title='Parent Task Run Id',
+        title="Parent Task Run Id",
     )
     state_type: Optional[StateType] = Field(
-        None, description='The type of the current flow run state.'
+        None, description="The type of the current flow run state."
     )
     state_name: Optional[str] = Field(
-        None, description='The name of the current flow run state.', title='State Name'
+        None, description="The name of the current flow run state.", title="State Name"
     )
     run_count: Optional[int] = Field(
         0,
-        description='The number of times the flow run was executed.',
-        title='Run Count',
+        description="The number of times the flow run was executed.",
+        title="Run Count",
     )
     expected_start_time: Optional[AwareDatetime] = Field(
         None,
         description="The flow run's expected start time.",
-        title='Expected Start Time',
+        title="Expected Start Time",
     )
     next_scheduled_start_time: Optional[AwareDatetime] = Field(
         None,
-        description='The next time the flow run is scheduled to start.',
-        title='Next Scheduled Start Time',
+        description="The next time the flow run is scheduled to start.",
+        title="Next Scheduled Start Time",
     )
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The actual start time.', title='Start Time'
+        None, description="The actual start time.", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The actual end time.', title='End Time'
+        None, description="The actual end time.", title="End Time"
     )
     total_run_time: Optional[float] = Field(
         0,
-        description='Total run time. If the flow run was executed multiple times, the time of each run will be summed.',
-        title='Total Run Time',
+        description="Total run time. If the flow run was executed multiple times, the time of each run will be summed.",
+        title="Total Run Time",
     )
     estimated_run_time: Optional[float] = Field(
         0,
-        description='A real-time estimate of the total run time.',
-        title='Estimated Run Time',
+        description="A real-time estimate of the total run time.",
+        title="Estimated Run Time",
     )
     estimated_start_time_delta: Optional[float] = Field(
         0,
-        description='The difference between actual and expected start time.',
-        title='Estimated Start Time Delta',
+        description="The difference between actual and expected start time.",
+        title="Estimated Start Time Delta",
     )
     auto_scheduled: Optional[bool] = Field(
         False,
-        description='Whether or not the flow run was automatically scheduled.',
-        title='Auto Scheduled',
+        description="Whether or not the flow run was automatically scheduled.",
+        title="Auto Scheduled",
     )
     infrastructure_document_id: Optional[UUID] = Field(
         None,
-        description='The block document defining infrastructure to use this flow run.',
-        title='Infrastructure Document Id',
+        description="The block document defining infrastructure to use this flow run.",
+        title="Infrastructure Document Id",
     )
     infrastructure_pid: Optional[str] = Field(
         None,
-        description='The id of the flow run as returned by an infrastructure block.',
-        title='Infrastructure Pid',
+        description="The id of the flow run as returned by an infrastructure block.",
+        title="Infrastructure Pid",
     )
     created_by: Optional[CreatedBy] = Field(
-        None, description='Optional information about the creator of this flow run.'
+        None, description="Optional information about the creator of this flow run."
     )
     work_queue_id: Optional[UUID] = Field(
-        None, description="The id of the run's work pool queue.", title='Work Queue Id'
+        None, description="The id of the run's work pool queue.", title="Work Queue Id"
     )
     state: Optional[State] = Field(
-        None, description='The current state of the flow run.'
+        None, description="The current state of the flow run."
     )
     job_variables: Optional[dict[str, Any]] = Field(
         None,
-        description='Variables used as overrides in the base job template',
-        title='Job Variables',
+        description="Variables used as overrides in the base job template",
+        title="Job Variables",
     )
 
 
 class FlowRunCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     state: Optional[StateCreate] = Field(
-        None, description='The state of the flow run to create'
+        None, description="The state of the flow run to create"
     )
     name: Optional[str] = Field(
         None,
-        description='The name of the flow run. Defaults to a random slug if not specified.',
-        examples=['my-flow-run'],
-        title='Name',
+        description="The name of the flow run. Defaults to a random slug if not specified.",
+        examples=["my-flow-run"],
+        title="Name",
     )
     flow_id: UUID = Field(
-        ..., description='The id of the flow being run.', title='Flow Id'
+        ..., description="The id of the flow being run.", title="Flow Id"
     )
     flow_version: Optional[str] = Field(
-        None, description='The version of the flow being run.', title='Flow Version'
+        None, description="The version of the flow being run.", title="Flow Version"
     )
-    parameters: Optional[dict[str, Any]] = Field(None, title='Parameters')
+    parameters: Optional[dict[str, Any]] = Field(None, title="Parameters")
     context: Optional[dict[str, Any]] = Field(
-        None, description='The context of the flow run.', title='Context'
+        None, description="The context of the flow run.", title="Context"
     )
-    parent_task_run_id: Optional[UUID] = Field(None, title='Parent Task Run Id')
+    parent_task_run_id: Optional[UUID] = Field(None, title="Parent Task Run Id")
     infrastructure_document_id: Optional[UUID] = Field(
-        None, title='Infrastructure Document Id'
+        None, title="Infrastructure Document Id"
     )
     empirical_policy: Optional[FlowRunPolicy] = Field(
-        None, description='The empirical policy for the flow run.'
+        None, description="The empirical policy for the flow run."
     )
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags for the flow run.',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags for the flow run.",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     idempotency_key: Optional[str] = Field(
         None,
-        description='An optional idempotency key. If a flow run with the same idempotency key has already been created, the existing flow run will be returned.',
-        title='Idempotency Key',
+        description="An optional idempotency key. If a flow run with the same idempotency key has already been created, the existing flow run will be returned.",
+        title="Idempotency Key",
     )
     work_pool_name: Optional[str] = Field(
         None,
-        description='The name of the work pool to run the flow run in.',
-        title='Work Pool Name',
+        description="The name of the work pool to run the flow run in.",
+        title="Work Pool Name",
     )
     work_queue_name: Optional[str] = Field(
         None,
-        description='The name of the work queue to place the flow run in.',
-        title='Work Queue Name',
+        description="The name of the work queue to place the flow run in.",
+        title="Work Queue Name",
     )
     job_variables: Optional[dict[str, Any]] = Field(
         None,
-        description='The job variables to use when setting up flow run infrastructure.',
-        title='Job Variables',
+        description="The job variables to use when setting up flow run infrastructure.",
+        title="Job Variables",
     )
     deployment_id: Optional[UUID] = Field(
         None,
-        description='DEPRECATED: The id of the deployment associated with this flow run, if available.',
-        title='Deployment Id',
+        description="DEPRECATED: The id of the deployment associated with this flow run, if available.",
+        title="Deployment Id",
     )
 
 
 class FlowRunFilterState(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     type: Optional[FlowRunFilterStateType] = Field(
-        None, description='Filter criteria for `FlowRun.state_type`'
+        None, description="Filter criteria for `FlowRun.state_type`"
     )
     name: Optional[FlowRunFilterStateName] = Field(
-        None, description='Filter criteria for `FlowRun.state_name`'
+        None, description="Filter criteria for `FlowRun.state_name`"
     )
 
 
 class FlowRunOrchestrationResult(BaseModel):
-    flow_run_id: UUID = Field(..., title='Flow Run Id')
+    flow_run_id: UUID = Field(..., title="Flow Run Id")
     status: SetStateStatus
     state: Optional[State] = None
     details: Union[
         StateAcceptDetails, StateWaitDetails, StateRejectDetails, StateAbortDetails
-    ] = Field(..., title='Details')
+    ] = Field(..., title="Details")
 
 
 class FlowRunResponse(BaseModel):
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
     name: Optional[str] = Field(
         None,
-        description='The name of the flow run. Defaults to a random slug if not specified.',
-        examples=['my-flow-run'],
-        title='Name',
+        description="The name of the flow run. Defaults to a random slug if not specified.",
+        examples=["my-flow-run"],
+        title="Name",
     )
     flow_id: UUID = Field(
-        ..., description='The id of the flow being run.', title='Flow Id'
+        ..., description="The id of the flow being run.", title="Flow Id"
     )
     state_id: Optional[UUID] = Field(
-        None, description="The id of the flow run's current state.", title='State Id'
+        None, description="The id of the flow run's current state.", title="State Id"
     )
     deployment_id: Optional[UUID] = Field(
         None,
-        description='The id of the deployment associated with this flow run, if available.',
-        title='Deployment Id',
+        description="The id of the deployment associated with this flow run, if available.",
+        title="Deployment Id",
     )
     deployment_version: Optional[str] = Field(
         None,
-        description='The version of the deployment associated with this flow run.',
-        examples=['1.0'],
-        title='Deployment Version',
+        description="The version of the deployment associated with this flow run.",
+        examples=["1.0"],
+        title="Deployment Version",
     )
     work_queue_id: Optional[UUID] = Field(
-        None, description="The id of the run's work pool queue.", title='Work Queue Id'
+        None, description="The id of the run's work pool queue.", title="Work Queue Id"
     )
     work_queue_name: Optional[str] = Field(
         None,
-        description='The work queue that handled this flow run.',
-        title='Work Queue Name',
+        description="The work queue that handled this flow run.",
+        title="Work Queue Name",
     )
     flow_version: Optional[str] = Field(
         None,
-        description='The version of the flow executed in this flow run.',
-        examples=['1.0'],
-        title='Flow Version',
+        description="The version of the flow executed in this flow run.",
+        examples=["1.0"],
+        title="Flow Version",
     )
     parameters: Optional[dict[str, Any]] = Field(
-        None, description='Parameters for the flow run.', title='Parameters'
+        None, description="Parameters for the flow run.", title="Parameters"
     )
     idempotency_key: Optional[str] = Field(
         None,
-        description='An optional idempotency key for the flow run. Used to ensure the same flow run is not created multiple times.',
-        title='Idempotency Key',
+        description="An optional idempotency key for the flow run. Used to ensure the same flow run is not created multiple times.",
+        title="Idempotency Key",
     )
     context: Optional[dict[str, Any]] = Field(
         None,
-        description='Additional context for the flow run.',
-        examples=[{'my_var': 'my_val'}],
-        title='Context',
+        description="Additional context for the flow run.",
+        examples=[{"my_var": "my_val"}],
+        title="Context",
     )
     empirical_policy: Optional[FlowRunPolicy] = None
     tags: Optional[list[str]] = Field(
         None,
-        description='A list of tags on the flow run',
-        examples=[['tag-1', 'tag-2']],
-        title='Tags',
+        description="A list of tags on the flow run",
+        examples=[["tag-1", "tag-2"]],
+        title="Tags",
     )
     labels: Optional[dict[str, Union[bool, int, float, str]]] = Field(
         None,
-        description='A dictionary of key-value labels. Values can be strings, numbers, or booleans.',
-        examples=[{'key': 'value1', 'key2': 42}],
-        title='Labels',
+        description="A dictionary of key-value labels. Values can be strings, numbers, or booleans.",
+        examples=[{"key": "value1", "key2": 42}],
+        title="Labels",
     )
     parent_task_run_id: Optional[UUID] = Field(
         None,
         description="If the flow run is a subflow, the id of the 'dummy' task in the parent flow used to track subflow state.",
-        title='Parent Task Run Id',
+        title="Parent Task Run Id",
     )
     state_type: Optional[StateType] = Field(
-        None, description='The type of the current flow run state.'
+        None, description="The type of the current flow run state."
     )
     state_name: Optional[str] = Field(
-        None, description='The name of the current flow run state.', title='State Name'
+        None, description="The name of the current flow run state.", title="State Name"
     )
     run_count: Optional[int] = Field(
         0,
-        description='The number of times the flow run was executed.',
-        title='Run Count',
+        description="The number of times the flow run was executed.",
+        title="Run Count",
     )
     expected_start_time: Optional[AwareDatetime] = Field(
         None,
         description="The flow run's expected start time.",
-        title='Expected Start Time',
+        title="Expected Start Time",
     )
     next_scheduled_start_time: Optional[AwareDatetime] = Field(
         None,
-        description='The next time the flow run is scheduled to start.',
-        title='Next Scheduled Start Time',
+        description="The next time the flow run is scheduled to start.",
+        title="Next Scheduled Start Time",
     )
     start_time: Optional[AwareDatetime] = Field(
-        None, description='The actual start time.', title='Start Time'
+        None, description="The actual start time.", title="Start Time"
     )
     end_time: Optional[AwareDatetime] = Field(
-        None, description='The actual end time.', title='End Time'
+        None, description="The actual end time.", title="End Time"
     )
     total_run_time: Optional[float] = Field(
         0,
-        description='Total run time. If the flow run was executed multiple times, the time of each run will be summed.',
-        title='Total Run Time',
+        description="Total run time. If the flow run was executed multiple times, the time of each run will be summed.",
+        title="Total Run Time",
     )
     estimated_run_time: Optional[float] = Field(
         0,
-        description='A real-time estimate of the total run time.',
-        title='Estimated Run Time',
+        description="A real-time estimate of the total run time.",
+        title="Estimated Run Time",
     )
     estimated_start_time_delta: Optional[float] = Field(
         0,
-        description='The difference between actual and expected start time.',
-        title='Estimated Start Time Delta',
+        description="The difference between actual and expected start time.",
+        title="Estimated Start Time Delta",
     )
     auto_scheduled: Optional[bool] = Field(
         False,
-        description='Whether or not the flow run was automatically scheduled.',
-        title='Auto Scheduled',
+        description="Whether or not the flow run was automatically scheduled.",
+        title="Auto Scheduled",
     )
     infrastructure_document_id: Optional[UUID] = Field(
         None,
-        description='The block document defining infrastructure to use this flow run.',
-        title='Infrastructure Document Id',
+        description="The block document defining infrastructure to use this flow run.",
+        title="Infrastructure Document Id",
     )
     infrastructure_pid: Optional[str] = Field(
         None,
-        description='The id of the flow run as returned by an infrastructure block.',
-        title='Infrastructure Pid',
+        description="The id of the flow run as returned by an infrastructure block.",
+        title="Infrastructure Pid",
     )
     created_by: Optional[CreatedBy] = Field(
-        None, description='Optional information about the creator of this flow run.'
+        None, description="Optional information about the creator of this flow run."
     )
     work_pool_id: Optional[UUID] = Field(
-        None, description="The id of the flow run's work pool.", title='Work Pool Id'
+        None, description="The id of the flow run's work pool.", title="Work Pool Id"
     )
     work_pool_name: Optional[str] = Field(
         None,
         description="The name of the flow run's work pool.",
-        examples=['my-work-pool'],
-        title='Work Pool Name',
+        examples=["my-work-pool"],
+        title="Work Pool Name",
     )
     state: Optional[State] = Field(
-        None, description='The current state of the flow run.'
+        None, description="The current state of the flow run."
     )
     job_variables: Optional[dict[str, Any]] = Field(
         None,
-        description='Variables used as overrides in the base job template',
-        title='Job Variables',
+        description="Variables used as overrides in the base job template",
+        title="Job Variables",
     )
 
 
 class Graph(BaseModel):
-    start_time: Optional[AwareDatetime] = Field(..., title='Start Time')
-    end_time: Optional[AwareDatetime] = Field(..., title='End Time')
-    root_node_ids: list[UUID] = Field(..., title='Root Node Ids')
-    nodes: list[list] = Field(..., title='Nodes')
-    artifacts: list[GraphArtifact] = Field(..., title='Artifacts')
-    states: list[GraphState] = Field(..., title='States')
+    start_time: Optional[AwareDatetime] = Field(..., title="Start Time")
+    end_time: Optional[AwareDatetime] = Field(..., title="End Time")
+    root_node_ids: list[UUID] = Field(..., title="Root Node Ids")
+    nodes: list[list] = Field(..., title="Nodes")
+    artifacts: list[GraphArtifact] = Field(..., title="Artifacts")
+    states: list[GraphState] = Field(..., title="States")
 
 
 class HistoryResponse(BaseModel):
     interval_start: AwareDatetime = Field(
-        ..., description='The start date of the interval.', title='Interval Start'
+        ..., description="The start date of the interval.", title="Interval Start"
     )
     interval_end: AwareDatetime = Field(
-        ..., description='The end date of the interval.', title='Interval End'
+        ..., description="The end date of the interval.", title="Interval End"
     )
     states: list[HistoryResponseState] = Field(
         ...,
-        description='A list of state histories during the interval.',
-        title='States',
+        description="A list of state histories during the interval.",
+        title="States",
     )
 
 
@@ -6446,24 +6446,24 @@ class OrchestrationResult(BaseModel):
     status: SetStateStatus
     details: Union[
         StateAcceptDetails, StateWaitDetails, StateRejectDetails, StateAbortDetails
-    ] = Field(..., title='Details')
+    ] = Field(..., title="Details")
 
 
 class Settings(BaseModel):
     home: Optional[Path] = Field(
-        '~/.prefect',
-        description='The path to the Prefect home directory. Defaults to ~/.prefect',
-        title='Home',
+        "~/.prefect",
+        description="The path to the Prefect home directory. Defaults to ~/.prefect",
+        title="Home",
     )
     profiles_path: Optional[Path] = Field(
         None,
-        description='The path to a profiles configuration file. Supports \\$PREFECT_HOME templating. Defaults to \\$PREFECT_HOME/profiles.toml.',
-        title='Profiles Path',
+        description="The path to a profiles configuration file. Supports \\$PREFECT_HOME templating. Defaults to \\$PREFECT_HOME/profiles.toml.",
+        title="Profiles Path",
     )
     debug_mode: Optional[bool] = Field(
         False,
-        description='If True, enables debug mode which may provide additional logging and debugging features.',
-        title='Debug Mode',
+        description="If True, enables debug mode which may provide additional logging and debugging features.",
+        title="Debug Mode",
     )
     api: Optional[APISettings] = None
     cli: Optional[CLISettings] = None
@@ -6472,243 +6472,243 @@ class Settings(BaseModel):
     deployments: Optional[DeploymentsSettings] = None
     events: Optional[EventsSettings] = None
     experiments: Optional[ExperimentsSettings] = Field(
-        None, description='Settings for controlling experimental features'
+        None, description="Settings for controlling experimental features"
     )
     flows: Optional[FlowsSettings] = None
     internal: Optional[InternalSettings] = Field(
-        None, description='Settings for internal Prefect machinery'
+        None, description="Settings for internal Prefect machinery"
     )
     logging: Optional[LoggingSettings] = None
     plugins: Optional[PluginsSettings] = Field(
-        None, description='Settings for the plugin system.'
+        None, description="Settings for the plugin system."
     )
     results: Optional[ResultsSettings] = None
     runner: Optional[RunnerSettings] = None
     server: Optional[ServerSettings] = None
     tasks: Optional[TasksSettings] = Field(
-        None, description='Settings for controlling task behavior'
+        None, description="Settings for controlling task behavior"
     )
     telemetry: Optional[TelemetrySettings] = Field(
-        None, description='Settings for configuring telemetry collection'
+        None, description="Settings for configuring telemetry collection"
     )
     testing: Optional[TestingSettings] = Field(
-        None, description='Settings used during testing'
+        None, description="Settings used during testing"
     )
     worker: Optional[WorkerSettings] = Field(
-        None, description='Settings for controlling worker behavior'
+        None, description="Settings for controlling worker behavior"
     )
     ui_url: Optional[str] = Field(
         None,
-        description='The URL of the Prefect UI. If not set, the client will attempt to infer it.',
-        title='Ui Url',
+        description="The URL of the Prefect UI. If not set, the client will attempt to infer it.",
+        title="Ui Url",
     )
     silence_api_url_misconfiguration: Optional[bool] = Field(
         False,
-        description='\n        If `True`, disable the warning when a user accidentally misconfigure its `PREFECT_API_URL`\n        Sometimes when a user manually set `PREFECT_API_URL` to a custom url,reverse-proxy for example,\n        we would like to silence this warning so we will set it to `FALSE`.\n        ',
-        title='Silence Api Url Misconfiguration',
+        description="\n        If `True`, disable the warning when a user accidentally misconfigure its `PREFECT_API_URL`\n        Sometimes when a user manually set `PREFECT_API_URL` to a custom url,reverse-proxy for example,\n        we would like to silence this warning so we will set it to `FALSE`.\n        ",
+        title="Silence Api Url Misconfiguration",
     )
 
 
 class TaskRunFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[TaskRunFilterId] = Field(
-        None, description='Filter criteria for `TaskRun.id`'
+        None, description="Filter criteria for `TaskRun.id`"
     )
     name: Optional[TaskRunFilterName] = Field(
-        None, description='Filter criteria for `TaskRun.name`'
+        None, description="Filter criteria for `TaskRun.name`"
     )
     tags: Optional[TaskRunFilterTags] = Field(
-        None, description='Filter criteria for `TaskRun.tags`'
+        None, description="Filter criteria for `TaskRun.tags`"
     )
     state: Optional[TaskRunFilterState] = Field(
-        None, description='Filter criteria for `TaskRun.state`'
+        None, description="Filter criteria for `TaskRun.state`"
     )
     start_time: Optional[TaskRunFilterStartTime] = Field(
-        None, description='Filter criteria for `TaskRun.start_time`'
+        None, description="Filter criteria for `TaskRun.start_time`"
     )
     end_time: Optional[TaskRunFilterEndTime] = Field(
-        None, description='Filter criteria for `TaskRun.end_time`'
+        None, description="Filter criteria for `TaskRun.end_time`"
     )
     expected_start_time: Optional[TaskRunFilterExpectedStartTime] = Field(
-        None, description='Filter criteria for `TaskRun.expected_start_time`'
+        None, description="Filter criteria for `TaskRun.expected_start_time`"
     )
     subflow_runs: Optional[TaskRunFilterSubFlowRuns] = Field(
-        None, description='Filter criteria for `TaskRun.subflow_run`'
+        None, description="Filter criteria for `TaskRun.subflow_run`"
     )
     flow_run_id: Optional[TaskRunFilterFlowRunId] = Field(
-        None, description='Filter criteria for `TaskRun.flow_run_id`'
+        None, description="Filter criteria for `TaskRun.flow_run_id`"
     )
 
 
 class TaskRunPaginationResponse(BaseModel):
-    results: list[TaskRunResponse] = Field(..., title='Results')
-    count: int = Field(..., title='Count')
-    limit: int = Field(..., title='Limit')
-    pages: int = Field(..., title='Pages')
-    page: int = Field(..., title='Page')
+    results: list[TaskRunResponse] = Field(..., title="Results")
+    count: int = Field(..., title="Count")
+    limit: int = Field(..., title="Limit")
+    pages: int = Field(..., title="Pages")
+    page: int = Field(..., title="Page")
 
 
 class WorkPoolConcurrencyStatus(BaseModel):
-    active_slots: int = Field(..., title='Active Slots')
-    concurrency_limit: Optional[int] = Field(None, title='Concurrency Limit')
+    active_slots: int = Field(..., title="Active Slots")
+    concurrency_limit: Optional[int] = Field(None, title="Concurrency Limit")
     queues: Optional[list[WorkQueueConcurrencyStatusDetail]] = Field(
-        None, title='Queues'
+        None, title="Queues"
     )
-    count: int = Field(..., description='Total number of queues.', title='Count')
-    limit: int = Field(..., description='Page size.', title='Limit')
-    pages: int = Field(..., description='Total number of pages.', title='Pages')
-    page: int = Field(..., description='Current page number (1-indexed).', title='Page')
+    count: int = Field(..., description="Total number of queues.", title="Count")
+    limit: int = Field(..., description="Page size.", title="Limit")
+    pages: int = Field(..., description="Total number of pages.", title="Pages")
+    page: int = Field(..., description="Current page number (1-indexed).", title="Page")
 
 
 class WorkerFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     last_heartbeat_time: Optional[WorkerFilterLastHeartbeatTime] = Field(
-        None, description='Filter criteria for `Worker.last_heartbeat_time`'
+        None, description="Filter criteria for `Worker.last_heartbeat_time`"
     )
     status: Optional[WorkerFilterStatus] = Field(
-        None, description='Filter criteria for `Worker.status`'
+        None, description="Filter criteria for `Worker.status`"
     )
 
 
 class WorkerFlowRunResponse(BaseModel):
-    work_pool_id: UUID = Field(..., title='Work Pool Id')
-    work_queue_id: UUID = Field(..., title='Work Queue Id')
+    work_pool_id: UUID = Field(..., title="Work Pool Id")
+    work_queue_id: UUID = Field(..., title="Work Queue Id")
     flow_run: FlowRun
 
 
 class BodyBulkDeleteDeploymentsDeploymentsBulkDeletePost(BaseModel):
     deployments: Optional[DeploymentFilter] = Field(
-        None, description='Filter criteria for deployments to delete'
+        None, description="Filter criteria for deployments to delete"
     )
     limit: Optional[conint(ge=1, le=50)] = Field(
         50,
-        description='Maximum number of deployments to delete. Defaults to 50.',
-        title='Limit',
+        description="Maximum number of deployments to delete. Defaults to 50.",
+        title="Limit",
     )
 
 
 class BodyBulkDeleteFlowsFlowsBulkDeletePost(BaseModel):
     flows: Optional[FlowFilter] = Field(
-        None, description='Filter criteria for flows to delete'
+        None, description="Filter criteria for flows to delete"
     )
     limit: Optional[conint(ge=1, le=50)] = Field(
         50,
-        description='Maximum number of flows to delete. Defaults to 50.',
-        title='Limit',
+        description="Maximum number of flows to delete. Defaults to 50.",
+        title="Limit",
     )
 
 
 class BodyCountAccountEventsEventsCountByCountablePost(BaseModel):
     filter: EventFilter
-    time_unit: Optional[TimeUnit] = 'day'
-    time_interval: Optional[confloat(ge=0.01)] = Field(1, title='Time Interval')
+    time_unit: Optional[TimeUnit] = "day"
+    time_interval: Optional[confloat(ge=0.01)] = Field(1, title="Time Interval")
 
 
 class BodyReadEventsEventsFilterPost(BaseModel):
     filter: Optional[EventFilter] = Field(
         None,
-        description='Additional optional filter criteria to narrow down the set of Events',
+        description="Additional optional filter criteria to narrow down the set of Events",
     )
     limit: Optional[conint(ge=0, le=50)] = Field(
-        50, description='The number of events to return with each page', title='Limit'
+        50, description="The number of events to return with each page", title="Limit"
     )
 
 
 class BodyReadWorkersWorkPoolsWorkPoolNameWorkersFilterPost(BaseModel):
     workers: Optional[WorkerFilter] = None
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class DeploymentPaginationResponse(BaseModel):
-    results: list[DeploymentResponse] = Field(..., title='Results')
-    count: int = Field(..., title='Count')
-    limit: int = Field(..., title='Limit')
-    pages: int = Field(..., title='Pages')
-    page: int = Field(..., title='Page')
+    results: list[DeploymentResponse] = Field(..., title="Results")
+    count: int = Field(..., title="Count")
+    limit: int = Field(..., title="Limit")
+    pages: int = Field(..., title="Pages")
+    page: int = Field(..., title="Page")
 
 
 class FlowRunBulkSetStateResponse(BaseModel):
-    results: Optional[list[FlowRunOrchestrationResult]] = Field(None, title='Results')
+    results: Optional[list[FlowRunOrchestrationResult]] = Field(None, title="Results")
 
 
 class FlowRunFilter(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
     operator: Optional[Operator] = Field(
-        'and_',
+        "and_",
         description="Operator for combining filter criteria. Defaults to 'and_'.",
     )
     id: Optional[FlowRunFilterId] = Field(
-        None, description='Filter criteria for `FlowRun.id`'
+        None, description="Filter criteria for `FlowRun.id`"
     )
     name: Optional[FlowRunFilterName] = Field(
-        None, description='Filter criteria for `FlowRun.name`'
+        None, description="Filter criteria for `FlowRun.name`"
     )
     tags: Optional[FlowRunFilterTags] = Field(
-        None, description='Filter criteria for `FlowRun.tags`'
+        None, description="Filter criteria for `FlowRun.tags`"
     )
     deployment_id: Optional[FlowRunFilterDeploymentId] = Field(
-        None, description='Filter criteria for `FlowRun.deployment_id`'
+        None, description="Filter criteria for `FlowRun.deployment_id`"
     )
     work_queue_name: Optional[FlowRunFilterWorkQueueName] = Field(
-        None, description='Filter criteria for `FlowRun.work_queue_name'
+        None, description="Filter criteria for `FlowRun.work_queue_name"
     )
     state: Optional[FlowRunFilterState] = Field(
-        None, description='Filter criteria for `FlowRun.state`'
+        None, description="Filter criteria for `FlowRun.state`"
     )
     flow_version: Optional[FlowRunFilterFlowVersion] = Field(
-        None, description='Filter criteria for `FlowRun.flow_version`'
+        None, description="Filter criteria for `FlowRun.flow_version`"
     )
     start_time: Optional[FlowRunFilterStartTime] = Field(
-        None, description='Filter criteria for `FlowRun.start_time`'
+        None, description="Filter criteria for `FlowRun.start_time`"
     )
     end_time: Optional[FlowRunFilterEndTime] = Field(
-        None, description='Filter criteria for `FlowRun.end_time`'
+        None, description="Filter criteria for `FlowRun.end_time`"
     )
     expected_start_time: Optional[FlowRunFilterExpectedStartTime] = Field(
-        None, description='Filter criteria for `FlowRun.expected_start_time`'
+        None, description="Filter criteria for `FlowRun.expected_start_time`"
     )
     next_scheduled_start_time: Optional[FlowRunFilterNextScheduledStartTime] = Field(
-        None, description='Filter criteria for `FlowRun.next_scheduled_start_time`'
+        None, description="Filter criteria for `FlowRun.next_scheduled_start_time`"
     )
     parent_flow_run_id: Optional[FlowRunFilterParentFlowRunId] = Field(
-        None, description='Filter criteria for subflows of the given flow runs'
+        None, description="Filter criteria for subflows of the given flow runs"
     )
     parent_task_run_id: Optional[FlowRunFilterParentTaskRunId] = Field(
-        None, description='Filter criteria for `FlowRun.parent_task_run_id`'
+        None, description="Filter criteria for `FlowRun.parent_task_run_id`"
     )
     idempotency_key: Optional[FlowRunFilterIdempotencyKey] = Field(
-        None, description='Filter criteria for `FlowRun.idempotency_key`'
+        None, description="Filter criteria for `FlowRun.idempotency_key`"
     )
     created_by: Optional[FlowRunFilterCreatedBy] = Field(
-        None, description='Filter criteria for `FlowRun.created_by`'
+        None, description="Filter criteria for `FlowRun.created_by`"
     )
 
 
 class FlowRunPaginationResponse(BaseModel):
-    results: list[FlowRunResponse] = Field(..., title='Results')
-    count: int = Field(..., title='Count')
-    limit: int = Field(..., title='Limit')
-    pages: int = Field(..., title='Pages')
-    page: int = Field(..., title='Page')
+    results: list[FlowRunResponse] = Field(..., title="Results")
+    count: int = Field(..., title="Count")
+    limit: int = Field(..., title="Limit")
+    pages: int = Field(..., title="Pages")
+    page: int = Field(..., title="Page")
 
 
 class BodyAverageFlowRunLatenessFlowRunsLatenessPost(BaseModel):
@@ -6722,29 +6722,29 @@ class BodyAverageFlowRunLatenessFlowRunsLatenessPost(BaseModel):
 
 class BodyBulkDeleteFlowRunsFlowRunsBulkDeletePost(BaseModel):
     flow_runs: Optional[FlowRunFilter] = Field(
-        None, description='Filter criteria for flow runs to delete'
+        None, description="Filter criteria for flow runs to delete"
     )
     limit: Optional[conint(ge=1, le=50)] = Field(
         50,
-        description='Maximum number of flow runs to delete. Defaults to 50.',
-        title='Limit',
+        description="Maximum number of flow runs to delete. Defaults to 50.",
+        title="Limit",
     )
 
 
 class BodyBulkSetFlowRunStateFlowRunsBulkSetStatePost(BaseModel):
     flow_runs: Optional[FlowRunFilter] = Field(
-        None, description='Filter criteria for flow runs to update'
+        None, description="Filter criteria for flow runs to update"
     )
-    state: StateCreate = Field(..., description='The state to set')
+    state: StateCreate = Field(..., description="The state to set")
     force: Optional[bool] = Field(
         False,
-        description='If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.',
-        title='Force',
+        description="If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied.",
+        title="Force",
     )
     limit: Optional[conint(ge=1, le=50)] = Field(
         50,
-        description='Maximum number of flow runs to update. Defaults to 50.',
-        title='Limit',
+        description="Maximum number of flow runs to update. Defaults to 50.",
+        title="Limit",
     )
 
 
@@ -6799,15 +6799,15 @@ class BodyCountTaskRunsTaskRunsCountPost(BaseModel):
 
 class BodyFlowRunHistoryFlowRunsHistoryPost(BaseModel):
     history_start: AwareDatetime = Field(
-        ..., description="The history's start time.", title='History Start'
+        ..., description="The history's start time.", title="History Start"
     )
     history_end: AwareDatetime = Field(
-        ..., description="The history's end time.", title='History End'
+        ..., description="The history's end time.", title="History End"
     )
     history_interval_seconds: float = Field(
         ...,
-        description='The size of each history interval, in seconds. Must be at least 1 second.',
-        title='History Interval Seconds',
+        description="The size of each history interval, in seconds. Must be at least 1 second.",
+        title="History Interval Seconds",
     )
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
@@ -6818,24 +6818,24 @@ class BodyFlowRunHistoryFlowRunsHistoryPost(BaseModel):
 
 
 class BodyPaginateDeploymentsDeploymentsPaginatePost(BaseModel):
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     work_pools: Optional[WorkPoolFilter] = None
     work_pool_queues: Optional[WorkQueueFilter] = None
-    sort: Optional[DeploymentSort] = 'NAME_ASC'
+    sort: Optional[DeploymentSort] = "NAME_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyPaginateFlowRunsFlowRunsPaginatePost(BaseModel):
-    sort: Optional[FlowRunSort] = 'ID_DESC'
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    sort: Optional[FlowRunSort] = "ID_DESC"
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
@@ -6844,43 +6844,43 @@ class BodyPaginateFlowRunsFlowRunsPaginatePost(BaseModel):
     work_pool_queues: Optional[WorkQueueFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyPaginateFlowsFlowsPaginatePost(BaseModel):
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     work_pools: Optional[WorkPoolFilter] = None
-    sort: Optional[FlowSort] = 'NAME_ASC'
+    sort: Optional[FlowSort] = "NAME_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyPaginateTaskRunsTaskRunsPaginatePost(BaseModel):
-    sort: Optional[TaskRunSort] = 'ID_DESC'
-    page: Optional[conint(ge=1)] = Field(1, title='Page')
+    sort: Optional[TaskRunSort] = "ID_DESC"
+    page: Optional[conint(ge=1)] = Field(1, title="Page")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadArtifactsArtifactsFilterPost(BaseModel):
-    sort: Optional[ArtifactSort] = 'ID_DESC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[ArtifactSort] = "ID_DESC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     artifacts: Optional[ArtifactFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
@@ -6888,8 +6888,8 @@ class BodyReadArtifactsArtifactsFilterPost(BaseModel):
     deployments: Optional[DeploymentFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
@@ -6903,25 +6903,25 @@ class BodyReadDashboardTaskRunCountsUiTaskRunsDashboardCountsPost(BaseModel):
 
 
 class BodyReadDeploymentsDeploymentsFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     work_pools: Optional[WorkPoolFilter] = None
     work_pool_queues: Optional[WorkQueueFilter] = None
-    sort: Optional[DeploymentSort] = 'NAME_ASC'
+    sort: Optional[DeploymentSort] = "NAME_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadFlowRunHistoryUiFlowRunsHistoryPost(BaseModel):
-    sort: Optional[FlowRunSort] = 'EXPECTED_START_TIME_DESC'
-    limit: Optional[conint(le=1000)] = Field(1000, title='Limit')
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[FlowRunSort] = "EXPECTED_START_TIME_DESC"
+    limit: Optional[conint(le=1000)] = Field(1000, title="Limit")
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
@@ -6930,8 +6930,8 @@ class BodyReadFlowRunHistoryUiFlowRunsHistoryPost(BaseModel):
 
 
 class BodyReadFlowRunsFlowRunsFilterPost(BaseModel):
-    sort: Optional[FlowRunSort] = 'ID_DESC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[FlowRunSort] = "ID_DESC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
@@ -6940,29 +6940,29 @@ class BodyReadFlowRunsFlowRunsFilterPost(BaseModel):
     work_pool_queues: Optional[WorkQueueFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadFlowsFlowsFilterPost(BaseModel):
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     work_pools: Optional[WorkPoolFilter] = None
-    sort: Optional[FlowSort] = 'NAME_ASC'
+    sort: Optional[FlowSort] = "NAME_ASC"
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyReadLatestArtifactsArtifactsLatestFilterPost(BaseModel):
-    sort: Optional[ArtifactCollectionSort] = 'ID_DESC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[ArtifactCollectionSort] = "ID_DESC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     artifacts: Optional[ArtifactCollectionFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
@@ -6970,8 +6970,8 @@ class BodyReadLatestArtifactsArtifactsLatestFilterPost(BaseModel):
     deployments: Optional[DeploymentFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
@@ -6983,30 +6983,30 @@ class BodyReadTaskRunCountsByStateUiTaskRunsCountPost(BaseModel):
 
 
 class BodyReadTaskRunsTaskRunsFilterPost(BaseModel):
-    sort: Optional[TaskRunSort] = 'ID_DESC'
-    offset: Optional[conint(ge=0)] = Field(0, title='Offset')
+    sort: Optional[TaskRunSort] = "ID_DESC"
+    offset: Optional[conint(ge=0)] = Field(0, title="Offset")
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
     task_runs: Optional[TaskRunFilter] = None
     deployments: Optional[DeploymentFilter] = None
     limit: Optional[int] = Field(
         None,
-        description='Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.',
-        title='Limit',
+        description="Defaults to PREFECT_API_DEFAULT_LIMIT if not provided.",
+        title="Limit",
     )
 
 
 class BodyTaskRunHistoryTaskRunsHistoryPost(BaseModel):
     history_start: AwareDatetime = Field(
-        ..., description="The history's start time.", title='History Start'
+        ..., description="The history's start time.", title="History Start"
     )
     history_end: AwareDatetime = Field(
-        ..., description="The history's end time.", title='History End'
+        ..., description="The history's end time.", title="History End"
     )
     history_interval_seconds: float = Field(
         ...,
-        description='The size of each history interval, in seconds. Must be at least 1 second.',
-        title='History Interval Seconds',
+        description="The size of each history interval, in seconds. Must be at least 1 second.",
+        title="History Interval Seconds",
     )
     flows: Optional[FlowFilter] = None
     flow_runs: Optional[FlowRunFilter] = None
@@ -7015,20 +7015,20 @@ class BodyTaskRunHistoryTaskRunsHistoryPost(BaseModel):
 
 
 class Automation(BaseModel):
-    name: str = Field(..., description='The name of this automation', title='Name')
+    name: str = Field(..., description="The name of this automation", title="Name")
     description: Optional[str] = Field(
-        '', description='A longer description of this automation', title='Description'
+        "", description="A longer description of this automation", title="Description"
     )
     enabled: Optional[bool] = Field(
-        True, description='Whether this automation will be evaluated', title='Enabled'
+        True, description="Whether this automation will be evaluated", title="Enabled"
     )
     tags: Optional[list[str]] = Field(
-        None, description='A list of tags associated with this automation', title='Tags'
+        None, description="A list of tags associated with this automation", title="Tags"
     )
     trigger: Union[EventTrigger, CompoundTriggerOutput, SequenceTriggerOutput] = Field(
         ...,
-        description='The criteria for which events this Automation covers and how it will respond to the presence or absence of those events',
-        title='Trigger',
+        description="The criteria for which events this Automation covers and how it will respond to the presence or absence of those events",
+        title="Trigger",
     )
     actions: list[
         Union[
@@ -7051,8 +7051,8 @@ class Automation(BaseModel):
         ]
     ] = Field(
         ...,
-        description='The actions to perform when this Automation triggers',
-        title='Actions',
+        description="The actions to perform when this Automation triggers",
+        title="Actions",
     )
     actions_on_trigger: Optional[
         list[
@@ -7077,8 +7077,8 @@ class Automation(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a triggered state',
-        title='Actions On Trigger',
+        description="The actions to perform when an Automation goes into a triggered state",
+        title="Actions On Trigger",
     )
     actions_on_resolve: Optional[
         list[
@@ -7103,32 +7103,32 @@ class Automation(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a resolving state',
-        title='Actions On Resolve',
+        description="The actions to perform when an Automation goes into a resolving state",
+        title="Actions On Resolve",
     )
-    id: UUID = Field(..., title='Id')
-    created: Optional[AwareDatetime] = Field(..., title='Created')
-    updated: Optional[AwareDatetime] = Field(..., title='Updated')
+    id: UUID = Field(..., title="Id")
+    created: Optional[AwareDatetime] = Field(..., title="Created")
+    updated: Optional[AwareDatetime] = Field(..., title="Updated")
 
 
 class AutomationCreate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: str = Field(..., description='The name of this automation', title='Name')
+    name: str = Field(..., description="The name of this automation", title="Name")
     description: Optional[str] = Field(
-        '', description='A longer description of this automation', title='Description'
+        "", description="A longer description of this automation", title="Description"
     )
     enabled: Optional[bool] = Field(
-        True, description='Whether this automation will be evaluated', title='Enabled'
+        True, description="Whether this automation will be evaluated", title="Enabled"
     )
     tags: Optional[list[str]] = Field(
-        None, description='A list of tags associated with this automation', title='Tags'
+        None, description="A list of tags associated with this automation", title="Tags"
     )
     trigger: Union[EventTrigger, CompoundTriggerInput, SequenceTriggerInput] = Field(
         ...,
-        description='The criteria for which events this Automation covers and how it will respond to the presence or absence of those events',
-        title='Trigger',
+        description="The criteria for which events this Automation covers and how it will respond to the presence or absence of those events",
+        title="Trigger",
     )
     actions: list[
         Union[
@@ -7151,8 +7151,8 @@ class AutomationCreate(BaseModel):
         ]
     ] = Field(
         ...,
-        description='The actions to perform when this Automation triggers',
-        title='Actions',
+        description="The actions to perform when this Automation triggers",
+        title="Actions",
     )
     actions_on_trigger: Optional[
         list[
@@ -7177,8 +7177,8 @@ class AutomationCreate(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a triggered state',
-        title='Actions On Trigger',
+        description="The actions to perform when an Automation goes into a triggered state",
+        title="Actions On Trigger",
     )
     actions_on_resolve: Optional[
         list[
@@ -7203,34 +7203,34 @@ class AutomationCreate(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a resolving state',
-        title='Actions On Resolve',
+        description="The actions to perform when an Automation goes into a resolving state",
+        title="Actions On Resolve",
     )
     owner_resource: Optional[str] = Field(
         None,
-        description='The resource to which this automation belongs',
-        title='Owner Resource',
+        description="The resource to which this automation belongs",
+        title="Owner Resource",
     )
 
 
 class AutomationUpdate(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra="forbid",
     )
-    name: str = Field(..., description='The name of this automation', title='Name')
+    name: str = Field(..., description="The name of this automation", title="Name")
     description: Optional[str] = Field(
-        '', description='A longer description of this automation', title='Description'
+        "", description="A longer description of this automation", title="Description"
     )
     enabled: Optional[bool] = Field(
-        True, description='Whether this automation will be evaluated', title='Enabled'
+        True, description="Whether this automation will be evaluated", title="Enabled"
     )
     tags: Optional[list[str]] = Field(
-        None, description='A list of tags associated with this automation', title='Tags'
+        None, description="A list of tags associated with this automation", title="Tags"
     )
     trigger: Union[EventTrigger, CompoundTriggerInput, SequenceTriggerInput] = Field(
         ...,
-        description='The criteria for which events this Automation covers and how it will respond to the presence or absence of those events',
-        title='Trigger',
+        description="The criteria for which events this Automation covers and how it will respond to the presence or absence of those events",
+        title="Trigger",
     )
     actions: list[
         Union[
@@ -7253,8 +7253,8 @@ class AutomationUpdate(BaseModel):
         ]
     ] = Field(
         ...,
-        description='The actions to perform when this Automation triggers',
-        title='Actions',
+        description="The actions to perform when this Automation triggers",
+        title="Actions",
     )
     actions_on_trigger: Optional[
         list[
@@ -7279,8 +7279,8 @@ class AutomationUpdate(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a triggered state',
-        title='Actions On Trigger',
+        description="The actions to perform when an Automation goes into a triggered state",
+        title="Actions On Trigger",
     )
     actions_on_resolve: Optional[
         list[
@@ -7305,76 +7305,76 @@ class AutomationUpdate(BaseModel):
         ]
     ] = Field(
         None,
-        description='The actions to perform when an Automation goes into a resolving state',
-        title='Actions On Resolve',
+        description="The actions to perform when an Automation goes into a resolving state",
+        title="Actions On Resolve",
     )
 
 
 class CompoundTriggerInput(BaseModel):
-    type: Literal['compound'] = Field('compound', title='Type')
+    type: Literal["compound"] = Field("compound", title="Type")
     id: Optional[UUID] = Field(
-        None, description='The unique ID of this trigger', title='Id'
+        None, description="The unique ID of this trigger", title="Id"
     )
     triggers: list[Union[EventTrigger, CompoundTriggerInput, SequenceTriggerInput]] = (
-        Field(..., title='Triggers')
+        Field(..., title="Triggers")
     )
-    within: Optional[float] = Field(..., title='Within')
-    require: Union[int, Require] = Field(..., title='Require')
+    within: Optional[float] = Field(..., title="Within")
+    require: Union[int, Require] = Field(..., title="Require")
 
 
 class CompoundTriggerOutput(BaseModel):
-    type: Literal['compound'] = Field('compound', title='Type')
+    type: Literal["compound"] = Field("compound", title="Type")
     id: Optional[UUID] = Field(
-        None, description='The unique ID of this trigger', title='Id'
+        None, description="The unique ID of this trigger", title="Id"
     )
     triggers: list[
         Union[EventTrigger, CompoundTriggerOutput, SequenceTriggerOutput]
-    ] = Field(..., title='Triggers')
-    within: Optional[float] = Field(..., title='Within')
-    require: Union[int, Require] = Field(..., title='Require')
+    ] = Field(..., title="Triggers")
+    within: Optional[float] = Field(..., title="Within")
+    require: Union[int, Require] = Field(..., title="Require")
 
 
 class SchemaValueIndexError(BaseModel):
-    index: int = Field(..., title='Index')
+    index: int = Field(..., title="Index")
     errors: list[Union[str, SchemaValuePropertyError, SchemaValueIndexError]] = Field(
-        ..., title='Errors'
+        ..., title="Errors"
     )
 
 
 class SchemaValuePropertyError(BaseModel):
-    property: str = Field(..., title='Property')
+    property: str = Field(..., title="Property")
     errors: list[Union[str, SchemaValuePropertyError, SchemaValueIndexError]] = Field(
-        ..., title='Errors'
+        ..., title="Errors"
     )
 
 
 class SchemaValuesValidationResponse(BaseModel):
     errors: list[Union[str, SchemaValuePropertyError, SchemaValueIndexError]] = Field(
-        ..., title='Errors'
+        ..., title="Errors"
     )
-    valid: bool = Field(..., title='Valid')
+    valid: bool = Field(..., title="Valid")
 
 
 class SequenceTriggerInput(BaseModel):
-    type: Literal['sequence'] = Field('sequence', title='Type')
+    type: Literal["sequence"] = Field("sequence", title="Type")
     id: Optional[UUID] = Field(
-        None, description='The unique ID of this trigger', title='Id'
+        None, description="The unique ID of this trigger", title="Id"
     )
     triggers: list[Union[EventTrigger, CompoundTriggerInput, SequenceTriggerInput]] = (
-        Field(..., title='Triggers')
+        Field(..., title="Triggers")
     )
-    within: Optional[float] = Field(..., title='Within')
+    within: Optional[float] = Field(..., title="Within")
 
 
 class SequenceTriggerOutput(BaseModel):
-    type: Literal['sequence'] = Field('sequence', title='Type')
+    type: Literal["sequence"] = Field("sequence", title="Type")
     id: Optional[UUID] = Field(
-        None, description='The unique ID of this trigger', title='Id'
+        None, description="The unique ID of this trigger", title="Id"
     )
     triggers: list[
         Union[EventTrigger, CompoundTriggerOutput, SequenceTriggerOutput]
-    ] = Field(..., title='Triggers')
-    within: Optional[float] = Field(..., title='Within')
+    ] = Field(..., title="Triggers")
+    within: Optional[float] = Field(..., title="Within")
 
 
 Automation.model_rebuild()

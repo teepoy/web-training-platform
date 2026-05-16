@@ -24,7 +24,9 @@ async def export_dataset_task(
         response = await client.get(url)
         response.raise_for_status()
 
-    logger.info(f"Export request completed for dataset_id={dataset_id}: status={response.status_code}")
+    logger.info(
+        f"Export request completed for dataset_id={dataset_id}: status={response.status_code}"
+    )
 
     return {
         "dataset_id": dataset_id,

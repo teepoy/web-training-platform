@@ -64,7 +64,9 @@ class TorchPredictor:
     """Runtime predictor backed by persisted prototype model artifacts."""
 
     def __init__(
-        self, embedding_client: EmbeddingClient | None = None, artifact_storage: ArtifactStorage | None = None
+        self,
+        embedding_client: EmbeddingClient | None = None,
+        artifact_storage: ArtifactStorage | None = None,
     ) -> None:
         self._embedding_client = embedding_client
         self._artifact_storage = artifact_storage
@@ -222,7 +224,7 @@ class TorchTrainer:
             if not label_space:
                 raise ValueError(
                     "no labeled samples with readable images found for training"
-            )
+                )
             dim = 64
             for idx, label in enumerate(label_space):
                 seed = [0.0] * dim

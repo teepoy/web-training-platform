@@ -43,11 +43,11 @@ ruff:
   script:
     - uv run ruff check apps/api/
 
-ty-check:
+pyright:
   extends: .default
   stage: check
   script:
-    - uv run ty check --project apps/api apps/api
+    - uv run --directory apps/api pyright .
 
 # ── Python tests ───────────────────────────────────
 

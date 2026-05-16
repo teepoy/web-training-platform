@@ -26,9 +26,11 @@ _FORMAT_REGISTRY: dict[str, ExportBuilder] = {}
 
 def register_format(format_id: str) -> Callable[[ExportBuilder], ExportBuilder]:
     """Decorator to register an export format builder."""
+
     def decorator(fn: ExportBuilder) -> ExportBuilder:
         _FORMAT_REGISTRY[format_id] = fn
         return fn
+
     return decorator
 
 
@@ -64,14 +66,16 @@ def build_full_context_export(
         ann = ann_map.get(v.annotation_id)
         if ann is None:
             continue
-        entries.append({
-            "annotation": ann.model_dump(mode="json"),
-            "version": v.model_dump(mode="json"),
-            "prediction_context": {
-                "prediction_id": v.prediction_id,
-                "predicted_label": v.predicted_label,
-            },
-        })
+        entries.append(
+            {
+                "annotation": ann.model_dump(mode="json"),
+                "version": v.model_dump(mode="json"),
+                "prediction_context": {
+                    "prediction_id": v.prediction_id,
+                    "predicted_label": v.predicted_label,
+                },
+            }
+        )
     return {
         "format": "annotation-version-full-context-v1",
         "review_action": review_action.model_dump(mode="json"),
@@ -97,12 +101,14 @@ def build_compact_export(
         ann = ann_map.get(v.annotation_id)
         if ann is None:
             continue
-        rows.append({
-            "sample_id": ann.sample_id,
-            "predicted_label": v.predicted_label,
-            "final_label": v.final_label,
-            "confidence": v.confidence,
-        })
+        rows.append(
+            {
+                "sample_id": ann.sample_id,
+                "predicted_label": v.predicted_label,
+                "final_label": v.final_label,
+                "confidence": v.confidence,
+            }
+        )
     return {
         "format": "annotation-version-compact-v1",
         "review_action_id": review_action.id,
@@ -121,10 +127,16 @@ class ArtifactService:
         self.storage = storage
         self.repository = repository
 
-    async def persist_dataset_export(self, dataset: Dataset, samples: list[Sample], annotations: list[Annotation]) -> str:
+    async def persist_dataset_export(
+        self, dataset: Dataset, samples: list[Sample], annotations: list[Annotation]
+    ) -> str:
         payload = self.build_dataset_export(dataset, samples, annotations)
         object_name = f"exports/{dataset.id}/dataset-export.json"
-        return await self.storage.put_bytes(object_name=object_name, data=json.dumps(payload).encode("utf-8"), content_type="application/json")
+        return await self.storage.put_bytes(
+            object_name=object_name,
+            data=json.dumps(payload).encode("utf-8"),
+            content_type="application/json",
+        )
 
     async def persist_version_export(
         self,
@@ -151,10 +163,12 @@ class ArtifactService:
             content_type="application/json",
         )
 
-    async def persist_job_artifacts(self, job_id: str, artifacts: list[ArtifactRef]) -> list[ArtifactRef]:
+    async def persist_job_artifacts(
+        self, job_id: str, artifacts: list[ArtifactRef]
+    ) -> list[ArtifactRef]:
         """Persist artifacts to repository.
-        
-        If artifacts already have real storage URIs (s3://, memory://), they are 
+
+        If artifacts already have real storage URIs (s3://, memory://), they are
         stored directly. Legacy artifacts with placeholder URIs get re-wrapped.
         """
         persisted: list[ArtifactRef] = []
@@ -202,7 +216,9 @@ class ArtifactService:
             return bool(parsed.netloc and parsed.path and parsed.path != "/")
         return False
 
-    def build_dataset_export(self, dataset: Dataset, samples: list[Sample], annotations: list[Annotation]) -> dict:
+    def build_dataset_export(
+        self, dataset: Dataset, samples: list[Sample], annotations: list[Annotation]
+    ) -> dict:
         return {
             "format": "hf-datasets-friendly-json",
             "dataset": dataset.model_dump(mode="json"),

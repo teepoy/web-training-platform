@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingClient:
-
-    def __init__(self, grpc_target: str = "localhost:50051", timeout_seconds: float = 5.0):
+    def __init__(
+        self, grpc_target: str = "localhost:50051", timeout_seconds: float = 5.0
+    ):
         self._target = grpc_target
         self._timeout_seconds = timeout_seconds
         self._channel: grpc.Channel | None = None
@@ -46,7 +47,9 @@ class EmbeddingClient:
     ) -> list[float]:
         return await asyncio.to_thread(self._embed_sync, image_bytes, model_name)
 
-    def _embed_batch_sync(self, image_bytes_list: list[bytes], model_name: str) -> list[list[float]]:
+    def _embed_batch_sync(
+        self, image_bytes_list: list[bytes], model_name: str
+    ) -> list[list[float]]:
         stub = self._ensure_channel()
         response = stub.EmbedBatch(
             EmbedBatchRequest(images=image_bytes_list, model_name=model_name),
@@ -59,7 +62,9 @@ class EmbeddingClient:
         image_bytes_list: list[bytes],
         model_name: str = "openai/clip-vit-base-patch32",
     ) -> list[list[float]]:
-        return await asyncio.to_thread(self._embed_batch_sync, image_bytes_list, model_name)
+        return await asyncio.to_thread(
+            self._embed_batch_sync, image_bytes_list, model_name
+        )
 
     async def health(self) -> bool:
         def _check() -> bool:
@@ -69,6 +74,7 @@ class EmbeddingClient:
                 return resp.healthy
             except grpc.RpcError:
                 return False
+
         return await asyncio.to_thread(_check)
 
     def close(self):
@@ -86,7 +92,7 @@ class EmbeddingClient:
         model_name: str,
     ) -> tuple[str, float, dict[str, float]]:
         """Synchronous classification call.
-        
+
         Returns (predicted_label, confidence, {label: score}).
         """
         stub = self._ensure_channel()
@@ -108,7 +114,7 @@ class EmbeddingClient:
         model_name: str = "openai/clip-vit-base-patch32",
     ) -> tuple[str, float, dict[str, float]]:
         """Zero-shot CLIP classification for a single image.
-        
+
         Parameters
         ----------
         image_bytes:
@@ -117,7 +123,7 @@ class EmbeddingClient:
             List of class labels for classification.
         model_name:
             CLIP model to use (default: openai/clip-vit-base-patch32).
-            
+
         Returns
         -------
         tuple[str, float, dict[str, float]]
@@ -156,7 +162,7 @@ class EmbeddingClient:
         model_name: str = "openai/clip-vit-base-patch32",
     ) -> list[tuple[str, float, dict[str, float]]]:
         """Zero-shot CLIP classification for multiple images.
-        
+
         Parameters
         ----------
         image_bytes_list:
@@ -165,7 +171,7 @@ class EmbeddingClient:
             List of class labels for classification.
         model_name:
             CLIP model to use.
-            
+
         Returns
         -------
         list[tuple[str, float, dict[str, float]]]

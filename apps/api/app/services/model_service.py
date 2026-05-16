@@ -73,7 +73,9 @@ class ModelService:
         try:
             data = await self.artifact_storage.get_bytes(model.uri)
         except Exception as e:
-            raise HTTPException(status_code=404, detail=f"Model file not found in storage: {e}")
+            raise HTTPException(
+                status_code=404, detail=f"Model file not found in storage: {e}"
+            )
 
         # Determine filename
         filename = model.name or f"model_{artifact_id}"
@@ -102,9 +104,13 @@ class ModelService:
         try:
             raw_metadata = json.loads(metadata_json)
         except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail=f"invalid upload metadata: {exc}")
+            raise HTTPException(
+                status_code=400, detail=f"invalid upload metadata: {exc}"
+            )
         if not isinstance(raw_metadata, dict):
-            raise HTTPException(status_code=400, detail="upload metadata must be a JSON object")
+            raise HTTPException(
+                status_code=400, detail="upload metadata must be a JSON object"
+            )
 
         try:
             upload_metadata = validate_upload_metadata(raw_metadata)
@@ -141,6 +147,9 @@ class ModelService:
             )
 
         # Create artifact record
+        raw_spec = upload_metadata.get("model_spec", {})
+        if not isinstance(raw_spec, dict):
+            raw_spec = {}
         artifact = ArtifactRef(
             id=artifact_id,
             uri=uri,
@@ -157,9 +166,9 @@ class ModelService:
                 "profile_id": upload_metadata.get("profile_id"),
                 **upload_metadata.get("compatibility", {}),  # type: ignore
                 "model_spec": upload_metadata.get("model_spec", {}),
-                "framework": str(upload_metadata.get("model_spec", {}).get("framework", "")),  # type: ignore
-                "architecture": str(upload_metadata.get("model_spec", {}).get("architecture", "")),  # type: ignore
-                "base_model": str(upload_metadata.get("model_spec", {}).get("base_model", "")),  # type: ignore
+                "framework": str(raw_spec.get("framework", "")),
+                "architecture": str(raw_spec.get("architecture", "")),
+                "base_model": str(raw_spec.get("base_model", "")),
             },
         )
 
@@ -183,7 +192,7 @@ class ModelService:
 
         # Store in object storage
         object_name = f"models/{org_id}/{job_id}/{name}"
-        
+
         content_type_map = {
             "pytorch": "application/octet-stream",
             "onnx": "application/octet-stream",

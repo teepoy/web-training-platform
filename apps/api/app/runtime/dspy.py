@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING, Any
 
 from prefect import get_run_logger
 
-from app.presets.runtime import BatchPredictResult, PredictContext, PredictResult, TrainContext, TrainResult
+from app.presets.runtime import (
+    BatchPredictResult,
+    PredictContext,
+    PredictResult,
+    TrainContext,
+    TrainResult,
+)
 
 if TYPE_CHECKING:
     from app.services.llm import OpenAICompatibleLlmClient
@@ -22,7 +28,11 @@ def _logger():
 
 
 class DspyVqaTrainer:
-    def __init__(self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient | None = None) -> None:
+    def __init__(
+        self,
+        artifact_storage: ArtifactStorage,
+        llm_client: OpenAICompatibleLlmClient | None = None,
+    ) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client
 
@@ -50,7 +60,9 @@ class DspyVqaTrainer:
                 break
 
         if not selected:
-            raise ValueError("VQA training needs at least one record with question, answer, and image")
+            raise ValueError(
+                "VQA training needs at least one record with question, answer, and image"
+            )
 
         instruction = str(
             ctx.preset.train.config.get(
@@ -65,7 +77,9 @@ class DspyVqaTrainer:
             "base_model": ctx.preset.model.base_model,
             "instruction": instruction,
             "fewshot_examples": selected,
-            "optimizer": str(ctx.preset.train.config.get("optimizer", "bootstrap_fewshot")),
+            "optimizer": str(
+                ctx.preset.train.config.get("optimizer", "bootstrap_fewshot")
+            ),
         }
 
         artifact_prefix = f"artifacts/{ctx.job_id}"
@@ -87,7 +101,11 @@ class DspyVqaTrainer:
             content_type="application/json",
         )
 
-        logger.info("DSPy VQA optimization finished job_id=%s examples=%s", ctx.job_id, len(selected))
+        logger.info(
+            "DSPy VQA optimization finished job_id=%s examples=%s",
+            ctx.job_id,
+            len(selected),
+        )
 
         return TrainResult(
             model_uri=optimized_program_uri,
@@ -102,7 +120,9 @@ class DspyVqaTrainer:
 
 
 class DspyVqaPredictor:
-    def __init__(self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient) -> None:
+    def __init__(
+        self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient
+    ) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client
         self._program: dict[str, Any] | None = None
@@ -116,7 +136,9 @@ class DspyVqaPredictor:
             raise ValueError("Invalid optimized VQA program")
         self._program = program
 
-    async def predict_batch(self, ctx: PredictContext, samples: list[Any]) -> BatchPredictResult:
+    async def predict_batch(
+        self, ctx: PredictContext, samples: list[Any]
+    ) -> BatchPredictResult:
         predictions = [await self.predict_single(ctx, sample) for sample in samples]
         failed = sum(1 for p in predictions if p.metadata.get("error"))
         return BatchPredictResult(
@@ -133,11 +155,19 @@ class DspyVqaPredictor:
         image_bytes = sample.get("image_bytes")
         question = str(sample.get("question", "")).strip()
         if not image_bytes:
-            return PredictResult(sample_id=sample_id, label="", metadata={"error": "missing image bytes"})
+            return PredictResult(
+                sample_id=sample_id, label="", metadata={"error": "missing image bytes"}
+            )
         if not question:
-            return PredictResult(sample_id=sample_id, label="", metadata={"error": "missing question"})
+            return PredictResult(
+                sample_id=sample_id, label="", metadata={"error": "missing question"}
+            )
         if self._llm_client is None:
-            return PredictResult(sample_id=sample_id, label="", metadata={"error": "llm client not configured"})
+            return PredictResult(
+                sample_id=sample_id,
+                label="",
+                metadata={"error": "llm client not configured"},
+            )
 
         try:
             answer = await self._llm_client.answer_vqa(
@@ -146,7 +176,11 @@ class DspyVqaPredictor:
                 system_prompt=str(self._program.get("instruction", "")),
             )
         except Exception as exc:
-            return PredictResult(sample_id=sample_id, label="", metadata={"error": f"vqa inference failed: {exc}"})
+            return PredictResult(
+                sample_id=sample_id,
+                label="",
+                metadata={"error": f"vqa inference failed: {exc}"},
+            )
 
         return PredictResult(
             sample_id=sample_id,

@@ -4,6 +4,7 @@ These protocols define the interfaces that concrete implementations must satisfy
 Presets reference implementations via importable ``module:function`` entrypoints;
 the platform dynamically loads and validates them against these contracts.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -153,9 +154,13 @@ class Predictor(Protocol):
 
     async def load_model(self, model_ref: ModelRef) -> None: ...
 
-    async def predict_batch(self, ctx: PredictContext, samples: list[Any]) -> BatchPredictResult: ...
+    async def predict_batch(
+        self, ctx: PredictContext, samples: list[Any]
+    ) -> BatchPredictResult: ...
 
-    async def predict_single(self, ctx: PredictContext, sample: Any) -> PredictResult: ...
+    async def predict_single(
+        self, ctx: PredictContext, sample: Any
+    ) -> PredictResult: ...
 
     async def unload_model(self) -> None: ...
 

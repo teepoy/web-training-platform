@@ -42,6 +42,7 @@ WORKER_MODE         — ``v1`` (default) or ``v2``.
 WORK_POOL_NAME      — Work pool name for V2 mode (default ``training-pool``).
 WORK_QUEUE_NAME     — Work queue name for V2 mode (required for specialized workers).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -79,7 +80,11 @@ _QUEUE_POOLS = {
 def _deployment_entrypoint(deployment_name: str) -> str:
     if deployment_name == "drain-dataset-deployment":
         return _DRAIN_ENTRYPOINT
-    if deployment_name in {"predict-job-deployment", "predict-job-batch-deployment", "embed-job-batch-deployment"}:
+    if deployment_name in {
+        "predict-job-deployment",
+        "predict-job-batch-deployment",
+        "embed-job-batch-deployment",
+    }:
         return _PREDICT_ENTRYPOINT
     return _FLOW_ENTRYPOINT
 
@@ -147,7 +152,10 @@ async def _bootstrap_worker_deployment(pool_name: str, queue_name: str) -> None:
         await client._request(
             "PATCH",
             f"/deployments/{deployment_id}",
-            json={"entrypoint": _deployment_entrypoint(deployment_name), "path": _DEPLOYMENT_ROOT},
+            json={
+                "entrypoint": _deployment_entrypoint(deployment_name),
+                "path": _DEPLOYMENT_ROOT,
+            },
             expect_json=False,
             resource_label="deployment",
         )
@@ -194,12 +202,24 @@ async def main() -> None:
     cfg = load_config()
     client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
     for deployment_name, entrypoint in (
-        ("drain-dataset-deployment", _deployment_entrypoint("drain-dataset-deployment")),
+        (
+            "drain-dataset-deployment",
+            _deployment_entrypoint("drain-dataset-deployment"),
+        ),
         ("train-job-deployment", _deployment_entrypoint("train-job-deployment")),
         ("predict-job-deployment", _deployment_entrypoint("predict-job-deployment")),
-        ("predict-job-batch-deployment", _deployment_entrypoint("predict-job-batch-deployment")),
-        ("train-job-torch-deployment", _deployment_entrypoint("train-job-torch-deployment")),
-        ("train-job-dspy-deployment", _deployment_entrypoint("train-job-dspy-deployment")),
+        (
+            "predict-job-batch-deployment",
+            _deployment_entrypoint("predict-job-batch-deployment"),
+        ),
+        (
+            "train-job-torch-deployment",
+            _deployment_entrypoint("train-job-torch-deployment"),
+        ),
+        (
+            "train-job-dspy-deployment",
+            _deployment_entrypoint("train-job-dspy-deployment"),
+        ),
     ):
         deployment_id = await client.resolve_deployment_id(deployment_name)
         if deployment_id is not None:
@@ -227,10 +247,17 @@ async def main_v2() -> None:
     await _bootstrap_worker_deployment(pool_name=pool_name, queue_name=queue_name)
 
     cmd = [
-        sys.executable, "-m", "prefect", "worker", "start",
-        "--pool", pool_name,
-        "--type", "process",
-        "--work-queue", queue_name,
+        sys.executable,
+        "-m",
+        "prefect",
+        "worker",
+        "start",
+        "--pool",
+        pool_name,
+        "--type",
+        "process",
+        "--work-queue",
+        queue_name,
     ]
     proc = await asyncio.to_thread(
         subprocess.run,

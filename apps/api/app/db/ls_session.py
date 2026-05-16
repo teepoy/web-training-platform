@@ -4,6 +4,7 @@ Provides an async SQLAlchemy engine and session factory for read-only
 access to the Label Studio Postgres database.  Used by
 :class:`LsReadRepository` to query tasks and annotations directly.
 """
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

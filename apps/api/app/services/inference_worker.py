@@ -67,7 +67,9 @@ class InferenceWorkerClient:
         image_bytes = sample.get("image_bytes")
         return {
             "sample_id": sample.get("sample_id", ""),
-            "image_bytes_b64": None if image_bytes is None else base64.b64encode(image_bytes).decode("ascii"),
+            "image_bytes_b64": None
+            if image_bytes is None
+            else base64.b64encode(image_bytes).decode("ascii"),
             "metadata": sample.get("metadata", {}),
             "image_uris": sample.get("image_uris", []),
             "question": sample.get("question", ""),

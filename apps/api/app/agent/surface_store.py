@@ -4,6 +4,7 @@ Holds per-session panel state for agent-controlled display surfaces.
 Thread-safe via asyncio.Lock.  State is JSON-serialisable and
 supports export / import for persistence or sharing.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -44,9 +45,7 @@ class SurfaceStore:
     # Read
     # ------------------------------------------------------------------
 
-    async def get_state(
-        self, session_id: str, surface_id: str
-    ) -> SurfaceStateDocument:
+    async def get_state(self, session_id: str, surface_id: str) -> SurfaceStateDocument:
         async with self._lock:
             return deepcopy(self._ensure(session_id, surface_id))
 
