@@ -143,6 +143,15 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Backend extension registry | `apps/api/app/routers/registry.py`                                           | Explicit list of backend extension routers                             |
 | Backend extension routes  | `apps/api/app/routers/*/router.py`                                           | One FastAPI router per backend extension                               |
 | Extension guide           | `docs/guides/extension-guide.md`                                      | Step-by-step guide for all 4 extension types                           |
+| Sensor registry         | `apps/api/app/sensors/registry.py`                                           | SensorRegistry — loads YAML sensor definitions |
+| Sensor YAML definitions | `apps/api/sensors/`                                                          | Engineer-authored sensor YAML files |
+| Sensor domain models    | `apps/api/app/domain/sensor.py`                                              | SensorSubscription, SensorCheckpoint, SensorEvent |
+| Sensor repository       | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for subscriptions + checkpoints |
+| Sensor dispatch service | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatch events to matching subscriptions |
+| Sensor API router       | `apps/api/app/routers/sensors/router.py`                                     | CRUD + event ingestion endpoints |
+| Sensor Prefect flow     | `apps/api/app/flows/dataset_size_sensor.py`                                  | Example sensor flow (polls dataset counts) |
+| Sensor pub/sub arch     | `docs/architecture/sensor-pubsub.md`                                         | Architecture overview |
+| Sensors frontend view   | `apps/web/src/views/SensorsView.vue`                                         | Sensor subscription management UI |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
 | Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
 | Widget stories            | `apps/web/src/registrations/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts` | Story files for app widgets and shared web-ui components            |
@@ -183,6 +192,9 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PageProvider`          | component  | `libs/web-ui/src/components/page-provider/PageProvider.vue`               | Template-friendly wrapper for usePagePanels                   |
 | `useWaferHelpers`       | composable | `libs/web-ui/src/composables/useWaferHelpers.ts`                          | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
 | `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
+| `SensorRegistry`        | class      | `apps/api/app/sensors/registry.py`                                           | Loads sensor YAML definitions; exposes get(id), list_all() |
+| `SensorDispatchService` | service    | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatches sensor events to matching subscriptions; isolation per subscription |
+| `SensorRepository`      | repository | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for SensorSubscriptionORM and SensorCheckpointORM |
 | `provideWidgetContext`  | decorator  | `apps/web/.storybook/mocks/widgetContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
 | `mockImportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for importer props               |
 | `mockExportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for exporter props               |
