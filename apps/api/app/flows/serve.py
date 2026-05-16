@@ -59,8 +59,10 @@ import subprocess
 import sys
 
 from prefect.runner import Runner
+from prefect.schedules import Cron
 
 from app.core.config import load_config
+from app.flows.dataset_size_sensor import dataset_size_sensor
 from app.flows.drain_dataset import drain_dataset
 from app.flows.predict_job import predict_job  # noqa: F401 — register flow for V2 worker
 from app.flows.train_job import train_job  # noqa: F401 — register flow for V2 worker
@@ -75,6 +77,7 @@ _DEPLOYMENT_ROOT = "/app/apps/api"
 _FLOW_ENTRYPOINT = "app/flows/train_job.py:train_job"
 _DRAIN_ENTRYPOINT = "app/flows/drain_dataset.py:drain_dataset"
 _PREDICT_ENTRYPOINT = "app/flows/predict_job.py:predict_job"
+_SENSOR_ENTRYPOINT = "app/flows/dataset_size_sensor.py:dataset_size_sensor"
 
 _QUEUE_POOLS = {
     _DSPY_QUEUE: "default-pool",
@@ -84,6 +87,8 @@ _QUEUE_POOLS = {
 def _deployment_entrypoint(deployment_name: str) -> str:
     if deployment_name == "drain-dataset-deployment":
         return _DRAIN_ENTRYPOINT
+    if deployment_name == "dataset-size-sensor-deployment":
+        return _SENSOR_ENTRYPOINT
     if deployment_name in {
         "predict-job-deployment",
         "predict-job-batch-deployment",
@@ -170,6 +175,11 @@ async def main() -> None:
         description="Prediction runtime deployment for predict-job flow (managed by flow-worker)",
         work_queue_name="predict-batch",
     )
+    sensor_deploy = await dataset_size_sensor.ato_deployment(
+        name="dataset-size-sensor-deployment",
+        description="Polls dataset sizes and emits events (managed by flow-worker)",
+        schedules=[Cron("*/5 * * * *")],
+    )
     # Use Runner for async context instead of serve()
     runner = Runner(name="flow-worker")
     await runner.aadd_deployment(drain_deploy)
@@ -178,12 +188,17 @@ async def main() -> None:
     await runner.aadd_deployment(train_torch_deploy)
     await runner.aadd_deployment(train_dspy_deploy)
     await runner.aadd_deployment(predict_queue_deploy)
+    await runner.aadd_deployment(sensor_deploy)
     cfg = load_config()
     client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
     for deployment_name, entrypoint in (
         (
             "drain-dataset-deployment",
             _deployment_entrypoint("drain-dataset-deployment"),
+        ),
+        (
+            "dataset-size-sensor-deployment",
+            _deployment_entrypoint("dataset-size-sensor-deployment"),
         ),
         ("train-job-deployment", _deployment_entrypoint("train-job-deployment")),
         ("predict-job-deployment", _deployment_entrypoint("predict-job-deployment")),
