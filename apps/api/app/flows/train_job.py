@@ -117,7 +117,7 @@ async def train_job(
             dataset_id=dataset_id,
             preset_id=preset_id,
             created_by=created_by,
-            logger=logger,
+            logger=logger,  # pyright: ignore[reportArgumentType]
         )
     except GpuWorkerUnavailableError as exc:
         logger.error(
