@@ -24,6 +24,7 @@ def _resolve_gpu_worker_url(cfg: DictConfig) -> str:
     inference_url = str(cfg.get("inference", {}).get("base_url", ""))
     if inference_url:
         import warnings
+
         warnings.warn(
             "inference.base_url is deprecated; use gpu_worker.base_url instead",
             DeprecationWarning,

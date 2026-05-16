@@ -5,6 +5,7 @@ instead of running the training pipeline in-process.  The Prefect worker
 remains CPU-only — it submits the job, polls for completion, and relays
 artifacts back to the orchestrator via the flow return value.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +40,9 @@ async def _run_train_job(
         dataset_id=dataset_id,
     )
     gpu_job_id: str = submit_result["job_id"]
-    logger.info("GPU job submitted: gpu_job_id=%s platform_job_id=%s", gpu_job_id, job_id)
+    logger.info(
+        "GPU job submitted: gpu_job_id=%s platform_job_id=%s", gpu_job_id, job_id
+    )
 
     poll_interval = int(os.environ.get("GPU_WORKER_POLL_INTERVAL", "5"))
     max_poll_seconds = int(os.environ.get("GPU_WORKER_MAX_POLL_SECONDS", "7200"))
@@ -127,6 +130,10 @@ async def train_job(
         logger.error("Training failed for job_id=%s: %s", job_id, exc)
         raise
 
-    artifacts = result.get("artifacts", []) if isinstance(result.get("artifacts", []), list) else []
+    artifacts = (
+        result.get("artifacts", [])
+        if isinstance(result.get("artifacts", []), list)
+        else []
+    )
     logger.info("Training complete: artifacts=%s", len(artifacts))
     return result

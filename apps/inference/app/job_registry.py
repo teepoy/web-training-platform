@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-JOB_STATES = frozenset({"pending", "running", "completed", "failed", "cancelled", "lost"})
+JOB_STATES = frozenset(
+    {"pending", "running", "completed", "failed", "cancelled", "lost"}
+)
 ACTIVE_STATES = frozenset({"pending", "running"})
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "lost"})
 

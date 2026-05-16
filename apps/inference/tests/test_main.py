@@ -132,9 +132,9 @@ class TestPredictEndpoint:
 
     def test_predict_image_classification_from_metadata_label_space(self) -> None:
         """Falls back to metadata.label_space when top-level label_space is empty."""
-        metadata_b64 = base64.b64encode(
-            b'{"label_space": ["cat", "dog"]}'
-        ).decode("ascii")
+        metadata_b64 = base64.b64encode(b'{"label_space": ["cat", "dog"]}').decode(
+            "ascii"
+        )
         payload = {
             "model": {
                 "id": "test-model",
@@ -220,7 +220,9 @@ class TestPredictEndpoint:
         pred = resp.json()["predictions"][0]
         # Without LLM_API_KEY, _answer_vqa raises ValueError
         assert pred["error"] is not None
-        assert "api_key" in pred["error"].lower() or "configure" in pred["error"].lower()
+        assert (
+            "api_key" in pred["error"].lower() or "configure" in pred["error"].lower()
+        )
 
     def test_predict_vqa_with_mock_llm(self) -> None:
         """VQA target with mocked LLM returns the model's answer as label."""
@@ -447,8 +449,12 @@ class TestEmbedEndpoint:
             samples=[{"sample_id": "s2", "image_bytes_b64": img_b64}],
         )
         with TestClient(app) as cl:
-            emb1 = cl.post("/v1/embed", json=payload1).json()["embeddings"][0]["embedding"]
-            emb2 = cl.post("/v1/embed", json=payload2).json()["embeddings"][0]["embedding"]
+            emb1 = cl.post("/v1/embed", json=payload1).json()["embeddings"][0][
+                "embedding"
+            ]
+            emb2 = cl.post("/v1/embed", json=payload2).json()["embeddings"][0][
+                "embedding"
+            ]
 
         assert emb1 == emb2
 
@@ -660,18 +666,24 @@ def _reset_job_registry() -> None:
     app.main._job_registry = JobRegistry()
 
 
-def _noop_training(registry: object, gpu_job_id: str, *args: object, **kwargs: object) -> None:
+def _noop_training(
+    registry: object, gpu_job_id: str, *args: object, **kwargs: object
+) -> None:
     """Simulate a training run that starts and stays running (non-terminal)."""
     registry.update_status(gpu_job_id, "running")  # type: ignore[union-attr]
 
 
-def _completing_training(registry: object, gpu_job_id: str, *args: object, **kwargs: object) -> None:
+def _completing_training(
+    registry: object, gpu_job_id: str, *args: object, **kwargs: object
+) -> None:
     """Simulate a training run that completes successfully."""
     registry.update_status(gpu_job_id, "running")  # type: ignore[union-attr]
     registry.update_status(gpu_job_id, "completed", progress=1.0)  # type: ignore[union-attr]
 
 
-def _failing_training(registry: object, gpu_job_id: str, *args: object, **kwargs: object) -> None:
+def _failing_training(
+    registry: object, gpu_job_id: str, *args: object, **kwargs: object
+) -> None:
     """Simulate a training run that fails."""
     registry.update_status(gpu_job_id, "running")  # type: ignore[union-attr]
     registry.update_status(gpu_job_id, "failed", error="mock failure")  # type: ignore[union-attr]

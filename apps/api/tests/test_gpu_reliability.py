@@ -313,4 +313,3 @@ async def test_idempotency_across_retries() -> None:
     submit_kwargs = [call.kwargs for call in client.create_flow_run_from_deployment.await_args_list]
     assert [kwargs["idempotency_key"] for kwargs in submit_kwargs] == [job.id, job.id]
     assert [kwargs["parameters"]["job_id"] for kwargs in submit_kwargs] == [job.id, job.id]
-

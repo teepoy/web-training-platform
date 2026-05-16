@@ -21,7 +21,12 @@ class ServiceCheckResult(BaseModel):
 
 
 class ServiceHealthService:
-    def __init__(self, config: DictConfig, prefect_client: PrefectClient, embedding_client: EmbeddingClient) -> None:
+    def __init__(
+        self,
+        config: DictConfig,
+        prefect_client: PrefectClient,
+        embedding_client: EmbeddingClient,
+    ) -> None:
         self._config = config
         self._prefect_client = prefect_client
         self._embedding_client = embedding_client
@@ -40,8 +45,18 @@ class ServiceHealthService:
     async def _check_postgres(self) -> ServiceCheckResult:
         db_url = str(self._config.db.url)
         if not db_url.startswith("postgresql"):
-            return ServiceCheckResult(name="postgres", kind="database", status="down", detail="non-PostgreSQL database configured")
-        return ServiceCheckResult(name="postgres", kind="database", status="healthy", detail="PostgreSQL configured")
+            return ServiceCheckResult(
+                name="postgres",
+                kind="database",
+                status="down",
+                detail="non-PostgreSQL database configured",
+            )
+        return ServiceCheckResult(
+            name="postgres",
+            kind="database",
+            status="healthy",
+            detail="PostgreSQL configured",
+        )
 
     async def _check_object_storage(self) -> ServiceCheckResult:
         endpoint = str(self._config.storage.minio.endpoint)
@@ -59,17 +74,38 @@ class ServiceHealthService:
                 endpoint=endpoint,
             )
         except Exception as exc:
-            return ServiceCheckResult(name="object-storage", kind="storage", status="down", detail=str(exc), endpoint=endpoint)
+            return ServiceCheckResult(
+                name="object-storage",
+                kind="storage",
+                status="down",
+                detail=str(exc),
+                endpoint=endpoint,
+            )
 
     async def _check_prefect(self) -> ServiceCheckResult:
         endpoint = str(self._config.prefect.api_url)
         start = time.perf_counter()
         try:
-            await self._prefect_client.get_work_pool(str(self._config.prefect.work_pool_name))
+            await self._prefect_client.get_work_pool(
+                str(self._config.prefect.work_pool_name)
+            )
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(name="prefect", kind="orchestrator", status="healthy", detail="work pool reachable", latency_ms=latency_ms, endpoint=endpoint)
+            return ServiceCheckResult(
+                name="prefect",
+                kind="orchestrator",
+                status="healthy",
+                detail="work pool reachable",
+                latency_ms=latency_ms,
+                endpoint=endpoint,
+            )
         except Exception as exc:
-            return ServiceCheckResult(name="prefect", kind="orchestrator", status="down", detail=str(exc), endpoint=endpoint)
+            return ServiceCheckResult(
+                name="prefect",
+                kind="orchestrator",
+                status="down",
+                detail=str(exc),
+                endpoint=endpoint,
+            )
 
     async def _check_label_studio(self) -> ServiceCheckResult:
         endpoint = str(self._config.label_studio.url)
@@ -78,9 +114,22 @@ class ServiceHealthService:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{endpoint.rstrip('/')}/health")
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(name="label-studio", kind="annotation", status="healthy" if response.is_success else "degraded", detail=f"HTTP {response.status_code}", latency_ms=latency_ms, endpoint=endpoint)
+            return ServiceCheckResult(
+                name="label-studio",
+                kind="annotation",
+                status="healthy" if response.is_success else "degraded",
+                detail=f"HTTP {response.status_code}",
+                latency_ms=latency_ms,
+                endpoint=endpoint,
+            )
         except Exception as exc:
-            return ServiceCheckResult(name="label-studio", kind="annotation", status="down", detail=str(exc), endpoint=endpoint)
+            return ServiceCheckResult(
+                name="label-studio",
+                kind="annotation",
+                status="down",
+                detail=str(exc),
+                endpoint=endpoint,
+            )
 
     async def _check_embedding(self) -> ServiceCheckResult:
         endpoint = str(self._config.embedding.grpc_target)
@@ -88,9 +137,24 @@ class ServiceHealthService:
         try:
             healthy = await self._embedding_client.health()
             latency_ms = int((time.perf_counter() - start) * 1000)
-            return ServiceCheckResult(name="embedding", kind="worker", status="healthy" if healthy else "degraded", detail="gRPC health" if healthy else "embedding healthcheck returned false", latency_ms=latency_ms, endpoint=endpoint)
+            return ServiceCheckResult(
+                name="embedding",
+                kind="worker",
+                status="healthy" if healthy else "degraded",
+                detail="gRPC health"
+                if healthy
+                else "embedding healthcheck returned false",
+                latency_ms=latency_ms,
+                endpoint=endpoint,
+            )
         except Exception as exc:
-            return ServiceCheckResult(name="embedding", kind="worker", status="down", detail=str(exc), endpoint=endpoint)
+            return ServiceCheckResult(
+                name="embedding",
+                kind="worker",
+                status="down",
+                detail=str(exc),
+                endpoint=endpoint,
+            )
 
     async def _check_prefect_worker(self) -> ServiceCheckResult:
         """Check Prefect worker health via work pool and work queue availability."""

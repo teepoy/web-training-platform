@@ -9,8 +9,6 @@ from app.services.prefect_client import PrefectClient
 from app.services.prefect_engine import PrefectWorkPoolEngine
 from app.services.artifacts import ArtifactService
 from app.services.feature_ops import FeatureOpsService
-from app.services.kubeflow_client import KubeflowClient
-from app.services.label_studio import LabelStudioClient
 from app.services.model_service import ModelService
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator

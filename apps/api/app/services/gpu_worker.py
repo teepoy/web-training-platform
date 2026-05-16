@@ -77,7 +77,11 @@ class GpuWorkerClient:
         except GpuWorkerClientError as exc:
             if exc.status_code == 409:
                 body = exc.response_body or {}
-                if body.get("status") == "already_submitted" and isinstance(body.get("job_id"), str) and body["job_id"]:
+                if (
+                    body.get("status") == "already_submitted"
+                    and isinstance(body.get("job_id"), str)
+                    and body["job_id"]
+                ):
                     return body
                 detail = body.get("detail", str(exc))
                 if body.get("status") == "already_submitted":
@@ -118,7 +122,9 @@ class GpuWorkerClient:
     async def get_train_logs(self, job_id: str, tail: int = 100) -> dict[str, Any]:
         """Get logs for a training job."""
         try:
-            return await self._request("GET", f"/v1/train/{job_id}/logs", params={"tail": tail})
+            return await self._request(
+                "GET", f"/v1/train/{job_id}/logs", params={"tail": tail}
+            )
         except GpuWorkerClientError as exc:
             if exc.status_code == 404:
                 raise GpuWorkerClientError(
@@ -188,7 +194,9 @@ class GpuWorkerClient:
         image_bytes = sample.get("image_bytes")
         return {
             "sample_id": sample.get("sample_id", ""),
-            "image_bytes_b64": None if image_bytes is None else base64.b64encode(image_bytes).decode("ascii"),
+            "image_bytes_b64": None
+            if image_bytes is None
+            else base64.b64encode(image_bytes).decode("ascii"),
             "metadata": sample.get("metadata", {}),
             "image_uris": sample.get("image_uris", []),
             "question": sample.get("question", ""),
@@ -222,7 +230,11 @@ class GpuWorkerClient:
                         raise ValueError(f"Unsupported HTTP method: {method}")
                     response.raise_for_status()
                     return response.json()
-            except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            except (
+                httpx.ConnectError,
+                httpx.TimeoutException,
+                httpx.RemoteProtocolError,
+            ) as exc:
                 last_exc = exc
                 if attempt == self._max_retries:
                     raise GpuWorkerUnavailableError(

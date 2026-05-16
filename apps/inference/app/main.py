@@ -15,8 +15,20 @@ from pydantic import BaseModel, Field
 
 from app.job_registry import JobRegistry, JobConflictError
 from app.train_handler import run_training_background, cancel_training
+from app.metrics import (
+    get_metrics,
+    jobs_active as _m_jobs_active,
+    jobs_total as _m_jobs_total,
+    job_duration_seconds as _m_job_duration,
+    prediction_batch_duration_seconds as _m_predict_duration,
+    embedding_batch_duration_seconds as _m_embed_duration,
+    TASK_KIND_TRAINING,
+    TASK_KIND_PREDICTION,
+    TASK_KIND_EMBEDDING,
+)
 
 # ── GPU detection (best-effort, graceful degradation) ──────────────
+
 
 def _detect_gpu_info() -> dict[str, object]:
     gpu_info: dict[str, object] = {"available": False, "reason": "CUDA not available"}
@@ -47,19 +59,8 @@ def _detect_gpu_info() -> dict[str, object]:
         "device_name": device_name,
     }
 
-# ── Prometheus metrics ─────────────────────────────────────────────
 
-from app.metrics import (
-    get_metrics,
-    jobs_active as _m_jobs_active,
-    jobs_total as _m_jobs_total,
-    job_duration_seconds as _m_job_duration,  # noqa: F401 — used by Task 8 (training execution)
-    prediction_batch_duration_seconds as _m_predict_duration,
-    embedding_batch_duration_seconds as _m_embed_duration,
-    TASK_KIND_TRAINING,
-    TASK_KIND_PREDICTION,  # noqa: F401 — used by future prediction metrics
-    TASK_KIND_EMBEDDING,  # noqa: F401 — used by future embedding metrics
-)
+
 
 # ── Job registry (V1 in-memory, lost on restart) ───────────────────
 
@@ -146,6 +147,7 @@ async def _answer_vqa(image_bytes: bytes, question: str, system_prompt: str) -> 
 
 # -- Predict (existing, unchanged) --
 
+
 class PredictModelPayload(BaseModel):
     id: str
     uri: str
@@ -184,6 +186,7 @@ class PredictResponse(BaseModel):
 
 # -- Embed (existing, unchanged) --
 
+
 class EmbedSamplePayload(BaseModel):
     sample_id: str
     image_bytes_b64: str | None = None
@@ -205,6 +208,7 @@ class EmbedResponse(BaseModel):
 
 
 # -- Train (new) --
+
 
 class TrainRequest(BaseModel):
     platform_job_id: str

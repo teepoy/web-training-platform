@@ -78,7 +78,9 @@ class FeatureOpsService:
             return self._gpu_worker
         if self._inference_worker is not None:
             return self._inference_worker
-        raise ValueError("No worker client is configured (both gpu_worker and inference_worker are None)")
+        raise ValueError(
+            "No worker client is configured (both gpu_worker and inference_worker are None)"
+        )
 
     async def extract_features_via_worker(
         self, samples: list[Sample], embed_model: str, force: bool = False, storage=None

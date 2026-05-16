@@ -58,21 +58,34 @@ def _build_training_command(
 
     if workspace_toml.exists() and shutil_which("uv"):
         return [
-            "uv", "run",
-            "--directory", str(workspace_root),
-            "--package", "finetune-api",
+            "uv",
+            "run",
+            "--directory",
+            str(workspace_root),
+            "--package",
+            "finetune-api",
             "--",
-            sys.executable, "-m", "app.runtime.training_runner",
-            "--job-id", job_id,
-            "--dataset-id", dataset_id,
-            "--preset-id", preset_id,
+            sys.executable,
+            "-m",
+            "app.runtime.training_runner",
+            "--job-id",
+            job_id,
+            "--dataset-id",
+            dataset_id,
+            "--preset-id",
+            preset_id,
         ]
 
     return [
-        sys.executable, "-m", "app.runtime.training_runner",
-        "--job-id", job_id,
-        "--dataset-id", dataset_id,
-        "--preset-id", preset_id,
+        sys.executable,
+        "-m",
+        "app.runtime.training_runner",
+        "--job-id",
+        job_id,
+        "--dataset-id",
+        dataset_id,
+        "--preset-id",
+        preset_id,
     ]
 
 
@@ -91,6 +104,7 @@ def _build_subprocess_env(api_src_dir: str) -> dict[str, str]:
 
 def shutil_which(name: str) -> str | None:
     import shutil
+
     return shutil.which(name)
 
 
@@ -138,7 +152,8 @@ def run_training_background(
 
     if api_src_dir is None:
         _fail_job(
-            registry, gpu_job_id,
+            registry,
+            gpu_job_id,
             "API source directory not found — set API_SRC_DIR environment variable",
         )
         return
@@ -155,7 +170,8 @@ def run_training_background(
 
     registry.update_status(gpu_job_id, "running")
     registry.append_log(
-        gpu_job_id, "INFO",
+        gpu_job_id,
+        "INFO",
         f"Starting training: dataset={dataset_id} preset={preset_id} "
         f"(platform_job_id={platform_job_id})",
     )
@@ -181,11 +197,13 @@ def run_training_background(
             proc.wait()
             _active_subprocesses.pop(gpu_job_id, None)
             registry.update_status(
-                gpu_job_id, "failed",
+                gpu_job_id,
+                "failed",
                 error=f"Training timed out after {training_timeout}s",
             )
             registry.append_log(
-                gpu_job_id, "ERROR",
+                gpu_job_id,
+                "ERROR",
                 f"Training timed out after {training_timeout}s",
             )
             jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(0)
@@ -206,20 +224,24 @@ def run_training_background(
                 # Non-JSON output — treat as success but log warning
                 registry.update_status(gpu_job_id, "completed", progress=1.0)
                 registry.append_log(
-                    gpu_job_id, "WARNING",
+                    gpu_job_id,
+                    "WARNING",
                     f"Training completed but stdout was not valid JSON: {stdout_text[:200]}",
                 )
                 jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(0)
                 return
             metrics = result.get("metrics", {}) if isinstance(result, dict) else {}
             registry.update_status(
-                gpu_job_id, "completed",
+                gpu_job_id,
+                "completed",
                 metrics=metrics,
                 progress=1.0,
             )
             registry.append_log(gpu_job_id, "INFO", "Training completed successfully")
             jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(0)
-            logger.info("Training completed: gpu_job_id=%s result=%s", gpu_job_id, result)
+            logger.info(
+                "Training completed: gpu_job_id=%s result=%s", gpu_job_id, result
+            )
         else:
             error_msg = _extract_error(stderr_text)
             registry.update_status(gpu_job_id, "failed", error=error_msg)
@@ -227,12 +249,15 @@ def run_training_background(
             jobs_active.labels(task_kind=TASK_KIND_TRAINING).set(0)
             logger.error(
                 "Training failed: gpu_job_id=%s returncode=%s stderr=%s",
-                gpu_job_id, proc.returncode, stderr_text[:500],
+                gpu_job_id,
+                proc.returncode,
+                stderr_text[:500],
             )
 
     except FileNotFoundError:
         _fail_job(
-            registry, gpu_job_id,
+            registry,
+            gpu_job_id,
             f"Training runner not found. Ensure the API package is installed "
             f"and API_SRC_DIR points to the correct directory. (tried: {api_src_dir})",
         )
