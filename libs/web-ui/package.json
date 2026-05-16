@@ -38,6 +38,7 @@
     "naive-ui": "^2.44.1",
     "@storybook/vue3-vite": "^8.6.18",
     "@storybook/addon-essentials": "8.6.18",
+    "@storybook/test": "8.6.18",
     "storybook": "^8.6.18",
     "pinia": "^3.0.1",
     "@tanstack/vue-query": "^5.66.9",

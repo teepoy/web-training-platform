@@ -111,6 +111,9 @@ importers:
       '@storybook/addon-essentials':
         specifier: 8.6.18
         version: 8.6.18(@types/react@19.2.14)(storybook@8.6.18)
+      '@storybook/test':
+        specifier: 8.6.18
+        version: 8.6.18(storybook@8.6.18)
       '@storybook/vue3-vite':
         specifier: ^8.6.18
         version: 8.6.18(storybook@8.6.18)(vite@6.4.1(@types/node@22.19.15))(vue@3.5.31(typescript@5.7.3))
