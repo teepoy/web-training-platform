@@ -5,6 +5,12 @@ import os
 from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
+from pydantic import BaseModel
+
+
+class SensorsConfig(BaseModel):
+    dir: str = "sensors"
+    strict: bool = False
 
 
 def _require(value: str, field_name: str) -> None:

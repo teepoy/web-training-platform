@@ -24,6 +24,10 @@ label_studio:
 oauth:
   enabled: false
 
+sensors:
+  dir: "sensors"
+  strict: false
+
 agent:
   enabled: true
   max_panels: 8
