@@ -228,7 +228,7 @@ export-bundle: ## Export source snapshot and docker images to a tar bundle
 	bash scripts/export_bundle.sh $(ARGS)
 
 .PHONY: up
-up: api-contract ## Start full Compose stack (dev profile, detached)
+up: ## Start full Compose stack (dev profile, detached)
 	docker compose -f $(COMPOSE) up -d
 
 .PHONY: up-stack
@@ -244,8 +244,7 @@ ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mod
 	$(MAKE) seed-imagenet-mock ARGS="--no-model"
 
 .PHONY: updev
-
-updev: api-contract ## Start compose backend + local Vite frontend with hot reload
+updev: ## Start compose backend + local Vite frontend with hot reload
 	@trap 'kill 0' EXIT; \
 	$(MAKE) up-stack && \
 	$(MAKE) ensure-mock-datasets && \
@@ -279,14 +278,10 @@ clean: ## Remove build artifacts and caches
 	find . -type d -name node_modules -exec rm -rf {} + 2>/dev/null || true
 	rm -rf $(WEB_DIR)/dist
 
-.PHONY: api-contract
-api-contract: ## Export OpenAPI schema from backend and generate TypeScript DTOs
-	cd $(API_DIR) && uv run python scripts/export_openapi.py
-	cd libs/api-contract && pnpm run generate
-	cd libs/api-contract && pnpm run typecheck
-	@echo "API contract types generated and verified."
+.PHONY: help
+help: ## Show this help message
 	@printf '\nUsage: make \033[36m<target>\033[0m [VAR=value]\n\n'
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf '\nVariables:\n'
 	@printf '  \033[36m%-16s\033[0m %s\n' "API_PORT" "API server port (default: 8000)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "API_URL" "API base URL used by seed targets (default: http://localhost:API_PORT)"

@@ -73,6 +73,3 @@ classify-*.png
 # MkDocs
 site/
 .mkdocs.yml.swp
-
-# API contract generation
-libs/api-contract/openapi.json

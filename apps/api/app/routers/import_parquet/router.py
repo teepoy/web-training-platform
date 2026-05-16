@@ -193,7 +193,7 @@ async def import_parquet(
             ls_tasks,
             return_task_ids=True,
         )
-        task_ids = [int(tid) for tid in imported.get("task_ids", [])]
+        task_ids = [int(tid) for tid in imported.get("task_ids", [])]  # type: ignore[arg-type]
         if len(task_ids) != len(items):
             raise HTTPException(
                 status_code=502,

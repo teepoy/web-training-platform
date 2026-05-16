@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import select
 
 from app.main import app
@@ -13,7 +14,7 @@ from app.db.models import UserORM
 # ---------------------------------------------------------------------------
 
 
-def _register(client: TestClient, email: str, password: str, name: str) -> dict:
+def _register(client: TestClient, email: str, password: str, name: str) -> Response:
     resp = client.post(
         "/api/v1/auth/register",
         json={"email": email, "password": password, "name": name},
@@ -21,7 +22,7 @@ def _register(client: TestClient, email: str, password: str, name: str) -> dict:
     return resp
 
 
-def _login(client: TestClient, email: str, password: str) -> dict:
+def _login(client: TestClient, email: str, password: str) -> Response:
     resp = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     return resp
 

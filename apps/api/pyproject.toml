@@ -63,20 +63,10 @@ dev = [
 [tool.pyright]
 exclude = [
   "app/generated/**",
-  "**/label_studio.py",
-  "**/main.py",
-  "**/metadata_inference.py",
-  "**/embedding.py",
-  "**/*_test.py",
-  "tests/**",
-  "alembic/**",
-  "app/routers/datasets/**",
-  "app/routers/import_parquet/**",
-  "app/services/feature_ops.py",
 ]
 typeCheckingMode = "basic"
-reportMissingImports = false
-reportMissingModuleSource = false
+reportMissingImports = true
+reportMissingModuleSource = true
 
 [tool.ruff]
 exclude = ["tests/", "alembic/", "**/*_test.py"]

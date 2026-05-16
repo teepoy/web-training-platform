@@ -34,7 +34,7 @@ def _scan_with_polars(
     metadata_dicts: list[dict[str, Any]],
 ) -> dict[str, MetadataKeyInfo]:
     """Use ``polars.DataFrame`` for fast, exact type inference."""
-    import polars as pl
+    import polars as pl  # pyright: ignore[reportMissingImports]
 
     df = pl.DataFrame(metadata_dicts)
     result: dict[str, MetadataKeyInfo] = {}

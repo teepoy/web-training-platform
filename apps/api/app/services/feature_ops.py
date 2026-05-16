@@ -1,4 +1,3 @@
-# pyright: ignore
 from __future__ import annotations
 
 import base64
@@ -32,6 +31,8 @@ class FeatureOpsService:
     async def extract_features(
         self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
     ) -> dict:
+        assert self._repo is not None
+        assert self._embedding_service is not None
         computed = 0
         skipped = 0
         for sample in samples:
@@ -85,6 +86,7 @@ class FeatureOpsService:
     async def extract_features_via_worker(
         self, samples: list[Sample], embed_model: str, force: bool = False, storage=None
     ) -> dict:
+        assert self._repo is not None
         computed = 0
         skipped = 0
         payload_samples: list[dict] = []
@@ -161,6 +163,7 @@ class FeatureOpsService:
         self, sample_id: str, dataset_id: str, k: int = 5
     ) -> dict:
         """Return k nearest neighbors by cosine similarity."""
+        assert self._repo is not None
         # Get the query embedding
         feature = await self._repo.get_sample_feature(sample_id)
         if feature is None or not feature.embedding:
@@ -182,6 +185,7 @@ class FeatureOpsService:
         return {"sample_id": sample_id, "neighbors": neighbors}
 
     async def uniqueness_scores(self, sample_ids: list[str], dataset_id: str) -> dict:
+        assert self._repo is not None
         scores: dict[str, float] = {}
         for sid in sample_ids:
             feature = await self._repo.get_sample_feature(sid)
@@ -197,6 +201,7 @@ class FeatureOpsService:
     async def representativeness_scores(
         self, sample_ids: list[str], dataset_id: str
     ) -> dict:
+        assert self._repo is not None
         scores: dict[str, float] = {}
         for sid in sample_ids:
             feature = await self._repo.get_sample_feature(sid)
@@ -213,6 +218,7 @@ class FeatureOpsService:
         return scores
 
     async def uncovered_cluster_hints(self, dataset_id: str) -> dict:
+        assert self._repo is not None
         samples, _ = await self._repo.list_samples(dataset_id, limit=100_000)
         if not samples:
             return {"dataset_id": dataset_id, "clusters": []}

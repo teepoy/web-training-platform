@@ -77,16 +77,16 @@ def test_platform_annotation_to_ls():
     assert isinstance(result, list)
     assert len(result) == 1
     item = result[0]
-    assert item["from_name"] == "classification"
+    assert item["from_name"] == "classification"  # pyright: ignore[reportIndexIssue]
     assert item["to_name"] == "image"
     assert item["type"] == "choices"
-    assert item["value"]["choices"] == ["cat"]
+    assert item["value"]["choices"] == ["cat"]  # pyright: ignore[reportIndexIssue]
 
 
 def test_platform_annotation_to_ls_with_config_info():
     """label_config_info is accepted but does not change the output."""
     result = platform_annotation_to_ls("dog", label_config_info={"some": "hint"})
-    assert result[0]["value"]["choices"] == ["dog"]
+    assert result[0]["value"]["choices"] == ["dog"]  # pyright: ignore[reportIndexIssue]
 
 
 # ---------------------------------------------------------------------------

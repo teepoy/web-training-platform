@@ -5,14 +5,14 @@ import logging
 
 import grpc
 
-from embedding_pb.embedding_pb2 import (
+from embedding_pb.embedding_pb2 import (  # pyright: ignore[reportMissingImports]
     ClassifyBatchRequest,
     ClassifyRequest,
     EmbedBatchRequest,
     EmbedRequest,
     HealthRequest,
 )
-from embedding_pb.embedding_pb2_grpc import EmbeddingServiceStub
+from embedding_pb.embedding_pb2_grpc import EmbeddingServiceStub  # pyright: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
 

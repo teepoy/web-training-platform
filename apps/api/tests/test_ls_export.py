@@ -9,12 +9,16 @@ Tests cover:
 from __future__ import annotations
 
 from datetime import datetime, UTC
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+
+if TYPE_CHECKING:
+    from app.domain.models import Dataset, Sample, Annotation
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +35,7 @@ def _make_config() -> MagicMock:
 
 
 def _make_dataset(ls_project_id: str | None = "10") -> "Dataset":
-    from app.domain.models import Dataset
+    from app.domain.models import Dataset  # noqa: F811
 
     return Dataset(
         id=str(uuid4()),
@@ -41,7 +45,7 @@ def _make_dataset(ls_project_id: str | None = "10") -> "Dataset":
 
 
 def _make_sample(dataset_id: str, ls_task_id: int | None = 101) -> "Sample":
-    from app.domain.models import Sample
+    from app.domain.models import Sample  # noqa: F811
 
     return Sample(
         id=str(uuid4()),
@@ -52,7 +56,7 @@ def _make_sample(dataset_id: str, ls_task_id: int | None = 101) -> "Sample":
 
 
 def _make_annotation(sample_id: str, label: str = "cat") -> "Annotation":
-    from app.domain.models import Annotation
+    from app.domain.models import Annotation  # noqa: F811
 
     return Annotation(
         id=str(uuid4()),

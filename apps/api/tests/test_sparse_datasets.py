@@ -207,7 +207,7 @@ def test_sparse_delete_lifecycle() -> None:
         ds_id = ds.json()["id"]
 
         ls_mock = container.label_studio_client()
-        ls_mock.delete_project.reset_mock()
+        ls_mock.delete_project.reset_mock()  # pyright: ignore[reportAttributeAccessIssue]
 
         deleted = c.delete(f"/api/v1/datasets/{ds_id}")
         assert deleted.status_code == 204
@@ -215,4 +215,4 @@ def test_sparse_delete_lifecycle() -> None:
         get_resp = c.get(f"/api/v1/datasets/{ds_id}")
         assert get_resp.status_code == 404
 
-        ls_mock.delete_project.assert_not_called()
+        ls_mock.delete_project.assert_not_called()  # pyright: ignore[reportAttributeAccessIssue]

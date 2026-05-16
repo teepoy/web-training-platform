@@ -77,8 +77,8 @@ def test_create_vqa_dataset_uses_vqa_label_config() -> None:
         assert r.status_code == 200
 
         ls_client = container.label_studio_client()
-        assert ls_client.create_project.await_count == 1
-        args, _ = ls_client.create_project.call_args
+        assert ls_client.create_project.await_count == 1  # pyright: ignore[reportAttributeAccessIssue]
+        args, _ = ls_client.create_project.call_args  # pyright: ignore[reportAttributeAccessIssue]
         label_config = args[1]
         assert "<TextArea name=\"answer\"" in label_config
         assert "value=\"$question\"" in label_config
@@ -133,7 +133,8 @@ def test_import_vqa_jsonl_rejects_non_vqa_dataset() -> None:
 async def test_dspy_vqa_trainer_persists_optimized_program_bytes() -> None:
     preset = _load_vqa_preset()
     storage = InMemoryArtifactStorage()
-    trainer = DspyVqaTrainer(artifact_storage=storage, llm_client=_FakeLlm())
+    trainer = DspyVqaTrainer(  # pyright: ignore[reportArgumentType]
+        artifact_storage=storage, llm_client=_FakeLlm())  # pyright: ignore[reportArgumentType]
 
     ctx = TrainContext(
         job_id="job-vqa-1",
@@ -178,7 +179,7 @@ async def test_dspy_vqa_predictor_loads_program_and_answers() -> None:
         ).encode("utf-8"),
         content_type="application/json",
     )
-    predictor = DspyVqaPredictor(artifact_storage=storage, llm_client=_FakeLlm())
+    predictor = DspyVqaPredictor(artifact_storage=storage, llm_client=_FakeLlm())  # pyright: ignore[reportArgumentType]
     await predictor.load_model(ModelRef(uri=model_uri))
 
     pred = await predictor.predict_single(
@@ -202,9 +203,9 @@ async def test_dspy_vqa_predictor_loads_program_and_answers() -> None:
 @pytest.mark.asyncio
 async def test_prediction_prompt_override_for_vqa() -> None:
     svc = PredictionService(
-        repository=_RepoStub(),
+        repository=_RepoStub(),  # pyright: ignore[reportArgumentType]
         artifact_storage=InMemoryArtifactStorage(),
-        config=SimpleNamespace(label_studio=SimpleNamespace(url="", api_key="")),
+        config=SimpleNamespace(label_studio=SimpleNamespace(url="", api_key="")),  # pyright: ignore[reportArgumentType]
     )
     sample = Sample(
         id="s3",
@@ -239,9 +240,9 @@ async def test_prediction_prompt_override_for_vqa() -> None:
 @pytest.mark.asyncio
 async def test_prediction_target_vqa_requires_vqa_dataset() -> None:
     svc = PredictionService(
-        repository=_RepoStub(),
+        repository=_RepoStub(),  # pyright: ignore[reportArgumentType]
         artifact_storage=InMemoryArtifactStorage(),
-        config=SimpleNamespace(label_studio=SimpleNamespace(url="", api_key="")),
+        config=SimpleNamespace(label_studio=SimpleNamespace(url="", api_key="")),  # pyright: ignore[reportArgumentType]
     )
     with pytest.raises(ValueError, match="target 'vqa' requires dataset task_type 'vqa'"):
         await svc.run_prediction(

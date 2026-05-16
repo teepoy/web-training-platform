@@ -24,10 +24,10 @@ for _p in (_REPO_ROOT, _REPO_ROOT / "scripts"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from scripts.seed_maker.labels import IMAGENET_LABELS  # noqa: E402
+from scripts.seed_maker.labels import IMAGENET_LABELS  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 try:
-    from scripts.seed_maker.labels import CIFAR100_LABELS  # noqa: E402
+    from scripts.seed_maker.labels import CIFAR100_LABELS  # noqa: E402  # pyright: ignore[reportMissingImports]
 except ImportError:
     CIFAR100_LABELS: list[str] = IMAGENET_LABELS[:100]
 

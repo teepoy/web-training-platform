@@ -167,7 +167,7 @@ class LabelStudioClient:
         """
         try:
             pager = await asyncio.to_thread(self._client.projects.list)
-            return [_to_dict(p) for p in pager]
+            return [_to_dict(p) for p in pager]  # pyright: ignore[reportArgumentType]
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
@@ -195,7 +195,7 @@ class LabelStudioClient:
             result = await asyncio.to_thread(
                 self._client.projects.update,
                 id=project_id,
-                **kwargs,
+                **kwargs,  # pyright: ignore[reportArgumentType]
             )
             return _to_dict(result)
         except Exception as exc:
@@ -259,7 +259,9 @@ class LabelStudioClient:
         try:
             result = await asyncio.to_thread(
                 lambda: self._client.projects.import_tasks(
-                    id=project_id, request=tasks, return_task_ids=return_task_ids
+                    id=project_id,
+                    request=tasks,  # pyright: ignore[reportArgumentType]
+                    return_task_ids=return_task_ids,
                 )
             )
             return _to_dict(result)
@@ -295,7 +297,7 @@ class LabelStudioClient:
             )
             # SyncPagerExt wraps a SyncPager whose ``response`` is a
             # PaginatedRoleBasedTaskList with a ``total`` field.
-            tasks = [_to_dict(t) for t in pager]
+            tasks = [_to_dict(t) for t in pager]  # pyright: ignore[reportArgumentType]
             total: int = 0
             if hasattr(pager, "response") and pager.response is not None:
                 resp = pager.response
@@ -424,7 +426,7 @@ class LabelStudioClient:
 
             prediction = await asyncio.to_thread(
                 self._client.predictions.create,
-                **kwargs,
+                **kwargs,  # pyright: ignore[reportArgumentType]
             )
             return _to_dict(prediction)
         except Exception as exc:

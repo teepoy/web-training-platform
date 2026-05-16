@@ -101,7 +101,7 @@ async def test_submit_routes_dspy_queue(mock_client: AsyncMock, sample_job: Trai
         work_pool_type="process",
         flow_name="train-job",
         deployment_name="train-job-deployment",
-        preset_registry=registry,
+        preset_registry=registry,  # pyright: ignore[reportArgumentType]
     )
 
     await local_engine.submit(sample_job)
@@ -117,7 +117,7 @@ async def test_submit_routes_default_when_no_queue(mock_client: AsyncMock, sampl
         work_pool_type="process",
         flow_name="train-job",
         deployment_name="train-job-deployment",
-        preset_registry=registry,
+        preset_registry=registry,  # pyright: ignore[reportArgumentType]
     )
 
     await local_engine.submit(sample_job)

@@ -96,8 +96,8 @@ class TestSessionStore:
             ])
             msgs = await store.get_messages("sess-2")
             assert len(msgs) == 2
-            assert msgs[0]["content"] == "hello"
-            assert msgs[1]["content"] == "hi there"
+            assert msgs[0]["content"] == "hello"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            assert msgs[1]["content"] == "hi there"  # pyright: ignore[reportTypedDictNotRequiredAccess]
 
         asyncio.run(_run())
 
@@ -114,7 +114,7 @@ class TestSessionStore:
             msgs = await store.get_messages("sess-3")
             assert len(msgs) == 5
             # Should keep the last 5
-            assert msgs[0]["content"] == "msg-5"
+            assert msgs[0]["content"] == "msg-5"  # pyright: ignore[reportTypedDictNotRequiredAccess]
 
         asyncio.run(_run())
 

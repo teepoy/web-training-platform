@@ -33,7 +33,7 @@ def benchmark(total_tasks: int, batch_size: int, return_task_ids: bool) -> None:
         title=f"bench-import-{int(time.time())}",
         label_config=LABEL_CONFIG,
     )
-    project_id = int(project.id)
+    project_id: int = int(project.id)  # type: ignore[arg-type]
 
     try:
         batches = math.ceil(total_tasks / batch_size)
@@ -47,7 +47,7 @@ def benchmark(total_tasks: int, batch_size: int, return_task_ids: bool) -> None:
             batch_started = time.perf_counter()
             response = client.projects.import_tasks(
                 id=project_id,
-                request=payload,
+                request=payload,  # pyright: ignore[reportArgumentType]
                 return_task_ids=return_task_ids,
             )
             batch_elapsed = time.perf_counter() - batch_started

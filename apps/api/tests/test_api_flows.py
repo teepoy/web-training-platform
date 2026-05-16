@@ -136,7 +136,7 @@ def test_delete_dataset_removes_dataset_and_models() -> None:
         assert models.status_code == 200
         assert models.json() == []
 
-        container.label_studio_client().delete_project.assert_awaited_once()
+        container.label_studio_client().delete_project.assert_awaited_once()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_update_label_space() -> None:

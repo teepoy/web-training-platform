@@ -360,7 +360,7 @@ async def create_sample(
         image_url = (
             _make_ls_image_url(payload.image_uris[0]) if payload.image_uris else ""
         )
-        task_data = {"image": image_url}
+        task_data: dict[str, object] = {"image": image_url}
         if dataset.task_spec.task_type == TaskType.VQA:
             task_data["question"] = str(payload.metadata.get("question", ""))
         task = await ls_client.create_task(int(dataset.ls_project_id), task_data)
@@ -379,7 +379,7 @@ async def create_sample(
         dataset_id=dataset_id,
         image_uris=payload.image_uris,
         metadata=payload.metadata,
-        ls_task_id=int(ls_task_id),
+        ls_task_id=int(ls_task_id),  # type: ignore[arg-type]
     )
     sample = await c.repository().create_sample(sample)
     return sample
@@ -408,10 +408,10 @@ async def import_samples(
     if not payload.items:
         return BulkCreateSampleResponse(dataset_id=dataset_id, imported=0, failed=0)
 
-    ls_tasks: list[dict] = []
+    ls_tasks: list[dict[str, object]] = []
     for item in payload.items:
         image_url = _make_ls_image_url(item.image_uris[0]) if item.image_uris else ""
-        task_data = {"image": image_url}
+        task_data: dict[str, object] = {"image": image_url}
         if dataset.task_spec.task_type == TaskType.VQA:
             task_data["question"] = str(item.metadata.get("question", ""))
         ls_tasks.append(task_data)
@@ -422,7 +422,7 @@ async def import_samples(
             ls_tasks,
             return_task_ids=True,
         )
-        task_ids = [int(task_id) for task_id in imported.get("task_ids", [])]
+        task_ids = [int(tid) for tid in imported.get("task_ids", [])]  # type: ignore[arg-type]
         if len(task_ids) != len(payload.items):
             raise HTTPException(
                 status_code=502,
@@ -533,7 +533,7 @@ async def import_vqa_samples(
                 dataset_id=dataset_id,
                 image_uris=[image_uri],
                 metadata=metadata,  # type: ignore
-                ls_task_id=int(ls_task_id),
+                ls_task_id=int(ls_task_id),  # type: ignore[arg-type]
             )
             await c.repository().create_sample(sample)
             imported += 1
@@ -658,11 +658,12 @@ async def embed_sample(
         raise HTTPException(status_code=400, detail="unsupported URI scheme")
 
     dataset = await c.repository().get_dataset(sample.dataset_id)
-    embed_model: str = (
+    embed_model: str | None = (
         (dataset.embed_config or {}).get("model", "openai/clip-vit-base-patch32")
         if dataset
         else "openai/clip-vit-base-patch32"
     )
+    assert embed_model is not None
     embedding_svc = c.embedding_service()
     embedding = await embedding_svc.embed_image(image_bytes, model_name=embed_model)
     feature = await c.repository().upsert_sample_feature(
@@ -670,7 +671,7 @@ async def embed_sample(
     )
     return SampleEmbedResponse(
         sample_id=feature.sample_id,
-        embed_model=feature.embed_model,
+        embed_model=feature.embed_model,  # type: ignore[arg-type]
         embedding_dim=len(feature.embedding),
     )
 
