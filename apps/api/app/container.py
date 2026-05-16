@@ -15,9 +15,12 @@ from app.services.orchestrator import TrainingOrchestrator
 from app.services.prediction_service import PredictionService
 from app.services.prediction_orchestrator import PredictionOrchestrator
 from app.services.service_health import ServiceHealthService
+from app.services.sensor_dispatch import SensorDispatchService
 from app.services.task_tracker import TaskTrackerService
 from app.services.auth import AuthService
 from app.presets.registry import PresetRegistry
+from app.repositories.sensor_repository import SensorRepository
+from app.sensors.registry import SensorRegistry
 from app.agent.session_store import SessionStore
 from app.agent.surface_store import SurfaceStore
 from app.services.preview_service import PreviewService
@@ -40,6 +43,7 @@ class Container(InfraContainer):
             "app.routers.models.router",
             "app.routers.preview.router",
             "app.routers.agent.router",
+            "app.routers.sensors.router",
         ],
     )
 
@@ -68,6 +72,25 @@ class Container(InfraContainer):
         strict=providers.Callable(
             lambda cfg: bool(cfg.presets.strict), InfraContainer.config
         ),
+    )
+
+    sensor_registry = providers.Singleton(
+        SensorRegistry,
+        sensors_dir=providers.Callable(
+            lambda cfg: cfg.sensors.dir, InfraContainer.config
+        ),
+        strict=providers.Callable(
+            lambda cfg: bool(cfg.sensors.strict), InfraContainer.config
+        ),
+    )
+    sensor_repository = providers.Singleton(
+        SensorRepository,
+        session_factory=InfraContainer.session_factory,
+    )
+    sensor_dispatch = providers.Singleton(
+        SensorDispatchService,
+        sensor_repository=sensor_repository,
+        prefect_client=prefect_client,
     )
 
     prefect_engine = providers.Singleton(
