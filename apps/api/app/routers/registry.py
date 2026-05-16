@@ -12,6 +12,7 @@ from app.routers.auth.router import router as auth_router
 from app.routers.schedules.router import router as schedules_router
 from app.routers.preview.router import router as preview_router
 from app.routers.agent.router import router as agent_router
+from app.routers.sensors.router import router as sensors_router
 from app.routers.task_tracker.router import router as task_tracker_router
 
 EXTENSION_ROUTERS: list[APIRouter] = [
@@ -27,5 +28,6 @@ DOMAIN_ROUTERS: list[APIRouter] = [
     schedules_router,
     preview_router,
     agent_router,
+    sensors_router,
     task_tracker_router,
 ]
