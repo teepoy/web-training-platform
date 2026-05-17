@@ -150,7 +150,7 @@ import { getApiBase } from "@platform/web-ui/api/client";
 import type { Model, ModelUploadTemplate, UploadModelMetadata } from "../types";
 import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
-import PredictModal from "../components/PredictModal.vue";
+import PredictModal from "../features/app/components/PredictModal.vue";
 
 const message = useMessage();
 const qc = useQueryClient();

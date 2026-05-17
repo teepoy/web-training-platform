@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BrowserSidebar } from "@platform/web-ui";
-import type { SidebarPanelDescriptor } from "../../features/classify/config";
-import { widgetComponentMap } from "./widgetMap";
+import type { SidebarPanelDescriptor } from "../config";
+import { widgetComponentMap } from "../widgetMap";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,

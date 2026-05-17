@@ -90,7 +90,7 @@ import { useTaskHandoff, syncWatchedTaskIds } from './composables/useTaskHandoff
 import { useTaskHandoffState } from './composables/taskHandoffState'
 import { useAgentAdapter } from './features/agent/useAgentAdapter'
 import { AgentChatDrawer } from '@platform/web-ui'
-import OrgSelector from './components/OrgSelector.vue'
+import OrgSelector from './features/app/components/OrgSelector.vue'
 
 const router = useRouter()
 const route = useRoute()

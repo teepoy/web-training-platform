@@ -3,34 +3,34 @@ from __future__ import annotations
 
 from dependency_injector import containers, providers
 
+from app.agent.session_store import SessionStore
+from app.agent.surface_store import SurfaceStore
 from app.containers.infra import InfraContainer
-from app.services.engines import KubeflowTrainingOperatorEngine, LocalProcessEngine
-from app.services.prefect_client import PrefectClient
-from app.services.prefect_engine import PrefectWorkPoolEngine
+from app.presets.registry import PresetRegistry
+from app.repositories.sensor_repository import SensorRepository
+from app.sensors.registry import SensorRegistry
 from app.services.artifacts import ArtifactService
+from app.services.auth import AuthService
+from app.services.engines import KubeflowTrainingOperatorEngine, LocalProcessEngine
 from app.services.feature_ops import FeatureOpsService
 from app.services.model_service import ModelService
 from app.services.notification import WebhookNotificationSink
 from app.services.orchestrator import TrainingOrchestrator
-from app.services.prediction_service import PredictionService
 from app.services.prediction_orchestrator import PredictionOrchestrator
-from app.services.service_health import ServiceHealthService
-from app.services.sensor_dispatch import SensorDispatchService
-from app.services.task_tracker import TaskTrackerService
-from app.services.auth import AuthService
-from app.presets.registry import PresetRegistry
-from app.repositories.sensor_repository import SensorRepository
-from app.sensors.registry import SensorRegistry
-from app.agent.session_store import SessionStore
-from app.agent.surface_store import SurfaceStore
+from app.services.prediction_service import PredictionService
+from app.services.prefect_client import PrefectClient
+from app.services.prefect_engine import PrefectWorkPoolEngine
 from app.services.preview_service import PreviewService
 from app.services.preview_store import PreviewStore
 from app.services.preview_upstream import (
-    UpstreamAdapter,
     MockUpstreamAdapter,
     PreviewUpstreamRouter,
+    UpstreamAdapter,
 )
 from app.services.preview_upstream_s3 import S3ZipPreviewUpstream
+from app.services.sensor_dispatch import SensorDispatchService
+from app.services.service_health import ServiceHealthService
+from app.services.task_tracker import TaskTrackerService
 
 
 class Container(InfraContainer):
@@ -47,15 +47,7 @@ class Container(InfraContainer):
         ],
     )
 
-    local_engine = providers.Singleton(
-        LocalProcessEngine, storage=InfraContainer.artifact_storage
-    )
-    kubeflow_engine = providers.Singleton(
-        KubeflowTrainingOperatorEngine,
-        kubeflow_client=InfraContainer.kubeflow_client,
-        image=providers.Callable(lambda cfg: cfg.kubeflow.image, InfraContainer.config),
-        storage=InfraContainer.artifact_storage,
-    )
+    # ---- platform ----
 
     prefect_client = providers.Singleton(
         PrefectClient,
@@ -93,6 +85,32 @@ class Container(InfraContainer):
         prefect_client=prefect_client,
     )
 
+    service_health = providers.Singleton(
+        ServiceHealthService,
+        config=InfraContainer.config,
+        prefect_client=prefect_client,
+        embedding_client=InfraContainer.embedding_service,
+    )
+    task_tracker = providers.Singleton(
+        TaskTrackerService,
+        repository=InfraContainer.repository,
+        prefect_client=prefect_client,
+        config=InfraContainer.config,
+    )
+    auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
+
+    # ---- training ----
+
+    local_engine = providers.Singleton(
+        LocalProcessEngine, storage=InfraContainer.artifact_storage
+    )
+    kubeflow_engine = providers.Singleton(
+        KubeflowTrainingOperatorEngine,
+        kubeflow_client=InfraContainer.kubeflow_client,
+        image=providers.Callable(lambda cfg: cfg.kubeflow.image, InfraContainer.config),
+        storage=InfraContainer.artifact_storage,
+    )
+
     prefect_engine = providers.Singleton(
         PrefectWorkPoolEngine,
         prefect_client=prefect_client,
@@ -128,13 +146,6 @@ class Container(InfraContainer):
         ),
     )
 
-    feature_ops = providers.Singleton(
-        FeatureOpsService,
-        repository=InfraContainer.repository,
-        embedding_service=InfraContainer.embedding_service,
-        inference_worker=InfraContainer.inference_worker,
-        gpu_worker=InfraContainer.gpu_worker,
-    )
     artifacts = providers.Singleton(
         ArtifactService,
         storage=InfraContainer.artifact_storage,
@@ -146,6 +157,16 @@ class Container(InfraContainer):
         notification_sink=notification_sink,
         repository=InfraContainer.repository,
         artifact_service=artifacts,
+    )
+
+    # ---- prediction ----
+
+    feature_ops = providers.Singleton(
+        FeatureOpsService,
+        repository=InfraContainer.repository,
+        embedding_service=InfraContainer.embedding_service,
+        inference_worker=InfraContainer.inference_worker,
+        gpu_worker=InfraContainer.gpu_worker,
     )
     model_service = providers.Singleton(
         ModelService,
@@ -167,21 +188,14 @@ class Container(InfraContainer):
         prefect_client=prefect_client,
         repository=InfraContainer.repository,
     )
-    service_health = providers.Singleton(
-        ServiceHealthService,
-        config=InfraContainer.config,
-        prefect_client=prefect_client,
-        embedding_client=InfraContainer.embedding_service,
-    )
-    task_tracker = providers.Singleton(
-        TaskTrackerService,
-        repository=InfraContainer.repository,
-        prefect_client=prefect_client,
-        config=InfraContainer.config,
-    )
-    auth_service: providers.Singleton[AuthService] = providers.Singleton(AuthService)
+
+    # ---- agent ----
+
     surface_store: providers.Singleton[SurfaceStore] = providers.Singleton(SurfaceStore)
     session_store: providers.Singleton[SessionStore] = providers.Singleton(SessionStore)
+
+    # ---- preview ----
+
     mock_upstream = providers.Singleton(MockUpstreamAdapter)
 
     @staticmethod

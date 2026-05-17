@@ -10,7 +10,7 @@ import {
   MIN_SIDEBAR_WIDTH,
 } from "@platform/web-ui";
 import { injectPreviewPage } from "../composables/usePreviewPage";
-import { widgetComponentMap } from "../../../components/classify/widgetMap";
+import { widgetComponentMap } from "../../classify/widgetMap";
 
 const page = injectPreviewPage();
 </script>

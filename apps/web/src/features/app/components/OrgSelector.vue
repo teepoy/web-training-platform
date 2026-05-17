@@ -15,8 +15,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAuthStore } from '../stores/auth'
-import { useOrgStore } from '../stores/org'
+import { useAuthStore } from '../../../stores/auth'
+import { useOrgStore } from '../../../stores/org'
 
 const authStore = useAuthStore()
 const orgStore = useOrgStore()

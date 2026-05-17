@@ -67,7 +67,7 @@ import {
 } from "@platform/web-ui";
 import type { BlinkSampleInput, DataPipeline } from "@platform/web-ui";
 import { useClassifyDashboard, useSampleLoader, TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@platform/web-ui";
-import ClassifySidebar from "../../../components/classify/ClassifySidebar.vue";
+import ClassifySidebar from "../components/ClassifySidebar.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../config";
 import { GLOBAL_AGENT_PANELS_KEY } from "../../agent/useAgentAdapter";
 import { useTaskStream } from "../../../composables/useTaskHandoff";

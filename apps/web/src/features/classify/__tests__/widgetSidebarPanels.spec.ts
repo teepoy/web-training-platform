@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultPanels, datasetPanels, previewPanels } from '../../features/classify/config'
+import { defaultPanels, datasetPanels, previewPanels } from '../config'
 
 describe('sidebarConfig panel presets', () => {
   describe('defaultPanels (classify)', () => {

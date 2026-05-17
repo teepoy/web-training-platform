@@ -14,7 +14,7 @@ import ParquetImporter from "../features/dataset-detail/components/ParquetImport
 import PersistExportPlugin from "../features/dataset-detail/components/PersistExportPlugin.vue";
 import ParquetExportPlugin from "../features/dataset-detail/components/ParquetExportPlugin.vue";
 import PreviewExportPlugin from "../features/dataset-detail/components/PreviewExportPlugin.vue";
-import { widgetComponentMap } from "../components/classify/widgetMap";
+import { widgetComponentMap } from "../features/classify/widgetMap";
 import { useDatasetBrowser } from "../features/dataset-detail/composables/useDatasetBrowser";
 import DatasetSparseSummary from "../features/dataset-detail/components/DatasetSparseSummary.vue";
 import DatasetFeatureOpsTab from "../features/dataset-detail/components/DatasetFeatureOpsTab.vue";
