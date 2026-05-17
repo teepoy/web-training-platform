@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import base64
 import io
-import sys
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,17 +15,10 @@ from tests.helpers.factories import (
     wait_for_job_completion,
 )
 
-# Ensure scripts/ is importable — both the repo root (for ``scripts.seed_maker.*``)
-# and the ``scripts/`` directory (for ``seed_maker.*`` internal imports).
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-for _p in (_REPO_ROOT, _REPO_ROOT / "scripts"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-from scripts.seed_maker.labels import IMAGENET_LABELS  # noqa: E402  # pyright: ignore[reportMissingImports]
+from seedmaker.labels import IMAGENET_LABELS
 
 try:
-    from scripts.seed_maker.labels import CIFAR100_LABELS  # noqa: E402  # pyright: ignore[reportMissingImports]
+    from seedmaker.labels import CIFAR100_LABELS
 except ImportError:
     CIFAR100_LABELS: list[str] = IMAGENET_LABELS[:100]
 

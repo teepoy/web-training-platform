@@ -120,7 +120,7 @@ Three pages use the new provider model:
 
 ### Wafer coordinate convention
 
-Wafer coordinates (`metadata.wafer_x`, `metadata.wafer_y`) are stored and rendered in **nanometers**, with the wafer disk anchored at the origin and a default radius of `150_000_000 nm` (300 mm wafer). The widget enforces a fixed 1:1 square plotting area at `±150_000_000 nm` on both axes regardless of container aspect ratio, so brush math and the wafer edge stay aligned after sidebar resize. The widget exposes a `waferRadiusNm` config override for non-default wafer geometries; the seed script `scripts/seed_wafer_demo.py` emits coordinates within the default disk via rejection sampling.
+Wafer coordinates (`metadata.wafer_x`, `metadata.wafer_y`) are stored and rendered in **nanometers**, with the wafer disk anchored at the origin and a default radius of `150_000_000 nm` (300 mm wafer). The widget enforces a fixed 1:1 square plotting area at `±150_000_000 nm` on both axes regardless of container aspect ratio, so brush math and the wafer edge stay aligned after sidebar resize. The widget exposes a `waferRadiusNm` config override for non-default wafer geometries; the seed dataset `wafer-demo` (via `make seed-wafer-demo`) emits coordinates within the default disk via rejection sampling.
 
 ### Wafer interaction semantics
 

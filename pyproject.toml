@@ -11,6 +11,7 @@ members = [
   "apps/worker",
   "libs/python-sdk",
   "libs/protos",
+  "libs/seedmaker",
 ]
 
 [dependency-groups]

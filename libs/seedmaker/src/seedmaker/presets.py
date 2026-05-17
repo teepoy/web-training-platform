@@ -1,44 +1,12 @@
-#!/usr/bin/env python3
-"""Seed the platform with default training presets.
-
-Usage::
-
-    # Against compose stack
-    uv run python scripts/seed_presets.py --compose-file infra/compose/docker-compose.yaml
-
-    # Manual (superadmin must already exist)
-    uv run python scripts/seed_presets.py --api-url http://localhost:8000 --no-promote
-"""
-
 from __future__ import annotations
 
-import argparse
 import sys
+from typing import Any
 
-import httpx
-from seed_maker.utils import (
-    DEFAULT_COMPOSE_FILE,
-    DEFAULT_ORG_NAME,
-    DEFAULT_ORG_SLUG,
-    DEFAULT_SEED_EMAIL,
-    DEFAULT_SEED_NAME,
-    DEFAULT_SEED_PASSWORD,
-)
-from seed_maker.auth import (
-    login_seed_user,
-    promote_superadmin,
-    register_seed_user,
-    resolve_or_create_org,
-)
 
-SEED_EMAIL = DEFAULT_SEED_EMAIL
-SEED_PASSWORD = DEFAULT_SEED_PASSWORD
-SEED_NAME = DEFAULT_SEED_NAME
-ORG_NAME = DEFAULT_ORG_NAME
-ORG_SLUG = DEFAULT_ORG_SLUG
-COMPOSE_FILE = DEFAULT_COMPOSE_FILE
+from seedmaker import SeedConfig, SeedRunner
 
-# Default presets to seed
+
 PRESETS = [
     {
         "name": "yolov8n-cls",
@@ -153,70 +121,35 @@ scheduler:
 ]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed training presets")
-    parser.add_argument(
-        "--api-url", default="http://localhost:8000", help="Platform API base URL"
+def run_presets(args: Any) -> int:
+    """Seed training presets into the platform.
+
+    Uses SeedRunner for auth/setup, then creates presets via the API.
+    """
+    # Create a minimal config for SeedRunner auth/setup only
+    config = SeedConfig(
+        name="presets",
+        dataset_name="__presets_only__",
+        description="Seed training presets",
+        defer_dataset=True,
     )
-    parser.add_argument(
-        "--compose-file", default=COMPOSE_FILE, help="Docker compose file path"
+    runner = SeedRunner(
+        config,
+        api_url=getattr(args, "api_url", "http://localhost:8000"),
+        no_promote=getattr(args, "no_promote", False),
     )
-    parser.add_argument(
-        "--no-promote", action="store_true", help="Skip superadmin promotion"
-    )
-    args = parser.parse_args()
+    runner.setup(skip_dataset=True)
+    client = runner.client
 
-    api_url = args.api_url.rstrip("/")
-    client = httpx.Client(base_url=api_url, timeout=30.0)
-
-    # 1. Register user (ignore if already exists)
-    print(f"Registering user {SEED_EMAIL}...")
-    r = register_seed_user(client, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
-    if r.status_code == 201:
-        print("  User created.")
-    elif r.status_code == 409:
-        print("  User already exists.")
-    else:
-        print(f"  Warning: register returned {r.status_code}: {r.text}")
-
-    # 2. Promote to superadmin via docker compose exec
-    if not args.no_promote:
-        print("Promoting user to superadmin...")
-        promote_superadmin(args.compose_file, SEED_EMAIL, SEED_PASSWORD, SEED_NAME)
-
-    # 3. Login
-    print("Logging in...")
-    r = login_seed_user(client, SEED_EMAIL, SEED_PASSWORD)
-    if r.status_code != 200:
-        print(f"Login failed: {r.status_code} {r.text}")
-        return 1
-    token = r.json()["access_token"]
-    client.headers["Authorization"] = f"Bearer {token}"
-    print("  Logged in.")
-
-    # 4. Get or create organization
-    print(f"Getting/creating organization '{ORG_NAME}'...")
-    org_id = resolve_or_create_org(client, ORG_NAME, ORG_SLUG)
-    if org_id:
-        print(f"  Using org: {org_id}")
-    else:
-        print(
-            "  Warning: could not resolve organization; continuing without X-Organization-ID"
-        )
-
-    if org_id:
-        client.headers["X-Organization-ID"] = org_id
-
-    # 5. Get existing presets
+    # Check existing presets
     print("Checking existing presets...")
     r = client.get("/api/v1/training-presets")
-    existing_presets = set()
+    existing_presets: set[str] = set()
     if r.status_code == 200:
         for p in r.json():
             existing_presets.add(p["name"])
         print(f"  Found {len(existing_presets)} existing presets: {existing_presets}")
 
-    # 6. Create presets
     created = 0
     skipped = 0
     for preset in PRESETS:
@@ -235,6 +168,26 @@ def main() -> int:
 
     print(f"\nDone! Created {created} presets, skipped {skipped}.")
     return 0
+
+
+def main() -> int:
+    """Standalone entry point for backward compatibility."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed training presets")
+    parser.add_argument(
+        "--api-url", default="http://localhost:8000", help="Platform API base URL"
+    )
+    parser.add_argument(
+        "--compose-file",
+        default="infra/compose/docker-compose.yaml",
+        help="Docker compose file path",
+    )
+    parser.add_argument(
+        "--no-promote", action="store_true", help="Skip superadmin promotion"
+    )
+    parsed_args = parser.parse_args()
+    return run_presets(parsed_args)
 
 
 if __name__ == "__main__":

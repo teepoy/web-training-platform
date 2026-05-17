@@ -1,76 +1,19 @@
 #!/usr/bin/env python3
-"""Unified seed CLI for the platform.
+"""Thin backward-compatible wrapper around seedmaker CLI.
 
 Usage::
 
     make seed ARGS="--list"
     make seed ARGS="mock-multi-image"
-    make seed ARGS="mock-multi-image --max-samples 5000 --loader s3-zip"
+    make seed ARGS="imagenet-mock"
+    make seed ARGS="presets"
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 
-from seed_maker import registry
-from seed_maker import datasets  # noqa: F401 — triggers auto-registration
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Unified seed CLI",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--api-url", default="http://localhost:8000")
-    parser.add_argument("--compose-file", default="infra/compose/docker-compose.yaml")
-    parser.add_argument("--no-promote", action="store_true")
-    parser.add_argument("--list", action="store_true", help="List available datasets")
-    parser.add_argument("--loader", default="dataset", choices=["dataset", "s3-zip"],
-                        help="Output loader (default: dataset)")
-    parser.add_argument("--max-samples", type=int, default=None)
-    parser.add_argument("--large-samples", type=int, default=None)
-    parser.add_argument("--samples", type=int, default=None)
-    parser.add_argument("--images-per-sample", type=int, default=None)
-    parser.add_argument("--batch-size", type=int, default=None)
-    parser.add_argument("--batch-report", type=int, default=None)
-    parser.add_argument("--zip-samples", type=int, default=500)
-    parser.add_argument("--reset", action="store_true")
-    parser.add_argument("--s3-bucket", default="finetune-preview")
-    parser.add_argument("--s3-prefix", default="")
-    parser.add_argument("dataset", nargs="?", default="")
-
-    args = parser.parse_args()
-
-    if args.list:
-        datasets_list = registry.list_datasets()
-        if not datasets_list:
-            print("No datasets registered.")
-            return 0
-        print(f"{'NAME':<25} {'DATASET':<35} DESCRIPTION")
-        print("-" * 90)
-        for name, ds_name, desc in datasets_list:
-            print(f"{name:<25} {ds_name:<35} {desc}")
-        return 0
-
-    if not args.dataset:
-        print("ERROR: specify a dataset name or use --list")
-        print("Usage: make seed ARGS=\"<dataset> [--max-samples N] ...\"")
-        return 1
-
-    entry = registry.get(args.dataset)
-    if entry is None:
-        print(f"ERROR: unknown dataset '{args.dataset}'. Use --list to see available datasets.")
-        return 1
-
-    config, run_fn = entry
-
-    from seed_maker import SeedRunner
-    runner = SeedRunner(config, api_url=args.api_url, no_promote=args.no_promote)
-    runner.setup(skip_dataset=config.defer_dataset)
-
-    return run_fn(args, runner)
-
+from seedmaker.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

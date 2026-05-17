@@ -18,7 +18,7 @@ metadata:
 | Context | Email | Password | Name | Source |
 |---------|-------|----------|------|--------|
 | Platform dev admin | `admin@localhost` | `admin` | Admin | `apps/api/alembic/versions/0011_seed_default_org_and_superadmin.py`, `scripts/dev-init.sh` |
-| Seed scripts | `seed@example.com` | `seed1234` | Seed Admin | `scripts/seed_imagenet_dev.py`, `scripts/seed_imagenet_real.py`, `scripts/seed_oxford_flowers.py`, `scripts/seed_presets.py` |
+| Seed scripts | `seed@example.com` | `seed1234` | Seed Admin | `libs/seedmaker/src/seedmaker/auth.py`, `libs/seedmaker/src/seedmaker/utils.py` |
 | Label Studio | `admin@example.com` | `admin123` | — | `infra/compose/docker-compose.yaml` (`LABEL_STUDIO_USERNAME` / `LABEL_STUDIO_PASSWORD`) |
 | pgAdmin | `admin@example.com` | `admin123` | — | `infra/compose/docker-compose.yaml` |
 | MinIO | `minioadmin` | `minioadmin` | — | `infra/compose/docker-compose.yaml` |

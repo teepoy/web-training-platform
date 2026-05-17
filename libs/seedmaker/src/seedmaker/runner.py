@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Callable
 
-from seed_maker.auth import register_seed_user, login_seed_user, promote_superadmin, resolve_or_create_org
-from seed_maker.utils import _find_by_name, api_request, wait_for_api_ready, DEFAULT_COMPOSE_FILE, DEFAULT_SEED_EMAIL, DEFAULT_SEED_PASSWORD, DEFAULT_SEED_NAME, DEFAULT_ORG_NAME, DEFAULT_ORG_SLUG
+from seedmaker.auth import (
+    register_seed_user,
+    login_seed_user,
+    promote_superadmin,
+    resolve_or_create_org,
+)
+from seedmaker.utils import (
+    _find_by_name,
+    api_request,
+    wait_for_api_ready,
+    DEFAULT_COMPOSE_FILE,
+    DEFAULT_SEED_EMAIL,
+    DEFAULT_SEED_PASSWORD,
+    DEFAULT_SEED_NAME,
+    DEFAULT_ORG_NAME,
+    DEFAULT_ORG_SLUG,
+)
 
 import httpx
 import math
@@ -78,9 +93,12 @@ class SeedRunner:
                 return existing
 
         if loader is None:
-            from seed_maker.loaders.dataset import DatasetLoader
+            from seedmaker.loaders.dataset import DatasetLoader
+
             if self._dataset_id is None:
-                raise RuntimeError("dataset_id is not set — ensure_dataset() must be called first")
+                raise RuntimeError(
+                    "dataset_id is not set — ensure_dataset() must be called first"
+                )
             loader = DatasetLoader(self.client, self._dataset_id)
 
         created = 0
@@ -98,19 +116,23 @@ class SeedRunner:
             elapsed = time.time() - t0
             rate = created / elapsed if elapsed > 0 else 0
             pct = 100 * (batch_idx + 1) / num_batches
-            print(f"    [{batch_idx + 1}/{num_batches}] {created}/{total} "
-                  f"samples ({pct:.0f}%) — {rate:.1f} samples/s")
+            print(
+                f"    [{batch_idx + 1}/{num_batches}] {created}/{total} "
+                f"samples ({pct:.0f}%) — {rate:.1f} samples/s"
+            )
 
         elapsed = time.time() - t0
         self._sample_count = created
         getattr(loader, "flush", lambda: None)()
-        print(f"\n  Uploaded {created} samples in {elapsed:.1f}s "
-              f"({created / elapsed:.1f} samples/s)")
+        print(
+            f"\n  Uploaded {created} samples in {elapsed:.1f}s "
+            f"({created / elapsed:.1f} samples/s)"
+        )
         return created
 
     def summary(self) -> None:
         print(f"\n{'=' * 50}")
-        print(f"  Seed Summary")
+        print("  Seed Summary")
         print(f"{'=' * 50}")
         print(f"  Dataset:    {self.config.dataset_name}")
         print(f"  Dataset ID: {self._dataset_id}")
@@ -128,7 +150,12 @@ class SeedRunner:
 
     def _register_user(self) -> None:
         print("[1/6] Registering seed user ...")
-        r = register_seed_user(self.client, self.config.seed_email, self.config.seed_password, self.config.seed_name)
+        r = register_seed_user(
+            self.client,
+            self.config.seed_email,
+            self.config.seed_password,
+            self.config.seed_name,
+        )
         if r.status_code == 201:
             print(f"  Created user: {self.config.seed_email}")
         elif r.status_code == 409:
@@ -141,11 +168,18 @@ class SeedRunner:
         if self.no_promote:
             print("  Skipped (--no-promote).")
         else:
-            promote_superadmin(self.config.compose_file, self.config.seed_email, self.config.seed_password, self.config.seed_name)
+            promote_superadmin(
+                self.config.compose_file,
+                self.config.seed_email,
+                self.config.seed_password,
+                self.config.seed_name,
+            )
 
     def _login(self) -> None:
         print("[3/6] Logging in ...")
-        r = login_seed_user(self.client, self.config.seed_email, self.config.seed_password)
+        r = login_seed_user(
+            self.client, self.config.seed_email, self.config.seed_password
+        )
         if r.status_code != 200:
             print(f"  ERROR: login failed: {r.status_code} {r.text}")
             sys.exit(1)
@@ -154,12 +188,16 @@ class SeedRunner:
 
     def _ensure_org(self) -> None:
         print("[4/6] Resolving organization ...")
-        org_id = resolve_or_create_org(self.client, self.config.org_name, self.config.org_slug)
+        org_id = resolve_or_create_org(
+            self.client, self.config.org_name, self.config.org_slug
+        )
         if org_id:
             print(f"  Using org: {org_id}")
             self.client.headers["X-Organization-ID"] = org_id
         else:
-            print("  Warning: could not resolve organization; continuing without X-Organization-ID")
+            print(
+                "  Warning: could not resolve organization; continuing without X-Organization-ID"
+            )
 
     def _ensure_dataset(self) -> None:
         print(f"[5/6] Creating/finding dataset '{self.config.dataset_name}' ...")
@@ -171,7 +209,9 @@ class SeedRunner:
             print(f"  Dataset already exists: {self._dataset_id}")
             return
         r = api_request(
-            self.client, "post", "/api/v1/datasets",
+            self.client,
+            "post",
+            "/api/v1/datasets",
             json={
                 "name": self.config.dataset_name,
                 "dataset_type": self.config.dataset_type,
@@ -188,7 +228,11 @@ class SeedRunner:
         print(f"  Created dataset: {self._dataset_id}")
 
     def _existing_sample_count(self) -> int:
-        r = api_request(self.client, "get", f"/api/v1/datasets/{self._dataset_id}/samples?offset=0&limit=1")
+        r = api_request(
+            self.client,
+            "get",
+            f"/api/v1/datasets/{self._dataset_id}/samples?offset=0&limit=1",
+        )
         if r.status_code != 200:
             print(f"  WARN: sample count check failed: {r.status_code} {r.text[:120]}")
             return 0

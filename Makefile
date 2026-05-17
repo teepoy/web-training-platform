@@ -116,25 +116,25 @@ seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-sam
 	uv run python scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-imagenet-mock
-seed-imagenet-mock: ## Seed ImageNet-1K mock data with 1000 offline synthetic samples
+seed-imagenet-mock: ## Seed ImageNet-1K mock data with 1000 offline synthetic samples (delegates to unified CLI)
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_imagenet_dev.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+	$(MAKE) seed ARGS="imagenet-mock $(ARGS)"
 
 .PHONY: imagenet-mock
 imagenet-mock: seed-imagenet-mock ## Alias for seed-imagenet-mock
 
 .PHONY: seed-imagenet-poc
-seed-imagenet-poc: ## Seed ImageNet-1K proof-of-concept with 64 real dev-bucket samples
+seed-imagenet-poc: ## Seed ImageNet-1K proof-of-concept with 64 real dev-bucket samples (delegates to unified CLI)
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_imagenet_real.py --api-url $(API_URL) --compose-file $(COMPOSE) --max-samples 64 $(ARGS)
+	$(MAKE) seed ARGS="imagenet-real --max-samples 64 $(ARGS)"
 
 .PHONY: imagenet-poc
 imagenet-poc: seed-imagenet-poc ## Alias for seed-imagenet-poc
 
 .PHONY: seed-imagenet-full
-seed-imagenet-full: ## Seed ImageNet-1K full real dataset from the real bucket/source
+seed-imagenet-full: ## Seed ImageNet-1K full real dataset from the real bucket/source (delegates to unified CLI)
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run python scripts/seed_imagenet_real.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
+	$(MAKE) seed ARGS="imagenet-real $(ARGS)"
 
 .PHONY: imagenet-full
 imagenet-full: seed-imagenet-full ## Alias for seed-imagenet-full

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import sys
 import time
 
-from seed_maker import SeedConfig, SeedRunner, registry
-from seed_maker.images import pil_to_data_uri
-from seed_maker.utils import api_request
+from seedmaker import SeedConfig, SeedRunner, registry
+from seedmaker.images import pil_to_data_uri
+from seedmaker.utils import api_request
 
 config = SeedConfig(
     name="oxford-flowers",
@@ -22,7 +21,9 @@ def run(args, runner: SeedRunner) -> int:
     try:
         from datasets import load_dataset  # type: ignore[import-untyped]
     except ImportError:
-        print("ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow")
+        print(
+            "ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow"
+        )
         return 1
 
     max_samples: int = args.max_samples if args.max_samples is not None else 0
@@ -36,7 +37,9 @@ def run(args, runner: SeedRunner) -> int:
 
     print("[5/6] Creating dataset ...")
     r = api_request(
-        runner.client, "post", "/api/v1/datasets",
+        runner.client,
+        "post",
+        "/api/v1/datasets",
         json={
             "name": config.dataset_name,
             "dataset_type": "image_classification",
@@ -54,7 +57,8 @@ def run(args, runner: SeedRunner) -> int:
     print(f"  Created dataset: {dataset_id}")
 
     print("[6/6] Creating samples ...")
-    from seed_maker.loaders.dataset import DatasetLoader
+    from seedmaker.loaders.dataset import DatasetLoader
+
     loader = DatasetLoader(runner.client, dataset_id)
 
     total_created = 0
@@ -71,13 +75,25 @@ def run(args, runner: SeedRunner) -> int:
                 break
             data_uri = pil_to_data_uri(example["image"])
             label_idx = example["label"]
-            label_name = label_names[label_idx] if label_idx < len(label_names) else f"class_{label_idx}"
-            batch.append({
-                "image_uris": [data_uri],
-                "metadata": {"split": split_name, "label_index": label_idx, "label_name": label_name},
-                "label": label_name,
-            })
-            if len(batch) >= batch_size or (max_samples > 0 and total_created + len(batch) >= limit):
+            label_name = (
+                label_names[label_idx]
+                if label_idx < len(label_names)
+                else f"class_{label_idx}"
+            )
+            batch.append(
+                {
+                    "image_uris": [data_uri],
+                    "metadata": {
+                        "split": split_name,
+                        "label_index": label_idx,
+                        "label_name": label_name,
+                    },
+                    "label": label_name,
+                }
+            )
+            if len(batch) >= batch_size or (
+                max_samples > 0 and total_created + len(batch) >= limit
+            ):
                 imported = loader(batch)
                 total_created += imported
                 batch = []

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import math
 import os
 import random
 import sys
 import time
 
-from seed_maker import SeedConfig, SeedRunner, CIFAR100_LABELS, registry
+from seedmaker import SeedConfig, SeedRunner, CIFAR100_LABELS, registry
 
 """Multi-image mock dataset: 100K samples with CIFAR-100 + optional ImageNet images."""
 
@@ -29,9 +28,18 @@ metadata_schema = {
     "point_label": {"type": "string", "description": "Cluster/group label."},
     "sample_title": {"type": "string", "description": "Human-readable sample title."},
     "image_count": {"type": "integer", "description": "Number of images."},
-    "primary_image_index": {"type": "integer", "description": "Default preview image index."},
-    "has_large_images": {"type": "boolean", "description": "Whether sample has 680x680 optional images."},
-    "view_mode": {"type": "string", "description": "Marks dataset as multi-image mock."},
+    "primary_image_index": {
+        "type": "integer",
+        "description": "Default preview image index.",
+    },
+    "has_large_images": {
+        "type": "boolean",
+        "description": "Whether sample has 680x680 optional images.",
+    },
+    "view_mode": {
+        "type": "string",
+        "description": "Marks dataset as multi-image mock.",
+    },
 }
 
 config = SeedConfig(
@@ -63,7 +71,9 @@ def _build_cifar100_pool() -> list[str]:
     print("  Downloading CIFAR-100 dataset via torchvision ...")
     t0 = time.time()
     train_set = torchvision.datasets.CIFAR100(
-        root=os.path.expanduser("~/.cache/torchvision"), train=True, download=True,
+        root=os.path.expanduser("~/.cache/torchvision"),
+        train=True,
+        download=True,
     )
     print(f"  Downloaded {len(train_set)} images in {time.time() - t0:.1f}s")
 
@@ -77,7 +87,9 @@ def _build_cifar100_pool() -> list[str]:
         b64 = base64.b64encode(buf.getvalue()).decode()
         pool.append(f"data:image/png;base64,{b64}")
         if (idx + 1) % 10000 == 0:
-            print(f"    ... {idx + 1}/{len(train_set)} images ({time.time() - t0:.1f}s)")
+            print(
+                f"    ... {idx + 1}/{len(train_set)} images ({time.time() - t0:.1f}s)"
+            )
     print(f"  Encoded {len(pool)} CIFAR-100 images in {time.time() - t0:.1f}s")
     return pool
 
@@ -91,7 +103,9 @@ def _build_imagenet_pool(size: int) -> list[str]:
     if not hf_token:
         print("=" * 60)
         print("  ERROR: HF_TOKEN environment variable is not set.")
-        print("  ImageNet-1K requires a HuggingFace access token with accepted license.")
+        print(
+            "  ImageNet-1K requires a HuggingFace access token with accepted license."
+        )
         print("  1. Go to https://huggingface.co/settings/tokens")
         print("  2. Create a token with read access")
         print("  3. Visit https://huggingface.co/datasets/ILSVRC/imagenet-1k")
@@ -103,12 +117,18 @@ def _build_imagenet_pool(size: int) -> list[str]:
     try:
         from datasets import load_dataset  # type: ignore[import-untyped]
     except ImportError:
-        print("  ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow")
+        print(
+            "  ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow"
+        )
         sys.exit(1)
 
-    print(f"  Streaming up to {size} ImageNet-1K validation images from HuggingFace ...")
+    print(
+        f"  Streaming up to {size} ImageNet-1K validation images from HuggingFace ..."
+    )
     t0 = time.time()
-    hf = load_dataset("ILSVRC/imagenet-1k", split="validation", streaming=True, token=hf_token)
+    hf = load_dataset(
+        "ILSVRC/imagenet-1k", split="validation", streaming=True, token=hf_token
+    )
 
     pool: list[str] = []
     for example in hf:
@@ -117,7 +137,12 @@ def _build_imagenet_pool(size: int) -> list[str]:
         image = example["image"]
         if image.mode != "RGB":
             image = image.convert("RGB")
-            resized = image.resize((IMAGENET_SIZE, IMAGENET_SIZE), Image.LANCZOS if hasattr(Image, "LANCZOS") else Image.Resampling.LANCZOS)  # type: ignore[union-attr]
+            resized = image.resize(
+                (IMAGENET_SIZE, IMAGENET_SIZE),
+                Image.LANCZOS
+                if hasattr(Image, "LANCZOS")
+                else Image.Resampling.LANCZOS,
+            )  # type: ignore[union-attr]
         buf = io.BytesIO()
         resized.save(buf, format="JPEG", quality=85)
         b64 = base64.b64encode(buf.getvalue()).decode()
@@ -149,7 +174,9 @@ def run(args, runner: SeedRunner) -> int:
 
     imagenet_pool: list[str] = []
     if large_samples > 0:
-        print(f"\n  Building ImageNet pool ({IMAGENET_SIZE}x{IMAGENET_SIZE} optional images) ...")
+        print(
+            f"\n  Building ImageNet pool ({IMAGENET_SIZE}x{IMAGENET_SIZE} optional images) ..."
+        )
         try:
             imagenet_pool = _build_imagenet_pool(IMAGENET_POOL_SIZE)
         except Exception as exc:
@@ -158,38 +185,58 @@ def run(args, runner: SeedRunner) -> int:
     else:
         print("  Skipping ImageNet pool (--large-samples=0)")
 
-    step = max(1, max_samples // large_samples) if large_samples > 0 and imagenet_pool else max_samples + 1
-    large_indices = {min(k * step, max_samples - 1) for k in range(large_samples)} if large_samples > 0 and imagenet_pool else set()
+    step = (
+        max(1, max_samples // large_samples)
+        if large_samples > 0 and imagenet_pool
+        else max_samples + 1
+    )
+    large_indices = (
+        {min(k * step, max_samples - 1) for k in range(large_samples)}
+        if large_samples > 0 and imagenet_pool
+        else set()
+    )
 
     if large_indices:
-        print(f"  Large image samples: {len(large_indices)} (first: {min(large_indices)}, last: {max(large_indices)})")
+        print(
+            f"  Large image samples: {len(large_indices)} (first: {min(large_indices)}, last: {max(large_indices)})"
+        )
 
     def build_sample_item(idx: int) -> dict:
         label_idx = idx % len(CIFAR100_LABELS)
         label = CIFAR100_LABELS[label_idx]
         required_uris = [random.choice(cifar_pool) for _ in range(REQUIRED_IMAGES)]
-        optional_uris = [random.choice(imagenet_pool) for _ in range(OPTIONAL_IMAGES)] if idx in large_indices else []
+        optional_uris = (
+            [random.choice(imagenet_pool) for _ in range(OPTIONAL_IMAGES)]
+            if idx in large_indices
+            else []
+        )
         image_uris = required_uris + optional_uris
         sx, sy = _scatter_coords(label_idx)
         return {
             "image_uris": image_uris,
             "metadata": {
-                "scatter_x": sx, "scatter_y": sy,
-                "point_label": label, "sample_title": f"{label} sample {idx + 1}",
-                "image_count": len(image_uris), "primary_image_index": 0,
-                "has_large_images": idx in large_indices, "view_mode": "multi-image-mock",
+                "scatter_x": sx,
+                "scatter_y": sy,
+                "point_label": label,
+                "sample_title": f"{label} sample {idx + 1}",
+                "image_count": len(image_uris),
+                "primary_image_index": 0,
+                "has_large_images": idx in large_indices,
+                "view_mode": "multi-image-mock",
             },
             "label": label,
         }
 
     loader = None
     if loader_name == "s3-zip":
-        from seed_maker.loaders.s3_zip import S3ZipWriter
+        from seedmaker.loaders.s3_zip import S3ZipWriter
+
         s3_bucket: str = getattr(args, "s3_bucket", "finetune-preview")
         s3_prefix: str = getattr(args, "s3_prefix", f"seed/{config.name}")
         zip_samples: int = getattr(args, "zip_samples", 500)
         loader = S3ZipWriter(
-            bucket=s3_bucket, prefix=s3_prefix,
+            bucket=s3_bucket,
+            prefix=s3_prefix,
             samples_per_zip=zip_samples,
         )
 

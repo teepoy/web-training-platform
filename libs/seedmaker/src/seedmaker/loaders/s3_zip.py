@@ -18,6 +18,7 @@ class S3ZipWriter:
         samples_per_zip: int = 500,
     ) -> None:
         import boto3  # type: ignore[import-untyped]
+
         self._bucket = bucket
         self._prefix = prefix.rstrip("/")
         self._samples_per_zip = samples_per_zip
@@ -36,8 +37,8 @@ class S3ZipWriter:
     def __call__(self, items: list[dict]) -> int:
         self._buffer.extend(items)
         while len(self._buffer) >= self._samples_per_zip:
-            chunk = self._buffer[:self._samples_per_zip]
-            self._buffer = self._buffer[self._samples_per_zip:]
+            chunk = self._buffer[: self._samples_per_zip]
+            self._buffer = self._buffer[self._samples_per_zip :]
             self._push_zip(chunk)
         return len(items)
 
@@ -52,7 +53,9 @@ class S3ZipWriter:
             Key=f"{self._prefix}/index.json",
             Body=json.dumps(self._index, indent=2).encode("utf-8"),
         )
-        print(f"  Wrote index.json ({len(self._index)} chunks) to s3://{self._bucket}/{self._prefix}/")
+        print(
+            f"  Wrote index.json ({len(self._index)} chunks) to s3://{self._bucket}/{self._prefix}/"
+        )
 
     def _push_zip(self, chunk_items: list[dict]) -> None:
         first_id = self._global_idx
@@ -68,13 +71,15 @@ class S3ZipWriter:
                     ext = self._uri_ext(uri)
                     image_names.append(f"{fname}.{ext}")
                     zf.writestr(f"{fname}.{ext}", self._uri_bytes(uri))
-                manifest.append({
-                    "id": sid,
-                    "label": item.get("label"),
-                    "metadata": item.get("metadata", {}),
-                    "image_count": len(image_names),
-                    "images": image_names,
-                })
+                manifest.append(
+                    {
+                        "id": sid,
+                        "label": item.get("label"),
+                        "metadata": item.get("metadata", {}),
+                        "image_count": len(image_names),
+                        "images": image_names,
+                    }
+                )
                 self._global_idx += 1
 
             zf.writestr("manifest.json", json.dumps(manifest, indent=2))
@@ -87,13 +92,17 @@ class S3ZipWriter:
             Body=zip_bytes,
             ContentType="application/zip",
         )
-        self._index.append({
-            "sample_range": [first_id, self._global_idx - 1],
-            "chunk": key,
-            "sample_count": len(chunk_items),
-        })
-        print(f"  Pushed {key} ({len(chunk_items)} samples, "
-              f"{len(zip_bytes) / 1024 / 1024:.1f} MB) to s3://{self._bucket}/")
+        self._index.append(
+            {
+                "sample_range": [first_id, self._global_idx - 1],
+                "chunk": key,
+                "sample_count": len(chunk_items),
+            }
+        )
+        print(
+            f"  Pushed {key} ({len(chunk_items)} samples, "
+            f"{len(zip_bytes) / 1024 / 1024:.1f} MB) to s3://{self._bucket}/"
+        )
         self._chunk_idx += 1
 
     @staticmethod
@@ -107,6 +116,7 @@ class S3ZipWriter:
     @staticmethod
     def _uri_bytes(uri: str) -> bytes:
         import base64
+
         if "," in uri:
             return base64.b64decode(uri.split(",", 1)[1])
         return uri.encode("utf-8")

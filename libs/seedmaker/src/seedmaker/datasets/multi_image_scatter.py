@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from seed_maker import SeedConfig, SeedRunner, registry
-from seed_maker.images import png_data_uri
+from seedmaker import SeedConfig, SeedRunner, registry
+from seedmaker.images import png_data_uri
 
 LABELS = ["cluster-a", "cluster-b", "cluster-c"]
 
@@ -11,8 +11,14 @@ metadata_schema = {
     "point_label": {"type": "string", "description": "Cluster/group label."},
     "sample_title": {"type": "string", "description": "Human-readable sample title."},
     "image_count": {"type": "integer", "description": "Number of images."},
-    "primary_image_index": {"type": "integer", "description": "Default preview image index."},
-    "view_mode": {"type": "string", "description": "Marks dataset as multi-image scatter demo."},
+    "primary_image_index": {
+        "type": "integer",
+        "description": "Default preview image index.",
+    },
+    "view_mode": {
+        "type": "string",
+        "description": "Marks dataset as multi-image scatter demo.",
+    },
 }
 
 config = SeedConfig(
@@ -24,7 +30,9 @@ config = SeedConfig(
 )
 
 
-def _sample_images(sample_idx: int, label_idx: int, images_per_sample: int) -> list[str]:
+def _sample_images(
+    sample_idx: int, label_idx: int, images_per_sample: int
+) -> list[str]:
     base_hue = (label_idx * 83 + sample_idx * 17) % 255
     images: list[str] = []
     for image_idx in range(images_per_sample):
@@ -37,7 +45,9 @@ def _sample_images(sample_idx: int, label_idx: int, images_per_sample: int) -> l
 
 def run(args, runner: SeedRunner) -> int:
     samples: int = args.samples if args.samples is not None else 18
-    images_per_sample: int = args.images_per_sample if args.images_per_sample is not None else 3
+    images_per_sample: int = (
+        args.images_per_sample if args.images_per_sample is not None else 3
+    )
 
     if samples < 1:
         print("ERROR: --samples must be >= 1")
@@ -54,14 +64,19 @@ def run(args, runner: SeedRunner) -> int:
         offset_x, offset_y = cluster_offsets[label_idx]
         local_angle = idx / max(1, len(LABELS))
         scatter_x = round(offset_x + (idx % 5) * 1.75 + (local_angle * 0.15), 3)
-        scatter_y = round(offset_y + ((idx // len(LABELS)) % 5) * 1.35 - (local_angle * 0.2), 3)
+        scatter_y = round(
+            offset_y + ((idx // len(LABELS)) % 5) * 1.35 - (local_angle * 0.2), 3
+        )
         image_uris = _sample_images(idx, label_idx, images_per_sample)
         return {
             "image_uris": image_uris,
             "metadata": {
-                "scatter_x": scatter_x, "scatter_y": scatter_y,
-                "point_label": label, "sample_title": f"{label} sample {idx + 1}",
-                "image_count": len(image_uris), "primary_image_index": 0,
+                "scatter_x": scatter_x,
+                "scatter_y": scatter_y,
+                "point_label": label,
+                "sample_title": f"{label} sample {idx + 1}",
+                "image_count": len(image_uris),
+                "primary_image_index": 0,
                 "view_mode": "interactive-scatter-demo",
             },
             "label": label,

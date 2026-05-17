@@ -93,7 +93,7 @@ wait_for_service() {
     local elapsed=0
 
     log_info "Waiting for $name at $url$endpoint ..."
-    
+
     while [ $elapsed -lt $WAIT_TIMEOUT ]; do
         if curl -sf "$url$endpoint" > /dev/null 2>&1; then
             log_success "$name is ready"
@@ -103,7 +103,7 @@ wait_for_service() {
         elapsed=$((elapsed + 2))
         echo -n "."
     done
-    
+
     echo ""
     log_error "$name not ready after ${WAIT_TIMEOUT}s"
     return 1
@@ -139,7 +139,7 @@ if echo "$LOGIN_RESP" | grep -q "access_token"; then
     ADMIN_TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 else
     log_warn "Default admin login failed, attempting to create via docker exec..."
-    
+
     # Try to create superadmin via docker compose exec
     if docker compose -f "$COMPOSE_FILE" exec -T api \
         uv run python -m app.cli create-superadmin \
@@ -150,12 +150,12 @@ else
     else
         log_warn "Could not create admin via docker exec (may already exist or not using compose)"
     fi
-    
+
     # Retry login
     LOGIN_RESP=$(curl -sf -X POST "$API_URL/api/v1/auth/login" \
         -H "Content-Type: application/json" \
         -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}")
-    
+
     if echo "$LOGIN_RESP" | grep -q "access_token"; then
         log_success "Admin user verified after creation"
         ADMIN_TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
@@ -183,12 +183,12 @@ cd "$REPO_ROOT"
 
 # Use uv to run the seed script
 if command -v uv &> /dev/null; then
-    uv run python scripts/seed_presets.py \
+    uv run python scripts/seed.py presets \
         --api-url "$API_URL" \
         --compose-file "$COMPOSE_FILE" \
         --no-promote
 else
-    python scripts/seed_presets.py \
+    python scripts/seed.py presets \
         --api-url "$API_URL" \
         --compose-file "$COMPOSE_FILE" \
         --no-promote
@@ -208,9 +208,9 @@ if [ "$MAX_SAMPLES" -gt 0 ]; then
 fi
 
 if command -v uv &> /dev/null; then
-    uv run python scripts/seed_oxford_flowers.py $FLOWERS_ARGS
+    uv run python scripts/seed.py oxford-flowers $FLOWERS_ARGS
 else
-    python scripts/seed_oxford_flowers.py $FLOWERS_ARGS
+    python scripts/seed.py oxford-flowers $FLOWERS_ARGS
 fi
 
 log_success "Oxford Flowers dataset seeded"
