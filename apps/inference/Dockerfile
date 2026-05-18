@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
@@ -8,6 +7,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY apps/inference/pyproject.toml apps/inference/pyproject.toml
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
+COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
+
+COPY libs/protos/ libs/protos/
 RUN uv sync --frozen --package finetune-inference --no-install-workspace
 
 COPY apps/inference/ apps/inference/

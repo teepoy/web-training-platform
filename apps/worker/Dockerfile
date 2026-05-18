@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
