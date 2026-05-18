@@ -38,6 +38,25 @@ def _wafer_coordinates(sample_idx: int) -> tuple[float, float]:
             return x, y
 
 
+def build_sample_item(idx: int) -> dict:
+    """Build a single wafer demo sample item.
+
+    Returns a dict with ``image_uris`` (single 16×16 coloured PNG)
+    and ``metadata`` (wafer_x, wafer_y, wafer_index, point_id, seed).
+    """
+    wx, wy = _wafer_coordinates(idx)
+    return {
+        "image_uris": [png_data_uri(16, 73, 109, 137)],
+        "metadata": {
+            "wafer_x": wx,
+            "wafer_y": wy,
+            "wafer_index": idx,
+            "point_id": f"wafer-point-{idx + 1:06d}",
+            "seed": RANDOM_SEED,
+        },
+    }
+
+
 def run(args, runner: SeedRunner) -> int:
     samples: int = args.samples if args.samples is not None else 200_000
     batch_size: int = args.batch_size if args.batch_size is not None else 5000
@@ -66,19 +85,6 @@ def run(args, runner: SeedRunner) -> int:
             runner._dataset_id = None
 
     runner.ensure_dataset()
-
-    def build_sample_item(idx: int) -> dict:
-        wx, wy = _wafer_coordinates(idx)
-        return {
-            "image_uris": [png_data_uri(16, 73, 109, 137)],
-            "metadata": {
-                "wafer_x": wx,
-                "wafer_y": wy,
-                "wafer_index": idx,
-                "point_id": f"wafer-point-{idx + 1:06d}",
-                "seed": RANDOM_SEED,
-            },
-        }
 
     runner.upload_samples(
         total=samples, item_builder=build_sample_item, batch_size=batch_size

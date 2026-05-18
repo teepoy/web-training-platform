@@ -84,6 +84,24 @@ def _upload_placeholder_model(
     return model_id
 
 
+def build_sample_item(idx: int) -> dict:
+    """Build a single ImageNet mock sample item.
+
+    Returns a dict with ``image_uris`` (single synthetic coloured square)
+    and ``metadata`` (source, label_index, label_name).
+    """
+    label = IMAGENET_LABELS[idx]
+    data_uri = generate_synthetic_image(idx)
+    return {
+        "image_uris": [data_uri],
+        "metadata": {
+            "source": "synthetic",
+            "label_index": idx,
+            "label_name": label,
+        },
+    }
+
+
 def _resolve_preset(client: Any) -> str:
     r = api_request(client, "get", "/api/v1/training-presets")
     presets = r.json() if r.status_code == 200 else []
@@ -118,18 +136,8 @@ def run(args: Any, runner: SeedRunner) -> int:
         print("\n[7/7] Creating samples ...")
         count = min(max_samples, len(IMAGENET_LABELS))
 
-        def _item_builder(idx: int) -> dict:
-            label = IMAGENET_LABELS[idx]
-            data_uri = generate_synthetic_image(idx)
-            metadata = {
-                "source": "synthetic",
-                "label_index": idx,
-                "label_name": label,
-            }
-            return {"image_uris": [data_uri], "metadata": metadata}
-
         sample_count = runner.upload_samples(
-            count, _item_builder, batch_size=5000, skip_existing=True
+            count, build_sample_item, batch_size=5000, skip_existing=True
         )
 
     # Create model

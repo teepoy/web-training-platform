@@ -5,6 +5,8 @@ from seedmaker.images import png_data_uri
 
 LABELS = ["cluster-a", "cluster-b", "cluster-c"]
 
+CLUSTER_OFFSETS = [(-7.5, 8.0), (10.0, -4.0), (2.0, 12.0)]
+
 metadata_schema = {
     "scatter_x": {"type": "float", "description": "X coordinate for scatter plot."},
     "scatter_y": {"type": "float", "description": "Y coordinate for scatter plot."},
@@ -43,6 +45,37 @@ def _sample_images(
     return images
 
 
+def build_sample_item(idx: int, images_per_sample: int = 3) -> dict:
+    """Build a single multi-image scatter sample item.
+
+    Returns a dict with ``image_uris`` (``images_per_sample`` coloured PNGs),
+    ``metadata`` (scatter_x, scatter_y, point_label, sample_title,
+    image_count, primary_image_index, view_mode), and ``label``.
+    """
+    label_idx = idx % len(LABELS)
+    label = LABELS[label_idx]
+    offset_x, offset_y = CLUSTER_OFFSETS[label_idx]
+    local_angle = idx / max(1, len(LABELS))
+    scatter_x = round(offset_x + (idx % 5) * 1.75 + (local_angle * 0.15), 3)
+    scatter_y = round(
+        offset_y + ((idx // len(LABELS)) % 5) * 1.35 - (local_angle * 0.2), 3
+    )
+    image_uris = _sample_images(idx, label_idx, images_per_sample)
+    return {
+        "image_uris": image_uris,
+        "metadata": {
+            "scatter_x": scatter_x,
+            "scatter_y": scatter_y,
+            "point_label": label,
+            "sample_title": f"{label} sample {idx + 1}",
+            "image_count": len(image_uris),
+            "primary_image_index": 0,
+            "view_mode": "interactive-scatter-demo",
+        },
+        "label": label,
+    }
+
+
 def run(args, runner: SeedRunner) -> int:
     samples: int = args.samples if args.samples is not None else 18
     images_per_sample: int = (
@@ -56,33 +89,10 @@ def run(args, runner: SeedRunner) -> int:
         print("ERROR: --images-per-sample must be >= 2")
         return 1
 
-    cluster_offsets = [(-7.5, 8.0), (10.0, -4.0), (2.0, 12.0)]
+    def _mk_item(idx: int) -> dict:
+        return build_sample_item(idx, images_per_sample)
 
-    def build_sample_item(idx: int) -> dict:
-        label_idx = idx % len(LABELS)
-        label = LABELS[label_idx]
-        offset_x, offset_y = cluster_offsets[label_idx]
-        local_angle = idx / max(1, len(LABELS))
-        scatter_x = round(offset_x + (idx % 5) * 1.75 + (local_angle * 0.15), 3)
-        scatter_y = round(
-            offset_y + ((idx // len(LABELS)) % 5) * 1.35 - (local_angle * 0.2), 3
-        )
-        image_uris = _sample_images(idx, label_idx, images_per_sample)
-        return {
-            "image_uris": image_uris,
-            "metadata": {
-                "scatter_x": scatter_x,
-                "scatter_y": scatter_y,
-                "point_label": label,
-                "sample_title": f"{label} sample {idx + 1}",
-                "image_count": len(image_uris),
-                "primary_image_index": 0,
-                "view_mode": "interactive-scatter-demo",
-            },
-            "label": label,
-        }
-
-    runner.upload_samples(total=samples, item_builder=build_sample_item)
+    runner.upload_samples(total=samples, item_builder=_mk_item)
     runner.summary()
     return 0
 

@@ -243,11 +243,17 @@ wait-api: ## Wait for API health endpoint to respond
 ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mode
 	$(MAKE) seed-imagenet-mock ARGS="--no-model"
 
+.PHONY: ensure-sandbox-datasets
+ensure-sandbox-datasets: wait-api ## Seed demo datasets for the /sandbox dev route
+	$(MAKE) seed ARGS="wafer-demo --samples 2000 $(ARGS)"
+	$(MAKE) seed ARGS="multi-image-scatter --samples 18 $(ARGS)"
+
 .PHONY: updev
 updev: ## Start compose backend + local Vite frontend with hot reload
 	@trap 'kill 0' EXIT; \
 	$(MAKE) up-stack && \
 	$(MAKE) ensure-mock-datasets && \
+	$(MAKE) ensure-sandbox-datasets && \
 	$(MAKE) dev-web & \
 	wait
 

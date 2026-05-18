@@ -154,6 +154,50 @@ def _build_imagenet_pool(size: int) -> list[str]:
     return pool
 
 
+def build_sample_item_factory(
+    cifar_pool: list[str],
+    imagenet_pool: list[str],
+    large_indices: set[int],
+    max_samples: int = 100_000,
+):
+    """Return an item builder for multi-image mock samples.
+
+    The returned callable expects an index and produces a dict with
+    ``image_uris`` (3 CIFAR-100 images + optional 4 ImageNet images),
+    ``metadata`` (scatter coords, label, etc.), and ``label``.
+    """
+    if not imagenet_pool:
+        large_indices = set()
+
+    def build_sample_item(idx: int) -> dict:
+        label_idx = idx % len(CIFAR100_LABELS)
+        label = CIFAR100_LABELS[label_idx]
+        required_uris = [random.choice(cifar_pool) for _ in range(REQUIRED_IMAGES)]
+        optional_uris = (
+            [random.choice(imagenet_pool) for _ in range(OPTIONAL_IMAGES)]
+            if idx in large_indices
+            else []
+        )
+        image_uris = required_uris + optional_uris
+        sx, sy = _scatter_coords(label_idx)
+        return {
+            "image_uris": image_uris,
+            "metadata": {
+                "scatter_x": sx,
+                "scatter_y": sy,
+                "point_label": label,
+                "sample_title": f"{label} sample {idx + 1}",
+                "image_count": len(image_uris),
+                "primary_image_index": 0,
+                "has_large_images": idx in large_indices,
+                "view_mode": "multi-image-mock",
+            },
+            "label": label,
+        }
+
+    return build_sample_item
+
+
 def run(args, runner: SeedRunner) -> int:
     max_samples: int = args.max_samples if args.max_samples is not None else 100_000
     large_samples: int = args.large_samples if args.large_samples is not None else 100
@@ -201,31 +245,9 @@ def run(args, runner: SeedRunner) -> int:
             f"  Large image samples: {len(large_indices)} (first: {min(large_indices)}, last: {max(large_indices)})"
         )
 
-    def build_sample_item(idx: int) -> dict:
-        label_idx = idx % len(CIFAR100_LABELS)
-        label = CIFAR100_LABELS[label_idx]
-        required_uris = [random.choice(cifar_pool) for _ in range(REQUIRED_IMAGES)]
-        optional_uris = (
-            [random.choice(imagenet_pool) for _ in range(OPTIONAL_IMAGES)]
-            if idx in large_indices
-            else []
-        )
-        image_uris = required_uris + optional_uris
-        sx, sy = _scatter_coords(label_idx)
-        return {
-            "image_uris": image_uris,
-            "metadata": {
-                "scatter_x": sx,
-                "scatter_y": sy,
-                "point_label": label,
-                "sample_title": f"{label} sample {idx + 1}",
-                "image_count": len(image_uris),
-                "primary_image_index": 0,
-                "has_large_images": idx in large_indices,
-                "view_mode": "multi-image-mock",
-            },
-            "label": label,
-        }
+    build_sample_item = build_sample_item_factory(
+        cifar_pool, imagenet_pool, large_indices, max_samples
+    )
 
     loader = None
     if loader_name == "s3-zip":

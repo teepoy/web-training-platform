@@ -9,11 +9,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from tests.conftest import PRESET_ID
 from tests.helpers.factories import (
-    create_test_dataset,
-    create_test_samples,
     create_test_training_job,
     wait_for_job_completion,
 )
+from tests.helpers.test_seed_runner import TestSeedRunner
 
 from seedmaker.labels import IMAGENET_LABELS
 
@@ -49,13 +48,18 @@ def seeded_imagenet_mock() -> tuple[str, str]:
 
     Creates the dataset, uploads 10 samples, launches a training job,
     waits for completion, and returns ``(dataset_id, dataset_name)``.
+    Uses the seedmaker ``imagenet-mock`` recipe config and item builder.
     """
+    from seedmaker.datasets.imagenet_mock import config, build_sample_item
+
     with TestClient(app) as client:
-        ds = create_test_dataset(client, "ImageNet-1K Mock", IMAGENET_LABELS)
-        create_test_samples(client, ds["id"], 10)
-        job = create_test_training_job(client, ds["id"], PRESET_ID)
+        runner = TestSeedRunner(client, config)
+        runner.ensure_dataset()
+        assert runner.dataset_id is not None
+        runner.upload_samples(10, build_sample_item)
+        job = create_test_training_job(client, runner.dataset_id, PRESET_ID)
         wait_for_job_completion(client, job["id"])
-        return (ds["id"], ds["name"])
+        return (runner.dataset_id, config.dataset_name)
 
 
 @pytest.fixture(scope="function")
@@ -64,13 +68,21 @@ def seeded_imagenet_poc() -> tuple[str, str]:
 
     Creates the dataset, uploads 5 samples, launches a training job,
     waits for completion, and returns ``(dataset_id, dataset_name)``.
+    Uses the seedmaker ``imagenet-real`` recipe config and the
+    ``imagenet-mock`` item builder (real ImageNet images are too heavy
+    for unit tests).
     """
+    from seedmaker.datasets.imagenet_real import config
+    from seedmaker.datasets.imagenet_mock import build_sample_item
+
     with TestClient(app) as client:
-        ds = create_test_dataset(client, "ImageNet-1K Real", IMAGENET_LABELS)
-        create_test_samples(client, ds["id"], 5)
-        job = create_test_training_job(client, ds["id"], PRESET_ID)
+        runner = TestSeedRunner(client, config)
+        runner.ensure_dataset()
+        assert runner.dataset_id is not None
+        runner.upload_samples(5, build_sample_item)
+        job = create_test_training_job(client, runner.dataset_id, PRESET_ID)
         wait_for_job_completion(client, job["id"])
-        return (ds["id"], ds["name"])
+        return (runner.dataset_id, config.dataset_name)
 
 
 @pytest.fixture(scope="function")
@@ -78,24 +90,17 @@ def seeded_wafer_demo() -> tuple[str, str]:
     """Seed a Wafer Demo dataset with 50 samples carrying grid metadata.
 
     Each sample includes ``wafer_x`` / ``wafer_y`` spatial coordinates
-    derived from its index (10×5 grid).  Uses direct ``client.post``
-    because ``create_test_samples`` does not support custom metadata.
+    derived from its index (10×5 grid).  Uses the seedmaker ``wafer-demo``
+    recipe config and item builder.
     """
+    from seedmaker.datasets.wafer_demo import config, build_sample_item
+
     with TestClient(app) as client:
-        ds = create_test_dataset(client, "Wafer Demo", ["defect"])
-        uri = _synthetic_data_uri()
-        for i in range(50):
-            resp = client.post(
-                f"/api/v1/datasets/{ds['id']}/samples",
-                json={
-                    "image_uris": [uri],
-                    "metadata": {"wafer_x": i % 10, "wafer_y": i // 10},
-                },
-            )
-            assert resp.status_code == 200, (
-                f"Failed wafer sample {i}: {resp.status_code} {resp.text}"
-            )
-        return (ds["id"], ds["name"])
+        runner = TestSeedRunner(client, config)
+        runner.ensure_dataset()
+        assert runner.dataset_id is not None
+        runner.upload_samples(50, build_sample_item)
+        return (runner.dataset_id, config.dataset_name)
 
 
 @pytest.fixture(scope="function")
@@ -103,49 +108,41 @@ def seeded_multi_image_scatter() -> tuple[str, str]:
     """Seed a Scatter Demo dataset with 6 multi-image samples (3 images each).
 
     Each sample carries ``scatter_x`` / ``scatter_y`` metadata for a
-    3×2 grid.  Uses direct ``client.post`` for the multi-image format.
+    3×2 grid.  Uses the seedmaker ``multi-image-scatter`` recipe config
+    and item builder.
     """
+    from seedmaker.datasets.multi_image_scatter import config, build_sample_item
+
     with TestClient(app) as client:
-        ds = create_test_dataset(
-            client,
-            "Scatter Demo - Multi Image Samples",
-            ["category_a", "category_b"],
-        )
-        uri = _synthetic_data_uri()
-        for i in range(6):
-            resp = client.post(
-                f"/api/v1/datasets/{ds['id']}/samples",
-                json={
-                    "image_uris": [uri, uri, uri],
-                    "metadata": {"scatter_x": i % 3, "scatter_y": i // 3},
-                },
-            )
-            assert resp.status_code == 200, (
-                f"Failed scatter sample {i}: {resp.status_code} {resp.text}"
-            )
-        return (ds["id"], ds["name"])
+        runner = TestSeedRunner(client, config)
+        runner.ensure_dataset()
+        assert runner.dataset_id is not None
+        runner.upload_samples(6, lambda idx: build_sample_item(idx, 3))
+        return (runner.dataset_id, config.dataset_name)
 
 
 @pytest.fixture(scope="function")
 def seeded_mock_multi_image() -> tuple[str, str]:
-    """Seed a Multi-Image Mock dataset with 10 samples (2 images each).
+    """Seed a Multi-Image Mock dataset with 10 samples (2 synthetic images each).
 
-    Uses CIFAR100_LABELS (100 labels) with a fallback to the first 100
-    ImageNet labels if CIFAR-100 is unavailable.
+    Uses the seedmaker ``mock-multi-image`` recipe config for the
+    dataset name and CIFAR-100 labels.  Samples use lightweight
+    synthetic images so the fixture does not download CIFAR-100.
     """
+    from seedmaker.datasets.mock_multi_image import config
+
     with TestClient(app) as client:
-        ds = create_test_dataset(
-            client,
-            "Multi-Image Mock (10)",
-            CIFAR100_LABELS,
-        )
+        runner = TestSeedRunner(client, config)
+        runner.ensure_dataset()
+        assert runner.dataset_id is not None
+
         uri = _synthetic_data_uri()
         for i in range(10):
             resp = client.post(
-                f"/api/v1/datasets/{ds['id']}/samples",
+                f"/api/v1/datasets/{runner.dataset_id}/samples",
                 json={"image_uris": [uri, uri], "metadata": {}},
             )
             assert resp.status_code == 200, (
                 f"Failed multi-image sample {i}: {resp.status_code} {resp.text}"
             )
-        return (ds["id"], ds["name"])
+        return (runner.dataset_id, config.dataset_name)
