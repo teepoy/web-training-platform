@@ -29,6 +29,7 @@ from app.domain.models import (
     PredictionCollectionItem,
     PredictionReviewAction,
 )
+from app.presets._registry import get_preset, get_preset_meta
 from app.presets.registry import PresetRegistry
 from app.presets.runtime import (
     DatasetRef,
@@ -164,6 +165,7 @@ class PredictionService:
         return self._embedding_client
 
     def _load_preset_registry(self) -> PresetRegistry:
+        """Bridge: load YAML-based PresetRegistry for backward compat."""
         try:
             presets_dir = str(self.config.presets.dir)
         except Exception:
@@ -177,6 +179,7 @@ class PredictionService:
 
     @staticmethod
     def _load_entrypoint(ref: str) -> Any:
+        """Fallback: string-based entrypoint loading for non-migrated presets."""
         module_name, sep, attr_name = ref.partition(":")
         if sep != ":" or not module_name or not attr_name:
             raise ValueError(f"Invalid predict entrypoint reference: {ref}")
@@ -186,14 +189,74 @@ class PredictionService:
     async def _resolve_predictor(
         self, model, org_id: str, target: str = "image_classification"
     ) -> tuple[Any, PredictContext]:
-        registry = self._load_preset_registry()
+        """Resolve predictor using decorator-based registry (no string imports).
+
+        Falls back to YAML PresetRegistry for presets not yet migrated.
+        """
+        from app.presets.registry import PresetRegistry as _OldRegistry
+
+        # Determine preset_id from model metadata
         preset_id = model.preset_id or model.preset_name or ""
-        preset = registry.get_preset(preset_id)
-        if preset is None and model.job_id:
+        if not preset_id and model.job_id:
             job = await self.repository.get_job(model.job_id, org_id=org_id)
             if job is not None:
                 preset_id = job.preset_id
-                preset = registry.get_preset(preset_id)
+
+        # Try new decorator registry first
+        preset_cls = get_preset(preset_id)
+        if preset_cls is not None:
+            meta = get_preset_meta(preset_id)
+            if meta is None:
+                raise ValueError(f"Preset metadata missing: {preset_id}")
+
+            if target not in meta.prediction_targets:
+                raise ValueError(
+                    f"Preset '{meta.id}' does not support target '{target}'"
+                )
+
+            predictor = preset_cls.predict(
+                target=target,
+                model_uri=model.uri,
+                artifact_storage=self.artifact_storage,
+                embedding_client=self._get_embedding_client(),
+                llm_client=self._llm_client,
+            )
+            if predictor is None:
+                raise ValueError(
+                    f"Preset.predict() returned None for preset: {preset_id}"
+                )
+
+            # Build compat PresetSpec for context
+            preset_spec = _OldRegistry._decorator_meta_to_spec(meta)
+
+            dataset_ref = DatasetRef(dataset_id=model.dataset_id or "")
+            model_ref = ModelRef(
+                uri=model.uri,
+                framework=str(model.metadata.get("framework", ""))
+                if isinstance(model.metadata, dict)
+                else "",
+                architecture=str(model.metadata.get("architecture", ""))
+                if isinstance(model.metadata, dict)
+                else "",
+                base_model=str(model.metadata.get("base_model", ""))
+                if isinstance(model.metadata, dict)
+                else "",
+                format=model.format,
+                metadata=model.metadata,
+            )
+
+            ctx = PredictContext(
+                job_id=model.job_id,
+                preset=preset_spec,
+                model_ref=model_ref,
+                dataset_ref=dataset_ref,
+                target=target,
+            )
+            return predictor, ctx
+
+        # Fallback: YAML-based PresetRegistry for non-migrated presets
+        registry = self._load_preset_registry()
+        preset = registry.get_preset(preset_id)
         if preset is None:
             raise ValueError(f"Preset not found for model/job: {model.id}")
 

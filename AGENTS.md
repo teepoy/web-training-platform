@@ -111,7 +111,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Prefect flows             | `apps/api/app/flows/`                                                        |
 | Schedule service          | `apps/api/app/services/scheduler.py`                                         |
 | Agent runtime             | `apps/api/app/agent/`                                                        |
-| Agent display protocol    | `docs/protocols/agent-display-protocol.md`                                   |                                                                     |
+| Preset definitions         | `apps/api/app/presets/*.py`                      | Decorator-based single-file presets (`@register`) — one .py = one complete preset |
+| Preset registry decorator  | `apps/api/app/presets/_registry.py`               | `@register` decorator + `get_preset()` / `list_presets()` API |
+| Preset registry (bridge)   | `apps/api/app/presets/registry.py`                | Legacy `PresetRegistry` — bridges YAML + decorator presets; `list_presets()`/`get_preset()`/`preset_to_api_dict()` |
+| Preset schema (legacy)     | `apps/api/app/presets/schema.py`                  | Pydantic models for preset YAML validation (still used for backward compat bridge) |
+| Agent display protocol    | `docs/protocols/agent-display-protocol.md`        |                                                                     |
 | Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`                                   |                                                                     |
 | Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`                                 |                                                                     |
 | Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue`       |                                                                     |
@@ -192,6 +196,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PageProvider`          | component  | `libs/web-ui/src/components/page-provider/PageProvider.vue`               | Template-friendly wrapper for usePagePanels                   |
 | `useWaferHelpers`       | composable | `libs/web-ui/src/composables/useWaferHelpers.ts`                          | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
 | `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
+| `register`               | decorator  | `apps/api/app/presets/_registry.py`                                    | `@register` decorator: single-file preset registration (replaces YAML) |
+| `get_preset`             | function   | `apps/api/app/presets/_registry.py`                                    | Look up registered preset class by ID |
+| `get_preset_meta`        | function   | `apps/api/app/presets/_registry.py`                                    | Look up registered preset metadata by ID |
+| `PresetRegistry`         | class      | `apps/api/app/presets/registry.py`                                     | Legacy YAML registry — bridges YAML + decorator presets |
+| `PresetSpec`             | model      | `apps/api/app/presets/schema.py`                                       | Pydantic model for preset YAML (legacy compat) |
 | `SensorRegistry`        | class      | `apps/api/app/sensors/registry.py`                                           | Loads sensor YAML definitions; exposes get(id), list_all() |
 | `SensorDispatchService` | service    | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatches sensor events to matching subscriptions; isolation per subscription |
 | `SensorRepository`      | repository | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for SensorSubscriptionORM and SensorCheckpointORM |
@@ -209,6 +218,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't assume Kubeflow/MinIO are live; smoke paths degrade gracefully.
 - Don't hardcode new backend URLs; the existing `localhost:8000` hardcode is a known debt.
 - Don't reuse example secrets (`postgres`, `minioadmin`) outside smoke.
+- Don't create new YAML-based presets — use the `@register` decorator in a single `.py` file under `apps/api/app/presets/`.
+- Don't use `importlib.import_module()` or string-based entrypoints for new preset trainers/predictors — import classes directly in the preset file.
 
 ### Label Studio (LS)
 - Dataset = LS project. Every dataset has a mandatory `ls_project_id` (NOT NULL).
@@ -241,7 +252,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect + shared S3-compatible storage.
 - K8s namespace: `finetune`; config via `finetune-config` and `finetune-secrets`.
 - Job progress exposed via SSE, not websockets.
-- Presets are engineer-managed YAML (`apps/api/presets/`) and read-only via API/UI.
+- Presets are engineer-managed **single Python files** (`apps/api/app/presets/<id>.py`) decorated with `@register(...)`. YAML presets are legacy — new presets must use the decorator.
+- To add a new training preset: create `apps/api/app/presets/<my_preset>.py`, decorate the class with `@register(id=..., name=..., ...)`, implement `.train()`, `.predict()`, and `.pipeline()` static methods, then add `from . import <my_preset>` to `apps/api/app/presets/__init__.py`. Config, model metadata, trainer/predictor references are all direct Python imports — no YAML, no string importlib entries.
 - Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - `storage_mode` (`db_full` | `file_shard_sparse`) is the dataset-level distinction for storage semantics. It is orthogonal to `dataset_type` — a classification dataset and a VQA dataset can each be either mode. Never infer storage behavior from the semantic type; always branch on `storage_mode`.

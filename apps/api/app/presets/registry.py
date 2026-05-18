@@ -107,24 +107,114 @@ class PresetRegistry:
         return self.load()
 
     def list_presets(self, *, include_deprecated: bool = False) -> list[PresetSpec]:
-        """Return all loaded presets.
+        """Return all loaded presets, merged from YAML and decorator sources.
 
         Parameters
         ----------
         include_deprecated:
             When False (default), presets with ``deprecated: true`` are excluded.
         """
-        result = []
+        seen: set[str] = set()
+        result: list[PresetSpec] = []
+        # YAML presets first
         for entry in self._presets.values():
             if not include_deprecated and entry.spec.deprecated:
                 continue
+            seen.add(entry.spec.id)
             result.append(entry.spec)
+        # Decorator-registered presets (bridge)
+        self._merge_decorator_presets(
+            result, seen, include_deprecated=include_deprecated
+        )
         return result
 
     def get_preset(self, preset_id: str) -> PresetSpec | None:
-        """Return a single preset by ID, or None if not found."""
+        """Return a single preset by ID, or None if not found.
+
+        Checks YAML presets first, then falling back to decorator-registered
+        presets.
+        """
         entry = self._presets.get(preset_id)
-        return entry.spec if entry else None
+        if entry is not None:
+            return entry.spec
+        # Check decorator-registered presets (bridge)
+        return self._get_decorator_preset(preset_id)
+
+    @staticmethod
+    def _merge_decorator_presets(
+        result: list[PresetSpec],
+        seen: set[str],
+        *,
+        include_deprecated: bool = False,
+    ) -> None:
+        """Merge decorator-registered presets into *result*, deduping by id."""
+        from app.presets._registry import list_presets as _list_deco
+
+        for meta in _list_deco(include_deprecated=include_deprecated):
+            if meta.id in seen:
+                continue
+            seen.add(meta.id)
+            result.append(PresetRegistry._decorator_meta_to_spec(meta))
+
+    @staticmethod
+    def _get_decorator_preset(preset_id: str) -> PresetSpec | None:
+        from app.presets._registry import get_preset_meta
+
+        meta = get_preset_meta(preset_id)
+        if meta is None:
+            return None
+        return PresetRegistry._decorator_meta_to_spec(meta)
+
+    @staticmethod
+    def _decorator_meta_to_spec(meta: Any) -> PresetSpec:
+        """Convert decorator metadata to a PresetSpec for API compat."""
+        from app.presets.schema import (
+            CompatConfig,
+            IOConfig,
+            ModelSource,
+            OwnershipConfig,
+            PredictConfig,
+            PresetCompatibility,
+            RuntimeConfig,
+            RuntimeResources,
+            TrainConfig,
+        )
+
+        return PresetSpec(
+            id=meta.id,
+            name=meta.name,
+            version=meta.version,
+            description=meta.description,
+            tags=list(meta.tags),
+            deprecated=meta.deprecated,
+            trainable=meta.trainable,
+            model=ModelSource(
+                framework=meta.model.get("framework", "pytorch"),
+                architecture=meta.model.get("architecture", ""),
+                base_model=meta.model.get("base_model", ""),
+                num_classes=meta.model.get("num_classes"),
+                input=meta.model.get("input", {}),
+            ),
+            train=TrainConfig(entrypoint="", config={}),
+            predict=PredictConfig(entrypoint="", config={}),
+            runtime=RuntimeConfig(
+                queue=meta.queue,
+                resources=RuntimeResources(**meta.resources)
+                if isinstance(meta.resources, dict)
+                else RuntimeResources(),
+            ),
+            compatibility=PresetCompatibility(
+                dataset_types=list(meta.dataset_types),
+                task_types=list(meta.task_types),
+                prediction_targets=list(meta.prediction_targets),
+            ),
+            io=IOConfig(),
+            compat=CompatConfig(min_api_version=meta.compat_min_api_version),
+            ownership=OwnershipConfig(
+                team=meta.team,
+                maintainer=meta.maintainer,
+            ),
+        )
 
     def get_preset_hash(self, preset_id: str) -> str | None:
         """Return the content hash of a preset file, or None if not found."""

@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib
-import inspect
 import json
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import load_config
 from app.db.session import create_engine, create_session_factory
 from app.domain.models import ArtifactRef
+from app.presets._registry import get_preset, get_preset_meta
 from app.presets.registry import PresetRegistry
 from app.presets.runtime import DatasetRef, ModelRef, TrainContext, TrainResult
 from app.repositories.sql_repository import SqlRepository
@@ -24,9 +21,7 @@ from app.services.llm import OpenAICompatibleLlmClient
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 
 if TYPE_CHECKING:
-    from app.storage.interfaces import ArtifactStorage
-
-_DEFAULT_PRESETS_DIR = str(Path(__file__).resolve().parents[2] / "presets")
+    pass
 
 
 def _build_storage() -> Any:
@@ -57,82 +52,14 @@ def _build_llm_client() -> OpenAICompatibleLlmClient:
     )
 
 
-def _load_callable(ref: str) -> Any:
-    module_name, sep, attr_name = ref.partition(":")
-    if sep != ":" or not module_name or not attr_name:
-        raise ValueError(f"Invalid entrypoint reference: {ref}")
-    module = importlib.import_module(module_name)
-    return getattr(module, attr_name)
-
-
-async def _invoke_entrypoint(
-    fn: Any,  # dynamically loaded plugin entrypoint (class or callable via importlib)
+async def _invoke_trainer(
+    trainer: Any,
     ctx: TrainContext,
-    artifact_storage: ArtifactStorage | None = None,
-    embedding_client: EmbeddingClient | None = None,
-    llm_client: OpenAICompatibleLlmClient | None = None,
 ) -> TrainResult:
-    if inspect.isclass(fn):
-        ctor_kwargs = {
-            "artifact_storage": artifact_storage or _build_storage(),
-            "embedding_client": embedding_client or _build_embedding_client(),
-            "llm_client": llm_client or _build_llm_client(),
-        }
-        init_sig = inspect.signature(fn)
-        params = init_sig.parameters
-        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
-            trainer = fn(**ctor_kwargs)
-        else:
-            accepted = {k: v for k, v in ctor_kwargs.items() if k in params}
-            trainer = fn(**accepted)
-        if hasattr(trainer, "train"):
-            result = trainer.train(ctx)
-            if inspect.isawaitable(result):
-                result = await result
-            if isinstance(result, TrainResult):
-                return result
-            if isinstance(result, dict):
-                return TrainResult(
-                    model_uri=str(result.get("model_uri", "")),
-                    metrics=result.get("metrics", {})
-                    if isinstance(result.get("metrics", {}), dict)
-                    else {},
-                    artifact_uris=result.get("artifact_uris", [])
-                    if isinstance(result.get("artifact_uris", []), list)
-                    else [],
-                    metadata=result.get("metadata", {})
-                    if isinstance(result.get("metadata", {}), dict)
-                    else {},
-                )
-            raise TypeError("Trainer.train must return TrainResult or dict")
-        raise TypeError("Trainer class entrypoint must expose train(ctx)")
+    """Invoke trainer.train(ctx) and normalize the result to TrainResult."""
+    import inspect
 
-    if hasattr(fn, "fn"):
-        fn = fn.fn
-
-    train_method = getattr(fn, "train", None)
-    if callable(train_method):
-        result = train_method(ctx)
-        if inspect.isawaitable(result):
-            result = await result
-        if isinstance(result, TrainResult):
-            return result
-        if isinstance(result, dict):
-            return TrainResult(
-                model_uri=str(result.get("model_uri", "")),
-                metrics=result.get("metrics", {})
-                if isinstance(result.get("metrics", {}), dict)
-                else {},
-                artifact_uris=result.get("artifact_uris", [])
-                if isinstance(result.get("artifact_uris", []), list)
-                else [],
-                metadata=result.get("metadata", {})
-                if isinstance(result.get("metadata", {}), dict)
-                else {},
-            )
-        raise TypeError("Trainer.train must return TrainResult or dict")
-
-    result = fn(ctx)
+    result = trainer.train(ctx)
     if inspect.isawaitable(result):
         result = await result
     if isinstance(result, TrainResult):
@@ -150,7 +77,7 @@ async def _invoke_entrypoint(
             if isinstance(result.get("metadata", {}), dict)
             else {},
         )
-    raise TypeError("Training entrypoint must return TrainResult or dict")
+    raise TypeError("Trainer.train must return TrainResult or dict")
 
 
 async def _load_dataset_records(
@@ -209,29 +136,55 @@ async def run_training_pipeline(
         raise ValueError(f"Dataset not found: {dataset_id}")
     records, label_space = await _load_dataset_records(repo, dataset_id)
 
-    presets_dir = os.environ.get("PRESETS_DIR", _DEFAULT_PRESETS_DIR)
-    root = Path(presets_dir)
-    if not root.is_absolute():
-        root = (Path(__file__).resolve().parents[2] / presets_dir).resolve()
-    registry = PresetRegistry(str(root), strict=True)
-    registry.load()
-    preset = registry.get_preset(preset_id)
-    if preset is None:
+    # ---- new: decorator-based registry (no YAML, no string imports) ----
+    preset_cls = get_preset(preset_id)
+    if preset_cls is None:
         await engine.dispose()
         raise ValueError(f"Preset not found: {preset_id}")
-    validate_dataset_preset_training(dataset, preset)
 
-    entrypoint_ref = preset.train.entrypoint
-    fn = _load_callable(entrypoint_ref)
+    meta = get_preset_meta(preset_id)
+    if meta is None or not meta.trainable:
+        await engine.dispose()
+        raise ValueError(f"Preset is not trainable: {preset_id}")
+
+    # Build PresetSpec for trainer compat (trainers read ctx.preset.*)
+    preset_spec = PresetRegistry._decorator_meta_to_spec(meta)
+
+    validate_dataset_preset_training(dataset, preset_spec)
+
+    # ---- pipeline: load & transform records via preset ----
+    if hasattr(preset_cls, "pipeline"):
+        pipeline = preset_cls.pipeline()
+        if pipeline is not None and hasattr(pipeline, "load"):
+            dataset_ref = DatasetRef(
+                dataset_id=dataset_id,
+                label_space=label_space,
+                metadata={"records": records},
+            )
+            loaded = await pipeline.load(dataset_ref)
+            if isinstance(loaded, list):
+                records = loaded
+
+    # ---- trainer: instantiated via preset, not string import ----
+    trainer = preset_cls.train(
+        artifact_storage=artifact_storage or _build_storage(),
+        llm_client=llm_client or _build_llm_client(),
+        embedding_client=embedding_client or _build_embedding_client(),
+        config=meta,  # pass full meta for typed config access
+    )
+    if trainer is None:
+        await engine.dispose()
+        raise ValueError(f"Preset.train() returned None for preset: {preset_id}")
+
     ctx = TrainContext(
         job_id=job_id,
-        preset=preset,
+        preset=preset_spec,
         model_ref=ModelRef(
-            framework=preset.model.framework,
-            architecture=preset.model.architecture,
-            base_model=preset.model.base_model,
-            checkpoint=preset.model.checkpoint,
-            num_classes=preset.model.num_classes,
+            framework=meta.model.get("framework", "pytorch"),
+            architecture=meta.model.get("architecture", ""),
+            base_model=meta.model.get("base_model", ""),
+            checkpoint=meta.model.get("checkpoint"),
+            num_classes=meta.model.get("num_classes"),
         ),
         dataset_ref=DatasetRef(
             dataset_id=dataset_id,
@@ -239,27 +192,15 @@ async def run_training_pipeline(
             metadata={"records": records},
         ),
     )
-    if preset.io.adapter:
-        adapter_fn = _load_callable(preset.io.adapter)
-        adapter = adapter_fn() if inspect.isclass(adapter_fn) else adapter_fn
-        loaded = await adapter.load(ctx.dataset_ref)
-        if isinstance(loaded, list):
-            ctx.dataset_ref.metadata["records"] = loaded
 
-    train_result = await _invoke_entrypoint(
-        fn,
-        ctx,
-        artifact_storage=artifact_storage,
-        embedding_client=embedding_client,
-        llm_client=llm_client,
-    )
+    train_result = await _invoke_trainer(trainer, ctx)
     await engine.dispose()
     artifacts = [
         {
             "uri": train_result.model_uri,
             "kind": "model",
             "metadata": build_trained_model_metadata(
-                dataset, preset, train_result.metadata
+                dataset, preset_spec, train_result.metadata
             ),
         },
     ]
