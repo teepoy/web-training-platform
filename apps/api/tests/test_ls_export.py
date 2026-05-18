@@ -16,6 +16,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.sample_access_db_full import DbFullSampleAccess
 
 if TYPE_CHECKING:
     from app.domain.models import Dataset, Sample, Annotation
@@ -118,12 +119,16 @@ def test_export_with_ls_project() -> None:
         }
     )
 
+    sample_access_factory_mock = MagicMock()
+    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
             with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                        r = c.get(f"/api/v1/exports/{dataset.id}")
+                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
+                        with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
+                            r = c.get(f"/api/v1/exports/{dataset.id}")
 
     assert r.status_code == 200
     body = r.json()
@@ -159,10 +164,14 @@ def test_export_no_ls_project_returns_500() -> None:
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=dataset)
 
+    sample_access_factory_mock = MagicMock()
+    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
             with patch.object(main_module.container, "repository", return_value=repo_mock):
-                r = c.get(f"/api/v1/exports/{dataset.id}")
+                with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
+                    r = c.get(f"/api/v1/exports/{dataset.id}")
 
     assert r.status_code == 500
     assert "no Label Studio project" in r.json()["detail"]
@@ -189,11 +198,15 @@ def test_export_ls_db_failure_returns_502() -> None:
     ls_read_mock = AsyncMock()
     ls_read_mock.get_tasks_for_project = AsyncMock(side_effect=RuntimeError("LS DB connection refused"))
 
+    sample_access_factory_mock = MagicMock()
+    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
             with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    r = c.get(f"/api/v1/exports/{dataset.id}")
+                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
+                        r = c.get(f"/api/v1/exports/{dataset.id}")
 
     assert r.status_code == 502
     assert "Label Studio database read failed" in r.json()["detail"]
@@ -240,12 +253,16 @@ def test_export_persist_with_ls() -> None:
     artifacts_mock = AsyncMock()
     artifacts_mock.persist_dataset_export = AsyncMock(return_value="memory://exports/test.json")
 
+    sample_access_factory_mock = MagicMock()
+    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
             with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                        r = c.post(f"/api/v1/exports/{dataset.id}/persist")
+                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
+                        with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
+                            r = c.post(f"/api/v1/exports/{dataset.id}/persist")
 
     assert r.status_code == 200
     body = r.json()

@@ -21,7 +21,6 @@ from app.domain.models import (
     User,
 )
 from app.routers._common import get_container
-from app.services.dataset_capability_guard import assert_not_sparse
 
 router = APIRouter(prefix="/api/v1", tags=["agent"])
 _logger = logging.getLogger(__name__)
@@ -126,7 +125,12 @@ async def query_dataset_data(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     if body.query_type == "wafer-points":
-        assert_not_sparse(dataset)
+        access = c.sample_access_factory().create(dataset.storage_mode)
+        if not access.capabilities().get("can_list_samples"):
+            raise HTTPException(
+                status_code=409,
+                detail="Wafer points query is not supported for this dataset's storage mode",
+            )
 
     from app.agent.tools import execute_query_data
 

@@ -155,6 +155,7 @@ def test_sync_annotations_to_ls() -> None:
 
     import app.main as main_module
     from app.domain.models import Annotation, Dataset, Sample
+    from app.services.sample_access_db_full import DbFullSampleAccess
     from datetime import datetime, UTC
     from uuid import uuid4
 
@@ -186,11 +187,16 @@ def test_sync_annotations_to_ls() -> None:
     repo_mock.list_samples = AsyncMock(return_value=([mock_sample], 1))
     repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[mock_ann])
 
+    access_mock = DbFullSampleAccess(repo_mock)
+    factory_mock = MagicMock()
+    factory_mock.create = MagicMock(return_value=access_mock)
+
     with TestClient(app) as c:
         with patch.object(main_module.container, "config", return_value=mock_config):
             with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
                 with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+                    with patch.object(main_module.container, "sample_access_factory", return_value=factory_mock):
+                        r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
 
     assert r.status_code == 200
     body = r.json()

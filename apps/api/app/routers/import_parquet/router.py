@@ -10,11 +10,11 @@ from pyarrow import Table as ArrowTable
 from app.api.deps import get_current_org, get_current_user
 from app.api.schemas import BulkCreateSampleItem, BulkCreateSampleResponse
 from app.container import Container
-from app.domain.models import Annotation, Organization, Sample, User
+from app.domain.models import Annotation, Organization, Sample, User, SPARSE_NO_LS
 from app.domain.types import TaskType
 from app.repositories.sql_repository import SqlRepository
-from app.services.dataset_capability_guard import assert_not_sparse
 from app.services.label_studio import LabelStudioClient, platform_annotation_to_ls
+from app.services.sample_access_factory import SampleAccessFactory
 
 router = APIRouter(prefix="/api/v1/plugins/import-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
@@ -141,6 +141,9 @@ async def import_parquet(
     ls_client: Annotated[
         LabelStudioClient, Depends(Provide[Container.label_studio_client])
     ],
+    sample_factory: Annotated[
+        SampleAccessFactory, Depends(Provide[Container.sample_access_factory])
+    ],
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -148,8 +151,8 @@ async def import_parquet(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
-    if not dataset.ls_project_id:
+    access = sample_factory.create(dataset.storage_mode)
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot create sample.",
@@ -215,7 +218,7 @@ async def import_parquet(
         )
         for idx, item in enumerate(items)
     ]
-    created = await repo.create_samples(samples)
+    created = await access.create_samples(samples)
 
     for idx, item in enumerate(items):
         if item.label is None:

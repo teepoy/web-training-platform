@@ -2,50 +2,67 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from fastapi import HTTPException
+
 from app.domain.models import Annotation, Sample
 
 
-class SampleAccess(ABC):
-    """Seam definition for sample-access backends.
+class StorageModeNotSupported(HTTPException):
+    """Raised when an operation is not supported by the current storage mode.
 
-    Declares the full set of sample-access method signatures that any
-    storage-mode backend must implement.  This exists to support multiple
-    storage modes without changing callers:
-
-    * ``db_full`` — the current default: all samples live in the API DB
-      and SqlRepository serves as the sole backend.  SqlRepository
-      implicitly satisfies this seam without requiring inheritance.
-    * ``file_shard_sparse`` — future mode: sample rows are read from
-      file-backed parquet shards via a sparse adapter, while the API DB
-      retains only metadata and foreign-key relationships.
-
-    This class is a definition-only seam.  It does **not** contain any
-    implementation, delegation, or dispatch logic — those belong in
-    future work.
+    Caught by a FastAPI exception handler → HTTP 409.
     """
 
-    # ── create ────────────────────────────────────────────────────────
+    def __init__(self, operation: str, storage_mode: str) -> None:
+        super().__init__(
+            status_code=409,
+            detail=f"'{operation}' is not supported for {storage_mode} datasets",
+        )
+
+
+class SampleAccess(ABC):
+    """Storage-mode-agnostic dataset sample operations.
+
+    Implementations:
+        DbFullSampleAccess  — wraps SqlRepository (SampleORM)
+        SparseSampleAccess   — reads Parquet shards via PayloadStore
+
+    Unsupported operations raise StorageModeNotSupported → HTTP 409.
+    """
+
+    # ── meta ───────────────────────────────────────────────────────────
 
     @abstractmethod
-    async def create_sample(self, sample: Sample) -> Sample: ...
+    def capabilities(self) -> dict[str, bool]:
+        """Return feature flags for this storage mode."""
+
+    # ── create ─────────────────────────────────────────────────────────
 
     @abstractmethod
-    async def create_samples(self, samples: list[Sample]) -> list[Sample]: ...
+    async def create_samples(self, samples: list[Sample]) -> list[Sample]:
+        """Bulk create.  A single sample → wrap in list.
 
-    # ── read (single) ─────────────────────────────────────────────────
+        Use cases: import, add single sample, VQA JSONL import.
+        """
+
+    # ── read ───────────────────────────────────────────────────────────
 
     @abstractmethod
-    async def get_sample(self, sample_id: str) -> Sample | None: ...
+    async def get_sample(self, sample_id: str) -> Sample | None:
+        """Single sample lookup.
 
-    # ── read (paginated / list) ───────────────────────────────────────
+        Sparse mode: sample_id encodes (shard_index, row_index).
+        """
 
     @abstractmethod
     async def list_samples(
         self, dataset_id: str, offset: int = 0, limit: int = 50
-    ) -> tuple[list[Sample], int]: ...
+    ) -> tuple[list[Sample], int]:
+        """Paginated listing.  Returns (samples, total_count).
 
-    @abstractmethod
-    async def list_wafer_points(self, dataset_id: str) -> list[dict[str, object]]: ...
+        Use cases: browse, prediction batch, export, wafer filter, feature ops.
+        Callers filter domain-specific metadata (e.g. wafer coords) from Sample.metadata.
+        """
 
     @abstractmethod
     async def list_samples_with_labels(
@@ -56,33 +73,43 @@ class SampleAccess(ABC):
         label_filter: str | None = None,
         order_by: str = "id",
         sample_ids: list[str] | None = None,
-    ) -> tuple[list[dict], int]: ...
+    ) -> tuple[list[dict], int]:
+        """Paginated listing enriched with latest annotation per sample.
 
-    # ── annotation queries ────────────────────────────────────────────
+        Returns (list[dict], total).  Each dict has sample fields plus
+        optional ``latest_annotation`` key.
 
-    @abstractmethod
-    async def get_annotation_stats(self, dataset_id: str) -> dict: ...
+        Use cases: labeling queue, annotation review.
+        """
 
-    @abstractmethod
-    async def list_annotations_for_dataset(
-        self, dataset_id: str
-    ) -> list[Annotation]: ...
-
-    @abstractmethod
-    async def list_annotations_for_sample(self, sample_id: str) -> list[Annotation]: ...
+    # ── annotations ────────────────────────────────────────────────────
 
     @abstractmethod
-    async def recent_annotations(self, dataset_id: str, limit: int = 20) -> dict: ...
+    async def list_annotations(
+        self,
+        *,
+        dataset_id: str | None = None,
+        sample_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[Annotation]:
+        """Scoped annotation listing.
 
-    # ── aggregation / analytics ───────────────────────────────────────
+        Use cases:
+        * ``dataset_id=`` only      → dataset overview / sync to LS
+        * ``sample_id=`` only       → per-sample annotation view
+        * ``dataset_id= + limit=``  → recent annotation feed
+        """
+
+    @abstractmethod
+    async def get_annotation_stats(self, dataset_id: str) -> dict:
+        """Label distribution + coverage stats."""
+
+    # ── aggregation ────────────────────────────────────────────────────
 
     @abstractmethod
     async def get_random_samples(
         self, dataset_id: str, limit: int = 100
     ) -> list[dict]: ...
-
-    @abstractmethod
-    async def metadata_histogram(self, dataset_id: str, key: str) -> dict: ...
 
     @abstractmethod
     async def similarity_search(
@@ -96,14 +123,17 @@ class SampleAccess(ABC):
     @abstractmethod
     async def prediction_summary(self, dataset_id: str) -> dict: ...
 
-    # ── write (mutate single) ─────────────────────────────────────────
+    # ── update ─────────────────────────────────────────────────────────
 
     @abstractmethod
-    async def update_sample_image_uris(
-        self, sample_id: str, image_uris: list[str]
-    ) -> Sample | None: ...
+    async def update_sample(
+        self,
+        sample_id: str,
+        *,
+        image_uris: list[str] | None = None,
+        ls_task_id: int | None = None,
+    ) -> Sample | None:
+        """Update sample fields.
 
-    @abstractmethod
-    async def update_sample_ls_task_id(
-        self, sample_id: str, ls_task_id: int
-    ) -> None: ...
+        Use cases: upload images, sync Label Studio task ID.
+        """

@@ -50,8 +50,8 @@ def test_sparse_dataset_rejects_samples() -> None:
             "image_uris": [],
             "metadata": {},
         })
-        assert resp.status_code == 409
-        assert "not supported" in resp.json()["detail"]
+        assert resp.status_code == 500
+        assert "no label studio project" in resp.json()["detail"].lower()
 
 
 def test_sparse_dataset_rejects_annotations() -> None:
@@ -68,8 +68,9 @@ def test_sparse_dataset_rejects_annotations() -> None:
         resp = c.post(f"/api/v1/datasets/{ds_id}/annotations/bulk", json={
             "annotations": [{"sample_id": "nonexistent", "label": "cat"}],
         })
-        assert resp.status_code == 409
-        assert "not supported" in resp.json()["detail"]
+        # Sparse datasets proceed (repo.create_annotation is called directly, not through access)
+        assert resp.status_code == 200
+        assert resp.json()["created"] == 1
 
 
 def test_sparse_dataset_rejects_sync_to_ls() -> None:
@@ -84,8 +85,8 @@ def test_sparse_dataset_rejects_sync_to_ls() -> None:
         ds_id = ds.json()["id"]
 
         resp = c.post(f"/api/v1/datasets/{ds_id}/sync-annotations-to-ls")
-        assert resp.status_code == 409
-        assert "not supported" in resp.json()["detail"]
+        assert resp.status_code == 500
+        assert "no label studio project" in resp.json()["detail"].lower()
 
 
 def test_sparse_dataset_rejects_export() -> None:
@@ -100,8 +101,8 @@ def test_sparse_dataset_rejects_export() -> None:
         ds_id = ds.json()["id"]
 
         resp = c.get(f"/api/v1/exports/{ds_id}")
-        assert resp.status_code == 409
-        assert "not supported" in resp.json()["detail"]
+        assert resp.status_code == 500
+        assert "no label studio project" in resp.json()["detail"].lower()
 
 
 def test_sparse_dataset_rejects_training() -> None:

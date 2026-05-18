@@ -28,6 +28,7 @@ from app.services.preview_upstream import (
     UpstreamAdapter,
 )
 from app.services.preview_upstream_s3 import S3ZipPreviewUpstream
+from app.services.sample_access_factory import SampleAccessFactory
 from app.services.sensor_dispatch import SensorDispatchService
 from app.services.service_health import ServiceHealthService
 from app.services.task_tracker import TaskTrackerService
@@ -85,6 +86,10 @@ class Container(InfraContainer):
         prefect_client=prefect_client,
     )
 
+    sample_access_factory = providers.Factory(
+        SampleAccessFactory,
+        repo=InfraContainer.repository,
+    )
     service_health = providers.Singleton(
         ServiceHealthService,
         config=InfraContainer.config,

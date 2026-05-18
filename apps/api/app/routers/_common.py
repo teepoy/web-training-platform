@@ -32,17 +32,16 @@ def _make_ls_image_url(uri: str) -> str:
 
 
 def _with_ls_url(dataset: Dataset) -> Dataset:
-    """Compute ls_project_url at response time from config.
-
-    Uses external_url (browser-facing) if available, falls back to url (internal).
-    Sparse datasets use a sentinel ``ls_project_id`` — no LS URL is returned.
-    """
+    """Compute ls_project_url and capabilities at response time."""
     from app.domain.models import SPARSE_NO_LS
+
+    c = get_container()
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    dataset = dataset.model_copy(update={"capabilities": access.capabilities()})
 
     if dataset.ls_project_id == SPARSE_NO_LS:
         return dataset
-    cfg = get_container().config()
-    # Prefer external_url for browser access, fall back to internal url
+    cfg = c.config()
     ls_url = str(cfg.label_studio.external_url or cfg.label_studio.url).rstrip("/")
     if dataset.ls_project_id and ls_url:
         return dataset.model_copy(

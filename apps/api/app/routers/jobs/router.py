@@ -39,7 +39,6 @@ from app.services.compatibility import (
     validate_dataset_preset_training,
     UPLOAD_TEMPLATE_DEFINITIONS,
 )
-from app.services.dataset_capability_guard import assert_not_sparse
 
 router = APIRouter(prefix="/api/v1", tags=["jobs"])
 _logger = logging.getLogger(__name__)
@@ -89,7 +88,12 @@ async def create_training_job(
     dataset = await c.repository().get_dataset(payload.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    if not access.capabilities().get("can_train"):
+        raise HTTPException(
+            status_code=409,
+            detail="Training is not supported for this dataset's storage mode",
+        )
     registry = c.preset_registry()
     preset = registry.get_preset(payload.preset_id)
     if preset is None:
@@ -682,7 +686,12 @@ async def save_review_annotations(
     dataset = await c.repository().get_dataset(action.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    if not access.capabilities().get("can_annotate"):
+        raise HTTPException(
+            status_code=409,
+            detail="Saving review annotations is not supported for this dataset's storage mode",
+        )
     try:
         items = [item.model_dump() for item in payload.items]
         (
@@ -880,7 +889,12 @@ async def extract_features(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    if not access.capabilities().get("can_train"):
+        raise HTTPException(
+            status_code=409,
+            detail="Feature extraction is not supported for this dataset's storage mode",
+        )
 
     embed_model: str = (dataset.embed_config or {}).get(
         "model", "openai/clip-vit-base-patch32"

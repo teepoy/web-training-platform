@@ -54,6 +54,7 @@ from app.domain.models import (
     Dataset,
     Organization,
     Sample,
+    SPARSE_NO_LS,
     User,
 )
 from app.domain.types import DatasetStorageMode, TaskType
@@ -63,7 +64,6 @@ from app.routers._common import (
     _with_ls_url,
     get_container,
 )
-from app.services.dataset_capability_guard import assert_not_sparse
 from app.services.dataset_payload_store import DatasetPayloadStore
 from app.services.label_studio import (
     LabelStudioNotFoundError,
@@ -98,8 +98,6 @@ async def create_dataset(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-
-    from app.domain.models import SPARSE_NO_LS
 
     if payload.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
         ls_project_id = SPARSE_NO_LS
@@ -349,8 +347,8 @@ async def create_sample(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
-    if not dataset.ls_project_id:
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot create sample.",
@@ -381,8 +379,8 @@ async def create_sample(
         metadata=payload.metadata,
         ls_task_id=int(ls_task_id),  # type: ignore[arg-type]
     )
-    sample = await c.repository().create_sample(sample)
-    return sample
+    created = await access.create_samples([sample])
+    return created[0]
 
 
 @router.post(
@@ -399,8 +397,8 @@ async def import_samples(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
-    if not dataset.ls_project_id:
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot create sample.",
@@ -444,7 +442,7 @@ async def import_samples(
         )
         for idx, item in enumerate(payload.items)
     ]
-    created = await c.repository().create_samples(samples)
+    created = await access.create_samples(samples)
 
     for idx, item in enumerate(payload.items):
         if item.label is None:
@@ -487,10 +485,10 @@ async def import_vqa_samples(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
     if dataset.task_spec.task_type != TaskType.VQA:
         raise HTTPException(status_code=400, detail="dataset task_type must be 'vqa'")
-    if not dataset.ls_project_id:
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500, detail="Dataset has no Label Studio project"
         )
@@ -535,7 +533,7 @@ async def import_vqa_samples(
                 metadata=metadata,  # type: ignore
                 ls_task_id=int(ls_task_id),  # type: ignore[arg-type]
             )
-            await c.repository().create_sample(sample)
+            await access.create_samples([sample])
             imported += 1
         except Exception as exc:
             failed += 1
@@ -561,10 +559,8 @@ async def list_samples(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
-    items, total = await c.repository().list_samples(
-        dataset_id, offset=offset, limit=limit
-    )
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    items, total = await access.list_samples(dataset_id, offset=offset, limit=limit)
     return PaginatedResponse(items=items, total=total)
 
 
@@ -585,8 +581,8 @@ async def list_samples_with_labels_endpoint(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    assert_not_sparse(dataset)
-    items, total = await c.repository().list_samples_with_labels(
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    items, total = await access.list_samples_with_labels(
         dataset_id=dataset_id,
         offset=offset,
         limit=limit,
@@ -611,8 +607,8 @@ async def get_annotation_stats(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    assert_not_sparse(dataset)
-    stats = await c.repository().get_annotation_stats(dataset_id)
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    stats = await access.get_annotation_stats(dataset_id)
     return DatasetAnnotationStats(**stats)
 
 
@@ -767,7 +763,7 @@ async def bulk_create_annotations(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)  # noqa: F841
     created = 0
     for item in payload.annotations:
         ann = Annotation(
@@ -794,17 +790,17 @@ async def sync_annotations_to_ls(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
 
-    if not dataset.ls_project_id:
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot sync annotations.",
         )
 
-    samples, _ = await c.repository().list_samples(dataset_id, limit=100_000)
+    samples, _ = await access.list_samples(dataset_id, limit=100_000)
     sample_map = {s.id: s for s in samples}
-    annotations = await c.repository().list_annotations_for_dataset(dataset_id)
+    annotations = await access.list_annotations(dataset_id=dataset_id)
 
     synced_count = 0
     errors: list[str] = []
@@ -847,9 +843,9 @@ async def _build_export_data(dataset_id: str):
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)
 
-    if not dataset.ls_project_id:
+    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot export.",
@@ -858,7 +854,7 @@ async def _build_export_data(dataset_id: str):
     try:
         ls_read = c.ls_read_repository()
 
-        all_samples, _ = await repo.list_samples(dataset_id, limit=100_000)
+        all_samples, _ = await access.list_samples(dataset_id, limit=100_000)
         task_id_to_sample: dict[int, Sample] = {
             s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
         }
@@ -949,7 +945,7 @@ async def similarity_search(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)  # noqa: F841
     sample = await c.repository().get_sample(sample_id)
     if sample is None or sample.dataset_id != dataset_id:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -968,8 +964,8 @@ async def selection_metrics(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
-    samples, _ = await c.repository().list_samples(dataset_id, limit=100_000)
+    access = c.sample_access_factory().create(dataset.storage_mode)
+    samples, _ = await access.list_samples(dataset_id, limit=100_000)
     sample_ids = [s.id for s in samples]
     fs = c.feature_ops()
     return {
@@ -990,7 +986,7 @@ async def uncovered_hints(
     dataset = await c.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    assert_not_sparse(dataset)
+    access = c.sample_access_factory().create(dataset.storage_mode)  # noqa: F841
     return await c.feature_ops().uncovered_cluster_hints(dataset_id)
 
 
@@ -1084,5 +1080,8 @@ async def upload_sample_image(
     existing_uris = list(sample.image_uris or [])
     index = len(existing_uris)
     updated_uris = existing_uris + [uri]
-    await c.repository().update_sample_image_uris(sample_id, updated_uris)
+    dataset = await c.repository().get_dataset(sample.dataset_id)
+    if dataset is not None:
+        session_access = c.sample_access_factory().create(dataset.storage_mode)
+        await session_access.update_sample(sample_id, image_uris=updated_uris)
     return UpdateSampleImageResponse(uri=uri, sample_id=sample_id, index=index)
