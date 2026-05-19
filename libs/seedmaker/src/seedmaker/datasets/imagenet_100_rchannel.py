@@ -113,6 +113,14 @@ def run(args, runner: SeedRunner) -> int:
         args.max_samples if args.max_samples is not None else MAX_SAMPLES_DEFAULT
     )
 
+    # Check for existing samples before attempting HF download
+    existing = runner._existing_sample_count()
+    if existing > 0:
+        print(f"  Dataset already has {existing} samples, skipping HF download.")
+        runner._sample_count = existing
+        runner.summary()
+        return 0
+
     print("[6/6] Streaming ImageNet-1K train split (first 100 classes) ...")
     try:
         from datasets import load_dataset  # type: ignore[import-untyped]
@@ -123,8 +131,28 @@ def run(args, runner: SeedRunner) -> int:
         )
         sys.exit(1)
 
-    t0 = time.time()
-    hf = load_dataset("ILSVRC/imagenet-1k", split="train", streaming=True)
+    import os
+
+    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    load_kwargs: dict = {"split": "train", "streaming": True}
+    if hf_token:
+        load_kwargs["token"] = hf_token
+
+    try:
+        t0 = time.time()
+        hf = load_dataset("ILSVRC/imagenet-1k", **load_kwargs)
+    except Exception as exc:
+        msg = str(exc)
+        if "gated" in msg.lower() or "authenticated" in msg.lower():
+            print(
+                "  SKIPPING: ILSVRC/imagenet-1k is a gated dataset on HuggingFace Hub.\n"
+                "  Set HF_TOKEN env var and accept the license at: "
+                "https://huggingface.co/datasets/ILSVRC/imagenet-1k\n"
+                "  Then re-run this command."
+            )
+            runner.summary()
+            return 0
+        raise
 
     r_channels: list[Image.Image] = []
     labels: list[int] = []
