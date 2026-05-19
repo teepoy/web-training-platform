@@ -141,6 +141,9 @@ const menuOptions = [
   { label: 'Schedules', key: '/schedules' },
   { label: 'Sensors', key: '/sensors' },
   { label: 'Settings', key: '/settings' },
+  ...(import.meta.env.DEV
+    ? ([{ label: 'Sandbox', key: '/sandbox' }] as const)
+    : []),
 ]
 
 const userInitials = computed(() =>

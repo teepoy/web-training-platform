@@ -160,6 +160,13 @@ seed-mock-multi-image: ## Seed 100K-sample multi-image mock dataset (delegates t
 .PHONY: mock-multi-image
 mock-multi-image: seed-mock-multi-image ## Alias for seed-mock-multi-image
 
+.PHONY: seed-imagenet-100-rchannel
+seed-imagenet-100-rchannel: ## Seed ImageNet-100 R-Channel dataset with 10K multi-image samples (delegates to unified CLI)
+	$(MAKE) seed ARGS="imagenet-100-rchannel $(ARGS)"
+
+.PHONY: imagenet-100-rchannel
+imagenet-100-rchannel: seed-imagenet-100-rchannel ## Alias for seed-imagenet-100-rchannel
+
 .PHONY: smoke-dev-batch
 smoke-dev-batch: ## Run batch dev smoke test against seeded local stack
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
@@ -247,6 +254,7 @@ ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mod
 ensure-sandbox-datasets: wait-api ## Seed demo datasets for the /sandbox dev route
 	$(MAKE) seed ARGS="wafer-demo --samples 2000 $(ARGS)"
 	$(MAKE) seed ARGS="multi-image-scatter --samples 18 $(ARGS)"
+	$(MAKE) seed ARGS="imagenet-100-rchannel --max-samples 200 --no-model $(ARGS)"
 
 .PHONY: updev
 updev: ## Start compose backend + local Vite frontend with hot reload
