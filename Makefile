@@ -8,6 +8,7 @@ API_DIR     := apps/api
 WEB_DIR     := apps/web
 SDK_DIR     := libs/python-sdk
 COMPOSE     := infra/compose/docker-compose.yaml
+OPENAPI_SPEC := openapi/openapi.yaml
 API_PORT    ?= 8000
 API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
@@ -80,6 +81,21 @@ test-api: ## Run API tests
 .PHONY: build-web
 build-web: ## Build frontend for production
 	cd $(WEB_DIR) && pnpm build
+
+.PHONY: generate-api-models
+generate-api-models: ## Generate backend transport models from openapi/openapi.yaml
+	cd $(API_DIR) && uv run --extra dev datamodel-codegen --input ../../$(OPENAPI_SPEC) --input-file-type openapi --output-datetime-class datetime --output app/generated/openapi_models.py
+
+.PHONY: generate-web-types
+generate-web-types: ## Generate frontend transport types from openapi/openapi.yaml
+	cd $(WEB_DIR) && pnpm generate:openapi-types
+
+.PHONY: generate-openapi-artifacts
+generate-openapi-artifacts: generate-api-models generate-web-types ## Generate backend/frontend transport artifacts
+
+.PHONY: check-openapi-sync
+check-openapi-sync: ## Check FastAPI route schema against openapi/openapi.yaml
+	cd $(API_DIR) && APP_CONFIG_PROFILE=test uv run python ../../scripts/check_openapi_sync.py
 
 .PHONY: docs-build
 docs-build: ## Build the MkDocs documentation site

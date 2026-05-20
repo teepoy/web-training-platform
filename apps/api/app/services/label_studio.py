@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
+from pydantic import BaseModel
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -105,7 +107,7 @@ class LabelStudioClient:
     """
 
     def __init__(self, url: str, api_key: str) -> None:
-        from label_studio_sdk import LabelStudio  # type: ignore[import]
+        from label_studio_sdk.client import LabelStudio  # type: ignore[import]
 
         self._client = LabelStudio(base_url=url, api_key=api_key)
 

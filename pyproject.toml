@@ -16,3 +16,13 @@ members = [
 
 [dependency-groups]
 dev = ["grpcio-tools>=1.80.0", "mkdocs>=1.6.1"]
+
+[tool.ty.src]
+exclude = [
+  "apps/api/app/generated/**",
+  "apps/api/tests/**",
+  "apps/api/alembic/**",
+]
+
+[tool.ruff]
+exclude = ["apps/api/app/generated/", "apps/api/tests/", "apps/api/alembic/"]

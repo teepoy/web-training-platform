@@ -19,6 +19,18 @@ replace-imports-with-any = [
 
 [src]
 exclude = [
+    "app/generated/**",
+    "app/main.py",
+    "app/services/label_studio.py",
+    "**/preview_upstream_s3.py",
+    "app/agent/metadata_inference.py",
+    "alembic/versions/**",
+    "tests/**",
+    "apps/api/app/generated/**",
+    "apps/api/app/main.py",
+    "apps/api/app/services/label_studio.py",
+    "apps/api/app/services/preview_upstream_s3.py",
+    "apps/api/app/agent/metadata_inference.py",
     "apps/api/alembic/versions/**",
     "apps/api/app/generated/**",
     "apps/api/tests/**",

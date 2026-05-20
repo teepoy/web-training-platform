@@ -23,7 +23,10 @@ nav:
       - Sensor Pub/Sub: architecture/sensor-pubsub.md
       - Task Tracker: architecture/task-tracker.md
   - Guides:
+      - Schema-first OpenAPI: guides/schema-first-openapi.md
       - Extension Guide: guides/extension-guide.md
+      - Plugin Extension Guide: guides/plugin-extension-guide.md
+      - Sidebar Extension Guide: guides/sidebar-extension-guide.md
       - Preview Dataset Mode: guides/preview-dataset-mode.md
       - Export Bundle: guides/export-bundle.md
   - Reference:
