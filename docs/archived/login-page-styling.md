@@ -14,7 +14,7 @@ The login page input fields have a pure white background color despite Naive UI 
 
 ## Example DOM Structure
 ```html
-<div class="n-input n-input--medium-size n-input--resizable n-input--stateful" 
+<div class="n-input n-input--medium-size n-input--resizable n-input--stateful"
      style="--n-color: rgba(255, 255, 255, 0.1); ...">
   <div class="n-input-wrapper">
     <div class="n-input__input">

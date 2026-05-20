@@ -591,6 +591,7 @@ class SqlRepository:
                     id=annotation.id,
                     sample_id=annotation.sample_id,
                     label=annotation.label,
+                    annotation_value=annotation.annotation_value,
                     created_by=annotation.created_by,
                     created_at=annotation.created_at,
                     user_id=user_id,
@@ -612,6 +613,7 @@ class SqlRepository:
                     id=r.id,
                     sample_id=r.sample_id,
                     label=r.label,
+                    annotation_value=r.annotation_value,
                     created_by=r.created_by,
                     created_at=r.created_at,
                 )
@@ -627,6 +629,7 @@ class SqlRepository:
                     id=r.id,
                     sample_id=r.sample_id,
                     label=r.label,
+                    annotation_value=r.annotation_value,
                     created_by=r.created_by,
                     created_at=r.created_at,
                 )
@@ -642,6 +645,7 @@ class SqlRepository:
                 id=row.id,
                 sample_id=row.sample_id,
                 label=row.label,
+                annotation_value=row.annotation_value,
                 created_by=row.created_by,
                 created_at=row.created_at,
             )
@@ -659,6 +663,7 @@ class SqlRepository:
                 id=row.id,
                 sample_id=row.sample_id,
                 label=row.label,
+                annotation_value=row.annotation_value,
                 created_by=row.created_by,
                 created_at=row.created_at,
             )

@@ -140,6 +140,7 @@ class AnnotationORM(Base):
         ForeignKey("samples.id", ondelete="CASCADE"), nullable=False
     )
     label: Mapped[str] = mapped_column(String(255), nullable=False)
+    annotation_value: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False

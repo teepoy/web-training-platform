@@ -15,16 +15,17 @@ nav:
   - Home: index.md
   - Architecture:
       - Overview: architecture/overview.md
-      - Prefect Training Delegation: architecture/prefect-training-delegation.md
-      - Cron Scheduling: architecture/cron-scheduling.md
+      - System Design Diagram: architecture/system-design-diagram.md
+      - Runtime Contract: architecture/runtime-contract.md
       - Sample Browser: architecture/sample-browser.md
+      - Datasets Shim Architecture: architecture/datasets-shim-architecture.md
+      - Dataset Storage Modes: architecture/dataset-storage-modes.md
+      - Sensor Pub/Sub: architecture/sensor-pubsub.md
       - Task Tracker: architecture/task-tracker.md
   - Guides:
       - Extension Guide: guides/extension-guide.md
-      - Sidebar Extension Guide: guides/sidebar-extension-guide.md
       - Preview Dataset Mode: guides/preview-dataset-mode.md
       - Export Bundle: guides/export-bundle.md
-      - Smoke Test Checklist: guides/smoke-test.md
   - Reference:
       - API Endpoints: reference/api-endpoints.md
       - Dataset Model Compatibility: reference/dataset-model-compatibility.md
@@ -32,9 +33,11 @@ nav:
       - OpenCode Skills: reference/opencode-skills.md
   - Protocols:
       - Agent Display Protocol: protocols/agent-display-protocol.md
-      - Dynamic Sidebar Widget Contract: protocols/dynamic-sidebar-widget-contract.md
       - Table Widget Interaction Protocol: protocols/table-widget-interaction-protocol.md
-  - Plans:
-      - Runtime De-stubbing Plan: plans/runtime-destub-implementation-plan.md
-  - Issues:
-      - Login Page Styling: issues/login-page-styling.md
+  - Observability:
+      - Metrics & Logging Conventions: observability/metrics-and-logs-conventions.md
+      - Operational Runbook: observability/runbook.md
+  - Archived:
+      - MCP Server: archived/mcp-server.md
+      - Login Page Styling Issue: archived/login-page-styling.md
+      - Runtime De-stubbing Plan: archived/runtime-destub-implementation-plan.md

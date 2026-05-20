@@ -13,8 +13,8 @@ The `prefect-worker` is a **CPU-only** Prefect V2 process worker. It:
 - never uses CUDA, never requests GPU resources, never executes GPU workloads locally
 
 GPU runtime execution (training, prediction, embedding) is handled by the separate
-`gpu-worker` service. See `docs/architecture/prefect-training-delegation.md` for
-the full topology.
+`gpu-worker` service. See [`docs/architecture/overview.md`](../../docs/architecture/overview.md) and
+[`docs/architecture/runtime-contract.md`](../../docs/architecture/runtime-contract.md) for the full topology and contract.
 
 ## Image
 
@@ -25,5 +25,5 @@ environment variables.
 ## Related
 
 - GPU worker: `apps/inference/` (evolving into the GPU runtime API)
-- Architecture: `docs/architecture/prefect-training-delegation.md`
+- Architecture: `docs/architecture/overview.md`, `docs/architecture/runtime-contract.md`
 - Observability: `docs/observability/`

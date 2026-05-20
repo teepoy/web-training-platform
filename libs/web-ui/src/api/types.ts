@@ -665,8 +665,8 @@ export interface UpdateScheduleBody {
 // ---------------------------------------------------------------------------
 // Type aliases
 // ---------------------------------------------------------------------------
-export type TaskType = "classification" | "vqa";
-export type DatasetType = "image_classification" | "image_vqa";
+export type TaskType = "classification" | "vqa" | "detection";
+export type DatasetType = "image_classification" | "image_vqa" | "image_detection";
 export type DatasetStorageMode = "db_full" | "file_shard_sparse";
 export type ModelFramework = "pytorch" | "dspy";
 export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";

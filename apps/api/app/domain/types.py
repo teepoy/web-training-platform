@@ -6,6 +6,7 @@ from enum import Enum
 class TaskType(str, Enum):
     CLASSIFICATION = "classification"
     VQA = "vqa"
+    DETECTION = "detection"
 
 
 class DatasetStorageMode(str, Enum):
@@ -16,6 +17,7 @@ class DatasetStorageMode(str, Enum):
 class DatasetType(str, Enum):
     IMAGE_CLASSIFICATION = "image_classification"
     IMAGE_VQA = "image_vqa"
+    IMAGE_DETECTION = "image_detection"
 
 
 class ModelFramework(str, Enum):

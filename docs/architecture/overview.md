@@ -67,7 +67,7 @@ Prometheus avoids high-cardinality labels (job IDs, dataset IDs, user IDs). Thos
 - **Non-GPU degradation**: On macOS/non-NVIDIA, GPU worker reports `gpu_info.available: false` but stack remains operational
 - **GPU worker crash**: Jobs active during crash are marked as failed or lost; no automatic recovery in V1
 
-Full runtime delegation design is documented in `prefect-training-delegation.md`. Observability configuration is in `docs/observability/`.
+Full runtime contract is documented in [`runtime-contract.md`](runtime-contract.md). Observability configuration is in [`observability/`](../observability/metrics-and-logs-conventions.md).
 
 ## Core design choices
 
@@ -104,7 +104,9 @@ Full runtime delegation design is documented in `prefect-training-delegation.md`
 
 ## Prefect Delegation
 
-- Prefect-based training delegation is documented in `prefect-training-delegation.md`.
 - The target model separates API orchestration from Prefect flow workers (CPU-only) and the GPU worker (runtime execution).
-- The Prefect worker orchestrates flows and delegates GPU work to the GPU worker via HTTP API calls.
+- The `prefect-worker` consumes CPU queues and delegates GPU work to the `gpu-worker` via HTTP API calls.
 - CPU-only flows (DSPy optimization, dataset drain) execute directly in the Prefect worker.
+- The runtime uses two Docker images: `apps/inference/Dockerfile` (GPU worker) and `apps/worker/Dockerfile.cpu` (Prefect worker).
+- Cron-scheduled deployments are created through the API and consumed by the Prefect worker.
+- Full contract: [`runtime-contract.md`](runtime-contract.md).

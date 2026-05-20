@@ -77,6 +77,7 @@ class Annotation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     sample_id: str
     label: str
+    annotation_value: dict | list | None = None
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

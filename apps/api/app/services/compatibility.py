@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from app.domain import schema_registry
+from app.domain import schemas as _schemas  # noqa: F401 — triggers schema auto-registration
 from app.domain.models import Dataset
 from app.domain.types import DatasetType, TaskType
 from app.presets.schema import PresetSpec
@@ -17,9 +19,16 @@ class UploadTemplateDefinition:
     profiles: tuple[dict[str, object], ...] = ()
 
 
+def _get_allowed_pairs() -> dict[DatasetType, TaskType]:
+    """Derive allowed dataset→task type pairs from the schema registry."""
+    return schema_registry.get_allowed_pairs()
+
+
+# Keep module-level name for backward compatibility; updated lazily via the function.
 ALLOWED_DATASET_TASK_PAIRS: dict[DatasetType, TaskType] = {
     DatasetType.IMAGE_CLASSIFICATION: TaskType.CLASSIFICATION,
     DatasetType.IMAGE_VQA: TaskType.VQA,
+    DatasetType.IMAGE_DETECTION: TaskType.DETECTION,
 }
 
 
@@ -124,10 +133,23 @@ def validate_dataset_contract(
         raise ValueError(
             f"dataset_type '{dataset_type.value}' is incompatible with task_type '{task_type.value}'"
         )
-    if task_type == TaskType.CLASSIFICATION and not label_space:
-        raise ValueError("classification datasets require a non-empty label space")
-    if task_type == TaskType.VQA and label_space:
-        raise ValueError("vqa datasets must not define a label space")
+    schema = schema_registry.get(dataset_type.value)
+    if schema is not None:
+        mode = schema.label_space_mode
+        if mode == "required" and not label_space:
+            raise ValueError(
+                f"{dataset_type.value} datasets require a non-empty label space"
+            )
+        if mode == "forbidden" and label_space:
+            raise ValueError(
+                f"{dataset_type.value} datasets must not define a label space"
+            )
+    else:
+        # Legacy fallback for types not yet registered in schema_registry
+        if task_type == TaskType.CLASSIFICATION and not label_space:
+            raise ValueError("classification datasets require a non-empty label space")
+        if task_type == TaskType.VQA and label_space:
+            raise ValueError("vqa datasets must not define a label space")
 
 
 def validate_dataset_preset_training(dataset: Dataset, preset: PresetSpec) -> None:

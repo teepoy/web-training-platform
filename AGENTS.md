@@ -319,7 +319,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 
 Before considering a feature complete or a bug fixed:
 1. Run `make test` to verify backend tests pass
-2. Follow the smoke test checklist in [`docs/guides/smoke-test.md`](docs/guides/smoke-test.md)
+2. Follow the verification steps: run `make test`, check auth/dataset/training flows in the browser, verify no console errors
 3. At minimum, verify:
    - Auth flow (login/logout)
    - Dataset creation (LS integration)

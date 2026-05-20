@@ -5,6 +5,10 @@ extra-paths = ["./libs/protos"]
 
 [analysis]
 replace-imports-with-any = [
+    "boto3",
+    "boto3.**",
+    "botocore",
+    "botocore.**",
     "datasets",
     "datasets.**",
     "embedding_pb",
@@ -16,6 +20,7 @@ replace-imports-with-any = [
 [src]
 exclude = [
     "apps/api/alembic/versions/**",
+    "apps/api/app/generated/**",
     "apps/api/tests/**",
     "examples/**",
     "libs/protos/**",
