@@ -68,9 +68,22 @@ class PreviewService:
 
         session.start_persist()
 
+        from app.domain import schemas as _schemas  # noqa: F401 — triggers schema registration
         from app.services.label_studio import LabelStudioClient as _LSC
 
-        label_config = _LSC.generate_image_classification_config([])
+        upstream_schema = self._upstream.get_dataset_schema()
+
+        if upstream_schema is not None:
+            dataset_type = DatasetType(upstream_schema.dataset_type)
+            task_type = TaskType(upstream_schema.task_type)
+            label_space: list[str] = []
+            label_config = upstream_schema.generate_ls_config(label_space)
+        else:
+            # Fallback: default to image classification
+            dataset_type = DatasetType.IMAGE_CLASSIFICATION
+            task_type = TaskType.CLASSIFICATION
+            label_config = _LSC.generate_image_classification_config([])
+
         project = await label_studio_client.create_project(
             f"Preview: {session.collection_ref}", label_config
         )
@@ -78,8 +91,8 @@ class PreviewService:
 
         dataset = Dataset(
             name=f"Preview: {session.collection_ref}",
-            dataset_type=DatasetType.IMAGE_CLASSIFICATION,
-            task_spec=TaskSpec(task_type=TaskType.CLASSIFICATION),
+            dataset_type=dataset_type,
+            task_spec=TaskSpec(task_type=task_type),
             ls_project_id=ls_project_id,
         )
         dataset = await dataset_repo.create_dataset(dataset)

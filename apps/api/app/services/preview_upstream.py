@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.domain.preview import PreviewItem, PreviewPage
+
+if TYPE_CHECKING:
+    from app.domain.dataset_schema import DatasetSchema
 
 
 class UpstreamAdapter(ABC):
@@ -11,10 +14,21 @@ class UpstreamAdapter(ABC):
     async def resolve_collection(self, collection_ref: str) -> dict[str, Any]: ...
 
     @abstractmethod
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage: ...
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage: ...
 
     @abstractmethod
     async def estimate_total(self, collection_ref: str) -> int | None: ...
+
+    def get_dataset_schema(self) -> DatasetSchema | None:
+        """Return the dataset schema this upstream produces, or ``None`` if unknown.
+
+        Sub-classes should override this when they carry semantic type information.
+        ``PreviewService`` uses the returned schema to create a correctly-typed dataset
+        during the persist step.
+        """
+        return None
 
 
 class PreviewUpstreamRouter(UpstreamAdapter):
@@ -34,7 +48,9 @@ class PreviewUpstreamRouter(UpstreamAdapter):
     def __init__(self, upstreams: dict[str, UpstreamAdapter]) -> None:
         self._upstreams = upstreams
         if self.DEFAULT_SCHEME not in self._upstreams:
-            raise ValueError(f"PreviewUpstreamRouter requires a '{self.DEFAULT_SCHEME}' upstream")
+            raise ValueError(
+                f"PreviewUpstreamRouter requires a '{self.DEFAULT_SCHEME}' upstream"
+            )
 
     def _resolve(self, collection_ref: str) -> tuple[UpstreamAdapter, str]:
         if ":" in collection_ref:
@@ -48,7 +64,9 @@ class PreviewUpstreamRouter(UpstreamAdapter):
         upstream, ref = self._resolve(collection_ref)
         return await upstream.resolve_collection(ref)
 
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage:
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
         upstream, ref = self._resolve(collection_ref)
         return await upstream.fetch_page(ref, cursor, limit)
 
@@ -67,14 +85,18 @@ class MockUpstreamAdapter(UpstreamAdapter):
             raise ValueError("collection_ref must not be empty")
         return {"collection_ref": collection_ref, "type": "mock"}
 
-    async def fetch_page(self, collection_ref: str, cursor: str | None, limit: int) -> PreviewPage:
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
         offset = int(cursor) if cursor else 0
         items: list[PreviewItem] = []
         for i in range(offset, min(offset + limit, self.TOTAL)):
             items.append(
                 PreviewItem(
                     upstream_item_id=f"{collection_ref}-{i}",
-                    image_uris=[f"https://picsum.photos/seed/{collection_ref}-{i}/400/300"],
+                    image_uris=[
+                        f"https://picsum.photos/seed/{collection_ref}-{i}/400/300"
+                    ],
                     metadata={"index": i, "collection": collection_ref},
                 )
             )
@@ -89,3 +111,52 @@ class MockUpstreamAdapter(UpstreamAdapter):
 
     async def estimate_total(self, collection_ref: str) -> int | None:
         return self.TOTAL
+
+
+class SchemaAwareMockUpstream(UpstreamAdapter):
+    """Mock upstream that generates items using a schema's ``mock_item_generator``.
+
+    This is the bridge between the schema system and the preview pipeline.
+    Instantiate with a registered ``DatasetSchema`` and an optional label space;
+    the upstream will produce ``PreviewItem`` objects that match the schema's
+    sample format — usable in preview sessions, seed scripts, and Storybook.
+    """
+
+    def __init__(
+        self, schema: DatasetSchema, label_space: list[str], total: int = 50
+    ) -> None:
+        self._schema = schema
+        self._label_space = label_space
+        self._total = total
+
+    def get_dataset_schema(self) -> DatasetSchema:
+        return self._schema
+
+    async def resolve_collection(self, collection_ref: str) -> dict[str, Any]:
+        if not collection_ref.strip():
+            raise ValueError("collection_ref must not be empty")
+        return {
+            "collection_ref": collection_ref,
+            "type": "schema_mock",
+            "dataset_type": self._schema.dataset_type,
+        }
+
+    async def fetch_page(
+        self, collection_ref: str, cursor: str | None, limit: int
+    ) -> PreviewPage:
+        offset = int(cursor) if cursor else 0
+        items: list[PreviewItem] = []
+        for i in range(offset, min(offset + limit, self._total)):
+            item = self._schema.mock_item_generator(i, self._label_space)
+            items.append(item)
+        next_offset = offset + len(items)
+        has_more = next_offset < self._total
+        return PreviewPage(
+            items=items,
+            next_cursor=str(next_offset) if has_more else None,
+            has_more=has_more,
+            estimated_total=self._total,
+        )
+
+    async def estimate_total(self, collection_ref: str) -> int | None:
+        return self._total

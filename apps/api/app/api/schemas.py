@@ -61,6 +61,7 @@ class ImportVqaJsonlResponse(BaseModel):
 class CreateAnnotationRequest(BaseModel):
     sample_id: str
     label: str
+    annotation_value: dict | list | None = None
     created_by: str = "demo-user"
 
 
@@ -381,6 +382,7 @@ class SetPublicRequest(BaseModel):
 
 class ModelResponse(BaseModel):
     """Response schema for model artifacts."""
+
     id: str
     uri: str
     kind: str
@@ -398,6 +400,7 @@ class ModelResponse(BaseModel):
 
 class UploadModelRequest(BaseModel):
     """Request metadata for model upload (file sent separately)."""
+
     name: str
     format: str = Field(description="Model format: pytorch, onnx, safetensors, keras")
     job_id: str = Field(description="Training job ID to associate the model with")
@@ -452,6 +455,7 @@ class ModelUploadTemplateResponse(BaseModel):
 
 class RunPredictionRequest(BaseModel):
     """Request to run predictions on a dataset using a model."""
+
     model_id: str = Field(description="ID of the model artifact to use")
     dataset_id: str = Field(description="ID of the dataset to run predictions on")
     sample_ids: list[str] | None = Field(
@@ -462,12 +466,17 @@ class RunPredictionRequest(BaseModel):
         default=None,
         description="Optional version tag for Label Studio filtering",
     )
-    target: str = Field(default="image_classification", description="Prediction target key in preset")
-    prompt: str | None = Field(default=None, description="Optional runtime prompt/question override")
+    target: str = Field(
+        default="image_classification", description="Prediction target key in preset"
+    )
+    prompt: str | None = Field(
+        default=None, description="Optional runtime prompt/question override"
+    )
 
 
 class PredictionResultResponse(BaseModel):
     """Result of a single sample prediction."""
+
     id: str | None = None
     sample_id: str
     predicted_label: str
@@ -574,7 +583,9 @@ class TaskTrackerDerived(BaseModel):
     pool_slots_used: int | None = None
     stages: list[TaskTrackerStage] = Field(default_factory=list)
     scorecard: TaskTrackerScorecard = Field(default_factory=TaskTrackerScorecard)
-    summary_metrics: TaskTrackerSummaryMetrics = Field(default_factory=TaskTrackerSummaryMetrics)
+    summary_metrics: TaskTrackerSummaryMetrics = Field(
+        default_factory=TaskTrackerSummaryMetrics
+    )
     artifacts: list[dict] = Field(default_factory=list)
     dynamic_console_lines: list[str] = Field(default_factory=list)
     deep_links: TaskTrackerDeepLinks = Field(default_factory=TaskTrackerDeepLinks)
@@ -614,6 +625,7 @@ class TaskTrackerDetailResponse(BaseModel):
 
 class BatchPredictionResponse(BaseModel):
     """Response for batch prediction run."""
+
     model_id: str
     dataset_id: str
     total_samples: int
@@ -627,14 +639,19 @@ class BatchPredictionResponse(BaseModel):
 
 class PredictSingleRequest(BaseModel):
     """Request to predict a single sample."""
+
     model_id: str = Field(description="ID of the model artifact to use")
     sample_id: str = Field(description="ID of the sample to predict")
     model_version: str | None = Field(
         default=None,
         description="Optional version tag for Label Studio filtering",
     )
-    target: str = Field(default="image_classification", description="Prediction target key in preset")
-    prompt: str | None = Field(default=None, description="Optional runtime prompt/question override")
+    target: str = Field(
+        default="image_classification", description="Prediction target key in preset"
+    )
+    prompt: str | None = Field(
+        default=None, description="Optional runtime prompt/question override"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -644,10 +661,16 @@ class PredictSingleRequest(BaseModel):
 
 class CreateReviewActionRequest(BaseModel):
     """Request to start a prediction review session."""
+
     dataset_id: str = Field(description="ID of the dataset")
     model_id: str = Field(description="ID of the model used for predictions")
-    collection_id: str | None = Field(default=None, description="Optional prediction collection used for manual sync")
-    sync_tag: str | None = Field(default=None, description="Optional LS sync tag for the temporary manual annotation batch")
+    collection_id: str | None = Field(
+        default=None, description="Optional prediction collection used for manual sync"
+    )
+    sync_tag: str | None = Field(
+        default=None,
+        description="Optional LS sync tag for the temporary manual annotation batch",
+    )
     model_version: str | None = Field(
         default=None,
         description="Version tag used when running predictions",
@@ -656,6 +679,7 @@ class CreateReviewActionRequest(BaseModel):
 
 class ReviewActionResponse(BaseModel):
     """Response for a prediction review action."""
+
     id: str
     dataset_id: str
     model_id: str
@@ -668,6 +692,7 @@ class ReviewActionResponse(BaseModel):
 
 class SaveReviewAnnotationItem(BaseModel):
     """Single reviewed prediction to save as annotation."""
+
     sample_id: str
     predicted_label: str
     final_label: str
@@ -677,11 +702,13 @@ class SaveReviewAnnotationItem(BaseModel):
 
 class SaveReviewAnnotationsRequest(BaseModel):
     """Request to save reviewed predictions as annotations for a review action."""
+
     items: list[SaveReviewAnnotationItem]
 
 
 class AnnotationVersionResponse(BaseModel):
     """Response for a single annotation version entry."""
+
     id: str
     review_action_id: str
     annotation_id: str
@@ -730,6 +757,7 @@ class SyncPredictionCollectionResponse(BaseModel):
 
 class SaveReviewAnnotationsResponse(BaseModel):
     """Response after saving reviewed annotations."""
+
     review_action_id: str
     created_count: int
     annotation_versions: list[AnnotationVersionResponse]
@@ -737,11 +765,13 @@ class SaveReviewAnnotationsResponse(BaseModel):
 
 class ExportFormatResponse(BaseModel):
     """Available export format descriptor."""
+
     format_id: str
 
 
 class VersionExportRequest(BaseModel):
     """Request to export an annotation version."""
+
     format_id: str = Field(
         default="annotation-version-full-context-v1",
         description="Export format identifier",
@@ -752,32 +782,43 @@ class VersionExportRequest(BaseModel):
 # Agent / Display Surface schemas
 # ---------------------------------------------------------------------------
 
+
 class MetadataKeyInfo(BaseModel):
     """Describes a single metadata key discovered by scanning sample data."""
+
     type: str = Field(description="Polars-inferred type name, e.g. 'Utf8', 'Int64'")
     null_count: int = 0
     n_unique: int = 0
-    sample_values: list = Field(default_factory=list, description="Up to 5 example values")
+    sample_values: list = Field(
+        default_factory=list, description="Up to 5 example values"
+    )
     min: float | int | None = None
     max: float | int | None = None
 
 
 class DeclaredMetadataKey(BaseModel):
     """Human-declared metadata key description (stored in task_spec.metadata_schema)."""
+
     type: str = Field(description="Expected type, e.g. 'string', 'integer', 'float'")
-    description: str = Field(default="", description="Human-readable description of this key")
+    description: str = Field(
+        default="", description="Human-readable description of this key"
+    )
 
 
 class DataSourceApi(BaseModel):
     """Data source that fetches from a backend API endpoint."""
+
     kind: str = Field(default="api", pattern="^api$")
     endpoint: str
     params: dict[str, str] = Field(default_factory=dict)
-    refresh_interval: int = Field(default=0, ge=0, description="Auto-refresh in ms; 0 = off")
+    refresh_interval: int = Field(
+        default=0, ge=0, description="Auto-refresh in ms; 0 = off"
+    )
 
 
 class DataSourceContext(BaseModel):
     """Data source that reads from an injected Vue provide/inject context."""
+
     kind: str = Field(default="context", pattern="^context$")
     key: str
     path: str | None = None
@@ -785,53 +826,72 @@ class DataSourceContext(BaseModel):
 
 class AgentPanelDescriptor(BaseModel):
     """Describes a single panel that the agent wants to render on a display surface."""
+
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9\-]*$", max_length=80)
     component: str = Field(description="Key into the frontend plugin registry")
     title: str = Field(max_length=120)
     order: int = Field(default=50, ge=0)
     collapsed: bool = False
     size: str = Field(default="normal", pattern="^(compact|normal|large)$")
-    data: dict | None = Field(default=None, description="Inline data payload: {inline: <payload>}")
-    data_source: DataSourceApi | DataSourceContext | None = Field(default=None, description="Reference to a data source")
-    config: dict = Field(default_factory=dict, description="Widget-specific config props")
-    ephemeral: bool = Field(default=False, description="Auto-remove on next agent turn if not re-sent")
-    ttl: int | None = Field(default=None, ge=1, description="Auto-remove after N seconds")
+    data: dict | None = Field(
+        default=None, description="Inline data payload: {inline: <payload>}"
+    )
+    data_source: DataSourceApi | DataSourceContext | None = Field(
+        default=None, description="Reference to a data source"
+    )
+    config: dict = Field(
+        default_factory=dict, description="Widget-specific config props"
+    )
+    ephemeral: bool = Field(
+        default=False, description="Auto-remove on next agent turn if not re-sent"
+    )
+    ttl: int | None = Field(
+        default=None, ge=1, description="Auto-remove after N seconds"
+    )
 
 
 class SurfaceLayout(BaseModel):
     """Layout settings for a display surface."""
+
     width: int = Field(default=280, ge=100, le=800)
     position: str = Field(default="right", pattern="^(right|left)$")
 
 
 class SurfaceStateDocument(BaseModel):
     """Complete serialisable state of a display surface."""
+
     version: int = Field(default=1)
     surface_id: str
     panels: list[AgentPanelDescriptor] = Field(default_factory=list)
     layout: SurfaceLayout = Field(default_factory=SurfaceLayout)
     exported_at: str | None = None
-    metadata: dict = Field(default_factory=dict, description="Optional provenance: created_by, description")
+    metadata: dict = Field(
+        default_factory=dict, description="Optional provenance: created_by, description"
+    )
 
 
 class SetPanelRequest(BaseModel):
     """Request body for adding / replacing a panel on a surface."""
+
     panel: AgentPanelDescriptor
 
 
 class ChatRequest(BaseModel):
     """User message sent to the agent."""
+
     message: str = Field(min_length=1, max_length=4000)
 
 
 class AgentEventMessage(BaseModel):
     """Agent text response event."""
+
     type: str = Field(default="message")
     content: str
 
 
 class AgentEventAction(BaseModel):
     """Agent tool-call action event."""
+
     type: str = Field(default="action")
     tool: str
     summary: str
@@ -840,14 +900,20 @@ class AgentEventAction(BaseModel):
 
 class WidgetManifest(BaseModel):
     """Describes a widget type available on a surface."""
+
     key: str
     description: str
-    config_schema: dict = Field(default_factory=dict, description="JSON Schema for config props")
-    data_schema: dict = Field(default_factory=dict, description="JSON Schema for inline data")
+    config_schema: dict = Field(
+        default_factory=dict, description="JSON Schema for config props"
+    )
+    data_schema: dict = Field(
+        default_factory=dict, description="JSON Schema for inline data"
+    )
 
 
 class QueryDataRequest(BaseModel):
     """Structured data query from the agent."""
+
     query_type: str = Field(
         description="One of: annotation-stats, sample-slice, metadata-histogram, recent-annotations, prediction-summary, wafer-points"
     )
@@ -858,27 +924,43 @@ class QueryDataRequest(BaseModel):
 # Global Agent schemas
 # ---------------------------------------------------------------------------
 
+
 class AgentContext(BaseModel):
     """Client-provided context for the global agent.
 
     Tells the agent what page the user is on and what entity they are
     looking at, so the system prompt can be enriched accordingly.
     """
-    page: str = Field(default="", description="Current route path, e.g. '/datasets/abc/classify'")
-    dataset_id: str | None = Field(default=None, description="Active dataset ID if on a dataset page")
-    job_id: str | None = Field(default=None, description="Active job ID if on a job page")
-    schedule_id: str | None = Field(default=None, description="Active schedule ID if on a schedule page")
-    extra: dict = Field(default_factory=dict, description="Arbitrary extra context from the frontend")
+
+    page: str = Field(
+        default="", description="Current route path, e.g. '/datasets/abc/classify'"
+    )
+    dataset_id: str | None = Field(
+        default=None, description="Active dataset ID if on a dataset page"
+    )
+    job_id: str | None = Field(
+        default=None, description="Active job ID if on a job page"
+    )
+    schedule_id: str | None = Field(
+        default=None, description="Active schedule ID if on a schedule page"
+    )
+    extra: dict = Field(
+        default_factory=dict, description="Arbitrary extra context from the frontend"
+    )
 
 
 class GlobalChatRequest(BaseModel):
     """User message sent to the global agent."""
+
     message: str = Field(min_length=1, max_length=4000)
     context: AgentContext = Field(default_factory=AgentContext)
-    session_id: str | None = Field(default=None, description="Resume existing session; omit for auto-generated")
+    session_id: str | None = Field(
+        default=None, description="Resume existing session; omit for auto-generated"
+    )
 
 
 # --- Preview session schemas ---
+
 
 class CreatePreviewSessionRequest(BaseModel):
     collection_ref: str
@@ -893,7 +975,9 @@ class PreviewItemResponse(BaseModel):
 class PreviewSessionResponse(BaseModel):
     session_id: str
     collection_ref: str
-    classification_enabled: bool  # always False in preview (read-only flag for frontend)
+    classification_enabled: (
+        bool  # always False in preview (read-only flag for frontend)
+    )
     estimated_total: int | None
     loaded_count: int
     next_cursor: str | None

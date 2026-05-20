@@ -1,20 +1,14 @@
-import { defineAsyncComponent, type Component } from "vue";
-
 import type { TaskType } from "../../types";
 
+// Import schema modules to trigger auto-registration
+import "./schemas/image-classification";
+import "./schemas/image-vqa";
+import "./schemas/image-detection";
+
+export { resolveDatasetShim, getDatasetSchema, listRegisteredDatasetTypes } from "./schema-registry";
+
 export function resolveDatasetTaskType(taskType: string | null | undefined): TaskType {
-  return taskType === "vqa" ? "vqa" : "classification";
-}
-
-export const DATASET_SHIM_REGISTRY = {
-  classification: defineAsyncComponent(() => import("./shims/ClassificationDatasetsShim.vue")),
-  vqa: defineAsyncComponent(() => import("./shims/VqaDatasetsShim.vue")),
-} satisfies Record<TaskType, Component>;
-
-export function resolveDatasetShim(taskType: string | null | undefined): Component {
-  if (resolveDatasetTaskType(taskType) === "vqa") {
-    return DATASET_SHIM_REGISTRY.vqa;
-  }
-
-  return DATASET_SHIM_REGISTRY.classification;
+  if (taskType === "vqa") return "vqa";
+  if (taskType === "detection") return "detection";
+  return "classification";
 }

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from app.domain import schema_registry
+from app.domain import schemas as _schemas  # noqa: F401 — triggers schema auto-registration
 from app.domain.models import Dataset
 from app.domain.types import DatasetType, TaskType
 from app.presets.schema import PresetSpec
@@ -17,9 +19,16 @@ class UploadTemplateDefinition:
     profiles: tuple[dict[str, object], ...] = ()
 
 
+def _get_allowed_pairs() -> dict[DatasetType, TaskType]:
+    """Derive allowed dataset→task type pairs from the schema registry."""
+    return schema_registry.get_allowed_pairs()
+
+
+# Keep module-level name for backward compatibility; updated lazily via the function.
 ALLOWED_DATASET_TASK_PAIRS: dict[DatasetType, TaskType] = {
     DatasetType.IMAGE_CLASSIFICATION: TaskType.CLASSIFICATION,
     DatasetType.IMAGE_VQA: TaskType.VQA,
+    DatasetType.IMAGE_DETECTION: TaskType.DETECTION,
 }
 
 
@@ -62,7 +71,10 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
     UploadTemplateDefinition(
         id="image-embedder",
         name="Image Embedder",
-        dataset_types=(DatasetType.IMAGE_CLASSIFICATION.value, DatasetType.IMAGE_VQA.value),
+        dataset_types=(
+            DatasetType.IMAGE_CLASSIFICATION.value,
+            DatasetType.IMAGE_VQA.value,
+        ),
         task_types=(TaskType.CLASSIFICATION.value, TaskType.VQA.value),
         label_space_mode="forbidden",
         requires_embedding_metadata=True,
@@ -113,16 +125,31 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
 )
 
 
-def validate_dataset_contract(dataset_type: DatasetType, task_type: TaskType, label_space: list[str]) -> None:
+def validate_dataset_contract(
+    dataset_type: DatasetType, task_type: TaskType, label_space: list[str]
+) -> None:
     expected_task = ALLOWED_DATASET_TASK_PAIRS.get(dataset_type)
     if expected_task is None or expected_task != task_type:
         raise ValueError(
             f"dataset_type '{dataset_type.value}' is incompatible with task_type '{task_type.value}'"
         )
-    if task_type == TaskType.CLASSIFICATION and not label_space:
-        raise ValueError("classification datasets require a non-empty label space")
-    if task_type == TaskType.VQA and label_space:
-        raise ValueError("vqa datasets must not define a label space")
+    schema = schema_registry.get(dataset_type.value)
+    if schema is not None:
+        mode = schema.label_space_mode
+        if mode == "required" and not label_space:
+            raise ValueError(
+                f"{dataset_type.value} datasets require a non-empty label space"
+            )
+        if mode == "forbidden" and label_space:
+            raise ValueError(
+                f"{dataset_type.value} datasets must not define a label space"
+            )
+    else:
+        # Legacy fallback for types not yet registered in schema_registry
+        if task_type == TaskType.CLASSIFICATION and not label_space:
+            raise ValueError("classification datasets require a non-empty label space")
+        if task_type == TaskType.VQA and label_space:
+            raise ValueError("vqa datasets must not define a label space")
 
 
 def validate_dataset_preset_training(dataset: Dataset, preset: PresetSpec) -> None:
@@ -136,15 +163,21 @@ def validate_dataset_preset_training(dataset: Dataset, preset: PresetSpec) -> No
         raise ValueError(
             f"preset '{preset.id}' does not support task_type '{task_type}'"
         )
-    validate_dataset_contract(dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space)
+    validate_dataset_contract(
+        dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space
+    )
 
 
-def validate_model_prediction(dataset: Dataset, model_metadata: dict[str, object], target: str) -> None:
+def validate_model_prediction(
+    dataset: Dataset, model_metadata: dict[str, object], target: str
+) -> None:
     supported_dataset_types = _as_str_list(model_metadata.get("dataset_types"))
     supported_task_types = _as_str_list(model_metadata.get("task_types"))
     supported_targets = _as_str_list(model_metadata.get("prediction_targets"))
 
-    validate_dataset_contract(dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space)
+    validate_dataset_contract(
+        dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space
+    )
 
     if target == "vqa" and dataset.task_spec.task_type != TaskType.VQA:
         raise ValueError("target 'vqa' requires dataset task_type 'vqa'")
@@ -168,13 +201,17 @@ def validate_model_prediction(dataset: Dataset, model_metadata: dict[str, object
         if not model_labels:
             raise ValueError("classification model metadata must include a label space")
         if not model_labels.issubset(dataset_labels):
-            raise ValueError("model label_space must be a subset of dataset label_space")
+            raise ValueError(
+                "model label_space must be a subset of dataset label_space"
+            )
 
     if target == "embedding":
         if bool(model_metadata.get("requires_embedding_metadata")):
             dimension = model_metadata.get("embedding_dimension")
             if not isinstance(dimension, int) or dimension <= 0:
-                raise ValueError("embedding models must declare a positive embedding_dimension")
+                raise ValueError(
+                    "embedding models must declare a positive embedding_dimension"
+                )
 
 
 def validate_model_review(dataset: Dataset, model_metadata: dict[str, object]) -> None:
@@ -230,14 +267,22 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
         raise ValueError(f"template '{template.id}' does not allow label_space")
     if template.requires_embedding_metadata:
         if not isinstance(embedding_dimension, int) or embedding_dimension <= 0:
-            raise ValueError(f"template '{template.id}' requires a positive embedding_dimension")
+            raise ValueError(
+                f"template '{template.id}' requires a positive embedding_dimension"
+            )
         if normalized_output is None:
             raise ValueError(f"template '{template.id}' requires normalized_output")
 
-    if template.id == "image-classifier" and prediction_targets != ["image_classification"]:
-        raise ValueError("image-classifier uploads only support prediction target 'image_classification'")
+    if template.id == "image-classifier" and prediction_targets != [
+        "image_classification"
+    ]:
+        raise ValueError(
+            "image-classifier uploads only support prediction target 'image_classification'"
+        )
     if template.id == "image-embedder" and prediction_targets != ["embedding"]:
-        raise ValueError("image-embedder uploads only support prediction target 'embedding'")
+        raise ValueError(
+            "image-embedder uploads only support prediction target 'embedding'"
+        )
     if template.id == "vqa" and prediction_targets != ["vqa"]:
         raise ValueError("vqa uploads only support prediction target 'vqa'")
 
@@ -255,7 +300,9 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
     }
 
 
-def build_trained_model_metadata(dataset: Dataset, preset: PresetSpec, metadata: dict[str, object] | None = None) -> dict[str, object]:
+def build_trained_model_metadata(
+    dataset: Dataset, preset: PresetSpec, metadata: dict[str, object] | None = None
+) -> dict[str, object]:
     runtime_metadata = metadata.copy() if isinstance(metadata, dict) else {}
     merged = {
         **runtime_metadata,
@@ -275,7 +322,9 @@ def build_trained_model_metadata(dataset: Dataset, preset: PresetSpec, metadata:
     return merged
 
 
-def _profile_prediction_targets(template: UploadTemplateDefinition, profile_id: str) -> list[str]:
+def _profile_prediction_targets(
+    template: UploadTemplateDefinition, profile_id: str
+) -> list[str]:
     for profile in template.profiles:
         if str(profile.get("id", "")) == profile_id:
             return _as_str_list(profile.get("default_prediction_targets"))

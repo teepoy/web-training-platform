@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { Dataset, TaskSpec } from "../types";
-import { DATASET_SHIM_REGISTRY, resolveDatasetShim } from "./datasets/registry";
-import { getActiveDatasetTaskType } from "./datasets/selection";
+import { resolveDatasetShim } from "./datasets/registry";
+import { getActiveDatasetTaskType, getActiveDatasetType } from "./datasets/selection";
 
 function makeDataset(taskType: Dataset["task_spec"]["task_type"]): Dataset {
+  const datasetType = taskType === "vqa" ? "image_vqa" : taskType === "detection" ? "image_detection" : "image_classification";
   return {
     id: `${taskType}-dataset`,
     name: `${taskType} dataset`,
-    dataset_type: taskType === "vqa" ? "image_vqa" : "image_classification",
+    dataset_type: datasetType,
     task_spec: {
       task_type: taskType,
       label_space: ["label-a"],
@@ -27,45 +28,56 @@ function makeMalformedDataset(overrides: Omit<Partial<Dataset>, "task_spec"> & {
   } as Dataset;
 }
 
+const classificationShim = resolveDatasetShim("image_classification");
+
 describe("DatasetsView host delegation", () => {
   it("reads the first dataset task type when present", () => {
     expect(getActiveDatasetTaskType([makeDataset("vqa")])).toBe("vqa");
   });
 
-  it("falls back to classification when the first row is missing task_spec", () => {
-    const datasetType = getActiveDatasetTaskType([makeMalformedDataset({ task_spec: undefined })]);
-
-    expect(datasetType).toBe(undefined);
-    expect(() => resolveDatasetShim(datasetType)).not.toThrow();
-    expect(resolveDatasetShim(datasetType)).toBe(DATASET_SHIM_REGISTRY.classification);
+  it("reads the first dataset type when present", () => {
+    expect(getActiveDatasetType([makeDataset("vqa")])).toBe("image_vqa");
+    expect(getActiveDatasetType([makeDataset("detection")])).toBe("image_detection");
   });
 
-  it("falls back to classification when the first row has a null task_spec", () => {
-    const datasetType = getActiveDatasetTaskType([makeMalformedDataset({ task_spec: null })]);
+  it("falls back to classification shim when the first row is missing task_spec", () => {
+    const ds = [makeMalformedDataset({ task_spec: undefined })];
+    const activeDatasetType = getActiveDatasetType(ds);
 
-    expect(datasetType).toBe(undefined);
-    expect(() => resolveDatasetShim(datasetType)).not.toThrow();
-    expect(resolveDatasetShim(datasetType)).toBe(DATASET_SHIM_REGISTRY.classification);
+    expect(activeDatasetType).toBe("image_classification"); // default in makeDataset
+    expect(() => resolveDatasetShim(activeDatasetType)).not.toThrow();
+    expect(resolveDatasetShim(activeDatasetType)).toBe(classificationShim);
   });
 
-  it("falls back to classification for unknown task_spec task types", () => {
-    const datasetType = getActiveDatasetTaskType([
-      makeMalformedDataset({
-        task_spec: {
-          task_type: "unsupported" as never,
-          label_space: ["label-a"],
-        },
-      }),
-    ]);
+  it("falls back to classification shim when the first row has a null task_spec", () => {
+    const ds = [makeMalformedDataset({ task_spec: null })];
+    const activeDatasetType = getActiveDatasetType(ds);
 
-    expect(datasetType).toBe("unsupported");
-    expect(() => resolveDatasetShim(datasetType)).not.toThrow();
-    expect(resolveDatasetShim(datasetType)).toBe(DATASET_SHIM_REGISTRY.classification);
+    expect(activeDatasetType).toBe("image_classification");
+    expect(() => resolveDatasetShim(activeDatasetType)).not.toThrow();
+    expect(resolveDatasetShim(activeDatasetType)).toBe(classificationShim);
+  });
+
+  it("falls back to classification shim for unknown dataset types", () => {
+    const ds = [makeMalformedDataset({ dataset_type: "unsupported" as never })];
+    const activeDatasetType = getActiveDatasetType(ds);
+
+    expect(activeDatasetType).toBe("unsupported");
+    expect(() => resolveDatasetShim(activeDatasetType)).not.toThrow();
+    expect(resolveDatasetShim(activeDatasetType)).toBe(classificationShim);
+  });
+
+  it("resolves distinct shims for each known dataset type", () => {
+    expect(resolveDatasetShim("image_vqa")).not.toBe(classificationShim);
+    expect(resolveDatasetShim("image_detection")).not.toBe(classificationShim);
   });
 
   it("returns undefined when datasets are absent or empty", () => {
     expect(getActiveDatasetTaskType(undefined)).toBe(undefined);
     expect(getActiveDatasetTaskType(null)).toBe(undefined);
     expect(getActiveDatasetTaskType([])).toBe(undefined);
+    expect(getActiveDatasetType(undefined)).toBe(undefined);
+    expect(getActiveDatasetType(null)).toBe(undefined);
+    expect(getActiveDatasetType([])).toBe(undefined);
   });
 });

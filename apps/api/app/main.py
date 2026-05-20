@@ -739,7 +739,10 @@ async def create_annotation(
             status_code=502, detail=f"Label Studio annotation sync failed: {exc}"
         )
     ann = Annotation(
-        sample_id=payload.sample_id, label=payload.label, created_by=current_user.id
+        sample_id=payload.sample_id,
+        label=payload.label,
+        annotation_value=payload.annotation_value,
+        created_by=current_user.id,
     )
     ann = await container.repository().create_annotation(ann)
     return ann

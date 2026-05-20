@@ -30,7 +30,7 @@ import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
 import { pluginRegistry } from "../core/registry";
 import { resolveDatasetShim, resolveDatasetTaskType } from "./datasets/registry";
-import { getActiveDatasetTaskType } from "./datasets/selection";
+import { getActiveDatasetTaskType, getActiveDatasetType } from "./datasets/selection";
 
 const router = useRouter();
 const message = useMessage();
@@ -110,6 +110,7 @@ const surface = useDatasetListSurface<Dataset, User>({
 });
 
 const activeTaskType = computed(() => getActiveDatasetTaskType(datasets.value));
+const activeDatasetType = computed(() => getActiveDatasetType(datasets.value));
 
-const activeShim = computed(() => resolveDatasetShim(activeTaskType.value));
+const activeShim = computed(() => resolveDatasetShim(activeDatasetType.value));
 </script>
