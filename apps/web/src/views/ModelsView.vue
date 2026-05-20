@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, watch } from "vue";
+import { ref, computed, h, watch, onMounted } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption, UploadFileInfo } from "naive-ui";
 import { useMessage, NTag, NButton, NSpace } from "naive-ui";
@@ -152,6 +152,8 @@ import { useOrgStore } from "../stores/org";
 import { useAuthStore } from "../stores/auth";
 import PredictModal from "../features/app/components/PredictModal.vue";
 
+const props = defineProps<{ datasetId?: string | null }>();
+
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
@@ -162,6 +164,10 @@ const authStore = useAuthStore();
 // ---------------------------------------------------------------------------
 
 const filterDatasetId = ref<string | null>(null);
+
+onMounted(() => {
+  if (props.datasetId) filterDatasetId.value = props.datasetId;
+});
 
 // ---------------------------------------------------------------------------
 // Queries

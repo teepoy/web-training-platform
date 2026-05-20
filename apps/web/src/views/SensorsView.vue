@@ -1,6 +1,6 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header title="Sensor Subscriptions" />
+    <n-page-header title="Automations" />
 
     <n-grid :x-gap="24" :y-gap="24" cols="1 s:1 m:2 l:3" responsive="screen">
       <!-- Left Column: Sensors -->

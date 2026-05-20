@@ -18,6 +18,8 @@ import { widgetComponentMap } from "../features/classify/widgetMap";
 import { useDatasetBrowser } from "../features/dataset-detail/composables/useDatasetBrowser";
 import DatasetSparseSummary from "../features/dataset-detail/components/DatasetSparseSummary.vue";
 import DatasetFeatureOpsTab from "../features/dataset-detail/components/DatasetFeatureOpsTab.vue";
+import DatasetTrainTab from "../features/dataset-detail/components/DatasetTrainTab.vue";
+import DatasetPredictTab from "../features/dataset-detail/components/DatasetPredictTab.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -115,6 +117,8 @@ function handleExporterComplete(result: unknown) {
           </template>
         </n-tab-pane>
 
+        <n-tab-pane name="train" tab="Train"><DatasetTrainTab :dataset-id="id" /></n-tab-pane>
+        <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane name="export" tab="Export"><n-empty v-if="exporterFlows.length === 0" description="No export plugins available." style="margin-top: 24px" /><div v-else style="display: flex; justify-content: center; padding: 24px 0"><n-button type="primary" @click="showExportFlow = true">Export Dataset</n-button></div></n-tab-pane>
         <n-tab-pane name="feature-ops" tab="Feature Ops"><DatasetFeatureOpsTab :dataset-id="id" :is-sparse="isSparse" /></n-tab-pane>
         <n-tab-pane v-if="!isSparse" name="annotate" tab="Annotate">

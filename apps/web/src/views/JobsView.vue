@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from "vue";
+import { ref, computed, h, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
@@ -83,6 +83,8 @@ const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
+const props = defineProps<{ datasetId?: string | null }>();
+onMounted(() => { if (props.datasetId) formModel.value.dataset_id = props.datasetId; });
 
 // ---------------------------------------------------------------------------
 // Queries

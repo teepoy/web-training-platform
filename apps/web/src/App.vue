@@ -6,62 +6,74 @@
           <template v-if="isAuthPage">
             <RouterView />
           </template>
-          <n-layout v-else has-sider style="height: 100vh">
-            <n-layout-sider
-              :collapsed="uiStore.sidebarCollapsed"
-              :width="240"
-              :collapsed-width="64"
-              collapse-mode="width"
-              bordered
-              show-trigger
-              @collapse="uiStore.sidebarCollapsed = true"
-              @expand="uiStore.sidebarCollapsed = false"
-            >
-              <n-menu
+          <template v-else-if="isSettingsRoute || isAdminRoute">
+            <RouterView />
+            <!-- Global Agent Chat Drawer (available on settings/admin pages too) -->
+            <AgentChatDrawer
+              :messages="globalAgent.messages.value"
+              :status="globalAgent.status.value"
+              @send="globalAgent.send"
+              @abort="globalAgent.abort"
+              @clear="globalAgent.clearHistory"
+            />
+          </template>
+          <template v-else>
+            <n-layout has-sider style="height: 100vh">
+              <n-layout-sider
                 :collapsed="uiStore.sidebarCollapsed"
-                :options="menuOptions"
-                :value="activeRoute"
-                @update:value="(key: string) => router.push(key)"
-              />
-            </n-layout-sider>
-            <n-layout vertical>
-              <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
-                <span style="font-weight: 600; flex: 1">ML Training Platform</span>
-                <OrgSelector v-if="authStore.isAuthenticated" />
-                <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
-
-                <!-- External service links -->
-                <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
-                  Label Studio ↗
-                </n-button>
-                <template v-if="isAdmin">
-                  <n-button tag="a" :href="prefectUrl" target="_blank" text type="primary" size="small">
-                    Prefect ↗
+                :width="240"
+                :collapsed-width="64"
+                collapse-mode="width"
+                bordered
+                show-trigger
+                @collapse="uiStore.sidebarCollapsed = true"
+                @expand="uiStore.sidebarCollapsed = false"
+              >
+                <n-menu
+                  :collapsed="uiStore.sidebarCollapsed"
+                  :options="menuOptions"
+                  :value="activeRoute"
+                  @update:value="(key: string) => router.push(key)"
+                />
+              </n-layout-sider>
+              <n-layout vertical>
+                <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
+                  <span style="font-weight: 600; flex: 1">ML Training Platform</span>
+                  <OrgSelector v-if="authStore.isAuthenticated" />
+                  <SandboxDropdown />
+                  <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
+                  <!-- External service links -->
+                  <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
+                    Label Studio ↗
                   </n-button>
-                  <n-button tag="a" :href="minioUrl" target="_blank" text type="primary" size="small">
-                    MinIO ↗
-                  </n-button>
-                  <n-button tag="a" :href="pgAdminUrl" target="_blank" text type="primary" size="small">
-                    pgAdmin ↗
-                  </n-button>
-                </template>
-
-                <n-dropdown
-                  trigger="click"
-                  :options="avatarDropdownOptions"
-                  @select="handleAvatarSelect"
-                >
-                  <n-avatar
-                    round
-                    size="small"
-                    style="cursor: pointer"
-                  >{{ userInitials }}</n-avatar>
-                </n-dropdown>
-              </n-layout-header>
-              <n-layout-content style="padding: 24px; overflow-y: auto">
-                <RouterView />
-                <n-back-top />
-              </n-layout-content>
+                  <template v-if="isAdmin">
+                    <n-button tag="a" :href="prefectUrl" target="_blank" text type="primary" size="small">
+                      Prefect ↗
+                    </n-button>
+                    <n-button tag="a" :href="minioUrl" target="_blank" text type="primary" size="small">
+                      MinIO ↗
+                    </n-button>
+                    <n-button tag="a" :href="pgAdminUrl" target="_blank" text type="primary" size="small">
+                      pgAdmin ↗
+                    </n-button>
+                  </template>
+                  <n-dropdown
+                    trigger="click"
+                    :options="avatarDropdownOptions"
+                    @select="handleAvatarSelect"
+                  >
+                    <n-avatar
+                      round
+                      size="small"
+                      style="cursor: pointer"
+                    >{{ userInitials }}</n-avatar>
+                  </n-dropdown>
+                </n-layout-header>
+                <n-layout-content style="padding: 24px; overflow-y: auto">
+                  <RouterView />
+                  <n-back-top />
+                </n-layout-content>
+              </n-layout>
             </n-layout>
             <!-- Global Agent Chat Drawer (available on all authenticated pages) -->
             <AgentChatDrawer
@@ -71,7 +83,7 @@
               @abort="globalAgent.abort"
               @clear="globalAgent.clearHistory"
             />
-          </n-layout>
+          </template>
         </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
@@ -91,6 +103,7 @@ import { useTaskHandoffState } from './composables/taskHandoffState'
 import { useAgentAdapter } from './features/agent/useAgentAdapter'
 import { AgentChatDrawer } from '@platform/web-ui'
 import OrgSelector from './features/app/components/OrgSelector.vue'
+import SandboxDropdown from './features/app/components/SandboxDropdown.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -104,6 +117,8 @@ const globalAgent = useAgentAdapter()
 
 const AUTH_PATHS = ['/login', '/register']
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path))
+const isSettingsRoute = computed(() => route.path.startsWith('/settings'))
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 // Always use dark theme for auth pages (they have dark gradient background)
 const computedTheme = computed(() => {
@@ -119,7 +134,14 @@ const themeOverrides: GlobalThemeOverrides = {
   },
 }
 
-const activeRoute = computed(() => route.path)
+const activeRoute = computed(() => {
+  const p = route.path
+  if (p.startsWith('/datasets')) return '/datasets'
+  if (p.startsWith('/sensors')) return '/sensors'
+  if (p.startsWith('/preview')) return '/preview'
+  if (p.startsWith('/tasks')) return '/tasks'
+  return p
+})
 
 // Check if current user is an admin (superadmin)
 const isAdmin = computed(() => authStore.user?.is_superadmin ?? false)
@@ -131,19 +153,10 @@ const minioUrl = 'http://localhost:9001'
 const pgAdminUrl = 'http://localhost:5050'
 
 const menuOptions = [
-  { label: 'Dashboard', key: '/dashboard' },
+  { label: 'Preview', key: '/preview' },
   { label: 'Task Explorer', key: '/tasks' },
   { label: 'Datasets', key: '/datasets' },
-  { label: 'Preview', key: '/preview' },
-  { label: 'Training Jobs', key: '/jobs' },
-  { label: 'Models', key: '/models' },
-  { label: 'Preset Catalog', key: '/presets' },
-  { label: 'Schedules', key: '/schedules' },
-  { label: 'Sensors', key: '/sensors' },
-  { label: 'Settings', key: '/settings' },
-  ...(import.meta.env.DEV
-    ? ([{ label: 'Sandbox', key: '/sandbox' }] as const)
-    : []),
+  { label: 'Automations', key: '/sensors' },
 ]
 
 const userInitials = computed(() =>
@@ -151,12 +164,15 @@ const userInitials = computed(() =>
 )
 
 const avatarDropdownOptions = computed(() => {
-  const options = [
+  const options: Array<{ label: string; key: string; disabled: boolean } | { type: 'divider'; key: string }> = [
     { label: authStore.user?.name || 'Local User', key: 'name', disabled: true },
     { type: 'divider' as const, key: 'd1' },
     { label: 'Profile', key: 'profile', disabled: true },
     { label: 'Settings', key: 'settings', disabled: false },
   ]
+  if (isAdmin.value) {
+    options.push({ label: 'Admin', key: 'admin', disabled: false })
+  }
   if (authStore.authEnabled) {
     options.push({ label: 'Logout', key: 'logout', disabled: false })
   }
@@ -165,7 +181,11 @@ const avatarDropdownOptions = computed(() => {
 
 function handleAvatarSelect(key: string) {
   if (key === 'settings') {
-    router.push('/settings')
+    router.push('/settings/access-keys')
+    return
+  }
+  if (key === 'admin') {
+    router.push('/admin/dashboard')
     return
   }
   if (key === 'logout') {

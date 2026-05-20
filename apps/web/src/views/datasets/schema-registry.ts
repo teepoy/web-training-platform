@@ -37,7 +37,7 @@ export function resolveDatasetShim(datasetType: string | null | undefined): Comp
   const fallback = _registry.get("image_classification");
   return (
     fallback?.shimComponent ??
-    defineAsyncComponent(() => import("../shims/ClassificationDatasetsShim.vue"))
+    defineAsyncComponent(() => import("./shims/ClassificationDatasetsShim.vue"))
   );
 }
 
