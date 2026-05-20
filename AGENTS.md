@@ -130,6 +130,14 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`                               | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
 | Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
+| Dataset schema system     | `docs/architecture/dataset-schema-system.md`                                 | Unified DatasetSchema descriptor — types, LS config, annotation, mocks |
+| Backend schema dataclass  | `apps/api/app/domain/dataset_schema.py`                                      | `DatasetSchema` dataclass definition                                |
+| Backend schema registry   | `apps/api/app/domain/schema_registry.py`                                     | register / get / list_all / get_allowed_pairs                       |
+| Backend schema modules    | `apps/api/app/domain/schemas/`                                               | One Python module per dataset type; auto-registers on import        |
+| Frontend schema registry  | `apps/web/src/views/datasets/schema-registry.ts`                             | `registerDatasetSchema` / `resolveDatasetShim` — keyed by dataset_type |
+| Frontend schema modules   | `apps/web/src/views/datasets/schemas/`                                       | One TS module per dataset type; self-registers on import            |
+| Dataset list shims        | `apps/web/src/views/datasets/shims/`                                         | Per-type dataset list Vue components                                |
+| Seed scripts              | `libs/seedmaker/src/seedmaker/datasets/`                                     | Per-type seed scripts; share mock_item_generator logic with schema  |
 | Dataset storage modes     | `docs/architecture/dataset-storage-modes.md`                                 | Capability matrix for `db_full` vs `file_shard_sparse`, intent origin, and deferred scope |
 | Sparse dataset payload     | `apps/api/app/services/dataset_payload_store.py` + `apps/api/app/domain/dataset_payload.py` | Shard manifest, parquet payload storage, deterministic delete |
 | Sparse capability guards   | `apps/api/app/services/dataset_capability_guard.py`                           | `assert_not_sparse` guard for operations incompatible with `file_shard_sparse` |

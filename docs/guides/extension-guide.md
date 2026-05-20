@@ -474,3 +474,143 @@ The platform's sensor pub/sub system allows you to trigger workflows based on ex
 4. **Verification**: Once registered, your sensor will automatically appear in the platform API (`GET /api/v1/sensors`) and the Sensors UI in the web app, where users can create subscriptions for it.
 
 Refer to `apps/api/app/flows/dataset_size_sensor.py` for a complete reference implementation.
+
+---
+
+## 7. Adding a New Dataset Type
+
+A "dataset type" controls how samples, annotations, Label Studio configuration, mock data, and frontend views are shaped. The schema system bundles all of these into one descriptor so nothing gets out of sync.
+
+### Step-by-step
+
+#### Backend
+
+**a. Add enum values** in `apps/api/app/domain/types.py`:
+```python
+class DatasetType(str, Enum):
+    IMAGE_CLASSIFICATION = "image_classification"
+    IMAGE_VQA = "image_vqa"
+    IMAGE_DETECTION = "image_detection"
+    IMAGE_SEGMENTATION = "image_ newsegmentation"   #
+
+class TaskType(str, Enum):
+    CLASSIFICATION = "classification"
+    VQA = "vqa"
+    DETECTION = "detection"
+    SEGMENTATION = " newsegmentation"               #
+```
+
+**b. Create the schema module** `apps/api/app/domain/schemas/image_segmentation.py`:
+```python
+from __future__ import annotations
+from app.domain.dataset_schema import DatasetSchema
+from app.domain.preview import PreviewItem
+from app.domain import schema_registry
+
+def _generate_ls_config(label_space: list[str]) -> str:
+    # Return Label Studio XML string for segmentation
+    ...
+
+def _mock_item_generator(index: int, label_space: list[str]) -> PreviewItem:
+    # Return a deterministic PreviewItem (no external I/O)
+    ...
+
+SCHEMA = DatasetSchema(
+    dataset_type="image_segmentation",
+    task_type="segmentation",
+    annotation_type="masks",
+    label_space_mode="required",
+    generate_ls_config=_generate_ls_config,
+    platform_annotation_to_ls=...,
+    ls_annotation_to_platform=...,
+    mock_item_generator=_mock_item_generator,
+)
+schema_registry.register(SCHEMA)
+```
+
+**c. Register in the barrel** `apps/api/app/domain/schemas/__init__.py`:
+```python
+from app.domain.schemas import image_segmentation  # noqa: F401
+```
+
+After this, `compatibility.py` will automatically allow the new pair via `get_allowed_pairs()` and the preview service will use the correct LS config.
+
+#### Frontend
+
+**d. Add type values** in `libs/web-ui/src/api/types.ts`:
+```typescript
+export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
+export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
+```
+
+**e. Create the shim component** `apps/web/src/views/datasets/shims/SegmentationDatasetsShim.vue` (copy `DetectionDatasetsShim.vue` as a template).
+
+**f. Create the frontend schema module** `apps/web/src/views/datasets/schemas/image-segmentation.ts`:
+```typescript
+import { defineAsyncComponent } from "vue";
+import { registerDatasetSchema } from "../schema-registry";
+
+registerDatasetSchema({
+  datasetType: "image_segmentation",
+  taskType: "segmentation",
+  annotationType: "masks",
+  shimComponent: defineAsyncComponent(
+    () => import("../shims/SegmentationDatasetsShim.vue"),
+  ),
+  mockSampleFactory: (index, labelSpace = ["object"]) => ({
+    // same structure as _mock_item_generator in Python
+  }),
+});
+```
+
+**g. Register in the  add the import to `apps/web/src/views/datasets/registry.ts`:barrel**
+```typescript
+import "./schemas/image-segmentation";
+```
+
+#### Seed script (optional but recommended)
+
+**h. Create** `libs/seedmaker/src/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
+```python
+from seedmaker.config import SeedConfig
+from seedmaker.runner import SeedRunner
+
+config = SeedConfig(
+    name="image-segmentation-mock",
+    dataset_name="Segmentation Mock",
+    dataset_type="image_segmentation",
+    task_type="segmentation",
+    label_space=["road", "sky", "car"],
+)
+```
+
+**i. Register** in `libs/seedmaker/src/seedmaker/datasets/__init__.py`:
+```python
+from seedmaker.datasets import image_segmentation  # noqa: F401
+```
+
+### Annotation value for complex types
+
+If your annotation type stores more than a string label (e.g., bounding boxes, masks, key-points), use the `annotation_value` JSON column:
+
+- Set `label = ""` (kept non-null for backward compat).
+- Set `annotation_value = [{ ... complex payload ... }]`.
+
+The `CreateAnnotationRequest` already accepts `annotation_value: dict | list | None = None`.
+
+### What you get automatically
+
+After completing all steps above:
+- `GET /api/v1/compatibility` will include your new pair.
+- `POST /api/v1/datasets` will accept your new `dataset_type` + `task_type`.
+- Label Studio projects will be created with the correct config.
+- The preview feature will create datasets of the right type.
+- The datasets list page will render your shim component.
+- `SchemaAwareMockUpstream` will produce correctly-shaped preview items.
+
+### Further reading
+
+- [`docs/architecture/dataset-schema-system.md`](../architecture/dataset-schema-system. architecture overviewmd)
+- [`docs/architecture/datasets-shim-architecture.md`](../architecture/datasets-shim-architecture. frontend shim detailmd)
+- `apps/api/app/domain/schemas/image_detection. reference implementation (backend)py`
+- `apps/web/src/views/datasets/schemas/image-detection. reference implementation (frontend)ts`

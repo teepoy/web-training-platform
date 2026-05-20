@@ -1,88 +1,175 @@
 # Datasets Shim Architecture
 
-The `DatasetsView` uses a shim-based architecture to support different UI layouts and behaviors based on the task type of the datasets being displayed. This allows the platform to provide specialized views for different task types (e.g., Classification vs. VQA) while sharing common data fetching and state management logic.
+The `DatasetsView` uses a schema-driven shim architecture to support different UI layouts and behaviors based on the **dataset type** of the datasets being displayed. Each dataset type (e.g., `image_classification`, `image_vqa`, `image_detection`) has a corresponding schema descriptor that bundles its shim component, annotation shape, and mock data factory.
 
 ## Overview
 
-The architecture consists of four main parts:
+The architecture consists of five layers:
 
-1.  **Host (`DatasetsView.vue`)**: A thin container that manages data fetching and determines which specialized "shim" to render.
-2.  **Registry (`registry.ts`)**: A central map that associates task types with their corresponding shim components.
-3.  **Shared UI package (`@platform/web-ui`)**: Reusable Vue/Naive UI components and dataset-list helpers shared across app surfaces.
-4.  **Shims (`shims/*.vue`)**: Specialized components that render the actual UI for a specific task type.
+1. **Host (`DatasetsView.vue`)**: Thin container — fetches data, resolves active dataset type, renders the shim.
+2. **App schema barrel (`schemas/`)**: One module per dataset type; each registers itself into the schema registry on import.
+3. **Schema registry (`schema-registry.ts`)**: Map of `dataset_type → DatasetSchemaDescriptor`; provides `resolveDatasetShim()`.
+4. **Shared UI package (`@platform/web-ui`)**: Reusable Vue/Naive UI components and dataset-list helpers.
+5. **Shims (`shims/*.vue`)**: Leaf components defining the per-type dataset list layout.
 
-## How it Works
+## How It Works
 
 ### 1. Host: `DatasetsView.vue`
 
-The host component is responsible for:
-- Fetching the list of datasets using Vue Query.
-- Initializing `useDatasetListSurface` from `@platform/web-ui` with fetched data, widget registry results, and event handlers.
-- Determining the `activeTaskType` (currently based on the first dataset in the list).
-- Resolving the `activeShim` component via the registry.
-- Rendering the `DatasetPageShell` and the resolved shim.
+The host is responsible for:
+- Fetching the dataset list via Vue Query.
+- Deriving `activeDatasetType` from `datasets[0].dataset_type` (e.g. `"image_classification"`).
+- Calling `resolveDatasetShim(activeDatasetType)` to get the correct shim component.
+- Rendering `DatasetPageShell` + the resolved shim.
 
-### 2. Registry: `registry.ts`
-
-The registry defines the mapping between `TaskType` and shim components:
+### 2. Schema Registry: `schema-registry.ts`
 
 ```typescript
-export const DATASET_SHIM_REGISTRY = {
-  classification: defineAsyncComponent(() => import("./shims/ClassificationDatasetsShim.vue")),
-  vqa: defineAsyncComponent(() => import("./shims/VqaDatasetsShim.vue")),
-} satisfies Record<TaskType, Component>;
+// apps/web/src/views/datasets/schema-registry.ts
+
+export interface DatasetSchemaDescriptor {
+  datasetType: string;          // e.g. "image_classification"
+  taskType: string;             // e.g. "classification"
+  annotationType: "choice" | "boxes" | "text" | "none";
+  shimComponent: Component;     // async component factory
+  mockSampleFactory: (index: number, labelSpace?: string[]) => unknown;
+}
+
+export function registerDatasetSchema(schema: DatasetSchemaDescriptor): void { ... }
+export function resolveDatasetShim(datasetType: string | null | undefined): Component { ... }
+export function getMockSampleFactory(datasetType: string): (...) => unknown { ... }
 ```
 
-The `resolveDatasetShim` function provides the resolution logic, including fallback behavior:
-- If `taskType` is `vqa`, it returns the VQA shim.
-- Otherwise, it falls back to the `classification` shim.
+`resolveDatasetShim` falls back to the `image_classification` shim for unknown types.
 
-### 3. Shared UI Package: `@platform/web-ui`
+### 3. Schema Modules: `schemas/`
 
-The `libs/web-ui` package owns reusable frontend UI and helpers that are not tied to app routing, API clients, stores, or the singleton widget registry.
+Each file in `apps/web/src/views/datasets/schemas/` registers one dataset type:
 
-The package provides:
-- **Normalized Data**: Datasets with consistent field types.
+```typescript
+// schemas/image-detection.ts
+import { registerDatasetSchema } from "../schema-registry";
+import { imageDetectionSchema } from "./image-detection-descriptor";
+
+registerDatasetSchema({
+  datasetType: "image_detection",
+  taskType: "detection",
+  annotationType: "boxes",
+  shimComponent: defineAsyncComponent(() => import("../shims/DetectionDatasetsShim.vue")),
+  mockSampleFactory: imageDetectionSchema.mockSampleFactory,
+});
+```
+
+The barrel `registry.ts` imports all schema modules so they self-register before the host renders.
+
+### 4. Shared UI Package: `@platform/web-ui`
+
+The `libs/web-ui` package owns reusable UI and helpers independent of routing, API clients, stores, and the widget registry.
+
+- **Normalized Data**: Consistent field types across dataset types.
 - **Permissions**: `isSuperadmin`, `canDelete`, etc.
-- **UI Components**: `DatasetPageShell`, `DatasetToolbar`, `DatasetTable`, `DatasetRowActions`, `FlowModal`, and `FlowTypeSelector`.
-- **Dataset Helpers**: `useDatasetListSurface` and `buildDatasetColumns` for shared table/action behavior.
+- **UI Components**: `DatasetPageShell`, `DatasetToolbar`, `DatasetTable`, `DatasetRowActions`.
+- **Dataset Helpers**: `useDatasetListSurface`, `buildDatasetColumns`.
 
-The web app remains responsible for API calls, Vue Query, routing, auth/org stores, and reading registered widgets from `widgetRegistry`.
+### 5. Shims
 
-### 4. Shims
+Shims are leaf components defining per-type dataset list layouts using `@platform/web-ui` helpers.
 
-Shims are the "leaf" components that define the layout. They use shared components and helpers from `@platform/web-ui`.
+| Shim | Dataset Type | Notes |
+|------|-------------|-------|
+| `ClassificationDatasetsShim.vue` | `image_classification` | Default fallback shim |
+| `VqaDatasetsShim.vue` | `image_vqa` | Extra alert for VQA-specific guidance |
+| `DetectionDatasetsShim.vue` | `image_detection` | Object detection list view |
 
-- **`ClassificationDatasetsShim.vue`**: The default view for classification tasks.
-- **`VqaDatasetsShim.vue`**: A specialized view for Visual Question Answering, which can include additional alerts or custom columns.
+## Backend Schema System
 
-## Extension Flow: Adding a New Shim
+The frontend schema registry mirrors a backend `DatasetSchema` dataclass system:
 
-To add support for a new task type (e.g., `object-detection`):
+```
+apps/api/app/domain/dataset_schema.py   ← DatasetSchema dataclass
+apps/api/app/domain/schema_registry.py  ← register/get/list_all
+apps/api/app/domain/schemas/            ← one module per type, auto-registers on import
+  __init__.py                           ← imports all schema modules (barrel)
+  image_classification.py
+  image_vqa.py
+  image_detection.py
+```
 
-1.  **Create the Shim**:
-    Create `apps/web/src/views/datasets/shims/ObjectDetectionDatasetsShim.vue`. You can copy `ClassificationDatasetsShim.vue` as a starting point.
+Each Python schema module defines:
+- `generate_ls_config(label_space)` — Label Studio XML config
+- `platform_annotation_to_ls(label, annotation_value)` — annotation format conversion
+- `ls_annotation_to_platform(ls_results)` — reverse conversion
+- `mock_item_generator(index, label_space)` — deterministic synthetic sample (shared with seeds and Storybook)
 
-2.  **Register the Shim**:
-    Update `apps/web/src/views/datasets/registry.ts`:
-    ```typescript
-    export const DATASET_SHIM_REGISTRY = {
-      classification: ...,
-      vqa: ...,
-      "object-detection": defineAsyncComponent(() => import("./shims/ObjectDetectionDatasetsShim.vue")),
-    };
-    ```
+The `mock_item_generator` in the Python schema is the **same logic** as `mockSampleFactory` in the TypeScript schema — a single source of truth for test/mock data across backend seeds, `SchemaAwareMockUpstream`, and frontend Storybook stories.
 
-3.  **Update Resolution Logic**:
-    Update `resolveDatasetShim` in `registry.ts` to handle the new type:
-    ```typescript
-    export function resolveDatasetShim(taskType: TaskType | undefined): Component {
-      if (taskType === "vqa") return DATASET_SHIM_REGISTRY.vqa;
-      if (taskType === "object-detection") return DATASET_SHIM_REGISTRY["object-detection"];
-      return DATASET_SHIM_REGISTRY.classification;
-    }
-    ```
+## Extension Flow: Adding a New Dataset Type
+
+To add a new dataset type end-to-end (e.g., `image_segmentation`):
+
+### Backend
+
+1. **Add enum values** in `apps/api/app/domain/types.py`:
+   ```python
+   IMAGE_SEGMENTATION = "image_segmentation"
+   SEGMENTATION = "segmentation"
+   ```
+
+2. **Create the schema module** `apps/api/app/domain/schemas/image_segmentation.py`:
+   ```python
+   from app.domain.dataset_schema import DatasetSchema
+   from app.domain import schema_registry
+
+   SCHEMA = DatasetSchema(
+       dataset_type="image_segmentation",
+       task_type="segmentation",
+       annotation_type="masks",
+       label_space_mode="required",
+       generate_ls_config=...,
+       platform_annotation_to_ls=...,
+       ls_annotation_to_platform=...,
+       mock_item_generator=...,
+   )
+   schema_registry.register(SCHEMA)
+   ```
+
+3. **Register in the barrel** `apps/api/app/domain/schemas/__init__.py`:
+   ```python
+   from app.domain.schemas import image_segmentation  # noqa: F401
+   ```
+
+### Frontend
+
+4. **Add type values** in `libs/web-ui/src/api/types.ts`:
+   ```typescript
+   export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
+   export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
+   ```
+
+5. **Create the shim** `apps/web/src/views/datasets/shims/SegmentationDatasetsShim.vue`.
+
+6. **Create the schema module** `apps/web/src/views/datasets/schemas/image-segmentation.ts`:
+   ```typescript
+   import { defineAsyncComponent } from "vue";
+   import { registerDatasetSchema } from "../schema-registry";
+
+   registerDatasetSchema({
+     datasetType: "image_segmentation",
+     taskType: "segmentation",
+     annotationType: "masks",
+     shimComponent: defineAsyncComponent(() => import("../shims/SegmentationDatasetsShim.vue")),
+     mockSampleFactory: (index) => ({ /* ... */ }),
+   });
+   ```
+
+7. **Register in the barrel** `apps/web/src/views/datasets/registry.ts` — add the import.
+
+### Seed script
+
+8. **Create** `libs/seedmaker/src/seedmaker/datasets/image_segmentation.py` using the same `mock_item_generator` logic.
+
+9. **Register** in `libs/seedmaker/src/seedmaker/datasets/__init__.py`.
 
 ## Fallback Behavior
 
-If a task type is not explicitly handled in `resolveDatasetShim`, the system defaults to the `classification` shim. This ensures that the datasets list remains functional even as new task types are introduced to the backend before specialized frontend shims are implemented.
+If `resolveDatasetShim` receives an unknown `datasetType`, it falls back to `image_classification`. This keeps the list page functional while a new type's shim is being developed.
