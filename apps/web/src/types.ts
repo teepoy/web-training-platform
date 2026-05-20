@@ -1,7 +1,15 @@
-export type TaskType = "classification" | "vqa";
-export type DatasetType = "image_classification" | "image_vqa";
-export type ModelFramework = "pytorch" | "dspy";
-export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+import type { components } from "./generated/openapi-types";
+
+type Schemas = components["schemas"];
+
+export type TaskType = Schemas["TaskType"];
+export type DatasetType = Schemas["DatasetType"];
+export type JobStatus = Schemas["JobStatus"];
+
+// This file intentionally preserves the app-facing transport contract that the
+// existing UI was written against. openapi/openapi.yaml remains the source of
+// truth, while this layer keeps imports stable and smooths over stricter/nullish
+// shapes produced by the generator.
 
 export interface TaskSpec {
   task_type: TaskType;
@@ -20,6 +28,7 @@ export interface Dataset {
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
+  embed_config?: Record<string, unknown> | null;
 }
 
 export interface Sample {
@@ -28,18 +37,7 @@ export interface Sample {
   image_uris: string[];
   metadata: Record<string, unknown>;
   ls_task_id?: number | null;
-}
-
-export interface WaferPoint {
-  id: string;
-  x: number;
-  y: number;
-  value?: number;
-}
-
-export interface WaferPointsQueryResponse {
-  points: WaferPoint[];
-  total: number;
+  created_at?: string | null;
 }
 
 export interface BulkCreateSampleItem {
@@ -81,73 +79,6 @@ export interface SampleWithLabels {
   latest_annotation: LatestAnnotation | null;
 }
 
-export interface ModelSpec {
-  architecture: string;
-  num_classes: number;
-}
-
-// ---------------------------------------------------------------------------
-// File-backed preset (new shape from preset registry)
-// ---------------------------------------------------------------------------
-
-export interface PresetModelSource {
-  framework: string;
-  base_model: string;
-  source?: string | null;
-  checkpoint?: string | null;
-}
-
-export interface PresetTrainConfig {
-  process: string;
-  dataloader?: { ref: string } | null;
-  hyperparams?: Record<string, unknown>;
-}
-
-export interface PresetPredictTarget {
-  process: string;
-  label_space?: string[] | null;
-  threshold?: number | null;
-}
-
-export interface PresetPredictConfig {
-  targets: Record<string, PresetPredictTarget>;
-}
-
-export interface PresetRuntimeConfig {
-  gpu?: boolean;
-  min_vram_gb?: number | null;
-  env?: Record<string, string>;
-  queue?: string | null;
-}
-
-export interface PresetCompatibility {
-  dataset_types: string[];
-  task_types: string[];
-  prediction_targets: string[];
-}
-
-export interface TrainingPreset {
-  id: string;
-  name: string;
-  version?: string;
-  description?: string;
-  tags?: string[];
-  deprecated?: boolean;
-  trainable?: boolean;
-  model: PresetModelSource;
-  train: PresetTrainConfig;
-  predict: PresetPredictConfig;
-  test?: Record<string, unknown> | null;
-  convert?: Record<string, unknown> | null;
-  runtime: PresetRuntimeConfig;
-  compatibility?: PresetCompatibility;
-  // Legacy compat fields
-  model_spec?: ModelSpec | { framework: string; base_model: string };
-  omegaconf_yaml?: string;
-  dataloader_ref?: string;
-  org_id?: string | null;
-}
-
 export interface TrainingEvent {
   job_id: string;
   ts: string;
@@ -157,10 +88,15 @@ export interface TrainingEvent {
 }
 
 export interface ArtifactRef {
-  id: string;
+  id: string | null;
   uri: string;
   kind: string;
   metadata: Record<string, unknown>;
+  name?: string | null;
+  file_size?: number | null;
+  file_hash?: string | null;
+  format?: string | null;
+  created_at?: string | null;
 }
 
 export interface TrainingJob {
@@ -172,42 +108,16 @@ export interface TrainingJob {
   created_at: string;
   updated_at: string;
   artifact_refs: ArtifactRef[];
+  external_job_id?: string | null;
   org_id?: string;
   org_name?: string;
   is_public?: boolean;
-}
-
-export interface SampleFeature {
-  sample_id: string;
-  embedding: number[];
 }
 
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
 }
-
-export interface ApiError {
-  detail: string;
-  status: number;
-}
-
-export interface HealthStatus {
-  status: string;
-  auth_enabled: boolean;
-}
-
-export interface UploadResponse {
-  uri: string;
-  sample_id: string;
-  index: number;
-}
-
-export interface UpdateAnnotationPayload {
-  label: string;
-}
-
-export type ScheduleStatus = "active" | "paused";
 
 export interface Schedule {
   id: string;
@@ -243,12 +153,6 @@ export interface RunLog {
   message: string;
 }
 
-export interface SyncResult {
-  synced_count: number;
-  skipped_count?: number;
-  errors: string[];
-}
-
 export interface BulkAnnotationItem {
   sample_id: string;
   label: string;
@@ -264,54 +168,54 @@ export interface BulkAnnotationResponse {
 }
 
 export interface WorkPoolStatus {
-  name: string
-  type: string
-  is_paused: boolean
-  concurrency_limit: number | null
-  slots_used: number
-  status: string
+  name: string;
+  type: string;
+  is_paused: boolean;
+  concurrency_limit: number | null;
+  slots_used: number;
+  status: string;
 }
 
 export interface JobQueueStats {
-  queued: number
-  running: number
-  completed: number
-  failed: number
-  cancelled: number
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
 }
 
 export interface RecentJobSummary {
-  id: string
-  dataset_id: string
-  preset_id: string
-  status: string
-  created_by: string
-  created_at: string
-  updated_at: string
+  id: string;
+  dataset_id: string;
+  preset_id: string;
+  status: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ServiceStatus {
-  name: string
-  kind: string
-  status: string
-  detail: string
-  latency_ms: number | null
-  endpoint: string | null
+  name: string;
+  kind: string;
+  status: string;
+  detail: string;
+  latency_ms: number | null;
+  endpoint: string | null;
 }
 
 export interface DashboardResponse {
-  work_pool: WorkPoolStatus | null
-  job_queue: JobQueueStats
-  recent_jobs: RecentJobSummary[]
-  services: ServiceStatus[]
-  prefect_connected: boolean
+  work_pool: WorkPoolStatus | null;
+  job_queue: JobQueueStats;
+  recent_jobs: RecentJobSummary[];
+  services: ServiceStatus[];
+  prefect_connected: boolean;
 }
 
 export interface DatasetAnnotationStats {
-  total_samples: number
-  annotated_samples: number
-  unlabeled_samples: number
-  label_counts: Record<string, number>
+  total_samples: number;
+  annotated_samples: number;
+  unlabeled_samples: number;
+  label_counts: Record<string, number>;
 }
 
 export type OrgRole = "admin" | "member";
@@ -321,7 +225,6 @@ export interface User {
   email: string;
   name: string;
   is_superadmin: boolean;
-  is_active: boolean;
   created_at: string;
 }
 
@@ -333,11 +236,10 @@ export interface Organization {
 }
 
 export interface OrgMembership {
-  id: string;
-  user_id: string;
   org_id: string;
+  org_name: string;
+  org_slug: string;
   role: OrgRole;
-  created_at: string;
 }
 
 export interface UserWithOrgs extends User {
@@ -351,43 +253,26 @@ export interface LoginResponse {
 
 export interface PersonalAccessToken {
   id: string;
-  user_id: string;
   name: string;
   token_prefix: string;
   created_at: string;
   last_used_at: string | null;
 }
 
-export interface PersonalAccessTokenCreated extends PersonalAccessToken {
+export interface PersonalAccessTokenCreated {
+  id: string;
+  name: string;
   token: string;
+  created_at: string;
 }
 
 export interface OrgMember {
+  id: string;
   user_id: string;
-  org_id: string;
+  user_email: string;
+  user_name: string;
   role: OrgRole;
-  user: User;
-}
-
-// ---------------------------------------------------------------------------
-// Model artifacts
-// ---------------------------------------------------------------------------
-
-export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";
-
-export interface ModelCompatibility {
-  dataset_types: string[];
-  task_types: string[];
-  prediction_targets: string[];
-  label_space: string[];
-  embedding_dimension?: number | null;
-  normalized_output?: boolean | null;
-}
-
-export interface UploadedModelSpec {
-  framework: string;
-  architecture: string;
-  base_model: string;
+  created_at: string;
 }
 
 export interface ModelUploadProfile {
@@ -403,18 +288,8 @@ export interface ModelUploadTemplate {
   dataset_types: string[];
   task_types: string[];
   profiles: ModelUploadProfile[];
-  label_space_mode: "required" | "forbidden";
+  label_space_mode: string;
   requires_embedding_metadata: boolean;
-}
-
-export interface UploadModelMetadata {
-  name: string;
-  format: ModelFormat;
-  job_id: string;
-  template_id: string;
-  profile_id: string;
-  model_spec: UploadedModelSpec;
-  compatibility: ModelCompatibility;
 }
 
 export interface Model {
@@ -433,10 +308,6 @@ export interface Model {
   preset_name: string;
 }
 
-// ---------------------------------------------------------------------------
-// Predictions
-// ---------------------------------------------------------------------------
-
 export interface PredictionResult {
   id: string | null;
   sample_id: string;
@@ -448,18 +319,6 @@ export interface PredictionResult {
   job_id: string | null;
   created_at: string | null;
   error: string | null;
-}
-
-export interface BatchPredictionResult {
-  model_id: string;
-  dataset_id: string;
-  total_samples: number;
-  successful: number;
-  failed: number;
-  predictions: PredictionResult[];
-  started_at: string;
-  completed_at: string;
-  model_version: string | null;
 }
 
 export interface PredictionJob {
@@ -485,26 +344,8 @@ export interface PredictionEvent {
   payload: Record<string, unknown>;
 }
 
-export interface RunPredictionRequest {
-  model_id: string;
-  dataset_id: string;
-  sample_ids?: string[] | null;
-  model_version?: string | null;
-  target?: string;
-  prompt?: string | null;
-}
-
-export interface PredictSingleRequest {
-  model_id: string;
-  sample_id: string;
-  model_version?: string | null;
-  target?: string;
-  prompt?: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Prediction Review
-// ---------------------------------------------------------------------------
+export type RunPredictionRequest = Schemas["RunPredictionRequest"];
+export type PredictSingleRequest = Schemas["PredictSingleRequest"];
 
 export interface ReviewAction {
   id: string;
@@ -575,11 +416,6 @@ export interface SaveReviewAnnotationsResponse {
 }
 
 export interface ExportFormat {
-  format_id: string;
-}
-
-export interface VersionExportResponse {
-  uri: string;
   format_id: string;
 }
 
@@ -692,10 +528,6 @@ export interface TaskTrackerDetail {
   derived: TaskTrackerDerived;
 }
 
-// ---------------------------------------------------------------------------
-// Agent / Display Surface types
-// ---------------------------------------------------------------------------
-
 export interface AgentPanelDescriptor {
   id: string;
   component: string;
@@ -737,134 +569,6 @@ export interface SurfaceStateDocument {
   metadata: Record<string, unknown>;
 }
 
-export interface AgentChatEvent {
-  type: "agent-message" | "agent-action" | "sidebar-update" | "done";
-}
-
-export interface AgentMessageEvent extends AgentChatEvent {
-  type: "agent-message";
-  content: string;
-}
-
-export interface AgentActionEvent extends AgentChatEvent {
-  type: "agent-action";
-  tool: string;
-  summary: string;
-}
-
-export interface AgentSidebarUpdateEvent extends AgentChatEvent {
-  type: "sidebar-update";
-  surface_id: string;
-  panels: AgentPanelDescriptor[];
-}
-
-export interface AgentDoneEvent extends AgentChatEvent {
-  type: "done";
-}
-
-/** A single entry in the chat history shown to the user. */
-export interface ChatEntry {
-  id: string;
-  role: "user" | "assistant" | "action";
-  content: string;
-  tool?: string;
-  timestamp: number;
-}
-
-// Widget inline data shapes
-
-export interface MarkdownLogEntry {
-  ts: string;
-  level: string;
-  message: string;
-}
-
-export interface MetricCardItem {
-  label: string;
-  value: string;
-  color?: string;
-}
-
-export type TableWidgetEntity = "sample" | "prediction" | "row";
-
-export type TableWidgetFilterMode = "all" | "selected-only";
-
-export interface TableWidgetInteractionConfig {
-  collection: string;
-  entity: TableWidgetEntity;
-  emitSelection?: boolean;
-  followSelection?: boolean;
-  filterFromSelection?: boolean;
-  clearFilterOnEmptySelection?: boolean;
-}
-
-export interface TableWidgetColumn {
-  key: string;
-  label: string;
-}
-
-export interface TableWidgetRow {
-  id: string;
-  cells: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}
-
-export interface InteractiveTableWidgetData {
-  columns: TableWidgetColumn[];
-  rows: TableWidgetRow[];
-}
-
-// ---------------------------------------------------------------------------
-// Annotation Grid item (shared by ClassifyView & PredictionReview Step 2)
-// ---------------------------------------------------------------------------
-
-export interface AnnotationGridItem {
-  /** Sample ID (unique key) */
-  id: string;
-  /** Resolved image src strings (already passed through resolveImageUris) */
-  imageSrcs: string[];
-  /** Current persisted label (from latest_annotation) */
-  currentLabel: string | null;
-  /** Draft label assigned in-session but not yet submitted */
-  draftLabel: string | null;
-  /** Prediction label (only in prediction-review mode) */
-  predictionLabel: string | null;
-  /** Prediction confidence 0-1 (only in prediction-review mode) */
-  predictionConfidence: number | null;
-  /** Prediction ID for review submission */
-  predictionId: string | null;
-  /** Arbitrary metadata shown on hover / detail */
-  metadata: Record<string, unknown>;
-}
-
-export interface BrowserItem {
-  /** Sample or upstream item ID (unique key within a browser surface) */
-  id: string;
-  /** Resolved image src strings */
-  imageSrcs: string[];
-  /** Arbitrary metadata shown on hover / detail */
-  metadata: Record<string, unknown>;
-  /** Which surface this item came from — filled in by surface adapters */
-  sourceKind?: "dataset" | "preview" | "classify-review";
-  /** Current persisted label */
-  currentLabel: string | null;
-  /** Draft label assigned in-session but not yet submitted */
-  draftLabel: string | null;
-  /** Prediction label */
-  predictionLabel: string | null;
-  /** Prediction confidence 0–1 */
-  predictionConfidence: number | null;
-  /** Prediction ID for review submission */
-  predictionId: string | null;
-  /** Activation label (the label most recently activated/highlighted in the browser) */
-  activationLabel: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Global Agent types
-// ---------------------------------------------------------------------------
-
-/** Context sent to the global agent to describe where the user is. */
 export interface AgentContext {
   page: string;
   dataset_id?: string | null;
@@ -873,47 +577,33 @@ export interface AgentContext {
   extra?: Record<string, unknown>;
 }
 
-/** Request body for the global agent chat endpoint. */
 export interface GlobalChatRequest {
   message: string;
   context: AgentContext;
   session_id?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Preview session types
-// ---------------------------------------------------------------------------
-
 export interface PreviewSession {
-  session_id: string
-  collection_ref: string
-  classification_enabled: boolean
-  estimated_total: number | null
-  loaded_count: number
-  next_cursor: string | null
-  has_more: boolean
+  session_id: string;
+  collection_ref: string;
+  classification_enabled: boolean;
+  estimated_total: number | null;
+  loaded_count: number;
+  next_cursor: string | null;
+  has_more: boolean;
 }
 
 export interface PreviewItem {
-  upstream_item_id: string
-  image_uris: string[]
-  metadata: Record<string, unknown>
+  upstream_item_id: string;
+  image_uris: string[];
+  metadata: Record<string, unknown>;
 }
 
 export interface PreviewItemsPage {
-  items: PreviewItem[]
-  next_cursor: string | null
-  has_more: boolean
-  estimated_total: number | null
+  items: PreviewItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+  estimated_total: number | null;
 }
 
-export type PreviewPersistScope = 'entire_collection' | 'loaded_items_only'
-
-export interface PreviewPersistStatus {
-  dataset_id: string
-  persist_session_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  imported_count: number
-  remaining_count: number
-  error: string | null
-}
+export * from "./ui-types";

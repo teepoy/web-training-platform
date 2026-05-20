@@ -19,6 +19,9 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Agent runtime | `app/agent/` | Surface store, metadata inference, prompt assembler, tools, runtime loop |
 | Agent routes | `app/main.py` (bottom) | Surface CRUD, data query, agent chat SSE endpoints |
 | Agent tests | `tests/test_agent.py` | 37 tests covering surface store, inference, assembler, routes, chat |
+| Canonical transport contract | `../../openapi/openapi.yaml` | Single source of truth for backend/frontend transport types |
+| Generated transport models | `app/generated/openapi_models.py` | Generated with `datamodel-codegen`; do not edit by hand |
+| Manual schema helpers | `app/api/internal_schemas.py` | Internal-only helpers/default-heavy models not represented in OpenAPI |
 
 ## STRUCTURE
 ```text
@@ -55,6 +58,8 @@ apps/api/
 uv run uvicorn app.main:app --reload --port 8000
 uv run alembic upgrade head
 uv run --extra dev pytest
+make generate-api-models
+make check-openapi-sync
 ```
 
 ## TESTS & COVERAGE
@@ -67,3 +72,4 @@ uv run --extra dev pytest
 - SSE endpoint polls repository state every 0.5s per client.
 - `config/base.yaml` contains placeholder/insecure defaults; real deployments must override via env or secrets.
 - Per-sample predictions now live in the API DB (`platform_predictions`) instead of Label Studio. Label Studio prediction sync is a manual, one-way export of selected prediction collections for annotation use.
+- If a transport shape belongs in the API contract, change `openapi/openapi.yaml` first and regenerate; do not add a parallel hand-written DTO in `app/api/schemas.py`.

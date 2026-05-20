@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from functools import lru_cache
 import json
 import logging
-from typing import cast
+from pathlib import Path
+from typing import Any, cast
 
 import httpx
 from fastapi import (
@@ -20,9 +23,11 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+import yaml
 
 from app.api.schemas import (
     AddMemberRequest,
+    Annotation as ApiAnnotation,
     AnnotationVersionResponse,
     BulkAnnotationRequest,
     BulkCreateSampleRequest,
@@ -40,6 +45,7 @@ from app.api.schemas import (
     CreateTokenRequest,
     CreateTrainingJobRequest,
     DashboardResponse,
+    Dataset as ApiDataset,
     DatasetAnnotationStats,
     ExportFormatResponse,
     ImportVqaJsonlResponse,
@@ -63,6 +69,7 @@ from app.api.schemas import (
     RunLogResponse,
     RunPredictionRequest,
     RunResponse,
+    Sample as ApiSample,
     SaveReviewAnnotationsRequest,
     SaveReviewAnnotationsResponse,
     ScheduleResponse,
@@ -93,6 +100,8 @@ from app.api.schemas import (
     PreviewItemResponse,
     StartPersistRequest,
     PersistStatusResponse,
+    TrainingEvent as ApiTrainingEvent,
+    TrainingJob as ApiTrainingJob,
 )
 from app.api.deps import (
     get_current_org,
@@ -110,13 +119,13 @@ from app.db.models import (
 )
 from app.db.session import init_db
 from app.domain.models import (
-    Annotation,
-    Dataset,
+    Annotation as DomainAnnotation,
     DEFAULT_ORG_ID,
+    Dataset as DomainDataset,
     Organization,
-    Sample,
-    TrainingEvent,
-    TrainingJob,
+    Sample as DomainSample,
+    TrainingEvent as DomainTrainingEvent,
+    TrainingJob as DomainTrainingJob,
     User,
 )
 from app.domain.types import DatasetType, TaskType
@@ -137,6 +146,21 @@ from app.services.label_studio import (
 )
 
 _logger = logging.getLogger(__name__)
+_OPENAPI_SPEC_PATH = Path(__file__).resolve().parents[3] / "openapi" / "openapi.yaml"
+
+
+@lru_cache(maxsize=1)
+def _load_canonical_openapi() -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        yaml.safe_load(_OPENAPI_SPEC_PATH.read_text(encoding="utf-8")),
+    )
+
+
+def _as_utc(value: Any) -> Any:
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _infer_dataset_type(task_type: TaskType) -> DatasetType:
@@ -189,6 +213,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Online Finetune API", version="0.1.0", lifespan=lifespan)
+app.openapi = _load_canonical_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -212,7 +237,7 @@ def _make_ls_image_url(uri: str) -> str:
     return uri  # data: URIs and http:// pass through
 
 
-def _with_ls_url(dataset: Dataset) -> Dataset:
+def _with_ls_url(dataset: DomainDataset) -> DomainDataset:
     """Compute ls_project_url at response time from config.
 
     Uses external_url (browser-facing) if available, falls back to url (internal).
@@ -241,12 +266,12 @@ def api_health() -> dict[str, str | bool]:
     return health()
 
 
-@app.post("/api/v1/datasets", response_model=Dataset)
+@app.post("/api/v1/datasets", response_model=ApiDataset)
 async def create_dataset(
     payload: CreateDatasetRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Dataset:
+) -> DomainDataset:
     dataset_type = payload.dataset_type or _infer_dataset_type(
         payload.task_spec.task_type
     )
@@ -280,7 +305,7 @@ async def create_dataset(
         raise HTTPException(
             status_code=502, detail=f"Label Studio project creation failed: {exc}"
         )
-    dataset = Dataset(
+    dataset = DomainDataset(
         name=payload.name,
         dataset_type=dataset_type,
         task_spec=payload.task_spec,
@@ -291,21 +316,21 @@ async def create_dataset(
     return _with_ls_url(dataset)
 
 
-@app.get("/api/v1/datasets", response_model=list[Dataset])
+@app.get("/api/v1/datasets", response_model=list[ApiDataset])
 async def list_datasets(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> list[Dataset]:
+) -> list[DomainDataset]:
     datasets = await container.repository().list_datasets(org_id=org.id)
     return [_with_ls_url(d) for d in datasets]
 
 
-@app.get("/api/v1/datasets/{dataset_id}", response_model=Dataset)
+@app.get("/api/v1/datasets/{dataset_id}", response_model=ApiDataset)
 async def get_dataset(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Dataset:
+) -> DomainDataset:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -342,13 +367,13 @@ async def delete_dataset(
     return Response(status_code=204)
 
 
-@app.patch("/api/v1/datasets/{dataset_id}/label-space", response_model=Dataset)
+@app.patch("/api/v1/datasets/{dataset_id}/label-space", response_model=ApiDataset)
 async def update_label_space(
     dataset_id: str,
     payload: UpdateLabelSpaceRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Dataset:
+) -> DomainDataset:
     """Update the label space for a dataset. Also updates the Label Studio project config."""
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -387,13 +412,13 @@ async def update_label_space(
     return _with_ls_url(updated)
 
 
-@app.post("/api/v1/datasets/{dataset_id}/samples", response_model=Sample)
+@app.post("/api/v1/datasets/{dataset_id}/samples", response_model=ApiSample)
 async def create_sample(
     dataset_id: str,
     payload: CreateSampleRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Sample:
+) -> DomainSample:
     dataset = await container.repository().get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
@@ -423,7 +448,7 @@ async def create_sample(
         raise HTTPException(
             status_code=502, detail=f"Label Studio task creation failed: {exc}"
         )
-    sample = Sample(
+    sample = DomainSample(
         dataset_id=dataset_id,
         image_uris=payload.image_uris,
         metadata=payload.metadata,
@@ -482,7 +507,7 @@ async def import_samples(
         )
 
     samples = [
-        Sample(
+        DomainSample(
             dataset_id=dataset_id,
             image_uris=item.image_uris,
             metadata=item.metadata,
@@ -502,7 +527,7 @@ async def import_samples(
                 platform_annotation_to_ls(item.label),
             )
         await container.repository().create_annotation(
-            Annotation(
+            DomainAnnotation(
                 sample_id=sample.id,
                 label=item.label,
                 created_by=current_user.email,
@@ -573,7 +598,7 @@ async def import_vqa_samples(
             if answer is not None:
                 metadata["answer"] = str(answer)
 
-            sample = Sample(
+            sample = DomainSample(
                 dataset_id=dataset_id,
                 image_uris=[image_uri],
                 metadata=metadata,
@@ -594,7 +619,7 @@ async def import_vqa_samples(
 
 
 @app.get(
-    "/api/v1/datasets/{dataset_id}/samples", response_model=PaginatedResponse[Sample]
+    "/api/v1/datasets/{dataset_id}/samples", response_model=PaginatedResponse[ApiSample]
 )
 async def list_samples(
     dataset_id: str,
@@ -602,7 +627,7 @@ async def list_samples(
     limit: int = Query(default=50, ge=1),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> PaginatedResponse[Sample]:
+) -> PaginatedResponse[DomainSample]:
     items, total = await container.repository().list_samples(
         dataset_id, offset=offset, limit=limit
     )
@@ -653,12 +678,12 @@ async def get_annotation_stats(
     return DatasetAnnotationStats(**stats)
 
 
-@app.get("/api/v1/samples/{sample_id}", response_model=Sample)
+@app.get("/api/v1/samples/{sample_id}", response_model=ApiSample)
 async def get_sample(
     sample_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Sample:
+) -> DomainSample:
     sample = await container.repository().get_sample(sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -710,12 +735,12 @@ async def embed_sample(
     }
 
 
-@app.post("/api/v1/annotations", response_model=Annotation)
+@app.post("/api/v1/annotations", response_model=ApiAnnotation)
 async def create_annotation(
     payload: CreateAnnotationRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Annotation:
+) -> DomainAnnotation:
     sample = await container.repository().get_sample(payload.sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail="sample not found")
@@ -738,31 +763,31 @@ async def create_annotation(
         raise HTTPException(
             status_code=502, detail=f"Label Studio annotation sync failed: {exc}"
         )
-    ann = Annotation(
+    ann = DomainAnnotation(
         sample_id=payload.sample_id, label=payload.label, created_by=current_user.id
     )
     ann = await container.repository().create_annotation(ann)
     return ann
 
 
-@app.get("/api/v1/samples/{sample_id}/annotations", response_model=list[Annotation])
+@app.get("/api/v1/samples/{sample_id}/annotations", response_model=list[ApiAnnotation])
 async def list_annotations_for_sample(
     sample_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> list[Annotation]:
+) -> list[DomainAnnotation]:
     if await container.repository().get_sample(sample_id) is None:
         raise HTTPException(status_code=404, detail="sample not found")
     return await container.repository().list_annotations_for_sample(sample_id)
 
 
-@app.patch("/api/v1/annotations/{annotation_id}", response_model=Annotation)
+@app.patch("/api/v1/annotations/{annotation_id}", response_model=ApiAnnotation)
 async def update_annotation(
     annotation_id: str,
     payload: UpdateAnnotationRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> Annotation:
+) -> DomainAnnotation:
     result = await container.repository().update_annotation(
         annotation_id, payload.label
     )
@@ -795,7 +820,7 @@ async def bulk_create_annotations(
         raise HTTPException(status_code=404, detail="dataset not found")
     created = 0
     for item in payload.annotations:
-        ann = Annotation(
+        ann = DomainAnnotation(
             id=__import__("uuid").uuid4().hex,
             sample_id=item.sample_id,
             label=item.label,
@@ -875,12 +900,12 @@ async def get_preset(
     return registry.preset_to_api_dict(spec)
 
 
-@app.post("/api/v1/training-jobs", response_model=TrainingJob)
+@app.post("/api/v1/training-jobs", response_model=ApiTrainingJob)
 async def create_training_job(
     payload: CreateTrainingJobRequest,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> TrainingJob:
+) -> DomainTrainingJob:
     dataset = await container.repository().get_dataset(
         payload.dataset_id, org_id=org.id
     )
@@ -901,7 +926,7 @@ async def create_training_job(
         validate_dataset_preset_training(dataset, preset)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    job = TrainingJob(
+    job = DomainTrainingJob(
         dataset_id=payload.dataset_id,
         preset_id=payload.preset_id,
         created_by=current_user.id,
@@ -917,20 +942,20 @@ async def create_training_job(
         )
 
 
-@app.get("/api/v1/training-jobs", response_model=list[TrainingJob])
+@app.get("/api/v1/training-jobs", response_model=list[ApiTrainingJob])
 async def list_jobs(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> list[TrainingJob]:
+) -> list[DomainTrainingJob]:
     return await container.repository().list_jobs(org_id=org.id)
 
 
-@app.get("/api/v1/training-jobs/{job_id}", response_model=TrainingJob)
+@app.get("/api/v1/training-jobs/{job_id}", response_model=ApiTrainingJob)
 async def get_job(
     job_id: str,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> TrainingJob:
+) -> DomainTrainingJob:
     job = await container.repository().get_job(job_id, org_id=org.id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -1046,7 +1071,7 @@ async def get_job_events(
 
 @app.get(
     "/api/v1/training-jobs/{job_id}/events/history",
-    response_model=PaginatedResponse[TrainingEvent],
+    response_model=PaginatedResponse[ApiTrainingEvent],
 )
 async def get_job_events_history(
     job_id: str,
@@ -1054,7 +1079,7 @@ async def get_job_events_history(
     limit: int = Query(default=50, ge=1),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> PaginatedResponse[TrainingEvent]:
+) -> PaginatedResponse[DomainTrainingEvent]:
     if await container.repository().get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
     items, total = await container.repository().list_events_paginated(
@@ -1099,7 +1124,7 @@ async def _build_export_data(dataset_id: str):
 
         # Get all platform samples for this dataset
         all_samples, _ = await repo.list_samples(dataset_id, limit=100_000)
-        task_id_to_sample: dict[int, Sample] = {
+        task_id_to_sample: dict[int, DomainSample] = {
             s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
         }
 
@@ -1110,8 +1135,8 @@ async def _build_export_data(dataset_id: str):
             await ls_read.get_annotations_for_tasks(task_ids) if task_ids else {}
         )
 
-        samples_out: list[Sample] = []
-        annotations_out: list[Annotation] = []
+        samples_out: list[DomainSample] = []
+        annotations_out: list[DomainAnnotation] = []
 
         for ls_task in ls_tasks:
             task_id = ls_task["id"]
@@ -1125,7 +1150,7 @@ async def _build_export_data(dataset_id: str):
                 label = ls_annotation_to_platform(result)
                 if label:
                     annotations_out.append(
-                        Annotation(
+                        DomainAnnotation(
                             sample_id=platform_sample.id,
                             label=label,
                             created_by="label_studio",
@@ -1300,6 +1325,9 @@ async def download_artifact(
 
 def _model_to_response(model) -> ModelResponse:
     """Convert domain Model to API response."""
+    created_at = model.created_at
+    if created_at is not None and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     return ModelResponse(
         id=model.id,
         uri=model.uri,
@@ -1308,7 +1336,7 @@ def _model_to_response(model) -> ModelResponse:
         file_size=model.file_size,
         file_hash=model.file_hash,
         format=model.format,
-        created_at=model.created_at,
+        created_at=created_at,
         metadata=model.metadata,
         job_id=model.job_id,
         dataset_id=model.dataset_id,
@@ -1562,7 +1590,7 @@ def _prediction_result_to_response(result) -> PredictionResultResponse:
         target=result.target,
         model_version=result.model_version,
         job_id=result.job_id,
-        created_at=result.created_at,
+        created_at=_as_utc(result.created_at),
         error=result.error,
     )
 
@@ -1580,7 +1608,7 @@ def _prediction_collection_to_response(
         source_job_id=collection.source_job_id,
         sync_tag=collection.sync_tag,
         created_by=collection.created_by,
-        created_at=collection.created_at,
+        created_at=_as_utc(collection.created_at),
         prediction_ids=prediction_ids,
     )
 
@@ -1595,8 +1623,8 @@ def _prediction_job_to_response(job) -> PredictionJobResponse:
         created_by=job.created_by,
         target=job.target,
         model_version=job.model_version,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
+        created_at=_as_utc(job.created_at),
+        updated_at=_as_utc(job.updated_at),
         external_job_id=job.external_job_id,
         sample_ids=job.sample_ids,
         summary=job.summary,
@@ -1718,7 +1746,7 @@ async def list_prediction_job_events(
     return [
         PredictionEventResponse(
             job_id=e.job_id,
-            ts=e.ts,
+            ts=_as_utc(e.ts),
             level=e.level,
             message=e.message,
             payload=e.payload,
@@ -1900,7 +1928,7 @@ async def create_review_action(
             collection_id=action.collection_id,
             sync_tag=action.sync_tag,
             created_by=action.created_by,
-            created_at=action.created_at,
+            created_at=_as_utc(action.created_at),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1923,7 +1951,7 @@ async def list_review_actions(
             collection_id=a.collection_id,
             sync_tag=a.sync_tag,
             created_by=a.created_by,
-            created_at=a.created_at,
+            created_at=_as_utc(a.created_at),
         )
         for a in actions
     ]
@@ -1947,7 +1975,7 @@ async def get_review_action(
         collection_id=action.collection_id,
         sync_tag=action.sync_tag,
         created_by=action.created_by,
-        created_at=action.created_at,
+        created_at=_as_utc(action.created_at),
     )
 
 
@@ -1997,7 +2025,7 @@ async def save_review_annotations(
                     predicted_label=v.predicted_label,
                     final_label=v.final_label,
                     confidence=v.confidence,
-                    created_at=v.created_at,
+                    created_at=_as_utc(v.created_at),
                 )
                 for v in versions
             ],
@@ -2029,7 +2057,7 @@ async def list_annotation_versions(
             predicted_label=v.predicted_label,
             final_label=v.final_label,
             confidence=v.confidence,
-            created_at=v.created_at,
+            created_at=_as_utc(v.created_at),
         )
         for v in versions
     ]
@@ -2196,7 +2224,7 @@ async def register(payload: RegisterRequest) -> UserResponse:
         email=user_orm.email,
         name=user_orm.name,
         is_superadmin=user_orm.is_superadmin,
-        created_at=user_orm.created_at,
+        created_at=_as_utc(user_orm.created_at),
     )
 
 
@@ -2214,7 +2242,7 @@ async def login(payload: LoginRequest) -> LoginResponse:
         email=user_orm.email,
         name=user_orm.name,
         is_superadmin=user_orm.is_superadmin,
-        created_at=user_orm.created_at,
+        created_at=_as_utc(user_orm.created_at),
     )
     return LoginResponse(access_token=token, user=user_resp)
 
@@ -2239,7 +2267,7 @@ async def auth_me(
         email=current_user.email,
         name=current_user.name,
         is_superadmin=current_user.is_superadmin,
-        created_at=current_user.created_at,
+        created_at=_as_utc(current_user.created_at),
         organizations=orgs,
     )
 
@@ -2261,7 +2289,7 @@ async def create_token(
         id=pat_orm.id,
         name=pat_orm.name,
         token=plaintext,
-        created_at=pat_orm.created_at,
+        created_at=_as_utc(pat_orm.created_at),
     )
 
 
@@ -2276,7 +2304,7 @@ async def list_tokens(
             id=pat.id,
             name=pat.name,
             token_prefix=pat.token_prefix,
-            created_at=pat.created_at,
+            created_at=_as_utc(pat.created_at),
         )
         for pat in pats
     ]
@@ -2320,7 +2348,7 @@ async def create_organization(
         id=org_orm.id,
         name=org_orm.name,
         slug=org_orm.slug,
-        created_at=org_orm.created_at,
+        created_at=_as_utc(org_orm.created_at),
     )
 
 
@@ -2332,12 +2360,16 @@ async def list_organizations(
     if current_user.is_superadmin:
         orgs = await repo.list_all_organizations()
         return [
-            OrgResponse(id=o.id, name=o.name, slug=o.slug, created_at=o.created_at)
+            OrgResponse(
+                id=o.id, name=o.name, slug=o.slug, created_at=_as_utc(o.created_at)
+            )
             for o in orgs
         ]
     memberships = await repo.get_user_orgs(current_user.id)
     return [
-        OrgResponse(id=org.id, name=org.name, slug=org.slug, created_at=org.created_at)
+        OrgResponse(
+            id=org.id, name=org.name, slug=org.slug, created_at=_as_utc(org.created_at)
+        )
         for _, org in memberships
     ]
 
@@ -2376,7 +2408,7 @@ async def add_org_member(
         user_email=target_user.email,
         user_name=target_user.name,
         role=membership.role,
-        created_at=membership.created_at,
+        created_at=_as_utc(membership.created_at),
     )
 
 
@@ -2401,7 +2433,7 @@ async def list_org_members(
             user_email=user.email,
             user_name=user.name,
             role=membership.role,
-            created_at=membership.created_at,
+            created_at=_as_utc(membership.created_at),
         )
         for membership, user in members
     ]
@@ -2467,10 +2499,10 @@ async def get_dashboard(
             preset_id=j.preset_id,
             status=j.status.value if hasattr(j.status, "value") else str(j.status),
             created_by=j.created_by,
-            created_at=j.created_at
+            created_at=_as_utc(j.created_at)
             if isinstance(j.created_at, str)
             else j.created_at.isoformat(),
-            updated_at=j.updated_at
+            updated_at=_as_utc(j.updated_at)
             if isinstance(j.updated_at, str)
             else j.updated_at.isoformat(),
         )

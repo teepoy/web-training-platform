@@ -71,7 +71,8 @@
               <n-button
                 size="small"
                 :loading="downloadingId === artifact.id"
-                @click="onDownload(artifact.id, artifact.uri)"
+                :disabled="!artifact.id"
+                @click="artifact.id ? onDownload(artifact.id, artifact.uri) : undefined"
               >
                 Download
               </n-button>
@@ -132,7 +133,7 @@ const { data: metricsArtifact } = useQuery({
   queryKey: computed(() => ["job-metrics-artifact", id.value, metricsArtifactRef.value?.id ?? null]),
   queryFn: async () => {
     const artifact = metricsArtifactRef.value;
-    if (!artifact) {
+    if (!artifact || !artifact.id) {
       return null;
     }
 

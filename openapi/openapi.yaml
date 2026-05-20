@@ -1,0 +1,5836 @@
+openapi: 3.1.0
+info:
+  title: Online Finetune API
+  version: 0.1.0
+paths:
+  /api/v1/plugins/import-parquet/import:
+    post:
+      tags:
+      - plugins
+      summary: Import Parquet
+      operationId: import_parquet_api_v1_plugins_import_parquet_import_post
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_import_parquet_api_v1_plugins_import_parquet_import_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCreateSampleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/plugins/export-parquet/export:
+    post:
+      tags:
+      - plugins
+      summary: Export Parquet
+      operationId: export_parquet_api_v1_plugins_export_parquet_export_post
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Export Parquet Api V1 Plugins Export Parquet Export
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  anyOf:
+                  - type: string
+                  - type: boolean
+                type: object
+                title: Response Health Health Get
+  /api/v1/health:
+    get:
+      summary: Api Health
+      operationId: api_health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  anyOf:
+                  - type: string
+                  - type: boolean
+                type: object
+                title: Response Api Health Api V1 Health Get
+  /api/v1/datasets:
+    get:
+      summary: List Datasets
+      operationId: list_datasets_api_v1_datasets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Dataset'
+                type: array
+                title: Response List Datasets Api V1 Datasets Get
+    post:
+      summary: Create Dataset
+      operationId: create_dataset_api_v1_datasets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDatasetRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}:
+    get:
+      summary: Get Dataset
+      operationId: get_dataset_api_v1_datasets__dataset_id__get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Dataset
+      operationId: delete_dataset_api_v1_datasets__dataset_id__delete
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/label-space:
+    patch:
+      summary: Update Label Space
+      description: Update the label space for a dataset. Also updates the Label Studio
+        project config.
+      operationId: update_label_space_api_v1_datasets__dataset_id__label_space_patch
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLabelSpaceRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/samples:
+    post:
+      summary: Create Sample
+      operationId: create_sample_api_v1_datasets__dataset_id__samples_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSampleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sample'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Samples
+      operationId: list_samples_api_v1_datasets__dataset_id__samples_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_Sample_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/samples/import:
+    post:
+      summary: Import Samples
+      operationId: import_samples_api_v1_datasets__dataset_id__samples_import_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkCreateSampleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCreateSampleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/samples/import-vqa:
+    post:
+      summary: Import Vqa Samples
+      operationId: import_vqa_samples_api_v1_datasets__dataset_id__samples_import_vqa_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_import_vqa_samples_api_v1_datasets__dataset_id__samples_import_vqa_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportVqaJsonlResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/samples-with-labels:
+    get:
+      summary: List Samples With Labels Endpoint
+      operationId: list_samples_with_labels_endpoint_api_v1_datasets__dataset_id__samples_with_labels_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: label
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+      - name: order_by
+        in: query
+        required: false
+        schema:
+          type: string
+          default: id
+          title: Order By
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_SampleWithLabels_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/annotation-stats:
+    get:
+      summary: Get Annotation Stats
+      operationId: get_annotation_stats_api_v1_datasets__dataset_id__annotation_stats_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetAnnotationStats'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/samples/{sample_id}:
+    get:
+      summary: Get Sample
+      operationId: get_sample_api_v1_samples__sample_id__get
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sample'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/samples/{sample_id}/embed:
+    post:
+      summary: Embed Sample
+      operationId: embed_sample_api_v1_samples__sample_id__embed_post
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Embed Sample Api V1 Samples  Sample Id  Embed Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/annotations:
+    post:
+      summary: Create Annotation
+      operationId: create_annotation_api_v1_annotations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnnotationRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Annotation'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/samples/{sample_id}/annotations:
+    get:
+      summary: List Annotations For Sample
+      operationId: list_annotations_for_sample_api_v1_samples__sample_id__annotations_get
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Annotation'
+                title: Response List Annotations For Sample Api V1 Samples  Sample
+                  Id  Annotations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/annotations/{annotation_id}:
+    patch:
+      summary: Update Annotation
+      operationId: update_annotation_api_v1_annotations__annotation_id__patch
+      parameters:
+      - name: annotation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Annotation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAnnotationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Annotation'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Annotation
+      operationId: delete_annotation_api_v1_annotations__annotation_id__delete
+      parameters:
+      - name: annotation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Annotation Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/annotations/bulk:
+    post:
+      summary: Bulk Create Annotations
+      operationId: bulk_create_annotations_api_v1_datasets__dataset_id__annotations_bulk_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkAnnotationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Bulk Create Annotations Api V1 Datasets  Dataset Id  Annotations
+                  Bulk Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/sync-annotations-to-ls:
+    post:
+      summary: Sync Annotations To Ls
+      operationId: sync_annotations_to_ls_api_v1_datasets__dataset_id__sync_annotations_to_ls_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sync Annotations To Ls Api V1 Datasets  Dataset Id  Sync
+                  Annotations To Ls Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-presets:
+    get:
+      summary: List Presets
+      operationId: list_presets_api_v1_training_presets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+                title: Response List Presets Api V1 Training Presets Get
+  /api/v1/training-presets/{preset_id}:
+    get:
+      summary: Get Preset
+      operationId: get_preset_api_v1_training_presets__preset_id__get
+      parameters:
+      - name: preset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Preset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Preset Api V1 Training Presets  Preset Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs:
+    get:
+      summary: List Jobs
+      operationId: list_jobs_api_v1_training_jobs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TrainingJob'
+                type: array
+                title: Response List Jobs Api V1 Training Jobs Get
+    post:
+      summary: Create Training Job
+      operationId: create_training_job_api_v1_training_jobs_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTrainingJobRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}:
+    get:
+      summary: Get Job
+      operationId: get_job_api_v1_training_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}/cancel:
+    post:
+      summary: Cancel Job
+      operationId: cancel_job_api_v1_training_jobs__job_id__cancel_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+                title: Response Cancel Job Api V1 Training Jobs  Job Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/task-tracker/tasks:
+    get:
+      summary: List Task Tracker Tasks
+      operationId: list_task_tracker_tasks_api_v1_task_tracker_tasks_get
+      parameters:
+      - name: kind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskTrackerSummaryResponse'
+                title: Response List Task Tracker Tasks Api V1 Task Tracker Tasks
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/task-tracker/tasks/{task_id}:
+    get:
+      summary: Get Task Tracker Task
+      operationId: get_task_tracker_task_api_v1_task_tracker_tasks__task_id__get
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTrackerDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/task-tracker/tasks/{task_id}/cancel:
+    post:
+      summary: Cancel Task Tracker Task
+      operationId: cancel_task_tracker_task_api_v1_task_tracker_tasks__task_id__cancel_post
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+                title: Response Cancel Task Tracker Task Api V1 Task Tracker Tasks  Task
+                  Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/task-tracker/tasks/{task_id}/stream:
+    get:
+      summary: Stream Task Tracker Task
+      operationId: stream_task_tracker_task_api_v1_task_tracker_tasks__task_id__stream_get
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}/events:
+    get:
+      summary: Get Job Events
+      operationId: get_job_events_api_v1_training_jobs__job_id__events_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}/events/history:
+    get:
+      summary: Get Job Events History
+      operationId: get_job_events_history_api_v1_training_jobs__job_id__events_history_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_TrainingEvent_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}/mark-left:
+    post:
+      summary: Mark User Left
+      operationId: mark_user_left_api_v1_training_jobs__job_id__mark_left_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+                title: Response Mark User Left Api V1 Training Jobs  Job Id  Mark
+                  Left Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/exports/{dataset_id}:
+    get:
+      summary: Export Dataset
+      operationId: export_dataset_api_v1_exports__dataset_id__get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Export Dataset Api V1 Exports  Dataset Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/exports/{dataset_id}/persist:
+    post:
+      summary: Export Dataset Persist
+      operationId: export_dataset_persist_api_v1_exports__dataset_id__persist_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Export Dataset Persist Api V1 Exports  Dataset Id  Persist
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/features/extract:
+    post:
+      summary: Extract Features
+      operationId: extract_features_api_v1_datasets__dataset_id__features_extract_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: force
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Force
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Extract Features Api V1 Datasets  Dataset Id  Features
+                  Extract Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/similarity/{sample_id}:
+    get:
+      summary: Similarity Search
+      operationId: similarity_search_api_v1_datasets__dataset_id__similarity__sample_id__get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 5
+          title: K
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Similarity Search Api V1 Datasets  Dataset Id  Similarity  Sample
+                  Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/selection-metrics:
+    get:
+      summary: Selection Metrics
+      operationId: selection_metrics_api_v1_datasets__dataset_id__selection_metrics_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Selection Metrics Api V1 Datasets  Dataset Id  Selection
+                  Metrics Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/hints/uncovered:
+    get:
+      summary: Uncovered Hints
+      operationId: uncovered_hints_api_v1_datasets__dataset_id__hints_uncovered_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Uncovered Hints Api V1 Datasets  Dataset Id  Hints
+                  Uncovered Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/artifacts/{artifact_id}/download:
+    get:
+      summary: Download Artifact
+      operationId: download_artifact_api_v1_artifacts__artifact_id__download_get
+      parameters:
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Artifact Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/models:
+    get:
+      summary: List Models
+      description: List all trained models, optionally filtered by dataset or job.
+      operationId: list_models_api_v1_models_get
+      parameters:
+      - name: dataset_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Id
+      - name: job_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelResponse'
+                title: Response List Models Api V1 Models Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/models/{model_id}:
+    get:
+      summary: Get Model
+      description: Get a single model by ID.
+      operationId: get_model_api_v1_models__model_id__get
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Model
+      description: Delete a model artifact.
+      operationId: delete_model_api_v1_models__model_id__delete
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/models/{model_id}/download:
+    get:
+      summary: Download Model
+      description: Download a model file.
+      operationId: download_model_api_v1_models__model_id__download_get
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/model-upload-templates:
+    get:
+      summary: List Model Upload Templates
+      operationId: list_model_upload_templates_api_v1_model_upload_templates_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ModelUploadTemplateResponse'
+                type: array
+                title: Response List Model Upload Templates Api V1 Model Upload Templates
+                  Get
+  /api/v1/models/upload:
+    post:
+      summary: Upload Model
+      description: Upload an external model file and associate it with a training
+        job.
+      operationId: upload_model_api_v1_models_upload_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_model_api_v1_models_upload_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/samples/{sample_id}/upload:
+    post:
+      summary: Upload Sample Image
+      operationId: upload_sample_image_api_v1_samples__sample_id__upload_post
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_sample_image_api_v1_samples__sample_id__upload_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSampleImageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/images/resolve:
+    get:
+      summary: Resolve Image
+      operationId: resolve_image_api_v1_images_resolve_get
+      parameters:
+      - name: uri
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Uri
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/embed-config:
+    get:
+      summary: Get Embed Config
+      operationId: get_embed_config_api_v1_datasets__dataset_id__embed_config_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Embed Config Api V1 Datasets  Dataset Id  Embed
+                  Config Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      summary: Update Embed Config
+      operationId: update_embed_config_api_v1_datasets__dataset_id__embed_config_patch
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEmbedConfigRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Update Embed Config Api V1 Datasets  Dataset Id  Embed
+                  Config Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/predictions/run:
+    post:
+      summary: Run Predictions
+      description: Create an async prediction job for dataset-scale inference.
+      operationId: run_predictions_api_v1_predictions_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunPredictionRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionJobResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-jobs:
+    get:
+      summary: List Prediction Jobs
+      operationId: list_prediction_jobs_api_v1_prediction_jobs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/PredictionJobResponse'
+                type: array
+                title: Response List Prediction Jobs Api V1 Prediction Jobs Get
+  /api/v1/prediction-jobs/{job_id}:
+    get:
+      summary: Get Prediction Job
+      operationId: get_prediction_job_api_v1_prediction_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionJobResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-jobs/{job_id}/predictions:
+    get:
+      summary: List Prediction Job Predictions
+      operationId: list_prediction_job_predictions_api_v1_prediction_jobs__job_id__predictions_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PredictionResultResponse'
+                title: Response List Prediction Job Predictions Api V1 Prediction
+                  Jobs  Job Id  Predictions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-jobs/{job_id}/events:
+    get:
+      summary: List Prediction Job Events
+      operationId: list_prediction_job_events_api_v1_prediction_jobs__job_id__events_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PredictionEventResponse'
+                title: Response List Prediction Job Events Api V1 Prediction Jobs  Job
+                  Id  Events Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-jobs/{job_id}/cancel:
+    post:
+      summary: Cancel Prediction Job
+      operationId: cancel_prediction_job_api_v1_prediction_jobs__job_id__cancel_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Prediction Job Api V1 Prediction Jobs  Job
+                  Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/predictions/single:
+    post:
+      summary: Predict Single
+      description: Run prediction on a single sample using a trained model.
+      operationId: predict_single_api_v1_predictions_single_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictSingleRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResultResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/samples/{sample_id}/predictions:
+    get:
+      summary: List Sample Predictions
+      description: List all platform predictions for a sample.
+      operationId: list_sample_predictions_api_v1_samples__sample_id__predictions_get
+      parameters:
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      - name: model_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PredictionResultResponse'
+                title: Response List Sample Predictions Api V1 Samples  Sample Id  Predictions
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-collections:
+    post:
+      summary: Create Prediction Collection
+      operationId: create_prediction_collection_api_v1_prediction_collections_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictionCollectionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionCollectionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Prediction Collections
+      operationId: list_prediction_collections_api_v1_prediction_collections_get
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PredictionCollectionResponse'
+                title: Response List Prediction Collections Api V1 Prediction Collections
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-collections/{collection_id}/sync-label-studio:
+    post:
+      summary: Sync Prediction Collection To Label Studio
+      operationId: sync_prediction_collection_to_label_studio_api_v1_prediction_collections__collection_id__sync_label_studio_post
+      parameters:
+      - name: collection_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPredictionCollectionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPredictionCollectionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-reviews:
+    post:
+      summary: Create Review Action
+      description: Create a new prediction review session.
+      operationId: create_review_action_api_v1_prediction_reviews_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewActionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewActionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Review Actions
+      description: List all prediction review actions for a dataset.
+      operationId: list_review_actions_api_v1_prediction_reviews_get
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewActionResponse'
+                title: Response List Review Actions Api V1 Prediction Reviews Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-reviews/{action_id}:
+    get:
+      summary: Get Review Action
+      description: Get a single prediction review action.
+      operationId: get_review_action_api_v1_prediction_reviews__action_id__get
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewActionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Review Action
+      description: Delete a prediction review action and its annotation versions.
+      operationId: delete_review_action_api_v1_prediction_reviews__action_id__delete
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-reviews/{action_id}/annotations:
+    post:
+      summary: Save Review Annotations
+      description: Save reviewed predictions as annotations for a review action.
+      operationId: save_review_annotations_api_v1_prediction_reviews__action_id__annotations_post
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveReviewAnnotationsRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveReviewAnnotationsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-reviews/{action_id}/annotation-versions:
+    get:
+      summary: List Annotation Versions
+      description: List annotation versions for a review action.
+      operationId: list_annotation_versions_api_v1_prediction_reviews__action_id__annotation_versions_get
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnnotationVersionResponse'
+                title: Response List Annotation Versions Api V1 Prediction Reviews  Action
+                  Id  Annotation Versions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/export-formats:
+    get:
+      summary: List Export Formats
+      description: List all available annotation-version export formats.
+      operationId: list_export_formats_api_v1_export_formats_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ExportFormatResponse'
+                type: array
+                title: Response List Export Formats Api V1 Export Formats Get
+  /api/v1/prediction-reviews/{action_id}/export:
+    get:
+      summary: Export Review Version
+      description: Preview (return JSON) an annotation-version export.
+      operationId: export_review_version_api_v1_prediction_reviews__action_id__export_get
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      - name: format_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: annotation-version-full-context-v1
+          title: Format Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Export Review Version Api V1 Prediction Reviews  Action
+                  Id  Export Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/prediction-reviews/{action_id}/export/persist:
+    post:
+      summary: Persist Review Export
+      description: Persist an annotation-version export to artifact storage.
+      operationId: persist_review_export_api_v1_prediction_reviews__action_id__export_persist_post
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionExportRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Persist Review Export Api V1 Prediction Reviews  Action
+                  Id  Export Persist Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/public:
+    patch:
+      summary: Set Dataset Public
+      operationId: set_dataset_public_api_v1_datasets__dataset_id__public_patch
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPublicRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Set Dataset Public Api V1 Datasets  Dataset Id  Public
+                  Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{job_id}/public:
+    patch:
+      summary: Set Job Public
+      operationId: set_job_public_api_v1_training_jobs__job_id__public_patch
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPublicRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Set Job Public Api V1 Training Jobs  Job Id  Public
+                  Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/register:
+    post:
+      summary: Register
+      operationId: register_api_v1_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      summary: Auth Me
+      operationId: auth_me_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithOrgsResponse'
+  /api/v1/auth/tokens:
+    get:
+      summary: List Tokens
+      operationId: list_tokens_api_v1_auth_tokens_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TokenResponse'
+                type: array
+                title: Response List Tokens Api V1 Auth Tokens Get
+    post:
+      summary: Create Token
+      operationId: create_token_api_v1_auth_tokens_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenCreatedResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/tokens/{token_id}:
+    delete:
+      summary: Delete Token
+      operationId: delete_token_api_v1_auth_tokens__token_id__delete
+      parameters:
+      - name: token_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/organizations:
+    get:
+      summary: List Organizations
+      operationId: list_organizations_api_v1_organizations_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/OrgResponse'
+                type: array
+                title: Response List Organizations Api V1 Organizations Get
+    post:
+      summary: Create Organization
+      operationId: create_organization_api_v1_organizations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrgRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/organizations/{org_id}/members:
+    post:
+      summary: Add Org Member
+      operationId: add_org_member_api_v1_organizations__org_id__members_post
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Org Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: List Org Members
+      operationId: list_org_members_api_v1_organizations__org_id__members_get
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Org Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberResponse'
+                title: Response List Org Members Api V1 Organizations  Org Id  Members
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/organizations/{org_id}/members/{user_id}:
+    delete:
+      summary: Remove Org Member
+      operationId: remove_org_member_api_v1_organizations__org_id__members__user_id__delete
+      parameters:
+      - name: org_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Org Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/dashboard:
+    get:
+      summary: Get Dashboard
+      description: 'Return runtime analytics: work pool status, job queue stats, recent
+        jobs.'
+      operationId: get_dashboard_api_v1_dashboard_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+  /api/v1/schedules:
+    get:
+      summary: List Schedules
+      operationId: list_schedules_api_v1_schedules_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ScheduleResponse'
+                type: array
+                title: Response List Schedules Api V1 Schedules Get
+    post:
+      summary: Create Schedule
+      operationId: create_schedule_api_v1_schedules_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/schedules/{schedule_id}:
+    get:
+      summary: Get Schedule
+      operationId: get_schedule_api_v1_schedules__schedule_id__get
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      summary: Update Schedule
+      operationId: update_schedule_api_v1_schedules__schedule_id__patch
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Delete Schedule
+      operationId: delete_schedule_api_v1_schedules__schedule_id__delete
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/schedules/{schedule_id}/run:
+    post:
+      summary: Trigger Run
+      operationId: trigger_run_api_v1_schedules__schedule_id__run_post
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/schedules/{schedule_id}/pause:
+    post:
+      summary: Pause Schedule
+      operationId: pause_schedule_api_v1_schedules__schedule_id__pause_post
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/schedules/{schedule_id}/resume:
+    post:
+      summary: Resume Schedule
+      operationId: resume_schedule_api_v1_schedules__schedule_id__resume_post
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/schedules/{schedule_id}/runs:
+    get:
+      summary: List Runs
+      operationId: list_runs_api_v1_schedules__schedule_id__runs_get
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunResponse'
+                title: Response List Runs Api V1 Schedules  Schedule Id  Runs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}:
+    get:
+      summary: Get Run
+      operationId: get_run_api_v1_runs__run_id__get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/logs:
+    get:
+      summary: Get Run Logs
+      operationId: get_run_logs_api_v1_runs__run_id__logs_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 200
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunLogResponse'
+                title: Response Get Run Logs Api V1 Runs  Run Id  Logs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{session_id}/surfaces/{surface_id}:
+    get:
+      summary: Get Surface State
+      operationId: get_surface_state_api_v1_sessions__session_id__surfaces__surface_id__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: surface_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Surface Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurfaceStateDocument-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{session_id}/surfaces/{surface_id}/panels:
+    post:
+      summary: Set Surface Panel
+      operationId: set_surface_panel_api_v1_sessions__session_id__surfaces__surface_id__panels_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: surface_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Surface Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPanelRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurfaceStateDocument-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{session_id}/surfaces/{surface_id}/panels/{panel_id}:
+    delete:
+      summary: Remove Surface Panel
+      operationId: remove_surface_panel_api_v1_sessions__session_id__surfaces__surface_id__panels__panel_id__delete
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: surface_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Surface Id
+      - name: panel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Panel Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurfaceStateDocument-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{session_id}/surfaces/{surface_id}/import:
+    post:
+      summary: Import Surface State
+      operationId: import_surface_state_api_v1_sessions__session_id__surfaces__surface_id__import_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: surface_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Surface Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SurfaceStateDocument-Input'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurfaceStateDocument-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sessions/{session_id}/surfaces/{surface_id}/export:
+    get:
+      summary: Export Surface State
+      operationId: export_surface_state_api_v1_sessions__session_id__surfaces__surface_id__export_get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: surface_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Surface Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurfaceStateDocument-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/query:
+    post:
+      summary: Query Dataset Data
+      operationId: query_dataset_data_api_v1_datasets__dataset_id__query_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryDataRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Query Dataset Data Api V1 Datasets  Dataset Id  Query
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/agent/chat:
+    post:
+      summary: Agent Chat
+      description: Send a message to the classify agent.  Returns SSE stream of events.
+      operationId: agent_chat_api_v1_datasets__dataset_id__agent_chat_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/chat:
+    post:
+      tags:
+      - agent
+      summary: Global Agent Chat
+      description: 'Platform-wide agent chat.
+
+
+        Streams SSE events as the agent processes the message.  The agent is
+
+        context-aware: when on the classify page it has sidebar tools available;
+
+        everywhere else it has full read/write platform tools.
+
+
+        Session persistence is handled by ``SessionStore``; pass the same
+
+        ``session_id`` to continue a conversation.'
+      operationId: global_agent_chat_api_v1_agent_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlobalChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/preview-sessions:
+    post:
+      summary: Create Preview Session
+      operationId: create_preview_session_api_v1_preview_sessions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewSessionRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/preview-sessions/{session_id}:
+    get:
+      summary: Get Preview Session
+      operationId: get_preview_session_api_v1_preview_sessions__session_id__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/preview-sessions/{session_id}/items:
+    get:
+      summary: List Preview Items
+      operationId: list_preview_items_api_v1_preview_sessions__session_id__items_get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewItemsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/preview-sessions/{session_id}/persist:
+    post:
+      summary: Start Preview Persist
+      operationId: start_preview_persist_api_v1_preview_sessions__session_id__persist_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartPersistRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersistStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/preview-sessions/{session_id}/persist-status:
+    get:
+      summary: Get Preview Persist Status
+      operationId: get_preview_persist_status_api_v1_preview_sessions__session_id__persist_status_get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersistStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AddMemberRequest:
+      properties:
+        user_id:
+          type: string
+          title: User Id
+        role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Role
+          default: member
+      type: object
+      required:
+      - user_id
+      title: AddMemberRequest
+    AgentContext:
+      properties:
+        page:
+          type: string
+          title: Page
+          description: Current route path, e.g. '/datasets/abc/classify'
+          default: ''
+        dataset_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Id
+          description: Active dataset ID if on a dataset page
+        job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id
+          description: Active job ID if on a job page
+        schedule_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Schedule Id
+          description: Active schedule ID if on a schedule page
+        extra:
+          additionalProperties: true
+          type: object
+          title: Extra
+          description: Arbitrary extra context from the frontend
+      type: object
+      title: AgentContext
+    AgentPanelDescriptor:
+      properties:
+        id:
+          type: string
+          maxLength: 80
+          pattern: ^[a-z0-9][a-z0-9\-]*$
+          title: Id
+        component:
+          type: string
+          title: Component
+          description: Key into the frontend plugin registry
+        title:
+          type: string
+          maxLength: 120
+          title: Title
+        order:
+          type: integer
+          minimum: 0.0
+          title: Order
+          default: 50
+        collapsed:
+          type: boolean
+          title: Collapsed
+          default: false
+        size:
+          type: string
+          pattern: ^(compact|normal|large)$
+          title: Size
+          default: normal
+        data:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Data
+          description: 'Inline data payload: {inline: <payload>}'
+        data_source:
+          anyOf:
+          - $ref: '#/components/schemas/DataSourceApi'
+          - $ref: '#/components/schemas/DataSourceContext'
+          - type: 'null'
+          title: Data Source
+          description: Reference to a data source
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+          description: Widget-specific config props
+        ephemeral:
+          type: boolean
+          title: Ephemeral
+          description: Auto-remove on next agent turn if not re-sent
+          default: false
+        ttl:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Ttl
+          description: Auto-remove after N seconds
+      type: object
+      required:
+      - id
+      - component
+      - title
+      title: AgentPanelDescriptor
+    Annotation:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        sample_id:
+          type: string
+          title: Sample Id
+        label:
+          type: string
+          title: Label
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+      type: object
+      required:
+      - sample_id
+      - label
+      - created_by
+      title: Annotation
+    AnnotationVersionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        review_action_id:
+          type: string
+          title: Review Action Id
+        annotation_id:
+          type: string
+          title: Annotation Id
+        prediction_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prediction Id
+        predicted_label:
+          type: string
+          title: Predicted Label
+        final_label:
+          type: string
+          title: Final Label
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confidence
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - review_action_id
+      - annotation_id
+      - predicted_label
+      - final_label
+      - created_at
+      title: AnnotationVersionResponse
+    ArtifactRef:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        uri:
+          type: string
+          title: Uri
+        kind:
+          type: string
+          title: Kind
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        file_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: File Size
+        file_hash:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: File Hash
+        format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Format
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+      type: object
+      required:
+      - uri
+      - kind
+      title: ArtifactRef
+    Body_import_parquet_api_v1_plugins_import_parquet_import_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_import_parquet_api_v1_plugins_import_parquet_import_post
+    Body_import_vqa_samples_api_v1_datasets__dataset_id__samples_import_vqa_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_import_vqa_samples_api_v1_datasets__dataset_id__samples_import_vqa_post
+    Body_upload_model_api_v1_models_upload_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        metadata:
+          type: string
+          title: Metadata
+      type: object
+      required:
+      - file
+      - metadata
+      title: Body_upload_model_api_v1_models_upload_post
+    Body_upload_sample_image_api_v1_samples__sample_id__upload_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_sample_image_api_v1_samples__sample_id__upload_post
+    BulkAnnotationItem:
+      properties:
+        sample_id:
+          type: string
+          title: Sample Id
+        label:
+          type: string
+          title: Label
+        annotator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Annotator
+          default: platform-user
+      type: object
+      required:
+      - sample_id
+      - label
+      title: BulkAnnotationItem
+    BulkAnnotationRequest:
+      properties:
+        annotations:
+          items:
+            $ref: '#/components/schemas/BulkAnnotationItem'
+          type: array
+          title: Annotations
+      type: object
+      required:
+      - annotations
+      title: BulkAnnotationRequest
+    BulkCreateSampleItem:
+      properties:
+        image_uris:
+          items:
+            type: string
+          type: array
+          title: Image Uris
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+      type: object
+      title: BulkCreateSampleItem
+    BulkCreateSampleRequest:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BulkCreateSampleItem'
+          type: array
+          title: Items
+      type: object
+      title: BulkCreateSampleRequest
+    BulkCreateSampleResponse:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        imported:
+          type: integer
+          title: Imported
+        failed:
+          type: integer
+          title: Failed
+        sample_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Sample Ids
+        ls_task_ids:
+          anyOf:
+          - items:
+              type: integer
+            type: array
+          - type: 'null'
+          title: Ls Task Ids
+        errors:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Errors
+      type: object
+      required:
+      - dataset_id
+      - imported
+      - failed
+      title: BulkCreateSampleResponse
+    ChatRequest:
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Message
+      type: object
+      required:
+      - message
+      title: ChatRequest
+    CreateAnnotationRequest:
+      properties:
+        sample_id:
+          type: string
+          title: Sample Id
+        label:
+          type: string
+          title: Label
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created By
+          default: demo-user
+      type: object
+      required:
+      - sample_id
+      - label
+      title: CreateAnnotationRequest
+    CreateDatasetRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+        dataset_type:
+          anyOf:
+          - $ref: '#/components/schemas/DatasetType'
+          - type: 'null'
+        task_spec:
+          $ref: '#/components/schemas/TaskSpec'
+      type: object
+      required:
+      - name
+      title: CreateDatasetRequest
+    CreateOrgRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+        slug:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Slug
+          default: ''
+      type: object
+      required:
+      - name
+      title: CreateOrgRequest
+    CreatePreviewSessionRequest:
+      properties:
+        collection_ref:
+          type: string
+          title: Collection Ref
+      type: object
+      required:
+      - collection_ref
+      title: CreatePreviewSessionRequest
+    CreateReviewActionRequest:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+          description: ID of the dataset
+        model_id:
+          type: string
+          title: Model Id
+          description: ID of the model used for predictions
+        collection_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Collection Id
+          description: Optional prediction collection used for manual sync
+        sync_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Tag
+          description: Optional LS sync tag for the temporary manual annotation batch
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+          description: Version tag used when running predictions
+      type: object
+      required:
+      - dataset_id
+      - model_id
+      title: CreateReviewActionRequest
+    CreateSampleRequest:
+      properties:
+        image_uris:
+          items:
+            type: string
+          type: array
+          title: Image Uris
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      type: object
+      title: CreateSampleRequest
+    CreateScheduleRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+        flow_name:
+          type: string
+          title: Flow Name
+        cron:
+          type: string
+          title: Cron
+        parameters:
+          additionalProperties: true
+          type: object
+          title: Parameters
+        description:
+          type: string
+          title: Description
+          default: ''
+      type: object
+      required:
+      - name
+      - flow_name
+      - cron
+      title: CreateScheduleRequest
+    CreateTokenRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - name
+      title: CreateTokenRequest
+    CreateTrainingJobRequest:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        preset_id:
+          type: string
+          title: Preset Id
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created By
+          default: demo-user
+      type: object
+      required:
+      - dataset_id
+      - preset_id
+      title: CreateTrainingJobRequest
+    DashboardResponse:
+      properties:
+        work_pool:
+          anyOf:
+          - $ref: '#/components/schemas/WorkPoolStatus'
+          - type: 'null'
+        job_queue:
+          anyOf:
+          - $ref: '#/components/schemas/JobQueueStats'
+          - type: 'null'
+        recent_jobs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/RecentJobSummary'
+            type: array
+          - type: 'null'
+          title: Recent Jobs
+        services:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ServiceStatus'
+            type: array
+          - type: 'null'
+          title: Services
+        prefect_connected:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Prefect Connected
+          default: false
+      type: object
+      title: DashboardResponse
+    DataSourceApi:
+      properties:
+        kind:
+          type: string
+          pattern: ^api$
+          title: Kind
+          default: api
+        endpoint:
+          type: string
+          title: Endpoint
+        params:
+          additionalProperties:
+            type: string
+          type: object
+          title: Params
+        refresh_interval:
+          type: integer
+          minimum: 0.0
+          title: Refresh Interval
+          description: Auto-refresh in ms; 0 = off
+          default: 0
+      type: object
+      required:
+      - endpoint
+      title: DataSourceApi
+    DataSourceContext:
+      properties:
+        kind:
+          type: string
+          pattern: ^context$
+          title: Kind
+          default: context
+        key:
+          type: string
+          title: Key
+        path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Path
+      type: object
+      required:
+      - key
+      title: DataSourceContext
+    Dataset:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        name:
+          type: string
+          title: Name
+        dataset_type:
+          anyOf:
+          - $ref: '#/components/schemas/DatasetType'
+          - type: 'null'
+          default: image_classification
+        task_spec:
+          anyOf:
+          - $ref: '#/components/schemas/TaskSpecOutput'
+          - type: 'null'
+        org_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Org Id
+          default: 00000000-0000-0000-0000-000000000001
+        org_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Org Name
+          default: ''
+        is_public:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Public
+          default: false
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        embed_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Embed Config
+        ls_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ls Project Id
+        ls_project_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ls Project Url
+      type: object
+      required:
+      - name
+      title: Dataset
+    DatasetAnnotationStats:
+      properties:
+        total_samples:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total Samples
+          default: 0
+        annotated_samples:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Annotated Samples
+          default: 0
+        unlabeled_samples:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Unlabeled Samples
+          default: 0
+        label_counts:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Label Counts
+      type: object
+      title: DatasetAnnotationStats
+    DatasetType:
+      type: string
+      enum:
+      - image_classification
+      - image_vqa
+      title: DatasetType
+    ExportFormatResponse:
+      properties:
+        format_id:
+          type: string
+          title: Format Id
+      type: object
+      required:
+      - format_id
+      title: ExportFormatResponse
+    GlobalChatRequest:
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Message
+        context:
+          $ref: '#/components/schemas/AgentContext'
+        session_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+          description: Resume existing session; omit for auto-generated
+      type: object
+      required:
+      - message
+      title: GlobalChatRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ImportVqaJsonlResponse:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        imported:
+          type: integer
+          title: Imported
+        failed:
+          type: integer
+          title: Failed
+        errors:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Errors
+      type: object
+      required:
+      - dataset_id
+      - imported
+      - failed
+      title: ImportVqaJsonlResponse
+    JobQueueStats:
+      properties:
+        queued:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Queued
+          default: 0
+        running:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Running
+          default: 0
+        completed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Completed
+          default: 0
+        failed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Failed
+          default: 0
+        cancelled:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Cancelled
+          default: 0
+      type: object
+      title: JobQueueStats
+    JobStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - completed
+      - failed
+      - cancelled
+      title: JobStatus
+    LatestAnnotation:
+      properties:
+        id:
+          type: string
+          title: Id
+        label:
+          type: string
+          title: Label
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - id
+      - label
+      - created_by
+      - created_at
+      title: LatestAnnotation
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    LoginResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      type: object
+      required:
+      - access_token
+      - user
+      title: LoginResponse
+    MemberResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        user_id:
+          type: string
+          title: User Id
+        user_email:
+          type: string
+          title: User Email
+        user_name:
+          type: string
+          title: User Name
+        role:
+          type: string
+          title: Role
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - user_id
+      - user_email
+      - user_name
+      - role
+      - created_at
+      title: MemberResponse
+    MembershipResponse:
+      properties:
+        org_id:
+          type: string
+          title: Org Id
+        org_name:
+          type: string
+          title: Org Name
+        org_slug:
+          type: string
+          title: Org Slug
+        role:
+          type: string
+          title: Role
+      type: object
+      required:
+      - org_id
+      - org_name
+      - org_slug
+      - role
+      title: MembershipResponse
+    ModelResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        uri:
+          type: string
+          title: Uri
+        kind:
+          type: string
+          title: Kind
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        file_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: File Size
+        file_hash:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: File Hash
+        format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Format
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+        job_id:
+          type: string
+          title: Job Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        dataset_name:
+          type: string
+          title: Dataset Name
+        preset_name:
+          type: string
+          title: Preset Name
+      type: object
+      required:
+      - id
+      - uri
+      - kind
+      - job_id
+      - dataset_id
+      - dataset_name
+      - preset_name
+      title: ModelResponse
+    ModelUploadTemplateResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        dataset_types:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Dataset Types
+        task_types:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Task Types
+        profiles:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/UploadTemplateProfileResponse'
+            type: array
+          - type: 'null'
+          title: Profiles
+        label_space_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Space Mode
+          default: forbidden
+        requires_embedding_metadata:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Requires Embedding Metadata
+          default: false
+      type: object
+      required:
+      - id
+      - name
+      title: ModelUploadTemplateResponse
+    OrgResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        slug:
+          type: string
+          title: Slug
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - slug
+      - created_at
+      title: OrgResponse
+    PaginatedResponse_SampleWithLabels_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/SampleWithLabels'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - total
+      title: PaginatedResponse[SampleWithLabels]
+    PaginatedResponse_Sample_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Sample'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - total
+      title: PaginatedResponse[Sample]
+    PaginatedResponse_TrainingEvent_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/TrainingEvent'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - total
+      title: PaginatedResponse[TrainingEvent]
+    PersistStatusResponse:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        persist_session_id:
+          type: string
+          title: Persist Session Id
+        status:
+          type: string
+          title: Status
+        imported_count:
+          type: integer
+          title: Imported Count
+        remaining_count:
+          type: integer
+          title: Remaining Count
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - dataset_id
+      - persist_session_id
+      - status
+      - imported_count
+      - remaining_count
+      - error
+      title: PersistStatusResponse
+    PredictSingleRequest:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+          description: ID of the model artifact to use
+        sample_id:
+          type: string
+          title: Sample Id
+          description: ID of the sample to predict
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+          description: Optional version tag for Label Studio filtering
+        target:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target
+          description: Prediction target key in preset
+          default: image_classification
+        prompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt
+          description: Optional runtime prompt/question override
+      type: object
+      required:
+      - model_id
+      - sample_id
+      title: PredictSingleRequest
+    PredictionCollectionRequest:
+      properties:
+        name:
+          type: string
+          title: Name
+        dataset_id:
+          type: string
+          title: Dataset Id
+        model_id:
+          type: string
+          title: Model Id
+        prediction_ids:
+          items:
+            type: string
+          type: array
+          title: Prediction Ids
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        target:
+          type: string
+          title: Target
+          default: image_classification
+        source_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Job Id
+      type: object
+      required:
+      - name
+      - dataset_id
+      - model_id
+      title: PredictionCollectionRequest
+    PredictionCollectionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        dataset_id:
+          type: string
+          title: Dataset Id
+        model_id:
+          type: string
+          title: Model Id
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        target:
+          type: string
+          title: Target
+        source_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Job Id
+        sync_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Tag
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        prediction_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Prediction Ids
+      type: object
+      required:
+      - id
+      - name
+      - dataset_id
+      - model_id
+      - target
+      - created_by
+      - created_at
+      title: PredictionCollectionResponse
+    PredictionEventResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+        level:
+          type: string
+          title: Level
+        message:
+          type: string
+          title: Message
+        payload:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Payload
+      type: object
+      required:
+      - job_id
+      - ts
+      - level
+      - message
+      title: PredictionEventResponse
+    PredictionJobResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        model_id:
+          type: string
+          title: Model Id
+        status:
+          type: string
+          title: Status
+        created_by:
+          type: string
+          title: Created By
+        target:
+          type: string
+          title: Target
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        external_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Job Id
+        sample_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Sample Ids
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+      type: object
+      required:
+      - id
+      - dataset_id
+      - model_id
+      - status
+      - created_by
+      - target
+      - created_at
+      - updated_at
+      title: PredictionJobResponse
+    PredictionResultResponse:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        sample_id:
+          type: string
+          title: Sample Id
+        predicted_label:
+          type: string
+          title: Predicted Label
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confidence
+        model_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Id
+        target:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - sample_id
+      - predicted_label
+      title: PredictionResultResponse
+    PreviewItemResponse:
+      properties:
+        upstream_item_id:
+          type: string
+          title: Upstream Item Id
+        image_uris:
+          items:
+            type: string
+          type: array
+          title: Image Uris
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+          default: {}
+      type: object
+      required:
+      - upstream_item_id
+      - image_uris
+      title: PreviewItemResponse
+    PreviewItemsResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PreviewItemResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        has_more:
+          type: boolean
+          title: Has More
+        estimated_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Estimated Total
+      type: object
+      required:
+      - items
+      - next_cursor
+      - has_more
+      - estimated_total
+      title: PreviewItemsResponse
+    PreviewSessionResponse:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        collection_ref:
+          type: string
+          title: Collection Ref
+        classification_enabled:
+          type: boolean
+          title: Classification Enabled
+        estimated_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Estimated Total
+        loaded_count:
+          type: integer
+          title: Loaded Count
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        has_more:
+          type: boolean
+          title: Has More
+      type: object
+      required:
+      - session_id
+      - collection_ref
+      - classification_enabled
+      - estimated_total
+      - loaded_count
+      - next_cursor
+      - has_more
+      title: PreviewSessionResponse
+    QueryDataRequest:
+      properties:
+        query_type:
+          type: string
+          title: Query Type
+          description: 'One of: annotation-stats, sample-slice, metadata-histogram,
+            recent-annotations, prediction-summary, wafer-points'
+        params:
+          additionalProperties: true
+          type: object
+          title: Params
+      type: object
+      required:
+      - query_type
+      title: QueryDataRequest
+    RecentJobSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        preset_id:
+          type: string
+          title: Preset Id
+        status:
+          type: string
+          title: Status
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      type: object
+      required:
+      - id
+      - dataset_id
+      - preset_id
+      - status
+      - created_by
+      - created_at
+      - updated_at
+      title: RecentJobSummary
+    RegisterRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - email
+      - password
+      - name
+      title: RegisterRequest
+    ReviewActionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        model_id:
+          type: string
+          title: Model Id
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        collection_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Collection Id
+        sync_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Tag
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - dataset_id
+      - model_id
+      - created_by
+      - created_at
+      title: ReviewActionResponse
+    RunLogResponse:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        flow_run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flow Run Id
+        level:
+          type: integer
+          title: Level
+        timestamp:
+          type: string
+          title: Timestamp
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - level
+      - timestamp
+      - message
+      title: RunLogResponse
+    RunPredictionRequest:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+          description: ID of the model artifact to use
+        dataset_id:
+          type: string
+          title: Dataset Id
+          description: ID of the dataset to run predictions on
+        sample_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Sample Ids
+          description: Optional list of sample IDs. If None, runs on all samples in
+            dataset
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+          description: Optional version tag for Label Studio filtering
+        target:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target
+          description: Prediction target key in preset
+          default: image_classification
+        prompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt
+          description: Optional runtime prompt/question override
+      type: object
+      required:
+      - model_id
+      - dataset_id
+      title: RunPredictionRequest
+    RunResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        deployment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deployment Id
+        flow_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flow Name
+        state_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State Type
+        state_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State Name
+        start_time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Start Time
+        end_time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: End Time
+        total_run_time:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total Run Time
+        parameters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Parameters
+      type: object
+      required:
+      - id
+      - name
+      title: RunResponse
+    Sample:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        image_uris:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Image Uris
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+        ls_task_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ls Task Id
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+      type: object
+      required:
+      - dataset_id
+      title: Sample
+    SampleWithLabels:
+      properties:
+        id:
+          type: string
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        image_uris:
+          items:
+            type: string
+          type: array
+          title: Image Uris
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+        ls_task_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ls Task Id
+        latest_annotation:
+          anyOf:
+          - $ref: '#/components/schemas/LatestAnnotation'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - dataset_id
+      - image_uris
+      - metadata
+      title: SampleWithLabels
+    SaveReviewAnnotationItem:
+      properties:
+        sample_id:
+          type: string
+          title: Sample Id
+        predicted_label:
+          type: string
+          title: Predicted Label
+        final_label:
+          type: string
+          title: Final Label
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confidence
+        prediction_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prediction Id
+      type: object
+      required:
+      - sample_id
+      - predicted_label
+      - final_label
+      title: SaveReviewAnnotationItem
+    SaveReviewAnnotationsRequest:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/SaveReviewAnnotationItem'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: SaveReviewAnnotationsRequest
+    SaveReviewAnnotationsResponse:
+      properties:
+        review_action_id:
+          type: string
+          title: Review Action Id
+        created_count:
+          type: integer
+          title: Created Count
+        annotation_versions:
+          items:
+            $ref: '#/components/schemas/AnnotationVersionResponse'
+          type: array
+          title: Annotation Versions
+      type: object
+      required:
+      - review_action_id
+      - created_count
+      - annotation_versions
+      title: SaveReviewAnnotationsResponse
+    ScheduleResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        flow_name:
+          type: string
+          title: Flow Name
+        cron:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cron
+        parameters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Parameters
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          default: ''
+        is_schedule_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Schedule Active
+          default: true
+        created:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created
+        updated:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updated
+        prefect_deployment_id:
+          type: string
+          title: Prefect Deployment Id
+      type: object
+      required:
+      - id
+      - name
+      - flow_name
+      - prefect_deployment_id
+      title: ScheduleResponse
+    ServiceStatus:
+      properties:
+        name:
+          type: string
+          title: Name
+        kind:
+          type: string
+          title: Kind
+        status:
+          type: string
+          title: Status
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
+          default: ''
+        latency_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latency Ms
+        endpoint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Endpoint
+      type: object
+      required:
+      - name
+      - kind
+      - status
+      title: ServiceStatus
+    SetPanelRequest:
+      properties:
+        panel:
+          $ref: '#/components/schemas/AgentPanelDescriptor'
+      type: object
+      required:
+      - panel
+      title: SetPanelRequest
+    SetPublicRequest:
+      properties:
+        is_public:
+          type: boolean
+          title: Is Public
+      type: object
+      required:
+      - is_public
+      title: SetPublicRequest
+    StartPersistRequest:
+      properties:
+        scope:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Scope
+          default: entire_collection
+      type: object
+      title: StartPersistRequest
+    SurfaceLayout:
+      properties:
+        width:
+          type: integer
+          maximum: 800.0
+          minimum: 100.0
+          title: Width
+          default: 280
+        position:
+          type: string
+          pattern: ^(right|left)$
+          title: Position
+          default: right
+      type: object
+      title: SurfaceLayout
+    SurfaceStateDocument-Input:
+      properties:
+        version:
+          type: integer
+          title: Version
+          default: 1
+        surface_id:
+          type: string
+          title: Surface Id
+        panels:
+          items:
+            $ref: '#/components/schemas/AgentPanelDescriptor'
+          type: array
+          title: Panels
+        layout:
+          $ref: '#/components/schemas/SurfaceLayout'
+        exported_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Exported At
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+          description: 'Optional provenance: created_by, description'
+      type: object
+      required:
+      - surface_id
+      title: SurfaceStateDocument
+    SurfaceStateDocument-Output:
+      properties:
+        version:
+          type: integer
+          title: Version
+          default: 1
+        surface_id:
+          type: string
+          title: Surface Id
+        panels:
+          items:
+            $ref: '#/components/schemas/AgentPanelDescriptor'
+          type: array
+          title: Panels
+        layout:
+          $ref: '#/components/schemas/SurfaceLayout'
+        exported_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Exported At
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+          description: 'Optional provenance: created_by, description'
+      type: object
+      required:
+      - surface_id
+      title: SurfaceStateDocument
+    SyncPredictionCollectionRequest:
+      properties:
+        sync_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Tag
+      type: object
+      title: SyncPredictionCollectionRequest
+    SyncPredictionCollectionResponse:
+      properties:
+        collection_id:
+          type: string
+          title: Collection Id
+        sync_tag:
+          type: string
+          title: Sync Tag
+        synced_count:
+          type: integer
+          title: Synced Count
+        failed_count:
+          type: integer
+          title: Failed Count
+        errors:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Errors
+      type: object
+      required:
+      - collection_id
+      - sync_tag
+      - synced_count
+      - failed_count
+      title: SyncPredictionCollectionResponse
+    TaskSpec:
+      properties:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+          default: classification
+        label_space:
+          items:
+            type: string
+          type: array
+          title: Label Space
+        metadata_schema:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          type: object
+          title: Metadata Schema
+      type: object
+      title: TaskSpec
+    TaskSpecOutput:
+      properties:
+        task_type:
+          anyOf:
+          - $ref: '#/components/schemas/TaskType'
+          - type: 'null'
+          default: classification
+        label_space:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Label Space
+        metadata_schema:
+          anyOf:
+          - additionalProperties:
+              additionalProperties:
+                type: string
+              type: object
+            type: object
+          - type: 'null'
+          title: Metadata Schema
+      type: object
+      title: TaskSpecOutput
+    TaskTrackerCheckResult:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        status:
+          type: string
+          title: Status
+        message:
+          type: string
+          title: Message
+          default: ''
+        value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Value
+      type: object
+      required:
+      - key
+      - label
+      - status
+      title: TaskTrackerCheckResult
+    TaskTrackerDeepLinks:
+      properties:
+        prefect_run_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prefect Run Url
+        prefect_deployment_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prefect Deployment Url
+        platform_job_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Platform Job Url
+      type: object
+      title: TaskTrackerDeepLinks
+    TaskTrackerDerived:
+      properties:
+        task_kind:
+          type: string
+          title: Task Kind
+        execution_kind:
+          type: string
+          title: Execution Kind
+        display_status:
+          type: string
+          title: Display Status
+        prefect_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prefect State
+        stage:
+          type: string
+          title: Stage
+        active_node:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Node
+        capacity_status:
+          type: string
+          title: Capacity Status
+          default: unknown
+        queue_priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Queue Priority
+        queue_priority_label:
+          type: string
+          title: Queue Priority Label
+          default: none
+        queue_depth_ahead:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Queue Depth Ahead
+        pool_concurrency_limit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pool Concurrency Limit
+        pool_slots_used:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pool Slots Used
+        stages:
+          items:
+            $ref: '#/components/schemas/TaskTrackerStage'
+          type: array
+          title: Stages
+        scorecard:
+          $ref: '#/components/schemas/TaskTrackerScorecard'
+        summary_metrics:
+          $ref: '#/components/schemas/TaskTrackerSummaryMetrics'
+        artifacts:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Artifacts
+        dynamic_console_lines:
+          items:
+            type: string
+          type: array
+          title: Dynamic Console Lines
+        deep_links:
+          $ref: '#/components/schemas/TaskTrackerDeepLinks'
+      type: object
+      required:
+      - task_kind
+      - execution_kind
+      - display_status
+      - stage
+      title: TaskTrackerDerived
+    TaskTrackerDetailResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        task_kind:
+          type: string
+          title: Task Kind
+        meta:
+          additionalProperties: true
+          type: object
+          title: Meta
+        raw:
+          $ref: '#/components/schemas/TaskTrackerRawPayload'
+        derived:
+          $ref: '#/components/schemas/TaskTrackerDerived'
+      type: object
+      required:
+      - id
+      - task_kind
+      - raw
+      - derived
+      title: TaskTrackerDetailResponse
+    TaskTrackerNode:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        status:
+          type: string
+          title: Status
+        detail:
+          type: string
+          title: Detail
+          default: ''
+        expected_start_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Start At
+        started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Started At
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+      type: object
+      required:
+      - key
+      - label
+      - status
+      title: TaskTrackerNode
+    TaskTrackerRawPayload:
+      properties:
+        platform_job:
+          additionalProperties: true
+          type: object
+          title: Platform Job
+        flow_run:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Flow Run
+        deployment:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Deployment
+        work_queue:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Work Queue
+        work_pool:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Work Pool
+        logs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Logs
+      type: object
+      title: TaskTrackerRawPayload
+    TaskTrackerScorecard:
+      properties:
+        errors:
+          type: integer
+          title: Errors
+          default: 0
+        warnings:
+          type: integer
+          title: Warnings
+          default: 0
+        checks:
+          items:
+            $ref: '#/components/schemas/TaskTrackerCheckResult'
+          type: array
+          title: Checks
+      type: object
+      title: TaskTrackerScorecard
+    TaskTrackerStage:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        status:
+          type: string
+          title: Status
+        summary:
+          type: string
+          title: Summary
+          default: ''
+        nodes:
+          items:
+            $ref: '#/components/schemas/TaskTrackerNode'
+          type: array
+          title: Nodes
+      type: object
+      required:
+      - key
+      - label
+      - status
+      title: TaskTrackerStage
+    TaskTrackerSummaryMetrics:
+      properties:
+        total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Total
+        processed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Processed
+        successful:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Successful
+        failed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Failed
+        skipped:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Skipped
+        rate_hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rate Hint
+      type: object
+      title: TaskTrackerSummaryMetrics
+    TaskTrackerSummaryResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        task_kind:
+          type: string
+          title: Task Kind
+        execution_kind:
+          type: string
+          title: Execution Kind
+        display_name:
+          type: string
+          title: Display Name
+        display_status:
+          type: string
+          title: Display Status
+        stage:
+          type: string
+          title: Stage
+        dataset_id:
+          type: string
+          title: Dataset Id
+        model_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Id
+        preset_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preset Id
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        prefect_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prefect State
+        work_pool_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Work Pool Name
+        work_queue_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Work Queue Name
+        queue_priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Queue Priority
+        queue_priority_label:
+          type: string
+          title: Queue Priority Label
+          default: none
+        queue_depth_ahead:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Queue Depth Ahead
+        capacity_status:
+          type: string
+          title: Capacity Status
+          default: unknown
+        pool_concurrency_limit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pool Concurrency Limit
+        pool_slots_used:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pool Slots Used
+      type: object
+      required:
+      - id
+      - task_kind
+      - execution_kind
+      - display_name
+      - display_status
+      - stage
+      - dataset_id
+      - created_by
+      - created_at
+      - updated_at
+      title: TaskTrackerSummaryResponse
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - vqa
+      title: TaskType
+    TokenCreatedResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        token:
+          type: string
+          title: Token
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - token
+      - created_at
+      title: TokenCreatedResponse
+    TokenResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        token_prefix:
+          type: string
+          title: Token Prefix
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - token_prefix
+      - created_at
+      title: TokenResponse
+    TrainingEvent:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        ts:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ts
+        level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Level
+          default: info
+        message:
+          type: string
+          title: Message
+        payload:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Payload
+      type: object
+      required:
+      - job_id
+      - message
+      title: TrainingEvent
+    TrainingJob:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        preset_id:
+          type: string
+          title: Preset Id
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
+          default: queued
+        created_by:
+          type: string
+          title: Created By
+        org_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Org Id
+          default: 00000000-0000-0000-0000-000000000001
+        org_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Org Name
+          default: ''
+        is_public:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Public
+          default: false
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        updated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Updated At
+        external_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Job Id
+        artifact_refs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ArtifactRef'
+            type: array
+          - type: 'null'
+          title: Artifact Refs
+      type: object
+      required:
+      - dataset_id
+      - preset_id
+      - created_by
+      title: TrainingJob
+    UpdateAnnotationRequest:
+      properties:
+        label:
+          type: string
+          title: Label
+      type: object
+      required:
+      - label
+      title: UpdateAnnotationRequest
+    UpdateEmbedConfigRequest:
+      properties:
+        model:
+          type: string
+          title: Model
+        dimension:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Dimension
+          default: 512
+      type: object
+      required:
+      - model
+      title: UpdateEmbedConfigRequest
+    UpdateLabelSpaceRequest:
+      properties:
+        label_space:
+          items:
+            type: string
+          type: array
+          title: Label Space
+      type: object
+      required:
+      - label_space
+      title: UpdateLabelSpaceRequest
+    UpdateSampleImageResponse:
+      properties:
+        uri:
+          type: string
+          title: Uri
+        sample_id:
+          type: string
+          title: Sample Id
+        index:
+          type: integer
+          title: Index
+      type: object
+      required:
+      - uri
+      - sample_id
+      - index
+      title: UpdateSampleImageResponse
+    UpdateScheduleRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        cron:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cron
+        parameters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Parameters
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        is_schedule_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Schedule Active
+      type: object
+      title: UpdateScheduleRequest
+    UploadTemplateProfileResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        model_spec:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Model Spec
+        default_prediction_targets:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Default Prediction Targets
+      type: object
+      required:
+      - id
+      - name
+      title: UploadTemplateProfileResponse
+    UserResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        email:
+          type: string
+          title: Email
+        name:
+          type: string
+          title: Name
+        is_superadmin:
+          type: boolean
+          title: Is Superadmin
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - email
+      - name
+      - is_superadmin
+      - created_at
+      title: UserResponse
+    UserWithOrgsResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        email:
+          type: string
+          title: Email
+        name:
+          type: string
+          title: Name
+        is_superadmin:
+          type: boolean
+          title: Is Superadmin
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        organizations:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/MembershipResponse'
+            type: array
+          - type: 'null'
+          title: Organizations
+      type: object
+      required:
+      - id
+      - email
+      - name
+      - is_superadmin
+      - created_at
+      title: UserWithOrgsResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VersionExportRequest:
+      properties:
+        format_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Format Id
+          description: Export format identifier
+          default: annotation-version-full-context-v1
+      type: object
+      title: VersionExportRequest
+    WorkPoolStatus:
+      properties:
+        name:
+          type: string
+          title: Name
+        type:
+          type: string
+          title: Type
+        is_paused:
+          type: boolean
+          title: Is Paused
+        concurrency_limit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Concurrency Limit
+        slots_used:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Slots Used
+          default: 0
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          default: unknown
+      type: object
+      required:
+      - name
+      - type
+      - is_paused
+      title: WorkPoolStatus

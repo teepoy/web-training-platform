@@ -7,7 +7,7 @@ import zipfile
 from typing import Any
 
 try:
-    import boto3  # type: ignore[import-untyped]
+    import boto3  # type: ignore[import-untyped]  # ty: ignore[unresolved-import]
 except ImportError:
     boto3 = None
 
@@ -157,7 +157,11 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
         return zips[chunk_key]
 
     def _extract_chunk(
-        self, zip_bytes: bytes, cursor: int, chunk_start: int, limit: int,
+        self,
+        zip_bytes: bytes,
+        cursor: int,
+        chunk_start: int,
+        limit: int,
     ) -> list[PreviewItem]:
         items: list[PreviewItem] = []
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
@@ -173,13 +177,19 @@ class S3ZipPreviewUpstream(UpstreamAdapter):
                 for img_name in m.get("images", []):
                     raw = zf.read(img_name)
                     b64 = base64.b64encode(raw).decode()
-                    ext = img_name.rsplit(".", 1)[-1].lower() if "." in img_name else "bin"
+                    ext = (
+                        img_name.rsplit(".", 1)[-1].lower()
+                        if "." in img_name
+                        else "bin"
+                    )
                     mime = "png" if ext == "png" else "jpeg"
                     image_uris.append(f"data:image/{mime};base64,{b64}")
 
-                items.append(PreviewItem(
-                    upstream_item_id=str(m["id"]),
-                    image_uris=image_uris,
-                    metadata=m.get("metadata", {}),
-                ))
+                items.append(
+                    PreviewItem(
+                        upstream_item_id=str(m["id"]),
+                        image_uris=image_uris,
+                        metadata=m.get("metadata", {}),
+                    )
+                )
         return items

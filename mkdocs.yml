@@ -20,6 +20,7 @@ nav:
       - Sample Browser: architecture/sample-browser.md
       - Task Tracker: architecture/task-tracker.md
   - Guides:
+      - Schema-first OpenAPI: guides/schema-first-openapi.md
       - Plugin Extension Guide: guides/plugin-extension-guide.md
       - Sidebar Extension Guide: guides/sidebar-extension-guide.md
       - Preview Dataset Mode: guides/preview-dataset-mode.md
