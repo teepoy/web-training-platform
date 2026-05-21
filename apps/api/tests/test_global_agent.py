@@ -325,7 +325,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -405,7 +405,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -491,7 +491,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -547,7 +547,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
                     # First message
                     r1 = c.post(
                         "/api/v1/agent/chat",
@@ -620,7 +620,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={"message": "Hi"},
@@ -646,7 +646,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.global_runtime._call_llm", side_effect=_failing_llm):
+                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_failing_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={

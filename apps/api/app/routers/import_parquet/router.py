@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.datasets.api.extensions.import_parquet_router import (  # noqa: F401
+from app.modules.datasets.interfaces.controllers.extensions.import_parquet_router import (  # noqa: F401
     _extract_image_uri,
     _find_image_columns,
     _find_label_column,

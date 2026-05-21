@@ -18,13 +18,15 @@ from app.shared.api.schemas import AgentContext, AgentPanelDescriptor
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
     from app.shared.infrastructure.label_studio.client import LabelStudioClient
-    from app.modules.models.application.model_service import ModelService
-    from app.modules.training.application.orchestrator import TrainingOrchestrator
-    from app.modules.prediction.application.prediction_orchestrator import (
+    from app.modules.models.application.services.model_service import ModelService
+    from app.modules.training.application.services.orchestrator import (
+        TrainingOrchestrator,
+    )
+    from app.modules.prediction.application.services.prediction_orchestrator import (
         PredictionOrchestrator,
     )
     from app.modules.presets.registry import PresetRegistry
-    from app.modules.schedules.application.scheduler import SchedulerService
+    from app.modules.schedules.application.services.scheduler import SchedulerService
 
 _logger = logging.getLogger(__name__)
 

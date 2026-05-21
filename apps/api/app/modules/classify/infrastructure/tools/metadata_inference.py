@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.modules.classify.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
+from app.modules.classify.interfaces.dtos.schemas import (
+    DeclaredMetadataKey,
+    MetadataKeyInfo,
+)
 
 
 def scan_metadata_types(

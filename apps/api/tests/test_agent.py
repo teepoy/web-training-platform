@@ -628,7 +628,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.application.runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.classify.application.services.runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "What does this dataset look like?"},
@@ -715,7 +715,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.application.runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.classify.application.services.runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "Show me an overview"},

@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.modules.classify.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
+from app.modules.classify.interfaces.dtos.schemas import (
+    DeclaredMetadataKey,
+    MetadataKeyInfo,
+)
 from app.modules.classify.infrastructure.tools.metadata_inference import (
     build_metadata_block,
     scan_metadata_types,

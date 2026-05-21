@@ -12,7 +12,7 @@ from app.shared.db.session import create_engine, create_session_factory
 
 
 async def _create_superadmin(email: str, password: str, name: str) -> None:
-    from app.modules.auth.application.auth_service import hash_password
+    from app.modules.auth.application.services.auth_service import hash_password
 
     cfg = load_config(skip_runtime_validation=True)
     engine = create_engine(str(cfg.db.url))

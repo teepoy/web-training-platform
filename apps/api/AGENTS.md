@@ -28,7 +28,7 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependenc
 | Dataset payload store | `app/services/dataset_payload_store.py` | Shard upload, manifest management, deterministic dataset payload delete |
 | Dataset payload domain | `app/domain/dataset_payload.py` | `DatasetManifest`, `ShardEntry`, `SampleLocator`, `SparsePredictionResult` and related models |
 | Canonical transport contract | `../../openapi/openapi.yaml` | Single source of truth for backend/frontend transport types |
-| Generated transport models | `app/generated/openapi_models.py` | Generated with `datamodel-codegen`; do not edit by hand |
+| Generated transport models | `app/shared/generated/openapi_models.py` | Generated with `datamodel-codegen`; do not edit by hand |
 | Manual schema helpers | `app/api/internal_schemas.py` | Internal-only helpers/default-heavy models not represented in OpenAPI |
 
 ## STRUCTURE

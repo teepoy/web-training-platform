@@ -9,7 +9,10 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import compile_path
 
-from app.modules.auth.api.deps import get_current_org, get_current_user
+from app.modules.auth.interfaces.controllers.deps import (
+    get_current_org,
+    get_current_user,
+)
 from app.shared.api.schemas import (
     DashboardResponse,
     JobQueueStats,
@@ -28,43 +31,51 @@ from app.domain.models import DEFAULT_ORG_ID, Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
 from app.modules.presets.registry import PresetRegistry
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
-from app.modules.sensors.infrastructure.repository import SensorRepository
+from app.modules.sensors.infrastructure.repositories.repository import SensorRepository
 from app.shared.db.sql_repository import SqlRepository
-from app.modules.sensors.domain.registry import SensorRegistry
+from app.modules.sensors.domain.entities.registry import SensorRegistry
 from app.shared.application.artifacts import ArtifactService
-from app.modules.auth.application.auth_service import AuthService
+from app.modules.auth.application.services.auth_service import AuthService
 from app.shared.infrastructure.workers.embedding import EmbeddingClient
 from app.modules.training.infrastructure.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
     LocalProcessEngine,
 )
-from app.modules.datasets.application.feature_ops import FeatureOpsService
+from app.modules.datasets.application.services.feature_ops import FeatureOpsService
 from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
 from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
-from app.modules.training.infrastructure.kubeflow_client import KubeflowClient
-from app.modules.models.application.model_service import ModelService
+from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
+from app.modules.models.application.services.model_service import ModelService
 from app.shared.application.notification import WebhookNotificationSink
-from app.modules.training.application.orchestrator import TrainingOrchestrator
-from app.modules.prediction.application.prediction_orchestrator import (
+from app.modules.training.application.services.orchestrator import TrainingOrchestrator
+from app.modules.prediction.application.services.prediction_orchestrator import (
     PredictionOrchestrator,
 )
-from app.modules.prediction.application.prediction_service import PredictionService
+from app.modules.prediction.application.services.prediction_service import (
+    PredictionService,
+)
 from app.modules.training.infrastructure.engines.prefect_engine import (
     PrefectWorkPoolEngine,
 )
-from app.modules.preview.application.preview_service import PreviewService
-from app.modules.preview.application.preview_store import PreviewStore
-from app.modules.preview.application.preview_upstream import (
+from app.modules.preview.application.services.preview_service import PreviewService
+from app.modules.preview.application.services.preview_store import PreviewStore
+from app.modules.preview.application.services.preview_upstream import (
     MockUpstreamAdapter,
     PreviewUpstreamRouter,
     UpstreamAdapter,
 )
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
-from app.modules.sensors.application.sensor_dispatch import SensorDispatchService
-from app.modules.dashboard.application.service_health import ServiceHealthService
+from app.modules.sensors.application.services.sensor_dispatch import (
+    SensorDispatchService,
+)
+from app.modules.dashboard.application.services.service_health import (
+    ServiceHealthService,
+)
 from app.agent.session_store import SessionStore
 from app.shared.infrastructure.surface_store import SurfaceStore
-from app.modules.task_tracker.application.task_tracker import TaskTrackerService
+from app.modules.task_tracker.application.services.task_tracker import (
+    TaskTrackerService,
+)
 from app.shared.infrastructure.label_studio import get_label_studio, init_label_studio
 from app.shared.infrastructure.llm import get_llm, init_llm
 from app.shared.infrastructure.prefect import get_prefect, init_prefect
@@ -351,24 +362,7 @@ def _strip_api_prefix(router: Any) -> None:
 
 
 def _register_legacy_provider_overrides(api: FastAPI) -> None:
-    overrides = {
-        "repo": container.repository,
-        "model_service": container.model_service,
-        "task_tracker": container.task_tracker,
-        "storage": container.artifact_storage,
-        "ls_client": container.label_studio_client,
-        "sample_factory": container.sample_access_factory,
-    }
-
-    for route in api.routes:
-        dependant = getattr(route, "dependant", None)
-        if dependant is None:
-            continue
-        for dependency in getattr(dependant, "dependencies", []):
-            provider = overrides.get(getattr(dependency, "name", ""))
-            call = getattr(dependency, "call", None)
-            if provider is not None and call is not None:
-                api.dependency_overrides[call] = provider
+    return None
 
 
 @asynccontextmanager

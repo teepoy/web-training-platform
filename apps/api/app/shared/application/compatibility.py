@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from app.domain import schema_registry
-from app.domain import schemas as _schemas  # noqa: F401 — triggers schema auto-registration
 from app.domain.models import Dataset
 from app.domain.types import DatasetType, TaskType
+from app.modules.datasets.domain import schemas as _schemas  # noqa: F401 — triggers schema auto-registration
+from app.modules.datasets.domain.entities import schema_registry
 from app.modules.presets.schema import PresetSpec
 
 

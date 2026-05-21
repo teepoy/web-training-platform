@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.modules.preview.domain.preview import PreviewItem
-from app.modules.datasets.domain import schema_registry
-from app.modules.datasets.domain.dataset_schema import DatasetSchema
+from app.modules.preview.domain.entities.preview import PreviewItem
+from app.modules.datasets.domain.entities import schema_registry
+from app.modules.datasets.domain.entities.dataset_schema import DatasetSchema
 
 
 def _generate_ls_config(label_space: list[str]) -> str:

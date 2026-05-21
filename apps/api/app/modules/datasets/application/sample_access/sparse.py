@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.domain.dataset_payload import SampleLocator
+from app.modules.datasets.domain.entities.dataset_payload import SampleLocator
 
 
 class SparseSampleAccess(Protocol):

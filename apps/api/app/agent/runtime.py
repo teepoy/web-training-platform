@@ -1,13 +1,13 @@
 """Thin shim — re-exports from canonical module.
 
 All substantive code lives in
-``app.modules.classify.application.runtime``.
+``app.modules.classify.application.services.runtime``.
 """
 
 from __future__ import annotations
 
 # Re-export everything tests and legacy callers expect.
-from app.modules.classify.application.runtime import (  # noqa: F401
+from app.modules.classify.application.services.runtime import (  # noqa: F401
     AgentAction,
     AgentDone,
     AgentEvent,

@@ -164,8 +164,8 @@ def test_list_detection_annotations_preserves_value() -> None:
 
 def test_schema_registry_has_detection() -> None:
     """The schema registry contains an entry for image_detection."""
-    from app.domain import schema_registry
-    from app.domain import schemas as _schemas  # noqa: F401
+    from app.modules.datasets.domain import schemas as _schemas  # noqa: F401
+    from app.modules.datasets.domain.entities import schema_registry
 
     schema = schema_registry.get("image_detection")
     assert schema is not None
@@ -175,9 +175,9 @@ def test_schema_registry_has_detection() -> None:
 
 def test_schema_registry_allowed_pairs_includes_detection() -> None:
     """get_allowed_pairs returns the detection pair."""
-    from app.domain import schema_registry
-    from app.domain import schemas as _schemas  # noqa: F401
     from app.domain.types import DatasetType, TaskType
+    from app.modules.datasets.domain import schemas as _schemas  # noqa: F401
+    from app.modules.datasets.domain.entities import schema_registry
 
     pairs = schema_registry.get_allowed_pairs()
     assert DatasetType.IMAGE_DETECTION in pairs
