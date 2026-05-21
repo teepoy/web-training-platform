@@ -65,6 +65,9 @@ from app.modules.preview.application.services.preview_upstream import (
     UpstreamAdapter,
 )
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
+from app.modules.datasets.application.services.dataset_payload_store import (
+    DatasetPayloadStore,
+)
 from app.modules.sensors.application.services.sensor_dispatch import (
     SensorDispatchService,
 )
@@ -95,6 +98,11 @@ def _build_state_container(api: FastAPI, cfg: Any) -> None:
         api.state.container.prefect_client = container.prefect_client()
     api.state.container.artifact_storage = container.artifact_storage()
     api.state.container.prediction_repository = container.repository()
+    api.state.container.dataset_repository = container.repository()
+    api.state.container.dataset_payload_store = DatasetPayloadStore(
+        storage=api.state.container.artifact_storage
+    )
+    api.state.container.label_studio_client = container.label_studio_client()
     engine_name = str(getattr(cfg.execution, "engine", ""))
     if (
         engine_name in {"local", "kubeflow", "prefect"}

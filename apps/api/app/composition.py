@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import _resolve_gpu_worker_url
 from app.modules.presets.registry import PresetRegistry
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
+from app.modules.datasets.application.services.dataset_payload_store import (
+    DatasetPayloadStore,
+)
 from app.modules.sensors.infrastructure.repositories.repository import (
     SensorRepositoryImpl,
 )
@@ -79,6 +82,8 @@ class AppContainer:
     service_health_service: ServiceHealthService
     model_repository: ModelArtifactRepository
     prediction_repository: PredictionRepository
+    dataset_repository: SqlRepository
+    dataset_payload_store: DatasetPayloadStore
     sample_access_factory: SampleAccessFactory
     preset_registry: PresetRegistry
     preview_store: PreviewStore
@@ -158,6 +163,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         _build_kubeflow_client(cfg) if str(cfg.execution.engine) == "kubeflow" else None
     )
     prediction_repository = SqlRepository(session_factory=session_factory)
+    dataset_repository = SqlRepository(session_factory=session_factory)
     notification_sink = WebhookNotificationSink(
         endpoint=str(cfg.notification.webhook.endpoint),
         timeout_seconds=int(cfg.notification.webhook.timeout_seconds),
@@ -215,6 +221,8 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         ),
         model_repository=ModelArtifactRepository(session_factory=session_factory),
         prediction_repository=prediction_repository,
+        dataset_repository=dataset_repository,
+        dataset_payload_store=DatasetPayloadStore(storage=artifact_storage),
         sample_access_factory=SampleAccessFactory(repo=prediction_repository),
         preset_registry=PresetRegistry(
             presets_dir=str(cfg.presets.dir),

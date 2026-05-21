@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # pyright: reportMissingImports=false
 
 import io
@@ -18,14 +20,13 @@ from app.modules.datasets.interfaces.dtos.schemas import (
     BulkCreateSampleItem,
     BulkCreateSampleResponse,
 )
+from app.modules.datasets.api.deps import LabelStudioClientDep
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.shared.deps import (  # pyright: ignore[reportMissingImports]
-    get_label_studio_client,
     get_repository,
     get_sample_access_factory,
 )
-from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.label_studio.client import (
     platform_annotation_to_ls,
 )
@@ -150,8 +151,8 @@ def _parquet_to_sample_items(
 @router.post("/import", response_model=BulkCreateSampleResponse)
 async def import_parquet(
     dataset_id: str,
+    ls_client: LabelStudioClientDep,
     repo: SqlRepository = Depends(get_repository),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),

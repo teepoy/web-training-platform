@@ -15,6 +15,10 @@ from fastapi import (
     UploadFile,
 )
 
+from app.modules.datasets.api.deps import (
+    DatasetServiceDep,
+    LabelStudioClientDep,
+)
 from app.shared.api.schemas import (
     DatasetAnnotationStats,
     PaginatedResponse,
@@ -64,13 +68,11 @@ from app.shared.api.schemas import (
 from app.shared.domain.protocols import (
     ArtifactStorage,
     EmbeddingClient,
-    LabelStudioClient,
 )
 from app.shared.api.schemas import DatasetStorageMode, TaskType
 from app.modules.datasets.application.services.dataset_payload_store import (
     DatasetPayloadStore,
 )
-from app.modules.datasets.application.services.dataset_service import DatasetService
 from app.modules.datasets.domain.entities.dataset_payload import DatasetManifest
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.datasets.application.services.feature_ops import FeatureOpsService
@@ -79,12 +81,10 @@ from app.shared.db.sql_repository import SqlRepository
 from app.shared.deps import (
     _infer_dataset_type,
     _make_ls_image_url,
-    _with_ls_url,
     get_artifact_storage,
     get_artifacts,
     get_embedding_service,
     get_feature_ops,
-    get_label_studio_client,
     get_repository,
     get_sample_access_factory,
 )
@@ -109,18 +109,6 @@ router = APIRouter(prefix="/api/v1", tags=["datasets"])
 _logger = logging.getLogger(__name__)
 
 
-def _dataset_service(
-    repo: SqlRepository,
-    sample_factory: SampleAccessFactory,
-    ls_read_repository: LsReadRepository,
-) -> DatasetService:
-    return DatasetService(
-        repository=repo,
-        sample_factory=sample_factory,
-        ls_read_repository=ls_read_repository,
-    )
-
-
 def _is_mocked_provider(value: object) -> bool:
     module_name = type(value).__module__
     return module_name.startswith("unittest.mock")
@@ -134,11 +122,12 @@ def _is_mocked_provider(value: object) -> bool:
 @router.post("/datasets", response_model=Dataset)
 async def create_dataset(
     payload: CreateDatasetRequest,
+    service: DatasetServiceDep,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     storage: ArtifactStorage = Depends(get_artifact_storage),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> Dataset:
     dataset_type = payload.dataset_type or _infer_dataset_type(
         payload.task_spec.task_type
@@ -197,22 +186,24 @@ async def create_dataset(
             total_rows=0,
         )
         await DatasetPayloadStore(storage).put_manifest(manifest, org_id=org.id)
-    return _with_ls_url(dataset)
+    return service.to_response(dataset)
 
 
 @router.get("/datasets", response_model=list[Dataset])
 async def list_datasets(
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
 ) -> list[Dataset]:
     datasets = await repo.list_datasets(org_id=org.id)
-    return [_with_ls_url(d) for d in datasets]
+    return [service.to_response(d) for d in datasets]
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
 async def get_dataset(
     dataset_id: str,
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
@@ -224,7 +215,7 @@ async def get_dataset(
     if _is_mocked_provider(repo):
         access = sample_factory.create(dataset.storage_mode)
         dataset = dataset.model_copy(update={"capabilities": access.capabilities()})
-    return _with_ls_url(dataset)
+    return service.to_response(dataset)
 
 
 @router.get(
@@ -302,11 +293,11 @@ async def get_sparse_summary(
 async def delete_dataset(
     dataset_id: str,
     request: Request,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     storage: ArtifactStorage = Depends(get_artifact_storage),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> Response:
     await require_admin(request, current_user=current_user, org=org)
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
@@ -338,10 +329,11 @@ async def delete_dataset(
 async def update_label_space(
     dataset_id: str,
     payload: UpdateLabelSpaceRequest,
+    service: DatasetServiceDep,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> Dataset:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -375,7 +367,7 @@ async def update_label_space(
     updated = await repo.update_dataset_task_spec(dataset_id, new_task_spec)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return _with_ls_url(updated)
+    return service.to_response(updated)
 
 
 @router.patch("/datasets/{dataset_id}/public", response_model=SetPublicResponse)
@@ -401,11 +393,11 @@ async def set_dataset_public(
 async def create_sample(
     dataset_id: str,
     payload: CreateSampleRequest,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> Sample:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None and _is_mocked_provider(repo):
@@ -454,11 +446,11 @@ async def create_sample(
 async def import_samples(
     dataset_id: str,
     payload: BulkCreateSampleRequest,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> BulkCreateSampleResponse:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -543,12 +535,12 @@ async def import_samples(
 )
 async def import_vqa_samples(
     dataset_id: str,
+    ls_client: LabelStudioClientDep,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> ImportVqaJsonlResponse:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -749,10 +741,10 @@ async def embed_sample(
 @router.post("/annotations", response_model=Annotation)
 async def create_annotation(
     payload: CreateAnnotationRequest,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> Annotation:
     sample = await repo.get_sample(payload.sample_id)
     if sample is None:
@@ -859,11 +851,11 @@ async def bulk_create_annotations(
 )
 async def sync_annotations_to_ls(
     dataset_id: str,
+    ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
 ) -> SyncAnnotationsResponse:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None and _is_mocked_provider(repo):
@@ -914,6 +906,7 @@ async def sync_annotations_to_ls(
 @router.get("/exports/{dataset_id}")
 async def export_dataset(
     dataset_id: str,
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
@@ -990,9 +983,9 @@ async def export_dataset(
                 samples=samples_out,
                 annotations=annotations_out,
             )
-    dataset, samples, anns = await _dataset_service(
-        repo, sample_factory, ls_read_repository
-    ).build_export_data(dataset_id)
+    dataset, samples, anns = await service.build_export_data(
+        dataset_id, ls_read_repository
+    )
     return artifacts.build_dataset_export(
         dataset=dataset,
         samples=samples,
@@ -1003,6 +996,7 @@ async def export_dataset(
 @router.post("/exports/{dataset_id}/persist", response_model=PersistExportResponse)
 async def export_dataset_persist(
     dataset_id: str,
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
@@ -1078,9 +1072,9 @@ async def export_dataset_persist(
                 dataset=dataset, samples=samples_out, annotations=annotations_out
             )
             return PersistExportResponse(uri=uri)
-    dataset, samples, anns = await _dataset_service(
-        repo, sample_factory, ls_read_repository
-    ).build_export_data(dataset_id)
+    dataset, samples, anns = await service.build_export_data(
+        dataset_id, ls_read_repository
+    )
     uri = await artifacts.persist_dataset_export(
         dataset=dataset, samples=samples, annotations=anns
     )

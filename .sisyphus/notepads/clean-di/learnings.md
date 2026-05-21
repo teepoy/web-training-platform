@@ -100,3 +100,14 @@
 - get_repository in preview deps.py: constructs SqlRepository(session_factory=container.session_factory) — no separate repo field needed in AppContainer
 - Critical gotcha: _mock_ls_client conftest fixture overrides legacy container.label_studio_client but NOT app.state.container.label_studio_client. Fix: also add app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls in the fixture. This is the same coexistence issue as T11 artifact_storage — any new module dep that reads from app.state.container must have its conftest mock updated.
 - Tests: 479 passed, pyright: 0 errors, ruff: clean
+
+## 2026-05-22 T15 training Protocol DI
+- Added training-specific FastAPI deps against app.state.container and kept legacy AppServices override compatibility for tests that patch container.orchestrator()/gpu_worker().
+- Training Prefect flow now resolves via _app_container_ref or build_flow_container(), but falls back to AppServices only when gpu_worker is explicitly overridden.
+- TrainingExecutionEngine.stream_events Protocol must be a synchronous async-iterator method, not async def, to match engine implementations and async-for usage.
+
+## 2026-05-22 T16 datasets Protocol DI
+- DatasetService now receives typed constructor deps (DatasetRepository Protocol, SampleAccessFactory, LabelStudioClient Protocol, ArtifactStorage Protocol, DatasetPayloadStore, capability guard callable, config) and owns dataset response enrichment via to_response().
+- Avoid eagerly constructing LsReadRepository in app.state.container during lifespan: test profile has an empty LS database URL, so export routes still resolve the direct LS read repository only when export handlers need it.
+- Dataset Label Studio FastAPI dep reads app.state.container by default but preserves legacy AppServices patch compatibility for older tests that patch container.label_studio_client directly.
+- _mock_ls_client now uses app.dependency_overrides for the datasets and preview get_label_studio_client deps; it only seeds the legacy SingletonProvider instance for assertions/backward compatibility, not as the route injection path.

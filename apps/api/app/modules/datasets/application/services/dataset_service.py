@@ -1,26 +1,62 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
+from collections.abc import Callable
 
-from app.shared.api.schemas import Annotation, Sample, SPARSE_NO_LS
+from fastapi import HTTPException
+from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
+
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
+from app.modules.datasets.application.services.dataset_payload_store import (
+    DatasetPayloadStore,
+)
+from app.modules.datasets.domain.repository import DatasetRepository
+from app.shared.api.schemas import Annotation, Dataset, Sample, SPARSE_NO_LS
+from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
-from app.shared.db.sql_repository import SqlRepository
 from app.shared.infrastructure.label_studio.client import ls_annotation_to_platform
 
 
 class DatasetService:
     def __init__(
         self,
-        repository: SqlRepository,
+        repository: DatasetRepository,
         sample_factory: SampleAccessFactory,
-        ls_read_repository: LsReadRepository,
+        ls_client: LabelStudioClient,
+        storage: ArtifactStorage,
+        payload_store: DatasetPayloadStore,
+        capability_guard: Callable[[Dataset], None],
+        config: DictConfig,
     ) -> None:
         self._repository = repository
         self._sample_factory = sample_factory
-        self._ls_read_repository = ls_read_repository
+        self._ls_client = ls_client
+        self._storage = storage
+        self._payload_store = payload_store
+        self._capability_guard = capability_guard
+        self._config = config
 
-    async def build_export_data(self, dataset_id: str):
+    def to_response(self, dataset: Dataset) -> Dataset:
+        """Compute response-only dataset fields such as LS URL and capabilities."""
+        access = self._sample_factory.create(dataset.storage_mode)
+        dataset = dataset.model_copy(update={"capabilities": access.capabilities()})
+
+        if dataset.ls_project_id == SPARSE_NO_LS:
+            return dataset
+
+        ls_url = str(
+            self._config.label_studio.external_url or self._config.label_studio.url
+        ).rstrip("/")
+        if dataset.ls_project_id and ls_url:
+            return dataset.model_copy(
+                update={"ls_project_url": f"{ls_url}/projects/{dataset.ls_project_id}"}
+            )
+        return dataset
+
+    async def build_export_data(
+        self,
+        dataset_id: str,
+        ls_read_repository: LsReadRepository,
+    ):
         """Return (dataset, samples, annotations) sourced from Label Studio read DB."""
         repo = self._repository
         dataset = await repo.get_dataset(dataset_id)
@@ -41,12 +77,12 @@ class DatasetService:
                 s.ls_task_id: s for s in all_samples if s.ls_task_id is not None
             }
 
-            ls_tasks = await self._ls_read_repository.get_tasks_for_project(
+            ls_tasks = await ls_read_repository.get_tasks_for_project(
                 int(dataset.ls_project_id)
             )
             task_ids = [t["id"] for t in ls_tasks]
             ls_annotations = (
-                await self._ls_read_repository.get_annotations_for_tasks(task_ids)
+                await ls_read_repository.get_annotations_for_tasks(task_ids)
                 if task_ids
                 else {}
             )

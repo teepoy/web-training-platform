@@ -12,7 +12,6 @@ from app.shared.domain.protocols import (
     LabelStudioClient,
     PrefectClient,
 )
-from app.shared.api.schemas import Dataset
 from app.shared.api.schemas import DatasetType, TaskType
 from app.modules.dashboard.application.services.service_health import (
     ServiceHealthService,
@@ -182,22 +181,3 @@ def _make_ls_image_url(uri: str) -> str:
     if uri.startswith(("s3://", "memory://")):
         return f"/api/v1/images/resolve?uri={quote(uri, safe='')}"
     return uri
-
-
-def _with_ls_url(dataset: Dataset) -> Dataset:
-    """Compute ls_project_url and capabilities at response time."""
-    from app.shared.api.schemas import SPARSE_NO_LS
-
-    c = get_container()
-    access = c.sample_access_factory().create(dataset.storage_mode)
-    dataset = dataset.model_copy(update={"capabilities": access.capabilities()})
-
-    if dataset.ls_project_id == SPARSE_NO_LS:
-        return dataset
-    cfg = c.config()
-    ls_url = str(cfg.label_studio.external_url or cfg.label_studio.url).rstrip("/")
-    if dataset.ls_project_id and ls_url:
-        return dataset.model_copy(
-            update={"ls_project_url": f"{ls_url}/projects/{dataset.ls_project_id}"}
-        )
-    return dataset

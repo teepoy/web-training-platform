@@ -87,8 +87,7 @@ def _mock_auth_deps(request):
 # After the LS-always-on migration, create_dataset always calls LS to create
 # a project.  Non-LS tests don't mock LS themselves, so we provide a global
 # mock that succeeds silently.  Tests in test_ls_*.py manage their own
-# overrides — they call container.label_studio_client.override() directly
-# and reset it in their finally blocks.
+# overrides — they manage their own Label Studio behavior directly.
 # ---------------------------------------------------------------------------
 
 
@@ -109,8 +108,6 @@ def _mock_ls_client(request):
         yield
         return
 
-    from app.main import container
-
     _mock_ls = MagicMock()
     _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
     _mock_ls.update_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
@@ -125,17 +122,22 @@ def _mock_ls_client(request):
     _mock_ls.list_annotations = AsyncMock(return_value=[])
     _mock_ls.export_project = AsyncMock(return_value=[])
 
-    container.label_studio_client.override(lambda: _mock_ls)
-
-    from app.main import app
+    from app.main import app, container
+    from app.modules.datasets.api.deps import (
+        get_label_studio_client as datasets_get_ls_client,
+    )
     from app.modules.preview.api.deps import (
         get_label_studio_client as preview_get_ls_client,
     )
 
+    app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
+    container.label_studio_client._instance = _mock_ls
     yield
-    container.label_studio_client.reset_override()
+    app.dependency_overrides.pop(datasets_get_ls_client, None)
     app.dependency_overrides.pop(preview_get_ls_client, None)
+    if container.label_studio_client._instance is _mock_ls:
+        container.label_studio_client.reset()
 
 
 @pytest.fixture(autouse=True, scope="function")
