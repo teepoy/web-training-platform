@@ -6,15 +6,15 @@ The `DatasetsView` uses a schema-driven shim architecture to support different U
 
 The architecture consists of five layers:
 
-1. **Host (`DatasetsView.vue`)**: Thin container — fetches data, resolves active dataset type, renders the shim.
-2. **App schema barrel (`schemas/`)**: One module per dataset type; each registers itself into the schema registry on import.
+1. **Host (`DatasetListView.vue`)**: Thin container — fetches data, resolves active dataset type, renders the shim.
+2. **Domain Modules (`src/modules/dataset-*/`)**: One module per dataset type; each registers its schema and shim on import.
 3. **Schema registry (`schema-registry.ts`)**: Map of `dataset_type → DatasetSchemaDescriptor`; provides `resolveDatasetShim()`.
-4. **Shared UI package (`@platform/web-ui`)**: Reusable Vue/Naive UI components and dataset-list helpers.
-5. **Shims (`shims/*.vue`)**: Leaf components defining the per-type dataset list layout.
+4. **Shared UI/API code (`src/shared/`)**: Reusable Vue/Naive UI components, API clients, and dataset-list helpers.
+5. **Shims (`ListShim.vue`)**: Per-module leaf components defining the dataset list layout.
 
 ## How It Works
 
-### 1. Host: `DatasetsView.vue`
+### 1. Host: `DatasetListView.vue`
 
 The host is responsible for:
 - Fetching the dataset list via Vue Query.
@@ -25,7 +25,7 @@ The host is responsible for:
 ### 2. Schema Registry: `schema-registry.ts`
 
 ```typescript
-// apps/web/src/views/datasets/schema-registry.ts
+// apps/web/src/features/datasets/presentation/pages/schema-registry.ts
 
 export interface DatasetSchemaDescriptor {
   datasetType: string;          // e.g. "image_classification"
@@ -42,29 +42,28 @@ export function getMockSampleFactory(datasetType: string): (...) => unknown { ..
 
 `resolveDatasetShim` falls back to the `image_classification` shim for unknown types.
 
-### 3. Schema Modules: `schemas/`
+### 3. Schema Modules: `src/modules/dataset-*/`
 
-Each file in `apps/web/src/views/datasets/schemas/` registers one dataset type:
+Each dataset type module registers its schema and shim:
 
 ```typescript
-// schemas/image-detection.ts
-import { registerDatasetSchema } from "../schema-registry";
-import { imageDetectionSchema } from "./image-detection-descriptor";
+// src/modules/dataset-detection/views/schema.ts
+import { registerDatasetSchema } from "@/features/datasets/presentation/pages/schema-registry";
 
 registerDatasetSchema({
   datasetType: "image_detection",
   taskType: "detection",
   annotationType: "boxes",
-  shimComponent: defineAsyncComponent(() => import("../shims/DetectionDatasetsShim.vue")),
-  mockSampleFactory: imageDetectionSchema.mockSampleFactory,
+  shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
+  mockSampleFactory: (index) => ({ /* ... */ }),
 });
 ```
 
-The barrel `registry.ts` imports all schema modules so they self-register before the host renders.
+The app-level `src/app/registrations.ts` imports each module's registration barrel so they self-register during app bootstrap.
 
-### 4. Shared UI Package: `@platform/web-ui`
+### 4. Shared UI/API code: `src/shared/`
 
-The `libs/web-ui` package owns reusable UI and helpers independent of routing, API clients, stores, and the widget registry.
+The `src/shared/` directory contains reusable UI components, API clients, and helpers independent of specific domain modules.
 
 - **Normalized Data**: Consistent field types across dataset types.
 - **Permissions**: `isSuperadmin`, `canDelete`, etc.
@@ -73,13 +72,13 @@ The `libs/web-ui` package owns reusable UI and helpers independent of routing, A
 
 ### 5. Shims
 
-Shims are leaf components defining per-type dataset list layouts using `@platform/web-ui` helpers.
+Shims are per-module components defining per-type dataset list layouts using `src/shared/` helpers.
 
-| Shim | Dataset Type | Notes |
-|------|-------------|-------|
-| `ClassificationDatasetsShim.vue` | `image_classification` | Default fallback shim |
-| `VqaDatasetsShim.vue` | `image_vqa` | Extra alert for VQA-specific guidance |
-| `DetectionDatasetsShim.vue` | `image_detection` | Object detection list view |
+| Shim | Dataset Type | Location |
+|------|-------------|----------|
+| `ListShim.vue` | `image_classification` | `src/modules/dataset-classification/views/` |
+| `ListShim.vue` | `image_vqa` | `src/modules/dataset-vqa/views/` |
+| `ListShim.vue` | `image_detection` | `src/modules/dataset-detection/views/` |
 
 ## Backend Schema System
 
@@ -140,29 +139,32 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
 
 ### Frontend
 
-4. **Add type values** in `libs/web-ui/src/api/types.ts`:
+4. **Add type values** in `src/types.ts`:
    ```typescript
    export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
    export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
    ```
 
-5. **Create the shim** `apps/web/src/views/datasets/shims/SegmentationDatasetsShim.vue`.
+5. **Create the shim** `src/modules/dataset-segmentation/views/ListShim.vue`.
 
-6. **Create the schema module** `apps/web/src/views/datasets/schemas/image-segmentation.ts`:
+6. **Create the schema module** `src/modules/dataset-segmentation/views/schema.ts`:
    ```typescript
    import { defineAsyncComponent } from "vue";
-   import { registerDatasetSchema } from "../schema-registry";
+   import { registerDatasetSchema } from "@/features/datasets/presentation/pages/schema-registry";
 
    registerDatasetSchema({
      datasetType: "image_segmentation",
      taskType: "segmentation",
      annotationType: "masks",
-     shimComponent: defineAsyncComponent(() => import("../shims/SegmentationDatasetsShim.vue")),
+     shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
      mockSampleFactory: (index) => ({ /* ... */ }),
    });
    ```
 
-7. **Register in the barrel** `apps/web/src/views/datasets/registry.ts` — add the import.
+7. **Register in the app** `src/app/registrations.ts` — add the import:
+   ```typescript
+   import "../modules/dataset-segmentation/registrations";
+   ```
 
 ### Seed script
 
