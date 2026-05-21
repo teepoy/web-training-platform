@@ -2,7 +2,13 @@ FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+ARG UV_INDEX_URL=""
+ARG PIP_INDEX_URL=""
+
 WORKDIR /app
+
+ENV UV_INDEX_URL=${UV_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml

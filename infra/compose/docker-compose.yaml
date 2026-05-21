@@ -62,6 +62,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/embedding/Dockerfile
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     ports:
       - "50051:50051"
     environment:
@@ -84,6 +87,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,6 +148,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -177,6 +186,8 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
     depends_on:
       - api
     ports:
@@ -187,6 +198,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/inference/Dockerfile
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

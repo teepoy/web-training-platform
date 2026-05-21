@@ -3,6 +3,9 @@
 # ---- Build stage ----
 FROM node:20-alpine AS build
 
+ARG NPM_CONFIG_REGISTRY=""
+ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
+
 RUN npm install -g pnpm
 
 WORKDIR /app

@@ -2,7 +2,13 @@ FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+ARG UV_INDEX_URL=""
+ARG PIP_INDEX_URL=""
+
 WORKDIR /app
+
+ENV UV_INDEX_URL=${UV_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 COPY pyproject.toml uv.lock ./
 COPY apps/inference/pyproject.toml apps/inference/pyproject.toml
