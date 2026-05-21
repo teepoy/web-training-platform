@@ -58,7 +58,7 @@ from app.shared.infrastructure.agent_runtime import (
     AgentSidebarUpdate,
 )
 from app.shared.infrastructure.llm.client import call_llm as _call_llm
-from app.agent.session_store import SessionStore
+from app.modules.agent.application.services.session_store import SessionStore
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:

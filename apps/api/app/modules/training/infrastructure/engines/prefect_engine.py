@@ -1,6 +1,6 @@
 """PrefectWorkPoolEngine — TrainingExecutionEngine backed by Prefect deployments.
 
-This module implements the :class:`~app.domain.interfaces.TrainingExecutionEngine`
+This module implements the :class:`~app.shared.infrastructure.storage.base.TrainingExecutionEngine`
 Protocol using Prefect deployments. Flow runs are submitted via a pre-registered
 deployment (``train-job-deployment``) which the embedded Prefect runner serves
 inside the API process.
@@ -21,8 +21,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from app.domain.models import ArtifactRef, TrainingEvent, TrainingJob
-from app.domain.types import JobStatus
+from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
+from app.shared.api.schemas import JobStatus
 from app.modules.presets.registry import PresetRegistry
 from app.shared.infrastructure.prefect.client import PrefectClient
 
@@ -132,7 +132,7 @@ class PrefectWorkPoolEngine:
         Parameters
         ----------
         job:
-            The :class:`~app.domain.models.TrainingJob` to execute.
+            The :class:`~app.shared.api.schemas.TrainingJob` to execute.
 
         Returns
         -------
@@ -155,7 +155,7 @@ class PrefectWorkPoolEngine:
         return run["id"]
 
     async def status(self, external_job_id: str) -> JobStatus:
-        """Return the current :class:`~app.domain.types.JobStatus` for a run.
+        """Return the current :class:`~app.shared.api.schemas.JobStatus` for a run.
 
         Parameters
         ----------

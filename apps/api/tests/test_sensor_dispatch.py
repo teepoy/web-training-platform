@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.main import app, container
@@ -43,7 +42,7 @@ def test_matching_event_triggers_flow_run() -> None:
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(providers.Object(prefect))
+    container.prefect_client.override(lambda: prefect)
     container.sensor_dispatch.reset()
     try:
         with TestClient(app) as client:
@@ -68,7 +67,7 @@ def test_non_matching_filter_does_not_trigger_flow_run() -> None:
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(providers.Object(prefect))
+    container.prefect_client.override(lambda: prefect)
     container.sensor_dispatch.reset()
     try:
         with TestClient(app) as client:
@@ -96,7 +95,7 @@ def test_failing_subscription_dispatch_does_not_abort_others() -> None:
         RuntimeError("prefect failed"),
         {"id": "flow-run-2"},
     ]
-    container.prefect_client.override(providers.Object(prefect))
+    container.prefect_client.override(lambda: prefect)
     container.sensor_dispatch.reset()
     try:
         with TestClient(app) as client:
@@ -124,7 +123,7 @@ def test_event_post_updates_checkpoint_and_subscriptions_remain_readable() -> No
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(providers.Object(prefect))
+    container.prefect_client.override(lambda: prefect)
     container.sensor_dispatch.reset()
     try:
         with TestClient(app) as client:

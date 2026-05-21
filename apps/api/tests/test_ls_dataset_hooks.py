@@ -9,7 +9,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
-from dependency_injector import providers
 
 from app.main import app, container
 
@@ -25,7 +24,7 @@ _DS_PAYLOAD = {
 
 
 def _override_ls(mock_ls: MagicMock) -> None:
-    container.label_studio_client.override(providers.Object(mock_ls))
+    container.label_studio_client.override(lambda: mock_ls)
 
 
 def _reset() -> None:

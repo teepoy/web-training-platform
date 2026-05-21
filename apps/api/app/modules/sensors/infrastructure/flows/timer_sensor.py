@@ -6,7 +6,7 @@ from typing import TypedDict
 import httpx
 from prefect import flow, get_run_logger
 
-from app.flows.sensor_base import SENSOR_EVENTS_URL
+from app.modules.sensors.infrastructure.flows.sensor_base import SENSOR_EVENTS_URL
 
 
 class TimerEvent(TypedDict):

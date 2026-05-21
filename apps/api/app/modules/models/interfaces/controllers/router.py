@@ -13,8 +13,8 @@ from fastapi import (
     UploadFile,
 )
 
-from app.domain.models import Organization, User
-from app.domain.interfaces import ArtifactStorage
+from app.shared.api.schemas import Organization, User
+from app.shared.infrastructure.storage.base import ArtifactStorage
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,

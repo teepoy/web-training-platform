@@ -37,7 +37,7 @@ class _FakeAsyncClient:
 
 
 def test_dataset_size_sensor_posts_event_batch_for_changed_counts() -> None:
-    from app.flows import dataset_size_sensor as flow_module
+    from app.modules.sensors.infrastructure.flows import dataset_size_sensor as flow_module
 
     client = _FakeAsyncClient(
         get_payload=[
@@ -70,7 +70,7 @@ def test_dataset_size_sensor_posts_event_batch_for_changed_counts() -> None:
 
 
 def test_dataset_size_sensor_posts_empty_event_batch_when_counts_unchanged() -> None:
-    from app.flows import dataset_size_sensor as flow_module
+    from app.modules.sensors.infrastructure.flows import dataset_size_sensor as flow_module
 
     client = _FakeAsyncClient()
     fetch_dataset_sizes = AsyncMock(return_value=[])

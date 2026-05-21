@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.main import services as app_services
-from app.services.gpu_worker import GpuWorkerUnavailableError
+from app.shared.infrastructure.workers.gpu_worker import GpuWorkerUnavailableError
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ def test_run_train_job_does_not_call_direct_training_pipeline() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        with patch("app.runtime.training_runner.run_training_pipeline") as mock_pipeline:
+        with patch("app.modules.training.infrastructure.runtime.training_runner.run_training_pipeline") as mock_pipeline:
             from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
             logger = logging.getLogger("test")

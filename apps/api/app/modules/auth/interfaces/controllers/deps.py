@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import load_config
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.auth.application.services.auth_service import (
     decode_access_token,
     verify_personal_access_token,

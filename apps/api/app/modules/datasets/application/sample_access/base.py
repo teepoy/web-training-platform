@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from fastapi import HTTPException
 
-from app.domain.models import Annotation, Sample
+from app.shared.api.schemas import Annotation, Sample
 
 
 class StorageModeNotSupported(HTTPException):

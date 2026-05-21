@@ -53,7 +53,7 @@ from app.modules.datasets.interfaces.dtos.schemas import (
     UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
 )
-from app.domain.models import (
+from app.shared.api.schemas import (
     Annotation,
     Dataset,
     Organization,
@@ -61,8 +61,8 @@ from app.domain.models import (
     SPARSE_NO_LS,
     User,
 )
-from app.domain.interfaces import ArtifactStorage
-from app.domain.types import DatasetStorageMode, TaskType
+from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.api.schemas import DatasetStorageMode, TaskType
 from app.modules.datasets.application.services.dataset_payload_store import (
     DatasetPayloadStore,
 )

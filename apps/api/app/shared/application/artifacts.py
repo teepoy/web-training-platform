@@ -5,7 +5,7 @@ import json
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from app.domain.models import (
+from app.shared.api.schemas import (
     Annotation,
     AnnotationVersion,
     ArtifactRef,

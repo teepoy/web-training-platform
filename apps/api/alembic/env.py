@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.db.base import Base
-from app.db import models as _models  # noqa: F401
+from app.shared.db.base import Base
+from app.shared.db import models as _models  # noqa: F401
 
 config = context.config
 

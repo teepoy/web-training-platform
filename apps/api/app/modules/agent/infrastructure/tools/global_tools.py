@@ -560,8 +560,8 @@ async def execute_create_dataset(
     user_id: str,
 ) -> dict[str, Any]:
     """Create a new dataset with a Label Studio project."""
-    from app.domain.models import Dataset, TaskSpec
-    from app.domain.types import DatasetType, TaskType
+    from app.shared.api.schemas import Dataset, TaskSpec
+    from app.shared.api.schemas import DatasetType, TaskType
 
     tt = TaskType.VQA if task_type == "vqa" else TaskType.CLASSIFICATION
     ds_type = (
@@ -609,7 +609,7 @@ async def execute_start_training_job(
     user_id: str,
 ) -> dict[str, Any]:
     """Start a training job."""
-    from app.domain.models import TrainingJob
+    from app.shared.api.schemas import TrainingJob
 
     dataset = await repository.get_dataset(dataset_id, org_id=org_id)
     if dataset is None:
@@ -648,7 +648,7 @@ async def execute_run_predictions(
     user_id: str,
 ) -> dict[str, Any]:
     """Run predictions on a dataset."""
-    from app.domain.models import PredictionJob
+    from app.shared.api.schemas import PredictionJob
 
     dataset = await repository.get_dataset(dataset_id, org_id=org_id)
     if dataset is None:

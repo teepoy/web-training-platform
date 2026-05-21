@@ -43,7 +43,7 @@ def _create_dataset_and_sample(c: TestClient, with_image: bool = False) -> tuple
 @pytest.mark.no_embedding_override
 def test_embed_sample_success() -> None:
     with mock.patch(
-        "app.services.embedding.EmbeddingClient.embed_image",
+        "app.shared.infrastructure.workers.embedding.EmbeddingClient.embed_image",
         side_effect=_fake_embed_image,
     ):
         with TestClient(app) as c:

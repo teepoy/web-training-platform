@@ -6,7 +6,7 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.domain.models import (
+from app.shared.api.schemas import (
     AnnotationVersion,
     DEFAULT_ORG_ID,
     PlatformPrediction,
@@ -16,7 +16,7 @@ from app.domain.models import (
     PredictionJob,
     PredictionReviewAction,
 )
-from app.domain.types import JobStatus
+from app.shared.api.schemas import JobStatus
 from app.shared.db.models.auth import OrganizationORM
 from app.shared.db.models.datasets import AnnotationVersionORM
 from app.shared.db.models.prediction import (

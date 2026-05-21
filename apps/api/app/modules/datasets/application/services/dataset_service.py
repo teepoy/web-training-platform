@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from app.domain.models import Annotation, Sample, SPARSE_NO_LS
+from app.shared.api.schemas import Annotation, Sample, SPARSE_NO_LS
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 from app.shared.db.sql_repository import SqlRepository

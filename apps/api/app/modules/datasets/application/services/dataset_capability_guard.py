@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from app.domain.models import Dataset
-from app.domain.types import DatasetStorageMode
+from app.shared.api.schemas import Dataset
+from app.shared.api.schemas import DatasetStorageMode
 
 
 def assert_not_sparse(dataset: Dataset) -> None:

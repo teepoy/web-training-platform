@@ -12,7 +12,7 @@ from app.modules.auth.interfaces.controllers.deps import (
     get_current_user,
     require_superadmin,
 )
-from app.domain.models import Organization, TrainingEvent, TrainingJob, User
+from app.shared.api.schemas import Organization, TrainingEvent, TrainingJob, User
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.models.interfaces.dtos.schemas import (
     SetPublicRequest,

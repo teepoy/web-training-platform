@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from app.domain.models import TrainingEvent, TrainingJob
-from app.domain.types import JobStatus
+from app.shared.api.schemas import TrainingEvent, TrainingJob
+from app.shared.api.schemas import JobStatus
 
 
 class TrainingOrchestrator:

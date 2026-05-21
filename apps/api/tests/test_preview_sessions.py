@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import func, select
 
-from app.db.models import DatasetORM
-from app.db.session import init_db
+from app.shared.db.models import DatasetORM
+from app.shared.db.session import init_db
 from app.main import container
 
 
@@ -64,9 +64,9 @@ async def test_fetch_next_page_cursor() -> None:
 async def test_session_ttl_eviction() -> None:
     import asyncio
 
-    from app.services.preview_service import PreviewService
-    from app.services.preview_store import PreviewStore
-    from app.services.preview_upstream import MockUpstreamAdapter
+    from app.modules.preview.application.services.preview_service import PreviewService
+    from app.modules.preview.application.services.preview_store import PreviewStore
+    from app.modules.preview.application.services.preview_upstream import MockUpstreamAdapter
 
     store = PreviewStore(ttl_seconds=1, max_sessions=10)
     upstream = MockUpstreamAdapter()

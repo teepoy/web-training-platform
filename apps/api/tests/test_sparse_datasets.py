@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app, container
-from app.domain.types import DatasetStorageMode
+from app.shared.api.schemas import DatasetStorageMode
 
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}

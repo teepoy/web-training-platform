@@ -13,9 +13,9 @@ from app.modules.schedules.interfaces.dtos.schemas import (
     ScheduleResponse,
     UpdateScheduleRequest,
 )
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.schedules.application.services.scheduler import SchedulerService
-from app.services.scheduler import get_scheduler_service
+from app.modules.schedules.application.services.scheduler import get_scheduler_service
 
 router = APIRouter(prefix="/api/v1", tags=["schedules"])
 

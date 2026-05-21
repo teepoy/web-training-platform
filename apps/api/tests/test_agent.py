@@ -201,13 +201,13 @@ class TestMetadataInference:
     """Test scan_metadata_types and build_metadata_block."""
 
     def test_scan_empty(self) -> None:
-        from app.agent.metadata_inference import scan_metadata_types
+        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
 
         result = scan_metadata_types([])
         assert result == {}
 
     def test_scan_pure_python_string_keys(self) -> None:
-        from app.agent.metadata_inference import scan_metadata_types
+        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"source": "imagenet", "label_name": "cat"},
@@ -226,7 +226,7 @@ class TestMetadataInference:
         assert result["label_name"].n_unique == 3
 
     def test_scan_pure_python_numeric_keys(self) -> None:
-        from app.agent.metadata_inference import scan_metadata_types
+        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"score": 0.9, "index": 1},
@@ -245,7 +245,7 @@ class TestMetadataInference:
         assert result["index"].max == 3
 
     def test_scan_pure_python_nulls(self) -> None:
-        from app.agent.metadata_inference import scan_metadata_types
+        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"key": "a"},
@@ -260,14 +260,14 @@ class TestMetadataInference:
         assert result["key"].n_unique == 2
 
     def test_build_metadata_block_empty(self) -> None:
-        from app.agent.metadata_inference import build_metadata_block
+        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
 
         result = build_metadata_block(None, None)
         assert "no metadata" in result.lower()
 
     def test_build_metadata_block_inferred_only(self) -> None:
-        from app.agent.metadata_inference import build_metadata_block
-        from app.api.schemas import MetadataKeyInfo
+        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
+        from app.shared.api.schemas import MetadataKeyInfo
 
         inferred = {
             "source": MetadataKeyInfo(
@@ -279,8 +279,8 @@ class TestMetadataInference:
         assert "inferred" in result.lower()
 
     def test_build_metadata_block_declared(self) -> None:
-        from app.agent.metadata_inference import build_metadata_block
-        from app.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
+        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
+        from app.shared.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
 
         declared = {
             "label_name": DeclaredMetadataKey(type="string", description="ImageNet class name"),
@@ -305,7 +305,7 @@ class TestPromptAssembler:
     """Test assemble_prompt fills the template correctly."""
 
     def test_assemble_basic(self) -> None:
-        from app.agent.assembler import assemble_prompt
+        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
 
         prompt = assemble_prompt(
             dataset_name="Test DS",
@@ -331,7 +331,7 @@ class TestPromptAssembler:
         assert "50" in prompt
 
     def test_assemble_with_metadata(self) -> None:
-        from app.agent.assembler import assemble_prompt
+        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
 
         metadata_dicts = [
             {"source": "imagenet", "label_index": 0},
@@ -362,7 +362,7 @@ class TestPromptAssembler:
         assert "false" in prompt  # has_embeddings
 
     def test_assemble_with_declared_metadata(self) -> None:
-        from app.agent.assembler import assemble_prompt
+        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
 
         prompt = assemble_prompt(
             dataset_name="Declared DS",
@@ -521,7 +521,7 @@ class TestQueryDataRoute:
 
     def test_execute_query_data_wafer_points(self) -> None:
         import asyncio
-        from app.agent.tools import execute_query_data
+        from app.modules.agent.infrastructure.tools.tools import execute_query_data
 
         repository = MagicMock()
         repository.list_wafer_points = AsyncMock(
@@ -765,8 +765,8 @@ class TestSurfaceStoreUnit:
 
     def test_clear_ephemeral(self) -> None:
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.api.schemas import AgentPanelDescriptor
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.shared.api.schemas import AgentPanelDescriptor
 
         store = SurfaceStore()
 
@@ -791,8 +791,8 @@ class TestSurfaceStoreUnit:
 
     def test_clear_session(self) -> None:
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.api.schemas import AgentPanelDescriptor
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.shared.api.schemas import AgentPanelDescriptor
 
         store = SurfaceStore()
 
@@ -813,8 +813,8 @@ class TestSurfaceStoreUnit:
     def test_max_panel_enforcement(self) -> None:
         """Test that tool implementation enforces MAX_PANELS=8."""
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.agent.tools import execute_set_panel
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.infrastructure.tools.tools import execute_set_panel
 
         store = SurfaceStore()
 
@@ -856,8 +856,8 @@ class TestToolExecution:
 
     def test_execute_get_surface_state(self) -> None:
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.agent.tools import execute_get_surface_state
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.infrastructure.tools.tools import execute_get_surface_state
 
         store = SurfaceStore()
 
@@ -872,8 +872,8 @@ class TestToolExecution:
 
     def test_execute_remove_nonexistent_panel(self) -> None:
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.agent.tools import execute_remove_panel
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.infrastructure.tools.tools import execute_remove_panel
 
         store = SurfaceStore()
 
@@ -890,7 +890,7 @@ class TestToolExecution:
 
     def test_execute_query_data_unknown_type(self) -> None:
         import asyncio
-        from app.agent.tools import execute_query_data
+        from app.modules.agent.infrastructure.tools.tools import execute_query_data
 
         async def _run():
             result = await execute_query_data(
@@ -906,8 +906,8 @@ class TestToolExecution:
     def test_data_size_limit(self) -> None:
         """Inline data > 50KB should be rejected."""
         import asyncio
-        from app.agent.surface_store import SurfaceStore
-        from app.agent.tools import execute_set_panel
+        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.infrastructure.tools.tools import execute_set_panel
 
         store = SurfaceStore()
 

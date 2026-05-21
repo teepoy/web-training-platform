@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.config import load_config
 from app.shared.db.session import create_engine, create_session_factory
-from app.domain.models import ArtifactRef
+from app.shared.api.schemas import ArtifactRef
 from app.modules.presets._registry import get_preset, get_preset_meta
 from app.modules.presets.registry import PresetRegistry
 from app.shared.domain.runtime import DatasetRef, ModelRef, TrainContext, TrainResult

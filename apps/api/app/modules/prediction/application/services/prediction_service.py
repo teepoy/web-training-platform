@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from omegaconf import DictConfig
 from pydantic import BaseModel
 
-from app.domain.models import (
+from app.shared.api.schemas import (
     Annotation,
     AnnotationVersion,
     PlatformPrediction,
@@ -54,7 +54,7 @@ from app.shared.infrastructure.label_studio.client import (
 )
 
 if TYPE_CHECKING:
-    from app.domain.models import Sample
+    from app.shared.api.schemas import Sample
     from app.shared.db.sql_repository import SqlRepository
 from app.shared.infrastructure.storage.base import ArtifactStorage
 

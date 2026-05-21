@@ -8,8 +8,8 @@ import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pyarrow import Table as ArrowTable
 
-from app.domain.models import Annotation, Organization, Sample, User, SPARSE_NO_LS
-from app.domain.types import TaskType
+from app.shared.api.schemas import Annotation, Organization, Sample, User, SPARSE_NO_LS
+from app.shared.api.schemas import TaskType
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,

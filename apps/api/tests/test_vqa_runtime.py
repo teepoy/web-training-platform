@@ -6,15 +6,15 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 import pytest
 
-from app.domain.models import Sample
-from app.domain.models import Dataset, Model, TaskSpec
-from app.domain.types import DatasetType, TaskType
+from app.shared.api.schemas import Sample
+from app.shared.api.schemas import Dataset, Model, TaskSpec
+from app.shared.api.schemas import DatasetType, TaskType
 from app.main import app, container
-from app.presets.registry import PresetRegistry
-from app.presets.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
-from app.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
-from app.services.prediction_service import PredictionService
-from app.storage.minio_storage import InMemoryArtifactStorage
+from app.modules.presets.registry import PresetRegistry
+from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
+from app.modules.training.infrastructure.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
+from app.modules.prediction.application.services.prediction_service import PredictionService
+from app.shared.infrastructure.storage import InMemoryArtifactStorage
 
 
 class _FakeLlm:
@@ -28,7 +28,7 @@ class _FakePredictor:
 
     async def predict_single(self, ctx, sample):
         self.last_question = str(sample.get("question", ""))
-        from app.presets.runtime import PredictResult
+        from app.shared.domain.runtime import PredictResult
 
         return PredictResult(sample_id=str(sample.get("sample_id", "")), label="ok")
 

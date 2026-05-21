@@ -27,7 +27,7 @@ from app.shared.infrastructure.label_studio.session import (
 )
 from app.shared.db.registry import OrganizationORM
 from app.shared.db.session import create_engine, create_session_factory, init_db
-from app.domain.models import DEFAULT_ORG_ID, Organization, User
+from app.shared.api.schemas import DEFAULT_ORG_ID, Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
 from app.modules.presets.registry import PresetRegistry
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
@@ -71,7 +71,7 @@ from app.modules.sensors.application.services.sensor_dispatch import (
 from app.modules.dashboard.application.services.service_health import (
     ServiceHealthService,
 )
-from app.agent.session_store import SessionStore
+from app.modules.agent.application.services.session_store import SessionStore
 from app.shared.infrastructure.surface_store import SurfaceStore
 from app.modules.task_tracker.application.services.task_tracker import (
     TaskTrackerService,

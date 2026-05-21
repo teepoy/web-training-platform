@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from app.domain.types import JobStatus
+from app.shared.api.schemas import JobStatus
 from app.modules.schedules.application.services.scheduler import SchedulerService
 from app.shared.api.schemas import (
     TaskTrackerCheckResult,

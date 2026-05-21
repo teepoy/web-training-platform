@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.domain.models import TaskSpec
-from app.domain.types import DatasetStorageMode, DatasetType
+from app.shared.api.schemas import TaskSpec
+from app.shared.api.schemas import DatasetStorageMode, DatasetType
 
 
 class CreateDatasetRequest(BaseModel):

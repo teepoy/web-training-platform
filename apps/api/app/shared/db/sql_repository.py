@@ -30,7 +30,7 @@ from app.shared.db.registry import (
     TrainingPresetORM,
     UserORM,
 )
-from app.domain.models import (
+from app.shared.api.schemas import (
     Annotation,
     AnnotationVersion,
     ArtifactRef,
@@ -51,7 +51,7 @@ from app.domain.models import (
     TrainingJob,
     TrainingPreset,
 )
-from app.domain.types import DatasetStorageMode, DatasetType, JobStatus
+from app.shared.api.schemas import DatasetStorageMode, DatasetType, JobStatus
 
 
 def _utcnow() -> datetime:

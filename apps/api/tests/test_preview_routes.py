@@ -4,7 +4,7 @@ from app.main import app
 
 
 def test_browse_preview_items():
-    from app.db.models import DatasetORM
+    from app.shared.db.models import DatasetORM
     from sqlalchemy import select, func
     from app.main import container
 

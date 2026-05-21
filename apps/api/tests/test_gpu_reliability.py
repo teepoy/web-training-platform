@@ -14,15 +14,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.domain.models import TrainingEvent, TrainingJob
-from app.domain.types import JobStatus
-from app.services.gpu_worker import (
+from app.shared.api.schemas import TrainingEvent, TrainingJob
+from app.shared.api.schemas import JobStatus
+from app.shared.infrastructure.workers.gpu_worker import (
     GpuWorkerClient,
     GpuWorkerClientError,
     GpuWorkerUnavailableError,
 )
-from app.services.orchestrator import TrainingOrchestrator
-from app.services.prefect_engine import PrefectWorkPoolEngine
+from app.modules.training.application.services.orchestrator import TrainingOrchestrator
+from app.modules.training.infrastructure.engines.prefect_engine import PrefectWorkPoolEngine
 
 BASE_URL = "http://gpu-worker:9999"
 
@@ -189,7 +189,7 @@ async def test_unavailable_gpu_worker_marks_job_failed() -> None:
     )
     orchestrator = _orchestrator_with(engine, repository)
 
-    with patch("app.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
+    with patch("app.modules.training.application.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
         await orchestrator.start_job(job)
 
     await asyncio.wait_for(orchestrator._run_job(job.id, "prefect-run-1"), timeout=1)
@@ -216,7 +216,7 @@ async def test_cancellation_propagates_to_gpu_worker() -> None:
     )
     orchestrator = _orchestrator_with(engine, repository)
 
-    with patch("app.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
+    with patch("app.modules.training.application.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
         await orchestrator.start_job(job)
     cancelled = await asyncio.wait_for(orchestrator.cancel_job(job.id), timeout=1)
 
@@ -242,7 +242,7 @@ async def test_gpu_worker_crash_loses_job() -> None:
     )
     orchestrator = _orchestrator_with(engine, repository)
 
-    with patch("app.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
+    with patch("app.modules.training.application.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
         await orchestrator.start_job(job)
     await asyncio.wait_for(orchestrator._run_job(job.id, "gpu-lost-1"), timeout=1)
 
@@ -270,7 +270,7 @@ async def test_gpu_oom_failure_marks_job_failed() -> None:
     )
     orchestrator = _orchestrator_with(engine, repository)
 
-    with patch("app.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
+    with patch("app.modules.training.application.services.orchestrator.asyncio.create_task", side_effect=lambda coro: coro.close()):
         await orchestrator.start_job(job)
     await asyncio.wait_for(orchestrator._run_job(job.id, "gpu-oom-1"), timeout=1)
 

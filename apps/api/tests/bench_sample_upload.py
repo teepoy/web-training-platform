@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from dependency_injector import providers
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,11 +19,11 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///./bench-sample-upload-{uuid4().hex}.db"
 
-from app.api.deps import get_current_org, get_current_user
+from app.shared.deps import get_current_org, get_current_user
 from app.core.config import load_config
-from app.db.base import Base
-from app.db.session import create_engine
-from app.domain.models import Organization, User
+from app.shared.db.base import Base
+from app.shared.db.session import create_engine
+from app.shared.api.schemas import Organization, User
 from app.main import app, container
 
 
@@ -69,7 +68,7 @@ def install_overrides() -> None:
     mock_ls.list_tasks = AsyncMock(return_value=([], 0))
     mock_ls.list_annotations = AsyncMock(return_value=[])
     mock_ls.export_project = AsyncMock(return_value=[])
-    container.label_studio_client.override(providers.Object(mock_ls))
+    container.label_studio_client.override(lambda: mock_ls)
 
 
 def clear_overrides() -> None:

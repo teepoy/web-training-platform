@@ -8,9 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.data.vqa import VqaDatasetAdapter
+from app.modules.datasets.domain.entities.vqa import VqaDatasetAdapter
 from app.modules.presets._registry import register
-from app.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
+from app.modules.training.infrastructure.runtime.dspy import (
+    DspyVqaPredictor,
+    DspyVqaTrainer,
+)
 
 
 # ===== Typed config =====

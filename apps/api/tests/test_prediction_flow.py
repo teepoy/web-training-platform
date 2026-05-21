@@ -20,8 +20,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domain.models import ArtifactRef, PredictionJob
-from app.domain.types import JobStatus
+from app.shared.api.schemas import ArtifactRef, PredictionJob
+from app.shared.api.schemas import JobStatus
 from app.main import app, services as app_services
 from tests.conftest import DEFAULT_ORG_ID, PRESET_ID
 

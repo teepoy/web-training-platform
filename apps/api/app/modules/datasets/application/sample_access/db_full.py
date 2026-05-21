@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.models import Annotation, Sample
+from app.shared.api.schemas import Annotation, Sample
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.application.sample_access.base import SampleAccess
 

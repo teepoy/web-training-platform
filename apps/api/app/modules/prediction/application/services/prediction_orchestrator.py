@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from app.domain.models import PredictionEvent, PredictionJob
-from app.domain.types import JobStatus
+from app.shared.api.schemas import PredictionEvent, PredictionJob
+from app.shared.api.schemas import JobStatus
 
 
 class PredictionOrchestrator:

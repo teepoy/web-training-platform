@@ -67,7 +67,7 @@ class TestSessionStore:
     """Direct unit tests for SessionStore."""
 
     def test_create_and_retrieve_session(self) -> None:
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -84,7 +84,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_append_and_get_messages(self) -> None:
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -102,7 +102,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_truncation(self) -> None:
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore(max_messages_per_session=5)
 
@@ -119,7 +119,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_clear_session(self) -> None:
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -138,7 +138,7 @@ class TestSessionStore:
 
     def test_ttl_eviction(self) -> None:
         import time
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore(ttl_seconds=0)
 
@@ -152,7 +152,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_max_sessions_cap(self) -> None:
-        from app.agent.session_store import SessionStore
+        from app.modules.agent.application.services.session_store import SessionStore
 
         store = SessionStore(max_sessions=3)
 
@@ -176,8 +176,8 @@ class TestGlobalToolDefinitions:
     """Test that get_tool_definitions returns the right tools for context."""
 
     def test_tools_without_classify_context(self) -> None:
-        from app.agent.global_tools import get_tool_definitions
-        from app.api.schemas import AgentContext
+        from app.modules.agent.infrastructure.tools.global_tools import get_tool_definitions
+        from app.shared.api.schemas import AgentContext
 
         ctx = AgentContext(page="/datasets")
         tools = get_tool_definitions(ctx)
@@ -192,8 +192,8 @@ class TestGlobalToolDefinitions:
         assert "get_surface_state" not in tool_names
 
     def test_tools_with_classify_context(self) -> None:
-        from app.agent.global_tools import get_tool_definitions
-        from app.api.schemas import AgentContext
+        from app.modules.agent.infrastructure.tools.global_tools import get_tool_definitions
+        from app.shared.api.schemas import AgentContext
 
         ctx = AgentContext(page="/datasets/abc/classify", dataset_id="abc")
         tools = get_tool_definitions(ctx)
@@ -207,15 +207,15 @@ class TestGlobalToolDefinitions:
         assert "get_surface_state" in tool_names
 
     def test_read_tool_count(self) -> None:
-        from app.agent.global_tools import READ_TOOLS
+        from app.modules.agent.infrastructure.tools.global_tools import READ_TOOLS
         assert len(READ_TOOLS) == 10
 
     def test_write_tool_count(self) -> None:
-        from app.agent.global_tools import WRITE_TOOLS
+        from app.modules.agent.infrastructure.tools.global_tools import WRITE_TOOLS
         assert len(WRITE_TOOLS) == 5
 
     def test_sidebar_tool_count(self) -> None:
-        from app.agent.global_tools import SIDEBAR_TOOLS
+        from app.modules.agent.infrastructure.tools.global_tools import SIDEBAR_TOOLS
         assert len(SIDEBAR_TOOLS) == 3
 
 
@@ -228,8 +228,8 @@ class TestGlobalAssembler:
     """Test the global prompt assembler."""
 
     def test_basic_assembly(self) -> None:
-        from app.agent.global_assembler import assemble_global_prompt
-        from app.api.schemas import AgentContext
+        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.shared.api.schemas import AgentContext
 
         async def _run():
             ctx = AgentContext(page="/datasets")
@@ -246,8 +246,8 @@ class TestGlobalAssembler:
         asyncio.run(_run())
 
     def test_assembly_with_classify_page(self) -> None:
-        from app.agent.global_assembler import assemble_global_prompt
-        from app.api.schemas import AgentContext
+        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.shared.api.schemas import AgentContext
 
         async def _run():
             ctx = AgentContext(page="/datasets/abc/classify", dataset_id="abc")
@@ -265,8 +265,8 @@ class TestGlobalAssembler:
         asyncio.run(_run())
 
     def test_assembly_with_platform_stats(self) -> None:
-        from app.agent.global_assembler import assemble_global_prompt
-        from app.api.schemas import AgentContext
+        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.shared.api.schemas import AgentContext
 
         async def _run():
             ctx = AgentContext(page="/")
@@ -675,7 +675,7 @@ class TestGlobalToolExecution:
     """Unit tests for global tool execute_* functions."""
 
     def test_execute_list_datasets(self) -> None:
-        from app.agent.global_tools import execute_list_datasets
+        from app.modules.agent.infrastructure.tools.global_tools import execute_list_datasets
 
         async def _run():
             mock_repo = MagicMock()
@@ -693,7 +693,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_get_dataset_not_found(self) -> None:
-        from app.agent.global_tools import execute_get_dataset
+        from app.modules.agent.infrastructure.tools.global_tools import execute_get_dataset
 
         async def _run():
             mock_repo = MagicMock()
@@ -707,7 +707,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_list_presets(self) -> None:
-        from app.agent.global_tools import execute_list_presets
+        from app.modules.agent.infrastructure.tools.global_tools import execute_list_presets
 
         async def _run():
             mock_registry = MagicMock()
@@ -724,7 +724,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_get_dashboard(self) -> None:
-        from app.agent.global_tools import execute_get_dashboard
+        from app.modules.agent.infrastructure.tools.global_tools import execute_get_dashboard
 
         async def _run():
             mock_repo = MagicMock()
@@ -744,7 +744,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_cancel_training_job_not_found(self) -> None:
-        from app.agent.global_tools import execute_cancel_training_job
+        from app.modules.agent.infrastructure.tools.global_tools import execute_cancel_training_job
 
         async def _run():
             mock_repo = MagicMock()
@@ -759,7 +759,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_list_schedules(self) -> None:
-        from app.agent.global_tools import execute_list_schedules
+        from app.modules.agent.infrastructure.tools.global_tools import execute_list_schedules
 
         async def _run():
             mock_svc = MagicMock()
@@ -783,9 +783,9 @@ class TestGlobalAgentRuntime:
     """Unit tests for GlobalAgent class directly."""
 
     def test_summarise_tool_call_read(self) -> None:
-        from app.agent.global_runtime import GlobalAgent
-        from app.agent.session_store import SessionStore
-        from app.agent.surface_store import SurfaceStore
+        from app.modules.agent.application.services.global_runtime import GlobalAgent
+        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.application.services.surface_store import SurfaceStore
 
         agent = GlobalAgent(
             llm_base_url="http://fake:8080/v1",

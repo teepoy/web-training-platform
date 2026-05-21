@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.shared.api.schemas import UserResponse
 from app.shared.db.registry import OrgMembershipORM, OrganizationORM, UserORM
-from app.domain.models import User
+from app.shared.api.schemas import User
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_user,
     require_superadmin,

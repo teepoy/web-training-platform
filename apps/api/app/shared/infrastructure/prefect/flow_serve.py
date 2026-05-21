@@ -1,8 +1,7 @@
 """Prefect flow worker serve logic.
 
 Flow definitions live in module-owned infrastructure packages.  This module
-keeps the worker entrypoint logic centralized for the legacy ``app.flows.serve``
-shim and deployment specs.
+keeps the worker entrypoint logic centralized for deployment specs.
 """
 
 from __future__ import annotations
@@ -18,8 +17,10 @@ from prefect.runner import Runner
 from prefect.schedules import Cron
 
 from app.core.config import load_config
-from app.flows.dataset_size_sensor import dataset_size_sensor
-from app.flows.timer_sensor import timer_sensor
+from app.modules.sensors.infrastructure.flows.dataset_size_sensor import (
+    dataset_size_sensor,
+)
+from app.modules.sensors.infrastructure.flows.timer_sensor import timer_sensor
 from app.modules.datasets.infrastructure.flows.drain_dataset import drain_dataset
 from app.modules.prediction.infrastructure.flows.predict_job import predict_job
 from app.modules.training.infrastructure.flows.train_job import train_job
@@ -37,8 +38,10 @@ _DRAIN_ENTRYPOINT = (
 _PREDICT_ENTRYPOINT = (
     "app/modules/prediction/infrastructure/flows/predict_job.py:predict_job"
 )
-_SENSOR_ENTRYPOINT = "app/flows/dataset_size_sensor.py:dataset_size_sensor"
-_TIMER_ENTRYPOINT = "app/flows/timer_sensor.py:timer_sensor"
+_SENSOR_ENTRYPOINT = "app/modules/sensors/infrastructure/flows/dataset_size_sensor.py:dataset_size_sensor"
+_TIMER_ENTRYPOINT = (
+    "app/modules/sensors/infrastructure/flows/timer_sensor.py:timer_sensor"
+)
 
 _QUEUE_POOLS = {
     _DSPY_QUEUE: "default-pool",

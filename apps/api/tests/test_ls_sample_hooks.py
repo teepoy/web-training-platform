@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from app.main import app, container
-from app.routers._common import _make_ls_image_url
+from app.shared.deps import _make_ls_image_url
 
 
 def _mock_config() -> MagicMock:
@@ -45,9 +45,8 @@ _SAMPLE_PAYLOAD = {
 
 def providers_value(val):  # type: ignore[return]
     """Return a dependency-injector compatible provider that always returns val."""
-    from dependency_injector import providers
 
-    return providers.Object(val)
+    return lambda: val
 
 
 def _reset_container_overrides() -> None:
@@ -124,7 +123,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
             pass
 
         # Use mocked repository to test the sample creation path
-        from app.domain.models import Dataset
+        from app.shared.api.schemas import Dataset
         from uuid import uuid4
         from unittest.mock import patch
 
@@ -162,7 +161,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
 
 def test_create_sample_ls_task_creation_fails_returns_502() -> None:
     """When LS task creation fails, sample creation returns 502."""
-    from app.domain.models import Dataset, Sample
+    from app.shared.api.schemas import Dataset, Sample
     from unittest.mock import patch
     from uuid import uuid4
 

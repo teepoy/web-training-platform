@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.domain.models import Dataset, Sample, TaskSpec
+from app.shared.api.schemas import Dataset, Sample, TaskSpec
 from app.modules.preview.domain.entities.preview import (
     PreviewPage,
     PreviewPersistScope,
     PreviewPersistStatus,
     PreviewSession,
 )
-from app.domain.types import DatasetType, TaskType
+from app.shared.api.schemas import DatasetType, TaskType
 from app.modules.preview.application.services.preview_store import PreviewStore
 from app.modules.preview.application.services.preview_upstream import UpstreamAdapter
 

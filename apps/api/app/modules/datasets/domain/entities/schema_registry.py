@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.modules.datasets.domain.entities.dataset_schema import DatasetSchema
-from app.domain.types import DatasetType, TaskType
+from app.shared.api.schemas import DatasetType, TaskType
 
 
 _registry: dict[str, DatasetSchema] = {}

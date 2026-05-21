@@ -4,7 +4,7 @@ This module is intentionally a stub.  No implementation is shipped in Phase 1.
 
 Flow sketch
 -----------
-1. Resolve the dataset manifest from storage (:class:`~app.domain.dataset_payload.DatasetManifest`).
+1. Resolve the dataset manifest from storage (:class:`~app.modules.datasets.domain.entities.dataset_payload.DatasetManifest`).
 2. Iterate over shard entries in order of ``shard_index``.
 3. For each shard:
    a. Load the parquet shard bytes from object storage via ``ArtifactStorage``.
@@ -13,11 +13,11 @@ Flow sketch
       (image_bytes, metadata, question/text).
    d. Call the model predictor via ``predictor.predict_single(ctx, input)``
       or the inference worker batch path.
-   e. Collect results in-memory as :class:`~app.domain.dataset_payload.SparsePredictionResult`
+   e. Collect results in-memory as :class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionResult`
       instances (not as DB-backed ``PlatformPrediction`` rows).
 4. After all shards have been processed, serialize a
-   :class:`~app.domain.dataset_payload.SparsePredictionJobResult` and
-   its per-shard :class:`~app.domain.dataset_payload.SparsePredictionShard`
+   :class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionJobResult` and
+   its per-shard :class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionShard`
    children to object storage.
 
 Integration point (in :meth:`PredictionService.run_prediction`)::
@@ -49,13 +49,13 @@ The naming convention is::
     datasets/{org_id}/{dataset_id}/predictions/{job_id}/{shard_index:06d}.parquet
 
 Each shard file is a parquet table whose schema mirrors the fields of
-:class:`~app.domain.dataset_payload.SparsePredictionResult`:
+:class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionResult`:
 
     shard_index, row_index, dataset_id,
     predicted_label, confidence, all_scores, error
 
 A top-level job result manifest — serialized from
-:class:`~app.domain.dataset_payload.SparsePredictionJobResult` — is
+:class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionJobResult` — is
 stored alongside the shards::
 
     datasets/{org_id}/{dataset_id}/predictions/{job_id}/job_result.json
@@ -68,7 +68,7 @@ Read-back for review
 When the review/reclassify UI (T14) needs prediction results:
 
 1. Load the ``job_result.json`` manifest to discover all prediction shard URIs.
-2. For each :class:`~app.domain.dataset_payload.SparsePredictionShard`:
+2. For each :class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionShard`:
    a. Read the prediction parquet shard from object storage.
    b. Read the *original* dataset shard from
       ``datasets/{org_id}/{dataset_id}/shards/{shard_index:06d}.parquet``.
@@ -76,9 +76,9 @@ When the review/reclassify UI (T14) needs prediction results:
       rows with both original sample data (image_uri, metadata, ...)
       and prediction fields (predicted_label, confidence, error).
 3. Present the joined rows to the review UI, keyed by
-   :class:`~app.domain.dataset_payload.SampleLocator`.
+   :class:`~app.modules.datasets.domain.entities.dataset_payload.SampleLocator`.
 
-The :class:`~app.domain.dataset_payload.SparsePredictionJobResult`
+The :class:`~app.modules.datasets.domain.entities.dataset_payload.SparsePredictionJobResult`
 domain model is the single source of truth for discovering and
 paginating prediction results without a database round-trip.
 """
@@ -90,12 +90,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from omegaconf import DictConfig
 
-    from app.domain.models import Dataset, Model
+    from app.shared.api.schemas import Dataset, Model
     from app.shared.db.sql_repository import SqlRepository
     from app.shared.infrastructure.workers.embedding import EmbeddingClient
     from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
     from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
-    from app.storage.interfaces import ArtifactStorage
+    from app.shared.infrastructure.storage.base import ArtifactStorage
 
 
 class SparsePredictionRunner:

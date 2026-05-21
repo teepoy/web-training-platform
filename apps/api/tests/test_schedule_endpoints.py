@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.scheduler import get_scheduler_service
+from app.modules.schedules.application.services.scheduler import get_scheduler_service
 
 
 # ---------------------------------------------------------------------------

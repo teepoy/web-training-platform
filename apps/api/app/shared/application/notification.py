@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from app.domain.models import TrainingEvent
+from app.shared.api.schemas import TrainingEvent
 
 
 class WebhookNotificationSink:

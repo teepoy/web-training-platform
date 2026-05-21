@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.main import container
-from app.services.service_health import ServiceHealthService
+from app.modules.dashboard.application.services.service_health import ServiceHealthService
 from tests.conftest import PRESET_ID
 
 
@@ -103,7 +102,7 @@ def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
         embedding_client=embedding_client,
     )
 
-    container.service_health.override(providers.Object(service_health))
+    container.service_health.override(lambda: service_health)
     try:
         with TestClient(app) as c:
             r = c.get("/api/v1/dashboard")
@@ -129,7 +128,7 @@ def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> No
         embedding_client=embedding_client,
     )
 
-    container.service_health.override(providers.Object(service_health))
+    container.service_health.override(lambda: service_health)
     try:
         with TestClient(app) as c:
             r = c.get("/api/v1/dashboard")

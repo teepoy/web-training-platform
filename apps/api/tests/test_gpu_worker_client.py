@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.gpu_worker import (
+from app.shared.infrastructure.workers.gpu_worker import (
     GpuWorkerClient,
     GpuWorkerClientError,
     GpuWorkerUnavailableError,

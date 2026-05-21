@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.types import DatasetStorageMode
+from app.shared.api.schemas import DatasetStorageMode
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.application.sample_access.base import (
     SampleAccess,

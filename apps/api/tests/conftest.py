@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from dependency_injector import providers
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -55,8 +54,8 @@ def _mock_auth_deps(request):
         return
 
     from app.main import app
-    from app.api.deps import get_current_user, get_current_org
-    from app.domain.models import User, Organization
+    from app.shared.deps import get_current_user, get_current_org
+    from app.shared.api.schemas import User, Organization
     import datetime
 
     _mock_user = User(
@@ -126,7 +125,7 @@ def _mock_ls_client(request):
     _mock_ls.list_annotations = AsyncMock(return_value=[])
     _mock_ls.export_project = AsyncMock(return_value=[])
 
-    container.label_studio_client.override(providers.Object(_mock_ls))
+    container.label_studio_client.override(lambda: _mock_ls)
     yield
     container.label_studio_client.reset_override()
 
@@ -178,7 +177,7 @@ def _mock_embedding_service(request):
     _mock_embedding.classify_batch = AsyncMock(side_effect=_classify_batch)
     _mock_embedding.health = AsyncMock(return_value=True)
 
-    container.embedding_service.override(providers.Object(_mock_embedding))
+    container.embedding_service.override(lambda: _mock_embedding)
     yield
     container.embedding_service.reset_override()
 
@@ -236,7 +235,7 @@ def _mock_inference_worker(request):
     _mock_worker.predict_batch = AsyncMock(side_effect=_predict_batch)
     _mock_worker.embed_batch = AsyncMock(side_effect=_embed_batch)
 
-    container.inference_worker.override(providers.Object(_mock_worker))
+    container.inference_worker.override(lambda: _mock_worker)
     yield
     container.inference_worker.reset_override()
 
@@ -293,7 +292,7 @@ def _mock_gpu_worker(request):
     _mock_gpu.predict_batch = AsyncMock(side_effect=_predict_batch)
     _mock_gpu.embed_batch = AsyncMock(side_effect=_embed_batch)
 
-    container.gpu_worker.override(providers.Object(_mock_gpu))
+    container.gpu_worker.override(lambda: _mock_gpu)
     yield
     container.gpu_worker.reset_override()
 

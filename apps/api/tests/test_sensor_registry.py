@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.sensors.registry import SensorRegistry
-from app.sensors.schema import SensorDefinition
+from app.modules.sensors.domain.entities.registry import SensorRegistry
+from app.modules.sensors.domain.entities.schema import SensorDefinition
 
 
 SENSORS_DIR = Path(__file__).resolve().parents[1] / "sensors"

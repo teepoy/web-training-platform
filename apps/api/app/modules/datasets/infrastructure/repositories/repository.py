@@ -22,7 +22,7 @@ from app.shared.db.registry import (
     SampleFeatureORM,
     SampleORM,
 )
-from app.domain.models import (
+from app.shared.api.schemas import (
     Annotation,
     Dataset,
     DEFAULT_ORG_ID,
@@ -30,7 +30,7 @@ from app.domain.models import (
     SampleFeature,
     TaskSpec,
 )
-from app.domain.types import DatasetStorageMode, DatasetType
+from app.shared.api.schemas import DatasetStorageMode, DatasetType
 from app.shared.db.models.training import (
     JobUserStateORM,
     TrainingEventORM,

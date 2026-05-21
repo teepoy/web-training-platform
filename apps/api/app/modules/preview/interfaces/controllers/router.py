@@ -16,7 +16,7 @@ from app.modules.preview.interfaces.dtos.schemas import (
     PreviewSessionResponse,
     StartPersistRequest,
 )
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.preview.application.services.preview_service import PreviewService
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.deps import (

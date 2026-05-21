@@ -51,7 +51,7 @@ def test_create_annotation_with_task_id() -> None:
     mock_config = _make_config()
 
     import app.main as main_module
-    from app.domain.models import Annotation, Sample
+    from app.shared.api.schemas import Annotation, Sample
     from datetime import datetime, UTC
     from uuid import uuid4
 
@@ -116,7 +116,7 @@ def test_create_annotation_no_task_id_returns_500() -> None:
     mock_config = _make_config()
 
     import app.main as main_module
-    from app.domain.models import Sample
+    from app.shared.api.schemas import Sample
     from uuid import uuid4
 
     sample_id = str(uuid4())
@@ -154,8 +154,8 @@ def test_sync_annotations_to_ls() -> None:
     mock_config = _make_config()
 
     import app.main as main_module
-    from app.domain.models import Annotation, Dataset, Sample
-    from app.services.sample_access_db_full import DbFullSampleAccess
+    from app.shared.api.schemas import Annotation, Dataset, Sample
+    from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
     from datetime import datetime, UTC
     from uuid import uuid4
 
@@ -218,7 +218,7 @@ def test_sync_annotations_no_project_returns_500() -> None:
     mock_config = _make_config()
 
     import app.main as main_module
-    from app.domain.models import Dataset
+    from app.shared.api.schemas import Dataset
     from uuid import uuid4
 
     dataset_id = str(uuid4())

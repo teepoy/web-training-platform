@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,

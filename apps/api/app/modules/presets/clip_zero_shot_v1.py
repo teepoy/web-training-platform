@@ -9,9 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.data.classification import ImageClassificationAdapter
+from app.modules.datasets.domain.entities.classification import (
+    ImageClassificationAdapter,
+)
 from app.modules.presets._registry import register
-from app.runtime.torch import TorchPredictor
+from app.modules.training.infrastructure.runtime.torch import TorchPredictor
 
 
 # ===== Typed config =====

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.domain.models import ArtifactRef, Model
+from app.shared.api.schemas import ArtifactRef, Model
 from app.shared.db.models.artifacts import ArtifactORM
 from app.shared.db.models.datasets import DatasetORM
 from app.shared.db.models.training import TrainingJobORM, TrainingPresetORM

@@ -1,15 +1,274 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import Enum
 from typing import Any, Generic, TypeVar
+from uuid import uuid4
 
 from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.models import ModelSpec, TaskSpec
-from app.domain.types import DatasetStorageMode, DatasetType
-
 T = TypeVar("T")
+
+
+class TaskType(str, Enum):
+    CLASSIFICATION = "classification"
+    VQA = "vqa"
+    DETECTION = "detection"
+
+
+class DatasetStorageMode(str, Enum):
+    DB_FULL = "db_full"
+    FILE_SHARD_SPARSE = "file_shard_sparse"
+
+
+class DatasetType(str, Enum):
+    IMAGE_CLASSIFICATION = "image_classification"
+    IMAGE_VQA = "image_vqa"
+    IMAGE_DETECTION = "image_detection"
+
+
+class ModelFramework(str, Enum):
+    PYTORCH = "pytorch"
+
+
+class JobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class OrgRole(str, Enum):
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+SPARSE_NO_LS = "SPARSE_NO_LS"
+
+
+class ArtifactRef(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    uri: str
+    kind: str
+    metadata: dict[str, object] = Field(default_factory=dict)
+    name: str | None = None
+    file_size: int | None = None
+    file_hash: str | None = None
+    format: str | None = None
+    created_at: datetime | None = None
+
+
+class Model(ArtifactRef):
+    job_id: str
+    dataset_id: str | None = None
+    dataset_name: str | None = None
+    preset_id: str | None = None
+    preset_name: str | None = None
+
+
+class TaskSpec(BaseModel):
+    task_type: TaskType = TaskType.CLASSIFICATION
+    label_space: list[str] = Field(default_factory=list)
+    metadata_schema: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class Dataset(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    dataset_type: DatasetType = DatasetType.IMAGE_CLASSIFICATION
+    task_spec: TaskSpec = Field(default_factory=TaskSpec)
+    org_id: str | None = DEFAULT_ORG_ID
+    org_name: str = ""
+    is_public: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    embed_config: dict = Field(default_factory=dict)
+    ls_project_id: str | None = None
+    ls_project_url: str | None = None
+    storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
+    capabilities: dict[str, bool] | None = None
+
+
+class Sample(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    image_uris: list[str] = Field(default_factory=list)
+    metadata: dict[str, object] = Field(default_factory=dict)
+    ls_task_id: int | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class Annotation(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    sample_id: str
+    label: str
+    annotation_value: dict | list | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ModelSpec(BaseModel):
+    framework: ModelFramework = ModelFramework.PYTORCH
+    base_model: str
+
+
+class TrainingPreset(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    model_spec: ModelSpec
+    omegaconf_yaml: str
+    dataloader_ref: str
+    org_id: str | None = DEFAULT_ORG_ID
+
+
+class TrainingEvent(BaseModel):
+    job_id: str
+    ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    level: str = "info"
+    message: str
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
+class TrainingJob(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    preset_id: str
+    status: JobStatus = JobStatus.QUEUED
+    created_by: str
+    org_id: str | None = DEFAULT_ORG_ID
+    org_name: str = ""
+    is_public: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    external_job_id: str | None = None
+    artifact_refs: list[ArtifactRef] = Field(default_factory=list)
+
+
+class SampleFeature(BaseModel):
+    sample_id: str
+    embedding: list[float] = Field(default_factory=list)
+    embed_model: str | None = None
+    computed_at: datetime | None = None
+
+
+class User(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    email: str
+    name: str
+    is_superadmin: bool = False
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    oauth_provider: str | None = None
+    oauth_provider_id: str | None = None
+
+
+class Organization(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    slug: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class OrgMembership(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str
+    org_id: str
+    role: OrgRole
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionReviewAction(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    model_id: str
+    model_version: str | None = None
+    collection_id: str | None = None
+    sync_tag: str | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PlatformPrediction(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    org_id: str
+    dataset_id: str
+    sample_id: str
+    model_id: str
+    target: str = "image_classification"
+    job_id: str | None = None
+    model_version: str | None = None
+    predicted_label: str
+    confidence: float | None = None
+    all_scores: dict[str, float] | None = None
+    error: str | None = None
+    created_by: str = "system"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionCollection(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    org_id: str
+    dataset_id: str
+    model_id: str
+    name: str
+    model_version: str | None = None
+    target: str = "image_classification"
+    source_job_id: str | None = None
+    sync_tag: str | None = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionCollectionItem(BaseModel):
+    collection_id: str
+    prediction_id: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AnnotationVersion(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    review_action_id: str
+    annotation_id: str
+    prediction_id: str | None = None
+    predicted_label: str
+    final_label: str
+    confidence: float | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PredictionEvent(BaseModel):
+    job_id: str
+    ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    level: str = "info"
+    message: str
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
+class PredictionJob(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    dataset_id: str
+    model_id: str
+    status: JobStatus = JobStatus.QUEUED
+    created_by: str
+    target: str = "image_classification"
+    model_version: str | None = None
+    org_id: str | None = DEFAULT_ORG_ID
+    org_name: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    external_job_id: str | None = None
+    sample_ids: list[str] | None = None
+    summary: dict[str, object] = Field(default_factory=dict)
+
+
+class UserWithOrgs(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    email: str
+    name: str
+    is_superadmin: bool = False
+    orgs: list[Organization] = Field(default_factory=list)
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

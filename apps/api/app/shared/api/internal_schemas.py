@@ -6,8 +6,8 @@ from typing import Any, Generic, TypeVar
 from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.models import ModelSpec, TaskSpec
-from app.domain.types import DatasetType
+from app.shared.api.schemas import ModelSpec, TaskSpec
+from app.shared.api.schemas import DatasetType
 
 T = TypeVar("T")
 

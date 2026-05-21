@@ -7,8 +7,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.domain.interfaces import ArtifactStorage
-from app.domain.models import Organization, User
+from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.api.schemas import Organization, User
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,

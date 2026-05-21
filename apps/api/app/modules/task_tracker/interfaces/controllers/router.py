@@ -9,7 +9,7 @@ from app.shared.api.schemas import (
     TaskTrackerDetailResponse,
     TaskTrackerSummaryResponse,
 )
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,

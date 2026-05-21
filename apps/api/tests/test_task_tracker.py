@@ -4,12 +4,11 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.domain.models import TrainingEvent
-from app.services.task_tracker import TaskTrackerService
+from app.shared.api.schemas import TrainingEvent
+from app.modules.task_tracker.application.services.task_tracker import TaskTrackerService
 from tests.conftest import PRESET_ID
 
 
@@ -224,7 +223,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
     with TestClient(app) as client:
         from app.main import container
 
-        container.prefect_client.override(providers.Object(prefect))
+        container.prefect_client.override(lambda: prefect)
         try:
             dataset_id = _create_dataset(client, "tracker-dynamic-flow")
             training = client.post(

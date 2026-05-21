@@ -175,7 +175,7 @@ def test_schema_registry_has_detection() -> None:
 
 def test_schema_registry_allowed_pairs_includes_detection() -> None:
     """get_allowed_pairs returns the detection pair."""
-    from app.domain.types import DatasetType, TaskType
+    from app.shared.api.schemas import DatasetType, TaskType
     from app.modules.datasets.domain import schemas as _schemas  # noqa: F401
     from app.modules.datasets.domain.entities import schema_registry
 

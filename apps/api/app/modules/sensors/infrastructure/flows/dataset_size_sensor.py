@@ -7,7 +7,7 @@ from typing import TypedDict
 import httpx
 from prefect import flow, get_run_logger, task
 
-from app.flows.sensor_base import SENSOR_EVENTS_URL
+from app.modules.sensors.infrastructure.flows.sensor_base import SENSOR_EVENTS_URL
 
 PLATFORM_API_URL = os.environ.get("PLATFORM_API_URL", "http://localhost:8000")
 

@@ -10,7 +10,7 @@ from app.shared.api.schemas import (
     ServiceStatus,
     WorkPoolStatus,
 )
-from app.domain.models import Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.dashboard.application.services.service_health import (
     ServiceHealthService,
 )

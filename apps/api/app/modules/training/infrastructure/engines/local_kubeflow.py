@@ -5,8 +5,8 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from app.domain.models import ArtifactRef, TrainingEvent, TrainingJob
-from app.domain.types import JobStatus
+from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
+from app.shared.api.schemas import JobStatus
 from app.modules.training.infrastructure.runtime.training_runner import (
     run_training_pipeline,
 )

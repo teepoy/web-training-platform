@@ -18,7 +18,7 @@ from app.modules.auth.interfaces.controllers.deps import (
 )
 from app.shared.db.registry import UserORM
 from app.modules.agent.application.services.global_runtime import GlobalAgent
-from app.domain.models import (
+from app.shared.api.schemas import (
     DEFAULT_ORG_ID,
     Organization,
     User,
@@ -51,7 +51,7 @@ from app.shared.infrastructure.agent_runtime import (
 )
 from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
-from app.agent.session_store import SessionStore
+from app.modules.agent.application.services.session_store import SessionStore
 
 router = APIRouter(prefix="/api/v1", tags=["agent"])
 _logger = logging.getLogger(__name__)

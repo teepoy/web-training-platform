@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from prefect import flow, get_run_logger, task
 
-from app.domain.models import PredictionEvent, Sample
-from app.domain.types import JobStatus
+from app.shared.api.schemas import PredictionEvent, Sample
+from app.shared.api.schemas import JobStatus
 
 
 def _get_services():

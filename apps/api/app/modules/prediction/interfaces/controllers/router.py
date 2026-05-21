@@ -26,8 +26,8 @@ from app.modules.prediction.interfaces.dtos.schemas import (
     VersionExportPersistResponse,
     VersionExportRequest,
 )
-from app.domain.interfaces import ArtifactStorage
-from app.domain.models import Organization, User
+from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.api.schemas import Organization, User
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.datasets.application.services.feature_ops import FeatureOpsService
 from app.modules.prediction.application.services.prediction_orchestrator import (
@@ -127,7 +127,7 @@ async def run_predictions(
     ),
 ) -> PredictionJobResponse:
     try:
-        from app.domain.models import PredictionJob
+        from app.shared.api.schemas import PredictionJob
 
         job = PredictionJob(
             dataset_id=payload.dataset_id,
@@ -139,8 +139,8 @@ async def run_predictions(
             sample_ids=payload.sample_ids,
         )
         if str(cfg.app.env) == "test":
-            from app.domain.models import PredictionEvent
-            from app.domain.types import JobStatus
+            from app.shared.api.schemas import PredictionEvent
+            from app.shared.api.schemas import JobStatus
 
             result = await prediction_service.run_prediction(
                 model_id=payload.model_id,
@@ -730,7 +730,7 @@ async def extract_features(
     embed_model: str = (dataset.embed_config or {}).get(
         "model", "openai/clip-vit-base-patch32"
     )
-    from app.domain.models import PredictionJob
+    from app.shared.api.schemas import PredictionJob
 
     job = PredictionJob(
         dataset_id=dataset_id,
@@ -742,7 +742,7 @@ async def extract_features(
         summary={"embed_model": embed_model},
     )
     if str(cfg.app.env) == "test":
-        from app.domain.types import JobStatus
+        from app.shared.api.schemas import JobStatus
 
         samples, total = await repo.list_samples(dataset_id, limit=100_000)
         result = await feature_ops.extract_features(

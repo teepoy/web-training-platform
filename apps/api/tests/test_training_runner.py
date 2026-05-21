@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.storage.minio_storage import InMemoryArtifactStorage
+from app.shared.infrastructure.storage import InMemoryArtifactStorage
 from tests.conftest import PRESET_ID
 
 
@@ -82,7 +82,7 @@ def test_run_training_pipeline_completes() -> None:
     with TestClient(app) as c:
         dataset_id, _ = _seed_dataset_with_samples(c, n_samples=4, labels=["cat", "dog"])
 
-        from app.runtime.training_runner import run_training_pipeline
+        from app.modules.training.infrastructure.runtime.training_runner import run_training_pipeline
 
         storage = InMemoryArtifactStorage()
         result = asyncio.run(
@@ -106,7 +106,7 @@ def test_run_training_pipeline_completes() -> None:
 def test_run_training_pipeline_missing_dataset() -> None:
     """Pipeline raises ValueError when dataset does not exist."""
     with TestClient(app):
-        from app.runtime.training_runner import run_training_pipeline
+        from app.modules.training.infrastructure.runtime.training_runner import run_training_pipeline
 
         with pytest.raises(ValueError, match="Dataset not found"):
             asyncio.run(
@@ -124,7 +124,7 @@ def test_run_training_pipeline_missing_preset() -> None:
     with TestClient(app) as c:
         dataset_id, _ = _seed_dataset_with_samples(c, n_samples=1)
 
-        from app.runtime.training_runner import run_training_pipeline
+        from app.modules.training.infrastructure.runtime.training_runner import run_training_pipeline
 
         with pytest.raises(ValueError, match="Preset not found"):
             asyncio.run(
@@ -155,7 +155,7 @@ def test_run_training_pipeline_empty_dataset() -> None:
         assert ds.status_code == 200
         dataset_id = ds.json()["id"]
 
-        from app.runtime.training_runner import run_training_pipeline
+        from app.modules.training.infrastructure.runtime.training_runner import run_training_pipeline
 
         storage = InMemoryArtifactStorage()
         result = asyncio.run(
@@ -175,7 +175,7 @@ def test_run_training_pipeline_persists_artifacts_to_storage() -> None:
     with TestClient(app) as c:
         dataset_id, _ = _seed_dataset_with_samples(c, n_samples=2, labels=["x", "y"])
 
-        from app.runtime.training_runner import run_training_pipeline
+        from app.modules.training.infrastructure.runtime.training_runner import run_training_pipeline
 
         storage = InMemoryArtifactStorage()
         result = asyncio.run(

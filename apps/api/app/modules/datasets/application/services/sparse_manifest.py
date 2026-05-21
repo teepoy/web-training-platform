@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 from app.modules.datasets.domain.entities.dataset_payload import ColumnSchema
 
 if TYPE_CHECKING:
-    from app.storage.interfaces import ArtifactStorage
+    from app.shared.infrastructure.storage.base import ArtifactStorage
 
 _logger = logging.getLogger(__name__)
 

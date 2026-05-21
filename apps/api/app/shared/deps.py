@@ -6,9 +6,9 @@ from typing import Any
 from fastapi import Depends
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
-from app.domain.interfaces import ArtifactStorage
-from app.domain.models import Dataset
-from app.domain.types import DatasetType, TaskType
+from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.api.schemas import Dataset
+from app.shared.api.schemas import DatasetType, TaskType
 from app.modules.dashboard.application.services.service_health import (
     ServiceHealthService,
 )
@@ -40,7 +40,12 @@ from app.shared.infrastructure.label_studio.read_repository import LsReadReposit
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.agent.session_store import SessionStore
+from app.modules.agent.application.services.session_store import SessionStore
+from app.modules.auth.interfaces.controllers.deps import (  # noqa: F401
+    _get_session_factory,
+    get_current_org,
+    get_current_user,
+)
 
 
 def get_container() -> Any:
@@ -182,7 +187,7 @@ def _make_ls_image_url(uri: str) -> str:
 
 def _with_ls_url(dataset: Dataset) -> Dataset:
     """Compute ls_project_url and capabilities at response time."""
-    from app.domain.models import SPARSE_NO_LS
+    from app.shared.api.schemas import SPARSE_NO_LS
 
     c = get_container()
     access = c.sample_access_factory().create(dataset.storage_mode)

@@ -4,7 +4,7 @@ import base64
 import logging
 from typing import TYPE_CHECKING
 
-from app.domain.models import Sample
+from app.shared.api.schemas import Sample
 from app.shared.infrastructure.workers.embedding import EmbeddingClient
 from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
 from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient

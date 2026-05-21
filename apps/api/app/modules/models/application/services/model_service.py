@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 
-from app.domain.models import ArtifactRef, Model
+from app.shared.api.schemas import ArtifactRef, Model
 from app.shared.application.compatibility import validate_upload_metadata
 
 if TYPE_CHECKING:
