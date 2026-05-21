@@ -4,23 +4,19 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
 from app.shared.api.schemas import Organization, User
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,
 )
-from app.modules.classify.interfaces.dtos.schemas import ChatRequest, QueryDataRequest
-from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
-    get_config,
-    get_repository,
-    get_sample_access_factory,
-    get_surface_store,
+from app.modules.classify.api.deps import (
+    ConfigDep,
+    RepositoryDep,
+    SampleAccessFactoryDep,
+    SurfaceStoreDep,
 )
-from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
-from app.shared.infrastructure.surface_store import SurfaceStore
+from app.modules.classify.interfaces.dtos.schemas import ChatRequest, QueryDataRequest
 
 router = APIRouter(prefix="/api/v1", tags=["classify"])
 
@@ -29,10 +25,10 @@ router = APIRouter(prefix="/api/v1", tags=["classify"])
 async def query_dataset_data(
     dataset_id: str,
     body: QueryDataRequest,
+    repo: RepositoryDep,
+    sample_factory: SampleAccessFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
 ) -> dict:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -60,11 +56,11 @@ async def query_dataset_data(
 async def agent_chat(
     dataset_id: str,
     body: ChatRequest,
+    cfg: ConfigDep,
+    repo: RepositoryDep,
+    surface_store: SurfaceStoreDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    cfg: DictConfig = Depends(get_config),
-    repo: SqlRepository = Depends(get_repository),
-    surface_store: SurfaceStore = Depends(get_surface_store),
 ):
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
