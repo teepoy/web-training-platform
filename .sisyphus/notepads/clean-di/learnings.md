@@ -21,3 +21,8 @@
 - close() closes: prefect_client, embedding_client
 - Config branching preserved: yes, storage.kind selects memory/minio and execution.engine selects local/kubeflow/prefect; Kubeflow client is created only for kubeflow engine in the new eager container.
 - load_config() location: apps/api/app/core/config.py
+
+## [T3 complete] _assert_clean_overrides fixture added
+- Location: apps/api/conftest.py
+- Existing tests clean: yes
+- Leak detection works: yes
