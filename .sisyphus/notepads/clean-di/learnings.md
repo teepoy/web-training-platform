@@ -63,3 +63,13 @@
 - shared/deps.py get_scheduler_service also updated (used by agent router)
 - task_tracker.py _list_schedule_run_records updated to use self._prefect instead of prefect_api_url
 - Any gotchas: SchedulerService is a second Prefect HTTP client (deployment CRUD). It doesn't use PrefectClient Protocol methods — it uses raw httpx. The DI pattern is satisfied by accepting PrefectClient in __init__ and extracting _base for the URL.
+
+## [T10 complete] Dashboard module migrated
+- DashboardService location: app/modules/dashboard/application/dashboard_service.py
+- deps.py: app/modules/dashboard/api/deps.py — get_dashboard_service reads container.task_tracker_repository, container.service_health_service, container.prefect_client, container.config
+- domain/protocols.py: local JobRepository Protocol (list_jobs method only)
+- AppContainer new field: service_health_service: ServiceHealthService (constructed in _build_base_container with config, prefect_client, embedding_client)
+- Handler reduced from ~80 lines to 4 lines (thin delegator)
+- Response shape: unchanged (DashboardResponse contract preserved)
+- Gotcha: Annotated dep (DashboardServiceDep) must come BEFORE params with defaults in handler signature, otherwise Python raises "parameter without a default follows parameter with a default" SyntaxError
+- task_tracker_repository (SqlRepository) reused as JobRepository — no new AppContainer field needed for the repo

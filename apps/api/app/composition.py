@@ -34,6 +34,9 @@ from app.shared.infrastructure.storage.minio import MinioArtifactStorage
 from app.shared.infrastructure.workers.embedding import EmbeddingClient
 from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
 from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
+from app.modules.dashboard.application.services.service_health import (
+    ServiceHealthService,
+)
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -59,6 +62,7 @@ class AppContainer:
     sensor_repository: SensorRepositoryImpl
     settings_repository: InMemorySettingsRepository
     task_tracker_repository: SqlRepository
+    service_health_service: ServiceHealthService
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -169,6 +173,13 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
         settings_repository=InMemorySettingsRepository(),
         task_tracker_repository=SqlRepository(session_factory=session_factory),
+        service_health_service=ServiceHealthService(
+            config=cfg,
+            prefect_client=prefect_client,
+            embedding_client=EmbeddingClient(
+                grpc_target=str(cfg.embedding.grpc_target)
+            ),
+        ),
     )
 
 
