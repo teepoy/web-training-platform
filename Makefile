@@ -84,7 +84,7 @@ build-web: ## Build frontend for production
 
 .PHONY: generate-api-models
 generate-api-models: ## Generate backend transport models from openapi/openapi.yaml
-	cd $(API_DIR) && uv run --extra dev datamodel-codegen --input ../../$(OPENAPI_SPEC) --input-file-type openapi --output-datetime-class datetime --output app/generated/openapi_models.py
+	cd $(API_DIR) && uv run --extra dev datamodel-codegen --input ../../$(OPENAPI_SPEC) --input-file-type openapi --output-datetime-class datetime --output app/shared/generated/openapi_models.py
 
 .PHONY: generate-web-types
 generate-web-types: ## Generate frontend transport types from openapi/openapi.yaml

@@ -6,7 +6,7 @@
 
 | Artifact | Command | Output |
 | --- | --- | --- |
-| Backend transport models | `make generate-api-models` | `apps/api/app/generated/openapi_models.py` |
+| Backend transport models | `make generate-api-models` | `apps/api/app/shared/generated/openapi_models.py` |
 | Frontend transport types | `make generate-web-types` | `apps/web/src/generated/openapi-types.ts` |
 | Both | `make generate-openapi-artifacts` | both files |
 
@@ -16,7 +16,7 @@ Backend models are generated with plain `datetime` fields so they stay compatibl
 
 - FastAPI serves the canonical schema from `openapi/openapi.yaml`.
 - `apps/api/app/api/schemas.py` is now a compatibility surface:
-  - generated OpenAPI-backed transport models are re-exported from `app.generated.openapi_models`
+  - generated OpenAPI-backed transport models are re-exported from `app.shared.generated.openapi_models`
   - only non-OpenAPI/internal helper models stay hand-written in `app.api.internal_schemas`
 - `apps/web/src/types.ts` is now a compatibility surface:
   - OpenAPI-backed transport types are aliases over `src/generated/openapi-types.ts`
