@@ -1,5 +1,5 @@
 import { createDescriptorRegistry } from "@/shared/widgets/sdk";
-import { classifyWidgetDescriptors } from "../modules/classify/widgets/descriptors";
+import { classifyWidgetDescriptors } from "../features/classify/presentation/widgets/descriptors";
 
 export const widgetRegistry = createDescriptorRegistry();
 

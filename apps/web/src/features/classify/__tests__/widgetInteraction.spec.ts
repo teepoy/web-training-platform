@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BROWSER_DASHBOARD_KEY } from "../../../shared/index";
+import { BROWSER_DASHBOARD_KEY } from "@/shared/widgets/sdk";
 
 describe("widget-sdk BROWSER_DASHBOARD_KEY", () => {
   it("exports BROWSER_DASHBOARD_KEY from widget-sdk", () => {

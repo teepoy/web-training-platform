@@ -39,8 +39,6 @@
               <n-layout vertical>
                 <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
                   <span style="font-weight: 600; flex: 1">ML Training Platform</span>
-                  <OrgSelector v-if="authStore.isAuthenticated" />
-                  <SandboxDropdown />
                   <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
                   <!-- External service links -->
                   <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
@@ -95,15 +93,13 @@ import { computed, onMounted, watch } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, type GlobalThemeOverrides } from "naive-ui";
 import { useQueryClient } from "@tanstack/vue-query";
-import { useUiStore } from "../stores/ui";
-import { useAuthStore } from "../stores/auth";
-import { useOrgStore } from "../stores/org";
+import { useUiStore } from '@/features/auth/application/ui';
+import { useAuthStore } from '@/features/auth/application/store';
+import { useOrgStore } from '@/features/auth/application/org';
 import { useTaskHandoff, syncWatchedTaskIds } from "../composables/useTaskHandoff";
 import { useTaskHandoffState } from "../composables/taskHandoffState";
-import { useAgentAdapter } from "../features/agent/useAgentAdapter";
+import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
 import { AgentChatDrawer } from "@/shared";
-import OrgSelector from "../features/app/components/OrgSelector.vue";
-import SandboxDropdown from "../features/app/components/SandboxDropdown.vue";
 
 const router = useRouter();
 const route = useRoute();

@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted, onMounted, isRef, watch, type Ref, type ComputedRef } from "vue";
 import type { TrainingEvent } from "../types";
-import { useAuthStore } from "../stores/auth";
+import { useAuthStore } from '@/features/auth/application/store';
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 

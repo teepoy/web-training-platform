@@ -3,9 +3,9 @@
  *
  * Architecture:
  *   Each panel in the sidebar is described by a `SidebarPanelDescriptor`.
- *   The descriptor carries a `component` key (resolved at render time via
- *   widgetRegistry.getWidgetComponent()), a human-readable `title`, and a
- *   flat `props` bag that controls the widget's behaviour.
+ *   The descriptor carries a `component` key (resolved at render time via the
+ *   classify module widget map), a human-readable `title`, and a flat `props`
+ *   bag that controls the widget's behaviour.
  *
  * Agent operability:
  *   An agent (or a human) can add, remove, or reconfigure panels by editing
@@ -13,14 +13,13 @@
  *   props in its own component directory.
  *
  * Extending:
- *   1. Create the .vue widget in `libs/web-ui/src/components/{name}/{Name}Widget.vue`.
- *   2. Create a widget descriptor in `libs/web-ui/src/components/{name}/index.ts`
- *      that imports the component and exports a `defineDashboardWidget({...})` descriptor.
- *   3. Export the descriptor from `@/shared` and register in `src/registrations/index.ts`.
+ *   1. Create the .vue widget component.
+ *   2. Create a widget descriptor that imports the component and exports a descriptor.
+ *   3. Add the descriptor/component to the classify module widget map.
  *   4. Add a descriptor entry to the desired panel preset below.
  */
 
-import type { AgentPanelDescriptor } from "../../types";
+import type { AgentPanelDescriptor } from "@/shared/api/types";
 
 // ---------------------------------------------------------------------------
 // Descriptor shape
@@ -29,7 +28,7 @@ import type { AgentPanelDescriptor } from "../../types";
 export interface SidebarPanelDescriptor {
   /** Unique identifier for this panel instance. */
   id: string;
-  /** Key registered in widgetRegistry via registerWidget(). */
+  /** Key resolved through the classify module widget map. */
   component: string;
   /** Human-readable title shown in the panel header. */
   title: string;
@@ -254,50 +253,4 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Preview browser panel preset — session-scoped browser widgets
-// ---------------------------------------------------------------------------
-
-/**
- * Panels shown in the preview browser sidebar.
- *
- * Preview uses session-loaded wafer points inline, so it ships the wafer-map
- * widget directly instead of the dataset browser scatter preset.
- */
-export const previewPanels: SidebarPanelDescriptor[] = [
-  {
-    id: "label-distribution",
-    component: "label-distribution",
-    title: "Label Distribution",
-    props: {
-      orientation: "horizontal",
-      showValues: true,
-      maxBars: 20,
-    },
-  },
-  {
-    id: "wafer-map",
-    component: "wafer-map",
-    title: "Wafer Map",
-    order: 15,
-    size: "normal",
-    props: {
-      data: {
-        inline: {
-          points: [],
-        },
-      },
-      config: {
-        maxPoints: 100000,
-      },
-    },
-  },
-  {
-    id: "browser-summary",
-    component: "browser-summary",
-    title: "Browser Summary",
-    order: 20,
-    size: "compact",
-    props: {},
-  },
-];
+export const previewPanels: SidebarPanelDescriptor[] = datasetPanels;

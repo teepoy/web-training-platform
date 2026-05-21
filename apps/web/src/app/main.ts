@@ -7,8 +7,8 @@ import "../style.css";
 import "./registrations";
 import App from "./App.vue";
 import { router } from "./router";
-import { useAuthStore, getStoredToken } from "../stores/auth";
-import { useOrgStore } from "../stores/org";
+import { useAuthStore, getStoredToken } from '@/features/auth/application/store';
+import { useOrgStore } from '@/features/auth/application/org';
 
 configureTransport({
   getToken: () => {
