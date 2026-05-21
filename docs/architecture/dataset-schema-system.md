@@ -38,30 +38,41 @@ DatasetSchemaDescriptor (TypeScript interface)
 ### Backend
 
 ```
-apps/api/app/domain/
-├── dataset_schema.py       ← DatasetSchema dataclass definition
-├── schema_registry.py      ← register() / get() / list_all() / get_allowed_pairs()
-└── schemas/
-    ├── __init__.py         ← barrel: imports all schema modules (triggers auto-registration)
-    ├── image_classification.py
-    ├── image_vqa.py
-    └── image_detection.py
+apps/api/app/
+├── domain/
+│   ├── dataset_schema.py       ← DatasetSchema dataclass definition
+│   └── schema_registry.py      ← register() / get() / list_all() / get_allowed_pairs()
+└── modules/
+    ├── dataset_classification/
+    │   ├── __init__.py         ← imports domain/schema (triggers auto-registration)
+    │   ├── domain/schema.py
+    │   └── mocks/              ← mock generators
+    ├── dataset_detection/
+    │   ├── __init__.py         ← imports domain/schema
+    │   └── domain/schema.py
+    └── dataset_vqa/
+        ├── __init__.py         ← imports domain/schema
+        └── domain/schema.py
 ```
 
 ### Frontend
 
 ```
-apps/web/src/views/datasets/
-├── schema-registry.ts      ← DatasetSchemaDescriptor, registerDatasetSchema(), resolveDatasetShim()
-├── registry.ts             ← imports all schema modules (barrel); re-exports resolveDatasetShim
-├── schemas/
-│   ├── image-classification.ts
-│   ├── image-vqa.ts
-│   └── image-detection.ts
-└── shims/
-    ├── ClassificationDatasetsShim.vue
-    ├── VqaDatasetsShim.vue
-    └── DetectionDatasetsShim.vue
+apps/web/src/
+├── features/datasets/presentation/pages/
+│   └── schema-registry.ts      ← DatasetSchemaDescriptor, registerDatasetSchema()
+├── app/
+│   └── registrations.ts        ← central registry: imports module registrations
+└── modules/
+    ├── dataset-classification/
+    │   ├── registrations.ts    ← calls registerDatasetSchema()
+    │   └── views/schema.ts
+    ├── dataset-detection/
+    │   ├── registrations.ts
+    │   └── views/schema.ts
+    └── dataset-vqa/
+        ├── registrations.ts
+        └── views/schema.ts
 ```
 
 ### Types
@@ -79,6 +90,19 @@ libs/seedmaker/src/seedmaker/datasets/
 ├── image_detection.py      ← uses same box generation logic as mock_item_generator
 └── ...
 ```
+
+## Registration Trigger
+
+The system uses side-effect registration to populate the registries:
+
+### Backend
+Registration is triggered by the `app/main.py` lifespan handler, which imports each dataset type module:
+- `apps/api/app/modules/dataset_*/__init__.py` imports `domain.schema`
+- The `schema.py` file uses the `@register` decorator to add itself to `schema_registry.py`
+
+### Frontend
+Registration is triggered by `apps/web/src/app/registrations.ts`, which imports the registration module for each dataset type:
+- Each `apps/web/src/modules/dataset-*/registrations.ts` calls `registerDatasetSchema` with its descriptor.
 
 ## How Services Use the Schema
 
@@ -125,7 +149,7 @@ Complex annotation types (e.g., bounding boxes) use the `annotation_value` JSON 
 
 ## Mock Data: Single Source of Truth
 
-The `mock_item_generator` in each Python schema and `mockSampleFactory` in the corresponding TypeScript schema use the **same logic**:
+The `mock_item_generator` in each Python schema (located in `apps/api/app/modules/dataset_*/mocks/` for classification) and `mockSampleFactory` in the corresponding TypeScript schema use the same logic:
 
 ```
 seed scripts          ─┐
