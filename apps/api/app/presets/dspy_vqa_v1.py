@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.presets._registry import register
+from app.modules.presets._registry import register
 
 
 # ===== Typed config =====
@@ -55,7 +55,7 @@ class DspyVqaV1:
     def train(
         *, artifact_storage: Any = None, llm_client: Any = None, **kwargs: Any
     ) -> Any:
-        from app.runtime.dspy import DspyVqaTrainer
+        from app.modules.training.infrastructure.runtime.dspy import DspyVqaTrainer
 
         return DspyVqaTrainer(
             artifact_storage=artifact_storage,
@@ -71,7 +71,7 @@ class DspyVqaV1:
         llm_client: Any = None,
         **kwargs: Any,
     ) -> Any:
-        from app.runtime.dspy import DspyVqaPredictor
+        from app.modules.training.infrastructure.runtime.dspy import DspyVqaPredictor
 
         return DspyVqaPredictor(
             artifact_storage=artifact_storage,

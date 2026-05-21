@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.presets._registry import register
+from app.modules.presets._registry import register
 
 
 # ===== Typed config =====
@@ -62,13 +62,13 @@ class Resnet50ClsV1:
 
     @staticmethod
     def train(*, artifact_storage, **kwargs) -> Any:
-        from app.runtime.torch import TorchTrainer
+        from app.modules.training.infrastructure.runtime.torch import TorchTrainer
 
         return TorchTrainer(artifact_storage=artifact_storage)
 
     @staticmethod
     def predict(target: str, *, model_uri: str, artifact_storage, **kwargs) -> Any:
-        from app.runtime.torch import TorchPredictor
+        from app.modules.training.infrastructure.runtime.torch import TorchPredictor
 
         predictor = TorchPredictor(artifact_storage=artifact_storage)
         # Return predictor instance — caller handles load/predict/unload lifecycle

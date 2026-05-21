@@ -14,6 +14,7 @@ COPY libs/protos/ libs/protos/
 RUN uv sync --frozen --package finetune-api --no-install-workspace
 
 COPY apps/api/ apps/api/
+COPY libs/seedmaker/ libs/seedmaker/
 RUN uv sync --frozen --package finetune-api
 
 WORKDIR /app/apps/api

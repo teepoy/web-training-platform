@@ -2,13 +2,12 @@
 
 These tests call the prediction flow functions directly as plain Python —
 no Prefect server required.  They exercise the full code path that runs
-inside a Prefect worker: Container wiring, DB access, sample iteration,
+inside a Prefect worker: singleton app services, DB access, sample iteration,
 inference worker delegation, prediction persistence.
 
-Note: The chunk tasks in predict_job.py create their own ``Container()``
-instances.  In test mode these get separate in-memory storage, so we
-patch the Container import to return the app's main container (which
-has the seeded data and mocked services).
+Note: The flow resolves ``app.main.services`` lazily.  These tests use
+the same singleton app services that own the seeded data and mocked
+services.
 """
 from __future__ import annotations
 
@@ -19,12 +18,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from dependency_injector import providers
 from fastapi.testclient import TestClient
 
 from app.domain.models import ArtifactRef, PredictionJob
 from app.domain.types import JobStatus
-from app.main import app, container as app_container
+from app.main import app, services as app_services
 from tests.conftest import DEFAULT_ORG_ID, PRESET_ID
 
 
@@ -41,18 +39,15 @@ _TINY_PNG = (
 _DATA_URI = "data:image/png;base64," + base64.b64encode(_TINY_PNG).decode()
 
 
-def _use_app_container():
-    """Patch predict_job.Container to return the app's main container.
+def _patch_prefect_tasks():
+    """Patch Prefect tasks to execute their underlying functions directly.
 
-    This ensures the flow tasks share the same DB, storage, and mocked
-    services as the test setup.  We also patch the @task-decorated
-    functions to call their underlying .fn directly, bypassing Prefect's
+    This bypasses Prefect's
     task engine which would otherwise create a new execution context.
     """
-    import app.flows.predict_job as _mod
+    import app.modules.prediction.infrastructure.flows.predict_job as _mod
 
     return _multi_patch(
-        patch.object(_mod, "Container", return_value=app_container),
         patch.object(_mod, "predict_chunk", side_effect=_mod.predict_chunk.fn),
         patch.object(_mod, "embed_chunk", side_effect=_mod.embed_chunk.fn),
         patch.object(_mod, "persist_chunk_results", side_effect=_mod.persist_chunk_results.fn),
@@ -128,8 +123,8 @@ def _seed_prediction_setup(
         "label_space": labels,
     }).encode()
 
-    repo = app_container.repository()
-    storage = app_container.artifact_storage()
+    repo = app_services.repository()
+    storage = app_services.artifact_storage()
 
     asyncio.run(storage.put_bytes(model_object_name, model_payload))
     model_uri = f"memory://{model_object_name}"
@@ -167,7 +162,7 @@ def _create_prediction_job_record(dataset_id: str, model_id: str) -> str:
         target="image_classification",
         org_id=DEFAULT_ORG_ID,
     )
-    asyncio.run(app_container.repository().create_prediction_job(job, org_id=DEFAULT_ORG_ID))
+    asyncio.run(app_services.repository().create_prediction_job(job, org_id=DEFAULT_ORG_ID))
     return job.id
 
 
@@ -182,9 +177,9 @@ def test_run_prediction_job_classification() -> None:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
         job_id = _create_prediction_job_record(dataset_id, model_id)
 
-        from app.flows.predict_job import run_prediction_job
+        from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        with _use_app_container():
+        with _patch_prefect_tasks():
             result = asyncio.run(
                 run_prediction_job(
                     job_id=job_id,
@@ -209,9 +204,9 @@ def test_run_prediction_job_with_sample_subset() -> None:
         subset = sample_ids[:2]
         job_id = _create_prediction_job_record(dataset_id, model_id)
 
-        from app.flows.predict_job import run_prediction_job
+        from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        with _use_app_container():
+        with _patch_prefect_tasks():
             result = asyncio.run(
                 run_prediction_job(
                     job_id=job_id,
@@ -230,9 +225,9 @@ def test_run_prediction_job_with_sample_subset() -> None:
 def test_run_prediction_job_missing_dataset() -> None:
     """Flow raises ValueError for nonexistent dataset."""
     with TestClient(app):
-        from app.flows.predict_job import run_prediction_job
+        from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        with _use_app_container():
+        with _patch_prefect_tasks():
             with pytest.raises(ValueError, match="Dataset not found"):
                 asyncio.run(
                     run_prediction_job(
@@ -253,9 +248,9 @@ def test_run_prediction_job_embedding_target() -> None:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=2)
         job_id = _create_prediction_job_record(dataset_id, model_id)
 
-        from app.flows.predict_job import run_prediction_job
+        from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        with _use_app_container():
+        with _patch_prefect_tasks():
             result = asyncio.run(
                 run_prediction_job(
                     job_id=job_id,
@@ -280,7 +275,7 @@ def test_run_prediction_job_embedding_target() -> None:
 def test_predict_chunk_missing_model() -> None:
     """predict_chunk raises ValueError when model does not exist."""
     with TestClient(app):
-        from app.flows.predict_job import predict_chunk
+        from app.modules.prediction.infrastructure.flows.predict_job import predict_chunk
 
         with pytest.raises(ValueError, match="Model not found"):
             asyncio.run(
@@ -299,7 +294,7 @@ def test_predict_chunk_empty_samples() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, _ = _seed_prediction_setup(c, n_samples=1)
 
-        from app.flows.predict_job import predict_chunk
+        from app.modules.prediction.infrastructure.flows.predict_job import predict_chunk
 
         result = asyncio.run(
             predict_chunk.fn(
@@ -325,7 +320,7 @@ def test_persist_chunk_results_writes_predictions() -> None:
             for sid in sample_ids
         ]
 
-        from app.flows.predict_job import persist_chunk_results
+        from app.modules.prediction.infrastructure.flows.predict_job import persist_chunk_results
 
         result = asyncio.run(
             persist_chunk_results.fn(
@@ -349,7 +344,7 @@ def test_persist_chunk_results_writes_predictions() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _isolated_gpu_worker_patch(app_container):
+def _isolated_gpu_worker_patch(app_services):
     """Override GPU and inference worker with fresh mocks for one test.
 
     Returns ``(mock_gpu, mock_inference, cleanup)`` where ``cleanup`` is a
@@ -372,12 +367,12 @@ def _isolated_gpu_worker_patch(app_container):
     mock_inference.predict_batch = AsyncMock(return_value=[])
     mock_inference.embed_batch = AsyncMock(return_value=[])
 
-    app_container.gpu_worker.override(providers.Object(mock_gpu))
-    app_container.inference_worker.override(providers.Object(mock_inference))
+    app_services.gpu_worker.override(lambda: mock_gpu)
+    app_services.inference_worker.override(lambda: mock_inference)
 
     def _cleanup() -> None:
-        app_container.gpu_worker.reset_override()
-        app_container.inference_worker.reset_override()
+        app_services.gpu_worker.reset_override()
+        app_services.inference_worker.reset_override()
 
     return mock_gpu, mock_inference, _cleanup
 
@@ -386,12 +381,12 @@ def test_predict_chunk_calls_gpu_worker_predict_batch() -> None:
     """predict_chunk invokes GPU worker predict_batch, NOT inference worker."""
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
-        from app.main import container as _app_container
-        from app.flows.predict_job import predict_chunk
+        from app.main import services as _app_services
+        from app.modules.prediction.infrastructure.flows.predict_job import predict_chunk
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
         try:
-            with _use_app_container():
+            with _patch_prefect_tasks():
                 worker_results = asyncio.run(
                     predict_chunk.fn(
                         model_id=model_id,
@@ -419,12 +414,12 @@ def test_embed_chunk_calls_gpu_worker_embed_batch() -> None:
     """embed_chunk invokes GPU worker embed_batch, NOT inference worker."""
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
-        from app.main import container as _app_container
-        from app.flows.predict_job import embed_chunk
+        from app.main import services as _app_services
+        from app.modules.prediction.infrastructure.flows.predict_job import embed_chunk
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
         try:
-            with _use_app_container():
+            with _patch_prefect_tasks():
                 chunk_summary = asyncio.run(
                     embed_chunk.fn(
                         dataset_id=dataset_id,
@@ -452,12 +447,12 @@ def test_run_prediction_job_prefers_gpu_worker_over_inference() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=4)
         job_id = _create_prediction_job_record(dataset_id, model_id)
-        from app.main import container as _app_container
-        from app.flows.predict_job import run_prediction_job
+        from app.main import services as _app_services
+        from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_container)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
         try:
-            with _use_app_container():
+            with _patch_prefect_tasks():
                 result = asyncio.run(
                     run_prediction_job(
                         job_id=job_id,

@@ -6,18 +6,18 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import load_config
-from app.db.session import create_engine, create_session_factory
+from app.shared.db.session import create_engine, create_session_factory
 from app.domain.models import ArtifactRef
-from app.presets._registry import get_preset, get_preset_meta
-from app.presets.registry import PresetRegistry
-from app.presets.runtime import DatasetRef, ModelRef, TrainContext, TrainResult
-from app.repositories.sql_repository import SqlRepository
-from app.services.compatibility import (
+from app.modules.presets._registry import get_preset, get_preset_meta
+from app.modules.presets.registry import PresetRegistry
+from app.shared.domain.runtime import DatasetRef, ModelRef, TrainContext, TrainResult
+from app.shared.db.sql_repository import SqlRepository
+from app.shared.application.compatibility import (
     build_trained_model_metadata,
     validate_dataset_preset_training,
 )
-from app.services.embedding import EmbeddingClient
-from app.services.llm import OpenAICompatibleLlmClient
+from app.shared.infrastructure.workers.embedding import EmbeddingClient
+from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.storage.minio_storage import InMemoryArtifactStorage, MinioArtifactStorage
 
 if TYPE_CHECKING:

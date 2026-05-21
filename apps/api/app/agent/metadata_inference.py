@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
+from app.shared.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
 
 
 def scan_metadata_types(

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
+from app.shared.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
 from app.agent.metadata_inference import build_metadata_block, scan_metadata_types
 
 

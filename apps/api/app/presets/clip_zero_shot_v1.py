@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.presets._registry import register
+from app.modules.presets._registry import register
 
 
 # ===== Typed config =====
@@ -51,7 +51,7 @@ class ClipZeroShotV1:
 
     @staticmethod
     def predict(target: str, *, model_uri: str, artifact_storage, **kwargs) -> Any:
-        from app.runtime.torch import TorchPredictor
+        from app.modules.training.infrastructure.runtime.torch import TorchPredictor
 
         return TorchPredictor(artifact_storage=artifact_storage)
 

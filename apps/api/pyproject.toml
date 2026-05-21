@@ -9,7 +9,6 @@ dependencies = [
   "fastapi>=0.116.0",
   "uvicorn>=0.35.0",
   "pydantic>=2.11.0",
-  "dependency-injector>=4.46.0",
   "omegaconf>=2.3.0",
   "httpx>=0.28.0",
   "prefect>=3.0.0",
@@ -26,6 +25,7 @@ dependencies = [
   "pgvector>=0.3.0",
   "grpcio>=1.68.0",
   "embedding-protos",
+  "seedmaker",
   "croniter>=2.0.0",
   "pillow>=11.0.0",
   "litellm>=1.30.0",
@@ -40,6 +40,7 @@ dev = [
 
 [tool.uv.sources]
 embedding-protos = { workspace = true }
+seedmaker = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "app"]
@@ -63,6 +64,7 @@ dev = [
 [tool.pyright]
 exclude = [
   "app/generated/**",
+  "app/shared/generated/**",
 ]
 typeCheckingMode = "basic"
 reportMissingImports = true

@@ -13,16 +13,18 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.agent.surface_store import SurfaceStore
-from app.api.schemas import AgentContext, AgentPanelDescriptor
+from app.shared.api.schemas import AgentContext, AgentPanelDescriptor
 
 if TYPE_CHECKING:
-    from app.repositories.sql_repository import SqlRepository
-    from app.services.label_studio import LabelStudioClient
-    from app.services.model_service import ModelService
-    from app.services.orchestrator import TrainingOrchestrator
-    from app.services.prediction_orchestrator import PredictionOrchestrator
-    from app.presets.registry import PresetRegistry
-    from app.services.scheduler import SchedulerService
+    from app.shared.db.sql_repository import SqlRepository
+    from app.shared.infrastructure.label_studio.client import LabelStudioClient
+    from app.modules.models.application.model_service import ModelService
+    from app.modules.training.application.orchestrator import TrainingOrchestrator
+    from app.modules.prediction.application.prediction_orchestrator import (
+        PredictionOrchestrator,
+    )
+    from app.modules.presets.registry import PresetRegistry
+    from app.modules.schedules.application.scheduler import SchedulerService
 
 _logger = logging.getLogger(__name__)
 
@@ -524,7 +526,9 @@ async def execute_create_dataset(
 
     # Create LS project
     try:
-        from app.services.label_studio import LabelStudioClient as _LSC
+        from app.shared.infrastructure.label_studio.client import (
+            LabelStudioClient as _LSC,
+        )
 
         if tt == TaskType.VQA:
             label_config = _LSC.generate_vqa_config()

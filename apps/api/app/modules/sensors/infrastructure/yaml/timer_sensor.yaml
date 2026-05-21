@@ -1,0 +1,29 @@
+id: timer_sensor
+name: Timer Sensor
+description: Emits timestamped events on a configurable schedule — a minimal example sensor
+cron: "* * * * *"
+available_triggers:
+  - train
+  - predict
+filter_schema:
+  type: object
+  properties:
+    year:
+      type: integer
+      description: Filter to a specific year
+    month:
+      type: integer
+      description: Filter to a specific month (1-12)
+    day:
+      type: integer
+      description: Filter to a specific day of month (1-31)
+    hour:
+      type: integer
+      description: Filter to a specific hour (0-23)
+    minute:
+      type: integer
+      description: Filter to a specific minute (0-59)
+    weekday:
+      type: integer
+      description: Filter to a specific day of week (0=Monday, 6=Sunday)
+  additionalProperties: false

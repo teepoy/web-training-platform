@@ -11,42 +11,14 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from dependency_injector import providers
 
-from app.main import container as app_container
+from app.main import services as app_services
 from app.services.gpu_worker import GpuWorkerUnavailableError
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-class _multi_patch:
-    """Context manager that applies multiple patches together."""
-
-    def __init__(self, *patches):
-        self._patches = patches
-        self._mocks = []
-
-    def __enter__(self):
-        self._mocks = [p.__enter__() for p in self._patches]
-        return self._mocks
-
-    def __exit__(self, *exc):
-        for p in reversed(self._patches):
-            p.__exit__(*exc)
-
-
-def _use_app_container():
-    """Patch train_job.Container to return the app's main container.
-
-    This ensures the flow uses the same mocked GPU worker as the test.
-    """
-    import app.flows.train_job as _mod
-    return _multi_patch(
-        patch.object(_mod, "Container", return_value=app_container),
-    )
 
 
 def _mock_gpu_worker(*, submit_response=None, status_sequence=None):
@@ -75,14 +47,14 @@ def _mock_gpu_worker(*, submit_response=None, status_sequence=None):
 
 
 def _install_gpu_mock(mock_gpu):
-    """Override the GPU worker provider in the app container."""
-    app_container.gpu_worker.override(providers.Object(mock_gpu))
+    """Override the GPU worker provider in the app services."""
+    app_services.gpu_worker.override(lambda: mock_gpu)
 
 
 def _remove_gpu_mock():
     """Reset the GPU worker provider override."""
     try:
-        app_container.gpu_worker.reset_override()
+        app_services.gpu_worker.reset_override()
     except Exception:
         pass
 
@@ -98,19 +70,18 @@ def test_run_train_job_delegates_to_gpu_worker() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            result = asyncio.run(
-                _run_train_job(
-                    job_id="platform-job-1",
-                    dataset_id="ds-1",
-                    preset_id="resnet50-cls-v1",
-                    created_by="test",
-                    logger=logger,
-                )
+        result = asyncio.run(
+            _run_train_job(
+                job_id="platform-job-1",
+                dataset_id="ds-1",
+                preset_id="resnet50-cls-v1",
+                created_by="test",
+                logger=logger,
             )
+        )
     finally:
         _remove_gpu_mock()
 
@@ -146,19 +117,18 @@ def test_run_train_job_polls_multiple_statuses() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            result = asyncio.run(
-                _run_train_job(
-                    job_id="p-2",
-                    dataset_id="ds-2",
-                    preset_id="resnet50-cls-v1",
-                    created_by="test",
-                    logger=logger,
-                )
+        result = asyncio.run(
+            _run_train_job(
+                job_id="p-2",
+                dataset_id="ds-2",
+                preset_id="resnet50-cls-v1",
+                created_by="test",
+                logger=logger,
             )
+        )
     finally:
         _remove_gpu_mock()
 
@@ -185,19 +155,18 @@ def test_run_train_job_preserves_artifact_uris() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            result = asyncio.run(
-                _run_train_job(
-                    job_id="p-3",
-                    dataset_id="ds-3",
-                    preset_id="resnet50-cls-v1",
-                    created_by="test",
-                    logger=logger,
-                )
+        result = asyncio.run(
+            _run_train_job(
+                job_id="p-3",
+                dataset_id="ds-3",
+                preset_id="resnet50-cls-v1",
+                created_by="test",
+                logger=logger,
             )
+        )
     finally:
         _remove_gpu_mock()
 
@@ -222,19 +191,18 @@ def test_run_train_job_does_not_call_direct_training_pipeline() -> None:
 
     try:
         with patch("app.runtime.training_runner.run_training_pipeline") as mock_pipeline:
-            from app.flows.train_job import _run_train_job
+            from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
             logger = logging.getLogger("test")
-            with _use_app_container():
-                asyncio.run(
-                    _run_train_job(
-                        job_id="p-4",
-                        dataset_id="ds-4",
-                        preset_id="resnet50-cls-v1",
-                        created_by="test",
-                        logger=logger,
-                    )
+            asyncio.run(
+                _run_train_job(
+                    job_id="p-4",
+                    dataset_id="ds-4",
+                    preset_id="resnet50-cls-v1",
+                    created_by="test",
+                    logger=logger,
                 )
+            )
 
         mock_pipeline.assert_not_called()
     finally:
@@ -243,7 +211,7 @@ def test_run_train_job_does_not_call_direct_training_pipeline() -> None:
 
 def test_train_job_flow_does_not_import_run_training_pipeline() -> None:
     """The train_job module must not import run_training_pipeline."""
-    import app.flows.train_job as mod
+    import app.modules.training.infrastructure.flows.train_job as mod
 
     source = mod.__dict__
     assert "run_training_pipeline" not in source, "train_job module must not import run_training_pipeline"
@@ -263,20 +231,19 @@ def test_run_train_job_gpu_worker_unavailable_on_submit() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            with pytest.raises(GpuWorkerUnavailableError, match="unreachable"):
-                asyncio.run(
-                    _run_train_job(
-                        job_id="p-5",
-                        dataset_id="ds-5",
-                        preset_id="resnet50-cls-v1",
-                        created_by="test",
-                        logger=logger,
-                    )
+        with pytest.raises(GpuWorkerUnavailableError, match="unreachable"):
+            asyncio.run(
+                _run_train_job(
+                    job_id="p-5",
+                    dataset_id="ds-5",
+                    preset_id="resnet50-cls-v1",
+                    created_by="test",
+                    logger=logger,
                 )
+            )
     finally:
         _remove_gpu_mock()
 
@@ -292,20 +259,19 @@ def test_run_train_job_gpu_worker_unavailable_on_poll() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            with pytest.raises(GpuWorkerUnavailableError, match="unreachable"):
-                asyncio.run(
-                    _run_train_job(
-                        job_id="p-6",
-                        dataset_id="ds-6",
-                        preset_id="resnet50-cls-v1",
-                        created_by="test",
-                        logger=logger,
-                    )
+        with pytest.raises(GpuWorkerUnavailableError, match="unreachable"):
+            asyncio.run(
+                _run_train_job(
+                    job_id="p-6",
+                    dataset_id="ds-6",
+                    preset_id="resnet50-cls-v1",
+                    created_by="test",
+                    logger=logger,
                 )
+            )
     finally:
         _remove_gpu_mock()
 
@@ -321,20 +287,19 @@ def test_run_train_job_gpu_training_failed() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            with pytest.raises(RuntimeError, match="GPU training failed"):
-                asyncio.run(
-                    _run_train_job(
-                        job_id="p-7",
-                        dataset_id="ds-7",
-                        preset_id="resnet50-cls-v1",
-                        created_by="test",
-                        logger=logger,
-                    )
+        with pytest.raises(RuntimeError, match="GPU training failed"):
+            asyncio.run(
+                _run_train_job(
+                    job_id="p-7",
+                    dataset_id="ds-7",
+                    preset_id="resnet50-cls-v1",
+                    created_by="test",
+                    logger=logger,
                 )
+            )
     finally:
         _remove_gpu_mock()
 
@@ -349,20 +314,19 @@ def test_run_train_job_gpu_training_cancelled() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
-        with _use_app_container():
-            with pytest.raises(RuntimeError, match="GPU training cancelled"):
-                asyncio.run(
-                    _run_train_job(
-                        job_id="p-8",
-                        dataset_id="ds-8",
-                        preset_id="resnet50-cls-v1",
-                        created_by="test",
-                        logger=logger,
-                    )
+        with pytest.raises(RuntimeError, match="GPU training cancelled"):
+            asyncio.run(
+                _run_train_job(
+                    job_id="p-8",
+                    dataset_id="ds-8",
+                    preset_id="resnet50-cls-v1",
+                    created_by="test",
+                    logger=logger,
                 )
+            )
     finally:
         _remove_gpu_mock()
 
@@ -378,24 +342,23 @@ def test_run_train_job_polling_timeout() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = logging.getLogger("test")
         with patch.dict("os.environ", {
             "GPU_WORKER_MAX_POLL_SECONDS": "0",
             "GPU_WORKER_POLL_INTERVAL": "1",
         }):
-            with _use_app_container():
-                with pytest.raises(TimeoutError, match="timed out"):
-                    asyncio.run(
-                        _run_train_job(
-                            job_id="p-9",
-                            dataset_id="ds-9",
-                            preset_id="resnet50-cls-v1",
-                            created_by="test",
-                            logger=logger,
-                        )
+            with pytest.raises(TimeoutError, match="timed out"):
+                asyncio.run(
+                    _run_train_job(
+                        job_id="p-9",
+                        dataset_id="ds-9",
+                        preset_id="resnet50-cls-v1",
+                        created_by="test",
+                        logger=logger,
                     )
+                )
     finally:
         _remove_gpu_mock()
 
@@ -406,22 +369,21 @@ def test_run_train_job_logs_gpu_job_id() -> None:
     _install_gpu_mock(mock_gpu)
 
     try:
-        from app.flows.train_job import _run_train_job
+        from app.modules.training.infrastructure.flows.train_job import _run_train_job
 
         logger = MagicMock(spec=logging.Logger)
         logger.info = MagicMock()
         logger.error = MagicMock()
 
-        with _use_app_container():
-            asyncio.run(
-                _run_train_job(
-                    job_id="p-10",
-                    dataset_id="ds-10",
-                    preset_id="resnet50-cls-v1",
-                    created_by="test",
-                    logger=logger,
-                )
+        asyncio.run(
+            _run_train_job(
+                job_id="p-10",
+                dataset_id="ds-10",
+                preset_id="resnet50-cls-v1",
+                created_by="test",
+                logger=logger,
             )
+        )
 
         submit_calls = [
             call for call in logger.info.call_args_list

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.flows import serve
+from app.shared.infrastructure.prefect import flow_serve as serve
 
 
 def test_deployment_root_uses_container_stable_api_workspace() -> None:
@@ -24,8 +24,8 @@ async def test_ensure_work_pool_uses_config() -> None:
     )
     client = AsyncMock()
 
-    with patch("app.flows.serve.load_config", return_value=cfg), patch(
-        "app.flows.serve.PrefectClient", return_value=client
+    with patch("app.shared.infrastructure.prefect.flow_serve.load_config", return_value=cfg), patch(
+        "app.shared.infrastructure.prefect.flow_serve.PrefectClient", return_value=client
     ):
         await serve._ensure_work_pool("training-pool")
 
@@ -39,7 +39,7 @@ async def test_ensure_work_pool_uses_config() -> None:
 @pytest.mark.asyncio
 async def test_bootstrap_rejects_retired_gpu_queue() -> None:
     """V2 is CPU-only. Retired GPU queues (train-gpu) must raise RuntimeError."""
-    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()):
+    with patch("app.shared.infrastructure.prefect.flow_serve._ensure_work_pool", new=AsyncMock()):
         with pytest.raises(RuntimeError) as exc_info:
             await serve._bootstrap_worker_deployment("training-pool", "train-gpu")
 
@@ -53,14 +53,17 @@ async def test_bootstrap_dspy_worker_registers_owned_deployment() -> None:
     client = AsyncMock()
     client.resolve_deployment_id.return_value = "train-dspy-deployment-id"
 
-    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()) as ensure_pool, patch(
-        "app.flows.serve.load_config",
+    with patch(
+        "app.shared.infrastructure.prefect.flow_serve._ensure_work_pool",
+        new=AsyncMock(),
+    ) as ensure_pool, patch(
+        "app.shared.infrastructure.prefect.flow_serve.load_config",
         return_value=SimpleNamespace(prefect=SimpleNamespace(api_url="http://prefect.example/api")),
     ), patch(
-        "app.flows.serve.PrefectClient",
+        "app.shared.infrastructure.prefect.flow_serve.PrefectClient",
         return_value=client,
     ), patch(
-        "app.flows.serve.train_job.ato_deployment",
+        "app.shared.infrastructure.prefect.flow_serve.train_job.ato_deployment",
         new=AsyncMock(return_value=deployment),
     ) as ato_deployment:
         await serve._bootstrap_worker_deployment("training-pool", "optimize-llm-cpu")
@@ -77,7 +80,10 @@ async def test_bootstrap_dspy_worker_registers_owned_deployment() -> None:
     client._request.assert_awaited_once_with(
         "PATCH",
         "/deployments/train-dspy-deployment-id",
-        json={"entrypoint": "app/flows/train_job.py:train_job", "path": serve._DEPLOYMENT_ROOT},
+        json={
+            "entrypoint": "app/modules/training/infrastructure/flows/train_job.py:train_job",
+            "path": serve._DEPLOYMENT_ROOT,
+        },
         expect_json=False,
         resource_label="deployment",
     )
@@ -87,7 +93,7 @@ async def test_bootstrap_dspy_worker_registers_owned_deployment() -> None:
 @pytest.mark.asyncio
 async def test_bootstrap_rejects_retired_predict_queue() -> None:
     """V2 is CPU-only. Retired predict-batch queue must raise RuntimeError."""
-    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()):
+    with patch("app.shared.infrastructure.prefect.flow_serve._ensure_work_pool", new=AsyncMock()):
         with pytest.raises(RuntimeError) as exc_info:
             await serve._bootstrap_worker_deployment("predict-pool", "predict-batch")
 
@@ -97,7 +103,7 @@ async def test_bootstrap_rejects_retired_predict_queue() -> None:
 @pytest.mark.asyncio
 async def test_bootstrap_rejects_retired_embed_queue() -> None:
     """V2 is CPU-only. Retired embed-batch queue must raise RuntimeError."""
-    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()):
+    with patch("app.shared.infrastructure.prefect.flow_serve._ensure_work_pool", new=AsyncMock()):
         with pytest.raises(RuntimeError) as exc_info:
             await serve._bootstrap_worker_deployment("embed-pool", "embed-batch")
 
@@ -106,7 +112,7 @@ async def test_bootstrap_rejects_retired_embed_queue() -> None:
 
 @pytest.mark.asyncio
 async def test_bootstrap_rejects_unknown_queue() -> None:
-    with patch("app.flows.serve._ensure_work_pool", new=AsyncMock()):
+    with patch("app.shared.infrastructure.prefect.flow_serve._ensure_work_pool", new=AsyncMock()):
         with pytest.raises(RuntimeError) as exc_info:
             await serve._bootstrap_worker_deployment("training-pool", "unknown")
 

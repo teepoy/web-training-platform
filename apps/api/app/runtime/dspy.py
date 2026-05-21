@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingImports=false
 
 import json
 from datetime import UTC, datetime
@@ -7,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from prefect import get_run_logger
 
-from app.presets.runtime import (
+from app.shared.domain.runtime import (
     BatchPredictResult,
     PredictContext,
     PredictResult,
@@ -16,7 +17,7 @@ from app.presets.runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.services.llm import OpenAICompatibleLlmClient
+    from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
     from app.storage.interfaces import ArtifactStorage
 
 

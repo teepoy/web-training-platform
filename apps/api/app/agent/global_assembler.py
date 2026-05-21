@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.api.schemas import AgentContext
+from app.shared.api.schemas import AgentContext
 
 
 _TEMPLATE_PATH = Path(__file__).parent / "global_prompt_template.md"

@@ -1,19 +1,10 @@
-"""In-memory conversation session store for the global agent.
-
-Persists multi-turn conversation history keyed by ``session_id``.
-Sessions have a configurable TTL; stale sessions are lazily evicted
-on access.
-
-Thread-safe via ``asyncio.Lock``.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import time
 from dataclasses import dataclass, field
 
-from litellm.types.llms.openai import AllMessageValues
+from litellm.types.llms.openai import AllMessageValues  # type: ignore[import-untyped]
 
 
 @dataclass
@@ -31,20 +22,7 @@ class Session:
 
 
 class SessionStore:
-    """In-memory store for agent conversation sessions.
-
-    Parameters
-    ----------
-    ttl_seconds:
-        Sessions older than this (measured from ``last_active``) are
-        evicted on the next access.  Default: 2 hours.
-    max_sessions:
-        Hard cap on total sessions.  When exceeded, the oldest session
-        is evicted regardless of TTL.  Default: 500.
-    max_messages_per_session:
-        Maximum conversation messages to keep per session.  Older
-        messages are truncated from the front (FIFO).  Default: 100.
-    """
+    """Thread-safe in-memory store for agent conversation sessions."""
 
     def __init__(
         self,
@@ -59,36 +37,28 @@ class SessionStore:
         self._max_sessions = max_sessions
         self._max_messages = max_messages_per_session
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _evict_stale(self) -> None:
-        """Remove sessions that have exceeded the TTL."""
         cutoff = time.monotonic() - self._ttl
-        stale_keys = [k for k, s in self._sessions.items() if s.last_active < cutoff]
-        for k in stale_keys:
-            del self._sessions[k]
+        stale_keys = [
+            key
+            for key, session in self._sessions.items()
+            if session.last_active < cutoff
+        ]
+        for key in stale_keys:
+            del self._sessions[key]
 
     def _enforce_cap(self) -> None:
-        """If we're over the max, drop the oldest session."""
         while len(self._sessions) > self._max_sessions:
             oldest_key = min(
-                self._sessions, key=lambda k: self._sessions[k].last_active
+                self._sessions, key=lambda key: self._sessions[key].last_active
             )
             del self._sessions[oldest_key]
 
     def _truncate_messages(self, session: Session) -> None:
-        """Keep only the last N messages."""
         if len(session.messages) > self._max_messages:
             session.messages = session.messages[-self._max_messages :]
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     async def get_or_create(self, session_id: str, user_id: str) -> Session:
-        """Return an existing session or create a new one."""
         async with self._lock:
             self._evict_stale()
             if session_id in self._sessions:
@@ -101,7 +71,6 @@ class SessionStore:
             return session
 
     async def get(self, session_id: str) -> Session | None:
-        """Return a session if it exists and is not stale."""
         async with self._lock:
             self._evict_stale()
             session = self._sessions.get(session_id)
@@ -112,7 +81,6 @@ class SessionStore:
     async def append_messages(
         self, session_id: str, messages: list[AllMessageValues]
     ) -> None:
-        """Append messages to a session and truncate if needed."""
         async with self._lock:
             session = self._sessions.get(session_id)
             if session is None:
@@ -122,7 +90,6 @@ class SessionStore:
             session.touch()
 
     async def get_messages(self, session_id: str) -> list[AllMessageValues]:
-        """Return a copy of the session message history."""
         async with self._lock:
             session = self._sessions.get(session_id)
             if session is None:
@@ -130,12 +97,13 @@ class SessionStore:
             return list(session.messages)
 
     async def clear_session(self, session_id: str) -> None:
-        """Remove a session entirely."""
         async with self._lock:
             self._sessions.pop(session_id, None)
 
     async def session_count(self) -> int:
-        """Return the number of active sessions."""
         async with self._lock:
             self._evict_stale()
             return len(self._sessions)
+
+
+__all__ = ["Session", "SessionStore"]

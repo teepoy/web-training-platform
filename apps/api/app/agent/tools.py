@@ -11,10 +11,10 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from app.agent.surface_store import SurfaceStore
-from app.api.schemas import AgentPanelDescriptor, WaferPointsResponse
+from app.shared.api.schemas import AgentPanelDescriptor, WaferPointsResponse
 
 if TYPE_CHECKING:
-    from app.repositories.sql_repository import SqlRepository
+    from app.shared.db.sql_repository import SqlRepository
 
 
 # ---------------------------------------------------------------------------

@@ -1,26 +1,310 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import compile_path
 
-from app.api.deps import get_current_org, get_current_user
-from app.api.schemas import (
+from app.modules.auth.api.deps import get_current_org, get_current_user
+from app.shared.api.schemas import (
     DashboardResponse,
     JobQueueStats,
     RecentJobSummary,
     ServiceStatus,
     WorkPoolStatus,
 )
-from app.container import Container
-from app.db.models import OrganizationORM
-from app.db.session import init_db
+from app.core.config import _resolve_gpu_worker_url, load_config
+from app.shared.infrastructure.label_studio.session import (
+    create_ls_engine,
+    create_ls_session_factory,
+)
+from app.shared.db.registry import OrganizationORM
+from app.shared.db.session import create_engine, create_session_factory, init_db
 from app.domain.models import DEFAULT_ORG_ID, Organization, User
-from app.routers.registry import EXTENSION_ROUTERS, DOMAIN_ROUTERS
+from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
+from app.modules.presets.registry import PresetRegistry
+from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
+from app.modules.sensors.infrastructure.repository import SensorRepository
+from app.shared.db.sql_repository import SqlRepository
+from app.modules.sensors.domain.registry import SensorRegistry
+from app.shared.application.artifacts import ArtifactService
+from app.modules.auth.application.auth_service import AuthService
+from app.shared.infrastructure.workers.embedding import EmbeddingClient
+from app.modules.training.infrastructure.engines.local_kubeflow import (
+    KubeflowTrainingOperatorEngine,
+    LocalProcessEngine,
+)
+from app.modules.datasets.application.feature_ops import FeatureOpsService
+from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
+from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
+from app.modules.training.infrastructure.kubeflow_client import KubeflowClient
+from app.modules.models.application.model_service import ModelService
+from app.shared.application.notification import WebhookNotificationSink
+from app.modules.training.application.orchestrator import TrainingOrchestrator
+from app.modules.prediction.application.prediction_orchestrator import (
+    PredictionOrchestrator,
+)
+from app.modules.prediction.application.prediction_service import PredictionService
+from app.modules.training.infrastructure.engines.prefect_engine import (
+    PrefectWorkPoolEngine,
+)
+from app.modules.preview.application.preview_service import PreviewService
+from app.modules.preview.application.preview_store import PreviewStore
+from app.modules.preview.application.preview_upstream import (
+    MockUpstreamAdapter,
+    PreviewUpstreamRouter,
+    UpstreamAdapter,
+)
+from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
+from app.modules.sensors.application.sensor_dispatch import SensorDispatchService
+from app.modules.dashboard.application.service_health import ServiceHealthService
+from app.agent.session_store import SessionStore
+from app.shared.infrastructure.surface_store import SurfaceStore
+from app.modules.task_tracker.application.task_tracker import TaskTrackerService
+from app.shared.infrastructure.label_studio import get_label_studio, init_label_studio
+from app.shared.infrastructure.llm import get_llm, init_llm
+from app.shared.infrastructure.prefect import get_prefect, init_prefect
+from app.shared.infrastructure.storage import get_storage, init_storage
 
 _logger = logging.getLogger(__name__)
+
+
+class SingletonProvider:
+    def __init__(self, factory: Callable[[], object]) -> None:
+        self._factory = factory
+        self._override: object | None = None
+        self._has_override = False
+        self._instance: object | None = None
+
+    def __call__(self) -> Any:
+        if self._has_override:
+            return self._override
+        if self._instance is None:
+            self._instance = self._factory()
+        return self._instance
+
+    def override(self, provider: object) -> None:
+        self._override = provider() if callable(provider) else provider
+        self._has_override = True
+
+    def reset_override(self) -> None:
+        self._override = None
+        self._has_override = False
+
+    def reset(self) -> None:
+        self._instance = None
+
+
+class AppServices:
+    def __init__(self) -> None:
+        self.config = SingletonProvider(load_config)
+        self.db_engine = SingletonProvider(
+            lambda: create_engine(
+                db_url=str(self.config().db.url),
+                echo=bool(self.config().db.echo),
+            )
+        )
+        self.session_factory = SingletonProvider(
+            lambda: create_session_factory(self.db_engine())
+        )
+        self.repository = SingletonProvider(
+            lambda: SqlRepository(session_factory=self.session_factory())
+        )
+        self.artifact_storage = SingletonProvider(get_storage)
+        self.label_studio_client = SingletonProvider(get_label_studio)
+        self.prefect_client = SingletonProvider(get_prefect)
+        self.llm_client = SingletonProvider(get_llm)
+        self.ls_engine = SingletonProvider(
+            lambda: create_ls_engine(
+                database_url=str(self.config().label_studio.database_url)
+            )
+        )
+        self.ls_session_factory = SingletonProvider(
+            lambda: create_ls_session_factory(engine=self.ls_engine())
+        )
+        self.ls_read_repository = SingletonProvider(
+            lambda: LsReadRepository(session_factory=self.ls_session_factory())
+        )
+        self.embedding_service = SingletonProvider(
+            lambda: EmbeddingClient(
+                grpc_target=str(self.config().embedding.grpc_target)
+            )
+        )
+        self.inference_worker = SingletonProvider(
+            lambda: InferenceWorkerClient(
+                base_url=str(self.config().inference.base_url)
+            )
+        )
+        self.gpu_worker = SingletonProvider(
+            lambda: GpuWorkerClient(base_url=_resolve_gpu_worker_url(self.config()))
+        )
+        self.kubeflow_client = SingletonProvider(
+            lambda: KubeflowClient(
+                namespace=str(self.config().k8s.namespace),
+                group=str(self.config().kubeflow.group),
+                version=str(self.config().kubeflow.version),
+                plural=str(self.config().kubeflow.plural),
+                in_cluster=bool(self.config().k8s.incluster),
+                kubeconfig=str(self.config().k8s.kubeconfig),
+            )
+        )
+        self.preset_registry = SingletonProvider(
+            lambda: PresetRegistry(
+                presets_dir=str(self.config().presets.dir),
+                strict=bool(self.config().presets.strict),
+            )
+        )
+        self.sensor_registry = SingletonProvider(
+            lambda: SensorRegistry(
+                sensors_dir=str(self.config().sensors.dir),
+                strict=bool(self.config().sensors.strict),
+            )
+        )
+        self.sensor_repository = SingletonProvider(
+            lambda: SensorRepository(session_factory=self.session_factory())
+        )
+        self.sensor_dispatch = SingletonProvider(
+            lambda: SensorDispatchService(
+                sensor_repository=self.sensor_repository(),
+                prefect_client=self.prefect_client(),
+            )
+        )
+        self.sample_access_factory = SingletonProvider(
+            lambda: SampleAccessFactory(repo=self.repository())
+        )
+        self.service_health = SingletonProvider(
+            lambda: ServiceHealthService(
+                config=self.config(),
+                prefect_client=self.prefect_client(),
+                embedding_client=self.embedding_service(),
+            )
+        )
+        self.task_tracker = SingletonProvider(
+            lambda: TaskTrackerService(
+                repository=self.repository(),
+                prefect_client=self.prefect_client(),
+                config=self.config(),
+            )
+        )
+        self.auth_service = SingletonProvider(AuthService)
+        self.local_engine = SingletonProvider(
+            lambda: LocalProcessEngine(storage=self.artifact_storage())
+        )
+        self.kubeflow_engine = SingletonProvider(
+            lambda: KubeflowTrainingOperatorEngine(
+                kubeflow_client=self.kubeflow_client(),
+                image=str(self.config().kubeflow.image),
+                storage=self.artifact_storage(),
+            )
+        )
+        self.prefect_engine = SingletonProvider(
+            lambda: PrefectWorkPoolEngine(
+                prefect_client=self.prefect_client(),
+                work_pool_name=str(self.config().prefect.work_pool_name),
+                work_pool_type=str(self.config().prefect.work_pool_type),
+                flow_name=str(self.config().prefect.flow_name),
+                concurrency_limit=int(self.config().prefect.concurrency_limit),
+                preset_registry=self.preset_registry(),
+            )
+        )
+        self.execution_engine = SingletonProvider(self._create_execution_engine)
+        self.notification_sink = SingletonProvider(
+            lambda: WebhookNotificationSink(
+                endpoint=str(self.config().notification.webhook.endpoint),
+                timeout_seconds=int(self.config().notification.webhook.timeout_seconds),
+            )
+        )
+        self.artifacts = SingletonProvider(
+            lambda: ArtifactService(
+                storage=self.artifact_storage(),
+                repository=self.repository(),
+            )
+        )
+        self.orchestrator = SingletonProvider(
+            lambda: TrainingOrchestrator(
+                engine=self.execution_engine(),
+                notification_sink=self.notification_sink(),
+                repository=self.repository(),
+                artifact_service=self.artifacts(),
+            )
+        )
+        self.feature_ops = SingletonProvider(
+            lambda: FeatureOpsService(
+                repository=self.repository(),
+                embedding_service=self.embedding_service(),
+                inference_worker=self.inference_worker(),
+                gpu_worker=self.gpu_worker(),
+            )
+        )
+        self.model_service = SingletonProvider(
+            lambda: ModelService(
+                repository=self.repository(),
+                artifact_storage=self.artifact_storage(),
+            )
+        )
+        self.prediction_service = SingletonProvider(
+            lambda: PredictionService(
+                repository=self.repository(),
+                artifact_storage=self.artifact_storage(),
+                config=self.config(),
+                embedding_client=self.embedding_service(),
+                llm_client=self.llm_client(),
+                inference_worker=self.inference_worker(),
+                gpu_worker=self.gpu_worker(),
+            )
+        )
+        self.prediction_orchestrator = SingletonProvider(
+            lambda: PredictionOrchestrator(
+                prefect_client=self.prefect_client(),
+                repository=self.repository(),
+            )
+        )
+        self.surface_store = SingletonProvider(SurfaceStore)
+        self.session_store = SingletonProvider(SessionStore)
+        self.mock_upstream = SingletonProvider(MockUpstreamAdapter)
+        self.preview_upstream = SingletonProvider(
+            lambda: PreviewUpstreamRouter(
+                upstreams=self._make_upstreams(self.mock_upstream(), None)
+            )
+        )
+        self.preview_store = SingletonProvider(PreviewStore)
+        self.preview_service = SingletonProvider(
+            lambda: PreviewService(
+                store=self.preview_store(), upstream=self.preview_upstream()
+            )
+        )
+
+    def _create_execution_engine(self) -> object:
+        engine = str(self.config().execution.engine)
+        if engine == "local":
+            return self.local_engine()
+        if engine == "kubeflow":
+            return self.kubeflow_engine()
+        if engine == "prefect":
+            return self.prefect_engine()
+        raise RuntimeError(f"Unsupported execution.engine: {engine}")
+
+    @staticmethod
+    def _make_upstreams(
+        mock: UpstreamAdapter, s3: UpstreamAdapter | None
+    ) -> dict[str, UpstreamAdapter]:
+        upstreams = {"mock": mock}
+        if s3 is not None:
+            upstreams["s3"] = s3
+        return upstreams
+
+    def reset_singletons(self) -> None:
+        for value in vars(self).values():
+            if isinstance(value, SingletonProvider):
+                value.reset()
+
+
+container = AppServices()
+services = container
 
 
 async def _sync_file_presets_to_db() -> None:
@@ -51,18 +335,80 @@ async def _sync_file_presets_to_db() -> None:
         )
 
 
+def _strip_api_prefix(router: Any) -> None:
+    for route in router.routes:
+        path = getattr(route, "path", "")
+        if path == "/api/v1":
+            new_path = ""
+        elif path.startswith("/api/v1/"):
+            new_path = path.removeprefix("/api/v1")
+        else:
+            continue
+        route.path = new_path
+        route.path_regex, route.path_format, route.param_convertors = compile_path(
+            new_path
+        )
+
+
+def _register_legacy_provider_overrides(api: FastAPI) -> None:
+    overrides = {
+        "repo": container.repository,
+        "model_service": container.model_service,
+        "task_tracker": container.task_tracker,
+        "storage": container.artifact_storage,
+        "ls_client": container.label_studio_client,
+        "sample_factory": container.sample_access_factory,
+    }
+
+    for route in api.routes:
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        for dependency in getattr(dependant, "dependencies", []):
+            provider = overrides.get(getattr(dependency, "name", ""))
+            call = getattr(dependency, "call", None)
+            if provider is not None and call is not None:
+                api.dependency_overrides[call] = provider
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     cfg = container.config()
+    if not container.artifact_storage._has_override:
+        try:
+            init_storage(cfg)
+        except RuntimeError:
+            if not container.config._has_override:
+                raise
+    if not container.label_studio_client._has_override:
+        init_label_studio(cfg)
+    if not container.llm_client._has_override:
+        init_llm(cfg)
+    if not container.prefect_client._has_override:
+        init_prefect(cfg)
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
 
     registry = container.preset_registry()
     count = registry.load()
     _logger.info("Preset registry: %d presets loaded", count)
+    try:
+        sensor_count = container.sensor_registry().load()
+    except Exception:
+        sensor_count = 0
+    _logger.info("Sensor registry: %d sensors loaded", sensor_count)
     await _sync_file_presets_to_db()
 
     yield
+
+    prefect_client = container.prefect_client()
+    close = getattr(prefect_client, "close", None)
+    if close is not None:
+        await close()
+    embedding_client = container.embedding_service()
+    embedding_close = getattr(embedding_client, "close", None)
+    if embedding_close is not None:
+        embedding_close()
 
 
 app = FastAPI(title="Online Finetune API", version="0.1.0", lifespan=lifespan)
@@ -74,12 +420,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-container = Container()
-
-for r in EXTENSION_ROUTERS:
-    app.include_router(r)
-for r in DOMAIN_ROUTERS:
-    app.include_router(r)
+for r in [*MODULE_ROUTERS, *EXTENSION_ROUTERS]:
+    _strip_api_prefix(r)
+    app.include_router(r, prefix="/api/v1")
+_register_legacy_provider_overrides(app)
 
 
 # ---------------------------------------------------------------------------

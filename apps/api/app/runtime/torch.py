@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingImports=false
 
 import base64
 import json
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from PIL import Image
 from prefect import get_run_logger
 
-from app.presets.runtime import (
+from app.shared.domain.runtime import (
     BatchPredictResult,
     PredictContext,
     PredictResult,
@@ -21,7 +22,7 @@ from app.presets.runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.services.embedding import EmbeddingClient
+    from app.shared.infrastructure.workers.embedding import EmbeddingClient
     from app.storage.interfaces import ArtifactStorage
 
 

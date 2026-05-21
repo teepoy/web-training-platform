@@ -6,13 +6,13 @@ import asyncio
 from sqlalchemy import select  # type: ignore[import-not-found]
 
 from app.core.config import load_config
-from app.db.base import Base
-from app.db.models import UserORM
-from app.db.session import create_engine, create_session_factory
+from app.shared.db.registry import Base
+from app.shared.db.registry import UserORM
+from app.shared.db.session import create_engine, create_session_factory
 
 
 async def _create_superadmin(email: str, password: str, name: str) -> None:
-    from app.services.auth import hash_password
+    from app.modules.auth.application.auth_service import hash_password
 
     cfg = load_config(skip_runtime_validation=True)
     engine = create_engine(str(cfg.db.url))
