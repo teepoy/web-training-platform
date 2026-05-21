@@ -1,44 +1,8 @@
-"""Prefect REST API client wrapper for cron-based schedule management.
-
-This module provides :class:`SchedulerService` — a thin async HTTP client
-over the Prefect server REST API (v2/v3 compatible).  It intentionally avoids
-the ``prefect`` Python SDK so that the API service has no heavyweight runtime
-dependency; all communication is done through ``httpx.AsyncClient``.
-
-Schedule records are persisted locally in the :class:`ScheduleORM` table via
-an injected :class:`SqlRepository`.  This provides org-scoped schedule
-management and survives Prefect restarts.
-
-Responsibilities
-----------------
-- CRUD for Prefect *deployments* (which carry cron schedules).
-- Persist schedule records locally with org/user context.
-- Trigger ad-hoc flow runs from a deployment.
-- Pause / resume a deployment's schedule.
-- Query flow-run state and server-side logs.
-
-Error mapping
--------------
-- Prefect 404  → ``HTTPException(404, "<resource_label> not found")``
-- Prefect 4xx (non-404)  → ``HTTPException(422, "Prefect validation error: <body>")``
-- Prefect 5xx  → ``HTTPException(502, "Prefect server error: <status>")``
-- Connection / transport error  → logged as warning; local DB operation still succeeds
-
-Factory
--------
-:func:`get_scheduler_service` is a FastAPI-compatible async generator dependency
-that reads ``PREFECT_API_URL`` from the environment (default:
-``http://localhost:4200/api``) and closes the underlying HTTP client after the
-request completes.
-"""
-
 from __future__ import annotations
 # pyright: reportMissingImports=false
 
 import logging
-import os
 from datetime import datetime, timezone
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -46,6 +10,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.shared.db.registry import ScheduleORM
+from app.shared.domain.protocols import PrefectClient
 
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
@@ -53,17 +18,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Shared container repository accessor
+# Module-level run store
 # ---------------------------------------------------------------------------
 
 _local_schedule_runs: dict[str, list[dict[str, object]]] = {}
-
-
-def _get_repository():
-    """Return the application container's shared SqlRepository."""
-    from app.shared.deps import get_container
-
-    return get_container().repository()
 
 
 def _orm_to_dict(row: ScheduleORM) -> dict[str, object]:
@@ -121,21 +79,14 @@ def _store_local_run(schedule_id: str, run: dict[str, object], limit: int = 20) 
 
 
 class SchedulerService:
-    """Async client wrapper for the Prefect server REST API with local DB persistence.
-
-    Parameters
-    ----------
-    prefect_api_url:
-        Base URL of the Prefect API, e.g. ``http://localhost:4200/api``.
-        Trailing slashes are normalised away.
-    repository:
-        SQL repository for local schedule persistence.  When ``None`` the
-        service operates in Prefect-only mode (legacy behaviour).
-    """
-
     def __init__(
-        self, prefect_api_url: str, repository: SqlRepository | None = None
+        self,
+        prefect_client: PrefectClient,
+        repository: SqlRepository | None = None,
     ) -> None:
+        prefect_api_url: str = getattr(
+            prefect_client, "_base", "http://localhost:4200/api"
+        )
         self._base = prefect_api_url.rstrip("/")
         self._client: httpx.AsyncClient = httpx.AsyncClient(
             base_url=self._base,
@@ -792,40 +743,3 @@ class SchedulerService:
             "POST", "/logs/filter", json=body, resource_label="run logs"
         )
         return result if isinstance(result, list) else []
-
-
-# ---------------------------------------------------------------------------
-# FastAPI dependency factory
-# ---------------------------------------------------------------------------
-
-
-async def get_scheduler_service() -> AsyncGenerator[SchedulerService, None]:
-    """FastAPI async generator dependency for :class:`SchedulerService`.
-
-    Reads ``PREFECT_API_URL`` from the environment.  Falls back to
-    ``http://localhost:4200/api`` when the variable is not set.  The
-    underlying ``httpx.AsyncClient`` is closed after each request via the
-    generator's ``finally`` block.
-
-    The repository is lazily initialised for local DB persistence.
-
-    Usage
-    -----
-    .. code-block:: python
-
-        from fastapi import Depends
-        from app.modules.schedules.application.services.scheduler import SchedulerService, get_scheduler_service
-
-        @app.get("/schedules")
-        async def list_schedules(
-            svc: SchedulerService = Depends(get_scheduler_service),
-        ) -> list[dict]:
-            return await svc.list_schedules()
-    """
-    prefect_api_url = os.environ.get("PREFECT_API_URL", "http://localhost:4200/api")
-    repo = _get_repository()
-    svc = SchedulerService(prefect_api_url=prefect_api_url, repository=repo)
-    try:
-        yield svc
-    finally:
-        await svc.close()

@@ -123,12 +123,9 @@ def get_prediction_orchestrator(
 
 
 def get_scheduler_service(c: Any = Depends(get_container)) -> SchedulerService:
-    cfg = _provider_value(c.config)
-    prefect_api_url = (
-        cfg.prefect.api_url if hasattr(cfg, "prefect") else "http://localhost:4200/api"
-    )
+    prefect_client = _provider_value(c.prefect_client)
     return SchedulerService(
-        prefect_api_url=str(prefect_api_url), repository=_provider_value(c.repository)
+        prefect_client=prefect_client, repository=_provider_value(c.repository)
     )
 
 

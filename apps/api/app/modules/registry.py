@@ -22,6 +22,7 @@ from app.modules.prediction.interfaces.controllers.router import (
 )
 from app.modules.schedules.interfaces.controllers.router import (
     router as schedules_router,
+    runs_router,
 )
 from app.modules.sensors.interfaces.controllers.router import router as sensors_router
 from app.modules.settings.interfaces.controllers.router import router as settings_router
@@ -42,6 +43,7 @@ MODULE_ROUTERS: list[APIRouter] = [
     preview_router,
     prediction_router,
     schedules_router,
+    runs_router,
     sensors_router,
     settings_router,
     task_tracker_router,

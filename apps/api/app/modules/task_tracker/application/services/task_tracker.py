@@ -141,7 +141,7 @@ class TaskTrackerService:
     async def _list_schedule_run_records(self, org_id: str) -> list[_TaskRecord]:
         schedules = await self._repository.list_schedules(org_id)
         scheduler = SchedulerService(
-            prefect_api_url=str(self._config.prefect.api_url),
+            prefect_client=self._prefect,
             repository=self._repository,
         )
         try:

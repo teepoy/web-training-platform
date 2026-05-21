@@ -54,3 +54,12 @@
 - Router prefix changed from "/api/v1" to "/task-tracker" (routes become /api/v1/task-tracker/tasks via include_router prefix="/api/v1")
 - Test migration: container.prefect_client.override() → app.dependency_overrides[get_prefect_client] set before TestClient context
 - Any gotchas: The old router had prefix="/api/v1" which was stripped by _strip_api_prefix; new router has prefix="/task-tracker" which is correct for the include_router(prefix="/api/v1") pattern. The config dep uses Any type since AppConfig is a TypeAlias for Any.
+
+## [T9 complete] Schedules module migrated
+- SchedulerService deps: prefect_client: PrefectClient (Protocol), repository: SqlRepository | None
+- PrefectClient Protocol coverage: SchedulerService uses its own httpx.AsyncClient for deployment-specific Prefect calls (not in Protocol). It extracts the URL via getattr(prefect_client, '_base', ...) from the concrete PrefectClient.
+- No domain/repository.py needed: SchedulerService uses SqlRepository directly (no domain-specific repo Protocol)
+- runs_router added: /runs/{run_id} routes live on a separate APIRouter(prefix="/runs") registered alongside schedules_router in MODULE_ROUTERS
+- shared/deps.py get_scheduler_service also updated (used by agent router)
+- task_tracker.py _list_schedule_run_records updated to use self._prefect instead of prefect_api_url
+- Any gotchas: SchedulerService is a second Prefect HTTP client (deployment CRUD). It doesn't use PrefectClient Protocol methods — it uses raw httpx. The DI pattern is satisfied by accepting PrefectClient in __init__ and extracting _base for the URL.
