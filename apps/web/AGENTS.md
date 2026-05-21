@@ -12,16 +12,16 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, domain modules under `s
 | API + SSE                      | `src/shared/api/`                                                       | API clients, generated/openapi-backed types, SSE helpers                                      |
 | Shared types                   | `src/types.ts` + `src/contracts.ts`                                     | Classification-first shapes                                                                  |
 | App registrations              | `src/app/registrations.ts`                                              | Singleton widget registry and explicit descriptor registration                                |
-| Domain modules                 | `src/modules/`                                                          | Datasets, jobs, preview, classify, schedules, and other feature modules                       |
-| Dataset workflow               | `src/modules/datasets/views/DatasetListView.vue`                        | Import dataset via shared `FlowModal`                                                        |
-| Job workflow                   | `src/views/JobsView.vue`                                                | Start job, consume SSE                                                                       |
-| Job detail metrics             | `src/views/JobDetailView.vue` + `src/shared/components/training-chart/TrainingChart.vue` | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present                 |
-| Schedule list                  | `src/views/SchedulesView.vue`                                           | CRUD + create modal + pause/resume/delete                                                    |
-| Schedule detail                | `src/views/ScheduleDetailView.vue`                                      | Config display, run history table, Trigger Now, Prefect deep link                            |
-| Run log viewer                 | `src/components/RunLogViewer.vue`                                       | Reusable; props: `runId: string`; shows level badges                                         |
-| Classify view                  | `src/views/ClassifyView.vue`                                            | Unified annotate + train + predict + review workflow with shared grid/sidebar                |
-| Classify sidebar               | `src/components/classify/`                                              | Widget config, sidebar shell wrapper; see Classify Sidebar Architecture section              |
-| Agent chat drawer              | `src/shared/components/agent-chat-drawer/AgentChatDrawer.vue`           | Floating chat UI for agent interaction                                                       |
+| Domain modules                 | `src/modules/`                                                          | Per-type dataset modules (classification, detection, vqa)     |
+| Dataset workflow               | `src/features/datasets/presentation/pages/DatasetListView.vue` | Import dataset via shared `FlowModal`                                                        |
+| Job workflow                   | `src/features/training/presentation/pages/JobsView.vue`                 | Start job, consume SSE                                                                       |
+| Job detail metrics             | `src/features/training/presentation/pages/JobDetailView.vue`            | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present                 |
+| Schedule list                  | `src/features/schedules/presentation/pages/SchedulesView.vue`           | CRUD + create modal + pause/resume/delete                                                    |
+| Schedule detail                | `src/features/schedules/presentation/pages/ScheduleDetailView.vue`      | Config display, run history table, Trigger Now, Prefect deep link                            |
+| Run log viewer                 | `src/features/task_tracker/presentation/components/RunLogViewer.vue`    | Reusable; props: `runId: string`; shows level badges                                         |
+| Classify view                  | `src/features/classify/presentation/pages/ClassifyView.vue`             | Unified annotate + train + predict + review workflow with shared grid/sidebar                |
+| Classify sidebar               | `src/features/classify/presentation/components/`                        | Widget config, sidebar shell wrapper; see Classify Sidebar Architecture section              |
+| Agent chat drawer              | `src/features/agent/presentation/components/AgentChatDrawer.vue`        | Floating chat UI for agent interaction                                                       |
 | Widget implementations         | `src/shared/components/<name>/`                                         | Widget .vue source files — general-purpose shared components                                 |
 | Widget descriptor wrappers     | `src/shared/components/<name>/index.ts`                                 | Widget descriptors co-located with .vue components; each widget directory is self-contained  |
 | Widget SDK contracts           | `src/shared/widgets/sdk/`                                               | `defineDashboardWidget`, importer/exporter/preview/agent contracts, descriptor registry      |
@@ -32,24 +32,34 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, domain modules under `s
 | Wafer helpers                  | `src/shared/composables/useWaferHelpers.ts`                             | Shared wafer coordinate utilities                                                            |
 | Browser preferences            | `src/stores/sampleBrowser.ts`                                           | Shared browser presentation preferences                                                      |
 | Browser filter                 | `src/shared/composables/useBrowserFilter.ts`                            | Browser-scope item filter pipeline                                                           |
-| Sidebar config                 | `src/components/classify/sidebarConfig.ts`                              | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels`                            |
-| Datasets shim registry         | `src/views/datasets/registry.ts`                                        | Maps task types to specialized list shims                                                   |
+| Sidebar config                 | `src/features/classify/presentation/components/sidebarConfig.ts`        | Panel registry; `defaultPanels`, `datasetPanels`, `previewPanels`                            |
+| Datasets shim registry         | `src/features/datasets/presentation/pages/registry.ts`                  | Maps task types to specialized list shims                                                   |
 
 ## DATASETS SHIM ARCHITECTURE
-The `DatasetsView.vue` uses a shim-based architecture to render specialized list views based on the task type of the datasets.
+The `DatasetListView.vue` uses a shim-based architecture to render specialized list views based on the task type of the datasets.
 
 | Piece                 | Location                                     | Role                                                                        |
 | --------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
-| Host                  | `src/views/DatasetsView.vue`                 | Thin container; resolves shim via registry; provides data via adapter       |
-| Registry              | `src/views/datasets/registry.ts`             | `DATASET_SHIM_REGISTRY` map and `resolveDatasetShim` logic                  |
+| Host                  | `src/features/datasets/presentation/pages/DatasetListView.vue` | Thin container; resolves shim via registry; provides data via adapter       |
+| Registry              | `src/features/datasets/presentation/pages/registry.ts` | `DATASET_SHIM_REGISTRY` map and `resolveDatasetShim` logic                  |
 | Shared UI/API/widget code | `src/shared/`                            | Shared components, flow UI, dataset-list helpers, composables, API clients, and widget SDK    |
-| Classification Shim   | `src/views/datasets/shims/ClassificationDatasetsShim.vue` | Default list view for classification tasks                                  |
-| VQA Shim              | `src/views/datasets/shims/VqaDatasetsShim.vue` | Specialized list view for VQA tasks                                         |
+| Classification Shim   | `src/modules/dataset-classification/views/ListShim.vue` | Specialized list view for classification tasks                              |
+| Detection Shim        | `src/modules/dataset-detection/views/ListShim.vue` | Specialized list view for detection tasks                                   |
+| VQA Shim              | `src/modules/dataset-vqa/views/ListShim.vue` | Specialized list view for VQA tasks                                         |
 
 **How to add a new shim:**
-1. Create `src/views/datasets/shims/<Name>DatasetsShim.vue`.
-2. Register it in `src/views/datasets/registry.ts` under `DATASET_SHIM_REGISTRY`.
-3. Update `resolveDatasetShim` in `registry.ts` to handle the new task type.
+1. Create `src/modules/dataset-<type>/views/ListShim.vue`.
+2. Register it in `src/app/registrations.ts` via `registerDatasetShim`.
+3. Export the shim descriptor from the module's `registrations.ts`.
+
+## DATASET TYPE MODULES (FE)
+Each dataset type is isolated in `src/modules/dataset-<type>/`:
+- `views/ListShim.vue`: Specialized table/list view component
+- `views/schema.ts`: Frontend schema descriptor (auto-registers on import)
+- `registrations.ts`: Descriptor exports for the global registry
+- `views/ListShim.stories.ts`: Storybook examples for the shim component
+
+Modules are registered in `src/app/registrations.ts`.
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 

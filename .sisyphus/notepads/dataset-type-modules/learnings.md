@@ -13,3 +13,7 @@
 - Verified the new module directory with lsp diagnostics and vue-tsc --noEmit.
 - Copied dataset detection schema and shim files into the new module layout without changing behavior.
 - FE copies needed import path normalization to absolute @/features references for moved registry/schema links.
+## 2026-05-21 storybook shims
+- Added Storybook stories for the classification and VQA dataset shims using the detection story as the template.
+- Kept story-local mock data aligned to each schema's sample factory shape (`label` for classification, `question` for VQA).
+- Verified the frontend Storybook build with `pnpm --dir apps/web build-storybook 2>&1 | tail -10`.

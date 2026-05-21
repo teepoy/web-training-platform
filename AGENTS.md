@@ -111,32 +111,10 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Prefect flows             | `apps/api/app/modules/*/infrastructure/flows/` + `apps/api/app/flows/`       |
 | Schedule service          | `apps/api/app/services/scheduler.py`                                         |
 | Agent runtime             | `apps/api/app/agent/`                                                        |
-| Preset definitions         | `apps/api/app/presets/*.py`                      | Decorator-based single-file presets (`@register`) — one .py = one complete preset |
-| Preset registry decorator  | `apps/api/app/presets/_registry.py`               | `@register` decorator + `get_preset()` / `list_presets()` API |
-| Preset registry (bridge)   | `apps/api/app/presets/registry.py`                | Legacy `PresetRegistry` — bridges YAML + decorator presets; `list_presets()`/`get_preset()`/`preset_to_api_dict()` |
-| Preset schema (legacy)     | `apps/api/app/presets/schema.py`                  | Pydantic models for preset YAML validation (still used for backward compat bridge) |
-| Agent display protocol    | `docs/protocols/agent-display-protocol.md`        |                                                                     |
-| Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`                                   |                                                                     |
-| Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`                                 |                                                                     |
-| Preview item drawer       | `apps/web/src/shared/components/preview-item-drawer/PreviewItemDrawer.vue`   |                                                                     |
-| Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`                               |                                                                     |
-| Preview domain models     | `apps/api/app/domain/preview.py`                                             |                                                                     |
-| Preview service           | `apps/api/app/services/preview_service.py`                                   | Session lifecycle, item pagination, persist handoff                 |
-| Preview TTL store         | `apps/api/app/services/preview_store.py`                                     | In-memory TTL session store                                         |
-| Upstream adapter          | `apps/api/app/services/preview_upstream.py`                                  | 50-item mock upstream; replace with real adapter                    |
-| Shared browser core       | `apps/web/src/shared/components/sample-browser/`                             | Shared virtualized browser core                                     |
-| Sidebar shell             | `apps/web/src/shared/components/browser-sidebar/BrowserSidebar.vue`          | Shared sidebar shell with injected widget resolver                  |
-| Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                                       | Presentation persistence (layout, thumbSize)                        |
-| Browser filter            | `apps/web/src/shared/composables/useBrowserFilter.ts`                        | Browser-scope item filter pipeline                                  |
-| Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
-| Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
-| Dataset schema system     | `docs/architecture/dataset-schema-system.md`                                 | Unified DatasetSchema descriptor — types, LS config, annotation, mocks |
-| Backend schema dataclass  | `apps/api/app/domain/dataset_schema.py`                                      | `DatasetSchema` dataclass definition                                |
-| Backend schema registry   | `apps/api/app/domain/schema_registry.py`                                     | register / get / list_all / get_allowed_pairs                       |
-| Backend schema modules    | `apps/api/app/domain/schemas/`                                               | One Python module per dataset type; auto-registers on import        |
-| Frontend schema registry  | `apps/web/src/views/datasets/schema-registry.ts`                             | `registerDatasetSchema` / `resolveDatasetShim` — keyed by dataset_type |
-| Frontend schema modules   | `apps/web/src/views/datasets/schemas/`                                       | One TS module per dataset type; self-registers on import            |
-| Dataset list shims        | `apps/web/src/views/datasets/shims/`                                         | Per-type dataset list Vue components                                |
+| Preset definitions         | `apps/api/app/modules/dataset_{classification,detection,vqa}/presets/` | Decorator-based single-file presets (`@register`) — one .py = one complete preset |
+| Backend schema modules    | `apps/api/app/modules/dataset_{classification,detection,vqa}/domain/schema.py` | One Python module per dataset type; auto-registers on import        |
+| Frontend schema modules   | `src/modules/dataset-{classification,detection,vqa}/views/schema.ts` | One TS module per dataset type; self-registers on import            |
+| Dataset list shims        | `src/modules/dataset-{classification,detection,vqa}/views/ListShim.vue` | Per-type dataset list Vue components                                |
 | Seed scripts              | `libs/seedmaker/src/seedmaker/datasets/`                                     | Per-type seed scripts; share mock_item_generator logic with schema  |
 | Dataset storage modes     | `docs/architecture/dataset-storage-modes.md`                                 | Capability matrix for `db_full` vs `file_shard_sparse`, intent origin, and deferred scope |
 | Sparse dataset payload     | `apps/api/app/services/dataset_payload_store.py` + `apps/api/app/domain/dataset_payload.py` | Shard manifest, parquet payload storage, deterministic delete |
@@ -203,11 +181,11 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | `PageProvider`          | component  | `apps/web/src/shared/components/page-provider/PageProvider.vue`           | Template-friendly wrapper for usePagePanels                   |
 | `useWaferHelpers`       | composable | `apps/web/src/shared/composables/useWaferHelpers.ts`                      | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
 | `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
-| `register`               | decorator  | `apps/api/app/presets/_registry.py`                                    | `@register` decorator: single-file preset registration (replaces YAML) |
-| `get_preset`             | function   | `apps/api/app/presets/_registry.py`                                    | Look up registered preset class by ID |
-| `get_preset_meta`        | function   | `apps/api/app/presets/_registry.py`                                    | Look up registered preset metadata by ID |
-| `PresetRegistry`         | class      | `apps/api/app/presets/registry.py`                                     | Legacy YAML registry — bridges YAML + decorator presets |
-| `PresetSpec`             | model      | `apps/api/app/presets/schema.py`                                       | Pydantic model for preset YAML (legacy compat) |
+| `register`               | decorator  | `apps/api/app/modules/presets/_registry.py`                                    | `@register` decorator: single-file preset registration (replaces YAML) |
+| `get_preset`             | function   | `apps/api/app/modules/presets/_registry.py`                                    | Look up registered preset class by ID |
+| `get_preset_meta`        | function   | `apps/api/app/modules/presets/_registry.py`                                    | Look up registered preset metadata by ID |
+| `PresetRegistry`         | class      | `apps/api/app/modules/presets/registry.py`                                     | Legacy YAML registry — bridges YAML + decorator presets |
+| `PresetSpec`             | model      | `apps/api/app/modules/presets/schema.py`                                       | Pydantic model for preset YAML (legacy compat) |
 | `SensorRegistry`        | class      | `apps/api/app/sensors/registry.py`                                           | Loads sensor YAML definitions; exposes get(id), list_all() |
 | `SensorDispatchService` | service    | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatches sensor events to matching subscriptions; isolation per subscription |
 | `SensorRepository`      | repository | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for SensorSubscriptionORM and SensorCheckpointORM |
@@ -225,7 +203,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't assume Kubeflow/MinIO are live; smoke paths degrade gracefully.
 - Don't hardcode new backend URLs; the existing `localhost:8000` hardcode is a known debt.
 - Don't reuse example secrets (`postgres`, `minioadmin`) outside smoke.
-- Don't create new YAML-based presets — use the `@register` decorator in a single `.py` file under `apps/api/app/presets/`.
+- Don't create new YAML-based presets — use the `@register` decorator in a single `.py` file under `apps/api/app/modules/dataset_*/presets/`.
 - Don't use `importlib.import_module()` or string-based entrypoints for new preset trainers/predictors — import classes directly in the preset file.
 
 ### Label Studio (LS)
@@ -259,8 +237,8 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect + shared S3-compatible storage.
 - K8s namespace: `finetune`; config via `finetune-config` and `finetune-secrets`.
 - Job progress exposed via SSE, not websockets.
-- Presets are engineer-managed **single Python files** (`apps/api/app/presets/<id>.py`) decorated with `@register(...)`. YAML presets are legacy — new presets must use the decorator.
-- To add a new training preset: create `apps/api/app/presets/<my_preset>.py`, decorate the class with `@register(id=..., name=..., ...)`, implement `.train()`, `.predict()`, and `.pipeline()` static methods, then add `from . import <my_preset>` to `apps/api/app/presets/__init__.py`. Config, model metadata, trainer/predictor references are all direct Python imports — no YAML, no string importlib entries.
+- Presets are engineer-managed **single Python files** (`apps/api/app/modules/dataset_*/presets/<id>.py`) decorated with `@register(...)`. YAML presets are legacy — new presets must use the decorator.
+- To add a new training preset: create `apps/api/app/modules/dataset_<type>/presets/<my_preset>.py`, decorate the class with `@register(id=..., name=..., ...)`, implement `.train()`, `.predict()`, and `.pipeline()` static methods, then add `from . import <my_preset>` to `apps/api/app/modules/dataset_<type>/presets/__init__.py`. Config, model metadata, trainer/predictor references are all direct Python imports — no YAML, no string importlib entries.
 - Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - `storage_mode` (`db_full` | `file_shard_sparse`) is the dataset-level distinction for storage semantics. It is orthogonal to `dataset_type` — a classification dataset and a VQA dataset can each be either mode. Never infer storage behavior from the semantic type; always branch on `storage_mode`.
@@ -282,7 +260,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.
-- Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
+- Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/modules/dataset_*/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
 - When adding a new external service integration, add the mock fixture FIRST, then write the flow/service code.
 - Flow tasks should use the `AppContainer` accessors from `app.state.container` (set by lifespan) or `build_flow_container(cfg)` for standalone Prefect flows.
 

@@ -19,6 +19,7 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, Protocol-
 | Add/manage cron schedules | `app/modules/schedules/application/services/scheduler.py` | `SchedulerService` — Prefect REST client |
 | Register Prefect flows | `app/flows/` | Shared flow definitions |
 | Agent runtime | `app/modules/agent/` | Domain-oriented agent modules |
+| Dataset type modules | `app/modules/dataset_*/` | Per-type schema, presets, and runtime logic |
 | Dataset payload store | `app/modules/datasets/application/services/dataset_payload_store.py` | Shard and manifest management |
 | Canonical transport contract | `../../openapi/openapi.yaml` | Single source of truth for backend/frontend transport types |
 
@@ -83,6 +84,15 @@ apps/api/
    ```python
    app.dependency_overrides[get_my_service] = lambda: FakeMyService()
    ```
+
+## DATASET TYPE MODULES
+Each dataset type (classification, detection, vqa) is isolated in `app/modules/dataset_<type>/`:
+- `domain/schema.py`: `DatasetSchema` definition (auto-registers on import)
+- `presets/`: Trainer/predictor presets decorated with `@register`
+- `runtime/`: Engine-specific execution logic (e.g. torch, dspy)
+- `mocks/`: Synthetic data generators for smoke tests
+
+Modules are auto-discovered and registered via imports in `app/main.py` lifespan.
 
 ## CONVENTIONS
 - Run from this directory with `uv run ...`.
