@@ -82,3 +82,21 @@
 - Router: Annotated type aliases (ModelServiceDep, CurrentUserDep, CurrentOrgDep) used throughout
 - Critical gotcha: AppContainer creates a fresh InMemoryArtifactStorage separate from legacy AppServices. When the new deps.py used container.artifact_storage, uploads stored to a different instance than what PredictionService (still on legacy container) reads from. Fix: always sync artifact_storage from legacy to new container in _build_state_container (unconditional, not just on override). This is the first module using artifact_storage — future modules with storage deps must be aware of this coexistence issue.
 - Router prefix: kept prefix="/api/v1" (existing pattern for this router)
+
+## [T12 complete] Presets module migrated
+- PresetRegistry is a pure in-memory singleton (no DB) — no domain/repository.py needed
+- deps.py: app/modules/presets/api/deps.py — get_preset_registry reads request.app.state.container.preset_registry
+- AppContainer.preset_registry field added: yes (PresetRegistry constructed in _build_base_container from cfg.presets.dir + cfg.presets.strict)
+- Routers updated: training router (list_presets, get_preset, create_training_job) + agent router (global_agent_chat)
+- PresetRegistryDep Annotated alias used; placed before params-with-defaults in handler signatures
+- shared/deps.py get_preset_registry kept for backward compat (no callers remain in routers, but not removed per "don't touch other modules" rule)
+- Tests: 479 passed, pyright: 0 errors, ruff: clean
+
+## [T13 complete] Preview module migrated
+- PreviewService deps: PreviewStore (in-memory TTL), UpstreamAdapter (ABC, concrete: PreviewUpstreamRouter wrapping MockUpstreamAdapter)
+- deps.py: app/modules/preview/api/deps.py — get_preview_service constructs PreviewService from store + upstream read from container
+- AppContainer new fields: preview_store: PreviewStore, preview_upstream: UpstreamAdapter (both constructed in _build_base_container)
+- Router: Annotated type aliases (PreviewServiceDep, RepositoryDep, LabelStudioClientDep) used throughout; Annotated deps before params-with-defaults
+- get_repository in preview deps.py: constructs SqlRepository(session_factory=container.session_factory) — no separate repo field needed in AppContainer
+- Critical gotcha: _mock_ls_client conftest fixture overrides legacy container.label_studio_client but NOT app.state.container.label_studio_client. Fix: also add app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls in the fixture. This is the same coexistence issue as T11 artifact_storage — any new module dep that reads from app.state.container must have its conftest mock updated.
+- Tests: 479 passed, pyright: 0 errors, ruff: clean

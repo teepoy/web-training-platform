@@ -46,6 +46,7 @@ from app.modules.preview.application.services.preview_upstream import (
     PreviewUpstreamRouter,
     UpstreamAdapter,
 )
+from app.modules.prediction.domain.repository import PredictionRepository
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -73,6 +74,7 @@ class AppContainer:
     task_tracker_repository: SqlRepository
     service_health_service: ServiceHealthService
     model_repository: ModelArtifactRepository
+    prediction_repository: PredictionRepository
     preset_registry: PresetRegistry
     preview_store: PreviewStore
     preview_upstream: UpstreamAdapter
@@ -194,6 +196,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             ),
         ),
         model_repository=ModelArtifactRepository(session_factory=session_factory),
+        prediction_repository=SqlRepository(session_factory=session_factory),
         preset_registry=PresetRegistry(
             presets_dir=str(cfg.presets.dir),
             strict=bool(cfg.presets.strict),

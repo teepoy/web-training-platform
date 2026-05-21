@@ -3,12 +3,18 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
+from app.modules.prediction.domain.repository import PredictionRepository
 from app.shared.api.schemas import PredictionEvent, PredictionJob
 from app.shared.api.schemas import JobStatus
+from app.shared.domain.protocols import PrefectClient
 
 
 class PredictionOrchestrator:
-    def __init__(self, prefect_client, repository) -> None:
+    def __init__(
+        self,
+        prefect_client: PrefectClient,
+        repository: PredictionRepository,
+    ) -> None:
         self._prefect_client = prefect_client
         self._repository = repository
 

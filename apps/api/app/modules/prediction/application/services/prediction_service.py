@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
 from pydantic import BaseModel
 
 from app.shared.api.schemas import (
@@ -31,6 +31,7 @@ from app.shared.api.schemas import (
 )
 from app.modules.presets._registry import get_preset, get_preset_meta
 from app.modules.presets.registry import PresetRegistry
+from app.modules.prediction.domain.repository import PredictionRepository
 from app.shared.domain.runtime import (
     DatasetRef,
     ModelRef,
@@ -63,7 +64,6 @@ from app.shared.infrastructure.label_studio.client import (
 
 if TYPE_CHECKING:
     from app.shared.api.schemas import Sample
-    from app.shared.db.sql_repository import SqlRepository
 from app.shared.domain.protocols import ArtifactStorage
 
 logger = logging.getLogger(__name__)
@@ -136,7 +136,7 @@ class PredictionService:
 
     def __init__(
         self,
-        repository: SqlRepository,
+        repository: PredictionRepository,
         artifact_storage: ArtifactStorage,
         config: DictConfig,
         embedding_client: EmbeddingClient | None = None,

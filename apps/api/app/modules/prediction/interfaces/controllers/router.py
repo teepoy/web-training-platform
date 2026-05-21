@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,
+)
+from app.modules.prediction.api.deps import (
+    ArtifactServiceDep,
+    ArtifactStorageDep,
+    ConfigDep,
+    FeatureOpsServiceDep,
+    PredictionOrchestratorDep,
+    PredictionRepositoryDep,
+    PredictionServiceDep,
+    SampleAccessFactoryDep,
 )
 from app.modules.prediction.interfaces.dtos.schemas import (
     CreateReviewActionRequest,
@@ -26,31 +37,12 @@ from app.modules.prediction.interfaces.dtos.schemas import (
     VersionExportPersistResponse,
     VersionExportRequest,
 )
-from app.shared.domain.protocols import ArtifactStorage
 from app.shared.api.schemas import Organization, User
-from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
-from app.modules.datasets.application.services.feature_ops import FeatureOpsService
-from app.modules.prediction.application.services.prediction_orchestrator import (
-    PredictionOrchestrator,
-)
-from app.modules.prediction.application.services.prediction_service import (
-    PredictionService,
-)
-from app.shared.application.artifacts import ArtifactService
-from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
-    get_artifact_storage,
-    get_artifacts,
-    get_config,
-    get_feature_ops,
-    get_prediction_orchestrator,
-    get_prediction_service,
-    get_repository,
-    get_sample_access_factory,
-)
 from app.shared.api.schemas import CancelJobResponse
 
 router = APIRouter(prefix="/api/v1", tags=["prediction"])
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 
 
 # ---------------------------------------------------------------------------
@@ -117,14 +109,12 @@ def _prediction_job_to_response(job) -> PredictionJobResponse:
 @router.post("/predictions/run", response_model=PredictionJobResponse, status_code=202)
 async def run_predictions(
     payload: RunPredictionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    cfg: DictConfig = Depends(get_config),
-    repo: SqlRepository = Depends(get_repository),
-    prediction_service: PredictionService = Depends(get_prediction_service),
-    prediction_orchestrator: PredictionOrchestrator = Depends(
-        get_prediction_orchestrator
-    ),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    cfg: ConfigDep,
+    repo: PredictionRepositoryDep,
+    prediction_service: PredictionServiceDep,
+    prediction_orchestrator: PredictionOrchestratorDep,
 ) -> PredictionJobResponse:
     try:
         from app.shared.api.schemas import PredictionJob
@@ -177,9 +167,9 @@ async def run_predictions(
 
 @router.get("/prediction-jobs", response_model=list[PredictionJobResponse])
 async def list_prediction_jobs(
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> list[PredictionJobResponse]:
     jobs = await repo.list_prediction_jobs(org_id=org.id)
     return [_prediction_job_to_response(job) for job in jobs]
@@ -188,9 +178,9 @@ async def list_prediction_jobs(
 @router.get("/prediction-jobs/{job_id}", response_model=PredictionJobResponse)
 async def get_prediction_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> PredictionJobResponse:
     job = await repo.get_prediction_job(job_id, org_id=org.id)
     if job is None:
@@ -204,10 +194,10 @@ async def get_prediction_job(
 )
 async def list_prediction_job_predictions(
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
+    prediction_service: PredictionServiceDep,
 ) -> list[PredictionResultResponse]:
     job = await repo.get_prediction_job(job_id, org_id=org.id)
     if job is None:
@@ -224,9 +214,9 @@ async def list_prediction_job_predictions(
 )
 async def list_prediction_job_events(
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> list[PredictionEventResponse]:
     job = await repo.get_prediction_job(job_id, org_id=org.id)
     if job is None:
@@ -247,11 +237,9 @@ async def list_prediction_job_events(
 @router.post("/prediction-jobs/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_prediction_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_orchestrator: PredictionOrchestrator = Depends(
-        get_prediction_orchestrator
-    ),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_orchestrator: PredictionOrchestratorDep,
 ) -> CancelJobResponse:
     cancelled = await prediction_orchestrator.cancel_job(job_id, org_id=org.id)
     if not cancelled:
@@ -264,9 +252,9 @@ async def cancel_prediction_job(
 @router.post("/predictions/single", response_model=PredictionResultResponse)
 async def predict_single(
     payload: PredictSingleRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_service: PredictionServiceDep,
 ) -> PredictionResultResponse:
     try:
         result = await prediction_service.predict_single(
@@ -288,10 +276,10 @@ async def predict_single(
 )
 async def list_sample_predictions(
     sample_id: str,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_service: PredictionServiceDep,
     model_version: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_service: PredictionService = Depends(get_prediction_service),
 ) -> list[PredictionResultResponse]:
     try:
         predictions = await prediction_service.list_predictions_for_sample(
@@ -316,9 +304,9 @@ async def list_sample_predictions(
 )
 async def create_prediction_collection(
     payload: PredictionCollectionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_service: PredictionServiceDep,
 ) -> PredictionCollectionResponse:
     try:
         collection = await prediction_service.create_prediction_collection(
@@ -341,11 +329,11 @@ async def create_prediction_collection(
     "/prediction-collections", response_model=list[PredictionCollectionResponse]
 )
 async def list_prediction_collections(
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
+    prediction_service: PredictionServiceDep,
     dataset_id: str = Query(...),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    prediction_service: PredictionService = Depends(get_prediction_service),
 ) -> list[PredictionCollectionResponse]:
     collections = await prediction_service.list_prediction_collections(
         dataset_id, org_id=org.id
@@ -370,9 +358,9 @@ async def list_prediction_collections(
 async def sync_prediction_collection_to_label_studio(
     collection_id: str,
     payload: SyncPredictionCollectionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_service: PredictionServiceDep,
 ) -> SyncPredictionCollectionResponse:
     try:
         (
@@ -406,9 +394,9 @@ async def sync_prediction_collection_to_label_studio(
 )
 async def create_review_action(
     payload: CreateReviewActionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    prediction_service: PredictionServiceDep,
 ) -> ReviewActionResponse:
     try:
         action = await prediction_service.create_review_action(
@@ -436,10 +424,10 @@ async def create_review_action(
 
 @router.get("/prediction-reviews", response_model=list[ReviewActionResponse])
 async def list_review_actions(
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
     dataset_id: str = Query(...),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> list[ReviewActionResponse]:
     actions = await repo.list_review_actions(dataset_id)
     return [
@@ -460,9 +448,9 @@ async def list_review_actions(
 @router.get("/prediction-reviews/{action_id}", response_model=ReviewActionResponse)
 async def get_review_action(
     action_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> ReviewActionResponse:
     action = await repo.get_review_action(action_id)
     if action is None:
@@ -482,9 +470,9 @@ async def get_review_action(
 @router.delete("/prediction-reviews/{action_id}", status_code=204)
 async def delete_review_action(
     action_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> Response:
     deleted = await repo.delete_review_action(action_id)
     if not deleted:
@@ -499,11 +487,11 @@ async def delete_review_action(
 async def save_review_annotations(
     action_id: str,
     payload: SaveReviewAnnotationsRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    prediction_service: PredictionService = Depends(get_prediction_service),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
+    sample_factory: SampleAccessFactoryDep,
+    prediction_service: PredictionServiceDep,
 ) -> SaveReviewAnnotationsResponse:
     action = await repo.get_review_action(action_id)
     if action is None:
@@ -554,9 +542,9 @@ async def save_review_annotations(
 )
 async def list_annotation_versions(
     action_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
 ) -> list[AnnotationVersionResponse]:
     action = await repo.get_review_action(action_id)
     if action is None:
@@ -584,7 +572,7 @@ async def list_annotation_versions(
 
 @router.get("/export-formats", response_model=list[ExportFormatResponse])
 async def list_export_formats(
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> list[ExportFormatResponse]:
     from app.shared.application.artifacts import list_export_formats as _list_fmts
 
@@ -594,10 +582,10 @@ async def list_export_formats(
 @router.get("/prediction-reviews/{action_id}/export")
 async def export_review_version(
     action_id: str,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
     format_id: str = Query(default="annotation-version-full-context-v1"),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> dict:
     from app.shared.application.artifacts import get_export_builder
 
@@ -648,10 +636,10 @@ async def export_review_version(
 async def persist_review_export(
     action_id: str,
     payload: VersionExportRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    artifacts: ArtifactService = Depends(get_artifacts),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    repo: PredictionRepositoryDep,
+    artifacts: ArtifactServiceDep,
 ) -> VersionExportPersistResponse:
     action = await repo.get_review_action(action_id)
     if action is None:
@@ -705,17 +693,15 @@ async def persist_review_export(
 )
 async def extract_features(
     dataset_id: str,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+    cfg: ConfigDep,
+    repo: PredictionRepositoryDep,
+    storage: ArtifactStorageDep,
+    sample_factory: SampleAccessFactoryDep,
+    feature_ops: FeatureOpsServiceDep,
+    prediction_orchestrator: PredictionOrchestratorDep,
     force: bool = Query(default=False),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    cfg: DictConfig = Depends(get_config),
-    repo: SqlRepository = Depends(get_repository),
-    storage: ArtifactStorage = Depends(get_artifact_storage),
-    sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops),
-    prediction_orchestrator: PredictionOrchestrator = Depends(
-        get_prediction_orchestrator
-    ),
 ) -> dict:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:

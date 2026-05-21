@@ -88,7 +88,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from omegaconf import DictConfig
+    from omegaconf import DictConfig  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
 
     from app.shared.api.schemas import Dataset, Model
     from app.shared.db.sql_repository import SqlRepository

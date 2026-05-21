@@ -2,49 +2,112 @@ from __future__ import annotations
 # pyright: reportMissingImports=false
 
 from datetime import UTC, datetime
+from typing import Any
 
 from prefect import flow, get_run_logger, task
 
+from app.core.config import load_config
+from app.modules.datasets.application.services.feature_ops import FeatureOpsService
+from app.modules.prediction.application.services.prediction_service import (
+    PredictionService,
+)
 from app.shared.api.schemas import PredictionEvent, Sample
 from app.shared.api.schemas import JobStatus
 
 
-def _get_services():
-    from app.main import services
+_app_container_ref: Any = None
 
-    return services
+
+def _sync_app_container_overrides(container: Any) -> None:
+    from app.main import container as app_services
+
+    container.artifact_storage = app_services.artifact_storage()
+    container.prediction_repository = app_services.repository()
+    container.embedding_client = app_services.embedding_service()
+    container.inference_worker = app_services.inference_worker()
+    container.gpu_worker = app_services.gpu_worker()
+
+
+async def _with_flow_container():
+    if _app_container_ref is not None:
+        _sync_app_container_overrides(_app_container_ref)
+        return _app_container_ref, False
+
+    from app.composition import build_flow_container
+
+    cfg = load_config()
+    return build_flow_container(cfg), True
+
+
+def _prediction_service(container) -> PredictionService:
+    return PredictionService(
+        repository=container.prediction_repository,
+        artifact_storage=container.artifact_storage,
+        config=container.config,
+        embedding_client=container.embedding_client,
+        llm_client=container.llm_client,
+        inference_worker=container.inference_worker,
+        gpu_worker=container.gpu_worker,
+    )
+
+
+def _feature_ops_service(container) -> FeatureOpsService:
+    return FeatureOpsService(
+        repository=container.prediction_repository,
+        embedding_service=container.embedding_client,
+        inference_worker=container.inference_worker,
+        gpu_worker=container.gpu_worker,
+    )
 
 
 @task(name="predict-chunk")
 async def predict_chunk(
+    job_id: str,
     model_id: str,
     org_id: str,
     target: str,
     prompt: str | None,
     sample_ids: list[str],
 ) -> list[dict]:
-    services = _get_services()
-    svc = services.prediction_service()
-    model = await services.repository().get_model(model_id, org_id)
-    if model is None:
-        raise ValueError(f"Model not found: {model_id}")
-    samples: list[Sample] = []
-    for sample_id in sample_ids:
-        sample = await services.repository().get_sample(sample_id)
-        if sample is not None:
-            samples.append(sample)
-    if not samples:
-        return []
-    dataset = await services.repository().get_dataset(samples[0].dataset_id, org_id)
-    if dataset is None:
-        raise ValueError(f"Dataset not found: {samples[0].dataset_id}")
-    return await svc._predict_via_worker(
-        model=model,
-        samples=samples,
-        label_space=list(dataset.task_spec.label_space),
-        target=target,
-        prompt=prompt,
-    )
+    container, should_close = await _with_flow_container()
+    try:
+        repo = container.prediction_repository
+        svc = _prediction_service(container)
+        model = await repo.get_model(model_id, org_id)
+        if model is None:
+            raise ValueError(f"Model not found: {model_id}")
+        samples: list[Sample] = []
+        for sample_id in sample_ids:
+            sample = await repo.get_sample(sample_id)
+            if sample is not None:
+                samples.append(sample)
+        if not samples:
+            return []
+        dataset = await repo.get_dataset(samples[0].dataset_id, org_id)
+        if dataset is None:
+            raise ValueError(f"Dataset not found: {samples[0].dataset_id}")
+        results = await svc._predict_via_worker(
+            model=model,
+            samples=samples,
+            label_space=list(dataset.task_spec.label_space),
+            target=target,
+            prompt=prompt,
+        )
+        await _persist_worker_results(
+            repo=repo,
+            svc=svc,
+            job_id=job_id,
+            model=model,
+            org_id=org_id,
+            target=target,
+            model_version=f"model-{model.id[:8]}",
+            sample_ids=sample_ids,
+            worker_results=results,
+        )
+        return results
+    finally:
+        if should_close:
+            await container.close()
 
 
 @task(name="embed-chunk")
@@ -55,28 +118,32 @@ async def embed_chunk(
     force: bool,
     sample_ids: list[str],
 ) -> dict:
-    services = _get_services()
-    repo = services.repository()
-    svc = services.feature_ops()
-    samples: list[Sample] = []
-    for sample_id in sample_ids:
-        sample = await repo.get_sample(sample_id)
-        if sample is not None and sample.dataset_id == dataset_id:
-            samples.append(sample)
-    if not samples:
-        return {
-            "count": 0,
-            "computed": 0,
-            "skipped": 0,
-            "embedding_model": embed_model,
-            "status": "completed",
-        }
-    return await svc.extract_features_via_worker(
-        samples=samples,
-        embed_model=embed_model,
-        force=force,
-        storage=services.artifact_storage(),
-    )
+    container, should_close = await _with_flow_container()
+    try:
+        repo = container.prediction_repository
+        svc = _feature_ops_service(container)
+        samples: list[Sample] = []
+        for sample_id in sample_ids:
+            sample = await repo.get_sample(sample_id)
+            if sample is not None and sample.dataset_id == dataset_id:
+                samples.append(sample)
+        if not samples:
+            return {
+                "count": 0,
+                "computed": 0,
+                "skipped": 0,
+                "embedding_model": embed_model,
+                "status": "completed",
+            }
+        return await svc.extract_features_via_worker(
+            samples=samples,
+            embed_model=embed_model,
+            force=force,
+            storage=container.artifact_storage,
+        )
+    finally:
+        if should_close:
+            await container.close()
 
 
 @task(name="persist-chunk")
@@ -89,13 +156,42 @@ async def persist_chunk_results(
     sample_ids: list[str],
     worker_results: list[dict],
 ) -> dict:
-    services = _get_services()
-    svc = services.prediction_service()
-    repo = services.repository()
-    model = await repo.get_model(model_id, org_id)
-    if model is None:
-        raise ValueError(f"Model not found: {model_id}")
-    version_tag = model_version or f"model-{model_id[:8]}"
+    container, should_close = await _with_flow_container()
+    try:
+        svc = _prediction_service(container)
+        repo = container.prediction_repository
+        model = await repo.get_model(model_id, org_id)
+        if model is None:
+            raise ValueError(f"Model not found: {model_id}")
+        return await _persist_worker_results(
+            repo=repo,
+            svc=svc,
+            job_id=job_id,
+            model=model,
+            org_id=org_id,
+            target=target,
+            model_version=model_version,
+            sample_ids=sample_ids,
+            worker_results=worker_results,
+        )
+    finally:
+        if should_close:
+            await container.close()
+
+
+async def _persist_worker_results(
+    *,
+    repo,
+    svc: PredictionService,
+    job_id: str,
+    model,
+    org_id: str,
+    target: str,
+    model_version: str | None,
+    sample_ids: list[str],
+    worker_results: list[dict],
+) -> dict:
+    version_tag = model_version or f"model-{model.id[:8]}"
     worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
     successful = 0
     failed = 0
@@ -108,7 +204,8 @@ async def persist_chunk_results(
         result = await svc._prediction_result_from_worker(
             sample=sample,
             worker_result=worker_by_sample.get(
-                sample.id, {"sample_id": sample.id, "error": "missing worker result"}
+                sample.id,
+                {"sample_id": sample.id, "error": "missing worker result"},
             ),
             model_id=model.id,
             org_id=org_id,
@@ -150,8 +247,37 @@ async def run_prediction_job(
     sample_ids: list[str] | None,
     prompt: str | None = None,
 ) -> dict:
-    services = _get_services()
-    repo = services.repository()
+    container, should_close = await _with_flow_container()
+    try:
+        return await _run_prediction_job_with_container(
+            container=container,
+            job_id=job_id,
+            dataset_id=dataset_id,
+            model_id=model_id,
+            org_id=org_id,
+            target=target,
+            model_version=model_version,
+            sample_ids=sample_ids,
+            prompt=prompt,
+        )
+    finally:
+        if should_close:
+            await container.close()
+
+
+async def _run_prediction_job_with_container(
+    *,
+    container,
+    job_id: str,
+    dataset_id: str,
+    model_id: str,
+    org_id: str,
+    target: str,
+    model_version: str | None,
+    sample_ids: list[str] | None,
+    prompt: str | None = None,
+) -> dict:
+    repo = container.prediction_repository
     dataset = await repo.get_dataset(dataset_id, org_id)
     if dataset is None:
         raise ValueError(f"Dataset not found: {dataset_id}")
@@ -234,6 +360,7 @@ async def run_prediction_job(
             )
         else:
             worker_results = await predict_chunk(
+                job_id=job_id,
                 model_id=model_id,
                 org_id=org_id,
                 target=target,
@@ -294,16 +421,22 @@ async def predict_job(
         target,
         created_by,
     )
-    result = await run_prediction_job(
-        job_id=job_id,
-        dataset_id=dataset_id,
-        model_id=model_id,
-        org_id=org_id,
-        target=target,
-        model_version=model_version,
-        sample_ids=sample_ids,
-        prompt=prompt,
-    )
+    container, should_close = await _with_flow_container()
+    try:
+        result = await _run_prediction_job_with_container(
+            container=container,
+            job_id=job_id,
+            dataset_id=dataset_id,
+            model_id=model_id,
+            org_id=org_id,
+            target=target,
+            model_version=model_version,
+            sample_ids=sample_ids,
+            prompt=prompt,
+        )
+    finally:
+        if should_close:
+            await container.close()
     logger.info(
         "Prediction complete: total=%s successful=%s failed=%s",
         result.get("total_samples"),

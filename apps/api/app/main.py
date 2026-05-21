@@ -94,6 +94,10 @@ def _build_state_container(api: FastAPI, cfg: Any) -> None:
     if container.prefect_client._has_override:
         api.state.container.prefect_client = container.prefect_client()
     api.state.container.artifact_storage = container.artifact_storage()
+    api.state.container.prediction_repository = container.repository()
+    api.state.container.embedding_client = container.embedding_service()
+    api.state.container.inference_worker = container.inference_worker()
+    api.state.container.gpu_worker = container.gpu_worker()
 
 
 class SingletonProvider:
@@ -390,6 +394,9 @@ async def lifespan(api: FastAPI):
     if not container.prefect_client._has_override:
         init_prefect(cfg)
     _build_state_container(api, cfg)
+    import app.modules.prediction.infrastructure.flows.predict_job as _predict_job_mod
+
+    _predict_job_mod._app_container_ref = api.state.container
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
 
@@ -403,7 +410,10 @@ async def lifespan(api: FastAPI):
     _logger.info("Sensor registry: %d sensors loaded", sensor_count)
     await _sync_file_presets_to_db()
 
-    yield
+    try:
+        yield
+    finally:
+        _predict_job_mod._app_container_ref = None
 
     prefect_client = container.prefect_client()
     close = getattr(prefect_client, "close", None)

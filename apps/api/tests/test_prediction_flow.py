@@ -5,9 +5,8 @@ no Prefect server required.  They exercise the full code path that runs
 inside a Prefect worker: singleton app services, DB access, sample iteration,
 inference worker delegation, prediction persistence.
 
-Note: The flow resolves ``app.main.services`` lazily.  These tests use
-the same singleton app services that own the seeded data and mocked
-services.
+Note: The flow resolves a fresh composition container lazily.  The app
+lifespan mirrors test overrides into that container for deterministic tests.
 """
 from __future__ import annotations
 
@@ -279,8 +278,9 @@ def test_predict_chunk_missing_model() -> None:
 
         with pytest.raises(ValueError, match="Model not found"):
             asyncio.run(
-                predict_chunk.fn(
-                    model_id="nonexistent-model",
+                    predict_chunk.fn(
+                        job_id="pred-missing-model",
+                        model_id="nonexistent-model",
                     org_id=DEFAULT_ORG_ID,
                     target="image_classification",
                     prompt=None,
@@ -298,6 +298,7 @@ def test_predict_chunk_empty_samples() -> None:
 
         result = asyncio.run(
             predict_chunk.fn(
+                job_id="pred-empty-samples",
                 model_id=model_id,
                 org_id=DEFAULT_ORG_ID,
                 target="image_classification",
@@ -389,6 +390,7 @@ def test_predict_chunk_calls_gpu_worker_predict_batch() -> None:
             with _patch_prefect_tasks():
                 worker_results = asyncio.run(
                     predict_chunk.fn(
+                        job_id="pred-gpu-worker",
                         model_id=model_id,
                         org_id=DEFAULT_ORG_ID,
                         target="image_classification",
