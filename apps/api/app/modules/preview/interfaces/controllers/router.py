@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,
+)
+from app.modules.preview.api.deps import (
+    LabelStudioClientDep,
+    PreviewServiceDep,
+    RepositoryDep,
 )
 from app.modules.preview.interfaces.dtos.schemas import (
     CreatePreviewSessionRequest,
@@ -17,24 +22,19 @@ from app.modules.preview.interfaces.dtos.schemas import (
     StartPersistRequest,
 )
 from app.shared.api.schemas import Organization, User
-from app.modules.preview.application.services.preview_service import PreviewService
-from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
-    get_label_studio_client,
-    get_preview_service,
-    get_repository,
-)
-from app.shared.domain.protocols import LabelStudioClient
 
 router = APIRouter(prefix="/api/v1", tags=["preview"])
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 
 
 @router.post("/preview-sessions", response_model=PreviewSessionResponse)
 async def create_preview_session(
     payload: CreatePreviewSessionRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    preview_service: PreviewService = Depends(get_preview_service),
+    preview_service: PreviewServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> PreviewSessionResponse:
     try:
         session = await preview_service.create_session(
@@ -57,9 +57,9 @@ async def create_preview_session(
 @router.get("/preview-sessions/{session_id}", response_model=PreviewSessionResponse)
 async def get_preview_session(
     session_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    preview_service: PreviewService = Depends(get_preview_service),
+    preview_service: PreviewServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> PreviewSessionResponse:
     session = await preview_service.get_session(session_id)
     if session is None:
@@ -80,11 +80,11 @@ async def get_preview_session(
 @router.get("/preview-sessions/{session_id}/items", response_model=PreviewItemsResponse)
 async def list_preview_items(
     session_id: str,
+    preview_service: PreviewServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
     cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    preview_service: PreviewService = Depends(get_preview_service),
 ) -> PreviewItemsResponse:
     session = await preview_service.get_session(session_id)
     if session is None:
@@ -119,11 +119,11 @@ async def list_preview_items(
 async def start_preview_persist(
     session_id: str,
     payload: StartPersistRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    preview_service: PreviewService = Depends(get_preview_service),
-    repo: SqlRepository = Depends(get_repository),
-    ls_client: LabelStudioClient = Depends(get_label_studio_client),
+    preview_service: PreviewServiceDep,
+    repo: RepositoryDep,
+    ls_client: LabelStudioClientDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> PersistStatusResponse:
     session = await preview_service.get_session(session_id)
     if session is None:
@@ -158,9 +158,9 @@ async def start_preview_persist(
 )
 async def get_preview_persist_status(
     session_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    preview_service: PreviewService = Depends(get_preview_service),
+    preview_service: PreviewServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> PersistStatusResponse:
     status = await preview_service.get_persist_status(session_id)
     if status is None:

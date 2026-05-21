@@ -40,6 +40,12 @@ from app.modules.dashboard.application.services.service_health import (
 from app.modules.models.infrastructure.repositories.repository import (
     ModelArtifactRepository,
 )
+from app.modules.preview.application.services.preview_store import PreviewStore
+from app.modules.preview.application.services.preview_upstream import (
+    MockUpstreamAdapter,
+    PreviewUpstreamRouter,
+    UpstreamAdapter,
+)
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -68,6 +74,8 @@ class AppContainer:
     service_health_service: ServiceHealthService
     model_repository: ModelArtifactRepository
     preset_registry: PresetRegistry
+    preview_store: PreviewStore
+    preview_upstream: UpstreamAdapter
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -189,6 +197,10 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         preset_registry=PresetRegistry(
             presets_dir=str(cfg.presets.dir),
             strict=bool(cfg.presets.strict),
+        ),
+        preview_store=PreviewStore(),
+        preview_upstream=PreviewUpstreamRouter(
+            upstreams={"mock": MockUpstreamAdapter()}
         ),
     )
 

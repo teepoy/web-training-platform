@@ -126,8 +126,16 @@ def _mock_ls_client(request):
     _mock_ls.export_project = AsyncMock(return_value=[])
 
     container.label_studio_client.override(lambda: _mock_ls)
+
+    from app.main import app
+    from app.modules.preview.api.deps import (
+        get_label_studio_client as preview_get_ls_client,
+    )
+
+    app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
     yield
     container.label_studio_client.reset_override()
+    app.dependency_overrides.pop(preview_get_ls_client, None)
 
 
 @pytest.fixture(autouse=True, scope="function")
