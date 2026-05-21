@@ -64,3 +64,20 @@ def _dispose_db_resources():
 
     load_config.cache_clear()
     container.reset_singletons()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _assert_clean_overrides():
+    """Ensures tests using app.dependency_overrides[get_xxx] = fake properly clean up."""
+    from app.main import app
+
+    initial = dict(app.dependency_overrides)
+    yield
+    leaked_keys = set(app.dependency_overrides) - set(initial)
+    for key in list(app.dependency_overrides.keys()):
+        if key not in initial:
+            del app.dependency_overrides[key]
+    assert not leaked_keys, f"Test leaked dependency_overrides: {leaked_keys}"
+    assert dict(app.dependency_overrides) == initial, (
+        f"Test leaked dependency_overrides: {set(app.dependency_overrides) - set(initial)}"
+    )
