@@ -13,7 +13,7 @@ from app.main import app
 from app.modules.datasets.api.deps import get_label_studio_client
 from app.modules.presets.registry import PresetRegistry
 from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
-from app.modules.training.infrastructure.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
+from app.modules.dataset_vqa.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
 from app.modules.prediction.application.services.prediction_service import PredictionService
 from app.shared.infrastructure.storage import InMemoryArtifactStorage
 
