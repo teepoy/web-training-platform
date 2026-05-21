@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from typing import Annotated
 
 from app.shared.api.schemas import (
     CancelJobResponse,
@@ -17,14 +20,14 @@ from app.modules.auth.interfaces.controllers.deps import (
 from app.modules.task_tracker.application.services.task_tracker import (
     TaskTrackerService,
 )
-from app.shared.deps import get_task_tracker  # pyright: ignore[reportMissingImports]
+from app.modules.task_tracker.api.deps import get_task_tracker_service
 
-router = APIRouter(prefix="/api/v1", tags=["task_tracker"])
+router = APIRouter(prefix="/task-tracker", tags=["task_tracker"])
 
 
-@router.get("/task-tracker/tasks", response_model=list[TaskTrackerSummaryResponse])
+@router.get("/tasks", response_model=list[TaskTrackerSummaryResponse])
 async def list_task_tracker_tasks(
-    task_tracker: TaskTrackerService = Depends(get_task_tracker),
+    task_tracker: Annotated[TaskTrackerService, Depends(get_task_tracker_service)],
     kind: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -34,10 +37,10 @@ async def list_task_tracker_tasks(
     return await task_tracker.list_tasks(org_id=org.id, kind=kind)
 
 
-@router.get("/task-tracker/tasks/{task_id}", response_model=TaskTrackerDetailResponse)
+@router.get("/tasks/{task_id}", response_model=TaskTrackerDetailResponse)
 async def get_task_tracker_task(
     task_id: str,
-    task_tracker: TaskTrackerService = Depends(get_task_tracker),
+    task_tracker: Annotated[TaskTrackerService, Depends(get_task_tracker_service)],
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TaskTrackerDetailResponse:
@@ -47,10 +50,10 @@ async def get_task_tracker_task(
     return detail
 
 
-@router.post("/task-tracker/tasks/{task_id}/cancel", response_model=CancelJobResponse)
+@router.post("/tasks/{task_id}/cancel", response_model=CancelJobResponse)
 async def cancel_task_tracker_task(
     task_id: str,
-    task_tracker: TaskTrackerService = Depends(get_task_tracker),
+    task_tracker: Annotated[TaskTrackerService, Depends(get_task_tracker_service)],
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> CancelJobResponse:
@@ -60,11 +63,11 @@ async def cancel_task_tracker_task(
     return CancelJobResponse(cancelled=True)
 
 
-@router.get("/task-tracker/tasks/{task_id}/stream")
+@router.get("/tasks/{task_id}/stream")
 async def stream_task_tracker_task(
     task_id: str,
     request: Request,
-    task_tracker: TaskTrackerService = Depends(get_task_tracker),
+    task_tracker: Annotated[TaskTrackerService, Depends(get_task_tracker_service)],
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ):

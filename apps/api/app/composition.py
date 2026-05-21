@@ -15,6 +15,7 @@ from app.modules.sensors.infrastructure.repositories.repository import (
 from app.modules.settings.infrastructure.repositories.repository import (
     InMemorySettingsRepository,
 )
+from app.shared.db.sql_repository import SqlRepository
 from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
 from app.modules.training.infrastructure.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
@@ -57,6 +58,7 @@ class AppContainer:
     training_engine: TrainingExecutionEngine
     sensor_repository: SensorRepositoryImpl
     settings_repository: InMemorySettingsRepository
+    task_tracker_repository: SqlRepository
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -166,6 +168,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         ),
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
         settings_repository=InMemorySettingsRepository(),
+        task_tracker_repository=SqlRepository(session_factory=session_factory),
     )
 
 

@@ -43,3 +43,14 @@
 - Auth deps: AuthService has no constructor deps (it's a stateless class wrapping module-level functions). The real deps are session_factory (for DB access in get_current_user, get_current_org, etc.)
 - _mock_auth_deps: still works (yes) — conftest imports get_current_user/get_current_org from app.shared.deps which re-exports from interfaces/controllers/deps.py; no change to import path
 - Any gotchas: _get_session_factory is called without a request in test helper functions (test_auth.py, test_auth_routes.py) to directly access the DB. Kept the optional-request fallback to get_container().session_factory() for this test-only path. FastAPI route handlers always pass request. The new api/deps.py provides the canonical get_session_factory(request) for future use.
+
+## [T7 complete] Settings module migrated
+- Settings deps: SettingsRepository (no session_factory needed — InMemorySettingsRepository has no DB deps)
+- Any gotchas: Settings router had no prefix on the empty stub router. Adding routes without a prefix caused /{key} to intercept /api/v1/training-jobs before the training router, breaking test_unauthenticated_jobs_returns_401 (got 404 instead of 401). Fix: add prefix="/settings" to APIRouter. Always add a prefix when a module router has wildcard path params.
+
+## [T8 complete] task_tracker module migrated
+- task_tracker deps: TaskTrackerRepository (Protocol over SqlRepository), PrefectClient, config (Any)
+- task_tracker_repository added to AppContainer as SqlRepository instance
+- Router prefix changed from "/api/v1" to "/task-tracker" (routes become /api/v1/task-tracker/tasks via include_router prefix="/api/v1")
+- Test migration: container.prefect_client.override() → app.dependency_overrides[get_prefect_client] set before TestClient context
+- Any gotchas: The old router had prefix="/api/v1" which was stripped by _strip_api_prefix; new router has prefix="/task-tracker" which is correct for the include_router(prefix="/api/v1") pattern. The config dep uses Any type since AppConfig is a TypeAlias for Any.

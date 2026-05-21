@@ -220,11 +220,12 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
         filter_flow_runs=AsyncMock(return_value=[]),
     )
 
-    with TestClient(app) as client:
-        from app.main import container
+    from app.modules.task_tracker.api.deps import get_prefect_client
+    from app.main import container
 
-        container.prefect_client.override(lambda: prefect)
-        try:
+    app.dependency_overrides[get_prefect_client] = lambda: prefect
+    try:
+        with TestClient(app) as client:
             dataset_id = _create_dataset(client, "tracker-dynamic-flow")
             training = client.post(
                 "/api/v1/training-jobs",
@@ -256,8 +257,8 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
                 body["derived"]["deep_links"]["prefect_run_url"]
                 == "http://localhost:4200/runs/flow-run/flow-run-1"
             )
-        finally:
-            container.prefect_client.reset_override()
+    finally:
+        app.dependency_overrides.pop(get_prefect_client, None)
 
 
 def test_prefect_run_url_strips_api_v1_suffix() -> None:
