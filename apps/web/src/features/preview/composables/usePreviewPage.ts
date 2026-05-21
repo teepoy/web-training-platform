@@ -16,7 +16,7 @@ import {
   type PreviewSession,
   type PreviewPersistScope,
   type PreviewItem,
-} from "@platform/web-ui/api/preview";
+} from "@/shared/api/preview";
 import {
   usePreviewLoader,
   useSampleBrowserPrefs,
@@ -26,7 +26,7 @@ import {
   useDataPipeline as createDataPipeline,
   DATA_PIPELINE_KEY,
   type SidebarPanelDescriptor,
-} from "@platform/web-ui";
+} from "@/shared";
 import type { BrowserItem, WaferPoint } from "../../../types";
 import { previewPanels } from "../../classify/config";
 

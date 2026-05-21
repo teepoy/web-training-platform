@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { NCard } from 'naive-ui'
-import { FlowTypeSelector, type FlowCard } from '@platform/web-ui'
+import { FlowTypeSelector, type FlowCard } from '@/shared'
 import UpstreamPreviewLauncher from '../features/preview/components/UpstreamPreviewLauncher.vue'
 
 const router = useRouter()

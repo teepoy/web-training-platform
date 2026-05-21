@@ -3,10 +3,10 @@ import { ref, watch } from "vue"
 import { useMutation, useQueryClient } from "@tanstack/vue-query"
 import { useMessage } from "naive-ui"
 import { NForm, NFormItem, NInput, NSelect, NDynamicTags, NButton, NSpace, NAlert } from "naive-ui"
-import { createDataset } from "@platform/web-ui/api/datasets"
-import { importSamples } from "@platform/web-ui/api/samples"
+import { createDataset } from "@/shared/api/datasets"
+import { importSamples } from "@/shared/api/samples"
 import type { BulkCreateSampleItem } from "../../../types"
-import type { ImporterProps } from "@platform/widget-sdk"
+import type { ImporterProps } from "@/shared/widgets/sdk"
 
 const props = defineProps<ImporterProps>()
 

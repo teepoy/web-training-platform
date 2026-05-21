@@ -136,9 +136,9 @@ import {
   resumeSchedule,
   listScheduleRuns,
   type UpdateScheduleBody,
-} from "@platform/web-ui/api/schedules";
+} from "@/shared/api/schedules";
 import type { ScheduleRun } from "../types";
-import { RunLogViewer } from "@platform/web-ui";
+import { RunLogViewer } from "@/shared";
 
 const route = useRoute();
 const router = useRouter();

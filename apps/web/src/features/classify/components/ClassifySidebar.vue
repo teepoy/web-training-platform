@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { BrowserSidebar } from "@platform/web-ui";
+import { BrowserSidebar } from "@/shared";
 import type { SidebarPanelDescriptor } from "../config";
-import { widgetComponentMap } from "../widgetMap";
+import { widgetRegistry } from "@/app/registrations";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   useSampleBrowserPrefs,
-} from "@platform/web-ui";
+} from "@/shared";
 
 const props = defineProps<{
   panels: SidebarPanelDescriptor[];
@@ -31,7 +31,7 @@ const prefs = useSampleBrowserPrefs();
     :min-sidebar-width="MIN_SIDEBAR_WIDTH"
     :max-sidebar-width="MAX_SIDEBAR_WIDTH"
     :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-    :component-resolver="(key: string) => widgetComponentMap[key] ?? null"
+    :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null"
     @update:collapsed="emit('update:collapsed', $event)"
     @update:sidebar-width="prefs.setSidebarWidth"
   />

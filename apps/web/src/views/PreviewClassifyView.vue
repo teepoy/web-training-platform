@@ -2,7 +2,7 @@
 import {
   NModal, NSpace, NRadioGroup, NRadio, NButton,
 } from "naive-ui";
-import { PreviewItemDrawer } from "@platform/web-ui";
+import { PreviewItemDrawer } from "@/shared";
 import { usePreviewPage } from "../features/preview/composables/usePreviewPage";
 import PreviewBrowserArea from "../features/preview/components/PreviewBrowserArea.vue";
 

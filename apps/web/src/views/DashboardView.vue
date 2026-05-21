@@ -92,7 +92,7 @@ import { computed, h } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
-import { getDashboard } from "@platform/web-ui/api";
+import { getDashboard } from "@/shared/api";
 import type { RecentJobSummary, ServiceStatus } from "../types";
 import { useOrgStore } from "../stores/org";
 

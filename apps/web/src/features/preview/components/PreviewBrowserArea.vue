@@ -8,9 +8,9 @@ import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
-} from "@platform/web-ui";
+} from "@/shared";
 import { injectPreviewPage } from "../composables/usePreviewPage";
-import { widgetComponentMap } from "../../classify/widgetMap";
+import { widgetRegistry } from "@/app/registrations";
 
 const page = injectPreviewPage();
 </script>
@@ -76,7 +76,7 @@ const page = injectPreviewPage();
             :min-sidebar-width="MIN_SIDEBAR_WIDTH"
             :max-sidebar-width="MAX_SIDEBAR_WIDTH"
             :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH"
-            :component-resolver="(key: string) => widgetComponentMap[key] ?? null"
+            :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null"
             @update:collapsed="page.prefs.setSidebarCollapsed"
             @update:sidebar-width="page.prefs.setSidebarWidth"
             style="border-left: none;"

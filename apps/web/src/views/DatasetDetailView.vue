@@ -3,10 +3,10 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
-import { BrowserSidebar, FlowModal, SampleBrowser, SampleDetailDrawer, type FlowCard } from "@platform/web-ui";
-import { getDataset } from "@platform/web-ui/api/datasets";
-import { getSparseSummary } from "@platform/web-ui/api/datasets";
-import { COLLAPSED_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, useSampleBrowserPrefs } from "@platform/web-ui";
+import { BrowserSidebar, FlowModal, SampleBrowser, SampleDetailDrawer, type FlowCard } from "@/shared";
+import { getDataset } from "@/shared/api/datasets";
+import { getSparseSummary } from "@/shared/api/datasets";
+import { COLLAPSED_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, useSampleBrowserPrefs } from "@/shared";
 import type { Dataset, SparseSummaryResponse } from "../types";
 import ManualImporter from "../features/dataset-detail/components/ManualImporter.vue";
 import ManualDatasetImporter from "../features/dataset-detail/components/ManualDatasetImporter.vue";
@@ -14,7 +14,7 @@ import ParquetImporter from "../features/dataset-detail/components/ParquetImport
 import PersistExportPlugin from "../features/dataset-detail/components/PersistExportPlugin.vue";
 import ParquetExportPlugin from "../features/dataset-detail/components/ParquetExportPlugin.vue";
 import PreviewExportPlugin from "../features/dataset-detail/components/PreviewExportPlugin.vue";
-import { widgetComponentMap } from "../features/classify/widgetMap";
+import { widgetRegistry } from "@/app/registrations";
 import { useDatasetBrowser } from "../features/dataset-detail/composables/useDatasetBrowser";
 import DatasetSparseSummary from "../features/dataset-detail/components/DatasetSparseSummary.vue";
 import DatasetFeatureOpsTab from "../features/dataset-detail/components/DatasetFeatureOpsTab.vue";
@@ -112,7 +112,7 @@ function handleExporterComplete(result: unknown) {
             </div>
             <div class="ds-samples-layout">
               <SampleBrowser :items="browser.filteredSamples.value" :total-count="browser.sampleLoader.totalCount.value" :thumb-size="prefs.thumbSize" :layout="prefs.layout" :is-loading="browser.sampleLoader.isLoading.value" :selection-enabled="false" :show-checkboxes="false" :show-label-rail="false" :show-bottom-bar="false" activation-mode="open" @open-item="openSampleDetail" @load-more="browser.sampleLoader.loadMore()" />
-              <BrowserSidebar :panels="browser.datasetSidebarPanels.value" :context="browser.pageDashboard" :collapsed="prefs.sidebarCollapsed" :sidebar-width="prefs.sidebarWidth" :min-sidebar-width="MIN_SIDEBAR_WIDTH" :max-sidebar-width="MAX_SIDEBAR_WIDTH" :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH" :component-resolver="(key: string) => widgetComponentMap[key] ?? null" @update:collapsed="prefs.setSidebarCollapsed" @update:sidebar-width="prefs.setSidebarWidth" />
+              <BrowserSidebar :panels="browser.datasetSidebarPanels.value" :context="browser.pageDashboard" :collapsed="prefs.sidebarCollapsed" :sidebar-width="prefs.sidebarWidth" :min-sidebar-width="MIN_SIDEBAR_WIDTH" :max-sidebar-width="MAX_SIDEBAR_WIDTH" :collapsed-sidebar-width="COLLAPSED_SIDEBAR_WIDTH" :component-resolver="(key: string) => widgetRegistry.getWidgetComponent(key) ?? null" @update:collapsed="prefs.setSidebarCollapsed" @update:sidebar-width="prefs.setSidebarWidth" />
             </div>
           </template>
         </n-tab-pane>

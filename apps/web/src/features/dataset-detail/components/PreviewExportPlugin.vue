@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
-import type { ExporterProps } from "@platform/widget-sdk";
-import { getExport } from "@platform/web-ui/api/datasets";
+import type { ExporterProps } from "@/shared/widgets/sdk";
+import { getExport } from "@/shared/api/datasets";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useMessage, type FormInst, type FormRules } from "naive-ui";
-import type { ImporterProps } from "@platform/widget-sdk";
-import { createSample, uploadSampleImage } from "@platform/web-ui/api/samples";
+import type { ImporterProps } from "@/shared/widgets/sdk";
+import { createSample, uploadSampleImage } from "@/shared/api/samples";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();

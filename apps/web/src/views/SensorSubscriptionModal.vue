@@ -53,8 +53,8 @@ import { ref, computed, watch } from "vue";
 import type { FormInst, FormRules } from "naive-ui";
 import { useMessage, NModal, NForm, NFormItem, NSelect, NInput, NSpace, NButton, NSwitch } from "naive-ui";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { createSubscription, updateSubscription } from "@platform/web-ui/api/sensors";
-import type { SensorDefinition, SensorSubscription, CreateSubscriptionBody, UpdateSubscriptionBody } from "@platform/web-ui/api/types";
+import { createSubscription, updateSubscription } from "@/shared/api/sensors";
+import type { SensorDefinition, SensorSubscription, CreateSubscriptionBody, UpdateSubscriptionBody } from "@/shared/api/types";
 
 const props = defineProps<{
   show: boolean;

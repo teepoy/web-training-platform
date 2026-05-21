@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { handleBrowserActivation } from '@platform/web-ui'
+import { handleBrowserActivation } from '../shared/index'
 
 describe('sampleBrowserActivation', () => {
   it('open mode — plain click calls onOpen', () => {

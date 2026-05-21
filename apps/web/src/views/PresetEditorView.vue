@@ -129,7 +129,7 @@
 import { ref, h, computed } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { NTag } from "naive-ui";
-import { listPresets } from "@platform/web-ui/api/jobs";
+import { listPresets } from "@/shared/api/jobs";
 import type { TrainingPreset } from "../types";
 import { useOrgStore } from "../stores/org";
 

@@ -1,8 +1,8 @@
 import { computed, onMounted, provide, ref, watch, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
-import { queryWaferPoints } from "@platform/web-ui/api/agent";
-import { BROWSER_DASHBOARD_KEY } from "@platform/widget-sdk";
+import { queryWaferPoints } from "@/shared/api/agent";
 import {
+  BROWSER_DASHBOARD_KEY,
   buildBlinkTableData,
   DATA_PIPELINE_KEY,
   injectWaferPanelData,
@@ -10,8 +10,8 @@ import {
   resolveImageUris,
   useSampleLoader,
   useDataPipeline,
-} from "@platform/web-ui";
-import type { BlinkSampleInput } from "@platform/web-ui";
+} from "@/shared";
+import type { BlinkSampleInput } from "@/shared";
 import type { BrowserItem, WaferPoint } from "../../../types";
 import { datasetPanels } from "../../classify/config";
 

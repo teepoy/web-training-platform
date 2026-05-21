@@ -65,8 +65,8 @@ import { ref, computed, h } from "vue";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { useMessage, NPageHeader, NSpace, NGrid, NGridItem, NCard, NDataTable, NSpin, NEmpty, NButton, NSwitch, NPopconfirm, NTag } from "naive-ui";
-import { listSensors, listSubscriptions, updateSubscription, deleteSubscription } from "@platform/web-ui/api/sensors";
-import type { SensorDefinition, SensorSubscription } from "@platform/web-ui/api/types";
+import { listSensors, listSubscriptions, updateSubscription, deleteSubscription } from "@/shared/api/sensors";
+import type { SensorDefinition, SensorSubscription } from "@/shared/api/types";
 import SensorSubscriptionModal from "./SensorSubscriptionModal.vue";
 
 const message = useMessage();

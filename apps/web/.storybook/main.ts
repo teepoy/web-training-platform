@@ -3,8 +3,9 @@ import path from "path";
 
 const config: StorybookConfig = {
   stories: [
-    "../../../libs/web-ui/src/**/*.stories.ts",
-    "../src/**/*.stories.ts",
+    "../src/shared/**/*.stories.ts",
+    "../src/views/**/*.stories.ts",
+    "../src/modules/**/*.stories.ts",
   ],
   addons: ["@storybook/addon-essentials"],
   framework: {
@@ -29,8 +30,7 @@ const config: StorybookConfig = {
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@platform/widget-sdk": path.resolve(__dirname, "../../../libs/widget-sdk/src/index.ts"),
-      "@platform/web-ui": path.resolve(__dirname, "../../../libs/web-ui/src/index.ts"),
+      "@": path.resolve(__dirname, "../src"),
     };
 
     config.resolve.dedupe = [...(config.resolve.dedupe || []), "vue"];

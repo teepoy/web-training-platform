@@ -94,11 +94,11 @@ import {
   listTokens,
   deleteToken,
   authKeys,
-} from "@platform/web-ui/api";
+} from "@/shared/api";
 import type {
   PersonalAccessToken,
   PersonalAccessTokenCreated,
-} from "@platform/web-ui/api";
+} from "@/shared/api";
 
 const message = useMessage();
 const qc = useQueryClient();

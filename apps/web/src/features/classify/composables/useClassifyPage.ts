@@ -20,11 +20,11 @@ import {
   useDialog,
   useThemeVars,
 } from "naive-ui";
-import { bulkCreateAnnotations, syncAnnotationsToLs } from "@platform/web-ui/api";
-import { getDataset, updateLabelSpace } from "@platform/web-ui/api/datasets";
-import { getSample, listSamplesWithLabels } from "@platform/web-ui/api/samples";
-import { listModels } from "@platform/web-ui/api/models";
-import { listJobs, listPresets, createJob } from "@platform/web-ui/api/jobs";
+import { bulkCreateAnnotations, syncAnnotationsToLs } from "@/shared/api";
+import { getDataset, updateLabelSpace } from "@/shared/api/datasets";
+import { getSample, listSamplesWithLabels } from "@/shared/api/samples";
+import { listModels } from "@/shared/api/models";
+import { listJobs, listPresets, createJob } from "@/shared/api/jobs";
 import {
   listPredictionJobs,
   listPredictionJobPredictions,
@@ -35,8 +35,8 @@ import {
   syncPredictionCollection,
   createReviewAction as createReviewActionApi,
   saveReviewAnnotations,
-} from "@platform/web-ui/api/predictions";
-import { queryWaferPoints } from "@platform/web-ui/api/agent";
+} from "@/shared/api/predictions";
+import { queryWaferPoints } from "@/shared/api/agent";
 import type {
   AnnotationGridItem,
   BrowserItem,
@@ -64,9 +64,10 @@ import {
   resolveImageUris,
   useDataPipeline as createDataPipeline,
   DATA_PIPELINE_KEY,
-} from "@platform/web-ui";
-import type { BlinkSampleInput, DataPipeline } from "@platform/web-ui";
-import { useClassifyDashboard, useSampleLoader, TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@platform/web-ui";
+} from "@/shared";
+import type { BlinkSampleInput } from "@/shared";
+import type { DataPipeline } from "@/shared/composables/useDataPipeline";
+import { useClassifyDashboard, useSampleLoader, TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@/shared";
 import ClassifySidebar from "../components/ClassifySidebar.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../config";
 import { GLOBAL_AGENT_PANELS_KEY } from "../../agent/useAgentAdapter";

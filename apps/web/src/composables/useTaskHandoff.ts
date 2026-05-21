@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
 import type { TaskTrackerDetail, TaskTrackerSummary } from '../types'
-import { getTrackedTask } from '@platform/web-ui/api/task-tracker'
-import { buildTrackedTaskEventSource } from '@platform/web-ui/api/sse'
+import { getTrackedTask } from '@/shared/api/task-tracker'
+import { buildTrackedTaskEventSource } from '@/shared/api/sse'
 
 const watchedTasks = ref<Record<string, TaskTrackerSummary>>({})
 const previousStatuses = new Map<string, string>()

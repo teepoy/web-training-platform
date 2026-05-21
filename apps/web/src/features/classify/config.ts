@@ -16,7 +16,7 @@
  *   1. Create the .vue widget in `libs/web-ui/src/components/{name}/{Name}Widget.vue`.
  *   2. Create a widget descriptor in `libs/web-ui/src/components/{name}/index.ts`
  *      that imports the component and exports a `defineDashboardWidget({...})` descriptor.
- *   3. Export the descriptor from `@platform/web-ui` and register in `src/registrations/index.ts`.
+ *   3. Export the descriptor from `@/shared` and register in `src/registrations/index.ts`.
  *   4. Add a descriptor entry to the desired panel preset below.
  */
 

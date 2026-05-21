@@ -1,5 +1,5 @@
-import { createJob } from "@platform/web-ui/api/jobs";
-import { updateLabelSpace } from "@platform/web-ui/api/datasets";
+import { createJob } from "@/shared/api/jobs";
+import { updateLabelSpace } from "@/shared/api/datasets";
 import type { TrainingJob } from "../../types";
 
 export async function startTrainingAction(

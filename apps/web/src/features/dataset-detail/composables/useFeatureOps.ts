@@ -1,10 +1,10 @@
 import { computed, h, ref, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
-import { listSamples } from "@platform/web-ui/api/samples"
-import { getSimilarity, type SimilarityResponse } from "@platform/web-ui/api/datasets";
-import { updateEmbedConfig, extractFeatures, getSelectionMetrics, getUncoveredHints } from "@platform/web-ui/api";
-import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "@platform/web-ui/api";
+import { listSamples } from "@/shared/api/samples"
+import { getSimilarity, type SimilarityResponse } from "@/shared/api/datasets";
+import { updateEmbedConfig, extractFeatures, getSelectionMetrics, getUncoveredHints } from "@/shared/api";
+import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "@/shared/api";
 
 interface UseFeatureOpsOptions {
   datasetId: ComputedRef<string>;

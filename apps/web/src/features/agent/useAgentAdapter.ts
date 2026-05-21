@@ -17,17 +17,18 @@ import {
   type Ref,
 } from "vue";
 import { useRoute } from "vue-router";
-import type { AgentChatStatus, ChatEntry } from "@platform/web-ui";
 import {
   useAgentCore,
+  type AgentChatStatus,
+  type ChatEntry,
   type UseAgentCoreReturn,
   type UseAgentCoreOptions,
-} from "@platform/web-ui";
+} from "@/shared";
 import {
   streamGlobalAgentChat,
   type AgentPanelDescriptor,
   type AgentContext,
-} from "@platform/web-ui/api/agent";
+} from "@/shared/api/agent";
 import { useAuthStore } from "../../stores/auth";
 
 export type { AgentChatStatus, ChatEntry };

@@ -9,24 +9,8 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@platform\/web-data\/(.+)$/,
-        replacement: path.resolve(__dirname, "../../libs/web-ui/src/api/$1.ts"),
-      },
-      {
-        find: "@platform/web-data",
-        replacement: path.resolve(__dirname, "../../libs/web-ui/src/api/index.ts"),
-      },
-      {
-        find: "@platform/widget-sdk",
-        replacement: path.resolve(__dirname, "../../libs/widget-sdk/src/index.ts"),
-      },
-      {
-        find: /^@platform\/web-ui\/(.+)$/,
-        replacement: path.resolve(__dirname, "../../libs/web-ui/src/$1"),
-      },
-      {
-        find: "@platform/web-ui",
-        replacement: path.resolve(__dirname, "../../libs/web-ui/src/index.ts"),
+        find: "@",
+        replacement: path.resolve(__dirname, "src"),
       },
     ],
   },

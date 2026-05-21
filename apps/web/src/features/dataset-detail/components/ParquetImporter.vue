@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
-import type { ImporterProps } from "@platform/widget-sdk";
-import { API_BASE } from "@platform/web-ui/api/client";
+import type { ImporterProps } from "@/shared/widgets/sdk";
+import { API_BASE } from "@/shared/api/client";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();

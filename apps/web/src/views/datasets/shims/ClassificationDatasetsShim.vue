@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { buildDatasetColumns, DatasetTable, DatasetToolbar, type FlowCard } from "@platform/web-ui";
+import { buildDatasetColumns, DatasetTable, DatasetToolbar, type FlowCard } from "@/shared";
 import type { Dataset } from "../../../types";
 import { resolveDatasetTaskType } from "../registry";
 

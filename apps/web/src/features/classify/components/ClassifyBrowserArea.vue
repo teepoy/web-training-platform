@@ -8,7 +8,7 @@ import {
   NSelect,
   type DataTableColumns,
 } from "naive-ui";
-import { SampleBrowser } from "@platform/web-ui";
+import { SampleBrowser } from "@/shared";
 import type { PredictionJob } from "../../../types";
 import { injectClassifyPage } from "../composables/useClassifyPage";
 

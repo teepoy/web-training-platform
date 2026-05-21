@@ -126,7 +126,7 @@ import {
   listDatasets,
   type BrowserItem,
   type SampleWithLabels,
-} from '@platform/web-ui'
+} from '@/shared'
 
 const IMAGE_LABELS = [
   '1. Noisy 32×32 (Salt & Pepper)',

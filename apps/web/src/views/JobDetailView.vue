@@ -90,11 +90,11 @@ import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useDialog, useMessage, NTag, NEllipsis } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { getJob, cancelJob } from "@platform/web-ui/api/jobs";
-import { getApiBase } from "@platform/web-ui/api/client";
+import { getJob, cancelJob } from "@/shared/api/jobs";
+import { getApiBase } from "@/shared/api/client";
 import type { JobStatus, TrainingEvent } from "../types";
 import { useJobEvents } from "../composables/useJobEvents";
-import { TrainingChart } from "@platform/web-ui";
+import { TrainingChart } from "@/shared";
 import { getStoredToken } from "../stores/auth";
 import { useOrgStore } from "../stores/org";
 

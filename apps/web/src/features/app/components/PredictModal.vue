@@ -95,9 +95,9 @@ import { ref, computed, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage } from "naive-ui";
-import { listDatasets } from "@platform/web-ui/api/datasets";
-import { runPredictions } from "@platform/web-ui/api/predictions";
-import type { PredictionJob } from "@platform/web-ui/api/predictions";
+import { listDatasets } from "@/shared/api/datasets";
+import { runPredictions } from "@/shared/api/predictions";
+import type { PredictionJob } from "@/shared/api/predictions";
 import type { Model } from "../../../types";
 import { useOrgStore } from "../../../stores/org";
 
