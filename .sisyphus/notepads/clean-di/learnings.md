@@ -33,3 +33,8 @@
 - AppContainer.sensor_repository field added: yes
 - Coexistence with AppServices: yes (AppServices still present, app.state.container added to lifespan)
 - Any gotchas: Existing tests still override the legacy AppServices prefect_client; lifespan mirrors that override into the pilot AppContainer so sensor dispatch tests remain compatible during the coexistence period. The required deps.py snippet needed an additional PrefectClient dependency because SensorDispatchService still requires Prefect to create flow runs.
+
+## [T5 complete] Legacy bridge deleted
+- _register_legacy_provider_overrides: deleted (was already a no-op `return None`)
+- Sensor-related conftest fixtures migrated: no (none existed — conftest had no sensor container overrides)
+- Any hidden call sites found: no (only definition at line 378 and call at line 436 in main.py)

@@ -375,10 +375,6 @@ def _strip_api_prefix(router: Any) -> None:
         )
 
 
-def _register_legacy_provider_overrides(api: FastAPI) -> None:
-    return None
-
-
 @asynccontextmanager
 async def lifespan(api: FastAPI):
     cfg = container.config()
@@ -433,7 +429,6 @@ app.add_middleware(
 for r in [*MODULE_ROUTERS, *EXTENSION_ROUTERS]:
     _strip_api_prefix(r)
     app.include_router(r, prefix="/api/v1")
-_register_legacy_provider_overrides(app)
 
 
 # ---------------------------------------------------------------------------
