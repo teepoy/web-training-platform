@@ -23,6 +23,9 @@ from app.shared.db.session import init_db
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.api.schemas import DEFAULT_ORG_ID, Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
+from app.modules import dataset_classification as _dataset_classification  # noqa: F401
+from app.modules import dataset_detection as _dataset_detection  # noqa: F401
+from app.modules import dataset_vqa as _dataset_vqa  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ export const imageClassificationSchema = {
   datasetType: "image_classification",
   taskType: "classification",
   annotationType: "choice" as const,
-  shimComponent: defineAsyncComponent(() => import("@/features/datasets/presentation/pages/shims/ClassificationDatasetsShim.vue")),
+  shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
   mockSampleFactory: (index: number, labelSpace?: string[]) => {
     const labels = labelSpace?.length ? labelSpace : ["unknown"];
     return {

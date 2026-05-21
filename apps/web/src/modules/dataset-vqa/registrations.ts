@@ -1,1 +1,1 @@
-export {}
+import "./views/schema";

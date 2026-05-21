@@ -11,7 +11,7 @@ export const imageVqaSchema = {
   datasetType: "image_vqa",
   taskType: "vqa",
   annotationType: "text" as const,
-  shimComponent: defineAsyncComponent(() => import("@/features/datasets/presentation/pages/shims/VqaDatasetsShim.vue")),
+  shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
   mockSampleFactory: (index: number, _labelSpace?: string[]) => ({
     id: `vqa-sample-${index}`,
     image_uris: [`https://picsum.photos/seed/vqa${index}/400/300`],
