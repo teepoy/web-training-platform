@@ -15,7 +15,8 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.application.services.feature_ops import FeatureOpsService
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
 
@@ -141,7 +142,7 @@ def test_similarity_search() -> None:
 
         mock_result = {"neighbors": [], "sample_id": sample_id}
         with patch.object(
-            container.feature_ops(), "similarity_search",
+            FeatureOpsService, "similarity_search",
             new_callable=AsyncMock, return_value=mock_result,
         ):
             resp = c.get(f"/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
@@ -173,9 +174,8 @@ def test_selection_metrics() -> None:
 
         mock_uniqueness = AsyncMock(return_value={"scores": {}})
         mock_repr = AsyncMock(return_value={"scores": {}})
-        fs = container.feature_ops()
-        with patch.object(fs, "uniqueness_scores", mock_uniqueness), \
-             patch.object(fs, "representativeness_scores", mock_repr):
+        with patch.object(FeatureOpsService, "uniqueness_scores", mock_uniqueness), \
+             patch.object(FeatureOpsService, "representativeness_scores", mock_repr):
             resp = c.get(f"/api/v1/datasets/{dataset_id}/selection-metrics")
         assert resp.status_code == 200
         body = resp.json()
@@ -199,7 +199,7 @@ def test_uncovered_hints() -> None:
 
         mock_result = {"clusters": [], "uncovered": []}
         with patch.object(
-            container.feature_ops(), "uncovered_cluster_hints",
+            FeatureOpsService, "uncovered_cluster_hints",
             new_callable=AsyncMock, return_value=mock_result,
         ):
             resp = c.get(f"/api/v1/datasets/{dataset_id}/hints/uncovered")

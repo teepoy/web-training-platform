@@ -17,6 +17,8 @@ os.environ.setdefault(
     "DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
 )
 
+_OPEN_CONTAINERS = []
+
 
 @pytest.fixture(autouse=True, scope="function")
 def _ensure_preset_registry():
@@ -27,9 +29,14 @@ def _ensure_preset_registry():
     loads it so that tests that access the registry outside the TestClient
     context (rare) also work.
     """
-    from app.main import container
+    from app.core.config import load_config
+    from app.modules.presets.registry import PresetRegistry
 
-    registry = container.preset_registry()
+    cfg = load_config()
+    registry = PresetRegistry(
+        presets_dir=str(cfg.presets.dir),
+        strict=bool(cfg.presets.strict),
+    )
     if registry.count == 0:
         registry.load()
     yield
@@ -41,16 +48,17 @@ def _dispose_db_resources():
     os.environ["DATABASE_URL"] = db_url
 
     from app.core.config import load_config
-    from app.main import container
 
     load_config.cache_clear()
-    container.reset_singletons()
 
     yield
 
     async def _dispose() -> None:
-        engine = container.db_engine()
-        await engine.dispose()
+        while _OPEN_CONTAINERS:
+            container = _OPEN_CONTAINERS.pop()
+            close = getattr(container, "close", None)
+            if close is not None:
+                await close()
 
     asyncio.run(_dispose())
 
@@ -63,7 +71,6 @@ def _dispose_db_resources():
             pass
 
     load_config.cache_clear()
-    container.reset_singletons()
 
 
 @pytest.fixture(autouse=True, scope="function")

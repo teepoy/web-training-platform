@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +317,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -397,7 +397,7 @@ class TestGlobalAgentChat:
         with TestClient(app) as c:
             _create_dataset(c, name="global-chat-ds-1")
 
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -483,7 +483,7 @@ class TestGlobalAgentChat:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="global-classify-ds")
 
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -539,7 +539,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -571,7 +571,7 @@ class TestGlobalAgentChat:
                     assert r2.status_code == 200
 
                     # Verify session store has accumulated messages
-                    session_store = container.session_store()
+                    session_store = app.state.container.session_store
 
                     async def _check():
                         msgs = await session_store.get_messages("persist-test-session")
@@ -612,7 +612,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -638,7 +638,7 @@ class TestGlobalAgentChat:
             raise RuntimeError("LLM is down")
 
         with TestClient(app) as c:
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 

@@ -12,20 +12,14 @@ With strict LS enforcement:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
+from app.shared.db.sql_repository import SqlRepository
 from app.shared.deps import _make_ls_image_url
-
-
-def _mock_config() -> MagicMock:
-    cfg = MagicMock()
-    cfg.db.auto_create = True
-    cfg.db.url = "sqlite+aiosqlite:///./finetune-test-ls-sample-hooks.db"
-    cfg.db.echo = False
-    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -43,15 +37,8 @@ _SAMPLE_PAYLOAD = {
 }
 
 
-def providers_value(val):  # type: ignore[return]
-    """Return a dependency-injector compatible provider that always returns val."""
-
-    return lambda: val
-
-
 def _reset_container_overrides() -> None:
-    container.label_studio_client.reset_override()
-    container.config.reset_override()
+    app.dependency_overrides.pop(get_label_studio_client, None)
 
 
 # ---------------------------------------------------------------------------
@@ -62,14 +49,11 @@ def _reset_container_overrides() -> None:
 @pytest.mark.xfail(reason="pre-existing: SQLite test DB lacks storage_mode column from ORM")
 def test_create_sample_with_ls_project() -> None:
     """Creating a sample with dataset linked to LS should set ls_task_id."""
-    mock_cfg = _mock_config()
-
     mock_ls = MagicMock()
     mock_ls.create_project = AsyncMock(return_value={"id": 7, "title": "sample-test-dataset"})
     mock_ls.create_task = AsyncMock(return_value={"id": 55})
 
-    container.config.override(providers_value(mock_cfg))
-    container.label_studio_client.override(providers_value(mock_ls))
+    app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
 
     try:
         with TestClient(app) as c:
@@ -96,15 +80,12 @@ def test_create_sample_with_ls_project() -> None:
 
 def test_create_sample_no_ls_project_returns_500() -> None:
     """Sample creation on dataset without ls_project_id returns 500."""
-    mock_cfg = _mock_config()
-
     # create_project raises so dataset gets no ls_project_id
     mock_ls = MagicMock()
     mock_ls.create_project = AsyncMock(side_effect=RuntimeError("LS down"))
     mock_ls.create_task = AsyncMock(return_value={"id": 99})
 
-    container.config.override(providers_value(mock_cfg))
-    container.label_studio_client.override(providers_value(mock_ls))
+    app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
 
     try:
         with TestClient(app) as c:
@@ -125,10 +106,6 @@ def test_create_sample_no_ls_project_returns_500() -> None:
         # Use mocked repository to test the sample creation path
         from app.shared.api.schemas import Dataset
         from uuid import uuid4
-        from unittest.mock import patch
-
-        import app.main as main_module
-
         dataset_no_project = Dataset(
             id=str(uuid4()),
             name="no-project-ds",
@@ -138,15 +115,12 @@ def test_create_sample_no_ls_project_returns_500() -> None:
         repo_mock = AsyncMock()
         repo_mock.get_dataset = AsyncMock(return_value=dataset_no_project)
 
-        mock_cfg2 = _mock_config()
-
         with TestClient(app) as c:
-            with patch.object(main_module.container, "config", return_value=mock_cfg2):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    r = c.post(
-                        f"/api/v1/datasets/{dataset_no_project.id}/samples",
-                        json=_SAMPLE_PAYLOAD,
-                    )
+            with patch.object(SqlRepository, "get_dataset", repo_mock.get_dataset):
+                r = c.post(
+                    f"/api/v1/datasets/{dataset_no_project.id}/samples",
+                    json=_SAMPLE_PAYLOAD,
+                )
 
         assert r.status_code == 500
         assert "no Label Studio project" in r.json()["detail"]
@@ -162,10 +136,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
 def test_create_sample_ls_task_creation_fails_returns_502() -> None:
     """When LS task creation fails, sample creation returns 502."""
     from app.shared.api.schemas import Dataset, Sample
-    from unittest.mock import patch
     from uuid import uuid4
-
-    import app.main as main_module
 
     dataset = Dataset(
         id=str(uuid4()),
@@ -188,13 +159,14 @@ def test_create_sample_ls_task_creation_fails_returns_502() -> None:
     mock_ls.create_task = AsyncMock(side_effect=RuntimeError("LS connection refused"))
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=MagicMock()):
-            with patch.object(main_module.container, "repository", return_value=repo_mock):
-                with patch.object(main_module.container, "label_studio_client", return_value=mock_ls):
-                    r = c.post(
-                        f"/api/v1/datasets/{dataset.id}/samples",
-                        json=_SAMPLE_PAYLOAD,
-                    )
+        app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
+        with patch.object(SqlRepository, "get_dataset", repo_mock.get_dataset), \
+             patch.object(SqlRepository, "create_samples", repo_mock.create_sample):
+            r = c.post(
+                f"/api/v1/datasets/{dataset.id}/samples",
+                json=_SAMPLE_PAYLOAD,
+            )
+        app.dependency_overrides.pop(get_label_studio_client, None)
 
     assert r.status_code == 502
     assert "Label Studio task creation failed" in r.json()["detail"]

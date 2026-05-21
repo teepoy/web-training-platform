@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.shared.deps import get_artifact_storage, get_config
 
 
 def _make_config(url: str = "http://label-studio:8080") -> MagicMock:
@@ -33,15 +34,14 @@ def test_http_uri_allowed_when_ls_url_matches() -> None:
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    import app.main as main_module
-
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch("httpx.AsyncClient", return_value=mock_client):
-                r = c.get(
-                    "/api/v1/images/resolve",
-                    params={"uri": "http://label-studio:8080/data/upload/image.jpg"},
-                )
+        app.dependency_overrides[get_config] = lambda: mock_config
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            r = c.get(
+                "/api/v1/images/resolve",
+                params={"uri": "http://label-studio:8080/data/upload/image.jpg"},
+            )
+        app.dependency_overrides.pop(get_config, None)
 
     assert r.status_code == 200
     assert r.content == mock_response.content
@@ -51,14 +51,13 @@ def test_http_uri_allowed_when_ls_url_matches() -> None:
 def test_http_uri_rejected_when_ls_url_empty() -> None:
     mock_config = _make_config("")
 
-    import app.main as main_module
-
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            r = c.get(
-                "/api/v1/images/resolve",
-                params={"uri": "http://label-studio:8080/data/upload/image.jpg"},
-            )
+        app.dependency_overrides[get_config] = lambda: mock_config
+        r = c.get(
+            "/api/v1/images/resolve",
+            params={"uri": "http://label-studio:8080/data/upload/image.jpg"},
+        )
+        app.dependency_overrides.pop(get_config, None)
 
     assert r.status_code == 400
     assert r.json()["detail"] == "http/https URIs are not allowed"
@@ -67,43 +66,40 @@ def test_http_uri_rejected_when_ls_url_empty() -> None:
 def test_http_uri_rejected_from_wrong_origin() -> None:
     mock_config = _make_config("http://label-studio:8080")
 
-    import app.main as main_module
-
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            r = c.get(
-                "/api/v1/images/resolve",
-                params={"uri": "http://evil.com/image.jpg"},
-            )
+        app.dependency_overrides[get_config] = lambda: mock_config
+        r = c.get(
+            "/api/v1/images/resolve",
+            params={"uri": "http://evil.com/image.jpg"},
+        )
+        app.dependency_overrides.pop(get_config, None)
 
     assert r.status_code == 400
     assert r.json()["detail"] == "http/https URIs are not allowed"
 
 
 def test_data_uri_still_works() -> None:
-    import app.main as main_module
-
     data_uri = "data:image/png;base64,iVBORw0KGgo="
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=_make_config("http://label-studio:8080")):
-            r = c.get("/api/v1/images/resolve", params={"uri": data_uri})
+        app.dependency_overrides[get_config] = lambda: _make_config("http://label-studio:8080")
+        r = c.get("/api/v1/images/resolve", params={"uri": data_uri})
+        app.dependency_overrides.pop(get_config, None)
 
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/png")
 
 
 def test_storage_uri_still_works() -> None:
-    import app.main as main_module
-
     storage = _make_storage()
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "artifact_storage", return_value=storage):
-            r = c.get(
-                "/api/v1/images/resolve",
-                params={"uri": "memory://samples/1/image.png"},
-            )
+        app.dependency_overrides[get_artifact_storage] = lambda: storage
+        r = c.get(
+            "/api/v1/images/resolve",
+            params={"uri": "memory://samples/1/image.png"},
+        )
+        app.dependency_overrides.pop(get_artifact_storage, None)
 
     assert r.status_code == 200
     assert r.content == b"memory-image-bytes"

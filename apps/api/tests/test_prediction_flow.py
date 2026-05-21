@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.api.schemas import ArtifactRef, PredictionJob
 from app.shared.api.schemas import JobStatus
-from app.main import app, services as app_services
+from app.main import app
 from tests.conftest import DEFAULT_ORG_ID, PRESET_ID
 
 
@@ -51,6 +51,28 @@ def _patch_prefect_tasks():
         patch.object(_mod, "embed_chunk", side_effect=_mod.embed_chunk.fn),
         patch.object(_mod, "persist_chunk_results", side_effect=_mod.persist_chunk_results.fn),
     )
+
+
+def _install_flow_worker_mocks() -> None:
+    import app.modules.prediction.infrastructure.flows.predict_job as predict_job_mod
+
+    app_container = predict_job_mod._app_container_ref
+    if app_container is None:
+        return
+    for dep_name, getter_name in (
+        ("gpu_worker", "get_gpu_worker"),
+        ("inference_worker", "get_inference_worker"),
+    ):
+        override = next(
+            (
+                provider()
+                for key, provider in app.dependency_overrides.items()
+                if getattr(key, "__name__", "") == getter_name
+            ),
+            None,
+        )
+        if override is not None:
+            setattr(app_container, dep_name, override)
 
 
 class _multi_patch:
@@ -122,8 +144,8 @@ def _seed_prediction_setup(
         "label_space": labels,
     }).encode()
 
-    repo = app_services.repository()
-    storage = app_services.artifact_storage()
+    repo = app.state.container.prediction_repository
+    storage = app.state.container.artifact_storage
 
     asyncio.run(storage.put_bytes(model_object_name, model_payload))
     model_uri = f"memory://{model_object_name}"
@@ -161,7 +183,7 @@ def _create_prediction_job_record(dataset_id: str, model_id: str) -> str:
         target="image_classification",
         org_id=DEFAULT_ORG_ID,
     )
-    asyncio.run(app_services.repository().create_prediction_job(job, org_id=DEFAULT_ORG_ID))
+    asyncio.run(app.state.container.prediction_repository.create_prediction_job(job, org_id=DEFAULT_ORG_ID))
     return job.id
 
 
@@ -173,6 +195,7 @@ def _create_prediction_job_record(dataset_id: str, model_id: str) -> str:
 def test_run_prediction_job_classification() -> None:
     """Full classification prediction flow completes and persists results."""
     with TestClient(app) as c:
+        _install_flow_worker_mocks()
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
         job_id = _create_prediction_job_record(dataset_id, model_id)
 
@@ -199,6 +222,7 @@ def test_run_prediction_job_classification() -> None:
 def test_run_prediction_job_with_sample_subset() -> None:
     """Prediction flow processes only the specified sample_ids."""
     with TestClient(app) as c:
+        _install_flow_worker_mocks()
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=4)
         subset = sample_ids[:2]
         job_id = _create_prediction_job_record(dataset_id, model_id)
@@ -224,6 +248,7 @@ def test_run_prediction_job_with_sample_subset() -> None:
 def test_run_prediction_job_missing_dataset() -> None:
     """Flow raises ValueError for nonexistent dataset."""
     with TestClient(app):
+        _install_flow_worker_mocks()
         from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
         with _patch_prefect_tasks():
@@ -244,6 +269,7 @@ def test_run_prediction_job_missing_dataset() -> None:
 def test_run_prediction_job_embedding_target() -> None:
     """Embedding target path completes without error."""
     with TestClient(app) as c:
+        _install_flow_worker_mocks()
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=2)
         job_id = _create_prediction_job_record(dataset_id, model_id)
 
@@ -345,7 +371,7 @@ def test_persist_chunk_results_writes_predictions() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _isolated_gpu_worker_patch(app_services):
+def _isolated_gpu_worker_patch():
     """Override GPU and inference worker with fresh mocks for one test.
 
     Returns ``(mock_gpu, mock_inference, cleanup)`` where ``cleanup`` is a
@@ -368,12 +394,18 @@ def _isolated_gpu_worker_patch(app_services):
     mock_inference.predict_batch = AsyncMock(return_value=[])
     mock_inference.embed_batch = AsyncMock(return_value=[])
 
-    app_services.gpu_worker.override(lambda: mock_gpu)
-    app_services.inference_worker.override(lambda: mock_inference)
+    import app.modules.prediction.infrastructure.flows.predict_job as predict_job_mod
+
+    original_gpu = app.state.container.gpu_worker
+    original_inference = app.state.container.inference_worker
+    app.state.container.gpu_worker = mock_gpu
+    app.state.container.inference_worker = mock_inference
+    predict_job_mod._app_container_ref = app.state.container
 
     def _cleanup() -> None:
-        app_services.gpu_worker.reset_override()
-        app_services.inference_worker.reset_override()
+        app.state.container.gpu_worker = original_gpu
+        app.state.container.inference_worker = original_inference
+        predict_job_mod._app_container_ref = app.state.container
 
     return mock_gpu, mock_inference, _cleanup
 
@@ -382,10 +414,9 @@ def test_predict_chunk_calls_gpu_worker_predict_batch() -> None:
     """predict_chunk invokes GPU worker predict_batch, NOT inference worker."""
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
-        from app.main import services as _app_services
         from app.modules.prediction.infrastructure.flows.predict_job import predict_chunk
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch()
         try:
             with _patch_prefect_tasks():
                 worker_results = asyncio.run(
@@ -416,10 +447,9 @@ def test_embed_chunk_calls_gpu_worker_embed_batch() -> None:
     """embed_chunk invokes GPU worker embed_batch, NOT inference worker."""
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=3)
-        from app.main import services as _app_services
         from app.modules.prediction.infrastructure.flows.predict_job import embed_chunk
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch()
         try:
             with _patch_prefect_tasks():
                 chunk_summary = asyncio.run(
@@ -449,10 +479,9 @@ def test_run_prediction_job_prefers_gpu_worker_over_inference() -> None:
     with TestClient(app) as c:
         dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=4)
         job_id = _create_prediction_job_record(dataset_id, model_id)
-        from app.main import services as _app_services
         from app.modules.prediction.infrastructure.flows.predict_job import run_prediction_job
 
-        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch(_app_services)
+        mock_gpu, mock_inference, cleanup = _isolated_gpu_worker_patch()
         try:
             with _patch_prefect_tasks():
                 result = asyncio.run(

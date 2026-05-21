@@ -12,11 +12,13 @@ With strict LS enforcement:
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
+from app.shared.deps import get_repository, get_sample_access_factory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,6 +42,11 @@ def _make_ls_client() -> AsyncMock:
     return client
 
 
+def _clear_overrides() -> None:
+    for dep in (get_repository, get_label_studio_client, get_sample_access_factory):
+        app.dependency_overrides.pop(dep, None)
+
+
 # ---------------------------------------------------------------------------
 # Test 1: create_annotation — sample with ls_task_id, LS sync succeeds
 # ---------------------------------------------------------------------------
@@ -48,9 +55,6 @@ def _make_ls_client() -> AsyncMock:
 def test_create_annotation_with_task_id() -> None:
     """When sample has ls_task_id, annotation creates and syncs to LS."""
     mock_ls_client = _make_ls_client()
-    mock_config = _make_config()
-
-    import app.main as main_module
     from app.shared.api.schemas import Annotation, Sample
     from datetime import datetime, UTC
     from uuid import uuid4
@@ -85,13 +89,13 @@ def test_create_annotation_with_task_id() -> None:
     repo_mock.create_annotation.return_value = created_ann
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    r = c.post(
-                        "/api/v1/annotations",
-                        json={"sample_id": sample_id, "label": "cat", "created_by": "tester"},
-                    )
+        app.dependency_overrides[get_label_studio_client] = lambda: mock_ls_client
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        r = c.post(
+            "/api/v1/annotations",
+            json={"sample_id": sample_id, "label": "cat", "created_by": "tester"},
+        )
+        _clear_overrides()
 
     assert r.status_code == 200
     assert r.json()["label"] == "cat"
@@ -113,9 +117,6 @@ def test_create_annotation_with_task_id() -> None:
 
 def test_create_annotation_no_task_id_returns_500() -> None:
     """When sample has no ls_task_id, annotation creation returns 500."""
-    mock_config = _make_config()
-
-    import app.main as main_module
     from app.shared.api.schemas import Sample
     from uuid import uuid4
 
@@ -132,12 +133,12 @@ def test_create_annotation_no_task_id_returns_500() -> None:
     repo_mock.get_sample = AsyncMock(return_value=sample_no_task)
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "repository", return_value=repo_mock):
-                r = c.post(
-                    "/api/v1/annotations",
-                    json={"sample_id": sample_id, "label": "dog", "created_by": "tester"},
-                )
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        r = c.post(
+            "/api/v1/annotations",
+            json={"sample_id": sample_id, "label": "dog", "created_by": "tester"},
+        )
+        _clear_overrides()
 
     assert r.status_code == 500
     assert "no Label Studio task" in r.json()["detail"]
@@ -151,9 +152,6 @@ def test_create_annotation_no_task_id_returns_500() -> None:
 def test_sync_annotations_to_ls() -> None:
     """Create annotations then call sync endpoint; verify synced_count matches."""
     mock_ls_client = _make_ls_client()
-    mock_config = _make_config()
-
-    import app.main as main_module
     from app.shared.api.schemas import Annotation, Dataset, Sample
     from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
     from datetime import datetime, UTC
@@ -192,11 +190,11 @@ def test_sync_annotations_to_ls() -> None:
     factory_mock.create = MagicMock(return_value=access_mock)
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "label_studio_client", return_value=mock_ls_client):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "sample_access_factory", return_value=factory_mock):
-                        r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+        app.dependency_overrides[get_label_studio_client] = lambda: mock_ls_client
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_sample_access_factory] = lambda: factory_mock
+        r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+        _clear_overrides()
 
     assert r.status_code == 200
     body = r.json()
@@ -215,9 +213,6 @@ def test_sync_annotations_to_ls() -> None:
 
 def test_sync_annotations_no_project_returns_500() -> None:
     """When dataset has no ls_project_id, sync returns 500."""
-    mock_config = _make_config()
-
-    import app.main as main_module
     from app.shared.api.schemas import Dataset
     from uuid import uuid4
 
@@ -232,9 +227,9 @@ def test_sync_annotations_no_project_returns_500() -> None:
     repo_mock.get_dataset = AsyncMock(return_value=mock_dataset)
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "repository", return_value=repo_mock):
-                r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
+        _clear_overrides()
 
     assert r.status_code == 500
     assert "no Label Studio project" in r.json()["detail"]
@@ -247,14 +242,13 @@ def test_sync_annotations_no_project_returns_500() -> None:
 
 def test_sync_annotations_dataset_not_found() -> None:
     """When dataset does not exist, sync returns 404."""
-    import app.main as main_module
-
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=None)
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "repository", return_value=repo_mock):
-            r = c.post("/api/v1/datasets/nonexistent-dataset-id/sync-annotations-to-ls")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        r = c.post("/api/v1/datasets/nonexistent-dataset-id/sync-annotations-to-ls")
+        _clear_overrides()
 
     assert r.status_code == 404
     assert r.json()["detail"] == "Dataset not found"

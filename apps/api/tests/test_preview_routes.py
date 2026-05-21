@@ -6,8 +6,6 @@ from app.main import app
 def test_browse_preview_items():
     from app.shared.db.models import DatasetORM
     from sqlalchemy import select, func
-    from app.main import container
-
     with TestClient(app) as c:
         resp = c.post("/api/v1/preview-sessions", json={"collection_ref": "test-browse"})
         assert resp.status_code == 200
@@ -25,7 +23,7 @@ def test_browse_preview_items():
         assert "has_more" in items_data
 
         import asyncio
-        repo = container.repository()
+        repo = app.state.container.prediction_repository
         async def _count():
             async with repo.session_factory() as db:
                 return await db.scalar(select(func.count()).select_from(DatasetORM))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import Mock
 from typing import Any
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
 from app.shared.domain.protocols import (
@@ -40,6 +40,10 @@ from app.modules.training.application.services.orchestrator import TrainingOrche
 from app.shared.application.artifacts import ArtifactService
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
+from app.shared.infrastructure.label_studio.session import (
+    create_ls_engine,
+    create_ls_session_factory,
+)
 from app.shared.infrastructure.surface_store import SurfaceStore
 from app.modules.agent.application.services.session_store import SessionStore
 from app.modules.auth.interfaces.controllers.deps import (  # noqa: F401
@@ -49,10 +53,8 @@ from app.modules.auth.interfaces.controllers.deps import (  # noqa: F401
 )
 
 
-def get_container() -> Any:
-    from app.main import container
-
-    return container
+def get_container(request: Request) -> Any:
+    return request.app.state.container
 
 
 def _provider_value(provider: Any) -> Any:
@@ -62,110 +64,131 @@ def _provider_value(provider: Any) -> Any:
 
 
 def get_repository(c: Any = Depends(get_container)) -> SqlRepository:
-    return _provider_value(c.repository)
+    return c.prediction_repository
 
 
 def get_artifact_storage(c: Any = Depends(get_container)) -> ArtifactStorage:
-    return _provider_value(c.artifact_storage)
+    return c.artifact_storage
 
 
 def get_label_studio_client(c: Any = Depends(get_container)) -> LabelStudioClient:
-    return _provider_value(c.label_studio_client)
+    return c.label_studio_client
 
 
 def get_ls_read_repository(c: Any = Depends(get_container)) -> LsReadRepository:
-    return _provider_value(c.ls_read_repository)
+    engine = create_ls_engine(database_url=str(c.config.label_studio.database_url))
+    return LsReadRepository(session_factory=create_ls_session_factory(engine=engine))
 
 
 def get_sample_access_factory(c: Any = Depends(get_container)) -> SampleAccessFactory:
-    return _provider_value(c.sample_access_factory)
+    return c.sample_access_factory
 
 
 def get_task_tracker(c: Any = Depends(get_container)) -> TaskTrackerService:
-    return _provider_value(c.task_tracker)
+    return TaskTrackerService(
+        repository=c.task_tracker_repository,
+        prefect_client=c.prefect_client,
+        config=c.config,
+    )
 
 
 def get_model_service(c: Any = Depends(get_container)) -> ModelService:
-    return _provider_value(c.model_service)
+    return c.model_service
 
 
 def get_sensor_repository(c: Any = Depends(get_container)) -> SensorRepository:
-    return _provider_value(c.sensor_repository)
+    return c.sensor_repository
 
 
 def get_sensor_dispatch(c: Any = Depends(get_container)) -> SensorDispatchService:
-    return _provider_value(c.sensor_dispatch)
+    return SensorDispatchService(
+        repository=c.sensor_repository, prefect_client=c.prefect_client
+    )
 
 
 def get_sensor_dispatch_service(
     c: Any = Depends(get_container),
 ) -> SensorDispatchService:
-    return _provider_value(c.sensor_dispatch)
+    return SensorDispatchService(
+        repository=c.sensor_repository, prefect_client=c.prefect_client
+    )
 
 
 def get_sensor_registry(c: Any = Depends(get_container)) -> SensorRegistry:
-    return _provider_value(c.sensor_registry)
+    return c.sensor_registry
 
 
 def get_orchestrator(c: Any = Depends(get_container)) -> TrainingOrchestrator:
-    return _provider_value(c.orchestrator)
+    return c.training_orchestrator
 
 
 def get_prediction_service(c: Any = Depends(get_container)) -> PredictionService:
-    return _provider_value(c.prediction_service)
+    return PredictionService(
+        repository=c.prediction_repository,
+        artifact_storage=c.artifact_storage,
+        config=c.config,
+        embedding_client=c.embedding_client,
+        llm_client=c.llm_client,
+        inference_worker=c.inference_worker,
+        gpu_worker=c.gpu_worker,
+    )
 
 
 def get_prediction_orchestrator(
     c: Any = Depends(get_container),
 ) -> PredictionOrchestrator:
-    return _provider_value(c.prediction_orchestrator)
+    return c.prediction_orchestrator
 
 
 def get_scheduler_service(c: Any = Depends(get_container)) -> SchedulerService:
-    prefect_client = _provider_value(c.prefect_client)
-    return SchedulerService(
-        prefect_client=prefect_client, repository=_provider_value(c.repository)
-    )
+    return c.scheduler_service
 
 
 def get_preview_service(c: Any = Depends(get_container)) -> PreviewService:
-    return _provider_value(c.preview_service)
+    return PreviewService(store=c.preview_store, upstream=c.preview_upstream)
 
 
 def get_surface_store(c: Any = Depends(get_container)) -> SurfaceStore:
-    return _provider_value(c.surface_store)
+    return c.surface_store
 
 
 def get_session_store(c: Any = Depends(get_container)) -> SessionStore:
-    return _provider_value(c.session_store)
+    return c.session_store
 
 
 def get_preset_registry(c: Any = Depends(get_container)) -> PresetRegistry:
-    return _provider_value(c.preset_registry)
+    return c.preset_registry
 
 
 def get_embedding_service(c: Any = Depends(get_container)) -> EmbeddingClient:
-    return _provider_value(c.embedding_service)
+    return c.embedding_client
 
 
 def get_config(c: Any = Depends(get_container)) -> DictConfig:
-    return _provider_value(c.config)
+    return c.config
 
 
 def get_feature_ops(c: Any = Depends(get_container)) -> FeatureOpsService:
-    return _provider_value(c.feature_ops)
+    return FeatureOpsService(
+        repository=c.prediction_repository,
+        embedding_service=c.embedding_client,
+        inference_worker=c.inference_worker,
+        gpu_worker=c.gpu_worker,
+    )
 
 
 def get_artifacts(c: Any = Depends(get_container)) -> ArtifactService:
-    return _provider_value(c.artifacts)
+    return ArtifactService(
+        storage=c.artifact_storage, repository=c.prediction_repository
+    )
 
 
 def get_service_health(c: Any = Depends(get_container)) -> ServiceHealthService:
-    return _provider_value(c.service_health)
+    return c.service_health_service
 
 
 def get_prefect_client(c: Any = Depends(get_container)) -> PrefectClient:
-    return _provider_value(c.prefect_client)
+    return c.prefect_client
 
 
 def _infer_dataset_type(task_type: TaskType) -> DatasetType:

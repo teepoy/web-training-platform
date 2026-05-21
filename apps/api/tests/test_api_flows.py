@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.main import container
+from app.modules.datasets.api.deps import get_label_studio_client
 from tests.conftest import PRESET_ID
 
 
@@ -136,7 +136,9 @@ def test_delete_dataset_removes_dataset_and_models() -> None:
         assert models.status_code == 200
         assert models.json() == []
 
-        container.label_studio_client().delete_project.assert_awaited_once()  # pyright: ignore[reportAttributeAccessIssue]
+        app.dependency_overrides[
+            get_label_studio_client
+        ]().delete_project.assert_awaited_once()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_update_label_space() -> None:

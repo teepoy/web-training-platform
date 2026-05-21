@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
 
 
 SENSOR_ID = "dataset_size_sensor"
@@ -18,7 +18,8 @@ def _available_workflow_type(client: TestClient) -> str:
 
 
 def _load_sensors() -> None:
-    loaded = container.sensor_registry().load()
+    with TestClient(app):
+        loaded = app.state.container.sensor_registry.load()
     assert loaded > 0
 
 

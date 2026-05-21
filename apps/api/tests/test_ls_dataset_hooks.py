@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
 
 
 # ---------------------------------------------------------------------------
@@ -24,11 +25,11 @@ _DS_PAYLOAD = {
 
 
 def _override_ls(mock_ls: MagicMock) -> None:
-    container.label_studio_client.override(lambda: mock_ls)
+    app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
 
 
 def _reset() -> None:
-    container.label_studio_client.reset_override()
+    app.dependency_overrides.pop(get_label_studio_client, None)
 
 
 def test_create_dataset_creates_ls_project() -> None:

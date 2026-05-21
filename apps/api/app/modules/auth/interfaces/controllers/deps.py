@@ -27,9 +27,13 @@ _DEV_ORG_SLUG = "dev-no-auth"
 def _get_session_factory(request: Request | None = None):
     if request is not None:
         return request.app.state.container.session_factory
-    from app.shared.deps import get_container
+    from app.core.config import load_config
+    from app.shared.db.session import create_engine, create_session_factory
 
-    return get_container().session_factory()
+    cfg = load_config()
+    return create_session_factory(
+        create_engine(db_url=str(cfg.db.url), echo=bool(cfg.db.echo))
+    )
 
 
 def _auth_enabled() -> bool:

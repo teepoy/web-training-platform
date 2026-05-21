@@ -69,8 +69,6 @@ def test_task_tracker_detail_contains_raw_and_derived() -> None:
 
 def test_task_tracker_detail_includes_gpu_job_id_from_events() -> None:
     with TestClient(app) as client:
-        from app.main import container
-
         dataset_id = _create_dataset(client, "tracker-gpu-correlation")
         training = client.post(
             "/api/v1/training-jobs",
@@ -80,7 +78,7 @@ def test_task_tracker_detail_includes_gpu_job_id_from_events() -> None:
         task_id = training.json()["id"]
 
         asyncio.run(
-            container.repository().add_event(
+            app.state.container.prediction_repository.add_event(
                 TrainingEvent(
                     job_id=task_id,
                     message="GPU job submitted",
@@ -221,7 +219,6 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
     )
 
     from app.modules.task_tracker.api.deps import get_prefect_client
-    from app.main import container
 
     app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
@@ -234,7 +231,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
             training.raise_for_status()
             task_id = training.json()["id"]
             asyncio.run(
-                container.repository().set_job_external_id(task_id, "flow-run-1")
+                app.state.container.prediction_repository.set_job_external_id(task_id, "flow-run-1")
             )
 
             detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")

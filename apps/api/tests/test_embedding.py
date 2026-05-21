@@ -76,9 +76,7 @@ def test_upsert_and_get_sample_feature() -> None:
         _, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            from app.main import container
-
-            repo = container.repository()
+            repo = app.state.container.prediction_repository
             feature = await repo.upsert_sample_feature(sample_id, FAKE_EMBEDDING, "test-model")
             assert feature.sample_id == sample_id
             assert len(feature.embedding) == 512
@@ -97,9 +95,7 @@ def test_get_sample_feature_returns_none_for_missing() -> None:
     with TestClient(app) as c:
 
         async def _run() -> None:
-            from app.main import container
-
-            repo = container.repository()
+            repo = app.state.container.prediction_repository
             result = await repo.get_sample_feature("does-not-exist-at-all")
             assert result is None
 
@@ -111,9 +107,7 @@ def test_upsert_sample_feature_idempotent() -> None:
         _, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            from app.main import container
-
-            repo = container.repository()
+            repo = app.state.container.prediction_repository
 
             first = [0.1] * 512
             second = [0.9] * 512

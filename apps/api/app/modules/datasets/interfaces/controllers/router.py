@@ -100,9 +100,15 @@ def get_ls_read_repository_optional() -> LsReadRepository | None:
 
 
 def _get_ls_read_repository_direct() -> LsReadRepository:
-    from app.main import container
+    from app.core.config import load_config
+    from app.shared.infrastructure.label_studio.session import (
+        create_ls_engine,
+        create_ls_session_factory,
+    )
 
-    return container.ls_read_repository()
+    cfg = load_config()
+    engine = create_ls_engine(database_url=str(cfg.label_studio.database_url))
+    return LsReadRepository(session_factory=create_ls_session_factory(engine=engine))
 
 
 router = APIRouter(prefix="/api/v1", tags=["datasets"])

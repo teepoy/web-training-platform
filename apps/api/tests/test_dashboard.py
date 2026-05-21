@@ -11,8 +11,9 @@ from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.main import container
+from app.core.config import load_config
 from app.modules.dashboard.application.services.service_health import ServiceHealthService
+from app.shared.deps import get_prefect_client, get_repository, get_service_health
 from tests.conftest import PRESET_ID
 
 
@@ -97,14 +98,17 @@ def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
     embedding_client = AsyncMock()
     embedding_client.health.return_value = True
     service_health = ServiceHealthService(
-        config=container.config(),
+        config=load_config(),
         prefect_client=prefect_client,
         embedding_client=embedding_client,
     )
-
-    container.service_health.override(lambda: service_health)
+    job_repository = AsyncMock()
+    job_repository.list_jobs.return_value = []
     try:
         with TestClient(app) as c:
+            app.dependency_overrides[get_repository] = lambda: job_repository
+            app.dependency_overrides[get_service_health] = lambda: service_health
+            app.dependency_overrides[get_prefect_client] = lambda: prefect_client
             r = c.get("/api/v1/dashboard")
         assert r.status_code == 200
         services = {service["name"]: service for service in r.json()["services"]}
@@ -113,7 +117,9 @@ def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
         assert "gpu-worker" in services
         assert services["embedding"]["status"] == "healthy"
     finally:
-        container.service_health.reset_override()
+        app.dependency_overrides.pop(get_repository, None)
+        app.dependency_overrides.pop(get_service_health, None)
+        app.dependency_overrides.pop(get_prefect_client, None)
 
 
 def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> None:
@@ -123,14 +129,17 @@ def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> No
     embedding_client = AsyncMock()
     embedding_client.health.return_value = True
     service_health = ServiceHealthService(
-        config=container.config(),
+        config=load_config(),
         prefect_client=prefect_client,
         embedding_client=embedding_client,
     )
-
-    container.service_health.override(lambda: service_health)
+    job_repository = AsyncMock()
+    job_repository.list_jobs.return_value = []
     try:
         with TestClient(app) as c:
+            app.dependency_overrides[get_repository] = lambda: job_repository
+            app.dependency_overrides[get_service_health] = lambda: service_health
+            app.dependency_overrides[get_prefect_client] = lambda: prefect_client
             r = c.get("/api/v1/dashboard")
         assert r.status_code == 200
         services = {service["name"]: service for service in r.json()["services"]}
@@ -139,4 +148,6 @@ def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> No
         assert "gpu-worker" in services
         assert services["embedding"]["status"] == "healthy"
     finally:
-        container.service_health.reset_override()
+        app.dependency_overrides.pop(get_repository, None)
+        app.dependency_overrides.pop(get_service_health, None)
+        app.dependency_overrides.pop(get_prefect_client, None)

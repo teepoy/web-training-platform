@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
 from app.shared.api.schemas import DatasetStorageMode
 
 
@@ -207,7 +208,7 @@ def test_sparse_delete_lifecycle() -> None:
         assert ds.status_code == 200
         ds_id = ds.json()["id"]
 
-        ls_mock = container.label_studio_client()
+        ls_mock = app.dependency_overrides[get_label_studio_client]()
         ls_mock.delete_project.reset_mock()  # pyright: ignore[reportAttributeAccessIssue]
 
         deleted = c.delete(f"/api/v1/datasets/{ds_id}")

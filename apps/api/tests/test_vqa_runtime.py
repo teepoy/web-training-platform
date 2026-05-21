@@ -9,7 +9,8 @@ import pytest
 from app.shared.api.schemas import Sample
 from app.shared.api.schemas import Dataset, Model, TaskSpec
 from app.shared.api.schemas import DatasetType, TaskType
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
 from app.modules.presets.registry import PresetRegistry
 from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
 from app.modules.training.infrastructure.runtime.dspy import DspyVqaPredictor, DspyVqaTrainer
@@ -76,7 +77,7 @@ def test_create_vqa_dataset_uses_vqa_label_config() -> None:
         )
         assert r.status_code == 200
 
-        ls_client = container.label_studio_client()
+        ls_client = app.dependency_overrides[get_label_studio_client]()
         assert ls_client.create_project.await_count == 1  # pyright: ignore[reportAttributeAccessIssue]
         args, _ = ls_client.create_project.call_args  # pyright: ignore[reportAttributeAccessIssue]
         label_config = args[1]

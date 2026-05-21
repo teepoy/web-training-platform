@@ -122,7 +122,7 @@ def _mock_ls_client(request):
     _mock_ls.list_annotations = AsyncMock(return_value=[])
     _mock_ls.export_project = AsyncMock(return_value=[])
 
-    from app.main import app, container
+    from app.main import app
     from app.modules.datasets.api.deps import (
         get_label_studio_client as datasets_get_ls_client,
     )
@@ -136,13 +136,10 @@ def _mock_ls_client(request):
     app.dependency_overrides[agent_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
-    container.label_studio_client._instance = _mock_ls
     yield
     app.dependency_overrides.pop(agent_get_ls_client, None)
     app.dependency_overrides.pop(datasets_get_ls_client, None)
     app.dependency_overrides.pop(preview_get_ls_client, None)
-    if container.label_studio_client._instance is _mock_ls:
-        container.label_studio_client.reset()
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -157,7 +154,11 @@ def _mock_embedding_service(request):
         yield
         return
 
-    from app.main import container
+    from app.main import app
+    from app.modules.prediction.api.deps import get_embedding_client
+    from app.modules.datasets.interfaces.controllers.router import (
+        get_embedding_service as datasets_get_embedding_client,
+    )
 
     async def _embed_image(image_bytes: bytes, model_name: str = "openai/clip-vit-base-patch32") -> list[float]:
         size = max(1, len(image_bytes))
@@ -192,9 +193,11 @@ def _mock_embedding_service(request):
     _mock_embedding.classify_batch = AsyncMock(side_effect=_classify_batch)
     _mock_embedding.health = AsyncMock(return_value=True)
 
-    container.embedding_service.override(lambda: _mock_embedding)
+    app.dependency_overrides[get_embedding_client] = lambda: _mock_embedding
+    app.dependency_overrides[datasets_get_embedding_client] = lambda: _mock_embedding
     yield
-    container.embedding_service.reset_override()
+    app.dependency_overrides.pop(get_embedding_client, None)
+    app.dependency_overrides.pop(datasets_get_embedding_client, None)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +221,8 @@ def _mock_inference_worker(request):
         yield
         return
 
-    from app.main import container
+    from app.main import app
+    from app.modules.prediction.api.deps import get_inference_worker
 
     async def _predict_batch(
         *,
@@ -250,9 +254,10 @@ def _mock_inference_worker(request):
     _mock_worker.predict_batch = AsyncMock(side_effect=_predict_batch)
     _mock_worker.embed_batch = AsyncMock(side_effect=_embed_batch)
 
-    container.inference_worker.override(lambda: _mock_worker)
+    app.dependency_overrides[get_inference_worker] = lambda: _mock_worker
+    _patch_flow_container_attr("inference_worker", _mock_worker)
     yield
-    container.inference_worker.reset_override()
+    app.dependency_overrides.pop(get_inference_worker, None)
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +280,8 @@ def _mock_gpu_worker(request):
         yield
         return
 
-    from app.main import container
+    from app.main import app
+    from app.modules.prediction.api.deps import get_gpu_worker
 
     async def _predict_batch(
         *,
@@ -307,9 +313,20 @@ def _mock_gpu_worker(request):
     _mock_gpu.predict_batch = AsyncMock(side_effect=_predict_batch)
     _mock_gpu.embed_batch = AsyncMock(side_effect=_embed_batch)
 
-    container.gpu_worker.override(lambda: _mock_gpu)
+    app.dependency_overrides[get_gpu_worker] = lambda: _mock_gpu
+    _patch_flow_container_attr("gpu_worker", _mock_gpu)
     yield
-    container.gpu_worker.reset_override()
+    app.dependency_overrides.pop(get_gpu_worker, None)
+
+
+def _patch_flow_container_attr(name: str, value: object) -> None:
+    try:
+        import app.modules.prediction.infrastructure.flows.predict_job as predict_job_mod
+
+        if predict_job_mod._app_container_ref is not None:
+            setattr(predict_job_mod._app_container_ref, name, value)
+    except Exception:
+        return
 
 
 # ---------------------------------------------------------------------------

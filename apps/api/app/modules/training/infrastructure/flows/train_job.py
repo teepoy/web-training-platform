@@ -25,19 +25,13 @@ _app_container_ref: Any = None
 
 
 def _sync_app_container_overrides(container: Any) -> None:
-    from app.main import container as app_services
-
-    container.gpu_worker = app_services.gpu_worker()
+    return None
 
 
 async def _with_flow_container() -> tuple[Any, bool]:
-    from app.main import container as app_services
-
     if _app_container_ref is not None:
         _sync_app_container_overrides(_app_container_ref)
         return _app_container_ref, False
-    if app_services.gpu_worker._has_override:
-        return app_services, False
 
     from app.composition import build_flow_container
 
@@ -60,7 +54,7 @@ async def _run_train_job(
     """
     container, should_close = await _with_flow_container()
     gpu_worker_value = container.gpu_worker
-    if callable(gpu_worker_value):
+    if callable(gpu_worker_value) and not hasattr(gpu_worker_value, "submit_train"):
         gpu_worker_value = gpu_worker_value()
     gpu_worker = cast(GpuWorker, gpu_worker_value)
 

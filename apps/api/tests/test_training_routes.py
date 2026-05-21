@@ -7,11 +7,12 @@ Covers:
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.training.api.deps import get_training_orchestrator
 from tests.conftest import PRESET_ID, create_dataset, create_job
 
 
@@ -89,14 +90,14 @@ def test_create_training_job_orchestrator_failure() -> None:
     """When orchestrator.start_job raises, the route returns 502."""
     with TestClient(app) as c:
         dataset_id = create_dataset(c)
-        with patch.object(
-            container.orchestrator(), "start_job",
-            new_callable=AsyncMock, side_effect=RuntimeError("Prefect unreachable"),
-        ):
+        orchestrator = app.state.container.training_orchestrator
+        with patch.object(orchestrator, "start_job", side_effect=RuntimeError("Prefect unreachable")):
+            app.dependency_overrides[get_training_orchestrator] = lambda: orchestrator
             resp = c.post("/api/v1/training-jobs", json={
                 "dataset_id": dataset_id,
                 "preset_id": PRESET_ID,
             })
+            app.dependency_overrides.pop(get_training_orchestrator, None)
         assert resp.status_code == 502
         assert "Prefect unreachable" in resp.json()["detail"]
 
@@ -104,9 +105,9 @@ def test_create_training_job_orchestrator_failure() -> None:
 def test_cancel_training_job_orchestrator_failure() -> None:
     """When orchestrator.cancel_job raises, the route returns 502."""
     with TestClient(app) as c:
-        with patch.object(
-            container.orchestrator(), "cancel_job",
-            new_callable=AsyncMock, side_effect=RuntimeError("connection refused"),
-        ):
+        orchestrator = app.state.container.training_orchestrator
+        with patch.object(orchestrator, "cancel_job", side_effect=RuntimeError("connection refused")):
+            app.dependency_overrides[get_training_orchestrator] = lambda: orchestrator
             resp = c.post("/api/v1/training-jobs/some-id/cancel")
+            app.dependency_overrides.pop(get_training_orchestrator, None)
         assert resp.status_code == 502

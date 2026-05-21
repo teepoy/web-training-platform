@@ -10,13 +10,21 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
+from app.shared.deps import (
+    get_artifacts,
+    get_repository,
+    get_sample_access_factory,
+)
+from app.modules.datasets.interfaces.controllers.router import (
+    get_ls_read_repository_optional,
+)
 
 if TYPE_CHECKING:
     from app.shared.api.schemas import Dataset, Sample, Annotation
@@ -27,12 +35,14 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _make_config() -> MagicMock:
-    cfg = MagicMock()
-    cfg.label_studio.url = "http://fake-ls:8080"
-    cfg.label_studio.api_key = "fake-key"
-    cfg.label_studio.database_url = "postgresql+asyncpg://fake"
-    return cfg
+def _clear_overrides() -> None:
+    for dep in (
+        get_repository,
+        get_sample_access_factory,
+        get_artifacts,
+        get_ls_read_repository_optional,
+    ):
+        app.dependency_overrides.pop(dep, None)
 
 
 def _make_dataset(ls_project_id: str | None = "10") -> "Dataset":
@@ -75,10 +85,6 @@ def _make_annotation(sample_id: str, label: str = "cat") -> "Annotation":
 
 def test_export_with_ls_project() -> None:
     """When dataset has ls_project_id, export uses LsReadRepository to read LS Postgres."""
-    mock_config = _make_config()
-
-    import app.main as main_module
-
     dataset = _make_dataset(ls_project_id="10")
     sample = _make_sample(dataset.id, ls_task_id=101)
 
@@ -123,12 +129,12 @@ def test_export_with_ls_project() -> None:
     sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
-                        with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                            r = c.get(f"/api/v1/exports/{dataset.id}")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
+        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        r = c.get(f"/api/v1/exports/{dataset.id}")
+        _clear_overrides()
 
     assert r.status_code == 200
     body = r.json()
@@ -155,10 +161,6 @@ def test_export_with_ls_project() -> None:
 
 def test_export_no_ls_project_returns_500() -> None:
     """When dataset has no ls_project_id, export returns 500."""
-    mock_config = _make_config()
-
-    import app.main as main_module
-
     dataset = _make_dataset(ls_project_id=None)
 
     repo_mock = AsyncMock()
@@ -168,10 +170,10 @@ def test_export_no_ls_project_returns_500() -> None:
     sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "repository", return_value=repo_mock):
-                with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
-                    r = c.get(f"/api/v1/exports/{dataset.id}")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        r = c.get(f"/api/v1/exports/{dataset.id}")
+        _clear_overrides()
 
     assert r.status_code == 500
     assert "no Label Studio project" in r.json()["detail"]
@@ -184,10 +186,6 @@ def test_export_no_ls_project_returns_500() -> None:
 
 def test_export_ls_db_failure_returns_502() -> None:
     """When LsReadRepository raises, export returns 502 with no fallback."""
-    mock_config = _make_config()
-
-    import app.main as main_module
-
     dataset = _make_dataset(ls_project_id="10")
     sample = _make_sample(dataset.id, ls_task_id=101)
 
@@ -202,11 +200,11 @@ def test_export_ls_db_failure_returns_502() -> None:
     sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
-                        r = c.get(f"/api/v1/exports/{dataset.id}")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        r = c.get(f"/api/v1/exports/{dataset.id}")
+        _clear_overrides()
 
     assert r.status_code == 502
     assert "Label Studio database read failed" in r.json()["detail"]
@@ -219,10 +217,6 @@ def test_export_ls_db_failure_returns_502() -> None:
 
 def test_export_persist_with_ls() -> None:
     """POST /persist with LS project sources data from LS Postgres and persists it."""
-    mock_config = _make_config()
-
-    import app.main as main_module
-
     dataset = _make_dataset(ls_project_id="20")
     sample = _make_sample(dataset.id, ls_task_id=202)
 
@@ -257,12 +251,12 @@ def test_export_persist_with_ls() -> None:
     sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
 
     with TestClient(app) as c:
-        with patch.object(main_module.container, "config", return_value=mock_config):
-            with patch.object(main_module.container, "ls_read_repository", return_value=ls_read_mock):
-                with patch.object(main_module.container, "repository", return_value=repo_mock):
-                    with patch.object(main_module.container, "sample_access_factory", return_value=sample_access_factory_mock):
-                        with patch.object(main_module.container, "artifacts", return_value=artifacts_mock):
-                            r = c.post(f"/api/v1/exports/{dataset.id}/persist")
+        app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
+        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        r = c.post(f"/api/v1/exports/{dataset.id}/persist")
+        _clear_overrides()
 
     assert r.status_code == 200
     body = r.json()

@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
+from app.modules.sensors.api.deps import get_prefect_client
 
 
 SENSOR_ID = "dataset_size_sensor"
@@ -18,7 +19,8 @@ def _workflow_type(client: TestClient) -> str:
 
 
 def _load_sensors() -> None:
-    loaded = container.sensor_registry().load()
+    with TestClient(app):
+        loaded = app.state.container.sensor_registry.load()
     assert loaded > 0
 
 
@@ -42,8 +44,7 @@ def test_matching_event_triggers_flow_run() -> None:
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(lambda: prefect)
-    container.sensor_dispatch.reset()
+    app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
         with TestClient(app) as client:
             _create_subscription(client, filter_config={"dataset_id": "ds-match"})
@@ -55,8 +56,7 @@ def test_matching_event_triggers_flow_run() -> None:
                 },
             )
     finally:
-        container.prefect_client.reset_override()
-        container.sensor_dispatch.reset()
+        app.dependency_overrides.pop(get_prefect_client, None)
 
     assert response.status_code == 200, response.text
     assert response.json()["triggered"] == 1
@@ -67,8 +67,7 @@ def test_non_matching_filter_does_not_trigger_flow_run() -> None:
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(lambda: prefect)
-    container.sensor_dispatch.reset()
+    app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
         with TestClient(app) as client:
             _create_subscription(client, filter_config={"dataset_id": "ds-match"})
@@ -80,8 +79,7 @@ def test_non_matching_filter_does_not_trigger_flow_run() -> None:
                 },
             )
     finally:
-        container.prefect_client.reset_override()
-        container.sensor_dispatch.reset()
+        app.dependency_overrides.pop(get_prefect_client, None)
 
     assert response.status_code == 200, response.text
     assert response.json()["triggered"] == 0
@@ -95,8 +93,7 @@ def test_failing_subscription_dispatch_does_not_abort_others() -> None:
         RuntimeError("prefect failed"),
         {"id": "flow-run-2"},
     ]
-    container.prefect_client.override(lambda: prefect)
-    container.sensor_dispatch.reset()
+    app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
         with TestClient(app) as client:
             _create_subscription(client, filter_config={"dataset_id": "ds-shared"})
@@ -109,8 +106,7 @@ def test_failing_subscription_dispatch_does_not_abort_others() -> None:
                 },
             )
     finally:
-        container.prefect_client.reset_override()
-        container.sensor_dispatch.reset()
+        app.dependency_overrides.pop(get_prefect_client, None)
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -123,8 +119,7 @@ def test_event_post_updates_checkpoint_and_subscriptions_remain_readable() -> No
     _load_sensors()
     prefect = AsyncMock()
     prefect.create_flow_run_from_deployment.return_value = {"id": "flow-run-1"}
-    container.prefect_client.override(lambda: prefect)
-    container.sensor_dispatch.reset()
+    app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
         with TestClient(app) as client:
             created = _create_subscription(client, filter_config={"dataset_id": "ds-checkpoint"})
@@ -138,8 +133,7 @@ def test_event_post_updates_checkpoint_and_subscriptions_remain_readable() -> No
             )
             list_response = client.get(f"/api/v1/sensors/{SENSOR_ID}/subscriptions")
     finally:
-        container.prefect_client.reset_override()
-        container.sensor_dispatch.reset()
+        app.dependency_overrides.pop(get_prefect_client, None)
 
     assert event_response.status_code == 200, event_response.text
     assert list_response.status_code == 200, list_response.text

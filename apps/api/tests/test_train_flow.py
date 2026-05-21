@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.main import services as app_services
 from app.shared.infrastructure.workers.gpu_worker import GpuWorkerUnavailableError
 
 
@@ -48,15 +48,23 @@ def _mock_gpu_worker(*, submit_response=None, status_sequence=None):
 
 def _install_gpu_mock(mock_gpu):
     """Override the GPU worker provider in the app services."""
-    app_services.gpu_worker.override(lambda: mock_gpu)
+    import app.modules.training.infrastructure.flows.train_job as train_job_mod
+
+    class FlowContainer:
+        gpu_worker: Any
+
+        pass
+
+    flow_container = FlowContainer()
+    flow_container.gpu_worker = mock_gpu
+    train_job_mod._app_container_ref = flow_container
 
 
 def _remove_gpu_mock():
     """Reset the GPU worker provider override."""
-    try:
-        app_services.gpu_worker.reset_override()
-    except Exception:
-        pass
+    import app.modules.training.infrastructure.flows.train_job as train_job_mod
+
+    train_job_mod._app_container_ref = None
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app, container
+from app.main import app
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +619,7 @@ class TestAgentChat:
             _create_sample(c, dataset_id)
 
             # Patch both the config check AND the LLM call
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -707,7 +707,7 @@ class TestAgentChat:
             dataset_id = _create_dataset(c, name="chat-tool-ds")
             _create_sample(c, dataset_id)
 
-            cfg = container.config()
+            cfg = app.state.container.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 

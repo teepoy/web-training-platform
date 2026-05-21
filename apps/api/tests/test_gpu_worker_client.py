@@ -590,18 +590,20 @@ def test_gpu_worker_in_container() -> None:
     Opts out of the ``_mock_gpu_worker`` autouse fixture so the real
     provider is resolved (not the MagicMock mock).
     """
-    from app.main import container
+    from app.composition import build_app_container
+    from app.core.config import load_config
 
-    client = container.gpu_worker()
+    container = build_app_container(load_config())
+    client = container.gpu_worker
     assert isinstance(client, GpuWorkerClient)
 
 
 def test_gpu_worker_container_uses_resolved_url() -> None:
     """Container gpu_worker provider uses _resolve_gpu_worker_url."""
-    from app.main import container
     from app.core.config import _resolve_gpu_worker_url
+    from app.core.config import load_config
 
-    cfg = container.config()
+    cfg = load_config()
     resolved = _resolve_gpu_worker_url(cfg)
     # In test profile, gpu_worker.base_url is absent and inference.base_url
     # is also absent from test.yaml, so resolved should be "".

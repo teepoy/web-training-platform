@@ -19,13 +19,7 @@ _app_container_ref: Any = None
 
 
 def _sync_app_container_overrides(container: Any) -> None:
-    from app.main import container as app_services
-
-    container.artifact_storage = app_services.artifact_storage()
-    container.prediction_repository = app_services.repository()
-    container.embedding_client = app_services.embedding_service()
-    container.inference_worker = app_services.inference_worker()
-    container.gpu_worker = app_services.gpu_worker()
+    return None
 
 
 async def _with_flow_container():

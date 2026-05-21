@@ -24,12 +24,12 @@ from app.core.config import load_config
 from app.shared.db.base import Base
 from app.shared.db.session import create_engine
 from app.shared.api.schemas import Organization, User
-from app.main import app, container
+from app.main import app
+from app.modules.datasets.api.deps import get_label_studio_client
 
 
 def reset_database() -> None:
     load_config.cache_clear()
-    container.reset_singletons()
 
     cfg = load_config()
     engine = create_engine(str(cfg.db.url))
@@ -68,14 +68,13 @@ def install_overrides() -> None:
     mock_ls.list_tasks = AsyncMock(return_value=([], 0))
     mock_ls.list_annotations = AsyncMock(return_value=[])
     mock_ls.export_project = AsyncMock(return_value=[])
-    container.label_studio_client.override(lambda: mock_ls)
+    app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
 
 
 def clear_overrides() -> None:
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_current_org, None)
-    container.label_studio_client.reset_override()
-    container.reset_singletons()
+    app.dependency_overrides.pop(get_label_studio_client, None)
     load_config.cache_clear()
 
 

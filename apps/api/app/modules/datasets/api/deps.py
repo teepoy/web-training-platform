@@ -26,13 +26,7 @@ def get_sample_access_factory(request: Request) -> SampleAccessFactory:
 
 
 def get_label_studio_client(request: Request) -> LabelStudioClient:
-    state_client = request.app.state.container.label_studio_client
-    from app.main import container
-
-    legacy_client = container.label_studio_client()
-    if legacy_client is not state_client:
-        return legacy_client
-    return state_client
+    return request.app.state.container.label_studio_client
 
 
 def get_artifact_storage(request: Request) -> ArtifactStorage:

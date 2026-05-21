@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, TypeAlias
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import _resolve_gpu_worker_url
 from app.modules.presets.registry import PresetRegistry
@@ -16,6 +16,7 @@ from app.modules.datasets.application.services.dataset_payload_store import (
 from app.modules.sensors.infrastructure.repositories.repository import (
     SensorRepositoryImpl,
 )
+from app.modules.sensors.domain.entities.registry import SensorRegistry
 from app.modules.settings.infrastructure.repositories.repository import (
     InMemorySettingsRepository,
 )
@@ -71,6 +72,7 @@ TrainingExecutionEngine: TypeAlias = (
 @dataclass
 class AppContainer:
     config: AppConfig
+    db_engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     artifact_storage: ArtifactStorage
     label_studio_client: LabelStudioClient
@@ -83,6 +85,7 @@ class AppContainer:
     notification_sink: WebhookNotificationSink
     training_engine: TrainingExecutionEngine
     training_orchestrator: TrainingOrchestrator
+    sensor_registry: SensorRegistry
     sensor_repository: SensorRepositoryImpl
     settings_repository: InMemorySettingsRepository
     task_tracker_repository: SqlRepository
@@ -102,8 +105,13 @@ class AppContainer:
     session_store: SessionStore
 
     async def close(self) -> None:
-        await self.prefect_client.close()
-        self.embedding_client.close()
+        prefect_close = getattr(self.prefect_client, "close", None)
+        if prefect_close is not None:
+            await prefect_close()
+        embedding_close = getattr(self.embedding_client, "close", None)
+        if embedding_close is not None:
+            embedding_close()
+        await self.db_engine.dispose()
 
 
 def _build_artifact_storage(cfg: AppConfig) -> ArtifactStorage:
@@ -192,6 +200,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
     )
     return AppContainer(
         config=cfg,
+        db_engine=db_engine,
         session_factory=session_factory,
         artifact_storage=artifact_storage,
         label_studio_client=LabelStudioClient(
@@ -220,6 +229,10 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             notification_sink=notification_sink,
             repository=prediction_repository,
             artifact_service=artifact_service,
+        ),
+        sensor_registry=SensorRegistry(
+            sensors_dir=str(cfg.sensors.dir),
+            strict=bool(cfg.sensors.strict),
         ),
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
         settings_repository=InMemorySettingsRepository(),
