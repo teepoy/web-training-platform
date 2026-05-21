@@ -68,7 +68,6 @@ class PreviewService:
 
         session.start_persist()
 
-        from app.modules.datasets.domain import schemas as _schemas  # noqa: F401 — triggers schema registration
         from app.shared.infrastructure.label_studio.client import (
             LabelStudioClient as _LSC,
         )
