@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from app.modules.sensors.infrastructure.repositories.repository import SensorRepository
+from app.modules.sensors.domain.repository import SensorRepository
 from app.shared.domain.protocols import PrefectClient
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ class DispatchSummary:
 
 class SensorDispatchService:
     def __init__(
-        self, sensor_repository: SensorRepository, prefect_client: PrefectClient
+        self, repository: SensorRepository, prefect_client: PrefectClient
     ) -> None:
-        self._repo = sensor_repository
+        self._repo = repository
         self._prefect_client = prefect_client
 
     async def dispatch(

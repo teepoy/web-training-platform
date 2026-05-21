@@ -26,3 +26,10 @@
 - Location: apps/api/conftest.py
 - Existing tests clean: yes
 - Leak detection works: yes
+
+## [T4 complete] Sensors pilot pattern established
+- SensorRepository Protocol location: app/modules/sensors/domain/repository.py
+- deps.py pattern: get_sensor_repository reads request.app.state.container.sensor_repository
+- AppContainer.sensor_repository field added: yes
+- Coexistence with AppServices: yes (AppServices still present, app.state.container added to lifespan)
+- Any gotchas: Existing tests still override the legacy AppServices prefect_client; lifespan mirrors that override into the pilot AppContainer so sensor dispatch tests remain compatible during the coexistence period. The required deps.py snippet needed an additional PrefectClient dependency because SensorDispatchService still requires Prefect to create flow runs.

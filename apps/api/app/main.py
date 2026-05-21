@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import compile_path
 
+from app.composition import build_app_container
 from app.modules.auth.interfaces.controllers.deps import (
     get_current_org,
     get_current_user,
@@ -31,7 +32,9 @@ from app.shared.api.schemas import DEFAULT_ORG_ID, Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
 from app.modules.presets.registry import PresetRegistry
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
-from app.modules.sensors.infrastructure.repositories.repository import SensorRepository
+from app.modules.sensors.infrastructure.repositories.repository import (
+    SensorRepositoryImpl,
+)
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.sensors.domain.entities.registry import SensorRegistry
 from app.shared.application.artifacts import ArtifactService
@@ -82,6 +85,17 @@ from app.shared.infrastructure.prefect import get_prefect, init_prefect
 from app.shared.infrastructure.storage import get_storage, init_storage
 
 _logger = logging.getLogger(__name__)
+
+
+def _build_state_container(api: FastAPI, cfg: Any) -> None:
+    try:
+        api.state.container = build_app_container(cfg)
+    except RuntimeError:
+        if not container.config._has_override:
+            raise
+        api.state.container = build_app_container(load_config())
+    if container.prefect_client._has_override:
+        api.state.container.prefect_client = container.prefect_client()
 
 
 class SingletonProvider:
@@ -176,11 +190,11 @@ class AppServices:
             )
         )
         self.sensor_repository = SingletonProvider(
-            lambda: SensorRepository(session_factory=self.session_factory())
+            lambda: SensorRepositoryImpl(session_factory=self.session_factory())
         )
         self.sensor_dispatch = SingletonProvider(
             lambda: SensorDispatchService(
-                sensor_repository=self.sensor_repository(),
+                repository=self.sensor_repository(),
                 prefect_client=self.prefect_client(),
             )
         )
@@ -366,7 +380,7 @@ def _register_legacy_provider_overrides(api: FastAPI) -> None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(api: FastAPI):
     cfg = container.config()
     if not container.artifact_storage._has_override:
         try:
@@ -374,12 +388,14 @@ async def lifespan(_: FastAPI):
         except RuntimeError:
             if not container.config._has_override:
                 raise
+            init_storage(load_config())
     if not container.label_studio_client._has_override:
         init_label_studio(cfg)
     if not container.llm_client._has_override:
         init_llm(cfg)
     if not container.prefect_client._has_override:
         init_prefect(cfg)
+    _build_state_container(api, cfg)
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
 

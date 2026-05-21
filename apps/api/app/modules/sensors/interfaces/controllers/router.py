@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.modules.sensors.infrastructure.repositories.repository import SensorRepository
-from app.modules.sensors.domain.entities.registry import SensorRegistry
+from app.modules.sensors.api.deps import (
+    get_sensor_dispatch_service,
+    get_sensor_repository,
+)
 from app.modules.sensors.application.services.sensor_dispatch import (
     SensorDispatchService,
 )
-from app.shared.deps import (  # pyright: ignore[reportMissingImports]
-    get_sensor_dispatch,
-    get_sensor_registry,
-    get_sensor_repository,
-)
+from app.modules.sensors.domain.entities.registry import SensorRegistry
+from app.modules.sensors.domain.repository import SensorRepository
+from app.shared.deps import get_sensor_registry
 
 router = APIRouter(prefix="/api/v1", tags=["sensors"])
 
@@ -64,7 +64,7 @@ class SensorEventIngestResponse(BaseModel):
 
 @router.get("/sensors", response_model=list[SensorDefinitionResponse])
 async def list_sensors(
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
 ) -> list[SensorDefinitionResponse]:
     return [
         SensorDefinitionResponse(**sensor.model_dump())
@@ -78,8 +78,8 @@ async def list_sensors(
 )
 async def list_sensor_subscriptions(
     sensor_id: str,
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
-    sensor_repository: SensorRepository = Depends(get_sensor_repository),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
+    sensor_repository: Annotated[SensorRepository, Depends(get_sensor_repository)],
 ) -> list[SensorSubscriptionResponse]:
     _get_sensor_or_404(sensor_registry, sensor_id)
     subscriptions = await sensor_repository.list_subscriptions(sensor_id)
@@ -96,8 +96,8 @@ async def list_sensor_subscriptions(
 async def create_sensor_subscription(
     sensor_id: str,
     payload: CreateSubscriptionRequest,
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
-    sensor_repository: SensorRepository = Depends(get_sensor_repository),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
+    sensor_repository: Annotated[SensorRepository, Depends(get_sensor_repository)],
 ) -> SensorSubscriptionResponse:
     sensor = _get_sensor_or_404(sensor_registry, sensor_id)
     if payload.workflow_type not in sensor.available_triggers:
@@ -122,8 +122,8 @@ async def update_sensor_subscription(
     sensor_id: str,
     sub_id: str,
     payload: UpdateSubscriptionRequest,
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
-    sensor_repository: SensorRepository = Depends(get_sensor_repository),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
+    sensor_repository: Annotated[SensorRepository, Depends(get_sensor_repository)],
 ) -> SensorSubscriptionResponse:
     _get_sensor_or_404(sensor_registry, sensor_id)
     existing = await sensor_repository.get_subscription(sub_id)
@@ -143,8 +143,8 @@ async def update_sensor_subscription(
 async def delete_sensor_subscription(
     sensor_id: str,
     sub_id: str,
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
-    sensor_repository: SensorRepository = Depends(get_sensor_repository),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
+    sensor_repository: Annotated[SensorRepository, Depends(get_sensor_repository)],
 ) -> dict[str, bool]:
     _get_sensor_or_404(sensor_registry, sensor_id)
     existing = await sensor_repository.get_subscription(sub_id)
@@ -159,9 +159,12 @@ async def delete_sensor_subscription(
 @router.post("/sensors/events", response_model=SensorEventIngestResponse)
 async def ingest_sensor_events(
     batch: SensorEventBatch,
-    sensor_registry: SensorRegistry = Depends(get_sensor_registry),
-    sensor_repository: SensorRepository = Depends(get_sensor_repository),
-    sensor_dispatch: SensorDispatchService = Depends(get_sensor_dispatch),
+    sensor_registry: Annotated[SensorRegistry, Depends(get_sensor_registry)],
+    sensor_repository: Annotated[SensorRepository, Depends(get_sensor_repository)],
+    sensor_dispatch: Annotated[
+        SensorDispatchService,
+        Depends(get_sensor_dispatch_service),
+    ],
 ) -> SensorEventIngestResponse:
     _get_sensor_or_404(sensor_registry, batch.sensor_id)
     summary = await sensor_dispatch.dispatch(batch.sensor_id, batch.events)

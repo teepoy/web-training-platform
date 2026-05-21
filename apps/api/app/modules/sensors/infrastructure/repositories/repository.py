@@ -11,7 +11,7 @@ from app.modules.sensors.domain.entities.models import (
 )
 
 
-class SensorRepository:
+class SensorRepositoryImpl:
     def __init__(self, session_factory: Any) -> None:
         self._session_factory = session_factory
 
@@ -34,7 +34,7 @@ class SensorRepository:
         self,
         sensor_id: str,
         workflow_type: str,
-        filter_config: dict,
+        filter_config: dict[str, Any],
         enabled: bool = True,
     ) -> SensorSubscription:
         async with self._session_factory() as session:
@@ -53,7 +53,7 @@ class SensorRepository:
         self,
         subscription_id: str,
         *,
-        filter_config: dict | None = None,
+        filter_config: dict[str, Any] | None = None,
         enabled: bool | None = None,
     ) -> SensorSubscription | None:
         async with self._session_factory() as session:
@@ -85,7 +85,7 @@ class SensorRepository:
             return self._checkpoint_from_row(row)
 
     async def upsert_checkpoint(
-        self, sensor_id: str, watermark: dict
+        self, sensor_id: str, watermark: dict[str, Any]
     ) -> SensorCheckpoint:
         async with self._session_factory() as session:
             row = await session.merge(
@@ -114,3 +114,6 @@ class SensorRepository:
             watermark=row.watermark,
             updated_at=row.updated_at,
         )
+
+
+SensorRepository = SensorRepositoryImpl

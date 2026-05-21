@@ -1,0 +1,11 @@
+GET /api/v1/sensors
+[{"id":"dataset_size_sensor","name":"Dataset Size Sensor","description":"Polls dataset sample counts and emits events when count changes","cron":"*/5 * * * *","filter_schema":{"type":"object","properties":{"dataset_id":{"type":"string","description":"Filter to a specific dataset ID"},"min_sample_count":{"type":"integer","description":"Only trigger when sample count exceeds this threshold"}},"additionalProperties":false},"available_triggers":["train","predict"]},{"id":"timer_sensor","name":"Timer Sensor","description":"Emits timestamped events on a configurable schedule — a minimal example sensor","cron":"* * * * *","filter_schema":{"type":"object","properties":{"year":{"type":"integer","description":"Filter to a specific year"},"month":{"type":"integer","description":"Filter to a specific month (1-12)"},"day":{"type":"integer","description":"Filter to a specific day of month (1-31)"},"hour":{"type":"integer","description":"Filter to a specific hour (0-23)"},"minute":{"type":"integer","description":"Filter to a specific minute (0-59)"},"weekday":{"type":"integer","description":"Filter to a specific day of week (0=Monday, 6=Sunday)"}},"additionalProperties":false},"available_triggers":["train","predict"]}]
+
+POST /api/v1/sensors/dataset_size_sensor/subscriptions
+{"id":"913bad88-7f5d-4d9b-9907-9f2442ccea6e","sensor_id":"dataset_size_sensor","workflow_type":"train","filter_config":{"dataset_id":"curl-ds"},"enabled":true,"created_at":"2026-05-21T14:23:50.093411","updated_at":"2026-05-21T14:23:50.093415"}
+
+GET /api/v1/sensors/dataset_size_sensor/subscriptions
+[{"id":"913bad88-7f5d-4d9b-9907-9f2442ccea6e","sensor_id":"dataset_size_sensor","workflow_type":"train","filter_config":{"dataset_id":"curl-ds"},"enabled":true,"created_at":"2026-05-21T14:23:50.093411","updated_at":"2026-05-21T14:23:50.093415"}]
+
+POST /api/v1/sensors/events
+{"dispatched":0,"triggered":0,"errors":1}

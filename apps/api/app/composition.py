@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import _resolve_gpu_worker_url
 from app.modules.presets.registry import PresetRegistry
+from app.modules.sensors.infrastructure.repositories.repository import (
+    SensorRepositoryImpl,
+)
 from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
 from app.modules.training.infrastructure.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
@@ -49,6 +52,7 @@ class AppContainer:
     kubeflow_client: KubeflowClient | None
     notification_sink: WebhookNotificationSink
     training_engine: TrainingExecutionEngine
+    sensor_repository: SensorRepositoryImpl
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -156,6 +160,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             prefect_client=prefect_client,
             kubeflow_client=kubeflow_client,
         ),
+        sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
     )
 
 
