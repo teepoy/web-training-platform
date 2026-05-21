@@ -1,4 +1,5 @@
 import base64
+from typing import Annotated
 from unittest.mock import Mock
 
 import httpx
@@ -26,14 +27,18 @@ from app.modules.models.interfaces.dtos.schemas import (
 )
 from app.modules.models.application.services.model_service import ModelService
 from app.shared.application.compatibility import UPLOAD_TEMPLATE_DEFINITIONS
+from app.modules.models.api.deps import get_model_service
 from app.shared.deps import (  # pyright: ignore[reportMissingImports]
     get_artifact_storage,
     get_config,
-    get_model_service,
 )
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
 router = APIRouter(prefix="/api/v1", tags=["models"])
+
+ModelServiceDep = Annotated[ModelService, Depends(get_model_service)]
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 
 
 def _model_to_response(model) -> ModelResponse:
@@ -56,11 +61,11 @@ def _model_to_response(model) -> ModelResponse:
 
 @router.get("/models", response_model=list[ModelResponse])
 async def list_models(
-    model_service: ModelService = Depends(get_model_service),
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
     dataset_id: str | None = Query(default=None),
     job_id: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
 ) -> list[ModelResponse]:
     models = await model_service.list_models(
         org_id=org.id,
@@ -73,9 +78,9 @@ async def list_models(
 @router.get("/models/{model_id}", response_model=ModelResponse)
 async def get_model(
     model_id: str,
-    model_service: ModelService = Depends(get_model_service),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> ModelResponse:
     model = await model_service.get_model(model_id, org_id=org.id)
     return _model_to_response(model)
@@ -84,9 +89,9 @@ async def get_model(
 @router.delete("/models/{model_id}", status_code=204)
 async def delete_model(
     model_id: str,
-    model_service: ModelService = Depends(get_model_service),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> Response:
     await model_service.delete_model(model_id, org_id=org.id)
     return Response(status_code=204)
@@ -95,9 +100,9 @@ async def delete_model(
 @router.get("/models/{model_id}/download")
 async def download_model(
     model_id: str,
-    model_service: ModelService = Depends(get_model_service),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> Response:
     data, filename = await model_service.download_model(model_id, org_id=org.id)
     return Response(
@@ -109,11 +114,11 @@ async def download_model(
 
 @router.post("/models/upload", response_model=ModelResponse)
 async def upload_model(
-    model_service: ModelService = Depends(get_model_service),
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
     file: UploadFile = File(...),
     metadata: str = Form(...),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
 ) -> ModelResponse:
     model = await model_service.upload_model(
         file=file,
@@ -125,8 +130,8 @@ async def upload_model(
 
 @router.get("/model-upload-templates", response_model=list[ModelUploadTemplateResponse])
 async def list_model_upload_templates(
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
 ) -> list[ModelUploadTemplateResponse]:
     return [
         ModelUploadTemplateResponse(
@@ -156,9 +161,9 @@ async def list_model_upload_templates(
 
 @router.get("/images/resolve")
 async def resolve_image(
+    cfg: Annotated[DictConfig, Depends(get_config)],
+    storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
     uri: str = Query(...),
-    cfg: DictConfig = Depends(get_config),
-    storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> Response:
     if uri.startswith("http://") or uri.startswith("https://"):
         ls_url = str(cfg.label_studio.url).rstrip("/")

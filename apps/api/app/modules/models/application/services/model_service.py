@@ -3,25 +3,20 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 
 from app.shared.api.schemas import ArtifactRef, Model
 from app.shared.application.compatibility import validate_upload_metadata
-
-if TYPE_CHECKING:
-    from app.modules.models.infrastructure.repositories.repository import (
-        ModelArtifactRepository,
-    )
+from app.modules.models.domain.repository import ModelRepository
 from app.shared.domain.protocols import ArtifactStorage
 
 
 class ModelService:
     def __init__(
         self,
-        repository: ModelArtifactRepository,
+        repository: ModelRepository,
         artifact_storage: ArtifactStorage,
     ) -> None:
         self.repository = repository

@@ -93,6 +93,7 @@ def _build_state_container(api: FastAPI, cfg: Any) -> None:
         api.state.container = build_app_container(load_config())
     if container.prefect_client._has_override:
         api.state.container.prefect_client = container.prefect_client()
+    api.state.container.artifact_storage = container.artifact_storage()
 
 
 class SingletonProvider:

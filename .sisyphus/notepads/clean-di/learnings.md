@@ -73,3 +73,12 @@
 - Response shape: unchanged (DashboardResponse contract preserved)
 - Gotcha: Annotated dep (DashboardServiceDep) must come BEFORE params with defaults in handler signature, otherwise Python raises "parameter without a default follows parameter with a default" SyntaxError
 - task_tracker_repository (SqlRepository) reused as JobRepository — no new AppContainer field needed for the repo
+
+## [T11 complete] Models module migrated
+- ModelRepository Protocol location: app/modules/models/domain/repository.py
+- Methods: list_models, get_model, delete_artifact, add_artifacts
+- deps.py: app/modules/models/api/deps.py — get_model_service reads container.model_repository + container.artifact_storage
+- AppContainer.model_repository field added: yes (ModelArtifactRepository)
+- Router: Annotated type aliases (ModelServiceDep, CurrentUserDep, CurrentOrgDep) used throughout
+- Critical gotcha: AppContainer creates a fresh InMemoryArtifactStorage separate from legacy AppServices. When the new deps.py used container.artifact_storage, uploads stored to a different instance than what PredictionService (still on legacy container) reads from. Fix: always sync artifact_storage from legacy to new container in _build_state_container (unconditional, not just on override). This is the first module using artifact_storage — future modules with storage deps must be aware of this coexistence issue.
+- Router prefix: kept prefix="/api/v1" (existing pattern for this router)

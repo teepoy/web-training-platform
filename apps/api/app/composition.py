@@ -37,6 +37,9 @@ from app.shared.infrastructure.workers.inference_worker import InferenceWorkerCl
 from app.modules.dashboard.application.services.service_health import (
     ServiceHealthService,
 )
+from app.modules.models.infrastructure.repositories.repository import (
+    ModelArtifactRepository,
+)
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -63,6 +66,7 @@ class AppContainer:
     settings_repository: InMemorySettingsRepository
     task_tracker_repository: SqlRepository
     service_health_service: ServiceHealthService
+    model_repository: ModelArtifactRepository
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -180,6 +184,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
                 grpc_target=str(cfg.embedding.grpc_target)
             ),
         ),
+        model_repository=ModelArtifactRepository(session_factory=session_factory),
     )
 
 
