@@ -22,12 +22,11 @@ from app.modules.training.interfaces.dtos.schemas import (
     CreateTrainingJobRequest,
     MarkLeftResponse,
 )
-from app.modules.presets.registry import PresetRegistry
+from app.modules.presets.api.deps import PresetRegistryDep
 from app.modules.training.application.services.orchestrator import TrainingOrchestrator
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.deps import (
     get_orchestrator,
-    get_preset_registry,
     get_repository,
     get_sample_access_factory,
 )
@@ -39,9 +38,9 @@ router = APIRouter(prefix="/api/v1", tags=["training"])
 
 @router.get("/training-presets")
 async def list_presets(
+    registry: PresetRegistryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    registry: PresetRegistry = Depends(get_preset_registry),
 ) -> list[dict]:
     return [registry.preset_to_api_dict(p) for p in registry.list_presets()]
 
@@ -49,9 +48,9 @@ async def list_presets(
 @router.get("/training-presets/{preset_id}")
 async def get_preset(
     preset_id: str,
+    registry: PresetRegistryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    registry: PresetRegistry = Depends(get_preset_registry),
 ) -> dict:
     spec = registry.get_preset(preset_id)
     if spec is None:
@@ -62,11 +61,11 @@ async def get_preset(
 @router.post("/training-jobs", response_model=TrainingJob)
 async def create_training_job(
     payload: CreateTrainingJobRequest,
+    registry: PresetRegistryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: SqlRepository = Depends(get_repository),
     sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    registry: PresetRegistry = Depends(get_preset_registry),
     orchestrator: TrainingOrchestrator = Depends(get_orchestrator),
 ) -> TrainingJob:
     dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)

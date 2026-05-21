@@ -27,7 +27,7 @@ from app.modules.models.application.services.model_service import ModelService
 from app.modules.prediction.application.services.prediction_orchestrator import (
     PredictionOrchestrator,
 )
-from app.modules.presets.registry import PresetRegistry
+from app.modules.presets.api.deps import PresetRegistryDep
 from app.modules.schedules.application.services.scheduler import SchedulerService
 from app.modules.training.application.services.orchestrator import TrainingOrchestrator
 from app.shared.db.sql_repository import SqlRepository
@@ -37,7 +37,6 @@ from app.shared.deps import (
     get_model_service,
     get_orchestrator,
     get_prediction_orchestrator,
-    get_preset_registry,
     get_repository,
     get_scheduler_service,
     get_session_store,
@@ -146,6 +145,7 @@ async def export_surface_state(
 @router.post("/agent/chat")
 async def global_agent_chat(
     body: GlobalChatRequest,
+    preset_registry: PresetRegistryDep,
     current_user: UserORM = Depends(get_current_user),
     cfg: DictConfig = Depends(get_config),
     repo: SqlRepository = Depends(get_repository),
@@ -157,7 +157,6 @@ async def global_agent_chat(
     ),
     scheduler_service: SchedulerService = Depends(get_scheduler_service),
     model_service: ModelService = Depends(get_model_service),
-    preset_registry: PresetRegistry = Depends(get_preset_registry),
     label_studio_client: LabelStudioClient = Depends(get_label_studio_client),
 ):
     if not cfg.llm.api_key:

@@ -67,6 +67,7 @@ class AppContainer:
     task_tracker_repository: SqlRepository
     service_health_service: ServiceHealthService
     model_repository: ModelArtifactRepository
+    preset_registry: PresetRegistry
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -185,6 +186,10 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             ),
         ),
         model_repository=ModelArtifactRepository(session_factory=session_factory),
+        preset_registry=PresetRegistry(
+            presets_dir=str(cfg.presets.dir),
+            strict=bool(cfg.presets.strict),
+        ),
     )
 
 
