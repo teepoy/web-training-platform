@@ -7,16 +7,16 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 ```text
 ./
 ├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
-├── apps/api/app/flows/ # Prefect flow definitions and serve entrypoint
+├── apps/api/app/modules/ # Domain-oriented backend modules (routes, services, flows)
+├── apps/api/app/shared/ # Shared backend dependencies, DB, generated models, infrastructure
+├── apps/api/app/flows/ # Legacy Prefect flow definitions and serve entrypoint
 ├── apps/api/app/routers/  # Backend extension routes — explicit registry.py
-├── apps/web/           # Vue 3 SPA — routes, API client, views
+├── apps/web/           # Vue 3 SPA
+├── apps/web/src/app/   # Vue bootstrap, router, app shell, widget registrations
+├── apps/web/src/modules/ # Domain-oriented frontend modules
+├── apps/web/src/shared/ # Shared Vue components, composables, API client, widget SDK
 ├── apps/web/.storybook/ # Storybook config + mock helpers
-├── libs/web-ui/src/components/sample-browser/ # Shared virtualized browser core
-├── apps/web/src/core/  # Singleton widget registry
-├── apps/web/src/registrations/  # Frontend widget descriptors (one subdirectory per widget)
 ├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
-├── libs/widget-sdk/    # @platform/widget-sdk — TypeScript widget contract types & factories
-├── libs/web-ui/        # @platform/web-ui — shared Vue/Naive UI components and composables
 ├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
 ├── infra/k8s/          # minikube/kubeflow manifests
 ├── infra/compose/      # docker compose smoke stack
@@ -51,10 +51,8 @@ Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK
 | Ensure mock datasets    | `make ensure-mock-datasets`                         | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation)                    |
 | Compose dev entrypoint  | `make updev`                                        | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server                               |
 
-| Widget SDK tests | `pnpm test:plugin-sdk` | vitest in `libs/widget-sdk/` (20 tests) |
-| Web UI package tests | `pnpm test:web-ui` | vitest in `libs/web-ui/` |
-| Widget integration tests | `pnpm test:plugins` | vitest for widget registrations |
-| Build widget SDK | `pnpm build:plugin-sdk` | tsup build of `@platform/widget-sdk` |
+| Web widget/shared tests | `pnpm --dir apps/web test:widgets` | vitest specs co-located under `apps/web/src/` |
+| Widget integration tests | `pnpm test:plugins` | vitest for widget registrations, if script is present |
 | **Storybook** | `pnpm storybook` | Widget component stories on port 6006 |
 | Build Storybook | `pnpm build-storybook` | Static build of Storybook |
 
@@ -103,12 +101,14 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Task                      | Location                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------- |
 | API routes                | `apps/api/app/main.py`                                                       |
-| Runtime DI wiring         | `apps/api/app/container.py`                                                  |
+| Runtime service wiring    | `apps/api/app/main.py` (`AppServices`)                                       |
 | Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)                              |
 | DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`                            |
-| Frontend API calls        | `apps/web/src/api.ts`                                                        |
-| Frontend views            | `apps/web/src/views/` + `apps/web/src/router.ts`                             |
-| Prefect flows             | `apps/api/app/flows/`                                                        |
+| Frontend API calls        | `apps/web/src/shared/api/`                                                   |
+| Frontend bootstrap/routes | `apps/web/src/app/main.ts` + `apps/web/src/app/router.ts`                    |
+| Frontend modules          | `apps/web/src/modules/`                                                      |
+| Frontend views            | `apps/web/src/views/` + `apps/web/src/modules/*/views/`                      |
+| Prefect flows             | `apps/api/app/modules/*/infrastructure/flows/` + `apps/api/app/flows/`       |
 | Schedule service          | `apps/api/app/services/scheduler.py`                                         |
 | Agent runtime             | `apps/api/app/agent/`                                                        |
 | Preset definitions         | `apps/api/app/presets/*.py`                      | Decorator-based single-file presets (`@register`) — one .py = one complete preset |
@@ -118,16 +118,16 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Agent display protocol    | `docs/protocols/agent-display-protocol.md`        |                                                                     |
 | Preview launch form       | `apps/web/src/views/PreviewLaunchView.vue`                                   |                                                                     |
 | Preview workspace         | `apps/web/src/views/PreviewClassifyView.vue`                                 |                                                                     |
-| Preview item drawer       | `libs/web-ui/src/components/preview-item-drawer/PreviewItemDrawer.vue`       |                                                                     |
+| Preview item drawer       | `apps/web/src/shared/components/preview-item-drawer/PreviewItemDrawer.vue`   |                                                                     |
 | Preview loader composable | `apps/web/src/composables/usePreviewLoader.ts`                               |                                                                     |
 | Preview domain models     | `apps/api/app/domain/preview.py`                                             |                                                                     |
 | Preview service           | `apps/api/app/services/preview_service.py`                                   | Session lifecycle, item pagination, persist handoff                 |
 | Preview TTL store         | `apps/api/app/services/preview_store.py`                                     | In-memory TTL session store                                         |
 | Upstream adapter          | `apps/api/app/services/preview_upstream.py`                                  | 50-item mock upstream; replace with real adapter                    |
-| Shared browser core       | `libs/web-ui/src/components/sample-browser/`                                 | Shared virtualized browser core                                     |
-| Sidebar shell             | `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue`              | Shared sidebar shell with injected widget resolver                  |
+| Shared browser core       | `apps/web/src/shared/components/sample-browser/`                             | Shared virtualized browser core                                     |
+| Sidebar shell             | `apps/web/src/shared/components/browser-sidebar/BrowserSidebar.vue`          | Shared sidebar shell with injected widget resolver                  |
 | Browser preferences       | `apps/web/src/stores/sampleBrowser.ts`                                       | Presentation persistence (layout, thumbSize)                        |
-| Browser filter            | `apps/web/src/composables/useBrowserFilter.ts`                               | Browser-scope item filter pipeline                                  |
+| Browser filter            | `apps/web/src/shared/composables/useBrowserFilter.ts`                        | Browser-scope item filter pipeline                                  |
 | Browser architecture      | `docs/architecture/sample-browser.md`                                        | Shared browser architecture doc                                     |
 | Datasets architecture     | `docs/architecture/datasets-shim-architecture.md`                            | Specialized list view shim architecture                             |
 | Dataset schema system     | `docs/architecture/dataset-schema-system.md`                                 | Unified DatasetSchema descriptor — types, LS config, annotation, mocks |
@@ -141,17 +141,16 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Dataset storage modes     | `docs/architecture/dataset-storage-modes.md`                                 | Capability matrix for `db_full` vs `file_shard_sparse`, intent origin, and deferred scope |
 | Sparse dataset payload     | `apps/api/app/services/dataset_payload_store.py` + `apps/api/app/domain/dataset_payload.py` | Shard manifest, parquet payload storage, deterministic delete |
 | Sparse capability guards   | `apps/api/app/services/dataset_capability_guard.py`                           | `assert_not_sparse` guard for operations incompatible with `file_shard_sparse` |
-| Widget SDK contracts      | `libs/widget-sdk/src/`                                                       | TypeScript widget type definitions and factories                    |
-| Web UI package            | `libs/web-ui/src/`                                                           | Shared Vue/Naive UI components and dataset-list helpers             |
-| Widget SDK templates      | `libs/widget-sdk/src/templates/`                                             | Copy-paste starter templates for new widgets                        |
-| Frontend widget registry  | `apps/web/src/core/registry.ts`                                              | Singleton `widgetRegistry` instance                                 |
-| Frontend widget barrel    | `apps/web/src/registrations/index.ts`                                              | Explicit registration of all widgets before app mount               |
-| Shared sidebar widgets    | `libs/web-ui/src/components/<name>/index.ts`                           | Widget descriptors co-located with .vue components; self-contained directories |
+| Widget SDK contracts      | `apps/web/src/shared/widgets/sdk/`                                           | TypeScript widget type definitions and factories                    |
+| Shared web components     | `apps/web/src/shared/components/`                                            | Shared Vue/Naive UI components and dataset-list helpers             |
+| Widget SDK templates      | `apps/web/src/shared/widgets/sdk/templates/`                                 | Copy-paste starter templates for new widgets                        |
+| Frontend widget registry  | `apps/web/src/app/registrations.ts`                                          | Singleton `widgetRegistry` instance and explicit widget registration |
+| Shared sidebar widgets    | `apps/web/src/shared/components/<name>/index.ts`                             | Widget descriptors co-located with .vue components; self-contained directories |
 | Frontend importers        | `apps/web/src/registrations/import-*/`                                             | Import flow widgets (e.g. `import-manual`, `import-dataset-manual`) |
 | Frontend exporters        | `apps/web/src/registrations/export-*/`                                             | Export flow widgets (e.g. `export-preview`, `export-persist`)       |
 | Frontend preview launchers | `apps/web/src/registrations/preview-*/`                                            | Preview launcher descriptors (e.g. `preview-upstream`)                  |
-| Flow modal                | `libs/web-ui/src/components/flow-modal/FlowModal.vue`           | 2-step modal: select type, then execute component                   |
-| Flow type selector        | `libs/web-ui/src/components/flow-type-selector/FlowTypeSelector.vue`     | Card grid for selecting a flow type                               |
+| Flow modal                | `apps/web/src/shared/components/flow-modal/FlowModal.vue`                    | 2-step modal: select type, then execute component                   |
+| Flow type selector        | `apps/web/src/shared/components/flow-type-selector/FlowTypeSelector.vue`     | Card grid for selecting a flow type                               |
 | Backend extension registry | `apps/api/app/routers/registry.py`                                           | Explicit list of backend extension routers                             |
 | Backend extension routes  | `apps/api/app/routers/*/router.py`                                           | One FastAPI router per backend extension                               |
 | Extension guide           | `docs/guides/extension-guide.md`                                      | Step-by-step guide for all 4 extension types                           |
@@ -166,43 +165,43 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Sensors frontend view   | `apps/web/src/views/SensorsView.vue`                                         | Sensor subscription management UI |
 | Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
 | Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
-| Widget stories            | `apps/web/src/registrations/**/*.stories.ts` and `libs/web-ui/src/**/*.stories.ts` | Story files for app widgets and shared web-ui components            |
+| Widget stories            | `apps/web/src/**/*.stories.ts`                                              | Story files for app widgets and shared web components               |
 
 ## CODE MAP
 | Symbol                  | Type       | Location                                                                 | Role                                                         |
 | ----------------------- | ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `app`                   | FastAPI    | `apps/api/app/main.py`                                                   | HTTP/SSE entrypoint                                          |
-| `Container`             | DI         | `apps/api/app/container.py`                                              | Wires engine/storage/repo; `WiringConfiguration` enables `@inject` on route handlers |
+| `AppServices`           | service locator | `apps/api/app/main.py`                                               | Lazily wires runtime services, repositories, storage, and external clients |
 | `TrainingOrchestrator`  | service    | `apps/api/app/services/orchestrator.py`                                  | Job persistence + notifications                              |
 | `SchedulerService`      | service    | `apps/api/app/services/scheduler.py`                                     | Prefect REST client                                          |
 | `SurfaceStore`          | service    | `apps/api/app/agent/surface_store.py`                                    | In-memory agent panel state                                  |
 | `SessionStore`          | service    | `apps/api/app/agent/session_store.py`                                    | In-memory conversation persistence (TTL-based)               |
 | `ClassifyAgent`         | service    | `apps/api/app/agent/runtime.py`                                          | LLM tool-calling loop for classify sidebar                   |
 | `GlobalAgent`           | service    | `apps/api/app/agent/global_runtime.py`                                   | Platform-wide LLM agent (read/write/sidebar)                 |
-| `useAgentCore`          | composable | `libs/web-ui/src/composables/useAgentCore.ts`                            | Shared SSE frame iteration, message accumulation, abort, status |
+| `useAgentCore`          | composable | `apps/web/src/shared/composables/useAgentCore.ts`                        | Shared SSE frame iteration, message accumulation, abort, status |
 | `useAgentAdapter`       | composable | `apps/web/src/features/agent/useAgentAdapter.ts`                         | App adapter: route context, auth wiring, panel orchestration |
-| `router`                | Vue Router | `apps/web/src/router.ts`                                                 | `/datasets`, `/jobs`, `/schedules`                           |
+| `router`                | Vue Router | `apps/web/src/app/router.ts`                                             | `/datasets`, `/jobs`, `/schedules`                           |
 | `FinetuneClient`        | SDK        | `libs/python-sdk/ftsdk/client.py`                                        | Sync HTTP wrapper                                            |
 | `PreviewService`        | service    | `apps/api/app/services/preview_service.py`                               | Session lifecycle, item pagination, persist handoff          |
 | `PreviewStore`          | service    | `apps/api/app/services/preview_store.py`                                 | In-memory TTL session store                                  |
 | `MockUpstreamAdapter`   | service    | `apps/api/app/services/preview_upstream.py`                              | 50-item mock upstream; replace with real adapter             |
 | `usePreviewLoader`      | composable | `apps/web/src/composables/usePreviewLoader.ts`                           | Cursor-based preview item loader                             |
 | `PreviewClassifyView`   | view       | `apps/web/src/views/PreviewClassifyView.vue`                             | Preview workspace with grid + persist flow                   |
-| `widgetRegistry`        | singleton  | `apps/web/src/core/registry.ts`                                          | Runtime registry of all frontend widgets                     |
-| `createDescriptorRegistry`  | factory    | `libs/widget-sdk/src/registry.ts`                                        | Creates the `DescriptorRegistry` instance                        |
-| `useDatasetListSurface` | composable | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset list normalization, permissions, and UI props |
-| `buildDatasetColumns`   | function   | `libs/web-ui/src/datasets/surface.ts`                                    | Shared dataset table column/action factory                   |
-| `defineDashboardWidget`   | factory    | `libs/widget-sdk/src/sidebar.ts`                                         | Declares a dashboard widget                             |
-| `defineImporter`    | factory    | `libs/widget-sdk/src/importer.ts`                                        | Declares an importer                               |
-| `defineExporter`    | factory    | `libs/widget-sdk/src/exporter.ts`                                        | Declares an exporter                               |
-| `defineAgentSkill`      | factory    | `libs/widget-sdk/src/agent.ts`                                           | Declares an agent skill                               |
-| `definePreviewLauncher`   | factory    | `libs/widget-sdk/src/preview.ts`                                         | Declares a preview launcher                           |
-| `FlowModal`       | component  | `libs/web-ui/src/components/flow-modal/FlowModal.vue`       | 2-step modal: select type, then execute component            |
-| `FlowTypeSelector`    | component  | `libs/web-ui/src/components/flow-type-selector/FlowTypeSelector.vue` | Card grid for selecting a flow type                        |
-| `PanelHost`             | component  | `libs/web-ui/src/components/panel-host/PanelHost.vue`                     | Standalone panel renderer — renders SidebarPanelDescriptor[] anywhere |
-| `usePagePanels`         | composable | `libs/web-ui/src/composables/usePagePanels.ts`                            | Page-level provider for BROWSER_DASHBOARD_KEY + SIDEBAR_WIDGET_INTERACTION_KEY |
-| `PageProvider`          | component  | `libs/web-ui/src/components/page-provider/PageProvider.vue`               | Template-friendly wrapper for usePagePanels                   |
-| `useWaferHelpers`       | composable | `libs/web-ui/src/composables/useWaferHelpers.ts`                          | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
+| `widgetRegistry`        | singleton  | `apps/web/src/app/registrations.ts`                                      | Runtime registry of all frontend widgets                     |
+| `createDescriptorRegistry`  | factory    | `apps/web/src/shared/widgets/sdk/registry.ts`                            | Creates the `DescriptorRegistry` instance                        |
+| `useDatasetListSurface` | composable | `apps/web/src/shared/datasets/surface.ts`                                | Shared dataset list normalization, permissions, and UI props |
+| `buildDatasetColumns`   | function   | `apps/web/src/shared/datasets/surface.ts`                                | Shared dataset table column/action factory                   |
+| `defineDashboardWidget`   | factory    | `apps/web/src/shared/widgets/sdk/sidebar.ts`                             | Declares a dashboard widget                             |
+| `defineImporter`    | factory    | `apps/web/src/shared/widgets/sdk/importer.ts`                                | Declares an importer                               |
+| `defineExporter`    | factory    | `apps/web/src/shared/widgets/sdk/exporter.ts`                                | Declares an exporter                               |
+| `defineAgentSkill`      | factory    | `apps/web/src/shared/widgets/sdk/agent.ts`                               | Declares an agent skill                               |
+| `definePreviewLauncher`   | factory    | `apps/web/src/shared/widgets/sdk/preview.ts`                             | Declares a preview launcher                           |
+| `FlowModal`       | component  | `apps/web/src/shared/components/flow-modal/FlowModal.vue`       | 2-step modal: select type, then execute component            |
+| `FlowTypeSelector`    | component  | `apps/web/src/shared/components/flow-type-selector/FlowTypeSelector.vue` | Card grid for selecting a flow type                        |
+| `PanelHost`             | component  | `apps/web/src/shared/components/panel-host/PanelHost.vue`                 | Standalone panel renderer — renders SidebarPanelDescriptor[] anywhere |
+| `usePagePanels`         | composable | `apps/web/src/shared/composables/usePagePanels.ts`                        | Page-level provider for BROWSER_DASHBOARD_KEY + SIDEBAR_WIDGET_INTERACTION_KEY |
+| `PageProvider`          | component  | `apps/web/src/shared/components/page-provider/PageProvider.vue`           | Template-friendly wrapper for usePagePanels                   |
+| `useWaferHelpers`       | composable | `apps/web/src/shared/composables/useWaferHelpers.ts`                      | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
 | `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
 | `register`               | decorator  | `apps/api/app/presets/_registry.py`                                    | `@register` decorator: single-file preset registration (replaces YAML) |
 | `get_preset`             | function   | `apps/api/app/presets/_registry.py`                                    | Look up registered preset class by ID |
@@ -244,7 +243,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Don't import widget `.vue` files statically in registration `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
 - Don't bypass `widgetRegistry` for sidebar rendering — app surfaces pass `widgetRegistry.getWidgetComponent(key)` into the shared `BrowserSidebar.vue` resolver prop.
 - Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineDashboardWidget` instead.
-- Don't import from `widgetContract.ts` for new widget code — import from `@platform/widget-sdk` directly; the shim is kept only for backward compatibility.
+- Don't import from `widgetContract.ts` for new widget code — import widget contracts from `@/shared/widgets/sdk`.
 - Don't add hardcoded import/export/preview modals to views — use `FlowModal` and `FlowTypeSelector` for the 2-step flow selection.
 - Backend extension routes must live under `apps/api/app/routers/<name>/router.py`; they must be added to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py` — don't manually import them in `main.py`.
 
@@ -266,24 +265,24 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
 - `storage_mode` (`db_full` | `file_shard_sparse`) is the dataset-level distinction for storage semantics. It is orthogonal to `dataset_type` — a classification dataset and a VQA dataset can each be either mode. Never infer storage behavior from the semantic type; always branch on `storage_mode`.
 - See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
-- Widget SDK (`@platform/widget-sdk`) is a workspace TypeScript package in `libs/widget-sdk/`. It is path-aliased in `apps/web/tsconfig.json` (`@platform/widget-sdk → ../../libs/widget-sdk/src/index.ts`) and built with `tsup`.
-- To add a reusable first-party widget: create the .vue component in `libs/web-ui/src/components/<name>/<Name>Widget.vue`, create a widget descriptor in `libs/web-ui/src/components/<name>/index.ts` via `defineDashboardWidget({...})`, export both the component default and the widget descriptor from `libs/web-ui/src/index.ts`, then register the descriptor in `apps/web/src/registrations/index.ts`. Widget components are now general-purpose — they can be rendered via `PanelHost` anywhere in a page, imported directly by other components, or registered as sidebar widgets from the same source. App-specific widgets can still live under `apps/web/src/registrations/sidebar-<name>/`. See `docs/guides/extension-guide.md`.
-- To add a new importer: create `apps/web/src/registrations/import-<name>/index.ts`, export a named descriptor via `defineImporter({...})`, then register in `apps/web/src/registrations/index.ts`. Importers use `FlowModal` with `kind="import"` for a 2-step type-selection flow.
-- To add a new exporter: create `apps/web/src/registrations/export-<name>/index.ts`, export a named descriptor via `defineExporter({...})`, then register in `apps/web/src/registrations/index.ts`. Exporters use `FlowModal` with `kind="export"`.
-- To add a new preview launcher: create `apps/web/src/registrations/preview-<name>/index.ts`, export a named descriptor via `definePreviewLauncher({...})`, then register in `apps/web/src/registrations/index.ts`. Preview launchers use `FlowTypeSelector` for a 2-step flow.
+- Widget SDK contracts and factories live in `apps/web/src/shared/widgets/sdk/`; import them via `@/shared/widgets/sdk`.
+- To add a reusable first-party widget: create the .vue component in `apps/web/src/shared/components/<name>/<Name>Widget.vue`, create a widget descriptor in `apps/web/src/shared/components/<name>/index.ts` via `defineDashboardWidget({...})`, export both from `apps/web/src/shared/index.ts`, then register the descriptor in `apps/web/src/app/registrations.ts`. Widget components are general-purpose and can be rendered via `PanelHost` anywhere in a page.
+- To add a new importer: create a descriptor alongside its component (shared components for reusable flows, or the owning module for domain-specific flows), export a named descriptor via `defineImporter({...})`, then register in `apps/web/src/app/registrations.ts`. Importers use `FlowModal` with `kind="import"` for a 2-step type-selection flow.
+- To add a new exporter: create a descriptor alongside its component, export a named descriptor via `defineExporter({...})`, then register in `apps/web/src/app/registrations.ts`. Exporters use `FlowModal` with `kind="export"`.
+- To add a new preview launcher: create a descriptor alongside its component, export a named descriptor via `definePreviewLauncher({...})`, then register in `apps/web/src/app/registrations.ts`. Preview launchers use `FlowTypeSelector` for a 2-step flow.
 - To add a new backend extension route: create `apps/api/app/routers/<name>/router.py` with an `APIRouter` named `router`, then add it to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py`.
 
 ### Route Handler DI Patterns
-- **Preferred** (simple routers, 1-2 services per handler): `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]`. Requires adding the module to `WiringConfiguration` in `app/container.py`. Injected params must precede all `= Depends(...)` / `= Query(...)` params with defaults.
-- **Pragmatic** (complex routers, 3+ services): `c = Depends(get_container)` — `get_container()` returns typed `Container` (via lazy `from app.main import container`). Available from `app.routers._common`.
-- Both patterns coexist; choose per handler. `deps.py` and `scheduler.py` keep `get_container()` (infrastructure, not routes).
+- Use FastAPI dependency functions from `apps/api/app/shared/deps.py` for route handlers.
+- Runtime singletons are provided by `AppServices` in `apps/api/app/main.py`; do not import deleted container modules or use legacy DI wiring.
+- Keep handlers thin: dependencies provide services, handlers delegate business logic to module services/repositories.
 - `# type: ignore` comments are NOT recognized by `ty`; suppress pre-existing type-gap diagnostics via pyproject.toml `[tool.ty.src.exclude]`.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.
 - Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
 - When adding a new external service integration, add the mock fixture FIRST, then write the flow/service code.
-- Flow tasks that create their own `Container()` (e.g. `predict_job.py`) need `unittest.mock.patch` on the Container import in tests to share the app container's DB and storage. See `test_prediction_flow.py:_use_app_container()` for the pattern.
+- Flow tasks should use the `AppServices` singleton accessors from `app.main` / shared dependency helpers instead of constructing containers.
 
 ## NOTES
 - No CI pipeline is configured. Conventions are enforced manually.
