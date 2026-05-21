@@ -87,11 +87,9 @@ The frontend schema registry mirrors a backend `DatasetSchema` dataclass system:
 ```
 apps/api/app/domain/dataset_schema.py   ← DatasetSchema dataclass
 apps/api/app/domain/schema_registry.py  ← register/get/list_all
-apps/api/app/domain/schemas/            ← one module per type, auto-registers on import
-  __init__.py                           ← imports all schema modules (barrel)
-  image_classification.py
-  image_vqa.py
-  image_detection.py
+apps/api/app/modules/dataset_classification/domain/schema.py  ← classification schema module
+apps/api/app/modules/dataset_detection/domain/schema.py       ← detection schema module
+apps/api/app/modules/dataset_vqa/domain/schema.py             ← vqa schema module
 ```
 
 Each Python schema module defines:
@@ -114,7 +112,7 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
    SEGMENTATION = "segmentation"
    ```
 
-2. **Create the schema module** `apps/api/app/domain/schemas/image_segmentation.py`:
+2. **Create the schema module** `apps/api/app/modules/dataset_segmentation/domain/schema.py`:
    ```python
    from app.domain.dataset_schema import DatasetSchema
    from app.domain import schema_registry
@@ -132,10 +130,7 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
    schema_registry.register(SCHEMA)
    ```
 
-3. **Register in the barrel** `apps/api/app/domain/schemas/__init__.py`:
-   ```python
-   from app.domain.schemas import image_segmentation  # noqa: F401
-   ```
+3. **Import the module from `apps/api/app/main.py`** so it registers on import, matching the existing type-module bootstrap pattern.
 
 ### Frontend
 

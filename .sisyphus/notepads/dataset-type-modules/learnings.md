@@ -17,3 +17,7 @@
 - Added Storybook stories for the classification and VQA dataset shims using the detection story as the template.
 - Kept story-local mock data aligned to each schema's sample factory shape (`label` for classification, `question` for VQA).
 - Verified the frontend Storybook build with `pnpm --dir apps/web build-storybook 2>&1 | tail -10`.
+## 2026-05-21 cleanup
+- Deleted the legacy `apps/api/app/modules/datasets/domain/schemas/` package directory and replaced it with a module file at `apps/api/app/modules/datasets/domain/schemas.py` to keep the legacy import path working for existing tests.
+- Updated `docs/architecture/datasets-shim-architecture.md` to point at the new per-type backend schema locations under `app/modules/dataset_*/domain/schema.py`.
+- Backend verification stayed green after the cleanup: `make test`, `ruff check apps/api`, and `uv run --directory apps/api pyright .`.
