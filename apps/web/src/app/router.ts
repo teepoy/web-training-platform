@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { getStoredToken } from '@/features/auth/application/store';
 import { useAuthStore } from '@/features/auth/application/store';
-import { sandboxRoutes } from "../sandbox/sandboxRoutes";
-import AdminLayout from "../layouts/AdminLayout.vue";
-import SettingsLayout from "../layouts/SettingsLayout.vue";
+import { sandboxRoutes } from "@/features/sandbox/router";
+import AdminLayout from "@/app/layouts/AdminLayout.vue";
+import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
 import { authRoutes } from "@/features/auth/router";
 import { classifyRoutes } from "@/features/classify/router";
 import { dashboardRoutes } from "@/features/dashboard/router";

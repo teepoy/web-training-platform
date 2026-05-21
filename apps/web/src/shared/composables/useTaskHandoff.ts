@@ -1,5 +1,5 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
-import type { TaskTrackerDetail, TaskTrackerSummary } from '../types'
+import type { TaskTrackerDetail, TaskTrackerSummary } from '@/types'
 import { getTrackedTask } from '@/shared/api/task-tracker'
 import { buildTrackedTaskEventSource } from '@/shared/api/sse'
 

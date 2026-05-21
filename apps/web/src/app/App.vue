@@ -96,8 +96,8 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { useUiStore } from '@/features/auth/application/ui';
 import { useAuthStore } from '@/features/auth/application/store';
 import { useOrgStore } from '@/features/auth/application/org';
-import { useTaskHandoff, syncWatchedTaskIds } from "../composables/useTaskHandoff";
-import { useTaskHandoffState } from "../composables/taskHandoffState";
+import { useTaskHandoff, syncWatchedTaskIds } from "@/shared/composables/useTaskHandoff";
+import { useTaskHandoffState } from "@/shared/composables/taskHandoffState";
 import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
 import { AgentChatDrawer } from "@/shared";
 

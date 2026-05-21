@@ -107,11 +107,6 @@ export interface TrainingJob {
   is_public?: boolean;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-}
-
 export interface Schedule {
   id: string;
   name: string;

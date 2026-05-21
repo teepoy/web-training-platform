@@ -15,7 +15,6 @@ import type {
   ExportFormatItem,
   ExtractFeaturesResponse,
   FetchSampleSliceOptions,
-  PaginatedResponse,
   PersistExportResponse,
   Sample,
   SampleWithLabels,
@@ -28,6 +27,7 @@ import type {
   UploadResponse,
   WaferPointsQueryResponse,
 } from '../domain/models';
+import type { PaginatedResponse } from '@/shared/api/types';
 
 export function listDatasets(): Promise<Dataset[]> {
   return req<Dataset[]>("/datasets");
@@ -290,4 +290,5 @@ export function deleteAnnotation(annotationId: string): Promise<void> {
 }
 
 export { getApiBase };
-export type { PaginatedResponse, SampleWithLabels, SimilarityResponse } from '../domain/models';
+export type { SampleWithLabels, SimilarityResponse } from '../domain/models';
+export type { PaginatedResponse } from '@/shared/api/types';

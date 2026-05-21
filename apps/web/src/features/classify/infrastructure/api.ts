@@ -5,7 +5,7 @@ import {
   getAnnotationStats,
   listSamplesWithLabels,
 } from "@/features/datasets/infrastructure/api";
-import type { PaginatedResponse, SampleWithLabels } from "@/features/datasets/domain/models";
+import type { PaginatedResponse, SampleWithLabels } from "@/shared/api/types";
 import type { ClassifyDashboardContext } from '@/shared/types/sidebar-widgets';
 
 export interface UseSampleLoaderOptions {

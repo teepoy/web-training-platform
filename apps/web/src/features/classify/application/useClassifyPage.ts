@@ -67,7 +67,7 @@ import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } fr
 import ClassifySidebar from "../presentation/components/ClassifySidebar.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../config";
 import { GLOBAL_AGENT_PANELS_KEY } from "@/shared/keys";
-import { useTaskStream } from "@/composables/useTaskHandoff";
+import { useTaskStream } from "@/shared/composables/useTaskHandoff";
 import { useOrgStore } from '@/features/auth/application/org';
 import { buildBlinkTableData } from "./buildBlinkTableData";
 import { createDataPipeline, DATA_PIPELINE_KEY } from "./useDataPipeline";

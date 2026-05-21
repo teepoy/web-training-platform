@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import SettingsLayout from '@/layouts/SettingsLayout.vue'
+import SettingsLayout from '@/app/layouts/SettingsLayout.vue'
 
 export const settingsRoutes: RouteRecordRaw[] = [
   {

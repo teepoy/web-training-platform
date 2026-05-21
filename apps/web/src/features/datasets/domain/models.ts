@@ -72,11 +72,6 @@ export interface SampleWithLabels {
   latest_annotation: LatestAnnotation | null;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-}
-
 export interface DatasetAnnotationStats {
   total_samples: number;
   annotated_samples: number;

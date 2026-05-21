@@ -8,11 +8,11 @@ export const sandboxRoutes: RouteRecordRaw[] = [
   {
     path: '/sandbox/classify',
     name: 'sandbox-classify',
-    component: () => import('./scenarios/classify/ClassifySandboxView.vue'),
+    component: () => import('./presentation/pages/scenarios/classify/ClassifySandboxView.vue'),
   },
   {
     path: '/sandbox/rchannel-denoise',
     name: 'sandbox-rchannel-denoise',
-    component: () => import('./scenarios/rchannel-denoise/RChannelDenoiseSandboxView.vue'),
+    component: () => import('./presentation/pages/scenarios/rchannel-denoise/RChannelDenoiseSandboxView.vue'),
   },
 ]
