@@ -38,3 +38,8 @@
 - _register_legacy_provider_overrides: deleted (was already a no-op `return None`)
 - Sensor-related conftest fixtures migrated: no (none existed — conftest had no sensor container overrides)
 - Any hidden call sites found: no (only definition at line 378 and call at line 436 in main.py)
+
+## [T6 complete] Auth module migrated
+- Auth deps: AuthService has no constructor deps (it's a stateless class wrapping module-level functions). The real deps are session_factory (for DB access in get_current_user, get_current_org, etc.)
+- _mock_auth_deps: still works (yes) — conftest imports get_current_user/get_current_org from app.shared.deps which re-exports from interfaces/controllers/deps.py; no change to import path
+- Any gotchas: _get_session_factory is called without a request in test helper functions (test_auth.py, test_auth_routes.py) to directly access the DB. Kept the optional-request fallback to get_container().session_factory() for this test-only path. FastAPI route handlers always pass request. The new api/deps.py provides the canonical get_session_factory(request) for future use.

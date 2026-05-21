@@ -1,5 +1,3 @@
-"""FastAPI auth dependencies."""
-
 from __future__ import annotations
 # pyright: reportMissingImports=false, reportMissingModuleSource=false
 
@@ -21,16 +19,14 @@ from app.shared.db.registry import (
     UserORM,
 )
 
-# ---------------------------------------------------------------------------
-# Shared container session factory accessor
-# ---------------------------------------------------------------------------
-
 _DEV_USER_ID = "00000000-0000-0000-0000-000000000002"
 _DEV_ORG_ID = "00000000-0000-0000-0000-000000000001"
 _DEV_ORG_SLUG = "dev-no-auth"
 
 
-def _get_session_factory():
+def _get_session_factory(request: Request | None = None):
+    if request is not None:
+        return request.app.state.container.session_factory
     from app.shared.deps import get_container
 
     return get_container().session_factory()
@@ -39,11 +35,6 @@ def _get_session_factory():
 def _auth_enabled() -> bool:
     cfg = load_config()
     return bool(getattr(cfg.auth, "enabled", True))
-
-
-# ---------------------------------------------------------------------------
-# ORM → domain model helpers
-# ---------------------------------------------------------------------------
 
 
 def _orm_to_user(orm: UserORM) -> User:
@@ -66,8 +57,8 @@ def _orm_to_org(orm: OrganizationORM) -> Organization:
     )
 
 
-async def _ensure_dev_auth_context() -> tuple[User, Organization]:
-    session_factory = _get_session_factory()
+async def _ensure_dev_auth_context(request: Request) -> tuple[User, Organization]:
+    session_factory = _get_session_factory(request)
     async with session_factory() as session:
         org_result = await session.execute(
             select(OrganizationORM).where(OrganizationORM.id == _DEV_ORG_ID)
@@ -121,17 +112,12 @@ async def _ensure_dev_auth_context() -> tuple[User, Organization]:
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            return await _ensure_dev_auth_context()
+            return await _ensure_dev_auth_context(request)
 
     return _orm_to_user(user_orm), _orm_to_org(org_orm)
 
 
-# ---------------------------------------------------------------------------
-# Internal token verifiers
-# ---------------------------------------------------------------------------
-
-
-async def _verify_jwt(token: str) -> User:
+async def _verify_jwt(token: str, request: Request) -> User:
     try:
         payload = decode_access_token(token)
         user_id: str | None = payload.get("sub")
@@ -140,7 +126,7 @@ async def _verify_jwt(token: str) -> User:
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    session_factory = _get_session_factory()
+    session_factory = _get_session_factory(request)
     async with session_factory() as session:
         result = await session.execute(select(UserORM).where(UserORM.id == user_id))
         user_orm = result.scalar_one_or_none()
@@ -150,9 +136,9 @@ async def _verify_jwt(token: str) -> User:
     return _orm_to_user(user_orm)
 
 
-async def _verify_pat(token: str) -> User:
+async def _verify_pat(token: str, request: Request) -> User:
     token_prefix = token[:8]
-    session_factory = _get_session_factory()
+    session_factory = _get_session_factory(request)
 
     async with session_factory() as session:
         result = await session.execute(
@@ -182,11 +168,6 @@ async def _verify_pat(token: str) -> User:
     return _orm_to_user(user_orm)
 
 
-# ---------------------------------------------------------------------------
-# Public dependencies
-# ---------------------------------------------------------------------------
-
-
 async def get_current_user(request: Request) -> User:
     """Extract and validate Bearer JWT, ``?token=`` query param, or ``ftp_`` PAT.
 
@@ -196,7 +177,7 @@ async def get_current_user(request: Request) -> User:
     3. If the resolved token starts with ``ftp_``, treat as a Personal Access Token.
     """
     if not _auth_enabled():
-        dev_user, _ = await _ensure_dev_auth_context()
+        dev_user, _ = await _ensure_dev_auth_context(request)
         return dev_user
 
     token: str | None = None
@@ -211,9 +192,9 @@ async def get_current_user(request: Request) -> User:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     if token.startswith("ftp_"):
-        return await _verify_pat(token)
+        return await _verify_pat(token, request)
 
-    return await _verify_jwt(token)
+    return await _verify_jwt(token, request)
 
 
 async def get_current_org(
@@ -230,12 +211,12 @@ async def get_current_org(
     4. Return 400 (no org) if the user has zero orgs and no header.
     """
     if not _auth_enabled():
-        _, dev_org = await _ensure_dev_auth_context()
+        _, dev_org = await _ensure_dev_auth_context(request)
         org_id_header = request.headers.get("X-Organization-ID")
         if not org_id_header:
             return dev_org
 
-        session_factory = _get_session_factory()
+        session_factory = _get_session_factory(request)
         async with session_factory() as session:
             org_result = await session.execute(
                 select(OrganizationORM).where(OrganizationORM.id == org_id_header)
@@ -245,18 +226,16 @@ async def get_current_org(
             raise HTTPException(status_code=404, detail="Organization not found")
         return _orm_to_org(org_orm)
 
-    session_factory = _get_session_factory()
+    session_factory = _get_session_factory(request)
     org_id_header = request.headers.get("X-Organization-ID")
 
     async with session_factory() as session:
-        # Load all memberships for this user
         result = await session.execute(
             select(OrgMembershipORM).where(OrgMembershipORM.user_id == current_user.id)
         )
         memberships = result.scalars().all()
 
         if org_id_header:
-            # Validate membership unless superadmin
             if not current_user.is_superadmin:
                 member_org_ids = {m.org_id for m in memberships}
                 if org_id_header not in member_org_ids:
@@ -273,7 +252,6 @@ async def get_current_org(
                 raise HTTPException(status_code=404, detail="Organization not found")
             return _orm_to_org(org_orm)
 
-        # No header — try auto-selection
         if len(memberships) == 1:
             org_result = await session.execute(
                 select(OrganizationORM).where(
@@ -285,7 +263,6 @@ async def get_current_org(
                 raise HTTPException(status_code=404, detail="Organization not found")
             return _orm_to_org(org_orm)
 
-        # Zero or multiple orgs without a header
         raise HTTPException(
             status_code=400,
             detail="X-Organization-ID header required",
@@ -297,7 +274,6 @@ async def require_admin(
     current_user: User | None = None,
     org: Organization | None = None,
 ) -> None:
-    """Raise 403 if the current user is not an admin (or superadmin) of *org*."""
     if current_user is None:
         current_user = await get_current_user(request)
 
@@ -307,7 +283,7 @@ async def require_admin(
     if org is None:
         org = await get_current_org(request, current_user)
 
-    session_factory = _get_session_factory()
+    session_factory = _get_session_factory(request)
     async with session_factory() as session:
         result = await session.execute(
             select(OrgMembershipORM).where(
@@ -325,7 +301,6 @@ async def require_superadmin(
     request: Request | None = None,
     current_user: User | None = None,
 ) -> None:
-    """Raise 403 if the current user is not a superadmin."""
     if current_user is None and request is not None:
         current_user = await get_current_user(request)
     if not (current_user and current_user.is_superadmin):

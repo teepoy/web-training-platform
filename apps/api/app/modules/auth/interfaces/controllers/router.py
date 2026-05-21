@@ -1,4 +1,6 @@
-# pyright: reportMissingImports=false
+from __future__ import annotations
+
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -30,20 +32,18 @@ from app.modules.auth.application.services.auth_service import (
     verify_password,
 )
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import get_repository  # pyright: ignore[reportMissingImports]
+from app.shared.deps import get_repository
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
-
-# ---------------------------------------------------------------------------
-# Auth endpoints
-# ---------------------------------------------------------------------------
+CurrentUser = Annotated[User, Depends(get_current_user)]
+Repo = Annotated[SqlRepository, Depends(get_repository)]
 
 
 @router.post("/auth/register", response_model=UserResponse, status_code=201)
 async def register(
     payload: RegisterRequest,
-    repo: SqlRepository = Depends(get_repository),
+    repo: Repo,
 ) -> UserResponse:
     existing = await repo.get_user_by_email(payload.email)
     if existing is not None:
@@ -67,7 +67,7 @@ async def register(
 @router.post("/auth/login", response_model=LoginResponse)
 async def login(
     payload: LoginRequest,
-    repo: SqlRepository = Depends(get_repository),
+    repo: Repo,
 ) -> LoginResponse:
     user_orm = await repo.get_user_by_email(payload.email)
     if user_orm is None or not user_orm.is_active:
@@ -87,8 +87,8 @@ async def login(
 
 @router.get("/auth/me", response_model=UserWithOrgsResponse)
 async def auth_me(
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> UserWithOrgsResponse:
     memberships = await repo.get_user_orgs(current_user.id)
     orgs = [
@@ -110,16 +110,11 @@ async def auth_me(
     )
 
 
-# ---------------------------------------------------------------------------
-# PAT endpoints
-# ---------------------------------------------------------------------------
-
-
 @router.post("/auth/tokens", response_model=TokenCreatedResponse, status_code=201)
 async def create_token(
     payload: CreateTokenRequest,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> TokenCreatedResponse:
     plaintext, pat_orm = create_personal_access_token(current_user.id, payload.name)
     pat_orm = await repo.create_pat(pat_orm)
@@ -133,8 +128,8 @@ async def create_token(
 
 @router.get("/auth/tokens", response_model=list[TokenResponse])
 async def list_tokens(
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> list[TokenResponse]:
     pats = await repo.list_personal_access_tokens(current_user.id)
     return [
@@ -151,8 +146,8 @@ async def list_tokens(
 @router.delete("/auth/tokens/{token_id}", status_code=204)
 async def delete_token(
     token_id: str,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> Response:
     deleted = await repo.delete_personal_access_token(token_id, current_user.id)
     if not deleted:
@@ -160,16 +155,15 @@ async def delete_token(
     return Response(status_code=204)
 
 
-# ---------------------------------------------------------------------------
-# Org management endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.post("/organizations", response_model=OrgResponse, status_code=201)
+@router.post(
+    "/organizations",
+    response_model=OrgResponse,
+    status_code=201,
+)
 async def create_organization(
     payload: CreateOrgRequest,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> OrgResponse:
     await require_superadmin(current_user=current_user)
     slug = payload.slug if payload.slug else payload.name.lower().replace(" ", "-")
@@ -192,8 +186,8 @@ async def create_organization(
 
 @router.get("/organizations", response_model=list[OrgResponse])
 async def list_organizations(
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> list[OrgResponse]:
     if current_user.is_superadmin:
         orgs = await repo.list_all_organizations()
@@ -216,8 +210,8 @@ async def list_organizations(
 async def add_org_member(
     org_id: str,
     payload: AddMemberRequest,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> MemberResponse:
     org = await repo.get_organization(org_id)
     if org is None:
@@ -249,8 +243,8 @@ async def add_org_member(
 @router.get("/organizations/{org_id}/members", response_model=list[MemberResponse])
 async def list_org_members(
     org_id: str,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> list[MemberResponse]:
     org = await repo.get_organization(org_id)
     if org is None:
@@ -277,8 +271,8 @@ async def list_org_members(
 async def remove_org_member(
     org_id: str,
     user_id: str,
-    repo: SqlRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
+    repo: Repo,
+    current_user: CurrentUser,
 ) -> Response:
     org = await repo.get_organization(org_id)
     if org is None:
