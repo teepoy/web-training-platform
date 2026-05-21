@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
+from app.modules.training.domain.repository import TrainingRepository
+from app.shared.application.artifacts import ArtifactService
 from app.shared.api.schemas import TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
+from app.shared.domain.protocols import NotificationSink, TrainingExecutionEngine
 
 
 class TrainingOrchestrator:
-    def __init__(self, engine, notification_sink, repository, artifact_service) -> None:
-        self.engine = engine
-        self.notification_sink = notification_sink
-        self.repository = repository
+    def __init__(
+        self,
+        engine: TrainingExecutionEngine | object,
+        notification_sink: NotificationSink | object,
+        repository: TrainingRepository | object,
+        artifact_service: ArtifactService,
+    ) -> None:
+        self.engine = cast(TrainingExecutionEngine, engine)
+        self.notification_sink = cast(NotificationSink, notification_sink)
+        self.repository = cast(TrainingRepository, repository)
         self.artifact_service = artifact_service
 
     async def start_job(self, job: TrainingJob) -> TrainingJob:

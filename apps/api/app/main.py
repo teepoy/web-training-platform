@@ -95,6 +95,14 @@ def _build_state_container(api: FastAPI, cfg: Any) -> None:
         api.state.container.prefect_client = container.prefect_client()
     api.state.container.artifact_storage = container.artifact_storage()
     api.state.container.prediction_repository = container.repository()
+    engine_name = str(getattr(cfg.execution, "engine", ""))
+    if (
+        engine_name in {"local", "kubeflow", "prefect"}
+        or container.orchestrator._has_override
+        or container.orchestrator._instance is not None
+    ):
+        api.state.container.training_orchestrator = container.orchestrator()
+    api.state.container.sample_access_factory = container.sample_access_factory()
     api.state.container.embedding_client = container.embedding_service()
     api.state.container.inference_worker = container.inference_worker()
     api.state.container.gpu_worker = container.gpu_worker()
@@ -395,8 +403,10 @@ async def lifespan(api: FastAPI):
         init_prefect(cfg)
     _build_state_container(api, cfg)
     import app.modules.prediction.infrastructure.flows.predict_job as _predict_job_mod
+    import app.modules.training.infrastructure.flows.train_job as _train_job_mod
 
     _predict_job_mod._app_container_ref = api.state.container
+    _train_job_mod._app_container_ref = api.state.container
     if bool(cfg.db.auto_create):
         await init_db(container.db_engine())
 
@@ -414,6 +424,7 @@ async def lifespan(api: FastAPI):
         yield
     finally:
         _predict_job_mod._app_container_ref = None
+        _train_job_mod._app_container_ref = None
 
     prefect_client = container.prefect_client()
     close = getattr(prefect_client, "close", None)

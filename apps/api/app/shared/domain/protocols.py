@@ -30,7 +30,7 @@ class TrainingExecutionEngine(Protocol):
         """Submit a training job and return an external execution ID."""
         ...
 
-    async def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]:
+    def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]:
         """Stream execution events until the job reaches a terminal state."""
         ...
 

@@ -13,23 +13,20 @@ from app.modules.auth.interfaces.controllers.deps import (
     require_superadmin,
 )
 from app.shared.api.schemas import Organization, TrainingEvent, TrainingJob, User
-from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.models.interfaces.dtos.schemas import (
     SetPublicRequest,
     SetPublicResponse,
+)
+from app.modules.training.api.deps import (
+    RepositoryDep,
+    SampleAccessFactoryDep,
+    TrainingOrchestratorDep,
 )
 from app.modules.training.interfaces.dtos.schemas import (
     CreateTrainingJobRequest,
     MarkLeftResponse,
 )
 from app.modules.presets.api.deps import PresetRegistryDep
-from app.modules.training.application.services.orchestrator import TrainingOrchestrator
-from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
-    get_orchestrator,
-    get_repository,
-    get_sample_access_factory,
-)
 from app.shared.application.compatibility import validate_dataset_preset_training
 from app.shared.api.schemas import CancelJobResponse
 
@@ -62,11 +59,11 @@ async def get_preset(
 async def create_training_job(
     payload: CreateTrainingJobRequest,
     registry: PresetRegistryDep,
+    repo: RepositoryDep,
+    sample_factory: SampleAccessFactoryDep,
+    orchestrator: TrainingOrchestratorDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    sample_factory: SampleAccessFactory = Depends(get_sample_access_factory),
-    orchestrator: TrainingOrchestrator = Depends(get_orchestrator),
 ) -> TrainingJob:
     dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
     if dataset is None:
@@ -109,9 +106,9 @@ async def create_training_job(
 
 @router.get("/training-jobs", response_model=list[TrainingJob])
 async def list_jobs(
+    repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> list[TrainingJob]:
     return await repo.list_jobs(org_id=org.id)
 
@@ -119,9 +116,9 @@ async def list_jobs(
 @router.get("/training-jobs/{job_id}", response_model=TrainingJob)
 async def get_job(
     job_id: str,
+    repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> TrainingJob:
     job = await repo.get_job(job_id, org_id=org.id)
     if job is None:
@@ -132,9 +129,9 @@ async def get_job(
 @router.post("/training-jobs/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_job(
     job_id: str,
+    orchestrator: TrainingOrchestratorDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    orchestrator: TrainingOrchestrator = Depends(get_orchestrator),
 ) -> CancelJobResponse:
     try:
         ok = await orchestrator.cancel_job(job_id)
@@ -149,9 +146,9 @@ async def cancel_job(
 async def get_job_events(
     job_id: str,
     request: Request,
+    repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ):
     if await repo.get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -177,11 +174,11 @@ async def get_job_events(
 )
 async def get_job_events_history(
     job_id: str,
+    repo: RepositoryDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> PaginatedResponse[TrainingEvent]:
     if await repo.get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -192,9 +189,9 @@ async def get_job_events_history(
 @router.post("/training-jobs/{job_id}/mark-left", response_model=MarkLeftResponse)
 async def mark_user_left(
     job_id: str,
+    repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
 ) -> MarkLeftResponse:
     if await repo.get_job(job_id, org_id=org.id) is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -205,8 +202,8 @@ async def mark_user_left(
 async def set_job_public(
     job_id: str,
     payload: SetPublicRequest,
+    repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
-    repo: SqlRepository = Depends(get_repository),
 ) -> SetPublicResponse:
     await require_superadmin(current_user=current_user)
     ok = await repo.set_job_public(job_id, payload.is_public)

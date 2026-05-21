@@ -80,7 +80,12 @@ class TrainingJobRepository:
             row.updated_at = _utcnow()
             await session.commit()
 
-    async def update_job_status(self, job_id: str, status: JobStatus) -> None:
+    async def update_job_status(
+        self,
+        job_id: str,
+        status: JobStatus,
+        summary: dict | None = None,
+    ) -> None:
         async with self.session_factory() as session:
             row = await session.get(TrainingJobORM, job_id)
             if row is None:

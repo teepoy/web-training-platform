@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import _resolve_gpu_worker_url
 from app.modules.presets.registry import PresetRegistry
+from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.sensors.infrastructure.repositories.repository import (
     SensorRepositoryImpl,
 )
@@ -47,6 +48,8 @@ from app.modules.preview.application.services.preview_upstream import (
     UpstreamAdapter,
 )
 from app.modules.prediction.domain.repository import PredictionRepository
+from app.modules.training.application.services.orchestrator import TrainingOrchestrator
+from app.shared.application.artifacts import ArtifactService
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -69,12 +72,14 @@ class AppContainer:
     kubeflow_client: KubeflowClient | None
     notification_sink: WebhookNotificationSink
     training_engine: TrainingExecutionEngine
+    training_orchestrator: TrainingOrchestrator
     sensor_repository: SensorRepositoryImpl
     settings_repository: InMemorySettingsRepository
     task_tracker_repository: SqlRepository
     service_health_service: ServiceHealthService
     model_repository: ModelArtifactRepository
     prediction_repository: PredictionRepository
+    sample_access_factory: SampleAccessFactory
     preset_registry: PresetRegistry
     preview_store: PreviewStore
     preview_upstream: UpstreamAdapter
@@ -152,6 +157,21 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
     kubeflow_client = (
         _build_kubeflow_client(cfg) if str(cfg.execution.engine) == "kubeflow" else None
     )
+    prediction_repository = SqlRepository(session_factory=session_factory)
+    notification_sink = WebhookNotificationSink(
+        endpoint=str(cfg.notification.webhook.endpoint),
+        timeout_seconds=int(cfg.notification.webhook.timeout_seconds),
+    )
+    training_engine = _build_training_engine(
+        cfg=cfg,
+        artifact_storage=artifact_storage,
+        prefect_client=prefect_client,
+        kubeflow_client=kubeflow_client,
+    )
+    artifact_service = ArtifactService(
+        storage=artifact_storage,
+        repository=prediction_repository,
+    )
     return AppContainer(
         config=cfg,
         session_factory=session_factory,
@@ -175,15 +195,13 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         ),
         gpu_worker=GpuWorkerClient(base_url=_resolve_gpu_worker_url(cfg)),
         kubeflow_client=kubeflow_client,
-        notification_sink=WebhookNotificationSink(
-            endpoint=str(cfg.notification.webhook.endpoint),
-            timeout_seconds=int(cfg.notification.webhook.timeout_seconds),
-        ),
-        training_engine=_build_training_engine(
-            cfg=cfg,
-            artifact_storage=artifact_storage,
-            prefect_client=prefect_client,
-            kubeflow_client=kubeflow_client,
+        notification_sink=notification_sink,
+        training_engine=training_engine,
+        training_orchestrator=TrainingOrchestrator(
+            engine=training_engine,
+            notification_sink=notification_sink,
+            repository=prediction_repository,
+            artifact_service=artifact_service,
         ),
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
         settings_repository=InMemorySettingsRepository(),
@@ -196,7 +214,8 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             ),
         ),
         model_repository=ModelArtifactRepository(session_factory=session_factory),
-        prediction_repository=SqlRepository(session_factory=session_factory),
+        prediction_repository=prediction_repository,
+        sample_access_factory=SampleAccessFactory(repo=prediction_repository),
         preset_registry=PresetRegistry(
             presets_dir=str(cfg.presets.dir),
             strict=bool(cfg.presets.strict),
