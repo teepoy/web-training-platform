@@ -49,7 +49,7 @@ from app.shared.infrastructure.agent_runtime import (
     AgentMessage,
     AgentSidebarUpdate,
 )
-from app.shared.infrastructure.label_studio.client import LabelStudioClient
+from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 from app.modules.agent.application.services.session_store import SessionStore
 

@@ -7,8 +7,7 @@ from omegaconf import DictConfig
 from pydantic import BaseModel
 
 from app.core.config import _resolve_gpu_worker_url
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.shared.infrastructure.prefect.client import PrefectClient
+from app.shared.domain.protocols import EmbeddingClient, PrefectClient
 
 
 class ServiceCheckResult(BaseModel):

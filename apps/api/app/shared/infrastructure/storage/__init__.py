@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
 

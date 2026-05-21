@@ -24,7 +24,7 @@ from app.shared.deps import (
     get_preview_service,
     get_repository,
 )
-from app.shared.infrastructure.label_studio.client import LabelStudioClient
+from app.shared.domain.protocols import LabelStudioClient
 
 router = APIRouter(prefix="/api/v1", tags=["preview"])
 

@@ -59,11 +59,11 @@ from app.shared.infrastructure.agent_runtime import (
 )
 from app.shared.infrastructure.llm.client import call_llm as _call_llm
 from app.modules.agent.application.services.session_store import SessionStore
+from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
-    from app.shared.infrastructure.label_studio.client import LabelStudioClient
     from app.modules.models.application.services.model_service import ModelService
     from app.modules.training.application.services.orchestrator import (
         TrainingOrchestrator,

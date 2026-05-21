@@ -6,7 +6,12 @@ from typing import Any
 from fastapi import Depends
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import (
+    ArtifactStorage,
+    EmbeddingClient,
+    LabelStudioClient,
+    PrefectClient,
+)
 from app.shared.api.schemas import Dataset
 from app.shared.api.schemas import DatasetType, TaskType
 from app.modules.dashboard.application.services.service_health import (
@@ -35,11 +40,8 @@ from app.modules.task_tracker.application.services.task_tracker import (
 from app.modules.training.application.services.orchestrator import TrainingOrchestrator
 from app.shared.application.artifacts import ArtifactService
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
-from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.surface_store import SurfaceStore
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
 from app.modules.agent.application.services.session_store import SessionStore
 from app.modules.auth.interfaces.controllers.deps import (  # noqa: F401
     _get_session_factory,

@@ -22,8 +22,8 @@ from app.shared.domain.runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.shared.infrastructure.storage.base import ArtifactStorage
+    from app.shared.domain.protocols import EmbeddingClient
+from app.shared.domain.protocols import ArtifactStorage
 
 
 def _decode_data_uri(uri: str) -> bytes:

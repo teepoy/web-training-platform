@@ -6,7 +6,7 @@ from app.modules.datasets.domain.entities.dataset_payload import (
     DatasetManifest,
     ShardEntry,
 )
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 
 
 class DatasetPayloadStore:

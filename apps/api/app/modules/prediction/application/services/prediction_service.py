@@ -41,12 +41,20 @@ from app.shared.application.compatibility import (
     validate_model_prediction,
     validate_model_review,
 )
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
-from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
-from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
-from app.shared.infrastructure.label_studio.client import (
+from app.shared.domain.protocols import (
+    EmbeddingClient,
+    GpuWorker,
+    InferenceWorker,
     LabelStudioClient,
+    LlmClient,
+)
+from app.shared.infrastructure.label_studio.client import (
+    LabelStudioClient as RealLabelStudioClient,
+)
+from app.shared.infrastructure.workers.embedding import (
+    EmbeddingClient as RealEmbeddingClient,
+)
+from app.shared.infrastructure.label_studio.client import (
     LabelStudioError,
     platform_annotation_to_ls,
     platform_prediction_to_ls,
@@ -56,7 +64,7 @@ from app.shared.infrastructure.label_studio.client import (
 if TYPE_CHECKING:
     from app.shared.api.schemas import Sample
     from app.shared.db.sql_repository import SqlRepository
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 
 logger = logging.getLogger(__name__)
 
@@ -132,9 +140,9 @@ class PredictionService:
         artifact_storage: ArtifactStorage,
         config: DictConfig,
         embedding_client: EmbeddingClient | None = None,
-        llm_client: OpenAICompatibleLlmClient | None = None,
-        inference_worker: InferenceWorkerClient | None = None,
-        gpu_worker: GpuWorkerClient | None = None,
+        llm_client: LlmClient | None = None,
+        inference_worker: InferenceWorker | None = None,
+        gpu_worker: GpuWorker | None = None,
     ) -> None:
         self.repository = repository
         self.artifact_storage = artifact_storage
@@ -151,7 +159,7 @@ class PredictionService:
             ls_cfg = self.config.label_studio
             if not ls_cfg.url:
                 raise ValueError("Label Studio URL not configured")
-            self._ls_client = LabelStudioClient(
+            self._ls_client = RealLabelStudioClient(
                 url=ls_cfg.url,
                 api_key=ls_cfg.api_key,
             )
@@ -164,7 +172,7 @@ class PredictionService:
             grpc_target = getattr(
                 self.config, "embedding_grpc_target", "localhost:50051"
             )
-            self._embedding_client = EmbeddingClient(grpc_target=grpc_target)
+            self._embedding_client = RealEmbeddingClient(grpc_target=grpc_target)
         return self._embedding_client
 
     def _load_preset_registry(self) -> PresetRegistry:
@@ -544,7 +552,7 @@ class PredictionService:
             return False
         return self._gpu_worker is not None or self._inference_worker is not None
 
-    def _resolve_worker(self) -> GpuWorkerClient | InferenceWorkerClient:
+    def _resolve_worker(self) -> GpuWorker | InferenceWorker:
         """Return the preferred worker client for prediction calls.
 
         GPU worker takes priority.  Falls back to legacy inference worker if

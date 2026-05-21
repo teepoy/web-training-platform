@@ -26,7 +26,7 @@ from app.modules.prediction.interfaces.dtos.schemas import (
     VersionExportPersistResponse,
     VersionExportRequest,
 )
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 from app.shared.api.schemas import Organization, User
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
 from app.modules.datasets.application.services.feature_ops import FeatureOpsService

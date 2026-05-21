@@ -92,10 +92,12 @@ if TYPE_CHECKING:
 
     from app.shared.api.schemas import Dataset, Model
     from app.shared.db.sql_repository import SqlRepository
-    from app.shared.infrastructure.workers.embedding import EmbeddingClient
-    from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
-    from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
-    from app.shared.infrastructure.storage.base import ArtifactStorage
+    from app.shared.domain.protocols import (
+        ArtifactStorage,
+        EmbeddingClient,
+        InferenceWorker,
+        LlmClient,
+    )
 
 
 class SparsePredictionRunner:
@@ -116,8 +118,8 @@ class SparsePredictionRunner:
         artifact_storage: ArtifactStorage,
         config: DictConfig,
         embedding_client: EmbeddingClient | None = None,
-        llm_client: OpenAICompatibleLlmClient | None = None,
-        inference_worker: InferenceWorkerClient | None = None,
+        llm_client: LlmClient | None = None,
+        inference_worker: InferenceWorker | None = None,
     ) -> None:
         self._repository = repository
         self._artifact_storage = artifact_storage

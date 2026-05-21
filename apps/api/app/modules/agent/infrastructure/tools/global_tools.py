@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING, Any
 
 from app.modules.agent.interfaces.dtos.schemas import AgentContext, AgentPanelDescriptor
 from app.shared.api.schemas import WaferPoint, WaferPointsResponse
+from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
-    from app.shared.infrastructure.label_studio.client import LabelStudioClient
     from app.modules.models.application.services.model_service import ModelService
     from app.modules.training.application.services.orchestrator import (
         TrainingOrchestrator,

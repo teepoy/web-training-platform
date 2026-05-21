@@ -16,7 +16,10 @@ from app.shared.application.compatibility import (
     build_trained_model_metadata,
     validate_dataset_preset_training,
 )
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
+from app.shared.domain.protocols import EmbeddingClient, LlmClient
+from app.shared.infrastructure.workers.embedding import (
+    EmbeddingClient as RealEmbeddingClient,
+)
 from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
@@ -40,7 +43,7 @@ def _build_storage() -> Any:
 
 def _build_embedding_client() -> EmbeddingClient:
     cfg = load_config()
-    return EmbeddingClient(grpc_target=str(cfg.embedding.grpc_target))
+    return RealEmbeddingClient(grpc_target=str(cfg.embedding.grpc_target))
 
 
 def _build_llm_client() -> OpenAICompatibleLlmClient:
@@ -125,7 +128,7 @@ async def run_training_pipeline(
     preset_id: str,
     artifact_storage: Any | None = None,
     embedding_client: EmbeddingClient | None = None,
-    llm_client: OpenAICompatibleLlmClient | None = None,
+    llm_client: LlmClient | None = None,
 ) -> dict[str, Any]:
     cfg = load_config()
     engine = create_engine(str(cfg.db.url), echo=bool(cfg.db.echo))

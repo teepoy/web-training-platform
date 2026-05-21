@@ -17,8 +17,7 @@ from app.shared.domain.runtime import (
 )
 
 if TYPE_CHECKING:
-    from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
-    from app.shared.infrastructure.storage.base import ArtifactStorage
+    from app.shared.domain.protocols import ArtifactStorage, LlmClient
 
 
 def _logger():
@@ -32,7 +31,7 @@ class DspyVqaTrainer:
     def __init__(
         self,
         artifact_storage: ArtifactStorage,
-        llm_client: OpenAICompatibleLlmClient | None = None,
+        llm_client: LlmClient | None = None,
     ) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client
@@ -122,7 +121,7 @@ class DspyVqaTrainer:
 
 class DspyVqaPredictor:
     def __init__(
-        self, artifact_storage: ArtifactStorage, llm_client: OpenAICompatibleLlmClient
+        self, artifact_storage: ArtifactStorage, llm_client: LlmClient
     ) -> None:
         self._artifact_storage = artifact_storage
         self._llm_client = llm_client

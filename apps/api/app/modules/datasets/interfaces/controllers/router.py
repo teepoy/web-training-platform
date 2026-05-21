@@ -61,7 +61,11 @@ from app.shared.api.schemas import (
     SPARSE_NO_LS,
     User,
 )
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import (
+    ArtifactStorage,
+    EmbeddingClient,
+    LabelStudioClient,
+)
 from app.shared.api.schemas import DatasetStorageMode, TaskType
 from app.modules.datasets.application.services.dataset_payload_store import (
     DatasetPayloadStore,
@@ -85,12 +89,10 @@ from app.shared.deps import (
     get_sample_access_factory,
 )
 from app.shared.infrastructure.label_studio.client import (
-    LabelStudioClient,
     LabelStudioNotFoundError,
     platform_annotation_to_ls,
 )
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
 
 
 def get_ls_read_repository_optional() -> LsReadRepository | None:

@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
 from app.modules.presets.registry import PresetRegistry
-from app.shared.infrastructure.prefect.client import PrefectClient
+from app.shared.domain.protocols import PrefectClient
 
 # ---------------------------------------------------------------------------
 # State-mapping constants

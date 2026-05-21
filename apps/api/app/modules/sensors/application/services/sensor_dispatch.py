@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.modules.sensors.infrastructure.repositories.repository import SensorRepository
-from app.shared.infrastructure.prefect.client import PrefectClient
+from app.shared.domain.protocols import PrefectClient
 
 logger = logging.getLogger(__name__)
 

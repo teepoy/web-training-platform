@@ -25,8 +25,8 @@ from app.shared.deps import (  # pyright: ignore[reportMissingImports]
     get_repository,
     get_sample_access_factory,
 )
+from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.label_studio.client import (
-    LabelStudioClient,
     platform_annotation_to_ls,
 )
 

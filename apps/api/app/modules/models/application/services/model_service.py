@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.modules.models.infrastructure.repositories.repository import (
         ModelArtifactRepository,
     )
-from app.shared.infrastructure.storage.base import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 
 
 class ModelService:

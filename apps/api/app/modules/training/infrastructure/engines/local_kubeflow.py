@@ -10,7 +10,7 @@ from app.shared.api.schemas import JobStatus
 from app.modules.training.infrastructure.runtime.training_runner import (
     run_training_pipeline,
 )
-from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
+from app.shared.domain.protocols import KubeflowClient
 
 
 class LocalProcessEngine:

@@ -5,9 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.shared.api.schemas import Sample
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
-from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
+from app.shared.domain.protocols import EmbeddingClient, GpuWorker, InferenceWorker
 
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
@@ -20,8 +18,8 @@ class FeatureOpsService:
         self,
         repository: SqlRepository | None = None,
         embedding_service: EmbeddingClient | None = None,
-        inference_worker: InferenceWorkerClient | None = None,
-        gpu_worker: GpuWorkerClient | None = None,
+        inference_worker: InferenceWorker | None = None,
+        gpu_worker: GpuWorker | None = None,
     ):
         self._repo = repository
         self._embedding_service = embedding_service
@@ -74,7 +72,7 @@ class FeatureOpsService:
             "status": "completed",
         }
 
-    def _resolve_worker(self) -> GpuWorkerClient | InferenceWorkerClient:
+    def _resolve_worker(self) -> GpuWorker | InferenceWorker:
         if self._gpu_worker is not None:
             return self._gpu_worker
         if self._inference_worker is not None:

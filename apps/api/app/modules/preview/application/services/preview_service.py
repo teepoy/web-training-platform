@@ -16,7 +16,7 @@ from app.modules.preview.application.services.preview_upstream import UpstreamAd
 
 if TYPE_CHECKING:
     from app.shared.db.sql_repository import SqlRepository
-    from app.shared.infrastructure.label_studio.client import LabelStudioClient
+    from app.shared.domain.protocols import LabelStudioClient
 
 
 class PreviewService:

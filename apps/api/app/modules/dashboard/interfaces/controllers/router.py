@@ -25,7 +25,7 @@ from app.shared.deps import (
     get_repository,
     get_service_health,
 )
-from app.shared.infrastructure.prefect.client import PrefectClient
+from app.shared.domain.protocols import PrefectClient
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
