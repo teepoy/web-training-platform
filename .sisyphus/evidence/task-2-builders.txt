@@ -1,0 +1,3 @@
+[92m21:47:20 - LiteLLM:WARNING[0m: get_model_cost_map.py:271 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'raw.githubusercontent.com'. (_ssl.c:1000). Falling back to local backup.
+21:47:20.978 | WARNING | LiteLLM - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'raw.githubusercontent.com'. (_ssl.c:1000). Falling back to local backup.
+OK AppContainer

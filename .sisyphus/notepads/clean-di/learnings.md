@@ -15,3 +15,9 @@
 - KubeflowClient methods: submit_pytorch_job, get_job_phase, delete_job, get_job_logs
 - interfaces.py deleted: yes (already absent in branch)
 - Import sites updated: 23 files
+
+## [T2 complete] composition.py created
+- AppContainer fields: config, session_factory, artifact_storage, label_studio_client, llm_client, prefect_client, embedding_client, inference_worker, gpu_worker, kubeflow_client, notification_sink, training_engine
+- close() closes: prefect_client, embedding_client
+- Config branching preserved: yes, storage.kind selects memory/minio and execution.engine selects local/kubeflow/prefect; Kubeflow client is created only for kubeflow engine in the new eager container.
+- load_config() location: apps/api/app/core/config.py
