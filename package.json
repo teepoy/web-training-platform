@@ -8,8 +8,6 @@
     "build:web": "pnpm --filter web build",
     "test:web": "pnpm --filter web test:all",
     "test:registrations": "pnpm --filter web test:registrations",
-    "test:widget-sdk": "pnpm --filter @platform/widget-sdk test",
-    "test:web-ui": "pnpm --filter @platform/web-ui test",
     "storybook": "pnpm --filter web storybook",
     "build-storybook": "pnpm --filter web build-storybook"
   }
