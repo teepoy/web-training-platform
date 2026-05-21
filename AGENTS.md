@@ -306,6 +306,22 @@ No linter/formatter is configured. Follow these observed conventions exactly.
   - If `ruff` is unavailable, use `uv tool run ruff check apps/api`.
 - These commands replace the former "no linter" convention. Treat type/lint errors the same as test failures.
 
+## IMPORT REPLACEMENT RULE
+
+- **Default tool**: `ast_grep_replace` for all import changes. Never use `sed` for import manipulation unless the change is demonstrably single-line, single-file, with no multi-line imports or string/comment collisions in that file.
+- **Why**: `sed` silently breaks multi-line imports (parenthesized `from` blocks), matches inside string literals and comments, and corrupts indentation in conditional imports. `ast_grep_replace` is AST-aware and preserves structure.
+- **Correct patterns**:
+
+| Language | Task | Pattern → Rewrite |
+|----------|------|-------------------|
+| Python | Rename module path | `from old.pkg import $$$` → `from new.pkg import $$$` |
+| Python | Rename exact import name | `from pkg import OldName` → `from pkg import NewName` |
+| TypeScript | Rename module path (named imports) | `import { $$$ } from 'old/pkg'` → `import { $$$ } from 'new/pkg'` |
+| TypeScript | Rename module path (default import) | `import $DEF from 'old/pkg'` → `import $DEF from 'new/pkg'` |
+
+- `$$$` (ellipsis) matches **zero or more nodes** at that position — handles single-line, multi-import, and parenthesized multi-line imports correctly.
+- **Add-to-import limitation**: `from pkg import $$$` → `from pkg import NewName, $$$` will **duplicate** `NewName` if already present. Always dry-run first (`dryRun=true`) and verify the result.
+
 ## DOCKER BUILD RULE
 - After modifying backend or frontend code, verify Docker images build successfully:
   - **API**: `docker compose -f infra/compose/docker-compose.yaml build api`
