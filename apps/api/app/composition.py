@@ -50,9 +50,16 @@ from app.modules.preview.application.services.preview_upstream import (
     PreviewUpstreamRouter,
     UpstreamAdapter,
 )
+from app.modules.prediction.application.services.prediction_orchestrator import (
+    PredictionOrchestrator,
+)
 from app.modules.prediction.domain.repository import PredictionRepository
+from app.modules.models.application.services.model_service import ModelService
+from app.modules.schedules.application.services.scheduler import SchedulerService
 from app.modules.training.application.services.orchestrator import TrainingOrchestrator
 from app.shared.application.artifacts import ArtifactService
+from app.shared.infrastructure.surface_store import SurfaceStore
+from app.modules.agent.application.services.session_store import SessionStore
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -88,6 +95,11 @@ class AppContainer:
     preset_registry: PresetRegistry
     preview_store: PreviewStore
     preview_upstream: UpstreamAdapter
+    prediction_orchestrator: PredictionOrchestrator
+    scheduler_service: SchedulerService
+    model_service: ModelService
+    surface_store: SurfaceStore
+    session_store: SessionStore
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -232,6 +244,20 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         preview_upstream=PreviewUpstreamRouter(
             upstreams={"mock": MockUpstreamAdapter()}
         ),
+        prediction_orchestrator=PredictionOrchestrator(
+            prefect_client=prefect_client,
+            repository=prediction_repository,
+        ),
+        scheduler_service=SchedulerService(
+            prefect_client=prefect_client,
+            repository=SqlRepository(session_factory=session_factory),
+        ),
+        model_service=ModelService(
+            repository=ModelArtifactRepository(session_factory=session_factory),
+            artifact_storage=artifact_storage,
+        ),
+        surface_store=SurfaceStore(),
+        session_store=SessionStore(),
     )
 
 

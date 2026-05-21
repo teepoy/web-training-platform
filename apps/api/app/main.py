@@ -54,6 +54,7 @@ from app.modules.prediction.application.services.prediction_orchestrator import 
 from app.modules.prediction.application.services.prediction_service import (
     PredictionService,
 )
+from app.modules.schedules.application.services.scheduler import SchedulerService
 from app.modules.training.infrastructure.engines.prefect_engine import (
     PrefectWorkPoolEngine,
 )
@@ -114,6 +115,15 @@ def _build_state_container(api: FastAPI, cfg: Any) -> None:
     api.state.container.embedding_client = container.embedding_service()
     api.state.container.inference_worker = container.inference_worker()
     api.state.container.gpu_worker = container.gpu_worker()
+    api.state.container.prediction_orchestrator = container.prediction_orchestrator()
+    if isinstance(getattr(api.state.container.prefect_client, "_base", None), str):
+        api.state.container.scheduler_service = SchedulerService(
+            prefect_client=api.state.container.prefect_client,
+            repository=api.state.container.task_tracker_repository,
+        )
+    api.state.container.model_service = container.model_service()
+    api.state.container.surface_store = container.surface_store()
+    api.state.container.session_store = container.session_store()
 
 
 class SingletonProvider:

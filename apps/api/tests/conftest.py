@@ -126,14 +126,19 @@ def _mock_ls_client(request):
     from app.modules.datasets.api.deps import (
         get_label_studio_client as datasets_get_ls_client,
     )
+    from app.modules.agent.api.deps import (
+        get_label_studio_client as agent_get_ls_client,
+    )
     from app.modules.preview.api.deps import (
         get_label_studio_client as preview_get_ls_client,
     )
 
+    app.dependency_overrides[agent_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
     container.label_studio_client._instance = _mock_ls
     yield
+    app.dependency_overrides.pop(agent_get_ls_client, None)
     app.dependency_overrides.pop(datasets_get_ls_client, None)
     app.dependency_overrides.pop(preview_get_ls_client, None)
     if container.label_studio_client._instance is _mock_ls:

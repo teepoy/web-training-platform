@@ -31,7 +31,7 @@ from app.modules.presets.api.deps import PresetRegistryDep
 from app.modules.schedules.application.services.scheduler import SchedulerService
 from app.modules.training.application.services.orchestrator import TrainingOrchestrator
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
+from app.modules.agent.api.deps import (
     get_config,
     get_label_studio_client,
     get_model_service,
