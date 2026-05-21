@@ -15,7 +15,7 @@ from app.modules.sensors.application.services.sensor_dispatch import (
 )
 from app.modules.sensors.domain.entities.registry import SensorRegistry
 from app.modules.sensors.domain.repository import SensorRepository
-from app.shared.deps import get_sensor_registry
+from app.modules.sensors.api.deps import get_sensor_registry
 
 router = APIRouter(prefix="/api/v1", tags=["sensors"])
 

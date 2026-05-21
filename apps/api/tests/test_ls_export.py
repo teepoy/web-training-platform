@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
-from app.shared.deps import (
+from app.modules.datasets.api.deps import (
     get_artifacts,
     get_repository,
     get_sample_access_factory,

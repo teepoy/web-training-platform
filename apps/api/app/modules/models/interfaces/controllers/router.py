@@ -27,10 +27,10 @@ from app.modules.models.interfaces.dtos.schemas import (
 )
 from app.modules.models.application.services.model_service import ModelService
 from app.shared.application.compatibility import UPLOAD_TEMPLATE_DEFINITIONS
-from app.modules.models.api.deps import get_model_service
-from app.shared.deps import (  # pyright: ignore[reportMissingImports]
+from app.modules.models.api.deps import (
     get_artifact_storage,
     get_config,
+    get_model_service,
 )
 from omegaconf import DictConfig  # pyright: ignore[reportMissingImports]
 

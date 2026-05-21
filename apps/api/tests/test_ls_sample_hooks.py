@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.modules.datasets.api.deps import get_label_studio_client
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import _make_ls_image_url
+from app.shared.api.utils import _make_ls_image_url
 
 
 # ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ def _mock_auth_deps(request):
         return
 
     from app.main import app
-    from app.shared.deps import get_current_user, get_current_org
+    from app.modules.auth.interfaces.controllers.deps import get_current_user, get_current_org
     from app.shared.api.schemas import User, Organization
     import datetime
 

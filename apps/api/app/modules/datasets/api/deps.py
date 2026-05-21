@@ -13,8 +13,14 @@ from app.modules.datasets.application.services.dataset_payload_store import (
     DatasetPayloadStore,
 )
 from app.modules.datasets.application.services.dataset_service import DatasetService
+from app.modules.datasets.application.services.feature_ops import FeatureOpsService
 from app.modules.datasets.domain.repository import DatasetRepository
-from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
+from app.shared.application.artifacts import ArtifactService
+from app.shared.domain.protocols import (
+    ArtifactStorage,
+    EmbeddingClient,
+    LabelStudioClient,
+)
 
 
 def get_repository(request: Request) -> DatasetRepository:
@@ -39,6 +45,28 @@ def get_dataset_payload_store(request: Request) -> DatasetPayloadStore:
 
 def get_config(request: Request) -> DictConfig:
     return request.app.state.container.config
+
+
+def get_embedding_service(request: Request) -> EmbeddingClient:
+    return request.app.state.container.embedding_client
+
+
+def get_feature_ops(request: Request) -> FeatureOpsService:
+    container = request.app.state.container
+    return FeatureOpsService(
+        repository=container.prediction_repository,
+        embedding_service=container.embedding_client,
+        inference_worker=container.inference_worker,
+        gpu_worker=container.gpu_worker,
+    )
+
+
+def get_artifacts(request: Request) -> ArtifactService:
+    container = request.app.state.container
+    return ArtifactService(
+        storage=container.artifact_storage,
+        repository=container.prediction_repository,
+    )
 
 
 def get_dataset_service(

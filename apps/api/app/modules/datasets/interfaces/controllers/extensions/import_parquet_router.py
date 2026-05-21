@@ -23,10 +23,7 @@ from app.modules.datasets.interfaces.dtos.schemas import (
 from app.modules.datasets.api.deps import LabelStudioClientDep
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
-from app.shared.deps import (  # pyright: ignore[reportMissingImports]
-    get_repository,
-    get_sample_access_factory,
-)
+from app.modules.datasets.api.deps import get_repository, get_sample_access_factory
 from app.shared.infrastructure.label_studio.client import (
     platform_annotation_to_ls,
 )

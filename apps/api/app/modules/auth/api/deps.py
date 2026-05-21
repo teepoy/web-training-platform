@@ -5,6 +5,12 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.shared.db.sql_repository import SqlRepository
+
+
+def get_repository(request: Request) -> SqlRepository:
+    return request.app.state.container.prediction_repository
+
 
 def get_session_factory(
     request: Request,

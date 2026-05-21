@@ -14,7 +14,7 @@ from app.modules.auth.interfaces.controllers.deps import (
     get_current_user,
 )
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import get_artifact_storage, get_repository  # pyright: ignore[reportMissingImports]
+from app.modules.datasets.api.deps import get_artifact_storage, get_repository
 
 router = APIRouter(prefix="/api/v1/plugins/export-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)

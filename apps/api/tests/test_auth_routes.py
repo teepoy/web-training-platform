@@ -37,7 +37,7 @@ def _login(client: TestClient, email: str, password: str) -> str:
 
 
 async def _promote_superadmin(email: str) -> None:
-    from app.shared.deps import _get_session_factory
+    from app.modules.auth.interfaces.controllers.deps import _get_session_factory
     sf = _get_session_factory()
     async with sf() as session:
         result = await session.execute(select(UserORM).where(UserORM.email == email))
@@ -48,7 +48,7 @@ async def _promote_superadmin(email: str) -> None:
 
 
 async def _get_user_id(email: str) -> str:
-    from app.shared.deps import _get_session_factory
+    from app.modules.auth.interfaces.controllers.deps import _get_session_factory
     sf = _get_session_factory()
     async with sf() as session:
         result = await session.execute(select(UserORM).where(UserORM.email == email))

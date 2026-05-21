@@ -78,9 +78,7 @@ from app.modules.datasets.application.sample_access.factory import SampleAccessF
 from app.modules.datasets.application.services.feature_ops import FeatureOpsService
 from app.shared.application.artifacts import ArtifactService
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
-    _infer_dataset_type,
-    _make_ls_image_url,
+from app.modules.datasets.api.deps import (
     get_artifact_storage,
     get_artifacts,
     get_embedding_service,
@@ -88,6 +86,7 @@ from app.shared.deps import (
     get_repository,
     get_sample_access_factory,
 )
+from app.shared.api.utils import _infer_dataset_type, _make_ls_image_url
 from app.shared.infrastructure.label_studio.client import (
     LabelStudioNotFoundError,
     platform_annotation_to_ls,

@@ -32,7 +32,7 @@ from app.modules.auth.application.services.auth_service import (
     verify_password,
 )
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import get_repository
+from app.modules.auth.api.deps import get_repository
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 

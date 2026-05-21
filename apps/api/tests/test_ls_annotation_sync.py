@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.datasets.api.deps import get_label_studio_client
-from app.shared.deps import get_repository, get_sample_access_factory
+from app.modules.datasets.api.deps import get_repository, get_sample_access_factory
 
 # ---------------------------------------------------------------------------
 # Helpers

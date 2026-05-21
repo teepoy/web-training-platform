@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import load_config
 from app.modules.dashboard.application.services.service_health import ServiceHealthService
-from app.shared.deps import get_prefect_client, get_repository, get_service_health
+from app.modules.dashboard.api.deps import get_prefect_client, get_repository, get_service_health
 from tests.conftest import PRESET_ID
 
 

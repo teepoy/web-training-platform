@@ -19,7 +19,7 @@ from app.modules.auth.interfaces.controllers.deps import (
     get_current_user,
 )
 from app.shared.db.sql_repository import SqlRepository
-from app.shared.deps import (
+from app.modules.dashboard.api.deps import (
     get_config,
     get_prefect_client,
     get_repository,
