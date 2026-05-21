@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class SettingsRepository(Protocol):
+    async def get(self, key: str) -> Any | None: ...
+
+    async def set(self, key: str, value: Any) -> None: ...
+
+    async def delete(self, key: str) -> bool: ...
+
+    async def list_all(self) -> dict[str, Any]: ...

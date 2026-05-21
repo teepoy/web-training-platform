@@ -12,6 +12,9 @@ from app.modules.presets.registry import PresetRegistry
 from app.modules.sensors.infrastructure.repositories.repository import (
     SensorRepositoryImpl,
 )
+from app.modules.settings.infrastructure.repositories.repository import (
+    InMemorySettingsRepository,
+)
 from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
 from app.modules.training.infrastructure.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
@@ -53,6 +56,7 @@ class AppContainer:
     notification_sink: WebhookNotificationSink
     training_engine: TrainingExecutionEngine
     sensor_repository: SensorRepositoryImpl
+    settings_repository: InMemorySettingsRepository
 
     async def close(self) -> None:
         await self.prefect_client.close()
@@ -161,6 +165,7 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             kubeflow_client=kubeflow_client,
         ),
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
+        settings_repository=InMemorySettingsRepository(),
     )
 
 
