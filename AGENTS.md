@@ -101,7 +101,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Task                      | Location                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------- |
 | API routes                | `apps/api/app/main.py`                                                       |
-| Runtime service wiring    | `apps/api/app/main.py` (`AppServices`)                                       |
+| Runtime service wiring    | `apps/api/app/composition.py` (`AppContainer`, `build_app_container`)        |
 | Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)                              |
 | DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`                            |
 | Frontend API calls        | `apps/web/src/shared/api/`                                                   |
@@ -171,7 +171,7 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 | Symbol                  | Type       | Location                                                                 | Role                                                         |
 | ----------------------- | ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `app`                   | FastAPI    | `apps/api/app/main.py`                                                   | HTTP/SSE entrypoint                                          |
-| `AppServices`           | service locator | `apps/api/app/main.py`                                               | Lazily wires runtime services, repositories, storage, and external clients |
+| `AppContainer`          | composition root | `apps/api/app/composition.py`                                       | Dataclass holding all runtime singletons; built by `build_app_container(cfg)` in lifespan |
 | `TrainingOrchestrator`  | service    | `apps/api/app/services/orchestrator.py`                                  | Job persistence + notifications                              |
 | `SchedulerService`      | service    | `apps/api/app/services/scheduler.py`                                     | Prefect REST client                                          |
 | `SurfaceStore`          | service    | `apps/api/app/agent/surface_store.py`                                    | In-memory agent panel state                                  |
@@ -273,16 +273,18 @@ No linter/formatter is configured. Follow these observed conventions exactly.
 - To add a new backend extension route: create `apps/api/app/routers/<name>/router.py` with an `APIRouter` named `router`, then add it to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py`.
 
 ### Route Handler DI Patterns
-- Use FastAPI dependency functions from `apps/api/app/shared/deps.py` for route handlers.
-- Runtime singletons are provided by `AppServices` in `apps/api/app/main.py`; do not import deleted container modules or use legacy DI wiring.
+- Use FastAPI dependency functions from each module's `apps/api/app/modules/*/api/deps.py` for route handlers.
+- Runtime singletons are provided by `AppContainer` in `apps/api/app/composition.py`; access via `request.app.state.container` inside `get_xxx(request: Request)` dep functions.
 - Keep handlers thin: dependencies provide services, handlers delegate business logic to module services/repositories.
-- `# type: ignore` comments are NOT recognized by `ty`; suppress pre-existing type-gap diagnostics via pyproject.toml `[tool.ty.src.exclude]`.
+- Test overrides: use `app.dependency_overrides[get_xxx] = lambda: FakeXxx()` — set before `with TestClient(app) as c:`, cleared after.
+- Do NOT import `container` or `services` from `app.main` in routers or tests.
+- Do NOT use `@inject`, `Provide[Container.xxx]`, or `container.override()` — the `dependency-injector` library is removed.
 
 ## SERVICE BOUNDARY TESTING
 - Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.
 - Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
 - When adding a new external service integration, add the mock fixture FIRST, then write the flow/service code.
-- Flow tasks should use the `AppServices` singleton accessors from `app.main` / shared dependency helpers instead of constructing containers.
+- Flow tasks should use the `AppContainer` accessors from `app.state.container` (set by lifespan) or `build_flow_container(cfg)` for standalone Prefect flows.
 
 ## NOTES
 - No CI pipeline is configured. Conventions are enforced manually.

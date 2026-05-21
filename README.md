@@ -19,7 +19,7 @@ notification sink as the default custom notification function, and async SQLAlch
   - `LocalProcessEngine` for smoke tests
   - `KubeflowTrainingOperatorEngine` (mock adapter scaffold for distributed path)
 - Real API persistence through async SQLAlchemy repository (SQLite smoke, Postgres-ready).
-- Centralized config via OmegaConf and runtime wiring via dependency-injector.
+- Centralized config via OmegaConf and runtime wiring via composition root (`apps/api/app/composition.py`).
 - Lightweight in-app orchestration with SSE event streaming.
 - Custom notification sink contract with webhook default implementation.
 - Python SDK/CLI for status checks and simple agent-friendly operations.

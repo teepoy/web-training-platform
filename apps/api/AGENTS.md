@@ -1,89 +1,120 @@
 # API KNOWLEDGE BASE
 
 ## OVERVIEW
-FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, dependency-injector wiring, SSE job updates, and pluggable execution/storage backends.
+FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, Protocol-based constructor injection via composition root, SSE job updates, and pluggable execution/storage backends.
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
 | HTTP routes | `app/main.py` | Main API surface, SSE, export persist endpoint |
-| Dependency wiring | `app/container.py` | Engine/storage/repo selection; `WiringConfiguration` for `@inject` |
-| Container accessors | `app/routers/_common.py` | `get_container() -> Container` (typed, lazy-import) |
-| Route dependency injection | `app/container.py` (`WiringConfiguration`) | `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]` for simple routers |
+| Composition root | `app/composition.py` | `AppContainer` dataclass + builders; central wiring point |
+| Per-module deps | `app/modules/*/api/deps.py` | Typed FastAPI `Depends()` functions and Annotated types |
+| Per-module Protocols | `app/modules/*/domain/repository.py` | Domain interfaces for constructor injection |
 | Config profile logic | `app/core/config.py` + `config/*.yaml` | Env overrides plus profile merge |
-| DB session/bootstrap | `app/db/session.py` | Async engine, session factory, optional auto-create in tests |
+| DB session/bootstrap | `app/shared/db/session.py` | Async engine, session factory, optional auto-create in tests |
 | Schema/migrations | `app/db/models.py` + `alembic/` | Use migration files for non-smoke envs |
-| Job execution | `app/services/orchestrator.py` + `services/engines.py` | Local vs Kubeflow path |
-| Artifact persistence | `app/services/artifacts.py` + `app/storage/` | Memory or MinIO backends |
-| Tests | `tests/` | Smoke integration only |
-| Add/manage cron schedules | `app/services/scheduler.py` | `SchedulerService` — pure httpx Prefect REST client, no SDK |
-| Register Prefect flows | `app/flows/` | `drain_dataset.py` flow definition + `serve.py` serve entrypoint |
-| Agent runtime | `app/agent/` | Surface store, metadata inference, prompt assembler, tools, runtime loop |
-| Agent routes | `app/main.py` (bottom) | Surface CRUD, data query, agent chat SSE endpoints |
-| Agent tests | `tests/test_agent.py` | 37 tests covering surface store, inference, assembler, routes, chat |
-| Sparse prediction service | `app/services/sparse_prediction.py` | Phase 2 stub — sparse-native prediction across shards (storage contract in module docstring) |
-| Sparse manifest reader | `app/services/sparse_manifest.py` | Reads parquet shard metadata and rows from in-memory bytes via `ArtifactStorage` |
-| Sparse sample access | `app/services/sparse_sample_access.py` | Protocol for resolving sample locators from file-backed shard storage |
-| Sparse capability guard | `app/services/dataset_capability_guard.py` | `assert_not_sparse` — raises 409 for ops incompatible with `file_shard_sparse` |
-| Dataset payload store | `app/services/dataset_payload_store.py` | Shard upload, manifest management, deterministic dataset payload delete |
-| Dataset payload domain | `app/domain/dataset_payload.py` | `DatasetManifest`, `ShardEntry`, `SampleLocator`, `SparsePredictionResult` and related models |
+| Job execution | `app/modules/training/application/services/orchestrator.py` | Core training lifecycle |
+| Artifact persistence | `app/shared/infrastructure/storage/` | Memory or MinIO backends |
+| Tests | `tests/` | Pytest integration tests |
+| Add/manage cron schedules | `app/modules/schedules/application/services/scheduler.py` | `SchedulerService` — Prefect REST client |
+| Register Prefect flows | `app/flows/` | Shared flow definitions |
+| Agent runtime | `app/modules/agent/` | Domain-oriented agent modules |
+| Dataset payload store | `app/modules/datasets/application/services/dataset_payload_store.py` | Shard and manifest management |
 | Canonical transport contract | `../../openapi/openapi.yaml` | Single source of truth for backend/frontend transport types |
-| Generated transport models | `app/shared/generated/openapi_models.py` | Generated with `datamodel-codegen`; do not edit by hand |
-| Manual schema helpers | `app/api/internal_schemas.py` | Internal-only helpers/default-heavy models not represented in OpenAPI |
 
 ## STRUCTURE
 ```text
 apps/api/
-├── app/api/         # request schemas
-├── app/core/        # config loading
-├── app/db/          # SQLAlchemy base/models/session
-├── app/domain/      # enums, Pydantic models, interfaces
-├── app/repositories/# async SQL repository
-├── app/services/    # orchestrator, engines, notifications, artifacts
-├── app/services/scheduler.py  # Prefect REST API client wrapper (httpx, no SDK)
-├── app/flows/       # Prefect flow definitions and serve entrypoint
-├── app/agent/       # AI agent: surface store, metadata inference, prompt assembly, tool-calling runtime
-├── config/          # base/dev/prod/test profiles
-├── alembic/         # migrations
-└── tests/           # pytest smoke flows
+├── app/
+│   ├── composition.py      # AppContainer dataclass + build_app_container()
+│   ├── main.py             # FastAPI app, lifespan, health endpoint
+│   ├── core/               # config loading
+│   ├── shared/
+│   │   ├── domain/protocols.py  # shared infra Protocols
+│   │   ├── api/utils.py         # shared utility functions
+│   │   └── db/                  # SQLAlchemy base/models/session
+│   └── modules/            # domain-oriented modules
+│       └── <module>/
+│           ├── api/deps.py           # FastAPI Depends() functions
+│           ├── domain/repository.py  # Protocol definitions
+│           ├── application/services/ # service classes
+│           ├── infrastructure/       # DB repos, external clients
+│           └── interfaces/controllers/router.py
+├── config/                 # base/dev/prod/test profiles
+├── alembic/                # migrations
+└── tests/                  # pytest integration tests
 ```
+
+## DEPENDENCY INJECTION
+1. **Composition root**: `app/composition.py` defines the `AppContainer` dataclass holding all singletons. `build_app_container(cfg)` constructs it. The FastAPI lifespan sets `app.state.container = build_app_container(cfg)`.
+2. **Per-module deps**: Each module has `api/deps.py` with `get_xxx(request: Request)` functions reading from `request.app.state.container.xxx`. Annotated types are exported: `XxxDep = Annotated[XxxType, Depends(get_xxx)]`.
+3. **Protocol-typed services**: Service constructors take Protocol-typed parameters only. This allows easy mocking and prevents circular dependencies.
+4. **Test overrides**: Use `app.dependency_overrides[get_xxx] = lambda: mock_xxx` in tests. Clear overrides after each test.
+5. **Non-HTTP entrypoints**: Prefect flows use `_app_container_ref` module-level references set by the lifespan; CLI tools use `build_cli_container(cfg)`.
+
+### HOW TO ADD A NEW MODULE
+1. Create `domain/repository.py` with a Protocol:
+   ```python
+   class MyRepository(Protocol):
+       async def get_item(self, id: str) -> Item | None: ...
+   ```
+2. Create `api/deps.py`:
+   ```python
+   def get_my_service(request: Request) -> MyService:
+       c = request.app.state.container
+       return MyService(repository=c.my_repository, ...)
+   MyServiceDep = Annotated[MyService, Depends(get_my_service)]
+   ```
+3. Add field to `AppContainer` in `composition.py`:
+   ```python
+   my_repository: MyRepository
+   ```
+4. Wire in `_build_base_container()` in `composition.py`:
+   ```python
+   container.my_repository = MyRepositoryImpl(session_factory=container.session_factory)
+   ```
+5. Use in router:
+   ```python
+   @router.get("/items/{id}")
+   async def get_item(id: str, service: MyServiceDep) -> Item:
+       return await service.get(id)
+   ```
+6. Test override:
+   ```python
+   app.dependency_overrides[get_my_service] = lambda: FakeMyService()
+   ```
 
 ## CONVENTIONS
 - Run from this directory with `uv run ...`.
 - `APP_CONFIG_PROFILE=test` is the test-only profile. Supported runtime profiles are `dev` and `prod`.
-- `db.auto_create` is only a test convenience; dev/prod should use Alembic.
 - `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect and MinIO/S3-compatible storage.
 
-### DI Injection
-- **Simple routers** (1-2 services/handler): use `@inject` + `Annotated[Service, Depends(Provide[Container.xxx])]`. Module must be in `Container.wiring_config.modules`. Injected params before `= Depends(...)` / `= Query(...)` params.
-- **Complex routers** (3+ services/handler): use `c = Depends(get_container)`. `get_container()` returns typed `Container` (import guard `.app.main` lazily).
-- **Infrastructure** (`deps.py`, `scheduler.py`): continue using `get_container()` directly in function body.
-
 ## ANTI-PATTERNS
-- Don’t add new route-level persistence shortcuts; keep handlers thin and push logic into services/repository.
-- Don’t trust Kubeflow/MinIO fallbacks as production behavior; some adapters degrade to smoke-friendly behavior on infra failure.
-- Don’t assume auth is enforced yet; OAuth config exists but route protection is not wired.
-- Don’t forget that several async services still wrap blocking client libraries; treat them as operationally fragile.
-- Don’t change schema only in ORM models; update Alembic too.
-- Don’t overload `dataset_type` with storage semantics — use `storage_mode` (`db_full` vs `file_shard_sparse`) to branch behavior. A classification dataset and a VQA dataset can each be either mode; storage behavior is never inferred from the semantic type.
+- Don't use `container: Any` or `self._container` in service constructors — inject typed Protocol deps.
+- Don't import `container` from `app.main` in routers or tests — use `app.dependency_overrides` or `request.app.state.container`.
+- Don't use `@inject` or `Provide[Container.xxx]` — the `dependency-injector` library is removed.
+- Don't add new fields to `AppContainer` without wiring them in `_build_base_container()`.
+- Don't make Protocols `@runtime_checkable` without justification.
+- Don't add route-level persistence; keep handlers thin and push logic into services/repository.
+- Don't trust Kubeflow/MinIO fallbacks as production behavior.
+- Don't overload `dataset_type` with storage semantics — use `storage_mode` (`db_full` vs `file_shard_sparse`).
 
 ## COMMANDS
 ```bash
+# Start API
 uv run uvicorn app.main:app --reload --port 8000
+# Migrations
 uv run alembic upgrade head
+# Tests
 uv run --extra dev pytest
-make generate-api-models
-make check-openapi-sync
+# Type check
+uv run --directory apps/api pyright .
+# Lint
+ruff check apps/api
 ```
 
-## TESTS & COVERAGE
-- Tests use `pytest` + `fastapi.testclient.TestClient`.
-- Coverage is limited to backend smoke paths (`/health`, dataset/preset/job create/get).
-- SSE edge cases, Kubeflow engine, MinIO persistence, webhooks, SDK flows, and feature-op logic are not meaningfully tested.
-
 ## GOTCHAS
-- `main.py` allows all CORS origins right now.
+- `main.py` allows all CORS origins.
 - SSE endpoint polls repository state every 0.5s per client.
-- `config/base.yaml` contains placeholder/insecure defaults; real deployments must override via env or secrets.
-- Per-sample predictions now live in the API DB (`platform_predictions`) instead of Label Studio. Label Studio prediction sync is a manual, one-way export of selected prediction collections for annotation use.
-- If a transport shape belongs in the API contract, change `openapi/openapi.yaml` first and regenerate; do not add a parallel hand-written DTO in `app/api/schemas.py`.
+- Per-sample predictions live in the API DB (`platform_predictions`) instead of Label Studio.
+- If a transport shape belongs in the API contract, change `openapi/openapi.yaml` first and regenerate.
