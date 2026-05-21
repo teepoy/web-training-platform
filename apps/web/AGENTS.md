@@ -14,11 +14,11 @@ Vue 3 + Vite frontend with Pinia, Vue Router, Vue Query, domain modules under `s
 | App registrations              | `src/app/registrations.ts`                                              | Singleton widget registry and explicit descriptor registration                                |
 | Domain modules                 | `src/modules/`                                                          | Per-type dataset modules (classification, detection, vqa)     |
 | Dataset workflow               | `src/features/datasets/presentation/pages/DatasetListView.vue` | Import dataset via shared `FlowModal`                                                        |
-| Job workflow                   | `src/features/training/presentation/pages/JobsView.vue`                 | Start job, consume SSE                                                                       |
+| Job workflow                   | `src/features/training/presentation/pages/TrainingJobsView.vue`         | Start job, consume SSE                                                                       |
 | Job detail metrics             | `src/features/training/presentation/pages/JobDetailView.vue`            | Prefer `metrics` artifact JSON; fallback to SSE epoch/loss points if present                 |
 | Schedule list                  | `src/features/schedules/presentation/pages/SchedulesView.vue`           | CRUD + create modal + pause/resume/delete                                                    |
 | Schedule detail                | `src/features/schedules/presentation/pages/ScheduleDetailView.vue`      | Config display, run history table, Trigger Now, Prefect deep link                            |
-| Run log viewer                 | `src/features/task_tracker/presentation/components/RunLogViewer.vue`    | Reusable; props: `runId: string`; shows level badges                                         |
+| Run log viewer                 | `src/shared/components/run-log-viewer/RunLogViewer.vue`                 | Reusable; props: `runId: string`; shows level badges                                         |
 | Classify view                  | `src/features/classify/presentation/pages/ClassifyView.vue`             | Unified annotate + train + predict + review workflow with shared grid/sidebar                |
 | Classify sidebar               | `src/features/classify/presentation/components/`                        | Widget config, sidebar shell wrapper; see Classify Sidebar Architecture section              |
 | Agent chat drawer              | `src/features/agent/presentation/components/AgentChatDrawer.vue`        | Floating chat UI for agent interaction                                                       |
