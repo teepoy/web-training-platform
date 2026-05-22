@@ -111,3 +111,26 @@
 - Avoid eagerly constructing LsReadRepository in app.state.container during lifespan: test profile has an empty LS database URL, so export routes still resolve the direct LS read repository only when export handlers need it.
 - Dataset Label Studio FastAPI dep reads app.state.container by default but preserves legacy AppServices patch compatibility for older tests that patch container.label_studio_client directly.
 - _mock_ls_client now uses app.dependency_overrides for the datasets and preview get_label_studio_client deps; it only seeds the legacy SingletonProvider instance for assertions/backward compatibility, not as the route injection path.
+
+## 2026-05-22 T17 agent Protocol DI
+- Agent router now imports module-local deps from app.modules.agent.api.deps; no app.shared.deps imports remain under app/modules/agent.
+- AppContainer gained prediction_orchestrator, scheduler_service, model_service, surface_store, and session_store for agent constructor injection.
+- _build_state_container syncs legacy surface/session/model/prediction services for coexistence; scheduler sync must avoid constructing SchedulerService when prefect_client is an AsyncMock without a string _base.
+- _mock_ls_client must override agent_get_label_studio_client alongside datasets/preview to keep Label Studio tests isolated during app.state.container migration.
+
+## 2026-05-22 T18 classify Protocol DI
+- Classify deps now live in app/modules/classify/api/deps.py and read from request.app.state.container for config, session_factory-backed SqlRepository, sample_access_factory, and surface_store.
+- Classify router keeps Annotated dep aliases before params with defaults to avoid Python's parameter-order SyntaxError.
+- Classify has no direct embedding dependency in its router, so _mock_embedding_service remains on the legacy container override path for now; that fixture migration is out of scope for T18.
+
+## 2026-05-22 T19 AppServices removal
+- Removed AppServices/SingletonProvider and module-level container/services from app.main; lifespan now builds and exposes AppContainer only via app.state.container.
+- Tests that patched legacy providers now use app.dependency_overrides for route deps or app.state.container for lifespan-scoped instances.
+- Flow modules keep _app_container_ref; direct-flow tests seed that ref or patch app.state.container workers instead of importing app.main services.
+- AppContainer now owns db_engine and sensor_registry so lifespan/test helpers no longer need AppServices providers; close() disposes DB engine and tolerates mocked clients.
+- Full verification: make test passed with 479 passed / 1 xpassed; pyright clean; ruff clean.
+
+## T20 shared deps deletion - 2026-05-22
+- Deleted app/shared/deps.py after moving route dependency providers into module api/deps.py files.
+- Dataset utility helpers now live in app/shared/api/utils.py with legacy underscored aliases for existing call sites.
+- Dependency overrides in tests must import the exact provider used by the route; images/resolve belongs to models.api.deps, not datasets.api.deps.
