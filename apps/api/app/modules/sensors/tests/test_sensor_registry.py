@@ -6,7 +6,7 @@ from app.modules.sensors.domain.entities.registry import SensorRegistry
 from app.modules.sensors.domain.entities.schema import SensorDefinition
 
 
-SENSORS_DIR = Path(__file__).resolve().parents[1] / "sensors"
+SENSORS_DIR = Path(__file__).resolve().parents[4] / "sensors"
 
 
 def _loaded_registry() -> SensorRegistry:

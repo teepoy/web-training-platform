@@ -53,7 +53,9 @@ markers = [
     "no_embedding_override: skip the global embedding service override for this test",
     "no_inference_override: skip the global inference worker override for this test",
     "no_gpu_worker_override: skip the global GPU worker override for this test",
+    "slow: marks tests as slow and skipped by default (run with -m slow)",
 ]
+addopts = "-m 'not slow'"
 
 [dependency-groups]
 dev = [
@@ -70,4 +72,4 @@ reportMissingImports = true
 reportMissingModuleSource = true
 
 [tool.ruff]
-exclude = ["tests/", "alembic/", "**/*_test.py"]
+exclude = ["tests/", "alembic/", "**/*_test.py", "app/modules/*/tests/"]

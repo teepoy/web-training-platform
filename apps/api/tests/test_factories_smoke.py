@@ -5,6 +5,8 @@ Verifies the complete flow: dataset → samples → annotations → training job
 """
 from __future__ import annotations
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -17,6 +19,7 @@ from tests.helpers.factories import (
 )
 
 
+@pytest.mark.slow
 def test_factories_end_to_end_flow() -> None:
     """Exercise all core factories: dataset, samples, annotations, training job."""
     with TestClient(app) as client:

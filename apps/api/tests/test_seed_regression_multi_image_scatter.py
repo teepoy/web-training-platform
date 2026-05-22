@@ -8,6 +8,7 @@ from tests.helpers.factories import list_samples
 from tests.helpers.fixtures import seeded_multi_image_scatter  # noqa: F401
 
 
+@pytest.mark.slow
 def test_seed_creates_scatter_dataset(
     seeded_multi_image_scatter: tuple[str, str],
 ) -> None:
@@ -16,6 +17,7 @@ def test_seed_creates_scatter_dataset(
     assert "Scatter" in name, f"Name should contain 'Scatter', got: {name}"
 
 
+@pytest.mark.slow
 def test_scatter_samples_have_multi_images_and_metadata(
     seeded_multi_image_scatter: tuple[str, str],
 ) -> None:

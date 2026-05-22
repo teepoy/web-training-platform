@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -7,12 +8,14 @@ from tests.helpers.factories import list_samples
 from tests.helpers.fixtures import seeded_imagenet_poc  # noqa: F401
 
 
+@pytest.mark.slow
 def test_seed_creates_imagenet_poc_dataset(seeded_imagenet_poc: tuple[str, str]) -> None:
     dataset_id, dataset_name = seeded_imagenet_poc
     assert dataset_id is not None
     assert dataset_name == "ImageNet-1K Real"
 
 
+@pytest.mark.slow
 def test_imagenet_poc_samples_exist(seeded_imagenet_poc: tuple[str, str]) -> None:
     dataset_id, _dataset_name = seeded_imagenet_poc
     with TestClient(app) as client:

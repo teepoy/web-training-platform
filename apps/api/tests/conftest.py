@@ -16,6 +16,8 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db")
+os.environ.setdefault("GPU_WORKER_POLL_INTERVAL", "0")
+os.environ.setdefault("GPU_WORKER_MAX_POLL_SECONDS", "10")
 
 
 # ---------------------------------------------------------------------------

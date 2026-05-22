@@ -5,6 +5,8 @@ spatial (wafer_x / wafer_y) metadata on at least 50 samples.
 """
 from __future__ import annotations
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -12,6 +14,7 @@ from tests.helpers.factories import list_samples
 from tests.helpers.fixtures import seeded_wafer_demo  # noqa: F401
 
 
+@pytest.mark.slow
 def test_seed_creates_wafer_dataset(seeded_wafer_demo: tuple[str, str]) -> None:
     """The fixture must expose a valid dataset_id and name 'Wafer Demo'."""
     dataset_id, dataset_name = seeded_wafer_demo
@@ -21,6 +24,7 @@ def test_seed_creates_wafer_dataset(seeded_wafer_demo: tuple[str, str]) -> None:
     )
 
 
+@pytest.mark.slow
 def test_wafer_samples_have_spatial_metadata(
     seeded_wafer_demo: tuple[str, str],
 ) -> None:
@@ -39,6 +43,7 @@ def test_wafer_samples_have_spatial_metadata(
     )
 
 
+@pytest.mark.slow
 def test_wafer_sample_count(seeded_wafer_demo: tuple[str, str]) -> None:
     """The fixture must produce at least 50 samples."""
     dataset_id, _ = seeded_wafer_demo

@@ -88,3 +88,5 @@ def _assert_clean_overrides():
     assert dict(app.dependency_overrides) == initial, (
         f"Test leaked dependency_overrides: {set(app.dependency_overrides) - set(initial)}"
     )
+
+pytest_plugins = ["tests.conftest"]
