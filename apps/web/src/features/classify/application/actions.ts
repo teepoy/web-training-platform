@@ -1,12 +1,13 @@
-import { createJob } from "@/features/training/infrastructure/api";
-import { updateLabelSpace } from "@/features/datasets/infrastructure/api";
-import type { TrainingJob } from "@/types";
+import { createTrainingJobApiV1TrainingJobsPost } from "@/generated/orval/endpoints/api";
+import { updateLabelSpace } from "@/shared/api/datasets";
+import type { TrainingJob } from "@/generated/orval/models";
 
 export async function startTrainingAction(
   datasetId: string,
-  presetId: string,
+  trainerId: string,
 ): Promise<TrainingJob> {
-  return createJob(datasetId, presetId);
+  const { data } = await createTrainingJobApiV1TrainingJobsPost({ dataset_id: datasetId, trainer_id: trainerId });
+  return data as TrainingJob;
 }
 
 export async function addLabelAction(

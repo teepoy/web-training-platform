@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.models.api.deps import get_artifact_storage, get_config
+from app.modules.models.port.http.deps import get_artifact_storage, get_config
 
 
 def _make_config(url: str = "http://label-studio:8080") -> MagicMock:

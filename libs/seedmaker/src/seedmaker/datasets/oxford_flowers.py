@@ -19,7 +19,7 @@ config = SeedConfig(
 
 def run(args, runner: SeedRunner) -> int:
     try:
-        from datasets import load_dataset  # type: ignore[import-untyped]
+        from datasets import load_dataset  # pyright: ignore[reportMissingImports]
     except ImportError:
         print(
             "ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow"

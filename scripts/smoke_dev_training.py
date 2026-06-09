@@ -29,29 +29,19 @@ from smoke_common import (
 API_URL = "http://localhost:8000"
 DEFAULT_TIMEOUT = 180
 DEFAULT_DATASET_NAME = "Smoke Training Dataset"
-DEFAULT_PRESET_ID = "resnet50-cls-v1"
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-MINIO_BUCKET = "finetune-artifacts"
+DEFAULT_TRAINER_ID = "resnet50-cls-v1"
 
 
-def _fail(message: str) -> int:
-    print(f"ERROR: {message}")
-    return 1
-
-
-def _create_dataset(client: httpx.Client, headers: dict[str, str], name: str) -> str:
+def _create_training_job(
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
+) -> str:
     response = client.post(
-        f"{API_URL}/api/v1/datasets",
+        f"{API_URL}/api/v1/training-jobs",
         headers=headers,
         json={
-            "name": name,
-            "dataset_type": "image_classification",
-            "task_spec": {
-                "task_type": "classification",
-                "label_space": ["red", "blue"],
-            },
+            "dataset_id": dataset_id,
+            "trainer_id": trainer_id,
+            "created_by": "seed-user",
         },
     )
     response.raise_for_status()
@@ -82,14 +72,14 @@ def _create_annotation(
 
 
 def _create_training_job(
-    client: httpx.Client, dataset_id: str, headers: dict[str, str], preset_id: str
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
 ) -> str:
     response = client.post(
         f"{API_URL}/api/v1/training-jobs",
         headers=headers,
         json={
             "dataset_id": dataset_id,
-            "preset_id": preset_id,
+            "trainer_id": trainer_id,
             "created_by": "seed-user",
         },
     )
@@ -169,7 +159,7 @@ def main() -> int:
         help="Overall training timeout in seconds",
     )
     parser.add_argument(
-        "--preset-id", default=DEFAULT_PRESET_ID, help="Training preset to use"
+        "--trainer-id", default=DEFAULT_TRAINER_ID, help="Trainer to use"
     )
     parser.add_argument(
         "--dataset-name-prefix",
@@ -203,7 +193,7 @@ def main() -> int:
             _create_annotation(client, sample_blue, "blue", headers)
 
             print("[5/7] Starting real training job ...")
-            job_id = _create_training_job(client, dataset_id, headers, args.preset_id)
+            job_id = _create_training_job(client, dataset_id, headers, args.trainer_id)
 
             print("[6/7] Polling job to terminal state ...")
             job = _poll_training_job(client, job_id, headers, args.timeout)

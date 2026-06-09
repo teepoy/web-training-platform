@@ -33,6 +33,7 @@ Environment variables:
     UPLOAD_IMAGES   Set to "1" to upload images via multipart upload endpoint
                     instead of embedding as data URIs (default: 0)
 """
+
 from __future__ import annotations
 
 import io
@@ -51,7 +52,10 @@ import httpx
 
 API_BASE = os.environ.get("API_BASE", "http://localhost:8000/api/v1")
 HF_DATASET = os.environ.get("HF_DATASET", "dpdl-benchmark/oxford_flowers102")
-DATASET_NAME = os.environ.get("DATASET_NAME", "") or PurePosixPath(HF_DATASET).name.replace("_", " ").title()
+DATASET_NAME = (
+    os.environ.get("DATASET_NAME", "")
+    or PurePosixPath(HF_DATASET).name.replace("_", " ").title()
+)
 SEED_SPLIT = os.environ.get("SEED_SPLIT", "train")
 SEED_LIMIT = int(os.environ.get("SEED_LIMIT", "0"))
 UPLOAD_IMAGES = os.environ.get("UPLOAD_IMAGES", "0") == "1"
@@ -61,7 +65,13 @@ UPLOAD_IMAGES = os.environ.get("UPLOAD_IMAGES", "0") == "1"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _post(client: httpx.Client, path: str, payload: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+
+def _post(
+    client: httpx.Client,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
     resp = client.post(f"{API_BASE}{path}", json=payload, timeout=30.0, **kwargs)
     if resp.status_code >= 400:
         print(f"  ERROR {resp.status_code}: {resp.text}", file=sys.stderr)
@@ -95,6 +105,7 @@ def _pil_to_bytes(img: Any) -> bytes:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     # --- 1. Load HuggingFace dataset ---
     print(f"Loading HuggingFace dataset: {HF_DATASET} (split={SEED_SPLIT})...")
@@ -109,7 +120,9 @@ def main() -> None:
         print(f"  Limiting to {total} samples (SEED_LIMIT={SEED_LIMIT})")
 
     print(f"  {total} samples, {len(label_names)} classes")
-    print(f"  Upload mode: {'multipart file upload' if UPLOAD_IMAGES else 'inline data URIs'}")
+    print(
+        f"  Upload mode: {'multipart file upload' if UPLOAD_IMAGES else 'inline data URIs'}"
+    )
     print()
 
     client = httpx.Client()
@@ -125,13 +138,17 @@ def main() -> None:
 
     # --- 3. Create dataset ---
     print(f"Creating dataset '{DATASET_NAME}'...")
-    dataset_resp = _post(client, "/datasets", {
-        "name": DATASET_NAME,
-        "task_spec": {
-            "task_type": "classification",
-            "label_space": label_names,
+    dataset_resp = _post(
+        client,
+        "/datasets",
+        {
+            "name": DATASET_NAME,
+            "task_spec": {
+                "task_type": "classification",
+                "label_space": label_names,
+            },
         },
-    })
+    )
     dataset_id = dataset_resp["id"]
     print(f"  Created: {dataset_id}")
     print()
@@ -156,15 +173,19 @@ def main() -> None:
             image_uris = [_pil_to_data_uri(pil_image)]
 
         try:
-            sample_resp = _post(client, f"/datasets/{dataset_id}/samples", {
-                "image_uris": image_uris,
-                "metadata": {
-                    "hf_index": i,
-                    "hf_split": SEED_SPLIT,
-                    "label_index": label_idx,
-                    "source": HF_DATASET,
+            sample_resp = _post(
+                client,
+                f"/datasets/{dataset_id}/samples",
+                {
+                    "image_uris": image_uris,
+                    "metadata": {
+                        "hf_index": i,
+                        "hf_split": SEED_SPLIT,
+                        "label_index": label_idx,
+                        "source": HF_DATASET,
+                    },
                 },
-            })
+            )
             sample_id = sample_resp["id"]
         except httpx.HTTPStatusError:
             errors += 1
@@ -185,11 +206,15 @@ def main() -> None:
 
         # Create annotation
         try:
-            _post(client, "/annotations", {
-                "sample_id": sample_id,
-                "label": label_str,
-                "created_by": "load-hf-script",
-            })
+            _post(
+                client,
+                "/annotations",
+                {
+                    "sample_id": sample_id,
+                    "label": label_str,
+                    "created_by": "load-hf-script",
+                },
+            )
         except httpx.HTTPStatusError:
             errors += 1
 

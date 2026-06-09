@@ -27,25 +27,19 @@ from smoke_common import (
 API_URL = "http://localhost:8000"
 DEFAULT_TIMEOUT = 240
 DEFAULT_DATASET_NAME = "Smoke Prediction Dataset"
-DEFAULT_PRESET_ID = "resnet50-cls-v1"
+DEFAULT_TRAINER_ID = "resnet50-cls-v1"
 
 
-def _fail(message: str) -> int:
-    print(f"ERROR: {message}")
-    return 1
-
-
-def _create_dataset(client: httpx.Client, headers: dict[str, str], name: str) -> str:
+def _create_training_job(
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
+) -> str:
     response = client.post(
-        f"{API_URL}/api/v1/datasets",
+        f"{API_URL}/api/v1/training-jobs",
         headers=headers,
         json={
-            "name": name,
-            "dataset_type": "image_classification",
-            "task_spec": {
-                "task_type": "classification",
-                "label_space": ["red", "blue"],
-            },
+            "dataset_id": dataset_id,
+            "trainer_id": trainer_id,
+            "created_by": "seed-user",
         },
     )
     response.raise_for_status()
@@ -76,14 +70,14 @@ def _create_annotation(
 
 
 def _create_training_job(
-    client: httpx.Client, dataset_id: str, headers: dict[str, str], preset_id: str
+    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
 ) -> str:
     response = client.post(
         f"{API_URL}/api/v1/training-jobs",
         headers=headers,
         json={
             "dataset_id": dataset_id,
-            "preset_id": preset_id,
+            "trainer_id": trainer_id,
             "created_by": "seed-user",
         },
     )
@@ -182,9 +176,9 @@ def main() -> int:
         help="Overall timeout in seconds",
     )
     parser.add_argument(
-        "--preset-id",
-        default=DEFAULT_PRESET_ID,
-        help="Training preset to use for the temporary model",
+        "--trainer-id",
+        default=DEFAULT_TRAINER_ID,
+        help="Trainer to use for the temporary model",
     )
     parser.add_argument(
         "--dataset-name-prefix",
@@ -220,7 +214,7 @@ def main() -> int:
 
             print("[5/8] Training a temporary model ...")
             training_job_id = _create_training_job(
-                client, dataset_id, headers, args.preset_id
+                client, dataset_id, headers, args.trainer_id
             )
             training_job = _poll_training_job(
                 client, training_job_id, headers, args.timeout

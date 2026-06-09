@@ -16,3 +16,13 @@ k8s:
   namespace: "finetune"
   incluster: true
   kubeconfig: null
+
+label_studio:
+  url: "http://localhost:8080"
+  external_url: "http://localhost:8080"
+  api_key: "ls-smoke-token-for-local-dev"
+  database_url: "postgresql+asyncpg://postgres:postgres@localhost:5432/labelstudio"
+
+sc:
+  mock:
+    db_url: "sqlite:////app/apps/api/wafer_inspection.db"

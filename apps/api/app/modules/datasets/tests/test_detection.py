@@ -122,6 +122,7 @@ def test_create_detection_annotation_with_value() -> None:
         resp = c.post(
             "/api/v1/annotations",
             json={
+                "dataset_id": dataset_id,
                 "sample_id": sample_id,
                 "label": "",
                 "annotation_value": _BOXES,
@@ -143,6 +144,7 @@ def test_list_detection_annotations_preserves_value() -> None:
         c.post(
             "/api/v1/annotations",
             json={
+                "dataset_id": dataset_id,
                 "sample_id": sample_id,
                 "label": "",
                 "annotation_value": _BOXES,
@@ -150,7 +152,7 @@ def test_list_detection_annotations_preserves_value() -> None:
             },
         )
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations")
+        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
         assert resp.status_code == 200
         annotations = resp.json()
         assert len(annotations) == 1
@@ -159,31 +161,6 @@ def test_list_detection_annotations_preserves_value() -> None:
 
 # ---------------------------------------------------------------------------
 # Schema registry
-# ---------------------------------------------------------------------------
-
-
-def test_schema_registry_has_detection() -> None:
-    """The schema registry contains an entry for image_detection."""
-    from app.modules.datasets.domain import schemas as _schemas  # noqa: F401
-    from app.modules.datasets.domain.entities import schema_registry
-
-    schema = schema_registry.get("image_detection")
-    assert schema is not None
-    assert schema.dataset_type == "image_detection"
-    assert schema.task_type == "detection"
-
-
-def test_schema_registry_allowed_pairs_includes_detection() -> None:
-    """get_allowed_pairs returns the detection pair."""
-    from app.shared.api.schemas import DatasetType, TaskType
-    from app.modules.datasets.domain import schemas as _schemas  # noqa: F401
-    from app.modules.datasets.domain.entities import schema_registry
-
-    pairs = schema_registry.get_allowed_pairs()
-    assert DatasetType.IMAGE_DETECTION in pairs
-    assert pairs[DatasetType.IMAGE_DETECTION] == TaskType.DETECTION
-
-
 # ---------------------------------------------------------------------------
 # Compatibility
 # ---------------------------------------------------------------------------

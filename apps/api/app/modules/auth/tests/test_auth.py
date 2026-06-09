@@ -33,7 +33,7 @@ def _auth(token: str) -> dict:
 
 async def _promote_superadmin(email: str) -> None:
     """Directly promote a user to superadmin via DB."""
-    from app.modules.auth.interfaces.controllers.deps import _get_session_factory
+    from app.modules.auth.port.http.deps import _get_session_factory
     sf = _get_session_factory()
     async with sf() as session:
         result = await session.execute(select(UserORM).where(UserORM.email == email))

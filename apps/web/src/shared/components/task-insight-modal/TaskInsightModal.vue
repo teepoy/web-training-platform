@@ -17,7 +17,7 @@
           <n-button v-if="canCancel" type="warning" ghost :loading="cancelMutation.isPending.value" @click="cancelMutation.mutate()">
             Interrupt
           </n-button>
-          <n-button v-if="activeDetail?.derived.deep_links.prefect_run_url" tag="a" :href="activeDetail?.derived.deep_links.prefect_run_url || undefined" target="_blank">
+          <n-button v-if="activeDetail?.derived.deep_links?.prefect_run_url" tag="a" :href="activeDetail?.derived.deep_links?.prefect_run_url || undefined" target="_blank">
             Prefect
           </n-button>
         </n-space>
@@ -46,22 +46,22 @@
             <n-space vertical>
               <n-text depth="3">{{ stage.summary }}</n-text>
               <div v-if="stage.key === 'execution_flow'">
-                <n-empty v-if="waterfallRows(stage.nodes).length === 0" description="No execution timing available" />
+                <n-empty v-if="waterfallRows(stage.nodes ?? []).length === 0" description="No execution timing available" />
                 <div v-else class="waterfall-shell">
-                  <svg :viewBox="`0 0 ${waterfallWidth} ${waterfallHeight(stage.nodes)}`" width="100%" :height="waterfallHeight(stage.nodes)">
+                  <svg :viewBox="`0 0 ${waterfallWidth} ${waterfallHeight(stage.nodes ?? [])}`" width="100%" :height="waterfallHeight(stage.nodes ?? [])">
                     <g>
                       <line
-                        v-for="tick in waterfallTicks(stage.nodes)"
+                        v-for="tick in waterfallTicks(stage.nodes ?? [])"
                         :key="tick.x"
                         :x1="tick.x"
                         :x2="tick.x"
                         y1="28"
-                        :y2="waterfallHeight(stage.nodes) - 12"
+                        :y2="waterfallHeight(stage.nodes ?? []) - 12"
                         stroke="rgba(255,255,255,0.12)"
                         stroke-width="1"
                       />
                       <text
-                        v-for="tick in waterfallTicks(stage.nodes)"
+                        v-for="tick in waterfallTicks(stage.nodes ?? [])"
                         :key="tick.label + tick.x"
                         :x="tick.x + 4"
                         y="18"
@@ -69,7 +69,7 @@
                         font-size="11"
                       >{{ tick.label }}</text>
                     </g>
-                    <g v-for="row in waterfallRows(stage.nodes)" :key="row.key">
+                    <g v-for="row in waterfallRows(stage.nodes ?? [])" :key="row.key">
                       <text
                         x="12"
                         :y="row.y + 16"
@@ -94,8 +94,8 @@
                   </svg>
                 </div>
               </div>
-              <n-steps v-else vertical size="small" :current="currentStep(stage.nodes)" status="process">
-                <n-step v-for="node in stage.nodes" :key="node.key" :title="node.label" :description="node.detail" />
+              <n-steps v-else vertical size="small" :current="currentStep(stage.nodes ?? [])" status="process">
+                <n-step v-for="node in stage.nodes ?? []" :key="node.key" :title="node.label" :description="node.detail" />
               </n-steps>
             </n-space>
           </n-collapse-item>
@@ -105,7 +105,7 @@
           <n-gi>
             <n-card title="Dynamic Console" size="small">
               <n-space vertical size="small">
-                <n-text v-if="activeDetail?.derived.summary_metrics.rate_hint" depth="3">{{ activeDetail?.derived.summary_metrics.rate_hint }}</n-text>
+                <n-text v-if="activeDetail?.derived.summary_metrics?.rate_hint" depth="3">{{ activeDetail?.derived.summary_metrics?.rate_hint }}</n-text>
                 <n-code
                   :code="consoleText"
                   language="text"
@@ -119,13 +119,13 @@
             <n-card title="Validation & Output" size="small">
               <n-space vertical>
                 <n-grid :cols="3" :x-gap="12">
-                  <n-gi><n-statistic label="Errors" :value="String(activeDetail?.derived.scorecard.errors || 0)" /></n-gi>
-                  <n-gi><n-statistic label="Warnings" :value="String(activeDetail?.derived.scorecard.warnings || 0)" /></n-gi>
-                  <n-gi><n-statistic label="Artifacts" :value="String(activeDetail?.derived.artifacts.length || 0)" /></n-gi>
+                  <n-gi><n-statistic label="Errors" :value="String(activeDetail?.derived.scorecard?.errors || 0)" /></n-gi>
+                  <n-gi><n-statistic label="Warnings" :value="String(activeDetail?.derived.scorecard?.warnings || 0)" /></n-gi>
+                  <n-gi><n-statistic label="Artifacts" :value="String(activeDetail?.derived.artifacts?.length || 0)" /></n-gi>
                 </n-grid>
-                <n-empty v-if="(activeDetail?.derived.scorecard.checks.length || 0) === 0" description="No checks available" />
+                <n-empty v-if="(activeDetail?.derived.scorecard?.checks?.length || 0) === 0" description="No checks available" />
                 <n-space v-else vertical size="small">
-                  <n-card v-for="check in activeDetail?.derived.scorecard.checks || []" :key="check.key" size="small" embedded>
+                  <n-card v-for="check in activeDetail?.derived.scorecard?.checks || []" :key="check.key" size="small" embedded>
                     <n-space justify="space-between" align="center">
                       <n-text strong>{{ check.label }}</n-text>
                       <n-tag size="small" :type="checkType(check.status)">{{ check.status }}</n-tag>
@@ -144,7 +144,6 @@
 
 <script lang="ts">
 import type { InjectionKey, Ref } from 'vue'
-import type { TaskTrackerDetail } from '../../api'
 export const TASK_INSIGHT_ORG_ID_KEY: InjectionKey<Ref<string | null>> = Symbol('task-insight-org-id')
 export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
   (taskId: Ref<string | null>, callback: (payload: TaskTrackerDetail) => void) => void
@@ -156,7 +155,8 @@ import { computed, inject, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useMessage } from 'naive-ui'
 import { useTrackedTaskQuery, useCancelTrackedTaskMutation, taskTrackerKeys } from '../../api/hooks'
-import type { TaskTrackerNode, TaskTrackerSummary } from '../../api'
+import type { TaskTrackerNode } from '@/generated/orval/models'
+import type { TaskTrackerDetailResponse as TaskTrackerDetail, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 
 const props = defineProps<{
   show: boolean

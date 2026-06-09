@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { getApiBase, getAuthToken, ApiError } from "./client";
-import type { GlobalChatRequest } from "./types";
+import type { GlobalChatRequest } from "@/generated/orval/models";
 
 /** Parsed SSE frame from a POST-based SSE response stream. */
 export interface SSEFrame {

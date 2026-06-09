@@ -3,30 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TypeAlias
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.core.config import _resolve_gpu_worker_url
-from app.modules.presets.registry import PresetRegistry
-from app.modules.datasets.application.sample_access.factory import SampleAccessFactory
-from app.modules.datasets.application.services.dataset_payload_store import (
-    DatasetPayloadStore,
-)
-from app.modules.sensors.infrastructure.repositories.repository import (
+from platform_runtime.sparse import DatasetPayloadStore
+from app.modules.sensors.adapter.repositories.repository import (
     SensorRepositoryImpl,
 )
 from app.modules.sensors.domain.entities.registry import SensorRegistry
-from app.modules.settings.infrastructure.repositories.repository import (
+from app.modules.settings.adapter.repositories.repository import (
     InMemorySettingsRepository,
 )
 from app.shared.db.sql_repository import SqlRepository
-from app.modules.training.infrastructure.clients.kubeflow_client import KubeflowClient
-from app.modules.training.infrastructure.engines.local_kubeflow import (
+from app.modules.training.adapter.clients.kubeflow_client import KubeflowClient
+from app.modules.training.adapter.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
     LocalProcessEngine,
 )
-from app.modules.training.infrastructure.engines.prefect_engine import (
+from app.modules.training.adapter.engines.prefect_engine import (
     PrefectWorkPoolEngine,
 )
 from app.shared.application.notification import WebhookNotificationSink
@@ -36,31 +32,45 @@ from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
-from app.shared.infrastructure.workers.embedding import EmbeddingClient
-from app.shared.infrastructure.workers.gpu_worker import GpuWorkerClient
-from app.shared.infrastructure.workers.inference_worker import InferenceWorkerClient
-from app.modules.dashboard.application.services.service_health import (
+from app.modules.dashboard.app.services.service_health import (
     ServiceHealthService,
 )
-from app.modules.models.infrastructure.repositories.repository import (
+from app.modules.models.adapter.repositories.repository import (
     ModelArtifactRepository,
 )
-from app.modules.preview.application.services.preview_store import PreviewStore
-from app.modules.preview.application.services.preview_upstream import (
+from app.modules.preview.app.services.preview_store import PreviewStore
+from app.modules.preview.app.services.preview_upstream import (
     MockUpstreamAdapter,
     PreviewUpstreamRouter,
     UpstreamAdapter,
 )
-from app.modules.prediction.application.services.prediction_orchestrator import (
+from app.modules.prediction.app.services.prediction_orchestrator import (
     PredictionOrchestrator,
 )
 from app.modules.prediction.domain.repository import PredictionRepository
-from app.modules.models.application.services.model_service import ModelService
-from app.modules.schedules.application.services.scheduler import SchedulerService
-from app.modules.training.application.services.orchestrator import TrainingOrchestrator
+from app.modules.models.app.services.model_service import ModelService
+from app.modules.schedules.app.services.scheduler import SchedulerService
+from app.modules.training.app.services.orchestrator import TrainingOrchestrator
 from app.shared.application.artifacts import ArtifactService
 from app.shared.infrastructure.surface_store import SurfaceStore
-from app.modules.agent.application.services.session_store import SessionStore
+from app.modules.agent.app.services.session_store import SessionStore
+from app.shared.context import AppContext, build_shared_infra
+
+# Per-module container factories
+from app.modules.datasets.container import init_datasets
+from app.modules.prediction.container import init_prediction
+from app.modules.training.container import init_training
+from app.modules.models.container import init_models
+from app.modules.dashboard.container import init_dashboard
+from app.modules.preview.container import init_preview
+from app.modules.task_tracker.container import init_task_tracker
+from app.modules.schedules.container import init_schedules
+from app.modules.sensors.container import init_sensors
+from app.modules.settings.container import init_settings
+from app.modules.agent.container import init_agent
+from app.modules.classify.container import init_classify
+from app.modules.auth.container import init_auth
+from app.modules.sc.container import init_sc
 
 AppConfig: TypeAlias = Any
 ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
@@ -78,9 +88,6 @@ class AppContainer:
     label_studio_client: LabelStudioClient
     llm_client: OpenAICompatibleLlmClient
     prefect_client: PrefectClient
-    embedding_client: EmbeddingClient
-    inference_worker: InferenceWorkerClient
-    gpu_worker: GpuWorkerClient
     kubeflow_client: KubeflowClient | None
     notification_sink: WebhookNotificationSink
     training_engine: TrainingExecutionEngine
@@ -94,8 +101,6 @@ class AppContainer:
     prediction_repository: PredictionRepository
     dataset_repository: SqlRepository
     dataset_payload_store: DatasetPayloadStore
-    sample_access_factory: SampleAccessFactory
-    preset_registry: PresetRegistry
     preview_store: PreviewStore
     preview_upstream: UpstreamAdapter
     prediction_orchestrator: PredictionOrchestrator
@@ -108,9 +113,6 @@ class AppContainer:
         prefect_close = getattr(self.prefect_client, "close", None)
         if prefect_close is not None:
             await prefect_close()
-        embedding_close = getattr(self.embedding_client, "close", None)
-        if embedding_close is not None:
-            embedding_close()
         await self.db_engine.dispose()
 
 
@@ -156,17 +158,12 @@ def _build_training_engine(
             storage=artifact_storage,
         )
     if engine == "prefect":
-        preset_registry = PresetRegistry(
-            presets_dir=str(cfg.presets.dir),
-            strict=bool(cfg.presets.strict),
-        )
         return PrefectWorkPoolEngine(
             prefect_client=prefect_client,
             work_pool_name=str(cfg.prefect.work_pool_name),
             work_pool_type=str(cfg.prefect.work_pool_type),
             flow_name=str(cfg.prefect.flow_name),
             concurrency_limit=int(cfg.prefect.concurrency_limit),
-            preset_registry=preset_registry,
         )
     raise RuntimeError(f"Unsupported execution.engine: {engine}")
 
@@ -214,13 +211,6 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             timeout_seconds=float(cfg.llm.timeout_seconds),
         ),
         prefect_client=prefect_client,
-        embedding_client=EmbeddingClient(
-            grpc_target=str(cfg.embedding.grpc_target),
-        ),
-        inference_worker=InferenceWorkerClient(
-            base_url=str(cfg.inference.base_url),
-        ),
-        gpu_worker=GpuWorkerClient(base_url=_resolve_gpu_worker_url(cfg)),
         kubeflow_client=kubeflow_client,
         notification_sink=notification_sink,
         training_engine=training_engine,
@@ -231,7 +221,9 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
             artifact_service=artifact_service,
         ),
         sensor_registry=SensorRegistry(
-            sensors_dir=str(cfg.sensors.dir),
+            sensors_dir=str(Path(cfg.data.dir) / cfg.sensors.dir)
+            if cfg.data.dir
+            else str(cfg.sensors.dir),
             strict=bool(cfg.sensors.strict),
         ),
         sensor_repository=SensorRepositoryImpl(session_factory=session_factory),
@@ -240,19 +232,11 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
         service_health_service=ServiceHealthService(
             config=cfg,
             prefect_client=prefect_client,
-            embedding_client=EmbeddingClient(
-                grpc_target=str(cfg.embedding.grpc_target)
-            ),
         ),
         model_repository=ModelArtifactRepository(session_factory=session_factory),
         prediction_repository=prediction_repository,
         dataset_repository=dataset_repository,
         dataset_payload_store=DatasetPayloadStore(storage=artifact_storage),
-        sample_access_factory=SampleAccessFactory(repo=prediction_repository),
-        preset_registry=PresetRegistry(
-            presets_dir=str(cfg.presets.dir),
-            strict=bool(cfg.presets.strict),
-        ),
         preview_store=PreviewStore(),
         preview_upstream=PreviewUpstreamRouter(
             upstreams={"mock": MockUpstreamAdapter()}
@@ -274,17 +258,118 @@ def _build_base_container(cfg: AppConfig) -> AppContainer:
     )
 
 
-def build_app_container(cfg: AppConfig) -> AppContainer:
-    return _build_base_container(cfg)
-
-
 def build_flow_container(cfg: AppConfig) -> AppContainer:
+    """Legacy flow container — returns flat AppContainer without per-module contexts.
+
+    Prefer :func:`build_flow_app_context` for new Prefect flows that need
+    per-module dependencies (e.g. SC repository, upstream reader,
+    image fetcher).  This function is kept for backward compatibility
+    with flows that only reference shared infra fields on AppContainer.
+    """
     return _build_base_container(cfg)
 
 
-def build_agent_container(cfg: AppConfig) -> AppContainer:
-    return _build_base_container(cfg)
+def build_flow_app_context(cfg: AppConfig) -> AppContext:
+    """Build AppContext for Prefect flows — full per-module context wiring.
+
+    Unlike ``build_flow_container()`` which returns a legacy flat
+    AppContainer, this returns an ``AppContext`` whose ``.sc``,
+    ``.datasets``, etc. fields are fully populated by the same per-module
+    ``init_*()`` factories used in the FastAPI server path.
+
+    Prefect flows that need SC module dependencies should use this
+    entrypoint and access them via ``ctx.sc.repository``,
+    ``ctx.sc.upstream_reader``, ``ctx.sc.image_fetcher`` etc. — no local
+    ``_build_sc_*`` helpers required.
+
+    **Lifecycle**: callers MUST invoke :func:`close_flow_app_context` when
+    the context is no longer needed to release the DB engine and HTTP
+    clients.
+    """
+    return build_app_context(cfg)
 
 
-def build_cli_container(cfg: AppConfig) -> AppContainer:
-    return _build_base_container(cfg)
+async def close_flow_app_context(ctx: AppContext) -> None:
+    """Clean up resources held by a flow ``AppContext``.
+
+    Disposes the async SQLAlchemy engine and closes the Prefect HTTP
+    client transport.
+    """
+    prefect_close = getattr(ctx.shared.prefect_client, "close", None)
+    if prefect_close is not None:
+        await prefect_close()
+    await ctx.shared.db_engine.dispose()
+
+
+def build_app_context(cfg: AppConfig) -> AppContext:
+    """Build AppContext from config - per-module contexts with cross-deps wired."""
+    shared = build_shared_infra(cfg)
+
+    # Level 0: no cross-deps
+    auth = init_auth(shared)
+    settings = init_settings(shared)
+    models = init_models(shared)
+    preview = init_preview(shared)
+    sensors = init_sensors(shared)
+
+    # Level 0 but depends on shared infra only
+    datasets = init_datasets(shared)
+
+    # Level 0: prediction (needs dataset_service from datasets)
+    prediction = init_prediction(
+        shared,
+        dataset_service=datasets.dataset_service,
+        dataset_storage_factory=datasets.dataset_storage_factory,
+    )
+
+    # Level 1: one cross-dep
+    # task_tracker creates its own repo, exposes it
+    task_tracker = init_task_tracker(shared)
+    # schedules needs task_tracker_repository
+    schedules = init_schedules(
+        shared, task_tracker_repository=task_tracker.task_tracker_repository
+    )
+    # training needs prediction repository port + sample_access_factory (from datasets)
+    training = init_training(
+        shared,
+    )
+
+    # Level 2: multiple cross-deps
+    dashboard = init_dashboard(
+        shared,
+        task_tracker_port=task_tracker.task_tracker_port,
+    )
+    classify = init_classify(shared)
+    agent = init_agent(shared)
+
+    # Level 3: SC module
+    from app.modules.sc.adapter.sparse_aware_reader import SparseAwareScDatasetReader
+
+    sc_dataset_reader = SparseAwareScDatasetReader(
+        underlying=datasets.dataset_reader,
+        storage_factory=datasets.dataset_storage_factory,
+    )
+    sc = init_sc(
+        shared,
+        dataset_reader=sc_dataset_reader,
+        dataset_payload_store=datasets.dataset_payload_store,
+        storage_factory=datasets.dataset_storage_factory,
+    )
+
+    return AppContext(
+        shared=shared,
+        auth=auth,
+        settings=settings,
+        datasets=datasets,
+        models=models,
+        preview=preview,
+        prediction=prediction,
+        sensors=sensors,
+        schedules=schedules,
+        task_tracker=task_tracker,
+        training=training,
+        dashboard=dashboard,
+        classify=classify,
+        agent=agent,
+        sc=sc,
+    )

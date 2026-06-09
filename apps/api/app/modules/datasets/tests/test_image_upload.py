@@ -28,10 +28,10 @@ def _create_dataset_and_sample(c: TestClient) -> tuple[str, str]:
 
 def test_upload_success() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c)
+        dataset_id, sample_id = _create_dataset_and_sample(c)
 
         resp = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("test.jpg", b"\xff\xd8\xff" + b"fake-jpeg-data", "image/jpeg")},
         )
         assert resp.status_code == 200
@@ -53,7 +53,7 @@ def test_upload_appends_to_existing() -> None:
 
         # First upload
         resp1 = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("img1.jpg", b"\xff\xd8\xff" + b"img1-data", "image/jpeg")},
         )
         assert resp1.status_code == 200
@@ -61,14 +61,14 @@ def test_upload_appends_to_existing() -> None:
 
         # Second upload
         resp2 = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("img2.jpg", b"\xff\xd8\xff" + b"img2-data", "image/jpeg")},
         )
         assert resp2.status_code == 200
         assert resp2.json()["index"] == 1
 
         # GET sample → image_uris should have 2 items
-        sample_resp = c.get(f"/api/v1/samples/{sample_id}")
+        sample_resp = c.get(f"/api/v1/datasets/{dataset_id}/samples/{sample_id}")
         assert sample_resp.status_code == 200
         assert len(sample_resp.json()["image_uris"]) == 2
 
@@ -80,11 +80,11 @@ def test_upload_appends_to_existing() -> None:
 
 def test_proxy_resolves_uploaded_uri() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c)
+        dataset_id, sample_id = _create_dataset_and_sample(c)
 
         image_bytes = b"\xff\xd8\xff" + b"roundtrip-payload"
         resp = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("rt.jpg", image_bytes, "image/jpeg")},
         )
         assert resp.status_code == 200
@@ -118,11 +118,11 @@ def test_proxy_resolves_data_uri() -> None:
 
 def test_upload_oversized_file() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c)
+        dataset_id, sample_id = _create_dataset_and_sample(c)
 
         big_data = b"x" * (10 * 1024 * 1024 + 1)
         resp = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("big.jpg", big_data, "image/jpeg")},
         )
         assert resp.status_code == 413
@@ -135,8 +135,9 @@ def test_upload_oversized_file() -> None:
 
 def test_upload_to_nonexistent_sample() -> None:
     with TestClient(app) as c:
+        dataset_id, _ = _create_dataset_and_sample(c)
         resp = c.post(
-            "/api/v1/samples/nonexistent-sample-id/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/nonexistent-sample-id/upload",
             files={"file": ("img.jpg", b"\xff\xd8\xff" + b"data", "image/jpeg")},
         )
         assert resp.status_code == 404
@@ -182,10 +183,10 @@ def test_proxy_missing_memory_key() -> None:
 
 def test_upload_non_image_content_type() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c)
+        dataset_id, sample_id = _create_dataset_and_sample(c)
 
         resp = c.post(
-            f"/api/v1/samples/{sample_id}/upload",
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/upload",
             files={"file": ("readme.txt", b"hello world", "text/plain")},
         )
         assert resp.status_code == 400

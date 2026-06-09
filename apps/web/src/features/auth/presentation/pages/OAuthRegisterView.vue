@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-page">
+  <div class="auth-page" :style="themeStyleVars">
     <n-card class="auth-card" title="Complete Registration">
       <n-form
         ref="formRef"
@@ -19,13 +19,13 @@
             v-model:value="formData.name"
             type="text"
             placeholder="Your name"
-            :disabled="loading"
+            :disabled="registerMutation.isPending.value"
           />
         </n-form-item>
         <n-button
           type="primary"
           block
-          :loading="loading"
+          :loading="registerMutation.isPending.value"
           @click="handleSubmit"
         >
           Complete Registration
@@ -48,22 +48,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useMessage, type FormInst, type FormRules } from 'naive-ui'
+import { useMessage, useThemeVars, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '@/features/auth/application/store'
 import { useOrgStore } from '@/features/auth/application/org'
-import { authOAuthRegister } from '../../infrastructure/api'
+import { useOauthRegisterApiV1AuthOauthRegisterPost } from '@/generated/orval/endpoints/api'
+import type { LoginResponse } from '@/generated/orval/models'
 
 const router = useRouter()
 const route = useRoute()
 const message = useMessage()
 const authStore = useAuthStore()
 const orgStore = useOrgStore()
+const themeVars = useThemeVars()
+const themeStyleVars = computed(() => ({
+  '--auth-bg-start': themeVars.value.bodyColor,
+  '--auth-bg-mid': themeVars.value.cardColor,
+  '--auth-bg-end': themeVars.value.modalColor,
+  '--auth-shadow': themeVars.value.boxShadow1,
+}))
 
 const formRef = ref<FormInst | null>(null)
-const loading = ref(false)
 const errorMessage = ref<string | null>(null)
+
+const registerMutation = useOauthRegisterApiV1AuthOauthRegisterPost()
 
 function getQueryParam(key: string): string {
   const raw = route.query[key]
@@ -99,22 +108,22 @@ async function handleSubmit() {
     return
   }
 
-  loading.value = true
   errorMessage.value = null
   try {
-    const resp = await authOAuthRegister({
-      state_token: stateToken,
-      name: formData.value.name,
+    const resp = await registerMutation.mutateAsync({
+      data: {
+        state_token: stateToken,
+        name: formData.value.name,
+      },
     })
-    await authStore.oauthLogin(resp.access_token)
+    const loginResp = resp.data as LoginResponse
+    await authStore.oauthLogin(loginResp.access_token)
     await orgStore.fetchOrganizations()
     router.replace('/datasets')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Registration failed'
     message.error(msg)
     errorMessage.value = msg
-  } finally {
-    loading.value = false
   }
 }
 </script>
@@ -125,12 +134,17 @@ async function handleSubmit() {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+  background: linear-gradient(
+    135deg,
+    var(--auth-bg-start) 0%,
+    var(--auth-bg-mid) 50%,
+    var(--auth-bg-end) 100%
+  );
 }
 
 .auth-card {
   width: 360px;
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--auth-shadow);
 }
 </style>

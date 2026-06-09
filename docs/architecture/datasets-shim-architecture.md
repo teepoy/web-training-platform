@@ -7,7 +7,7 @@ The `DatasetsView` uses a schema-driven shim architecture to support different U
 The architecture consists of five layers:
 
 1. **Host (`DatasetListView.vue`)**: Thin container — fetches data, resolves active dataset type, renders the shim.
-2. **Domain Modules (`src/modules/dataset-*/`)**: One module per dataset type; each registers its schema and shim on import.
+2. **Domain Modules (`src/features/datasets/presentation/dataset-types/`)**: One module per dataset type; each registers its schema and shim on import.
 3. **Schema registry (`schema-registry.ts`)**: Map of `dataset_type → DatasetSchemaDescriptor`; provides `resolveDatasetShim()`.
 4. **Shared UI/API code (`src/shared/`)**: Reusable Vue/Naive UI components, API clients, and dataset-list helpers.
 5. **Shims (`ListShim.vue`)**: Per-module leaf components defining the dataset list layout.
@@ -42,12 +42,12 @@ export function getMockSampleFactory(datasetType: string): (...) => unknown { ..
 
 `resolveDatasetShim` falls back to the `image_classification` shim for unknown types.
 
-### 3. Schema Modules: `src/modules/dataset-*/`
+### 3. Schema Modules: `src/features/datasets/presentation/dataset-types/`
 
 Each dataset type module registers its schema and shim:
 
 ```typescript
-// src/modules/dataset-detection/views/schema.ts
+// src/features/datasets/presentation/dataset-types/detection/views/schema.ts
 import { registerDatasetSchema } from "@/features/datasets/presentation/pages/schema-registry";
 
 registerDatasetSchema({
@@ -76,9 +76,9 @@ Shims are per-module components defining per-type dataset list layouts using `sr
 
 | Shim | Dataset Type | Location |
 |------|-------------|----------|
-| `ListShim.vue` | `image_classification` | `src/modules/dataset-classification/views/` |
-| `ListShim.vue` | `image_vqa` | `src/modules/dataset-vqa/views/` |
-| `ListShim.vue` | `image_detection` | `src/modules/dataset-detection/views/` |
+| `ListShim.vue` | `image_classification` | `src/features/datasets/presentation/dataset-types/classification/views/` |
+| `ListShim.vue` | `image_vqa` | `src/features/datasets/presentation/dataset-types/vqa/views/` |
+| `ListShim.vue` | `image_detection` | `src/features/datasets/presentation/dataset-types/detection/views/` |
 
 ## Backend Schema System
 
@@ -140,9 +140,9 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
    export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
    ```
 
-5. **Create the shim** `src/modules/dataset-segmentation/views/ListShim.vue`.
+5. **Create the shim** `src/features/datasets/presentation/dataset-types/segmentation/views/ListShim.vue`.
 
-6. **Create the schema module** `src/modules/dataset-segmentation/views/schema.ts`:
+6. **Create the schema module** `src/features/datasets/presentation/dataset-types/segmentation/views/schema.ts`:
    ```typescript
    import { defineAsyncComponent } from "vue";
    import { registerDatasetSchema } from "@/features/datasets/presentation/pages/schema-registry";
@@ -158,7 +158,7 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
 
 7. **Register in the app** `src/app/registrations.ts` — add the import:
    ```typescript
-   import "../modules/dataset-segmentation/registrations";
+   import "../features/datasets/presentation/dataset-types/segmentation/registrations";
    ```
 
 ### Seed script

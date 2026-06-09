@@ -84,12 +84,18 @@
 <script setup lang="ts">
 import { ref, computed, h } from "vue";
 import { useRouter } from "vue-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
-import { listSchedules, createSchedule, deleteSchedule, pauseSchedule, resumeSchedule } from "@/features/schedules/infrastructure/api";
-import type { Schedule } from "@/features/schedules/domain/models";
+import {
+  useListSchedulesApiV1SchedulesGet,
+  useCreateScheduleApiV1SchedulesPost,
+  useDeleteScheduleApiV1SchedulesScheduleIdDelete,
+  usePauseScheduleApiV1SchedulesScheduleIdPausePost,
+  useResumeScheduleApiV1SchedulesScheduleIdResumePost,
+} from "@/generated/orval/endpoints/api";
 import { useOrgStore } from '@/features/auth/application/org';
+import type { ScheduleResponse as Schedule } from "@/generated/orval/models";
 
 const router = useRouter();
 const message = useMessage();
@@ -100,53 +106,58 @@ const orgStore = useOrgStore();
 // Query
 // ---------------------------------------------------------------------------
 
-const { data: schedules, isLoading } = useQuery({
-  queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
-  queryFn: listSchedules,
-  enabled: computed(() => !!orgStore.currentOrgId),
+const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet({
+  query: {
+    select: (response) => response.data,
+    queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
 });
 
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
 
-const createMutation = useMutation({
-  mutationFn: (body: Parameters<typeof createSchedule>[0]) =>
-    createSchedule(body),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
-    message.success("Schedule created");
-    showModal.value = false;
-    resetForm();
+const createMutation = useCreateScheduleApiV1SchedulesPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      message.success("Schedule created");
+      showModal.value = false;
+      resetForm();
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to create schedule"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to create schedule"),
 });
 
-const deleteMutation = useMutation({
-  mutationFn: (id: string) => deleteSchedule(id),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
-    message.success("Schedule deleted");
+const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      message.success("Schedule deleted");
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to delete schedule"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to delete schedule"),
 });
 
-const pauseMutation = useMutation({
-  mutationFn: (id: string) => pauseSchedule(id),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
-    message.success("Schedule paused");
+const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      message.success("Schedule paused");
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to pause schedule"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to pause schedule"),
 });
 
-const resumeMutation = useMutation({
-  mutationFn: (id: string) => resumeSchedule(id),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
-    message.success("Schedule resumed");
+const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      message.success("Schedule resumed");
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to resume schedule"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to resume schedule"),
 });
 
 // ---------------------------------------------------------------------------
@@ -215,9 +226,9 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
               onClick: (e: Event) => {
                 e.stopPropagation();
                 if (row.is_schedule_active) {
-                  pauseMutation.mutate(row.id);
+                  pauseMutation.mutate({ scheduleId: row.id });
                 } else {
-                  resumeMutation.mutate(row.id);
+                  resumeMutation.mutate({ scheduleId: row.id });
                 }
               },
             },
@@ -228,7 +239,7 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
             {
               onPositiveClick: (e: MouseEvent) => {
                 e.stopPropagation();
-                deleteMutation.mutate(row.id);
+                deleteMutation.mutate({ scheduleId: row.id });
               },
             },
             {
@@ -318,11 +329,13 @@ function onSubmit() {
     }
 
     createMutation.mutate({
-      name: formModel.value.name,
-      flow_name: formModel.value.flow_name,
-      cron: formModel.value.cron,
-      parameters: parsedParams,
-      description: formModel.value.description || undefined,
+      data: {
+        name: formModel.value.name,
+        flow_name: formModel.value.flow_name,
+        cron: formModel.value.cron,
+        parameters: parsedParams,
+        description: formModel.value.description || undefined,
+      },
     });
   });
   // Return false to keep modal open while validating/mutating

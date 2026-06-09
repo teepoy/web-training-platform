@@ -26,7 +26,7 @@ def test_browse_preview_items():
         assert "has_more" in items_data
 
         import asyncio
-        repo = app.state.container.prediction_repository
+        repo = app.state.app_context.prediction.prediction_repository
         async def _count():
             async with repo.session_factory() as db:
                 return await db.scalar(select(func.count()).select_from(DatasetORM))

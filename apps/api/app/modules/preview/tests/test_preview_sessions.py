@@ -4,16 +4,16 @@ import pytest
 from sqlalchemy import func, select
 from unittest.mock import AsyncMock, MagicMock
 
-from app.composition import build_app_container
+from app.composition import build_app_context
 from app.core.config import load_config
-from app.modules.preview.application.services.preview_service import PreviewService
+from app.modules.preview.app.services.preview_service import PreviewService
 from app.shared.db.models import DatasetORM
 from app.shared.db.session import init_db
 from app.shared.db.sql_repository import SqlRepository
 
 
 def _container():
-    return build_app_container(load_config())
+    return build_app_context(load_config())
 
 
 @pytest.mark.asyncio
@@ -21,8 +21,12 @@ def _container():
 async def test_create_session() -> None:
     """Preview session creation must not touch dataset/sample tables."""
     container = _container()
-    await init_db(container.db_engine)
-    service = PreviewService(store=container.preview_store, upstream=container.preview_upstream)
+    preview = container.preview
+    assert preview is not None
+    prediction = container.prediction
+    assert prediction is not None
+    await init_db(container.shared.db_engine)
+    service = PreviewService(store=preview.preview_store, upstream=preview.preview_upstream)
 
     try:
         session = await service.create_session("test-collection", "user-1")
@@ -31,22 +35,26 @@ async def test_create_session() -> None:
         assert len(session.items) > 0
         assert session.persist_lock is False
 
-        repo = container.prediction_repository
+        repo = prediction.prediction_repository
         assert isinstance(repo, SqlRepository)
         async with repo.session_factory() as db:
             count = await db.scalar(select(func.count()).select_from(DatasetORM))
 
         assert count == 0
     finally:
-        await container.close()
+        await container.shared.db_engine.dispose()
 
 
 @pytest.mark.asyncio
 async def test_persist_lock() -> None:
     container = _container()
-    await init_db(container.db_engine)
-    service = PreviewService(store=container.preview_store, upstream=container.preview_upstream)
-    repo = container.prediction_repository
+    preview = container.preview
+    assert preview is not None
+    prediction = container.prediction
+    assert prediction is not None
+    await init_db(container.shared.db_engine)
+    service = PreviewService(store=preview.preview_store, upstream=preview.preview_upstream)
+    repo = prediction.prediction_repository
     assert isinstance(repo, SqlRepository)
 
     try:
@@ -55,19 +63,28 @@ async def test_persist_lock() -> None:
         ls_client.create_project = AsyncMock(return_value={"id": 1, "title": "preview"})
         ls_client.import_tasks = AsyncMock(return_value={"task_ids": [1, 2, 3, 4, 5], "task_count": 5})
 
-        first = await service.start_persist(session.session_id, "loaded_items_only", repo, ls_client)
-        second = await service.start_persist(session.session_id, "loaded_items_only", repo, ls_client)
+        datasets = container.datasets
+        assert datasets is not None
+        storage_factory = datasets.dataset_storage_factory
+        first = await service.start_persist(
+            session.session_id, "loaded_items_only", repo, storage_factory, ls_client, org_id="test-org",
+        )
+        second = await service.start_persist(
+            session.session_id, "loaded_items_only", repo, storage_factory, ls_client, org_id="test-org",
+        )
 
         assert first.status == "completed"
         assert second.dataset_id == first.dataset_id
     finally:
-        await container.close()
+        await container.shared.db_engine.dispose()
 
 
 @pytest.mark.asyncio
 async def test_fetch_next_page_cursor() -> None:
     container = _container()
-    svc = PreviewService(store=container.preview_store, upstream=container.preview_upstream)
+    preview = container.preview
+    assert preview is not None
+    svc = PreviewService(store=preview.preview_store, upstream=preview.preview_upstream)
     try:
         session = await svc.create_session(collection_ref="cursor-test", user_id="u1")
         page1 = await svc.fetch_next_page(session.session_id, cursor=None, limit=5)
@@ -80,16 +97,16 @@ async def test_fetch_next_page_cursor() -> None:
         ids2 = {i.upstream_item_id for i in page2.items}
         assert ids1.isdisjoint(ids2)
     finally:
-        await container.close()
+        await container.shared.db_engine.dispose()
 
 
 @pytest.mark.asyncio
 async def test_session_ttl_eviction() -> None:
     import asyncio
 
-    from app.modules.preview.application.services.preview_service import PreviewService
-    from app.modules.preview.application.services.preview_store import PreviewStore
-    from app.modules.preview.application.services.preview_upstream import MockUpstreamAdapter
+    from app.modules.preview.app.services.preview_service import PreviewService
+    from app.modules.preview.app.services.preview_store import PreviewStore
+    from app.modules.preview.app.services.preview_upstream import MockUpstreamAdapter
 
     store = PreviewStore(ttl_seconds=1, max_sessions=10)
     upstream = MockUpstreamAdapter()

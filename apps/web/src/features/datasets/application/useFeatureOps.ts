@@ -2,7 +2,8 @@ import { computed, h, ref, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useMessage, type DataTableColumns } from "naive-ui";
 import { listSamples } from "@/shared/api/samples"
-import { getSimilarity, type SimilarityResponse } from "@/shared/api/datasets";
+import { getSimilarity } from "@/shared/api/datasets";
+import type { SimilarityResponse } from "@/generated/orval/models";
 import { updateEmbedConfig, extractFeatures, getSelectionMetrics, getUncoveredHints } from "@/shared/api";
 import type { ExtractFeaturesResponse, SelectionMetricsResponse, UncoveredHintsResponse } from "@/shared/api";
 
@@ -62,8 +63,8 @@ export function useFeatureOps({ datasetId }: UseFeatureOpsOptions) {
 
   const sampleSelectOptions = computed(() =>
     (featureSamplesQuery.data.value?.items ?? []).map((sample) => ({
-      label: `${sample.id.slice(0, 8)}… — ${sample.image_uris.length} image(s)`,
-      value: sample.id,
+      label: `${sample.id!.slice(0, 8)}… — ${sample.image_uris!.length} image(s)`,
+      value: sample.id!,
     })),
   );
 

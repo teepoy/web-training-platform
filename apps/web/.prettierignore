@@ -1,0 +1,3 @@
+# Generated API, schema, SSE, and protobuf artifacts.
+src/generated/
+src/features/sc/generated/

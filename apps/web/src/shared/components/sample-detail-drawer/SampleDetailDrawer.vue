@@ -11,14 +11,6 @@
           <n-empty description="No sample selected" />
         </div>
 
-        <div v-else-if="isSparse" style="padding: 24px">
-          <n-result
-            status="info"
-            title="Sparse Dataset"
-            description="Detailed view not available for sparse datasets in this release."
-          />
-        </div>
-
         <div v-else style="padding: 0 4px">
           <!-- ================================================================ -->
           <!-- 1. Image Preview                                                  -->
@@ -127,9 +119,9 @@
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
                       <n-tag type="info" size="small">{{ ann.label }}</n-tag>
                       <span style="font-size: 11px; color: #888">{{ ann.created_by }}</span>
-                      <span style="font-size: 11px; color: #bbb">{{ formatDate(ann.created_at) }}</span>
+                      <span style="font-size: 11px; color: #bbb">{{ formatDate(ann.created_at ?? "") }}</span>
                     </div>
-                    <div style="font-size: 11px; color: #aaa; font-family: monospace">{{ ann.id.slice(0, 8) }}…</div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace">{{ ann.id!.slice(0, 8) }}…</div>
                   </div>
                   <n-button
                     size="small"
@@ -141,7 +133,7 @@
                   <n-popconfirm
                     positive-text="Delete"
                     negative-text="Cancel"
-                    @positive-click="deleteAnnot(ann.id)"
+                    @positive-click="deleteAnnot(ann.id!)"
                   >
                     <template #trigger>
                       <n-button size="small" quaternary type="error">Delete</n-button>
@@ -191,6 +183,7 @@
           <!-- ================================================================ -->
           <!-- 4. Replace Image                                                  -->
           <!-- ================================================================ -->
+          <template v-if="!isSparse">
           <n-divider title-placement="left">
             <span style="font-size: 13px; font-weight: 600">Replace Image</span>
           </n-divider>
@@ -227,10 +220,12 @@
               Upload
             </n-button>
           </div>
+          </template>
 
           <!-- ================================================================ -->
           <!-- 5. Find Similar                                                  -->
           <!-- ================================================================ -->
+          <template v-if="!isSparse">
           <n-divider title-placement="left">
             <span style="font-size: 13px; font-weight: 600">Find Similar</span>
           </n-divider>
@@ -284,6 +279,7 @@
               <n-empty description="No similar samples found" />
             </div>
           </div>
+          </template>
         </div>
       </n-scrollbar>
     </n-drawer-content>
@@ -310,12 +306,12 @@ import {
   NSpace,
   NAlert,
 } from "naive-ui";
-import { getSample, listAnnotationsForSample, uploadSampleImage } from "../../api/samples";
+import { getSample, uploadSampleImage, listAnnotationsForSample } from "../../api/samples";
 import { createAnnotation, updateAnnotation, deleteAnnotation } from "../../api/annotations";
 import { getSimilarity } from "../../api/datasets";
-import type { SimilarityResponse } from "../../api/datasets";
+import type { SimilarityResponse } from "@/generated/orval/models";
+import type { Annotation } from "@/generated/orval/models";
 import { resolveImageUris, FALLBACK_PLACEHOLDER } from "../../utils/image-adapters";
-import type { Annotation } from "../../api";
 
 // ---------------------------------------------------------------------------
 // Props / Emits
@@ -346,8 +342,8 @@ const isSparse = computed(() => !!props.sparse);
 // Fetch sample
 // ---------------------------------------------------------------------------
 const sampleQuery = useQuery({
-  queryKey: computed(() => ["sample", props.sampleId]),
-  queryFn: () => getSample(props.sampleId!),
+  queryKey: computed(() => ["sample", props.sampleId, isSparse.value]),
+  queryFn: () => getSample(props.sampleId!, props.datasetId),
   enabled: computed(() => !!props.sampleId),
 });
 
@@ -366,8 +362,8 @@ const metadataJson = computed(() =>
 // Fetch annotations
 // ---------------------------------------------------------------------------
 const annotationsQuery = useQuery({
-  queryKey: computed(() => ["annotations", props.sampleId]),
-  queryFn: () => listAnnotationsForSample(props.sampleId!),
+  queryKey: computed(() => ["annotations", props.sampleId, isSparse.value]),
+  queryFn: () => listAnnotationsForSample(props.sampleId!, props.datasetId),
   enabled: computed(() => !!props.sampleId),
 });
 
@@ -387,7 +383,7 @@ const editingAnnotationId = ref<string | null>(null);
 const editingLabel = ref("");
 
 function startEdit(ann: Annotation) {
-  editingAnnotationId.value = ann.id;
+  editingAnnotationId.value = ann.id ?? null;
   editingLabel.value = ann.label;
 }
 
@@ -398,7 +394,7 @@ function cancelEdit() {
 
 const updateAnnotationMutation = useMutation({
   mutationFn: ({ id, label }: { id: string; label: string }) =>
-    updateAnnotation(id, { label }),
+    updateAnnotation(id, props.datasetId, { label }),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
     cancelEdit();
@@ -411,7 +407,7 @@ function saveAnnotation(id: string) {
 }
 
 const deleteAnnotationMutation = useMutation({
-  mutationFn: (id: string) => deleteAnnotation(id),
+  mutationFn: (id: string) => deleteAnnotation(id, props.datasetId),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
   },
@@ -429,7 +425,7 @@ const newAnnotationCreatedBy = ref("web-user");
 
 const createAnnotationMutation = useMutation({
   mutationFn: (vars: { sample_id: string; label: string; created_by: string }) =>
-    createAnnotation(vars),
+    createAnnotation({ dataset_id: props.datasetId, ...vars }),
   onSuccess: () => {
     qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
     newAnnotationLabel.value = "";
@@ -468,7 +464,7 @@ async function doUpload() {
   if (!props.sampleId || !replaceFile.value) return;
   uploadingImage.value = true;
   try {
-    await uploadSampleImage(props.sampleId, replaceFile.value);
+    await uploadSampleImage(props.sampleId, replaceFile.value, props.datasetId);
     qc.invalidateQueries({ queryKey: ["sample", props.sampleId] });
     replaceFile.value = null;
     if (replacePreviewUrl.value) {
@@ -499,11 +495,11 @@ async function doFindSimilar() {
   try {
     const result: SimilarityResponse = await getSimilarity(props.datasetId, props.sampleId, 10);
     const neighbors = await Promise.all(
-      result.neighbors.map(async (nb) => {
+      (result.neighbors ?? []).map(async (nb) => {
         try {
-          const sample = await getSample(nb.sample_id);
-          const previewUri = sample.image_uris.length > 0
-            ? resolveImageUris(sample.image_uris)[0]
+          const sample = await getSample(nb.sample_id, props.datasetId);
+          const previewUri = (sample.image_uris ?? []).length > 0
+            ? resolveImageUris(sample.image_uris ?? [])[0]
             : FALLBACK_PLACEHOLDER;
           return { sample_id: nb.sample_id, score: nb.score, previewUri };
         } catch {

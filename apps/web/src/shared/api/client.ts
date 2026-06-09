@@ -35,7 +35,7 @@ function resolveApiBase(): string {
   return _apiBase;
 }
 
-async function req<T>(
+export async function req<T>(
   path: string,
   init?: RequestInit,
   timeoutMs = 30_000,
@@ -91,6 +91,10 @@ async function req<T>(
     if (r.status === 204 || r.status === 205) {
       return undefined as T;
     }
+    const acceptHeader = (initHeaders as Record<string, string> | undefined)?.Accept;
+    if (acceptHeader?.includes("application/x-protobuf")) {
+      return r as T;
+    }
     return (await r.json()) as T;
   } finally {
     clearTimeout(timer);
@@ -103,10 +107,39 @@ export function getApiBase(): string {
 
 export function getAuthToken(): string | null {
   try {
-    return _getToken?.() ?? null;
+    const token = _getToken?.() ?? null;
+    if (token) return token;
+  } catch {}
+
+  try {
+    return localStorage.getItem("auth_token");
   } catch {
     return null;
   }
+}
+
+export function getOrgId(): string | null {
+  try {
+    return _getOrgId?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function withAuthQueryParams(url: string): string {
+  const params = new URLSearchParams();
+  const token = getAuthToken();
+  const orgId = getOrgId();
+  if (token) params.set("token", token);
+  if (orgId) params.set("org_id", orgId);
+  const query = params.toString();
+  if (!query) return url;
+
+  const hashIndex = url.indexOf("#");
+  const base = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : "";
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}${query}${hash}`;
 }
 
 export async function uploadFile<T>(path: string, form: FormData): Promise<T> {
@@ -136,5 +169,3 @@ export async function uploadFile<T>(path: string, form: FormData): Promise<T> {
   }
   return r.json() as Promise<T>;
 }
-
-export { req };

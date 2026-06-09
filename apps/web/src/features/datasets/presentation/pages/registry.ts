@@ -1,6 +1,4 @@
-import type { TaskType } from "@/features/datasets/domain/models";
-
-export { resolveDatasetShim, getDatasetSchema, listRegisteredDatasetTypes } from "./schema-registry";
+import type { TaskType } from "@/shared/api/types";
 
 export function resolveDatasetTaskType(taskType: string | null | undefined): TaskType {
   if (taskType === "vqa") return "vqa";

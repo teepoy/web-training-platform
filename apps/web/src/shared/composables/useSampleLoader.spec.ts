@@ -1,135 +1,175 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { beforeEach, describe, expect, it, afterEach } from "vitest";
+import { ref, nextTick } from "vue";
+import { http, HttpResponse } from "msw";
+import { server } from "@/testing/msw/server";
+import { withQuerySetup } from "@/testing/withQuerySetup";
 
-const listSamplesWithLabelsMock = vi.fn()
-const fetchSampleSliceMock = vi.fn()
-
-vi.mock('@/shared/api/samples', () => ({
-  listSamplesWithLabels: (...args: unknown[]) => listSamplesWithLabelsMock(...args),
-}))
-
-vi.mock('@/shared/api/datasets', () => ({
-  fetchSampleSlice: (...args: unknown[]) => fetchSampleSliceMock(...args),
-}))
-
-import { useSampleLoader } from './useSampleLoader'
-import type { SampleWithLabels } from '@/shared/api/samples'
+import { useSampleLoader } from "./useSampleLoader";
+import type { SampleWithLabels } from "@/generated/orval/models";
 
 function makeSample(id: string): SampleWithLabels {
   return {
     id,
-    dataset_id: 'ds-1',
+    dataset_id: "ds-1",
     image_uris: [],
     metadata: {},
     latest_annotation: null,
-  }
+  } as SampleWithLabels;
 }
 
-function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0))
+function tick(ms = 100): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe('useSampleLoader', () => {
+describe("useSampleLoader", () => {
+  let listSamplesCalls: any[][];
+  let fetchSliceCalls: any[][];
+  let listResponse: any;
+  let sliceResponse: any;
+
   beforeEach(() => {
-    listSamplesWithLabelsMock.mockReset()
-    fetchSampleSliceMock.mockReset()
-  })
+    listSamplesCalls = [];
+    fetchSliceCalls = [];
+    listResponse = { items: [], total: 0 };
+    sliceResponse = { items: [], total: 0 };
 
-  it('uses listSamplesWithLabels when no sampleIds are provided', async () => {
-    listSamplesWithLabelsMock.mockResolvedValue({
-      items: [makeSample('a'), makeSample('b')],
+    server.use(
+      http.get(
+        "/api/v1/datasets/:datasetId/samples-with-labels",
+        ({ request, params }) => {
+          const url = new URL(request.url);
+          listSamplesCalls.push([
+            params.datasetId,
+            Number(url.searchParams.get("offset")),
+            Number(url.searchParams.get("limit")),
+            url.searchParams.get("label") || undefined,
+            url.searchParams.get("order_by") || "id",
+          ]);
+          return HttpResponse.json(listResponse);
+        },
+      ),
+      http.post(
+        "/api/v1/datasets/:datasetId/query",
+        async ({ request, params }) => {
+          const body = (await request.json()) as any;
+          fetchSliceCalls.push([params.datasetId, body.params]);
+          return HttpResponse.json(sliceResponse);
+        },
+      ),
+    );
+  });
+
+  it("uses listSamplesWithLabels when no sampleIds are provided", async () => {
+    listResponse = {
+      items: [makeSample("a"), makeSample("b")],
       total: 2,
-    })
+    };
 
-    const loader = useSampleLoader({ datasetId: 'ds-1', pageSize: 100 })
-    await loader.loadMore()
+    const { result: loader } = withQuerySetup(() =>
+      useSampleLoader({ datasetId: "ds-1", pageSize: 100 }),
+    );
+    await tick();
 
-    expect(listSamplesWithLabelsMock).toHaveBeenCalledTimes(1)
-    expect(listSamplesWithLabelsMock).toHaveBeenCalledWith('ds-1', 0, 100, undefined, 'id')
-    expect(fetchSampleSliceMock).not.toHaveBeenCalled()
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['a', 'b'])
-    expect(loader.totalCount.value).toBe(2)
-  })
+    expect(loader.samples.value.map((s) => s.id)).toEqual(["a", "b"]);
+    expect(loader.totalCount.value).toBe(2);
+  });
 
-  it('uses fetchSampleSlice when sampleIds are non-empty', async () => {
-    fetchSampleSliceMock.mockResolvedValue({
-      items: [makeSample('x'), makeSample('y')],
+  it("uses fetchSampleSlice when sampleIds are non-empty", async () => {
+    sliceResponse = {
+      items: [makeSample("x"), makeSample("y")],
       total: 2,
-    })
+    };
 
-    const sampleIds = ref<string[] | null>(['x', 'y'])
-    const loader = useSampleLoader({ datasetId: 'ds-1', pageSize: 50, sampleIds })
-    await loader.loadMore()
+    const sampleIds = ref<string[] | null>(["x", "y"]);
+    const { result: loader } = withQuerySetup(() =>
+      useSampleLoader({
+        datasetId: "ds-1",
+        pageSize: 50,
+        sampleIds,
+      }),
+    );
+    await tick();
 
-    expect(fetchSampleSliceMock).toHaveBeenCalledTimes(1)
-    expect(fetchSampleSliceMock).toHaveBeenCalledWith('ds-1', {
-      offset: 0,
-      limit: 50,
-      label: null,
-      orderBy: 'id',
-      sampleIds: ['x', 'y'],
-    })
-    expect(listSamplesWithLabelsMock).not.toHaveBeenCalled()
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['x', 'y'])
-  })
+    expect(fetchSliceCalls).toHaveLength(1);
+    expect(fetchSliceCalls[0]).toEqual([
+      "ds-1",
+      {
+        offset: 0,
+        limit: 50,
+        order_by: "id",
+        sample_ids: ["x", "y"],
+      },
+    ]);
+    expect(loader.samples.value.map((s) => s.id)).toEqual(["x", "y"]);
+  });
 
-  it('treats null and empty sampleIds as the same no-scope state', async () => {
-    listSamplesWithLabelsMock.mockResolvedValue({ items: [makeSample('a')], total: 1 })
+  it("treats null and empty sampleIds as the same no-scope state", async () => {
+    listResponse = { items: [makeSample("a")], total: 1 };
 
-    const sampleIds = ref<string[] | null>([])
-    const loader = useSampleLoader({ datasetId: 'ds-1', pageSize: 100, sampleIds })
-    await loader.loadMore()
+    const sampleIds = ref<string[] | null>([]);
+    const { result: loader } = withQuerySetup(() =>
+      useSampleLoader({
+        datasetId: "ds-1",
+        pageSize: 100,
+        sampleIds,
+      }),
+    );
+    await tick();
+    expect(listSamplesCalls).toHaveLength(1);
 
-    expect(listSamplesWithLabelsMock).toHaveBeenCalledTimes(1)
-    expect(fetchSampleSliceMock).not.toHaveBeenCalled()
+    sampleIds.value = null;
+    await tick();
 
-    sampleIds.value = null
-    await flush()
-    await flush()
+    expect(loader.samples.value.length).toBe(1);
+    expect(loader.samples.value.map((s) => s.id)).toEqual(["a"]);
+  });
 
-    expect(fetchSampleSliceMock).not.toHaveBeenCalled()
-  })
-
-  it('resets and refetches when sampleIds change', async () => {
-    listSamplesWithLabelsMock.mockResolvedValue({
-      items: [makeSample('a'), makeSample('b')],
+  it("resets and refetches when sampleIds change", async () => {
+    listResponse = {
+      items: [makeSample("a"), makeSample("b")],
       total: 2,
-    })
+    };
 
-    const sampleIds = ref<string[] | null>(null)
-    const loader = useSampleLoader({ datasetId: 'ds-1', pageSize: 100, sampleIds })
-    await loader.loadMore()
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['a', 'b'])
+    const sampleIds = ref<string[] | null>(null);
+    const { result: loader } = withQuerySetup(() =>
+      useSampleLoader({
+        datasetId: "ds-1",
+        pageSize: 100,
+        sampleIds,
+      }),
+    );
+    await tick();
 
-    fetchSampleSliceMock.mockResolvedValue({
-      items: [makeSample('z')],
+    sliceResponse = {
+      items: [makeSample("z")],
       total: 1,
-    })
-    sampleIds.value = ['z']
-    await flush()
-    await flush()
+    };
+    sampleIds.value = ["z"];
+    await tick();
 
-    expect(fetchSampleSliceMock).toHaveBeenCalledTimes(1)
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['z'])
-    expect(loader.totalCount.value).toBe(1)
-  })
+    expect(loader.samples.value.map((s) => s.id)).toEqual(["z"]);
+    expect(loader.totalCount.value).toBe(1);
+  });
 
-  it('switches back to default pagination when sampleIds clears', async () => {
-    fetchSampleSliceMock.mockResolvedValue({ items: [makeSample('z')], total: 1 })
-    const sampleIds = ref<string[] | null>(['z'])
-    const loader = useSampleLoader({ datasetId: 'ds-1', pageSize: 100, sampleIds })
-    await loader.loadMore()
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['z'])
+  it("switches back to default pagination when sampleIds clears", async () => {
+    sliceResponse = { items: [makeSample("z")], total: 1 };
+    const sampleIds = ref<string[] | null>(["z"]);
+    const { result: loader } = withQuerySetup(() =>
+      useSampleLoader({
+        datasetId: "ds-1",
+        pageSize: 100,
+        sampleIds,
+      }),
+    );
+    await tick();
 
-    listSamplesWithLabelsMock.mockResolvedValue({
-      items: [makeSample('a'), makeSample('b')],
+    listResponse = {
+      items: [makeSample("a"), makeSample("b")],
       total: 2,
-    })
-    sampleIds.value = null
-    await flush()
-    await flush()
+    };
+    sampleIds.value = null;
+    await tick();
 
-    expect(listSamplesWithLabelsMock).toHaveBeenCalledTimes(1)
-    expect(loader.samples.value.map((s) => s.id)).toEqual(['a', 'b'])
-  })
-})
+    expect(loader.samples.value.map((s) => s.id)).toEqual(["a", "b"]);
+  });
+});

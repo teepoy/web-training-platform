@@ -40,7 +40,6 @@ const collapsed = ref(false)
 
 const menuOptions = [
   { label: 'Dashboard', key: '/admin/dashboard' },
-  { label: 'Preset Catalog', key: '/admin/presets' }
 ]
 
 const activeRoute = computed(() => route.path)

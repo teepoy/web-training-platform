@@ -24,6 +24,10 @@ class ArtifactStorage(Protocol):
         """Delete the object at the given URI."""
         ...
 
+    async def list_prefix(self, prefix: str) -> list[str]:
+        """Return URIs of all objects whose key starts with the given prefix."""
+        ...
+
 
 class TrainingExecutionEngine(Protocol):
     async def submit(self, job: TrainingJob) -> str:
@@ -166,73 +170,6 @@ class PrefectClient(Protocol):
         deployment_id: str | None = None,
         state_types: list[str] | None = None,
         limit: int = 50,
-    ) -> list[dict[str, Any]]: ...
-
-
-class EmbeddingClient(Protocol):
-    async def embed_image(
-        self,
-        image_bytes: bytes,
-        model_name: str = "openai/clip-vit-base-patch32",
-    ) -> list[float]: ...
-
-    async def health(self) -> bool: ...
-
-
-class InferenceWorker(Protocol):
-    async def predict_batch(
-        self,
-        *,
-        model_id: str,
-        model_uri: str,
-        model_format: str | None,
-        model_metadata: dict[str, Any],
-        model_bytes: bytes,
-        target: str,
-        label_space: list[str],
-        samples: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]: ...
-
-    async def embed_batch(
-        self,
-        *,
-        model_name: str,
-        samples: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]: ...
-
-
-class GpuWorker(Protocol):
-    async def submit_train(
-        self,
-        *,
-        platform_job_id: str,
-        preset_id: str,
-        dataset_id: str,
-        model_id: str = "",
-        hyperparameters: dict[str, Any] | None = None,
-        artifact_prefix: str = "",
-    ) -> dict[str, Any]: ...
-
-    async def get_train_status(self, job_id: str) -> dict[str, Any]: ...
-
-    async def predict_batch(
-        self,
-        *,
-        model_id: str,
-        model_uri: str,
-        model_format: str | None,
-        model_metadata: dict[str, Any],
-        model_bytes: bytes,
-        target: str,
-        label_space: list[str],
-        samples: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]: ...
-
-    async def embed_batch(
-        self,
-        *,
-        model_name: str,
-        samples: list[dict[str, Any]],
     ) -> list[dict[str, Any]]: ...
 
 

@@ -7,9 +7,9 @@ resources:
   - configmap.yaml
   - postgres.yaml
   - minio.yaml
+  - redis.yaml
   - prefect-server.yaml
-  - embedding.yaml
   - label-studio.yaml
   - api-deployment.yaml
-  - prefect-worker.yaml
-  - gpu-worker.yaml
+  - prefect-worker-cpu.yaml
+  - prefect-worker-gpu.yaml

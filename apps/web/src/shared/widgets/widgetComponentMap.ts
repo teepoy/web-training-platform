@@ -34,7 +34,4 @@ export const widgetComponentMap: Record<string, Component> = {
   "wafer-map": defineAsyncComponent(
     () => import("@/shared/components/wafer-map/WaferMapWidget.vue"),
   ),
-  "blink-table": defineAsyncComponent(
-    () => import("@/shared/components/blink-table/BlinkTableWidget.vue"),
-  ),
 };

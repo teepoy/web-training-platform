@@ -1,6 +1,6 @@
 <template>
-  <div class="auth-page">
-    <n-card class="auth-card" title="Sign In">
+  <div class="auth-page" :style="themeStyleVars">
+    <n-card class="auth-card" title="Sign In" data-testid="login-form">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
         <n-form-item label="Email" path="email">
           <n-input
@@ -8,6 +8,7 @@
             type="text"
             placeholder="you@example.com"
             :disabled="loading"
+            data-testid="login-email"
           />
         </n-form-item>
         <n-form-item label="Password" path="password">
@@ -17,18 +18,20 @@
             placeholder="Password"
             show-password-on="click"
             :disabled="loading"
+            data-testid="login-password"
           />
         </n-form-item>
         <n-button
           type="primary"
           block
           :loading="loading"
+          data-testid="login-submit"
           @click="handleSubmit"
         >
           Sign In
         </n-button>
       </n-form>
-      <div v-if="oauthProviders.length > 0" class="oauth-section">
+      <div v-if="(oauthProviders ?? []).length > 0" class="oauth-section">
         <div class="oauth-divider">
           <span class="oauth-divider-text">or continue with</span>
         </div>
@@ -52,30 +55,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage, type FormInst, type FormRules } from 'naive-ui'
+import { useMessage, useThemeVars, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '@/features/auth/application/store'
 import { API_BASE } from '@/shared/api/client'
-import { fetchOAuthProviders, type OAuthProviderInfo } from '../../infrastructure/api'
+import { useListOauthProvidersApiV1AuthOauthProvidersGet } from '@/generated/orval/endpoints/api'
 
 const router = useRouter()
 const message = useMessage()
 const authStore = useAuthStore()
+const themeVars = useThemeVars()
+const themeStyleVars = computed(() => ({
+  '--auth-bg-start': themeVars.value.bodyColor,
+  '--auth-bg-mid': themeVars.value.cardColor,
+  '--auth-bg-end': themeVars.value.modalColor,
+  '--auth-divider': themeVars.value.dividerColor,
+  '--auth-text-muted': themeVars.value.textColor3,
+  '--auth-shadow': themeVars.value.boxShadow1,
+}))
 
 import { useOrgStore } from '@/features/auth/application/org'
 const orgStore = useOrgStore()
 
 const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
-const oauthProviders = ref<OAuthProviderInfo[]>([])
 
-onMounted(async () => {
-  try {
-    oauthProviders.value = await fetchOAuthProviders()
-  } catch {
-    // Graceful degradation: no OAuth buttons shown
-  }
+const { data: oauthProviders } = useListOauthProvidersApiV1AuthOauthProvidersGet({
+  query: {
+    select: (resp) => resp.data ?? [],
+  },
 })
 
 const formData = ref({
@@ -114,13 +123,18 @@ async function handleSubmit() {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+  background: linear-gradient(
+    135deg,
+    var(--auth-bg-start) 0%,
+    var(--auth-bg-mid) 50%,
+    var(--auth-bg-end) 100%
+  );
 }
 
 .auth-card {
   width: 360px;
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--auth-shadow);
 }
 
 .auth-link {
@@ -137,7 +151,7 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--auth-text-muted);
   font-size: 12px;
 }
 
@@ -146,7 +160,7 @@ async function handleSubmit() {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--auth-divider);
 }
 
 .oauth-divider-text {

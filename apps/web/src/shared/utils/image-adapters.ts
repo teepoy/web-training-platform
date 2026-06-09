@@ -1,3 +1,5 @@
+import { withAuthQueryParams } from "@/shared/api";
+
 /**
  * Image URI adapter registry.
  *
@@ -37,7 +39,10 @@ const adapters: AdapterEntry[] = [];
  * @param name   Unique name for the adapter (replaces if already registered).
  * @param adapter  Function that returns a renderable `src` string, or `null` to pass.
  */
-export function registerImageAdapter(name: string, adapter: ImageAdapter): void {
+export function registerImageAdapter(
+  name: string,
+  adapter: ImageAdapter,
+): void {
   const idx = adapters.findIndex((e) => e.name === name);
   if (idx !== -1) {
     adapters[idx] = { name, adapter };
@@ -113,10 +118,12 @@ registerImageAdapter("http", httpAdapter);
 // Proxy adapter — routes storage URIs through the backend resolver
 // ---------------------------------------------------------------------------
 
-/** Proxy `s3://` and `memory://` URIs through the backend image resolver. */
+/** Proxy `s3://` and `memory://` URIs through the backend image resolver with auth. */
 const proxyAdapter: ImageAdapter = (uri) => {
   if (uri.startsWith("s3://") || uri.startsWith("memory://")) {
-    return `/api/v1/images/resolve?uri=${encodeURIComponent(uri)}`;
+    return withAuthQueryParams(
+      `/api/v1/images/resolve?uri=${encodeURIComponent(uri)}`,
+    );
   }
   return null;
 };

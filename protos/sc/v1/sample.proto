@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package sc.v1;
+
+message ReviewImage {
+  reserved 1;
+  string image_name = 2;
+  int32 image_id = 3;
+  string image_type = 4;
+}
+
+// # 定义正确
+message ScSampleItem {
+  // 移除了 sample_id
+  reserved 1, 2, 3, 4;
+  uint32 defect_id = 5;
+  sint32 wafer_x = 6;
+  sint32 wafer_y = 7;
+  int32 rough_bin = 8;
+  optional int32 class_number = 9;
+  repeated ReviewImage review_images = 10;
+  int64 inspection_time = 11;
+  int32 wafer_key = 12;
+  sint32 index_x = 13;
+  sint32 index_y = 14;
+  int32 adder = 15;
+  int32 cluster = 16;
+  int32 test_id = 17;
+}
+
+message WaferGeometry {
+  int32 wafer_radius_nm = 1;
+  int32 center_x = 2;
+  int32 center_y = 3;
+  int32 origin_x = 4;
+  int32 origin_y = 5;
+  int32 die_size_x = 6;
+  int32 die_size_y = 7;
+}
+
+// WaferMapResponse is the unified aggregated response for Preview mode
+// (inspection upstream) and Dataset View mode (dataset store).
+// Returns all three map datasets in a single response:
+//   - Wafer map points (wafer coordinates)
+//   - Die stack map points (die-relative coordinates)
+//   - Reticle map points (reticle-frame coordinates)
+//
+// Each per-point array packs 6 int32 values:
+//   [x, y, defect_id, class_number, rough_bin, has_review, x, y, ...]
+// where has_review is 0 or 1.
+//
+// Endpoints:
+//   GET /sc/inspections/{time}/{wafer_key}/map-data   (Preview)
+//   GET /sc/datasets/{dataset_id}/map-data             (Dataset View)
+message WaferMapResponse {
+  int32 total = 1;
+  int32 wafer_key = 2;
+  WaferGeometry geometry = 3;
+  // 6 ints per point: wafer_x, wafer_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 wafer_points = 4;
+  // 6 ints per point: die_x, die_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 die_points = 5;
+  // 6 ints per point: reticle_x, reticle_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 reticle_points = 6;
+  // Reticle grid configuration — number of dies grouped into each reticle frame
+  int32 reticle_x_die_count = 7;
+  int32 reticle_y_die_count = 8;
+  // True when point arrays contain grid-downsampled data (total still reports full count)
+  bool is_sampled = 9;
+  // Active grouping dimension for frontend legend rendering.
+  // Empty string means default grouping (class_number).
+  string legend_group_by = 10;
+  // Defect ID groups for the active legend dimension.
+  // Key is the group name (e.g. "3" for class_number 3, "__unlabeled__" for missing labels).
+  map<string, DefectList> legend_groups = 11;
+}
+
+message DefectList {
+  int32 count = 1;
+  repeated int32 defect_ids = 2;
+}
+
+// InspectionSummaryResponse 被移除。使用 正常 restful json response

@@ -23,13 +23,16 @@ import {
 import {
   bulkCreateAnnotations,
   getDataset,
-  getSample,
-  listSamplesWithLabels,
   syncAnnotationsToLs,
   updateLabelSpace,
-} from "@/features/datasets/infrastructure/api";
-import { listModels } from "@/features/models/infrastructure/api";
-import { listJobs, listPresets, createJob } from "@/features/training/infrastructure/api";
+} from "@/shared/api/datasets";
+import { getSample, listSamplesWithLabels } from "@/shared/api/samples";
+import { useListModelsApiV1ModelsGet } from "@/generated/orval/endpoints/api";
+import {
+  useListJobsApiV1TrainingJobsGet,
+  useCreateTrainingJobApiV1TrainingJobsPost,
+  useListTrainersRouteApiV1TrainersGet,
+} from "@/generated/orval/endpoints/api";
 import {
   listPredictionJobs,
   listPredictionJobPredictions,
@@ -40,38 +43,30 @@ import {
   syncPredictionCollection,
   createReviewAction as createReviewActionApi,
   saveReviewAnnotations,
-} from "@/features/prediction/infrastructure/api";
-import { queryWaferPoints } from "@/features/datasets/infrastructure/api";
+} from "@/shared/api/predictions";
+import { queryWaferPoints } from "@/shared/api/datasets";
 import type {
   BulkAnnotationRequest,
   BulkAnnotationResponse,
-  Dataset,
-  Model,
-  PredictionCollection,
-  PredictionJob,
-  PredictionResult,
-  Sample,
-  SampleWithLabels,
   SaveReviewAnnotationItem,
-  SyncResult,
-  TaskTrackerSummary,
   TrainingJob,
-} from "@/types";
+} from "@/generated/orval/models";
+import type { Dataset, ModelResponse as Model, PredictionCollectionResponse as PredictionCollection, PredictionJobResponse as PredictionJob, PredictionResultResponse as PredictionResult, Sample, SampleWithLabels, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
+import type { SyncResult, Trainer } from "@/shared/api/types";
 import type { AnnotationGridItem, BrowserItem, WaferPoint } from "@/shared/types/components";
 import type { DataNode } from "@/shared/composables/useDataPipeline";
 import SampleBrowser from "@/shared/components/sample-browser";
 import { useSampleBrowserPrefs } from "@/features/datasets/application/sampleBrowser";
-import type { BlinkSampleInput } from '@/shared/utils/blink-table-data';
-import { useClassifyDashboard, useSampleLoader } from "../infrastructure/api";
+import { useClassifyDashboard } from "@/shared/composables/useClassifyDashboard";
+import { useSampleLoader } from "@/shared/composables/useSampleLoader";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@/shared/components/task-insight-modal";
 import ClassifySidebar from "../presentation/components/ClassifySidebar.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../config";
 import { GLOBAL_AGENT_PANELS_KEY } from "@/shared/keys";
 import { useTaskStream } from "@/shared/composables/useTaskHandoff";
 import { useOrgStore } from '@/features/auth/application/org';
-import { buildBlinkTableData } from "./buildBlinkTableData";
 import { createDataPipeline, DATA_PIPELINE_KEY } from "./useDataPipeline";
-import { resolveImageUris } from "./useImageAdapters";
+import { resolveImageUris } from "@/shared/utils/image-adapters";
 import { injectWaferPanelData, normalizeWaferPoint } from "./useWaferHelpers";
 
 interface ReviewRow {
@@ -117,8 +112,8 @@ export interface ClassifyPageState {
   datasetQuery: ReturnType<typeof useQuery<Dataset | undefined>>;
   router: ReturnType<typeof useRouter>;
 
-  selectedPresetId: Ref<string | null>;
-  presetOptions: Ref<SelectOption[]>;
+  selectedTrainerId: Ref<string | null>;
+  trainerOptions: Ref<SelectOption[]>;
   startTraining: () => void;
   startTrainingMutation: { isPending: Ref<boolean>; mutate: Function };
   activeTrainingJob: Ref<TrainingJob | null>;
@@ -344,7 +339,7 @@ export function useClassifyPage() {
 
   function toAnnotationGridItem(sample: HydratedSample): AnnotationGridItem {
     return {
-      id: sample.id,
+      id: sample.id!,
       imageSrcs: resolveImageUris(sample.image_uris ?? []),
       currentLabel: sample.latest_annotation?.label ?? null,
       draftLabel: null,
@@ -378,10 +373,12 @@ export function useClassifyPage() {
     isReviewMode.value ? pollingPredictionJob.value : isLoading.value,
   );
 
-  const { data: models } = useQuery({
-    queryKey: computed(() => ["models", orgStore.currentOrgId]),
-    queryFn: () => listModels(),
-    enabled: computed(() => !!orgStore.currentOrgId),
+  const { data: models } = useListModelsApiV1ModelsGet(undefined, {
+    query: {
+      select: (response) => response.data as Model[],
+      queryKey: computed(() => ["models", orgStore.currentOrgId]),
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
   });
 
   const modelOptions = computed<SelectOption[]>(() => {
@@ -397,8 +394,8 @@ export function useClassifyPage() {
             ? (metadata.task_types as string[])
             : [];
           return (
-            datasetTypes.includes(dataset.dataset_type) &&
-            taskTypes.includes(dataset.task_spec.task_type)
+            datasetTypes.includes(dataset.dataset_type!) &&
+            taskTypes.includes(dataset.task_spec!.task_type!)
           );
         })
       : allModels;
@@ -418,7 +415,10 @@ export function useClassifyPage() {
     if (Array.isArray(targets) && typeof targets[0] === "string") {
       return targets[0];
     }
-    return "image_classification";
+    const dt = selectedDataset.value?.dataset_type ?? "image_classification";
+    if (dt === "image_vqa") return "qa_input_v1";
+    if (dt === "image_detection") return "box_detection_v1";
+    return "labeled_image_v1";
   });
 
   const { data: predictionJobsData } = useQuery({
@@ -437,11 +437,11 @@ export function useClassifyPage() {
   function predictionResultToReviewRow(item: PredictionResult): ReviewRow {
     return {
       key: item.id ?? item.sample_id,
-      prediction_id: item.id,
+      prediction_id: item.id ?? null,
       sample_id: item.sample_id,
       predicted_label: item.predicted_label,
       final_label: item.predicted_label,
-      confidence: item.confidence,
+      confidence: item.confidence ?? null,
     };
   }
 
@@ -449,7 +449,7 @@ export function useClassifyPage() {
     job: PredictionJob,
   ): Promise<ReviewRow[]> {
     const summaryPredictions = (
-      (job.summary.predictions as PredictionResult[] | undefined) ?? []
+      (job.summary!.predictions as PredictionResult[] | undefined) ?? []
     )
       .filter((item) => !item.error)
       .map(predictionResultToReviewRow);
@@ -476,14 +476,14 @@ export function useClassifyPage() {
   ): { processed: number; total: number } | null {
     const status = job.status.toLowerCase();
     const total =
-      asNumber(job.summary.total_samples) ??
-      asNumber(job.summary.total) ??
+      asNumber(job.summary!.total_samples) ??
+      asNumber(job.summary!.total) ??
       asNumber(job.sample_ids?.length) ??
       null;
     const processed =
-      asNumber(job.summary.processed) ??
-      asNumber(job.summary.successful) ??
-      asNumber(job.summary.completed) ??
+      asNumber(job.summary!.processed) ??
+      asNumber(job.summary!.successful) ??
+      asNumber(job.summary!.completed) ??
       (status === "completed" ? total : 0);
     if (total === null || processed === null || total <= 0) return null;
     return { processed, total };
@@ -613,15 +613,10 @@ export function useClassifyPage() {
       syncedCollectionTag.value = syncResult.sync_tag;
       return syncResult;
     },
-    onSuccess: (data: SyncResult) => {
+    onSuccess: (data) => {
       message.success(
         `Synced ${data.synced_count} predictions to Label Studio`,
       );
-      if ((data.skipped_count ?? 0) > 0) {
-        message.warning(
-          `${data.skipped_count} predictions were skipped during sync`,
-        );
-      }
     },
     onError: (err: Error) => {
       message.error(
@@ -690,69 +685,71 @@ export function useClassifyPage() {
     syncedCollectionTag.value = null;
   }
 
-  const { data: trainingJobs } = useQuery({
-    queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-    queryFn: listJobs,
-    refetchInterval: 5000,
-    enabled: computed(() => !!orgStore.currentOrgId),
+  const { data: trainingJobs } = useListJobsApiV1TrainingJobsGet(undefined, {
+    query: {
+      select: (response: any) => response.data,
+      queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
+      refetchInterval: 5000,
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
   });
 
-  const { data: presets } = useQuery({
-    queryKey: computed(() => ["presets", orgStore.currentOrgId]),
-    queryFn: listPresets,
-    enabled: computed(() => !!orgStore.currentOrgId),
+  const { data: trainers } = useListTrainersRouteApiV1TrainersGet({
+    query: {
+      // ast-grep-ignore: forbid-unsafe-type-casts
+      select: (response) => response.data as unknown as Trainer[],
+      queryKey: computed(() => ["trainers", orgStore.currentOrgId]),
+      refetchInterval: 30000,
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
   });
 
-  const presetOptions = computed<SelectOption[]>(() =>
-    (presets.value ?? [])
-      .filter((p) => {
-        if (p.trainable === false) return false;
-        const dataset = selectedDataset.value;
-        if (!dataset) return true;
-        const compatibility = p.compatibility;
-        if (!compatibility) return true;
-        return (
-          compatibility.dataset_types.includes(dataset.dataset_type) &&
-          compatibility.task_types.includes(dataset.task_spec.task_type)
-        );
-      })
-      .map((p) => ({ label: p.name, value: p.id })),
+  const trainerOptions = computed<SelectOption[]>(() =>
+    (trainers.value ?? [])
+      .filter((t) => t.trainable !== false)
+      .map((t) => ({ label: t.name, value: t.id })),
   );
 
-  const selectedPresetId = ref<string | null>(null);
+  const selectedTrainerId = ref<string | null>(null);
   const activeTrainingJobId = ref<string | null>(null);
   const activeTrainingJob = computed<TrainingJob | null>(() => {
     if (!activeTrainingJobId.value) return null;
     return (
       (trainingJobs.value ?? []).find(
-        (job) => job.id === activeTrainingJobId.value,
+        (job: any) => job.id === activeTrainingJobId.value,
       ) ?? null
     );
   });
 
-  const startTrainingMutation = useMutation({
-    mutationFn: () => {
-      if (!selectedPresetId.value) {
-        throw new Error("Preset is required");
-      }
-      return createJob(datasetId.value, selectedPresetId.value);
-    },
-    onSuccess: (job: TrainingJob) => {
-      activeTrainingJobId.value = job.id;
-      taskModalSource.value = "training";
-      showTaskModal.value = true;
-      message.success(`Training job started: ${job.id}`);
-      void queryClient.invalidateQueries({
-        queryKey: ["jobs", orgStore.currentOrgId],
-      });
-    },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to start training job");
+  const startTrainingMutation = useCreateTrainingJobApiV1TrainingJobsPost({
+    mutation: {
+      onSuccess: (result) => {
+        const job = result.data as TrainingJob;
+        activeTrainingJobId.value = job.id ?? null;
+        taskModalSource.value = "training";
+        showTaskModal.value = true;
+        message.success(`Training job started: ${job.id}`);
+        void queryClient.invalidateQueries({
+          queryKey: ["jobs", orgStore.currentOrgId],
+        });
+      },
+      onError: (err: Error) => {
+        message.error(err.message ?? "Failed to start training job");
+      },
     },
   });
 
   function startTraining() {
-    startTrainingMutation.mutate();
+    if (!selectedTrainerId.value) {
+      message.error("Trainer is required");
+      return;
+    }
+    startTrainingMutation.mutate({
+      data: {
+        dataset_id: datasetId.value,
+        trainer_id: selectedTrainerId.value,
+      },
+    });
   }
 
   const taskModalSource = ref<TaskSource>(null);
@@ -761,18 +758,18 @@ export function useClassifyPage() {
 
   function toTrainingTaskSummary(job: TrainingJob): TaskTrackerSummary {
     return {
-      id: job.id,
+      id: job.id ?? '',
       task_kind: "training",
       execution_kind: "prefect",
-      display_name: `Training: ${job.preset_id}`,
-      display_status: job.status,
-      stage: job.status,
+      display_name: `Training: ${job.trainer_id}`,
+      display_status: job.status ?? '',
+      stage: job.status ?? '',
       dataset_id: job.dataset_id,
       model_id: null,
-      preset_id: job.preset_id,
+      trainer_id: job.trainer_id,
       created_by: job.created_by,
-      created_at: job.created_at,
-      updated_at: job.updated_at,
+      created_at: job.created_at ?? '',
+      updated_at: job.updated_at ?? '',
       prefect_state: null,
       work_pool_name: null,
       work_queue_name: null,
@@ -796,7 +793,7 @@ export function useClassifyPage() {
       stage: status,
       dataset_id: job.dataset_id,
       model_id: job.model_id,
-      preset_id: null,
+      trainer_id: null,
       created_by: job.created_by,
       created_at: job.created_at,
       updated_at: job.updated_at,
@@ -814,7 +811,7 @@ export function useClassifyPage() {
 
   const activeTaskSummary = computed<TaskTrackerSummary | null>(() => {
     if (taskModalSource.value === "training" && activeTrainingJob.value) {
-      if (["queued", "running"].includes(activeTrainingJob.value.status)) {
+      if (["queued", "running"].includes(activeTrainingJob.value.status!)) {
         return toTrainingTaskSummary(activeTrainingJob.value);
       }
       return null;
@@ -916,13 +913,29 @@ export function useClassifyPage() {
   );
 
   const pageDashboard = shallowReactive<Record<string, unknown>>({
-    ...(dashboardContext as unknown as Record<string, unknown>),
+    stats: dashboardContext.stats,
+    isLoading: dashboardContext.isLoading,
+    isError: dashboardContext.isError,
+    errorMessage: dashboardContext.errorMessage,
+    draftCount: dashboardContext.draftCount,
+    selectedCount: dashboardContext.selectedCount,
+    labelSpace: dashboardContext.labelSpace,
+    refetch: dashboardContext.refetch,
   });
 
   watch(
     () => dashboardContext,
     (next) => {
-      const ctx = next as unknown as Record<string, unknown>;
+      const ctx: Record<string, unknown> = {
+        stats: next.stats,
+        isLoading: next.isLoading,
+        isError: next.isError,
+        errorMessage: next.errorMessage,
+        draftCount: next.draftCount,
+        selectedCount: next.selectedCount,
+        labelSpace: next.labelSpace,
+        refetch: next.refetch,
+      };
       for (const key of Object.keys(pageDashboard)) {
         if (!(key in ctx)) {
           delete pageDashboard[key];
@@ -984,7 +997,7 @@ export function useClassifyPage() {
     queryFn: async () => {
       const samples = await Promise.all(
         selectedSidebarSampleHydrationIds.value.map((sampleId) =>
-          getSample(sampleId),
+          getSample(sampleId, datasetId.value),
         ),
       );
       return samples;
@@ -1056,25 +1069,6 @@ export function useClassifyPage() {
       .filter((point): point is WaferPoint => point !== null);
   });
 
-  const blinkTableData = computed(() => {
-    const items = isReviewMode.value
-      ? reviewGridItems.value
-      : annotationGridItems.value;
-    const multiSamples: BlinkSampleInput[] = items
-      .filter((item) => item.imageSrcs.length > 1)
-      .map((item) => ({
-        id: item.id,
-        imageSrcs: item.imageSrcs,
-        metadata: item.metadata ?? {},
-        label:
-          item.draftLabel ??
-          item.predictionLabel ??
-          item.currentLabel ??
-          undefined,
-      }));
-    return buildBlinkTableData(multiSamples);
-  });
-
   const staticPanels = computed(() => {
     const basePanels = isReviewMode.value
       ? [reviewPanel, ...defaultPanels]
@@ -1084,23 +1078,7 @@ export function useClassifyPage() {
       waferPoints.value,
       "classify-samples",
     );
-    return withWafer.map((panel) => {
-      if (panel.id === "blink-table") {
-        return {
-          ...panel,
-          props: {
-            ...panel.props,
-            data: {
-              inline: {
-                rows: blinkTableData.value.rows,
-                columns: blinkTableData.value.columns,
-              },
-            },
-          },
-        };
-      }
-      return panel;
-    });
+    return withWafer;
   });
 
   const mergedPanels = computed(() =>
@@ -1255,7 +1233,7 @@ export function useClassifyPage() {
     clearPredictionReview();
     selectedModelId.value = null;
     modelVersionTag.value = "";
-    selectedPresetId.value = null;
+    selectedTrainerId.value = null;
     activePredictionJob.value = null;
     activeTrainingJobId.value = null;
     labelSearch.value = "";
@@ -1285,8 +1263,8 @@ export function useClassifyPage() {
     datasetQuery,
     router,
 
-    selectedPresetId,
-    presetOptions,
+    selectedTrainerId,
+    trainerOptions,
     startTraining,
     startTrainingMutation,
     activeTrainingJob,

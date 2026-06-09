@@ -1,0 +1,126 @@
+<script setup lang="ts">
+import { ref } from "vue";
+import { NButton, NIcon, NInputNumber, NModal } from "naive-ui";
+import { SettingsOutline } from "@vicons/ionicons5";
+import {
+  normalizeReticleMapOptions,
+  type ReticleMapOptions,
+} from "@/features/sc/application/reticleMapOptions";
+
+const props = defineProps<{
+  modelValue: ReticleMapOptions;
+  size?: "tiny" | "small" | "medium" | "large";
+  iconOnly?: boolean;
+  quaternary?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "submit", value: ReticleMapOptions): void;
+}>();
+
+const showModal = ref(false);
+const draft = ref<ReticleMapOptions>({ ...props.modelValue });
+
+function openModal(): void {
+  draft.value = { ...props.modelValue };
+  showModal.value = true;
+}
+
+function updateDraft(key: keyof ReticleMapOptions, value: number | null): void {
+  draft.value = {
+    ...draft.value,
+    [key]: value ?? draft.value[key],
+  };
+}
+
+function applyOptions(): void {
+  emit("submit", normalizeReticleMapOptions(draft.value));
+  showModal.value = false;
+}
+</script>
+
+<template>
+  <NButton
+    :size="size ?? 'tiny'"
+    :quaternary="quaternary"
+    title="Reticle options"
+    @click="openModal"
+  >
+    <template v-if="iconOnly" #icon>
+      <NIcon><SettingsOutline /></NIcon>
+    </template>
+    <template v-if="!iconOnly">Options</template>
+  </NButton>
+  <NModal
+    v-model:show="showModal"
+    preset="card"
+    title="Reticle Map Options"
+    class="srmo-modal"
+    :style="{ width: '520px', maxWidth: 'calc(100vw - 32px)' }"
+  >
+    <div class="srmo-grid">
+      <label>
+        X die count
+        <NInputNumber
+          :min="1"
+          :precision="0"
+          :value="draft.xDieCount"
+          @update:value="(v) => updateDraft('xDieCount', v)"
+        />
+      </label>
+      <label>
+        Y die count
+        <NInputNumber
+          :min="1"
+          :precision="0"
+          :value="draft.yDieCount"
+          @update:value="(v) => updateDraft('yDieCount', v)"
+        />
+      </label>
+      <label>
+        X Die Shift
+        <NInputNumber
+          :precision="0"
+          :value="draft.xDieShift"
+          @update:value="(v) => updateDraft('xDieShift', v)"
+        />
+      </label>
+      <label>
+        Y Die Shift
+        <NInputNumber
+          :precision="0"
+          :value="draft.yDieShift"
+          @update:value="(v) => updateDraft('yDieShift', v)"
+        />
+      </label>
+    </div>
+    <template #footer>
+      <div class="srmo-footer">
+        <NButton @click="showModal = false">Cancel</NButton>
+        <NButton type="primary" @click="applyOptions">Apply</NButton>
+      </div>
+    </template>
+  </NModal>
+</template>
+
+<style scoped>
+.srmo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.srmo-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.srmo-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+</style>

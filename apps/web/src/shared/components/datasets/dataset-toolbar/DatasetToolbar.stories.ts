@@ -5,7 +5,7 @@ import DatasetToolbar from "./DatasetToolbar.vue";
 const MockPlugin = defineComponent({ template: "<div style='padding: 8px'>Mock flow content</div>" });
 
 const meta = {
-  title: "web-ui/components/datasets/DatasetToolbar",
+  title: "Shared/DatasetToolbar",
   component: DatasetToolbar,
   args: {
     title: "Datasets",

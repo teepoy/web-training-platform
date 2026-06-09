@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import MarkdownLogWidget from "./MarkdownLogWidget.vue";
 
 const meta = {
-  title: "web-ui/widgets/MarkdownLogWidget",
+  title: "Shared/MarkdownLogWidget",
   component: MarkdownLogWidget,
   args: {
     data: {

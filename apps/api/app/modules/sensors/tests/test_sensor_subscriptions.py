@@ -19,7 +19,7 @@ def _available_workflow_type(client: TestClient) -> str:
 
 def _load_sensors() -> None:
     with TestClient(app):
-        loaded = app.state.container.sensor_registry.load()
+        loaded = app.state.app_context.sensors.sensor_registry.load()
     assert loaded > 0
 
 

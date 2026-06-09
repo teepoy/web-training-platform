@@ -1,0 +1,14 @@
+id: disable-reexport
+valid:
+  - "export const Qux = 1;"
+  - "export function quux() {}"
+  - "export class Quuz {}"
+  - "export interface Corge {}"
+  - "export type Grault = string;"
+  - "export default function () {}"
+  - "export default 42;"
+invalid:
+  - 'export { Foo } from "./bar";'
+  - 'export type { FooType } from "./types";'
+  - 'import { Bar } from "./baz"; export { Bar };'
+  - 'import type { BazType } from "./t"; export type { BazType };'

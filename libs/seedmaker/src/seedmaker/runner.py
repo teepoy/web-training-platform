@@ -33,10 +33,11 @@ class SeedConfig:
     dataset_name: str = ""
     description: str = ""
     label_space: list[str] = field(default_factory=list)
-    dataset_type: str = "image_classification"
-    task_type: str = "classification"
+    dataset_type: str = "image_sc"
+    task_type: str = "semiconductor"
     metadata_schema: dict = field(default_factory=dict)
     defer_dataset: bool = False
+    storage_mode: str = "db_full"
     org_name: str = DEFAULT_ORG_NAME
     org_slug: str = DEFAULT_ORG_SLUG
     compose_file: str = DEFAULT_COMPOSE_FILE
@@ -215,6 +216,7 @@ class SeedRunner:
             json={
                 "name": self.config.dataset_name,
                 "dataset_type": self.config.dataset_type,
+                "storage_mode": self.config.storage_mode,
                 "task_spec": {
                     "task_type": self.config.task_type,
                     "label_space": self.config.label_space,

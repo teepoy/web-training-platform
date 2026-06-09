@@ -168,7 +168,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import type { BrowserItem } from '@/types'
+import type { BrowserItem } from '@/shared/types/components'
 import { handleBrowserActivation } from './browser-activation'
 
 const props = withDefaults(defineProps<{

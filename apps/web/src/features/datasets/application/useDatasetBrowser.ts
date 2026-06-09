@@ -1,9 +1,8 @@
 import { computed, onMounted, provide, ref, watch, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
-import { queryWaferPoints } from "@/shared/api/agent";
+import { queryWaferPoints } from "@/shared/api/datasets";
 import {
   BROWSER_DASHBOARD_KEY,
-  buildBlinkTableData,
   DATA_PIPELINE_KEY,
   injectWaferPanelData,
   normalizeWaferPoint,
@@ -11,7 +10,6 @@ import {
   useSampleLoader,
   useDataPipeline,
 } from "@/shared";
-import type { BlinkSampleInput } from "@/shared";
 import type { BrowserItem, WaferPoint } from "@/shared/types/components";
 import { datasetPanels } from "../../classify/config";
 
@@ -127,35 +125,8 @@ export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOp
       .filter((point): point is WaferPoint => point !== null);
   });
 
-  const blinkTableData = computed(() => {
-    const multiSamples: BlinkSampleInput[] = browserSamples.value
-      .filter((sample) => sample.imageSrcs.length > 1)
-      .map((sample) => ({
-        id: sample.id,
-        imageSrcs: sample.imageSrcs,
-        metadata: sample.metadata,
-        label: sample.currentLabel ?? undefined,
-      }));
-    return buildBlinkTableData(multiSamples);
-  });
-
   const datasetSidebarPanels = computed(() => {
-    const waferInjected = injectWaferPanelData(datasetPanels, waferPoints.value, "browser-items");
-    return waferInjected.map((panel) => {
-      if (panel.id !== "blink-table") return panel;
-      return {
-        ...panel,
-        props: {
-          ...panel.props,
-          data: {
-            inline: {
-              rows: blinkTableData.value.rows,
-              columns: blinkTableData.value.columns,
-            },
-          },
-        },
-      };
-    });
+    return injectWaferPanelData(datasetPanels, waferPoints.value, "browser-items");
   });
 
   onMounted(() => {
@@ -171,7 +142,6 @@ export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOp
     browserSidebarStats,
     waferPointsQuery,
     waferPoints,
-    blinkTableData,
     datasetSidebarPanels,
   };
 }

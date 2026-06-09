@@ -1,0 +1,19 @@
+id: forbid-preset-typescript
+language: typescript
+severity: error
+ignores:
+  - '**/generated/**'
+  - '**/*.vue'
+  - '**/__tests__/**'
+  - '**/features/classify/config.ts'
+rule:
+  any:
+    - kind: identifier
+      regex: '[pP]reset'
+    - kind: string_fragment
+      regex: '[pP]reset'
+    - kind: comment
+      regex: '[pP]reset'
+message: |
+  'preset' is deprecated. Use trainer, predictor, and view instead.
+  Only preset="xxx" in .vue template attributes is allowed.

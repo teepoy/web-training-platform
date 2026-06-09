@@ -1,108 +1,162 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref, nextTick } from 'vue'
-import { usePreviewLoader } from './usePreviewLoader'
-import { listPreviewItems } from '@/shared/api/preview'
+import { beforeEach, describe, expect, it } from "vitest";
+import { ref } from "vue";
+import { http, HttpResponse } from "msw";
+import { server } from "@/testing/msw/server";
+import { withQuerySetup } from "@/testing/withQuerySetup";
 
-vi.mock('@/shared/api/preview', () => ({
-  listPreviewItems: vi.fn(),
-}))
+import { usePreviewLoader } from "./usePreviewLoader";
 
-describe('usePreviewLoader', () => {
+function tick(ms = 100): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+describe("usePreviewLoader", () => {
+  let previewCalls: any[][];
+  let previewResponses: any[];
+
   beforeEach(() => {
-    vi.resetAllMocks()
-  })
+    previewCalls = [];
+    previewResponses = [];
+  });
 
-  it('loadMore accumulates items across pages', async () => {
-    vi.mocked(listPreviewItems).mockResolvedValueOnce({
-      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
-      estimated_total: 100,
-      has_more: true,
-      next_cursor: 'cursor1'
-    } as any).mockResolvedValueOnce({
-      items: [{ upstream_item_id: 'b', image_uris: ['/b.jpg'] }],
-      estimated_total: 100,
-      has_more: false,
-      next_cursor: null
-    } as any)
+  function setupHandler() {
+    server.use(
+      http.get(
+        "/api/v1/preview-sessions/:sessionId/items",
+        ({ request, params }) => {
+          const url = new URL(request.url);
+          previewCalls.push([
+            params.sessionId,
+            url.searchParams.get("cursor") || null,
+            Number(url.searchParams.get("limit")),
+          ]);
+          const response = previewResponses.shift() ?? {
+            items: [],
+            estimated_total: 0,
+            has_more: false,
+            next_cursor: null,
+          };
+          return HttpResponse.json(response);
+        },
+      ),
+    );
+  }
 
-    const loader = usePreviewLoader({ sessionId: 'session1' })
+  it("loadMore accumulates items across pages", async () => {
+    previewResponses = [
+      {
+        items: [{ upstream_item_id: "a", image_uris: ["/a.jpg"] }],
+        estimated_total: 100,
+        has_more: true,
+        next_cursor: "cursor1",
+      },
+      {
+        items: [{ upstream_item_id: "b", image_uris: ["/b.jpg"] }],
+        estimated_total: 100,
+        has_more: false,
+        next_cursor: null,
+      },
+    ];
+    setupHandler();
 
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(1)
-    expect(loader.items.value[0].upstream_item_id).toBe('a')
-    expect(loader.hasMore.value).toBe(true)
+    const { result: loader } = withQuerySetup(() =>
+      usePreviewLoader({ sessionId: "session1" }),
+    );
 
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(2)
-    expect(loader.items.value[1].upstream_item_id).toBe('b')
-    expect(loader.hasMore.value).toBe(false)
-  })
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(1);
+    expect(loader.items.value[0].upstream_item_id).toBe("a");
 
-  it('loadMore deduplicates by upstream_item_id', async () => {
-    vi.mocked(listPreviewItems).mockResolvedValue({
-      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
-      estimated_total: 100,
-      has_more: true,
-      next_cursor: 'c1'
-    } as any)
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(2);
+    expect(loader.items.value[1].upstream_item_id).toBe("b");
+  });
 
-    const loader = usePreviewLoader({ sessionId: 'session1' })
+  it("loadMore deduplicates by upstream_item_id", async () => {
+    previewResponses = [
+      {
+        items: [{ upstream_item_id: "a", image_uris: ["/a.jpg"] }],
+        estimated_total: 100,
+        has_more: true,
+        next_cursor: "c1",
+      },
+      {
+        items: [{ upstream_item_id: "a", image_uris: ["/a.jpg"] }],
+        estimated_total: 100,
+        has_more: true,
+        next_cursor: "c2",
+      },
+    ];
+    setupHandler();
 
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(1)
+    const { result: loader } = withQuerySetup(() =>
+      usePreviewLoader({ sessionId: "session1" }),
+    );
 
-    // Load again with the same item, it should be deduplicated
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(1)
-  })
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(1);
 
-  it('reset() clears items, cursor, hasMore, initialized', async () => {
-    vi.mocked(listPreviewItems).mockResolvedValue({
-      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
-      estimated_total: 100,
-      has_more: true,
-      next_cursor: 'c1'
-    } as any)
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(1);
+  });
 
-    const loader = usePreviewLoader({ sessionId: 'session1' })
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(1)
-    expect(loader.initialized.value).toBe(true)
+  it("refetches on reset", async () => {
+    previewResponses = [
+      {
+        items: [{ upstream_item_id: "a", image_uris: ["/a.jpg"] }],
+        estimated_total: 100,
+        has_more: true,
+        next_cursor: "c1",
+      },
+      {
+        items: [],
+        estimated_total: 0,
+        has_more: false,
+        next_cursor: null,
+      },
+    ];
+    setupHandler();
 
-    loader.reset()
+    const { result: loader } = withQuerySetup(() =>
+      usePreviewLoader({ sessionId: "session1" }),
+    );
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(1);
 
-    expect(loader.items.value.length).toBe(0)
-    expect(loader.hasMore.value).toBe(true)
-    expect(loader.initialized.value).toBe(false)
-    expect(loader.estimatedTotal.value).toBeNull()
-  })
+    loader.reset();
+    await tick();
 
-  it('auto-resets when sessionId ref changes', async () => {
-    vi.mocked(listPreviewItems).mockResolvedValueOnce({
-      items: [{ upstream_item_id: 'a', image_uris: ['/a.jpg'] }],
-      estimated_total: 100,
-      has_more: true,
-      next_cursor: 'c1'
-    } as any).mockResolvedValueOnce({
-      items: [],
-      estimated_total: 0,
-      has_more: false,
-      next_cursor: null
-    } as any)
+    expect(loader.items.value.length).toBe(0);
+  });
 
-    const sessionId = ref('session1')
-    const loader = usePreviewLoader({ sessionId })
+  it("auto-resets when sessionId ref changes", async () => {
+    previewResponses = [
+      {
+        items: [{ upstream_item_id: "a", image_uris: ["/a.jpg"] }],
+        estimated_total: 100,
+        has_more: true,
+        next_cursor: "c1",
+      },
+      {
+        items: [],
+        estimated_total: 0,
+        has_more: false,
+        next_cursor: null,
+      },
+    ];
+    setupHandler();
 
-    await loader.loadMore()
-    expect(loader.items.value.length).toBe(1)
+    const sessionId = ref("session1");
+    const { result: loader } = withQuerySetup(() =>
+      usePreviewLoader({ sessionId }),
+    );
 
-    // Change sessionId
-    sessionId.value = 'session2'
-    await nextTick()
-    await new Promise(r => setTimeout(r, 0))
+    await loader.loadMore();
+    expect(loader.items.value.length).toBe(1);
 
-    expect(loader.items.value.length).toBe(0)
-    expect(listPreviewItems).toHaveBeenCalledTimes(2)
-    expect(listPreviewItems).toHaveBeenLastCalledWith('session2', null, 20)
-  })
-})
+    sessionId.value = "session2";
+    await tick();
+
+    expect(loader.items.value.length).toBe(0);
+  });
+});

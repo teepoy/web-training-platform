@@ -12,7 +12,6 @@ Or via the seedmaker command::
     seedmaker --list
     seedmaker mock-multi-image
     seedmaker imagenet-mock
-    seedmaker presets
 """
 
 from __future__ import annotations
@@ -54,6 +53,16 @@ def main() -> int:
         "--no-samples", action="store_true", help="Skip sample creation"
     )
     parser.add_argument(
+        "--org-name",
+        default=None,
+        help="Override organization name (default: Default Org)",
+    )
+    parser.add_argument(
+        "--org-slug",
+        default=None,
+        help="Override organization slug (default: default-org)",
+    )
+    parser.add_argument(
         "--job-timeout",
         type=int,
         default=60,
@@ -79,11 +88,6 @@ def main() -> int:
         print('Usage: make seed ARGS="<dataset> [--max-samples N] ..."')
         return 1
 
-    if args.dataset == "presets":
-        from seedmaker.presets import run_presets
-
-        return run_presets(args)
-
     entry = registry.get(args.dataset)
     if entry is None:
         print(
@@ -92,6 +96,11 @@ def main() -> int:
         return 1
 
     config, run_fn = entry
+
+    if args.org_name:
+        config.org_name = args.org_name
+    if args.org_slug:
+        config.org_slug = args.org_slug
 
     from seedmaker import SeedRunner
 

@@ -1,8 +1,6 @@
 import { req } from "./client";
-import type {
-  SurfaceStateDocument,
-  AgentPanelDescriptor,
-} from "./types";
+import type { SurfaceStateDocument } from "./types";
+import type { AgentPanelDescriptor } from "@/generated/orval/models";
 
 export function getSurfaceState(
   sessionId: string,
@@ -54,8 +52,3 @@ export function importSurfaceState(
     body: JSON.stringify(doc),
   });
 }
-
-export { queryWaferPoints } from "./datasets";
-
-export { streamGlobalAgentChat } from "./sse";
-export type { AgentPanelDescriptor, AgentContext } from "./types";

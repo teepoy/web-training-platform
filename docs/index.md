@@ -15,4 +15,6 @@ This documentation is organized for site navigation as well as repo browsing.
 
 - Read [Architecture Overview](architecture/overview.md) for the platform shape.
 - Read [Extension Guide](guides/extension-guide.md) for the extension model and widget system.
+- Read [Production Docker Compose Deployment](guides/production-compose-deployment.md)
+  for deployment, backup, release, and rollback procedures.
 - Read [API Endpoints](reference/api-endpoints.md) for backend surface details.

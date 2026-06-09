@@ -192,6 +192,12 @@ pnpm run test:e2e
 
 `BlinkTable` is a shared virtualized comparison table in `@platform/web-ui` (`libs/web-ui/src/components/blink-table/BlinkTable.vue`). It renders rows with a synchronized A/B image blink column using `@tanstack/vue-virtual`, plus a global toggle to show or hide the blink column. Every row must supply `imageA` and `imageB` as resolved URLs (the component does not resolve storage URIs). The composable `useBlinkController` drives the shared blink timer exposed as `BlinkPhase` (`'A' | 'B'`).
 
+Resolved means browser-ready and authenticated. The component does not know about storage URIs, dataset IDs, SC defect IDs, tokens, or organization context. Callers must resolve images before they reach the browser core:
+
+- Generic dataset samples use `resolveImageUri()` / `resolveImageUris()` in `apps/web/src/shared/utils/image-adapters.ts`.
+- SC patch/review images use `scPatchUrl()`, `scReviewUrl()`, or `buildScBlinkImageUrls()` in `apps/web/src/features/sc/domain/models.ts`.
+- Imported sparse dataset image refs should point at `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` and include auth query parameters. Do not fall back from dataset-owned image refs to upstream inspection-time URLs inside shared browser components.
+
 **Key types** (from `libs/web-ui/src/types/blink-table.ts`): `BlinkRow` (`id`, `imageA`, `imageB`, `metadata`, `cells`), `BlinkColumnDef` (`key`, `title`, optional `width`), `BlinkTableProps` (`rows`, `columns`, optional `blinkIntervalMs` / `initialBlinkEnabled`).
 
 **Storybook story**: `web-ui/components/BlinkTable` — review new work there before wiring into any surface.

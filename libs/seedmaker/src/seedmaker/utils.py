@@ -54,19 +54,20 @@ def delete_model(client: httpx.Client, model_id: str) -> None:
         )
 
 
-def is_image_classification_compatible(model: dict) -> bool:
-    metadata = model.get("metadata") if isinstance(model.get("metadata"), dict) else {}
-    dataset_types = (
+def is_image_classification_compatible(model: dict[str, Any]) -> bool:
+    raw_meta = model.get("metadata")
+    metadata: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    dataset_types: Any = (
         metadata.get("dataset_types")
         if isinstance(metadata.get("dataset_types"), list)
         else []
     )
-    task_types = (
+    task_types: Any = (
         metadata.get("task_types")
         if isinstance(metadata.get("task_types"), list)
         else []
     )
-    prediction_targets = (
+    prediction_targets: Any = (
         metadata.get("prediction_targets")
         if isinstance(metadata.get("prediction_targets"), list)
         else []
@@ -81,7 +82,7 @@ def is_image_classification_compatible(model: dict) -> bool:
 def create_model_via_training_job(
     client: httpx.Client,
     dataset_id: str,
-    preset_id: str,
+    trainer_id: str,
     job_timeout: int,
 ) -> tuple[str | None, str | None]:
     """Create a training job via local engine and return (job_id, model_id)."""
@@ -91,7 +92,7 @@ def create_model_via_training_job(
         "/api/v1/training-jobs",
         json={
             "dataset_id": dataset_id,
-            "preset_id": preset_id,
+            "trainer_id": trainer_id,
         },
     )
     if r.status_code != 200:

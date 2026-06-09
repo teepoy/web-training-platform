@@ -63,14 +63,14 @@ apps/web/src/
 │   └── schema-registry.ts      ← DatasetSchemaDescriptor, registerDatasetSchema()
 ├── app/
 │   └── registrations.ts        ← central registry: imports module registrations
-└── modules/
-    ├── dataset-classification/
+└── features/datasets/presentation/dataset-types/
+    ├── classification/
     │   ├── registrations.ts    ← calls registerDatasetSchema()
     │   └── views/schema.ts
-    ├── dataset-detection/
+    ├── detection/
     │   ├── registrations.ts
     │   └── views/schema.ts
-    └── dataset-vqa/
+    └── vqa/
         ├── registrations.ts
         └── views/schema.ts
 ```
@@ -102,7 +102,7 @@ Registration is triggered by the `app/main.py` lifespan handler, which imports e
 
 ### Frontend
 Registration is triggered by `apps/web/src/app/registrations.ts`, which imports the registration module for each dataset type:
-- Each `apps/web/src/modules/dataset-*/registrations.ts` calls `registerDatasetSchema` with its descriptor.
+- Each `apps/web/src/features/datasets/presentation/dataset-types/*/registrations.ts` calls `registerDatasetSchema` with its descriptor.
 
 ## How Services Use the Schema
 

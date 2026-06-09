@@ -62,11 +62,16 @@
 
 <script setup lang="ts">
 import { ref, computed, h } from "vue";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { useMessage, NPageHeader, NSpace, NGrid, NGridItem, NCard, NDataTable, NSpin, NEmpty, NButton, NSwitch, NPopconfirm, NTag } from "naive-ui";
-import { listSensors, listSubscriptions, updateSubscription, deleteSubscription } from "@/features/sensors/infrastructure/api";
-import type { SensorDefinition, SensorSubscription } from "@/features/sensors/domain/models";
+import {
+  useListSensorsApiV1SensorsGet,
+  useListSensorSubscriptionsApiV1SensorsSensorIdSubscriptionsGet,
+  useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch,
+  useDeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete,
+} from "@/generated/orval/endpoints/api";
+import type { SensorDefinitionResponse as SensorDefinition, SensorSubscriptionResponse as SensorSubscription } from "@/generated/orval/models";
 import SensorSubscriptionModal from "./SensorSubscriptionModal.vue";
 
 const message = useMessage();
@@ -77,9 +82,10 @@ const selectedSensorId = ref<string | null>(null);
 // ---------------------------------------------------------------------------
 // Sensors List
 // ---------------------------------------------------------------------------
-const { data: sensors, isLoading: isLoadingSensors } = useQuery({
-  queryKey: ["sensors"],
-  queryFn: listSensors,
+const { data: sensors, isLoading: isLoadingSensors } = useListSensorsApiV1SensorsGet({
+  query: {
+    select: (response) => response.data,
+  },
 });
 
 const selectedSensor = computed(() => {
@@ -114,29 +120,34 @@ function sensorRowProps(row: SensorDefinition) {
 // ---------------------------------------------------------------------------
 // Subscriptions List
 // ---------------------------------------------------------------------------
-const { data: subscriptions, isLoading: isLoadingSubscriptions } = useQuery({
-  queryKey: computed(() => ["subscriptions", selectedSensorId.value]),
-  queryFn: () => listSubscriptions(selectedSensorId.value!),
-  enabled: computed(() => !!selectedSensorId.value),
+const sensorId = computed(() => selectedSensorId.value ?? '');
+
+const { data: subscriptions, isLoading: isLoadingSubscriptions } = useListSensorSubscriptionsApiV1SensorsSensorIdSubscriptionsGet(sensorId, {
+  query: {
+    queryKey: computed(() => ["subscriptions", selectedSensorId.value]),
+    enabled: computed(() => !!selectedSensorId.value),
+    select: (response) => response.data as SensorSubscription[],
+  },
 });
 
-const toggleMutation = useMutation({
-  mutationFn: ({ subId, enabled }: { subId: string, enabled: boolean }) =>
-    updateSubscription(selectedSensorId.value!, subId, { enabled }),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
-    message.success("Subscription updated");
+const toggleMutation = useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
+      message.success("Subscription updated");
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
 });
 
-const deleteMutation = useMutation({
-  mutationFn: (subId: string) => deleteSubscription(selectedSensorId.value!, subId),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
-    message.success("Subscription deleted");
+const deleteMutation = useDeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
+      message.success("Subscription deleted");
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to delete subscription"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to delete subscription"),
 });
 
 const subscriptionColumns = computed<DataTableColumns<SensorSubscription>>(() => [
@@ -161,7 +172,7 @@ const subscriptionColumns = computed<DataTableColumns<SensorSubscription>>(() =>
       NSwitch,
       {
         value: row.enabled,
-        onUpdateValue: (val: boolean) => toggleMutation.mutate({ subId: row.id, enabled: val })
+            onUpdateValue: (val: boolean) => toggleMutation.mutate({ sensorId: selectedSensorId.value!, subId: row.id, data: { enabled: val } })
       }
     )
   },
@@ -182,7 +193,7 @@ const subscriptionColumns = computed<DataTableColumns<SensorSubscription>>(() =>
         h(
           NPopconfirm,
           {
-            onPositiveClick: () => deleteMutation.mutate(row.id),
+              onPositiveClick: () => deleteMutation.mutate({ sensorId: selectedSensorId.value!, subId: row.id }),
           },
           {
             trigger: () => h(

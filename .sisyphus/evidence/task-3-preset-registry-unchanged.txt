@@ -1,0 +1,1 @@
+['resnet50-cls-v1', 'dspy-vqa-v1', 'clip-zero-shot-v1']

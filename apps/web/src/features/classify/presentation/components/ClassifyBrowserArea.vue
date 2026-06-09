@@ -13,15 +13,15 @@ const page = injectClassifyPage();
 
 <template>
   <!-- Sparse dataset: no per-sample browsing or annotation -->
-  <n-result
-    v-if="page.isSparse.value"
-    status="info"
-    title="Sparse Dataset"
-    description="Per-sample browsing and annotation are not available for file-backed sparse datasets. Use the prediction and training workflows above."
-    style="flex: 1; align-self: center"
-  />
+  <div v-if="page.isSparse.value" class="classify-layout classify-layout--centered">
+    <n-result
+      status="info"
+      title="Sparse Dataset"
+      description="Per-sample browsing and annotation are not available for file-backed sparse datasets. Use the prediction and training workflows above."
+    />
+  </div>
 
-  <template v-else>
+  <div v-else class="classify-layout">
     <div
       :ref="(el: any) => (page.browserShellRef.value = el)"
       class="classify-browser-shell"
@@ -130,22 +130,47 @@ const page = injectClassifyPage();
       </SampleBrowser>
     </div>
 
-    <component
-      :is="page.ClassifySidebar"
-      :panels="page.mergedPanels.value"
-      :context="page.pageDashboard"
-      :collapsed="page.prefs.sidebarCollapsed"
-      @update:collapsed="page.prefs.setSidebarCollapsed"
-    />
-  </template>
+    <div
+      class="classify-sidebar-container"
+      :class="{ collapsed: page.prefs.sidebarCollapsed }"
+    >
+      <component
+        :is="page.ClassifySidebar"
+        :panels="page.mergedPanels.value"
+        :context="page.pageDashboard"
+        :collapsed="page.prefs.sidebarCollapsed"
+        @update:collapsed="page.prefs.setSidebarCollapsed"
+      />
+    </div>
+  </div>
 </template>
 
 <style scoped>
+.classify-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.classify-layout--centered {
+  align-items: center;
+  justify-content: center;
+}
+
 .classify-browser-shell {
   flex: 1;
   min-width: 0;
   min-height: 0;
   outline: none;
+}
+
+.classify-sidebar-container {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
+  background: var(--cv-card-bg, #1e1e2e);
+  transition: width 0.2s, min-width 0.2s;
 }
 
 .classify-label-panel {

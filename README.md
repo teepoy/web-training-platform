@@ -4,8 +4,9 @@ Monorepo for an online finetune platform with:
 
 - Vue 3 frontend (`apps/web`)
 - FastAPI backend (`apps/api`)
-- Prefect flow-worker package (`apps/worker`)
-- Python SDK + CLI (`libs/python-sdk`)
+- Prefect flow definitions (in-app, inside `apps/api`)
+- Python SDK + CLI (`libs/platform-runtime`)
+- Python SDK compatibility shim (`libs/python-sdk`)
 
 Current implementation focuses on extensible interfaces, classification-first types,
 swappable execution engines (local + Kubeflow mock), SSE job progress, webhook
@@ -51,15 +52,15 @@ pnpm dev
 SDK CLI:
 
 ```bash
-cd libs/python-sdk
+cd libs/platform-runtime
 uv run ftctl jobs status --job-id <job-id>
 ```
 
 Or run module directly:
 
 ```bash
-cd libs/python-sdk
-uv run python -m ftsdk.cli jobs ls
+cd libs/platform-runtime
+uv run python -m platform_runtime.sdk.cli jobs ls
 ```
 
 ## Notes

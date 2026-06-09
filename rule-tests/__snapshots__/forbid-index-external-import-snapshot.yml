@@ -1,0 +1,62 @@
+id: forbid-index-external-import
+snapshots:
+  export type { Corge } from "../../up";:
+    labels:
+    - source: export type { Corge } from "../../up";
+      style: primary
+      start: 0
+      end: 38
+    - source: ../../up
+      style: secondary
+      start: 28
+      end: 36
+  export { Quux } from "@/other/module";:
+    labels:
+    - source: export { Quux } from "@/other/module";
+      style: primary
+      start: 0
+      end: 38
+    - source: '@/other/module'
+      style: secondary
+      start: 22
+      end: 36
+  export { Qux } from "../external";:
+    labels:
+    - source: export { Qux } from "../external";
+      style: primary
+      start: 0
+      end: 34
+    - source: ../external
+      style: secondary
+      start: 21
+      end: 32
+  import type { Baz } from "../../types";:
+    labels:
+    - source: import type { Baz } from "../../types";
+      style: primary
+      start: 0
+      end: 39
+    - source: ../../types
+      style: secondary
+      start: 26
+      end: 37
+  import { Bar } from "@/shared/foo";:
+    labels:
+    - source: import { Bar } from "@/shared/foo";
+      style: primary
+      start: 0
+      end: 35
+    - source: '@/shared/foo'
+      style: secondary
+      start: 21
+      end: 33
+  import { Foo } from "../something";:
+    labels:
+    - source: import { Foo } from "../something";
+      style: primary
+      start: 0
+      end: 35
+    - source: ../something
+      style: secondary
+      start: 21
+      end: 33

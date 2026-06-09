@@ -1,90 +1,117 @@
-import { req, uploadFile } from "./client";
+import {
+  listSamplesApiV1DatasetsDatasetIdSamplesGet,
+  createSampleApiV1DatasetsDatasetIdSamplesPost,
+  importSamplesApiV1DatasetsDatasetIdSamplesImportPost,
+  getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet,
+  uploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
+  listAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGet,
+  listSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithLabelsGet,
+} from "@/generated/orval/endpoints/api";
+import type {
+  BodyUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
+  BulkCreateSampleItem,
+  BulkCreateSampleResponse,
+} from "@/generated/orval/models";
 import type {
   Annotation,
   Sample,
   SampleWithLabels,
-  BulkCreateSampleItem,
-  BulkCreateSampleResponse,
+} from "@/generated/orval/models";
+import type {
   PaginatedResponse,
   UploadResponse,
   CreateSampleBody,
 } from "./types";
 
-export function listSamples(
+export async function listSamples(
   datasetId: string,
   offset?: number,
   limit?: number,
 ): Promise<PaginatedResponse<Sample>> {
-  const params = new URLSearchParams();
-  if (offset !== undefined) params.set("offset", String(offset));
-  if (limit !== undefined) params.set("limit", String(limit));
-  const qs = params.toString() ? `?${params.toString()}` : "";
-  return req<PaginatedResponse<Sample>>(
-    `/datasets/${datasetId}/samples${qs}`,
-  );
+  return (
+    await listSamplesApiV1DatasetsDatasetIdSamplesGet(datasetId, {
+      offset,
+      limit,
+    })
+  ).data as PaginatedResponse<Sample>;
 }
 
-export function createSample(
+export async function createSample(
   datasetId: string,
   body: CreateSampleBody,
 ): Promise<Sample> {
-  return req<Sample>(`/datasets/${datasetId}/samples`, {
-    method: "POST",
-    body: JSON.stringify({
+  return (
+    await createSampleApiV1DatasetsDatasetIdSamplesPost(datasetId, {
       image_uris: body.image_uris,
       metadata: body.metadata ?? {},
-    }),
-  });
+    } as import("@/generated/orval/models/createSampleRequest").CreateSampleRequest)
+  ).data as Sample;
 }
 
-export function importSamples(
+export async function importSamples(
   datasetId: string,
   items: BulkCreateSampleItem[],
 ): Promise<BulkCreateSampleResponse> {
-  return req<BulkCreateSampleResponse>(
-    `/datasets/${datasetId}/samples/import`,
-    {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    },
-    120_000,
-  );
+  return (
+    await importSamplesApiV1DatasetsDatasetIdSamplesImportPost(datasetId, {
+      items,
+    } as import("@/generated/orval/models/bulkCreateSampleRequest").BulkCreateSampleRequest)
+  ).data as BulkCreateSampleResponse;
 }
 
-export function getSample(sampleId: string): Promise<Sample> {
-  return req<Sample>(`/samples/${sampleId}`);
+export async function getSample(sampleId: string, datasetId: string): Promise<Sample> {
+  return (
+    await getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet(datasetId, sampleId)
+  ).data as Sample;
 }
 
-export function uploadSampleImage(
+export async function uploadSampleImage(
   sampleId: string,
   file: File,
+  datasetId: string,
 ): Promise<UploadResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  return uploadFile<UploadResponse>(`/samples/${sampleId}/upload`, form);
+  const body: BodyUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost = {
+    file,
+  };
+  return (
+    await uploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost(
+      datasetId,
+      sampleId,
+      body,
+    )
+  ).data as UploadResponse;
 }
 
-export function listAnnotationsForSample(
+export async function listAnnotationsForSample(
   sampleId: string,
+  datasetId: string,
 ): Promise<Annotation[]> {
-  return req<Annotation[]>(`/samples/${sampleId}/annotations`);
+  return (
+    await listAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGet(
+      datasetId,
+      sampleId,
+    )
+  ).data as Annotation[];
 }
 
-export function listSamplesWithLabels(
+export async function listSamplesWithLabels(
   datasetId: string,
   offset = 0,
   limit = 50,
   label?: string,
   orderBy = "id",
+  withPredictions = false,
 ): Promise<PaginatedResponse<SampleWithLabels>> {
-  const params = new URLSearchParams();
-  params.set("offset", String(offset));
-  params.set("limit", String(limit));
-  if (label != null) params.set("label", label);
-  params.set("order_by", orderBy);
-  return req<PaginatedResponse<SampleWithLabels>>(
-    `/datasets/${datasetId}/samples-with-labels?${params.toString()}`,
-  );
+  return (
+    await listSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithLabelsGet(
+      datasetId,
+      {
+        offset,
+        limit,
+        label: label ?? undefined,
+        order_by: orderBy,
+        with_predictions: withPredictions || undefined,
+      },
+    )
+  ).data as PaginatedResponse<SampleWithLabels>;
 }
-
-export type { PaginatedResponse, SampleWithLabels } from "./types";

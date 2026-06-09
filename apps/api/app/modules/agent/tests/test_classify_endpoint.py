@@ -35,11 +35,11 @@ def _create_sample(c: TestClient, dataset_id: str, image_uris: list[str] | None 
     return sample.json()["id"]
 
 
-def _create_annotation(c: TestClient, sample_id: str, label: str, created_by: str = "tester") -> str:
+def _create_annotation(c: TestClient, sample_id: str, label: str, dataset_id: str, created_by: str = "tester") -> str:
     """Create an annotation and return annotation_id."""
     r = c.post(
         "/api/v1/annotations",
-        json={"sample_id": sample_id, "label": label, "created_by": created_by},
+        json={"dataset_id": dataset_id, "sample_id": sample_id, "label": label, "created_by": created_by},
     )
     assert r.status_code == 200
     return r.json()["id"]
@@ -61,8 +61,8 @@ def test_samples_with_labels_happy_path() -> None:
         s3 = _create_sample(c, dataset_id)
 
         # annotations for s1 and s2 (s3 unannotated)
-        _create_annotation(c, s1, "cat")
-        _create_annotation(c, s2, "dog")
+        _create_annotation(c, s1, "cat", dataset_id)
+        _create_annotation(c, s2, "dog", dataset_id)
 
         resp = c.get(f"/api/v1/datasets/{dataset_id}/samples-with-labels")
         assert resp.status_code == 200
@@ -138,8 +138,8 @@ def test_samples_with_labels_label_filter() -> None:
         s2 = _create_sample(c, dataset_id)
         s3 = _create_sample(c, dataset_id)
 
-        _create_annotation(c, s1, "cat")
-        _create_annotation(c, s2, "dog")
+        _create_annotation(c, s1, "cat", dataset_id)
+        _create_annotation(c, s2, "dog", dataset_id)
         # s3 remains unlabeled
 
         # Filter by "cat"
@@ -206,8 +206,8 @@ def test_samples_with_labels_latest_annotation_wins() -> None:
         s1 = _create_sample(c, dataset_id)
 
         # Create two annotations; second is newer
-        _create_annotation(c, s1, "cat")
-        _create_annotation(c, s1, "dog")  # this is newer
+        _create_annotation(c, s1, "cat", dataset_id)
+        _create_annotation(c, s1, "dog", dataset_id)  # this is newer
 
         resp = c.get(f"/api/v1/datasets/{dataset_id}/samples-with-labels")
         assert resp.status_code == 200
@@ -233,8 +233,8 @@ def test_annotation_stats_happy_path() -> None:
         s2 = _create_sample(c, dataset_id)
         _create_sample(c, dataset_id)  # s3 unlabeled
 
-        _create_annotation(c, s1, "cat")
-        _create_annotation(c, s2, "dog")
+        _create_annotation(c, s1, "cat", dataset_id)
+        _create_annotation(c, s2, "dog", dataset_id)
 
         resp = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
         assert resp.status_code == 200
@@ -275,8 +275,8 @@ def test_annotation_stats_multiple_annotations_latest_wins() -> None:
         dataset_id = _create_dataset(c, name="stats-latest-ds")
 
         s1 = _create_sample(c, dataset_id)
-        _create_annotation(c, s1, "cat")
-        _create_annotation(c, s1, "dog")  # newer → should win
+        _create_annotation(c, s1, "cat", dataset_id)
+        _create_annotation(c, s1, "dog", dataset_id)  # newer → should win
 
         resp = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
         assert resp.status_code == 200

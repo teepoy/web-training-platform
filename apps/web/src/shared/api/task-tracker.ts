@@ -1,24 +1,23 @@
-import { req } from "./client";
-import type {
-  TaskTrackerSummary,
-  TaskTrackerDetail,
-} from "./types";
+import {
+  listTaskTrackerTasksApiV1TaskTrackerTasksGet,
+  getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet,
+  cancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost,
+} from "@/generated/orval/endpoints/api";
+import type { TaskTrackerSummaryResponse as TaskTrackerSummary, TaskTrackerDetailResponse as TaskTrackerDetail } from "@/generated/orval/models";
 
-export function listTrackedTasks(
+export async function listTrackedTasks(
   kind?: "training" | "prediction",
 ): Promise<TaskTrackerSummary[]> {
-  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
-  return req<TaskTrackerSummary[]>(`/task-tracker/tasks${qs}`);
+  return (await
+    listTaskTrackerTasksApiV1TaskTrackerTasksGet(kind ? { kind } : undefined)).data as TaskTrackerSummary[];
 }
 
-export function getTrackedTask(id: string): Promise<TaskTrackerDetail> {
-  return req<TaskTrackerDetail>(`/task-tracker/tasks/${id}`);
+export async function getTrackedTask(id: string): Promise<TaskTrackerDetail> {
+  return (await
+    getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet(id)).data as TaskTrackerDetail;
 }
 
-export function cancelTrackedTask(
-  id: string,
-): Promise<{ cancelled: boolean }> {
-  return req<{ cancelled: boolean }>(`/task-tracker/tasks/${id}/cancel`, {
-    method: "POST",
-  });
+export async function cancelTrackedTask(id: string): Promise<{ cancelled: boolean }> {
+  return (await
+    cancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost(id)).data as { cancelled: boolean };
 }

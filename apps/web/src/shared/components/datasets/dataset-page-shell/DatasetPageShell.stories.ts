@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import DatasetPageShell from "./DatasetPageShell.vue";
 
 const meta = {
-  title: "web-ui/components/datasets/DatasetPageShell",
+  title: "Shared/DatasetPageShell",
   component: DatasetPageShell,
   render: (args) => ({
     components: { DatasetPageShell },

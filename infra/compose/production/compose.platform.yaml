@@ -1,0 +1,140 @@
+# Stateless app plane — released with application versions.
+# Holds: prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu.
+# Start after the stateful data plane (postgres, redis, minio, label-studio) is up.
+# Note: prefect-server persists state in the stateful project's postgres.
+
+x-platform-environment: &platform-environment
+  APP_CONFIG_PROFILE: prod
+  MNT: /mnt
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+  PREFECT_API_URL: http://prefect-server:4200/api
+  PREFECT_UI_URL: ${PREFECT_UI_URL:?Set PREFECT_UI_URL}
+  LABEL_STUDIO_URL: http://label-studio:8080
+  LABEL_STUDIO_EXTERNAL_URL: ${LABEL_STUDIO_EXTERNAL_URL:?Set LABEL_STUDIO_EXTERNAL_URL}
+  LABEL_STUDIO_API_KEY: ${LABEL_STUDIO_API_KEY:?Set LABEL_STUDIO_API_KEY}
+  LABEL_STUDIO_DATABASE_URL: ${LABEL_STUDIO_DATABASE_URL:?Set LABEL_STUDIO_DATABASE_URL}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY}
+  MINIO_BUCKET: ${MINIO_BUCKET:-finetune-artifacts}
+  SC_PATCH_S3_ENDPOINT: ${SC_PATCH_S3_ENDPOINT:-minio:9000}
+  SC_PATCH_S3_ACCESS_KEY: ${SC_PATCH_S3_ACCESS_KEY:?Set SC_PATCH_S3_ACCESS_KEY}
+  SC_PATCH_S3_SECRET_KEY: ${SC_PATCH_S3_SECRET_KEY:?Set SC_PATCH_S3_SECRET_KEY}
+  SC_PATCH_S3_BUCKET: ${SC_PATCH_S3_BUCKET:-sc-patch-images}
+  SC_REVIEW_S3_ENDPOINT: ${SC_REVIEW_S3_ENDPOINT:-minio:9000}
+  SC_REVIEW_S3_ACCESS_KEY: ${SC_REVIEW_S3_ACCESS_KEY:?Set SC_REVIEW_S3_ACCESS_KEY}
+  SC_REVIEW_S3_SECRET_KEY: ${SC_REVIEW_S3_SECRET_KEY:?Set SC_REVIEW_S3_SECRET_KEY}
+  SC_REVIEW_S3_BUCKET: ${SC_REVIEW_S3_BUCKET:-sc-review-images}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
+
+services:
+  prefect-server:
+    image: prefecthq/prefect:3.6.25-python3.12
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: ${PREFECT_DATABASE_URL:?Set PREFECT_DATABASE_URL}
+    expose:
+      - "4200"
+    networks:
+      finetune-prod:
+        aliases:
+          - prefect-server
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  api:
+    image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
+    environment: *platform-environment
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    expose:
+      - "8000"
+    volumes:
+      - platform-data:/mnt
+    networks:
+      finetune-prod:
+        aliases:
+          - api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    image: ${FINETUNE_WEB_IMAGE:?Set FINETUNE_WEB_IMAGE to an immutable tag}
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "80"
+    networks:
+      finetune-prod:
+        aliases:
+          - web
+    restart: unless-stopped
+
+  prefect-worker-cpu:
+    image: ${FINETUNE_CPU_WORKER_IMAGE:?Set FINETUNE_CPU_WORKER_IMAGE to an immutable tag}
+    environment: *platform-environment
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    volumes:
+      - platform-data:/mnt
+    networks:
+      finetune-prod:
+    restart: unless-stopped
+
+  prefect-worker-gpu:
+    image: ${FINETUNE_GPU_WORKER_IMAGE:?Set FINETUNE_GPU_WORKER_IMAGE to an immutable tag}
+    profiles: ["gpu"]
+    environment: *platform-environment
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - platform-data:/mnt
+    networks:
+      finetune-prod:
+    restart: unless-stopped
+
+networks:
+  finetune-prod:
+    external: true
+    name: finetune-prod
+
+volumes:
+  platform-data:
+    name: finetune-platform-data

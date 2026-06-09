@@ -64,7 +64,7 @@ def _scatter_coords(label_idx: int) -> tuple[float, float]:
 
 
 def _build_cifar100_pool() -> list[str]:
-    import torchvision  # type: ignore[import-untyped]
+    import torchvision
     import base64
     import io
 
@@ -97,7 +97,7 @@ def _build_cifar100_pool() -> list[str]:
 def _build_imagenet_pool(size: int) -> list[str]:
     import base64
     import io
-    from PIL import Image  # type: ignore[import-untyped]
+    from PIL import Image
 
     hf_token = os.environ.get("HF_TOKEN", "")
     if not hf_token:
@@ -115,7 +115,7 @@ def _build_imagenet_pool(size: int) -> list[str]:
         sys.exit(1)
 
     try:
-        from datasets import load_dataset  # type: ignore[import-untyped]
+        from datasets import load_dataset  # pyright: ignore[reportMissingImports]
     except ImportError:
         print(
             "  ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow"
@@ -137,12 +137,10 @@ def _build_imagenet_pool(size: int) -> list[str]:
         image = example["image"]
         if image.mode != "RGB":
             image = image.convert("RGB")
-            resized = image.resize(
-                (IMAGENET_SIZE, IMAGENET_SIZE),
-                Image.LANCZOS
-                if hasattr(Image, "LANCZOS")
-                else Image.Resampling.LANCZOS,
-            )  # type: ignore[union-attr]
+        resized = image.resize(
+            (IMAGENET_SIZE, IMAGENET_SIZE),
+            Image.Resampling.LANCZOS,
+        )
         buf = io.BytesIO()
         resized.save(buf, format="JPEG", quality=85)
         b64 = base64.b64encode(buf.getvalue()).decode()

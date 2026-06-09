@@ -7,14 +7,14 @@ import pyarrow.parquet as pq
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.interfaces.controllers.extensions.import_parquet_router import (
+from app.modules.datasets.port.http.extensions.import_parquet_router import (
     _extract_image_uri,
     _find_image_columns,
     _find_label_column,
     _is_image_struct,
     _parquet_to_sample_items,
 )
-from app.modules.datasets.interfaces.controllers.extensions.export_parquet_router import _build_image_struct
+from app.modules.datasets.port.http.extensions.export_parquet_router import _build_image_struct
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ class TestImportParquetEndpoint:
             assert listed.status_code == 200
             sample_id = listed.json()["items"][0]["id"]
 
-            anns = c.get(f"/api/v1/samples/{sample_id}/annotations")
+            anns = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
             assert anns.status_code == 200
             assert any(a["label"] == "cat" for a in anns.json())
 

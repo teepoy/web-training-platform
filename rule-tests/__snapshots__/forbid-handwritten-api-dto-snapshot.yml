@@ -1,0 +1,42 @@
+id: forbid-handwritten-api-dto
+snapshots:
+  const a = req("/endpoint");:
+    labels:
+    - source: req("/endpoint")
+      style: primary
+      start: 10
+      end: 26
+    - source: req
+      style: secondary
+      start: 10
+      end: 13
+  const b = req<UserWithOrgs>("/auth/me", { headers });:
+    labels:
+    - source: req<UserWithOrgs>("/auth/me", { headers })
+      style: primary
+      start: 10
+      end: 52
+    - source: req
+      style: secondary
+      start: 10
+      end: 13
+  'export interface BarRequest { query: string }':
+    labels:
+    - source: 'interface BarRequest { query: string }'
+      style: primary
+      start: 7
+      end: 45
+    - source: BarRequest
+      style: secondary
+      start: 17
+      end: 27
+  'export interface FooResponse { data: string }':
+    labels:
+    - source: 'interface FooResponse { data: string }'
+      style: primary
+      start: 7
+      end: 45
+    - source: FooResponse
+      style: secondary
+      start: 17
+      end: 28

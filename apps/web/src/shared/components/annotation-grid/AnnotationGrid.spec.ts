@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { nextTick, ref } from "vue";
+import { nextTick } from "vue";
 
 // jsdom does not provide ResizeObserver — SampleBrowser uses it in onMounted
 beforeAll(() => {
@@ -12,15 +11,10 @@ beforeAll(() => {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
 });
 
-const mockVirtualizer = {
-  getTotalSize: () => 0,
-  getVirtualItems: () => [] as { index: number; start: number; size: number }[],
-};
+import { mockTanstackVirtual } from "@/testing/mocks/tanstack-virtual";
+mockTanstackVirtual();
 
-vi.mock("@tanstack/vue-virtual", () => ({
-  useVirtualizer: () => ref(mockVirtualizer),
-}));
-
+import { mountWithProviders } from "@/testing";
 import AnnotationGrid from "./AnnotationGrid.vue";
 import type { AnnotationGridItem } from "../../types/components";
 
@@ -39,7 +33,7 @@ const labelSpace = ["cat", "dog", "bird", "fish", "rabbit"];
 
 describe("AnnotationGrid", () => {
   it("renders grid with label buttons and submit button", async () => {
-    const wrapper = mount(AnnotationGrid, {
+    const { wrapper } = await mountWithProviders(AnnotationGrid, {
       props: {
         items: annotationItems,
         totalCount: 15,
@@ -65,7 +59,7 @@ describe("AnnotationGrid", () => {
   });
 
   it("hides label panel and submit when readOnly is true", async () => {
-    const wrapper = mount(AnnotationGrid, {
+    const { wrapper } = await mountWithProviders(AnnotationGrid, {
       props: {
         items: annotationItems,
         totalCount: 15,
@@ -81,7 +75,7 @@ describe("AnnotationGrid", () => {
   });
 
   it("disables submit button when submitting is true", async () => {
-    const wrapper = mount(AnnotationGrid, {
+    const { wrapper } = await mountWithProviders(AnnotationGrid, {
       props: {
         items: annotationItems,
         totalCount: 15,
@@ -99,7 +93,7 @@ describe("AnnotationGrid", () => {
   });
 
   it("shows loading indicator when isLoading is true", async () => {
-    const wrapper = mount(AnnotationGrid, {
+    const { wrapper } = await mountWithProviders(AnnotationGrid, {
       props: {
         items: annotationItems,
         totalCount: 15,
@@ -116,7 +110,7 @@ describe("AnnotationGrid", () => {
   });
 
   it('emits "apply-label" when a label button is clicked', async () => {
-    const wrapper = mount(AnnotationGrid, {
+    const { wrapper } = await mountWithProviders(AnnotationGrid, {
       props: {
         items: annotationItems,
         totalCount: 15,

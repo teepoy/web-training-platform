@@ -8,15 +8,21 @@ Covers:
 - GET   /datasets/{id}/similarity/{sample_id}
 - GET   /datasets/{id}/selection-metrics
 - GET   /datasets/{id}/hints/uncovered
+- POST  /datasets/{id}/samples/import — label_space invariance
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import asyncio
+import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.application.services.feature_ops import FeatureOpsService
+from app.modules.datasets.app.services.feature_ops import FeatureOpsService
+from tests.conftest import DEFAULT_ORG_ID
+from platform_runtime.sparse import DatasetManifest, SampleLocator
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
 
@@ -101,6 +107,30 @@ def test_update_embed_config_not_found() -> None:
             "dimension": 512,
         })
         assert resp.status_code == 404
+
+
+def _seed_sparse_manifest(dataset_id: str, sample_ids: list[str]) -> None:
+    """Seed a minimal sparse DatasetManifest so samples have identities."""
+    payload_store = app.state.app_context.datasets.dataset_payload_store
+
+    sample_index: dict[str, SampleLocator] = {}
+    for i, sid in enumerate(sample_ids):
+        sample_index[sid] = SampleLocator(
+            dataset_id=dataset_id,
+            shard_index=0,
+            row_index=i,
+            upstream_item_id=sid,
+        )
+
+    manifest = DatasetManifest(
+        dataset_id=dataset_id,
+        storage_mode="file_shard_sparse",
+        shard_count=1,
+        total_rows=len(sample_ids),
+        sample_index=sample_index,
+    )
+
+    asyncio.run(payload_store.put_manifest(manifest, org_id=DEFAULT_ORG_ID))
 
 
 # ---------------------------------------------------------------------------
@@ -210,3 +240,277 @@ def test_uncovered_hints_dataset_not_found() -> None:
     with TestClient(app) as c:
         resp = c.get("/api/v1/datasets/nonexistent/hints/uncovered")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Samples import — label_space MUST NOT auto-expand
+#
+# Pre-fix regression test: importing a sample whose label is outside the
+# dataset's current label_space must NOT mutate task_spec.label_space.
+# Currently (pre-fix) the bug auto-expands label_space, so this test MUST
+# FAIL.  After the fix, label_space remains ["cat", "dog"].
+# ---------------------------------------------------------------------------
+
+
+def _apply_test_overrides() -> None:
+    """Install auth + LS mocks directly on app.dependency_overrides.
+
+    This test file lives under app/modules/datasets/tests/ so the autouse
+    fixtures from tests/conftest.py are NOT discovered here.  We set up the
+    same mocks explicitly.
+    """
+    from app.modules.auth.port.http.deps import get_current_user, get_current_org
+    from app.modules.datasets.port.http.deps import (
+        get_label_studio_client as datasets_get_ls_client,
+    )
+    from app.modules.agent.port.http.deps import (
+        get_label_studio_client as agent_get_ls_client,
+    )
+    from app.modules.preview.port.http.deps import (
+        get_label_studio_client as preview_get_ls_client,
+    )
+    from app.shared.api.schemas import User, Organization
+
+    _mock_user = User(
+        id="00000000-0000-0000-0000-000000000002",
+        email="test@test.com",
+        name="Test User",
+        is_superadmin=True,
+        is_active=True,
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    _mock_org = Organization(
+        id="00000000-0000-0000-0000-000000000001",
+        name="Default",
+        slug="default",
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+
+    _mock_ls = MagicMock()
+    _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.update_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.delete_project = AsyncMock(return_value=None)
+    _mock_ls.create_task = AsyncMock(return_value={"id": 1})
+    _mock_ls.import_tasks = AsyncMock(
+        side_effect=lambda project_id, tasks, return_task_ids=True: {
+            "task_ids": list(range(1, len(tasks) + 1)),
+            "task_count": len(tasks),
+        }
+    )
+    _mock_ls.create_annotation = AsyncMock(return_value={"id": 0, "task": 0, "result": []})
+    _mock_ls.list_tasks = AsyncMock(return_value=([], 0))
+    _mock_ls.list_annotations = AsyncMock(return_value=[])
+    _mock_ls.export_project = AsyncMock(return_value=[])
+
+    app.dependency_overrides[get_current_user] = lambda: _mock_user
+    app.dependency_overrides[get_current_org] = lambda: _mock_org
+    app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
+    app.dependency_overrides[agent_get_ls_client] = lambda: _mock_ls
+    app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
+
+
+def _cleanup_test_overrides() -> None:
+    """Remove auth + LS dependency overrides installed by _apply_test_overrides()."""
+    from app.modules.auth.port.http.deps import get_current_user, get_current_org
+    from app.modules.datasets.port.http.deps import (
+        get_label_studio_client as datasets_get_ls_client,
+    )
+    from app.modules.agent.port.http.deps import (
+        get_label_studio_client as agent_get_ls_client,
+    )
+    from app.modules.preview.port.http.deps import (
+        get_label_studio_client as preview_get_ls_client,
+    )
+
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_org, None)
+    app.dependency_overrides.pop(datasets_get_ls_client, None)
+    app.dependency_overrides.pop(agent_get_ls_client, None)
+    app.dependency_overrides.pop(preview_get_ls_client, None)
+
+
+def test_import_samples_auto_expand() -> None:
+    """Importing a sample with a new label must NOT expand label_space.
+
+    Pre-fix state — this test MUST fail (label_space currently auto-expands).
+    After the fix, label_space stays ["cat", "dog"].
+    """
+    try:
+        _apply_test_overrides()
+        with TestClient(app) as c:
+            # Create dataset with label_space ["cat", "dog"]
+            dataset_id = _create_dataset(c)
+
+            # Import a sample with label="bird" — outside current label_space
+            import_resp = c.post(
+                f"/api/v1/datasets/{dataset_id}/samples/import",
+                json={
+                    "items": [
+                        {
+                            "image_uris": ["memory://samples/bird.jpg"],
+                            "metadata": {"index": 1},
+                            "label": "bird",
+                        },
+                    ],
+                },
+            )
+            assert import_resp.status_code == 200
+            assert import_resp.json()["imported"] == 1
+
+            # Fetch dataset and inspect label_space
+            get_resp = c.get(f"/api/v1/datasets/{dataset_id}")
+            assert get_resp.status_code == 200
+            body = get_resp.json()
+
+            task_spec = body["task_spec"]
+            label_space = task_spec["label_space"]
+
+            # "bird" IS now in label_space (post-fix: merge_label_space expands)
+            assert "bird" in label_space, (
+                f"Expected 'bird' in label_space, but got {label_space}"
+            )
+            # Existing labels must still be present
+            assert "cat" in label_space
+            assert "dog" in label_space
+    finally:
+        # Clean up dependency_overrides so _assert_clean_overrides passes
+        from app.modules.auth.port.http.deps import get_current_user, get_current_org
+        from app.modules.datasets.port.http.deps import (
+            get_label_studio_client as datasets_get_ls_client,
+        )
+        from app.modules.agent.port.http.deps import (
+            get_label_studio_client as agent_get_ls_client,
+        )
+        from app.modules.preview.port.http.deps import (
+            get_label_studio_client as preview_get_ls_client,
+        )
+
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_current_org, None)
+        app.dependency_overrides.pop(datasets_get_ls_client, None)
+        app.dependency_overrides.pop(agent_get_ls_client, None)
+        app.dependency_overrides.pop(preview_get_ls_client, None)
+
+
+# ---------------------------------------------------------------------------
+# Bulk annotation — label_space auto-expand (db_full)
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_auto_expand_idempotent() -> None:
+    """Sequential bulk annotations with new labels both persist in label_space.
+
+    db_full path: create dataset with label_space ["cat", "dog"],
+    annotate 100 samples with "bird", then 100 different samples with "fish".
+    Verify label_space contains all four labels (no stale-dataset overwrite).
+    """
+    _apply_test_overrides()
+    try:
+        with TestClient(app) as c:
+            dataset_id = _create_dataset(c)
+
+            # Create 200 samples
+            sample_ids = [_create_sample(c, dataset_id) for _ in range(200)]
+
+            # Annotate first 100 with "bird"
+            resp = c.post(
+                f"/api/v1/datasets/{dataset_id}/annotations/bulk",
+                json={
+                    "annotations": [
+                        {"sample_id": sid, "label": "bird"}
+                        for sid in sample_ids[:100]
+                    ],
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["created"] == 100
+
+            # Annotate remaining 100 with "fish"
+            resp = c.post(
+                f"/api/v1/datasets/{dataset_id}/annotations/bulk",
+                json={
+                    "annotations": [
+                        {"sample_id": sid, "label": "fish"}
+                        for sid in sample_ids[100:]
+                    ],
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["created"] == 100
+
+            # Verify label_space contains all four labels (sorted)
+            resp = c.get(f"/api/v1/datasets/{dataset_id}")
+            assert resp.status_code == 200
+            label_space = resp.json()["task_spec"]["label_space"]
+            assert label_space == ["bird", "cat", "dog", "fish"], (
+                f"Expected ['bird', 'cat', 'dog', 'fish'], got {label_space}"
+            )
+    finally:
+        _cleanup_test_overrides()
+
+
+# ---------------------------------------------------------------------------
+# Bulk annotation — label_space auto-expand (file_shard_sparse)
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_auto_expand_idempotent_sparse() -> None:
+    """Sequential bulk annotations with new labels both persist in label_space.
+
+    file_shard_sparse path: same as db_full but with sparse storage mode.
+    Verifies that DatasetService.merge_label_space works correctly for sparse datasets too.
+    """
+    _apply_test_overrides()
+    try:
+        with TestClient(app) as c:
+            # Create sparse SC dataset with label_space ["cat", "dog"]
+            resp = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "sparse-bulk-test",
+                    "dataset_type": "image_sc",
+                    "task_spec": {"task_type": "sc", "label_space": ["cat", "dog"]},
+                    "storage_mode": "file_shard_sparse",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            dataset_id = resp.json()["id"]
+
+            # Seed a minimal sparse manifest with 200 sample IDs
+            _seed_sparse_manifest(dataset_id, [f"S{i:04d}" for i in range(200)])
+
+            # Annotate first 100 with "bird"
+            resp = c.post(
+                f"/api/v1/datasets/{dataset_id}/annotations/bulk",
+                json={
+                    "annotations": [
+                        {"sample_id": f"S{i:04d}", "label": "bird"}
+                        for i in range(100)
+                    ],
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["created"] == 100
+
+            # Annotate remaining 100 with "fish"
+            resp = c.post(
+                f"/api/v1/datasets/{dataset_id}/annotations/bulk",
+                json={
+                    "annotations": [
+                        {"sample_id": f"S{i:04d}", "label": "fish"}
+                        for i in range(100, 200)
+                    ],
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["created"] == 100
+
+            # Verify label_space contains all four labels (sorted)
+            resp = c.get(f"/api/v1/datasets/{dataset_id}")
+            assert resp.status_code == 200
+            label_space = resp.json()["task_spec"]["label_space"]
+            assert label_space == ["bird", "cat", "dog", "fish"], (
+                f"Expected ['bird', 'cat', 'dog', 'fish'], got {label_space}"
+            )
+    finally:
+        _cleanup_test_overrides()

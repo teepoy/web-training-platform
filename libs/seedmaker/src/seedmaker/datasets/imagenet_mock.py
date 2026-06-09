@@ -8,15 +8,13 @@ from seedmaker import SeedConfig, SeedRunner, IMAGENET_LABELS, registry
 from seedmaker.images import generate_synthetic_image
 from seedmaker.utils import (
     api_request,
-    delete_model,
-    is_image_classification_compatible,
     create_model_via_training_job,
 )
 
 DATASET_NAME = "ImageNet-1K Mock"
 LEGACY_DATASET_NAME = "ImageNet-1K"
-PRESET_ID = "resnet50-cls-v1"
-PRESET_NAME = "ResNet50 Classification (v1)"
+TRAINER_ID = "resnet50-cls-v1"
+TRAINER_NAME = "ResNet50 Classification (v1)"
 PLACEHOLDER_MODEL_NAME = "imagenet-mock-placeholder"
 SEED_MODE = "mock"
 
@@ -102,89 +100,61 @@ def build_sample_item(idx: int) -> dict:
     }
 
 
-def _resolve_preset(client: Any) -> str:
-    r = api_request(client, "get", "/api/v1/training-presets")
-    presets = r.json() if r.status_code == 200 else []
-    for item in presets:
-        if item.get("id") == PRESET_ID or item.get("name") == PRESET_NAME:
+def _resolve_trainer(client: Any) -> str:
+    r = api_request(client, "get", "/api/v1/trainers")
+    trainers = r.json() if r.status_code == 200 else []
+    for item in trainers:
+        if item.get("id") == TRAINER_ID or item.get("name") == TRAINER_NAME:
             return item["id"]
     raise RuntimeError(
-        f"Required preset '{PRESET_ID}' not available. "
-        "Presets are file-backed and read-only; make sure the API started with the bundled preset registry."
+        f"Required trainer '{TRAINER_ID}' not available. "
+        "Trainers are catalog-backed; make sure the API started with the bundled catalog."
     )
 
 
 def run(args: Any, runner: SeedRunner) -> int:
     client = runner.client
     dataset_id = runner.dataset_id
-    max_samples = getattr(args, "max_samples", None) or 1000
 
     if not dataset_id:
         print("ERROR: dataset_id not set")
         return 1
 
-    # Resolve preset
-    print("\n[6/7] Resolving training preset ...")
-    preset_id = _resolve_preset(client)
-    print(f"  Using preset: {preset_id}")
-
-    # Create samples
-    sample_count = 0
-    if getattr(args, "no_samples", False):
-        print("\n  Skipping sample creation (--no-samples).")
-    else:
-        print("\n[7/7] Creating samples ...")
-        count = min(max_samples, len(IMAGENET_LABELS))
-
-        sample_count = runner.upload_samples(
-            count, build_sample_item, batch_size=5000, skip_existing=True
-        )
-
-    # Create model
+    trainer_id: str | None = None
     job_id: str | None = None
     model_id: str | None = None
 
-    if getattr(args, "no_model", False):
-        print("\n  Skipping model creation (--no-model).")
-    else:
-        print("\n[model] Creating training job + model artifact ...")
+    if not args.no_model:
+        print("\n[6/7] Resolving trainer ...")
+        trainer_id = _resolve_trainer(client)
 
-        # Delete existing mock models
-        r = api_request(client, "get", f"/api/v1/models?dataset_id={dataset_id}")
-        if r.status_code == 200:
-            compatible_models = [
-                m for m in r.json() if is_image_classification_compatible(m)
-            ]
-        else:
-            compatible_models = []
-        for existing_model in compatible_models:
-            print(
-                f"  Deleting existing mock model: {existing_model['id']} "
-                f"({existing_model.get('name', 'n/a')})"
-            )
-            delete_model(client, existing_model["id"])
-
-        job_timeout = getattr(args, "job_timeout", None) or 60
-        job_id, model_id = create_model_via_training_job(
-            client, dataset_id, preset_id, job_timeout
+        print("\n[7/7] Creating training job ...")
+        job_id, trained_model_id = create_model_via_training_job(
+            client, dataset_id, trainer_id, job_timeout=120
         )
-        if model_id is None and job_id is not None:
+        if job_id is None:
             print(
-                "  Training job failed in dev mode; "
-                "uploading placeholder image-classifier model instead ..."
+                "  WARNING: training job creation failed; uploading placeholder model instead."
             )
-            model_id = _upload_placeholder_model(client, job_id, IMAGENET_LABELS)
+            model_id = _upload_placeholder_model(
+                client, job_id or "", runner.config.label_space
+            )
+        elif trained_model_id is not None:
+            model_id = trained_model_id
+            print(f"  Model ID:   {model_id}")
+        else:
+            print(
+                "  Training completed but no model artifact found; uploading placeholder."
+            )
+            model_id = _upload_placeholder_model(
+                client, job_id, runner.config.label_space
+            )
+    else:
+        print("\n  Skipping trainer/model creation (--no-model).")
 
-    # Summary
-    print(f"\n{'=' * 50}")
-    print("  Seed Summary (mock mode)")
     print(f"{'=' * 50}")
-    print(f"  Dataset:    {DATASET_NAME}")
-    print(f"  Dataset ID: {dataset_id}")
-    print(f"  Labels:     {len(IMAGENET_LABELS)} ImageNet-1K classes")
-    print(f"  Samples:    {sample_count}")
-    print(f"  Preset:     {PRESET_NAME}")
-    print(f"  Preset ID:  {preset_id}")
+    print(f"  Trainer:     {TRAINER_NAME}")
+    print(f"  Trainer ID:  {trainer_id}")
     if job_id:
         print(f"  Job ID:     {job_id}")
     if model_id:

@@ -1,17 +1,96 @@
 # Compose Config
 
-`docker-compose.yaml` is now included at `infra/compose/docker-compose.yaml`.
+For production hardening, split-stack deployment, backup, release, and rollback
+procedures, see
+[`docs/guides/production-compose-deployment.md`](../../docs/guides/production-compose-deployment.md).
+The deployable split manifests are:
 
-Run:
+- `production/compose.stateful.yaml`
+- `production/compose.platform.yaml`
+- `production/compose.ops.yaml`
+- `production/compose.observability.yaml`
+
+## Dev vs Prod Modes
+
+The compose stack now supports two modes via override files:
+
+| Mode | Command | Compose Files | Hot Reload | Volume Mounts |
+|------|---------|--------------|------------|---------------|
+| Dev | `make up-dev` | `docker-compose.yaml` + `docker-compose.dev.yaml` | ✅ fastapi dev + vite dev | ✅ All code mounted |
+| Prod | `make up-prod` | `docker-compose.yaml` + `docker-compose.prod.yaml` | ❌ | ❌ Baked images |
+
+### Base Infrastructure (shared by both modes)
+`docker-compose.yaml` contains always-on infrastructure:
+- **postgres** (`:5432`): PostgreSQL with pgvector
+- **minio** (`:9000`, `:9001`): S3-compatible storage
+- **prefect-server** (`:4200`): Prefect 3 control plane
+- **label-studio** (`:8080`): Annotation UI
+
+> **Production note:** The split-stack manifests separate stateful services
+> (`postgres`, `minio`, `redis`, `label-studio`) into `compose.stateful.yaml`.
+> `prefect-server` stays in `compose.platform.yaml` because it is stateless
+> (its DB lives in the stateful project's postgres).
+
+### Dev Mode (`make up-dev`)
+Adds via `docker-compose.dev.yaml`:
+- **api** with bind mounts + `fastapi dev` hot reload
+- **web** with bind mount + Vite dev server hot reload
+- **prefect-worker-cpu** with bind mounts for flow code changes
+- **deployments-bootstrap**: one-shot pool creation + flow deployment registration
+- **pgadmin** (`:5050`): optional PostgreSQL admin UI
+- Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
+- Profile `--profile gpu`: GPU Prefect worker + DCGM exporter (Linux/NVIDIA only)
+
+### Prod Mode (`make up-prod`)
+Adds via `docker-compose.prod.yaml`:
+- **api** with `uvicorn --workers 4` (no hot reload, no bind mounts)
+- **web** served via nginx (built into image)
+- **prefect-worker-cpu** with baked image (no bind mounts)
+- Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
+- Profile `--profile gpu`: GPU Prefect worker + DCGM exporter (Linux/NVIDIA only)
+
+Prod mode does **not** include: pgadmin, deployments-bootstrap, automatic alembic migrations.
+
+### Production Split-Stack (real deployment)
+For production use the split-stack manifests under `infra/compose/production/`:
+
+| Step | Command | Description |
+|------|---------|-------------|
+| 1. Network | `make create-prod-network` | Create shared `finetune-prod` network |
+| 2. Stateful | `make up-prod-stateful` | `postgres`, `minio`, `redis`, `label-studio` |
+| 3. Platform | `make up-prod-platform` | `prefect-server`, `api`, `web`, `workers` |
+| 4. Ops | `make db-migrate-prod` | Alembic migrations (one-shot) |
+| 5. Ops | `make deployments-prod` | Prefect work pools + deployments (one-shot) |
+| 6. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ... |
+| 7. All-in-one | `make up-prod-all` | Steps 2 + 3 + 6 with 60s sleep between stateful and platform |
+
+The API performs startup readiness checks against `postgres`, `redis`, and `label-studio`.
+If any dependency is unreachable, the container exits with code 1 so the orchestrator
+restarts it after a delay. This replaces cross-project `depends_on` which is silently
+ignored across separate Compose projects.
+
+### Migration Notes
+- `make up` → now redirects to `make up-dev` (deprecated)
+- `make up-stack` → now redirects to `make up-dev --scale web=0` (deprecated)
+- `make updev` → unchanged (starts compose backend + local Vite on host)
+- `make prod` → removed (was deprecated redirect to `make up-prod`)
+- Flow deployment in prod: run `make deployments-prod` (split-stack) or `make ftctl ARGS="deployments apply"` (manual)
+- Alembic migrations in prod: run `make db-migrate-prod` (split-stack) or `make db-migrate-compose` (dev)
+
+`docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
+infrastructure (postgres, minio, prefect-server, label-studio). Dev and prod overrides
+add API, web, and workers — see [Dev vs Prod Modes](#dev-vs-prod-modes) above.
+
+Quick start:
 
 ```bash
-docker compose -f infra/compose/docker-compose.yaml up -d
-```
+# Dev mode (recommended for daily work)
+make up-dev
 
-From repo root, equivalent Make targets:
+# Prod mode
+make up-prod
 
-```bash
-make up
+# Interactive dev: compose backend + local Vite frontend
 make updev
 ```
 
@@ -22,44 +101,41 @@ hot reload and stable `/api` proxying to `localhost:8000`.
 
 ## Services
 
-This stack includes:
+The stack is split across multiple Compose files:
+
+- **Base infrastructure** (`docker-compose.yaml`): postgres, minio, prefect-server, label-studio
+- **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
+- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
+- **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
+- **Production ops** (`production/compose.ops.yaml`): migrate, deployments (one-shot ops)
+- **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
+
+All services at a glance:
 
 - **postgres** (:5432): PostgreSQL with pgvector, shared by API, Prefect, and Label Studio
 - **minio** (:9000, :9001): S3-compatible artifact storage
+- **redis** (no exposed port): Redis with appendonly persistence, used by API and workers
 - **prefect-server** (:4200): Prefect 3 control plane
-- **embedding** (:50051): Embedding gRPC service
-- **gpu-worker** (:8010): GPU runtime API for train/predict/embed. On macOS/non-NVIDIA, starts with `gpu_info.available: false` and GPU workloads are unavailable but the service remains healthy.
 - **label-studio** (:8080): Annotation UI
-- **api** (:8000): Platform API. Health depends on all services; calls GPU worker via `GPU_WORKER_BASE_URL=http://gpu-worker:8010`.
-- **prefect-worker**: CPU-only Prefect V2 worker. Orchestrates flows from `default-pool` / queue `optimize-llm-cpu`, executes CPU-bound work (DSPy, dataset drain), and delegates GPU work to the GPU worker via HTTP. No GPU resources, no CUDA, no exposed port.
-- **web** (:5173 → :80): Pre-built web frontend (baked into image)
-- **pgadmin** (:5050): Optional PostgreSQL admin UI
-
-## V1 GPU Degradation (macOS / non-NVIDIA)
-
-On macOS ARM64 or any environment without NVIDIA GPU support:
-
-- The GPU worker container starts and reports `gpu_info.available: false` in its `/health` endpoint. The health check is best-effort: it uses `torch.cuda.is_available()` when torch exists, and falls back to `CUDA not available` when torch or `nvidia-smi` is missing.
-- Training, prediction, and embedding endpoints return clear "GPU unavailable" errors rather than crashing or hanging.
-- The rest of the stack (API, Prefect, Label Studio, database, object storage) operates normally.
-- GPU metrics collection (DCGM exporter) is unavailable and is not required for basic operation.
-- No NVIDIA host dependencies (`nvidia-container-toolkit`, `nvidia-smi`) are needed to start the stack.
-
-To enable GPU metrics on Linux/NVIDIA hosts, start the exporter with the GPU profile:
-
-```bash
-docker compose -f infra/compose/docker-compose.yaml --profile gpu up -d dcgm-exporter
-```
-
-The `dcgm-exporter` service is profile-gated and does not start in the default compose stack.
+- **api** (:8000): Platform API (dev: fastapi hot-reload with bind mounts; prod: uvicorn workers with baked image)
+- **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
+- **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
+- **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).
+- **deployments-bootstrap** (dev-only): One-shot service that creates work pools and registers flow deployments.
+- **pgadmin** (:5050, dev-only): Optional PostgreSQL admin UI
+- **migrate** (ops profile, one-shot): Runs Alembic migrations in production.
+- **deployments** (ops profile, one-shot): Creates Prefect work pools and applies flow deployments.
 
 ## Notes
 
+- Dev mode uses `fastapi dev` with bind mounts for hot-reload; prod mode uses `uvicorn --workers 4` with baked images.
 - Compose services run from the image's prebuilt `/app/.venv` and do not use `uv run` at container startup.
-- The embedding image installs `torch` during image build, not at container startup.
-- The `web` service serves assets baked into the image; it does not bind-mount `apps/web/dist`.
-- Prefer `make updev` over the baked `web` container during daily development.
-- The Prefect worker is CPU-only. It does not use CUDA, request GPU resources, or set NVIDIA environment variables.
+- The `web` service serves assets baked into the image (prod) or via Vite dev server (dev).
+- Prefer `make updev` over the baked `web` container during daily development — or use `make up-dev` for the full compose dev stack.
+- GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.
+- The API exposes `/health` for process liveness and `/ready` for database-backed readiness. Compose marks the API healthy only when `/ready` returns HTTP 200.
+
 ## Observability
 
 Stack monitoring is profile-gated behind the `observability` Compose profile:

@@ -9,7 +9,7 @@
       <n-page-header title="Training Jobs">
         <template #extra>
           <n-button style="margin-right: 8px" @click="router.push('/tasks')">Open Task Explorer</n-button>
-          <n-button type="primary" @click="showModal = true">Start New Job</n-button>
+          <n-button type="primary" :disabled="!canTrain" @click="showModal = true">Start New Job</n-button>
         </template>
       </n-page-header>
 
@@ -41,7 +41,7 @@
           label-placement="left"
           label-width="auto"
         >
-          <n-form-item label="Dataset" path="dataset_id">
+          <n-form-item v-if="!props.datasetId" label="Dataset" path="dataset_id">
             <n-select
               v-model:value="formModel.dataset_id"
               :options="datasetOptions"
@@ -50,12 +50,16 @@
               filterable
             />
           </n-form-item>
-          <n-form-item label="Preset" path="preset_id">
+          <n-form-item label="Trainer" path="trainer_id">
+            <template v-if="props.datasetId && !trainersLoading && trainerOptions.length === 0">
+              <n-empty description="No compatible trainer for this dataset" />
+            </template>
             <n-select
-              v-model:value="formModel.preset_id"
-              :options="presetOptions"
-              :loading="presetsLoading"
-              placeholder="Select a preset"
+              v-else
+              v-model:value="formModel.trainer_id"
+              :options="trainerOptions"
+              :loading="trainersLoading"
+              placeholder="Select a trainer"
               filterable
             />
           </n-form-item>
@@ -66,35 +70,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onMounted } from "vue";
+import { ref, computed, h, watch } from "vue";
+import type { MaybeRef } from "vue";
 import { useRouter } from "vue-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
-import { listDatasets } from "@/features/datasets/infrastructure/api";
+import { listDatasets } from "@/shared/api/datasets";
 import { useOrgStore } from '@/features/auth/application/org';
 import { useAuthStore } from '@/features/auth/application/store';
 import {
-  createJob,
-  listJobs,
-  listPresets,
-  toggleJobPublic as toggleJobPublicApi,
-} from "../../infrastructure/api";
-import type { JobStatus, TrainingJob } from '@/types';
+  useListJobsApiV1TrainingJobsGet,
+  useCreateTrainingJobApiV1TrainingJobsPost,
+  useListTrainersRouteApiV1TrainersGet,
+  useSetJobPublicApiV1TrainingJobsJobIdPublicPatch,
+} from "@/generated/orval/endpoints/api";
+import type { ListJobsApiV1TrainingJobsGetParams } from "@/generated/orval/models/listJobsApiV1TrainingJobsGetParams";
+import type { JobStatus, TrainingJob } from '@/generated/orval/models';
+import type { Trainer } from "@/shared/api/types";
 
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
-const props = defineProps<{ datasetId?: string | null }>();
-onMounted(() => { if (props.datasetId) formModel.value.dataset_id = props.datasetId; });
+const props = defineProps<{ datasetId?: string | null; allowTrain?: boolean; compatibleViewTypes?: string[] | null }>();
+const canTrain = computed(() => props.allowTrain !== false);
 
-const { data: jobs, isLoading } = useQuery({
-  queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-  queryFn: listJobs,
-  refetchInterval: 5000,
-  enabled: computed(() => !!orgStore.currentOrgId),
+const jobsQueryParams = computed(() =>
+  props.datasetId ? { dataset_id: props.datasetId } : undefined,
+) as MaybeRef<ListJobsApiV1TrainingJobsGetParams>;
+
+const { data: jobs, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryParams, {
+  query: {
+    select: (response) => response.data,
+    queryKey: computed(() => ["jobs", orgStore.currentOrgId, props.datasetId]),
+    refetchInterval: 5000,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
 });
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
@@ -103,10 +116,14 @@ const { data: datasets, isLoading: datasetsLoading } = useQuery({
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
-const { data: presets, isLoading: presetsLoading } = useQuery({
-  queryKey: computed(() => ["presets", orgStore.currentOrgId]),
-  queryFn: listPresets,
-  enabled: computed(() => !!orgStore.currentOrgId),
+const { data: trainers, isLoading: trainersLoading } = useListTrainersRouteApiV1TrainersGet({
+  query: {
+    // ast-grep-ignore: forbid-unsafe-type-casts
+    select: (response) => response.data as unknown as Trainer[],
+    queryKey: computed(() => ["trainers", orgStore.currentOrgId]),
+    refetchInterval: 30000,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
 });
 
 const datasetOptions = computed<SelectOption[]>(
@@ -117,20 +134,21 @@ const selectedDataset = computed(() =>
   (datasets.value ?? []).find((d) => d.id === formModel.value.dataset_id),
 );
 
-const presetOptions = computed<SelectOption[]>(
+const trainerOptions = computed<SelectOption[]>(
   () =>
-    (presets.value ?? [])
-      .filter((p) => {
-        if (p.trainable === false) return false;
-        const dataset = selectedDataset.value;
-        if (!dataset) return true;
-        const compatibility = p.compatibility;
-        if (!compatibility) return true;
-        return compatibility.dataset_types.includes(dataset.dataset_type)
-          && compatibility.task_types.includes(dataset.task_spec.task_type);
+    (trainers.value ?? [])
+      .filter((t) => t.trainable !== false)
+      .filter((t) => {
+        if (!props.compatibleViewTypes?.length) return true;
+        if (!hasTrainerViewType(t)) return false;
+        return props.compatibleViewTypes.includes(t.view_type);
       })
-      .map((p) => ({ label: p.name, value: p.id })),
+      .map((t) => ({ label: t.name, value: t.id })),
 );
+
+function hasTrainerViewType(trainer: Trainer): trainer is Trainer & { view_type: string } {
+  return typeof (trainer as { view_type?: unknown }).view_type === "string";
+}
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
@@ -150,7 +168,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     title: "ID",
     key: "id",
     width: 120,
-    render: (row) => row.id.slice(0, 8) + "…",
+    render: (row) => (row.id ?? '').slice(0, 8) + "…",
   },
   {
     title: "Status",
@@ -159,7 +177,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     render: (row) =>
       h(
         NTag,
-        { type: statusType(row.status), size: "small", round: true },
+        { type: statusType(row.status!), size: "small", round: true },
         { default: () => row.status },
       ),
   },
@@ -187,16 +205,16 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     render: (row) => row.dataset_id.slice(0, 8) + "…",
   },
   {
-    title: "Preset",
-    key: "preset_id",
+    title: "Trainer",
+    key: "trainer_id",
     ellipsis: { tooltip: true },
-    render: (row) => row.preset_id,
+    render: (row) => row.trainer_id,
   },
   {
     title: "Created At",
     key: "created_at",
     width: 180,
-    render: (row) => new Date(row.created_at).toLocaleString(),
+    render: (row) => new Date(row.created_at!).toLocaleString(),
   },
   {
     title: "Actions",
@@ -225,7 +243,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
               style: "margin-left: 6px",
               onClick: (e: Event) => {
                 e.stopPropagation();
-                toggleJobPublic.mutate({ id: row.id, isPublic: !row.is_public });
+                toggleJobPublic.mutate({ jobId: row.id!, data: { is_public: !row.is_public } });
               },
             },
             { default: () => (row.is_public ? "Make Private" : "Make Public") },
@@ -246,45 +264,53 @@ function rowProps(row: TrainingJob) {
 
 const showModal = ref(false);
 const formRef = ref<FormInst | null>(null);
-const formModel = ref({ dataset_id: null as string | null, preset_id: null as string | null });
+const formModel = ref({ dataset_id: null as string | null, trainer_id: null as string | null });
+
+watch(
+  () => props.datasetId,
+  (val) => { if (val) formModel.value.dataset_id = val; },
+  { immediate: true },
+);
 
 const formRules: FormRules = {
   dataset_id: [{ required: true, message: "Please select a dataset", trigger: ["blur", "change"] }],
-  preset_id: [{ required: true, message: "Please select a preset", trigger: ["blur", "change"] }],
+  trainer_id: [{ required: true, message: "Please select a trainer", trigger: ["blur", "change"] }],
 };
 
-const createJobMutation = useMutation({
-  mutationFn: ({ dataset_id, preset_id }: { dataset_id: string; preset_id: string }) =>
-    createJob(dataset_id, preset_id),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
-    message.success("Job started");
-    showModal.value = false;
-    resetForm();
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to start job");
+const createJobMutation = useCreateTrainingJobApiV1TrainingJobsPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
+      message.success("Job started");
+      showModal.value = false;
+      resetForm();
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to start job");
+    },
   },
 });
 
-const toggleJobPublic = useMutation({
-  mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
-    toggleJobPublicApi(id, isPublic),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to update visibility");
+const toggleJobPublic = useSetJobPublicApiV1TrainingJobsJobIdPublicPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to update visibility");
+    },
   },
 });
 
 function onSubmit() {
   formRef.value?.validate((errors) => {
     if (errors) return;
-    if (!formModel.value.dataset_id || !formModel.value.preset_id) return;
+    if (!formModel.value.dataset_id || !formModel.value.trainer_id) return;
     createJobMutation.mutate({
-      dataset_id: formModel.value.dataset_id,
-      preset_id: formModel.value.preset_id,
+      data: {
+        dataset_id: formModel.value.dataset_id!,
+        trainer_id: formModel.value.trainer_id!,
+      },
     });
   });
   return false;
@@ -295,7 +321,7 @@ function onCancel() {
 }
 
 function resetForm() {
-  formModel.value = { dataset_id: null, preset_id: null };
+  formModel.value = { dataset_id: null, trainer_id: null };
   formRef.value?.restoreValidation();
 }
 </script>

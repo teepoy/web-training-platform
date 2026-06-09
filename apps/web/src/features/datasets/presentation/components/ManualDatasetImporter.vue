@@ -5,7 +5,7 @@ import { useMessage } from "naive-ui"
 import { NForm, NFormItem, NInput, NSelect, NDynamicTags, NButton, NSpace, NAlert } from "naive-ui"
 import { createDataset } from "@/shared/api/datasets"
 import { importSamples } from "@/shared/api/samples"
-import type { BulkCreateSampleItem } from "@/types"
+import type { BulkCreateSampleItem } from "@/generated/orval/models"
 import type { ImporterProps } from "@/shared/widgets/sdk"
 
 const props = defineProps<ImporterProps>()
@@ -22,12 +22,15 @@ const importFileName = ref("")
 
 const datasetTypeOptions = [
   { label: "Image Classification", value: "image_classification" },
+  { label: "Image Detection", value: "image_detection" },
   { label: "Image VQA", value: "image_vqa" },
 ]
 
 watch(datasetType, (v) => {
   if (v === "image_classification") {
     taskType.value = "classification"
+  } else if (v === "image_detection") {
+    taskType.value = "detection"
   } else if (v === "image_vqa") {
     taskType.value = "vqa"
     labelSpace.value = []
@@ -39,8 +42,8 @@ watch(datasetType, (v) => {
 const importDataset = useMutation({
   mutationFn: async (payload: {
     name: string
-    dataset_type: "image_classification" | "image_vqa"
-    task_type: "classification" | "vqa"
+    dataset_type: "image_classification" | "image_detection" | "image_vqa"
+    task_type: "classification" | "detection" | "vqa"
     label_space: string[]
     items: BulkCreateSampleItem[]
   }) => {
@@ -52,7 +55,7 @@ const importDataset = useMutation({
     const chunkSize = 5000
     for (let offset = 0; offset < payload.items.length; offset += chunkSize) {
       const chunk = payload.items.slice(offset, offset + chunkSize)
-      await importSamples(dataset.id, chunk)
+      await importSamples(dataset.id!, chunk)
     }
     return dataset
   },
@@ -108,8 +111,8 @@ function onSubmit() {
   }
   importDataset.mutate({
     name: name.value,
-    dataset_type: datasetType.value! as "image_classification" | "image_vqa",
-    task_type: taskType.value! as "classification" | "vqa",
+    dataset_type: datasetType.value! as "image_classification" | "image_detection" | "image_vqa",
+    task_type: taskType.value! as "classification" | "detection" | "vqa",
     label_space: labelSpace.value,
     items: importItems.value,
   })

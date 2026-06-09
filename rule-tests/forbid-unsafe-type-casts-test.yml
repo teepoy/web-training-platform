@@ -1,0 +1,24 @@
+id: forbid-unsafe-type-casts
+valid:
+  # Direct casts with a single "as" should pass
+  - "const x = value as string;"
+  # Standard type assertions should pass
+  - "const y = data as Dataset[];"
+  # Cast in return statement should pass
+  - "return res.data as Dataset;"
+  # Await expression cast should pass
+  - "return (await res).data as Dataset[];"
+  # Complex expression with single cast should pass
+  - "return (await listDatasetsApiV1DatasetsGet()).data as Dataset[];"
+invalid:
+  # Basic as unknown as cast
+  - "const x = value as unknown as string;"
+  # Return statement with as unknown as
+  - "return data as unknown as Dataset;"
+  # Multiline as unknown as cast
+  - |
+    return data as unknown as Dataset[];
+  # Await expression with as unknown as
+  - "return (await res).data as unknown as Dataset;"
+  # Variable assignment with as unknown as
+  - "const items = response as unknown as Schedule[];"

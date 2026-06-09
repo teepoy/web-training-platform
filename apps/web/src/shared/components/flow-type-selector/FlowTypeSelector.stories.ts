@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import FlowTypeSelector from "./FlowTypeSelector.vue";
 
 const meta = {
-  title: "web-ui/components/FlowTypeSelector",
+  title: "Shared/FlowTypeSelector",
   component: FlowTypeSelector,
   args: {
     title: "Select Plugin",

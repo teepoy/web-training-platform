@@ -9,31 +9,12 @@ export const waferMapPlugin = defineDashboardWidget({
   contract: {
     displayName: "Wafer Map",
     description:
-      "Renders high-density wafer scatter points and emits linked selection/filter intents.",
+      "Native Canvas wafer scatter map with spatial selection. Renders wafer-scale point data with class-color coding and emits linked sample selection intents via the data pipeline.",
     acceptsProps: ["data", "config", "size"],
     capabilities: {
       reads: ["interaction-state"],
-      emits: [
-        "select-samples",
-        "select-predictions",
-        "apply-filter",
-        "clear-selection",
-      ],
+      emits: ["select-samples"],
     },
-    selfTests: [
-      {
-        name: "brush updates linked collection",
-        objective:
-          "Verify brush selection emits collection-scoped intents so linked tables can filter.",
-        steps: [
-          "Render the widget with inline points and config.interaction.collection set.",
-          "Brush-select a point subset in the wafer map.",
-        ],
-        expected: [
-          "The widget emits select-* and apply-filter intents with metadata.collection.",
-          "A linked data-table widget on the same collection can reduce to selected rows.",
-        ],
-      },
-    ],
+    selfTests: [],
   },
 });

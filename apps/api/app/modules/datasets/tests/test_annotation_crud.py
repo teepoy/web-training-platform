@@ -1,12 +1,18 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.shared.api.schemas import Organization, User
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["rose", "tulip"]}
+_DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000002"
+_DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
 
 
 def _create_dataset_and_sample(c: TestClient) -> tuple[str, str]:
@@ -26,10 +32,99 @@ def _create_dataset_and_sample(c: TestClient) -> tuple[str, str]:
 def _create_annotation(c: TestClient, sample_id: str, dataset_id: str, label: str = "rose") -> str:
     r = c.post(
         "/api/v1/annotations",
-        json={"sample_id": sample_id, "label": label, "created_by": "tester"},
+        json={"dataset_id": dataset_id, "sample_id": sample_id, "label": label, "created_by": "tester"},
     )
     assert r.status_code == 200
     return r.json()["id"]
+
+
+def test_single_annotation_auto_expand() -> None:
+    """Creating a single annotation with a new label does NOT auto-expand
+    the dataset's task_spec.label_space (pre-fix behavior).
+
+    After the fix (adding DatasetService.merge_label_space to the single annotation
+    endpoint), this test will fail because the label WILL be expanded.
+    """
+    import datetime
+
+    from app.modules.auth.port.http.deps import get_current_org, get_current_user
+    from app.modules.datasets.port.http.deps import (
+        get_label_studio_client as datasets_get_ls_client,
+    )
+
+    # -- mock auth --
+    _mock_user = User(
+        id=_DEFAULT_USER_ID,
+        email="test@test.com",
+        name="Test User",
+        is_superadmin=True,
+        is_active=True,
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    _mock_org = Organization(
+        id=_DEFAULT_ORG_ID,
+        name="Default",
+        slug="default",
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user
+    app.dependency_overrides[get_current_org] = lambda: _mock_org
+
+    # -- mock LS client --
+    _mock_ls = MagicMock()
+    _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.create_task = AsyncMock(return_value={"id": 1})
+    _mock_ls.create_annotation = AsyncMock(return_value={"id": 0, "task": 0, "result": []})
+    app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
+
+    try:
+        with TestClient(app) as c:
+            # -- create dataset with label_space ["cat", "dog"] --
+            ds_resp = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "expand-test-ds",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat", "dog"],
+                    },
+                },
+            )
+            assert ds_resp.status_code == 200, ds_resp.text
+            dataset_id = ds_resp.json()["id"]
+
+            # -- create a sample (gets ls_task_id from mock LS) --
+            sample_resp = c.post(f"/api/v1/datasets/{dataset_id}/samples", json={})
+            assert sample_resp.status_code == 200, sample_resp.text
+            sample_id = sample_resp.json()["id"]
+
+            # -- create a single annotation with a NEW label "bird" --
+            ann_resp = c.post(
+                "/api/v1/annotations",
+                json={"dataset_id": dataset_id, "sample_id": sample_id, "label": "bird"},
+            )
+            assert ann_resp.status_code == 200, ann_resp.text
+
+            # -- fetch dataset and check label_space --
+            ds_resp2 = c.get(f"/api/v1/datasets/{dataset_id}")
+            assert ds_resp2.status_code == 200, ds_resp2.text
+            label_space = ds_resp2.json()["task_spec"]["label_space"]
+
+            # Post-fix: "bird" IS expanded into label_space
+            assert "bird" in label_space, (
+                f"Expected 'bird' in label_space, got {label_space}"
+            )
+            # Existing labels must still be present
+            assert "cat" in label_space, (
+                f"Expected 'cat' in label_space, got {label_space}"
+            )
+            assert "dog" in label_space, (
+                f"Expected 'dog' in label_space, got {label_space}"
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_current_org, None)
+        app.dependency_overrides.pop(datasets_get_ls_client, None)
 
 
 # ---------------------------------------------------------------------------
@@ -39,9 +134,9 @@ def _create_annotation(c: TestClient, sample_id: str, dataset_id: str, label: st
 
 def test_list_annotations_empty() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c)
+        dataset_id, sample_id = _create_dataset_and_sample(c)
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations")
+        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -56,7 +151,7 @@ def test_list_annotations_with_data() -> None:
         dataset_id, sample_id = _create_dataset_and_sample(c)
         _create_annotation(c, sample_id, dataset_id, label="rose")
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations")
+        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
         assert resp.status_code == 200
         body = resp.json()
         assert len(body) == 1
@@ -74,10 +169,107 @@ def test_update_annotation_label() -> None:
         dataset_id, sample_id = _create_dataset_and_sample(c)
         ann_id = _create_annotation(c, sample_id, dataset_id, label="rose")
 
-        resp = c.patch(f"/api/v1/annotations/{ann_id}", json={"label": "tulip"})
+        resp = c.patch(f"/api/v1/annotations/{ann_id}", json={"dataset_id": dataset_id, "label": "tulip"})
         assert resp.status_code == 200
         assert resp.json()["label"] == "tulip"
         assert resp.json()["id"] == ann_id
+
+
+# ---------------------------------------------------------------------------
+# Test 3b: Update annotation — label_space MUST NOT auto-expand
+# ---------------------------------------------------------------------------
+
+
+def test_update_annotation_auto_expand() -> None:
+    """Updating an annotation to a new label via PATCH auto-expands
+    the dataset's task_spec.label_space (post-fix behavior).
+    """
+    import datetime
+
+    from app.modules.auth.port.http.deps import get_current_org, get_current_user
+    from app.modules.datasets.port.http.deps import (
+        get_label_studio_client as datasets_get_ls_client,
+    )
+
+    # -- mock auth --
+    _mock_user = User(
+        id=_DEFAULT_USER_ID,
+        email="test@test.com",
+        name="Test User",
+        is_superadmin=True,
+        is_active=True,
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    _mock_org = Organization(
+        id=_DEFAULT_ORG_ID,
+        name="Default",
+        slug="default",
+        created_at=datetime.datetime(2024, 1, 1),
+    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user
+    app.dependency_overrides[get_current_org] = lambda: _mock_org
+
+    # -- mock LS client --
+    _mock_ls = MagicMock()
+    _mock_ls.create_project = AsyncMock(return_value={"id": 1, "title": "mock-project"})
+    _mock_ls.create_task = AsyncMock(return_value={"id": 1})
+    _mock_ls.create_annotation = AsyncMock(return_value={"id": 0, "task": 0, "result": []})
+    app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
+
+    try:
+        with TestClient(app) as c:
+            # -- create dataset with label_space ["cat", "dog"] --
+            ds_resp = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "update-expand-test-ds",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat", "dog"],
+                    },
+                },
+            )
+            assert ds_resp.status_code == 200, ds_resp.text
+            dataset_id = ds_resp.json()["id"]
+
+            # -- create a sample (gets ls_task_id from mock LS) --
+            sample_resp = c.post(f"/api/v1/datasets/{dataset_id}/samples", json={})
+            assert sample_resp.status_code == 200, sample_resp.text
+            sample_id = sample_resp.json()["id"]
+
+            # -- create an annotation with existing label "cat" --
+            ann_resp = c.post(
+                "/api/v1/annotations",
+                json={"dataset_id": dataset_id, "sample_id": sample_id, "label": "cat"},
+            )
+            assert ann_resp.status_code == 200, ann_resp.text
+            ann_id = ann_resp.json()["id"]
+
+            # -- update annotation to a NEW label "bird" via PATCH --
+            patch_resp = c.patch(f"/api/v1/annotations/{ann_id}", json={"dataset_id": dataset_id, "label": "bird"})
+            assert patch_resp.status_code == 200, patch_resp.text
+            assert patch_resp.json()["label"] == "bird"
+
+            # -- fetch dataset and check label_space --
+            ds_resp2 = c.get(f"/api/v1/datasets/{dataset_id}")
+            assert ds_resp2.status_code == 200, ds_resp2.text
+            label_space = ds_resp2.json()["task_spec"]["label_space"]
+
+            # Post-fix: "bird" IS expanded into label_space
+            assert "bird" in label_space, (
+                f"Expected 'bird' in label_space, got {label_space}"
+            )
+            # Existing labels must still be present
+            assert "cat" in label_space, (
+                f"Expected 'cat' in label_space, got {label_space}"
+            )
+            assert "dog" in label_space, (
+                f"Expected 'dog' in label_space, got {label_space}"
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_current_org, None)
+        app.dependency_overrides.pop(datasets_get_ls_client, None)
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +282,7 @@ def test_delete_annotation() -> None:
         dataset_id, sample_id = _create_dataset_and_sample(c)
         ann_id = _create_annotation(c, sample_id, dataset_id)
 
-        resp = c.delete(f"/api/v1/annotations/{ann_id}")
+        resp = c.delete(f"/api/v1/annotations/{ann_id}?dataset_id={dataset_id}")
         assert resp.status_code == 204
 
 
@@ -105,11 +297,11 @@ def test_delete_annotation_twice_returns_404() -> None:
         ann_id = _create_annotation(c, sample_id, dataset_id)
 
         # First delete succeeds
-        resp1 = c.delete(f"/api/v1/annotations/{ann_id}")
+        resp1 = c.delete(f"/api/v1/annotations/{ann_id}?dataset_id={dataset_id}")
         assert resp1.status_code == 204
 
         # Second delete → 404
-        resp2 = c.delete(f"/api/v1/annotations/{ann_id}")
+        resp2 = c.delete(f"/api/v1/annotations/{ann_id}?dataset_id={dataset_id}")
         assert resp2.status_code == 404
 
 
@@ -120,7 +312,8 @@ def test_delete_annotation_twice_returns_404() -> None:
 
 def test_update_nonexistent_annotation_returns_404() -> None:
     with TestClient(app) as c:
-        resp = c.patch("/api/v1/annotations/nonexistent-id", json={"label": "tulip"})
+        dataset_id, _sample_id = _create_dataset_and_sample(c)
+        resp = c.patch("/api/v1/annotations/nonexistent-id", json={"dataset_id": dataset_id, "label": "tulip"})
         assert resp.status_code == 404
 
 
@@ -131,7 +324,8 @@ def test_update_nonexistent_annotation_returns_404() -> None:
 
 def test_delete_nonexistent_annotation_returns_404() -> None:
     with TestClient(app) as c:
-        resp = c.delete("/api/v1/annotations/nonexistent-id")
+        dataset_id, _sample_id = _create_dataset_and_sample(c)
+        resp = c.delete(f"/api/v1/annotations/nonexistent-id?dataset_id={dataset_id}")
         assert resp.status_code == 404
 
 
@@ -142,5 +336,5 @@ def test_delete_nonexistent_annotation_returns_404() -> None:
 
 def test_list_annotations_nonexistent_sample_returns_404() -> None:
     with TestClient(app) as c:
-        resp = c.get("/api/v1/samples/nonexistent-id/annotations")
+        resp = c.get("/api/v1/samples/nonexistent-id/annotations?dataset_id=nonexistent-dataset")
         assert resp.status_code == 404

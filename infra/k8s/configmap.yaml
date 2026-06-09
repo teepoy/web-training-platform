@@ -5,6 +5,7 @@ metadata:
   namespace: finetune
 data:
   APP_CONFIG_PROFILE: "dev"
+  MNT: "/mnt/data"
   PREFECT_API_URL: "http://prefect-server.finetune.svc.cluster.local:4200/api"
   EMBEDDING_GRPC_TARGET: "embedding.finetune.svc.cluster.local:50051"
   GPU_WORKER_BASE_URL: "http://gpu-worker.finetune.svc.cluster.local:8010"
@@ -12,3 +13,5 @@ data:
   LLM_MODEL: "llava"
   LABEL_STUDIO_URL: "http://label-studio.finetune.svc.cluster.local:8080"
   LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+  REDIS_HOST: "redis.finetune.svc.cluster.local"
+  REDIS_PORT: "6379"

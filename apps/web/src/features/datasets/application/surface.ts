@@ -99,6 +99,23 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
         ),
     },
     {
+      title: "View Types",
+      key: "view_types",
+      render: (row: TDataset) => {
+        const viewTypes = (row as any).view_types;
+        if (!viewTypes || !Array.isArray(viewTypes) || viewTypes.length === 0) {
+          return h("span", { style: "color: #999" }, "—");
+        }
+        return h(
+          "div",
+          { style: "display: flex; gap: 4px; flex-wrap: wrap" },
+          viewTypes.map((vt: string) =>
+            h(NTag, { type: "info", size: "small" }, { default: () => vt })
+          )
+        );
+      },
+    },
+    {
       title: "Task Type",
       key: "task_type",
       render: (row: TDataset) =>

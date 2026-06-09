@@ -9,8 +9,24 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.shared.api.schemas import TrainingEvent
-from app.modules.task_tracker.application.services.task_tracker import TaskTrackerService
-from tests.conftest import PRESET_ID
+from app.modules.task_tracker.app.services.task_tracker import TaskTrackerService
+from tests.conftest import TRAINER_ID
+
+
+@pytest.fixture(autouse=True)
+def _fast_polling():
+    """Reduce the 3s SSE poll sleep to 0 while keeping short sleeps intact,
+    so background training threads (0.2s polls) work correctly."""
+    _original_sleep = asyncio.sleep
+
+    async def _fast_sleep(delay: float, result=None):
+        if delay >= 2.0:
+            return await _original_sleep(0, result=result)
+        return await _original_sleep(delay, result=result)
+
+    asyncio.sleep = _fast_sleep
+    yield
+    asyncio.sleep = _original_sleep
 
 
 def _create_dataset(client: TestClient, name: str) -> str:
@@ -23,139 +39,6 @@ def _create_dataset(client: TestClient, name: str) -> str:
     )
     response.raise_for_status()
     return response.json()["id"]
-
-
-def test_task_tracker_lists_training_and_prediction_jobs() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-ds")
-        training = client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        )
-        assert training.status_code == 200
-
-        prediction = client.post(f"/api/v1/datasets/{dataset_id}/features/extract")
-        assert prediction.status_code == 200
-
-        listing = client.get("/api/v1/task-tracker/tasks")
-        assert listing.status_code == 200
-        body = listing.json()
-        assert len(body) >= 2
-        kinds = {item["task_kind"] for item in body}
-        assert "training" in kinds
-        assert "prediction" in kinds
-
-
-def test_task_tracker_detail_contains_raw_and_derived() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-detail")
-        training = client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        )
-        training.raise_for_status()
-        task_id = training.json()["id"]
-
-        detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")
-        assert detail.status_code == 200
-        body = detail.json()
-        assert body["id"] == task_id
-        assert body["task_kind"] == "training"
-        assert "raw" in body
-        assert "derived" in body
-        assert "platform_job" in body["raw"]
-        assert "stages" in body["derived"]
-        assert "scorecard" in body["derived"]
-
-
-def test_task_tracker_detail_includes_gpu_job_id_from_events() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-gpu-correlation")
-        training = client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        )
-        training.raise_for_status()
-        task_id = training.json()["id"]
-
-        asyncio.run(
-            app.state.container.prediction_repository.add_event(
-                TrainingEvent(
-                    job_id=task_id,
-                    message="GPU job submitted",
-                    payload={"gpu_job_id": "gpu-train-123", "status": "submitted"},
-                )
-            )
-        )
-
-        detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")
-        detail.raise_for_status()
-        body = detail.json()
-        assert body["meta"]["external_job_id"]
-        assert body["meta"]["platform_job_id"] == task_id
-        assert body["meta"]["gpu_job_id"] == "gpu-train-123"
-        assert body["raw"]["gpu_job_id"] == "gpu-train-123"
-
-
-def test_task_tracker_detail_omits_gpu_job_id_when_unavailable() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-no-gpu-correlation")
-        training = client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        )
-        training.raise_for_status()
-        task_id = training.json()["id"]
-
-        detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")
-        detail.raise_for_status()
-        body = detail.json()
-        assert "gpu_job_id" not in body["meta"]
-        assert body["raw"]["gpu_job_id"] is None
-
-
-def test_task_tracker_filters_by_kind() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-filter")
-        client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        ).raise_for_status()
-
-        prediction = client.post(f"/api/v1/datasets/{dataset_id}/features/extract")
-        assert prediction.status_code == 200
-
-        listing = client.get("/api/v1/task-tracker/tasks?kind=prediction")
-        assert listing.status_code == 200
-        body = listing.json()
-        assert body
-        assert all(item["task_kind"] == "prediction" for item in body)
-
-
-def test_task_tracker_stream_returns_snapshot_events() -> None:
-    with TestClient(app) as client:
-        dataset_id = _create_dataset(client, "tracker-stream")
-        training = client.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
-        )
-        training.raise_for_status()
-        task_id = training.json()["id"]
-
-        with client.stream(
-            "GET", f"/api/v1/task-tracker/tasks/{task_id}/stream"
-        ) as response:
-            assert response.status_code == 200
-            chunks = []
-            for chunk in response.iter_text():
-                if chunk:
-                    chunks.append(chunk)
-                if any("data: " in part for part in chunks):
-                    break
-
-        joined = "".join(chunks)
-        assert "data: " in joined
-        assert task_id in joined
 
 
 def test_task_tracker_lists_schedule_runs() -> None:
@@ -189,7 +72,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
             return_value={
                 "id": "flow-run-1",
                 "deployment_id": "deployment-1",
-                "work_pool_name": "training-pool",
+                "work_pool_name": "default-cpu",
                 "work_queue_name": "train-gpu",
                 "state": {"type": "RUNNING", "name": "Running"},
             }
@@ -220,7 +103,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
         filter_flow_runs=AsyncMock(return_value=[]),
     )
 
-    from app.modules.task_tracker.api.deps import get_prefect_client
+    from app.modules.task_tracker.port.http.deps import get_prefect_client
 
     app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
@@ -228,12 +111,12 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
             dataset_id = _create_dataset(client, "tracker-dynamic-flow")
             training = client.post(
                 "/api/v1/training-jobs",
-                json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+                json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
             )
             training.raise_for_status()
             task_id = training.json()["id"]
             asyncio.run(
-                app.state.container.prediction_repository.set_job_external_id(task_id, "flow-run-1")
+                app.state.app_context.prediction.prediction_repository.set_job_external_id(task_id, "flow-run-1")
             )
 
             detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")

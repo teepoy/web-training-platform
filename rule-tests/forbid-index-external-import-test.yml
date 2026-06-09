@@ -1,0 +1,13 @@
+id: forbid-index-external-import
+valid:
+  - 'import { Local } from "./local";'
+  - 'import { Sub } from "./sub/module";'
+  - 'export { A } from "./a";'
+  - 'export { B } from "./sub/b";'
+invalid:
+  - 'import { Foo } from "../something";'
+  - 'import { Bar } from "@/shared/foo";'
+  - 'import type { Baz } from "../../types";'
+  - 'export { Qux } from "../external";'
+  - 'export { Quux } from "@/other/module";'
+  - 'export type { Corge } from "../../up";'

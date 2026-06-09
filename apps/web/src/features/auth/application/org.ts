@@ -1,8 +1,30 @@
 import { defineStore } from 'pinia'
-import { fetchOrganizations } from '../infrastructure/api'
-import type { Organization } from '@/types'
+import { listOrganizationsApiV1OrganizationsGet } from '@/generated/orval/endpoints/api'
+import type { Organization } from '@/shared/api/types'
+import type { MembershipResponse } from '@/generated/orval/models/membershipResponse'
 
 const ORG_KEY = 'current_org_id'
+
+function _persistOrg(id: string | null) {
+  if (id) {
+    localStorage.setItem(ORG_KEY, id)
+  } else {
+    localStorage.removeItem(ORG_KEY)
+  }
+}
+
+function _validateAndSelect(
+  currentOrgId: string | null,
+  orgIds: string[],
+): string | null {
+  if (currentOrgId && orgIds.includes(currentOrgId)) {
+    return currentOrgId
+  }
+  if (orgIds.length === 1) {
+    return orgIds[0]
+  }
+  return null
+}
 
 export const useOrgStore = defineStore('org', {
   state: () => ({
@@ -16,22 +38,39 @@ export const useOrgStore = defineStore('org', {
   },
   actions: {
     async fetchOrganizations() {
-      const orgs = await fetchOrganizations()
+      const resp = await listOrganizationsApiV1OrganizationsGet()
+      const orgs = resp.data as Organization[]
       this.organizations = orgs
-      if (orgs.length === 1 && this.currentOrgId === null) {
-        this.currentOrgId = orgs[0].id
-        localStorage.setItem(ORG_KEY, orgs[0].id)
+
+      const orgIds = orgs.map(o => o.id)
+      const selected = _validateAndSelect(this.currentOrgId, orgIds)
+      if (selected !== this.currentOrgId) {
+        this.currentOrgId = selected
+        _persistOrg(selected)
+        this._queryClient?.invalidateQueries()
       }
     },
+
     setCurrentOrg(orgId: string) {
       this.currentOrgId = orgId
-      localStorage.setItem(ORG_KEY, orgId)
+      _persistOrg(orgId)
       this._queryClient?.invalidateQueries()
     },
+
     initFromStorage() {
       const stored = localStorage.getItem(ORG_KEY)
       if (stored) {
         this.currentOrgId = stored
+      }
+    },
+
+    syncFromMeResponse(memberships: MembershipResponse[]) {
+      const orgIds = memberships.map(m => m.org_id)
+      const selected = _validateAndSelect(this.currentOrgId, orgIds)
+      if (selected !== this.currentOrgId) {
+        this.currentOrgId = selected
+        _persistOrg(selected)
+        this._queryClient?.invalidateQueries()
       }
     },
   },

@@ -2,7 +2,8 @@
 import { ref } from "vue";
 import { useMessage, NInput, NButton, NSpace, NAlert } from "naive-ui";
 import type { PreviewLauncherRequiredProps } from "@/shared/widgets/sdk";
-import { createPreviewSession } from "@/features/preview/infrastructure/api";
+import { createPreviewSessionApiV1PreviewSessionsPost } from "@/generated/orval/endpoints/api";
+import type { PreviewSessionResponse } from "@/generated/orval/models";
 
 const props = defineProps<PreviewLauncherRequiredProps>();
 
@@ -17,7 +18,8 @@ async function handlePreview() {
   }
   isLoading.value = true;
   try {
-    const session = await createPreviewSession(collectionRef.value.trim());
+    const { data } = await createPreviewSessionApiV1PreviewSessionsPost({ collection_ref: collectionRef.value.trim() });
+    const session = data as PreviewSessionResponse;
     props.onComplete({ sessionId: session.session_id });
   } catch (err) {
     const error = err instanceof Error ? err.message : "Failed to start preview";

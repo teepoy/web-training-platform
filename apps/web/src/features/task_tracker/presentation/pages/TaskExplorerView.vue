@@ -17,8 +17,8 @@
 import { computed, h } from "vue";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
-import { useTrackedTasksQuery } from "../../infrastructure/api";
-import type { TaskTrackerSummary } from "../../infrastructure/api";
+import { useTrackedTasksQuery } from "@/shared/api/hooks/task-tracker";
+import type { TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 
 const { data: tasks, isLoading } = useTrackedTasksQuery();
 

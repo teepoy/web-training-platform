@@ -109,7 +109,7 @@
 <script setup lang="ts">
 import { ref, computed, h, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst } from "naive-ui";
 import {
   useMessage,
@@ -128,16 +128,15 @@ import {
   NInput,
 } from "naive-ui";
 import {
-  getSchedule,
-  updateSchedule,
-  deleteSchedule,
-  triggerScheduleRun,
-  pauseSchedule,
-  resumeSchedule,
-  listScheduleRuns,
-  type UpdateScheduleBody,
-} from "@/features/schedules/infrastructure/api";
-import type { ScheduleRun } from "@/features/schedules/domain/models";
+  useGetScheduleApiV1SchedulesScheduleIdGet,
+  useUpdateScheduleApiV1SchedulesScheduleIdPatch,
+  useDeleteScheduleApiV1SchedulesScheduleIdDelete,
+  useTriggerRunApiV1SchedulesScheduleIdRunPost,
+  usePauseScheduleApiV1SchedulesScheduleIdPausePost,
+  useResumeScheduleApiV1SchedulesScheduleIdResumePost,
+  useListRunsApiV1SchedulesScheduleIdRunsGet,
+} from "@/generated/orval/endpoints/api";
+import type { RunResponse as ScheduleRun, ScheduleResponse, UpdateScheduleRequest } from "@/generated/orval/models";
 import RunLogViewer from "@/shared/components/run-log-viewer/RunLogViewer.vue";
 
 const route = useRoute();
@@ -151,61 +150,69 @@ const id = computed(() => route.params.id as string);
 // Queries
 // ---------------------------------------------------------------------------
 
-const { data: schedule, isLoading: scheduleLoading } = useQuery({
-  queryKey: computed(() => ["schedule", id.value]),
-  queryFn: () => getSchedule(id.value),
+const { data: schedule, isLoading: scheduleLoading } = useGetScheduleApiV1SchedulesScheduleIdGet(id, {
+  query: {
+    select: (response) => response.data as ScheduleResponse,
+    queryKey: computed(() => ["schedule", id.value]),
+  },
 });
 
-const { data: runs, isLoading: runsLoading } = useQuery({
-  queryKey: computed(() => ["schedule-runs", id.value]),
-  queryFn: () => listScheduleRuns(id.value),
+const { data: runs, isLoading: runsLoading } = useListRunsApiV1SchedulesScheduleIdRunsGet(id, undefined, {
+  query: {
+    select: (response) => response.data as ScheduleRun[],
+    queryKey: computed(() => ["schedule-runs", id.value]),
+  },
 });
 
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
 
-const triggerMutation = useMutation({
-  mutationFn: () => triggerScheduleRun(id.value),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedule-runs", id.value] });
-    message.success("Run triggered");
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to trigger run");
-  },
-});
-
-const pauseMutation = useMutation({
-  mutationFn: () => pauseSchedule(id.value),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedule", id.value] });
-    message.success("Schedule paused");
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to pause schedule");
+const triggerMutation = useTriggerRunApiV1SchedulesScheduleIdRunPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule-runs", id.value] });
+      message.success("Run triggered");
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to trigger run");
+    },
   },
 });
 
-const resumeMutation = useMutation({
-  mutationFn: () => resumeSchedule(id.value),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedule", id.value] });
-    message.success("Schedule resumed");
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to resume schedule");
+const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      message.success("Schedule paused");
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to pause schedule");
+    },
   },
 });
 
-const deleteMutation = useMutation({
-  mutationFn: () => deleteSchedule(id.value),
-  onSuccess: () => {
-    message.success("Schedule deleted");
-    router.push("/schedules");
+const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      message.success("Schedule resumed");
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to resume schedule");
+    },
   },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to delete schedule");
+});
+
+const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
+  mutation: {
+    onSuccess: () => {
+      message.success("Schedule deleted");
+      router.push("/schedules");
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to delete schedule");
+    },
   },
 });
 
@@ -231,15 +238,16 @@ watch(
   { immediate: true }
 );
 
-const updateMutation = useMutation({
-  mutationFn: (body: UpdateScheduleBody) => updateSchedule(id.value, body),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["schedule", id.value] });
-    message.success("Schedule updated");
-    showEditModal.value = false;
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to update schedule");
+const updateMutation = useUpdateScheduleApiV1SchedulesScheduleIdPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      message.success("Schedule updated");
+      showEditModal.value = false;
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to update schedule");
+    },
   },
 });
 
@@ -252,7 +260,7 @@ function onEditSubmit() {
     return false;
   }
 
-  const body: UpdateScheduleBody = {};
+  const body: UpdateScheduleRequest = {};
   if (editForm.value.cron !== (schedule.value?.cron ?? "")) {
     body.cron = editForm.value.cron;
   }
@@ -266,7 +274,7 @@ function onEditSubmit() {
     body.description = editForm.value.description;
   }
 
-  updateMutation.mutate(body);
+  updateMutation.mutate({ scheduleId: id.value, data: body });
   return false;
 }
 
@@ -275,19 +283,19 @@ function onEditSubmit() {
 // ---------------------------------------------------------------------------
 
 function onTrigger() {
-  triggerMutation.mutate();
+  triggerMutation.mutate({ scheduleId: id.value });
 }
 
 function onTogglePause() {
   if (schedule.value?.is_schedule_active) {
-    pauseMutation.mutate();
+    pauseMutation.mutate({ scheduleId: id.value });
   } else {
-    resumeMutation.mutate();
+    resumeMutation.mutate({ scheduleId: id.value });
   }
 }
 
 function onDelete() {
-  deleteMutation.mutate();
+  deleteMutation.mutate({ scheduleId: id.value });
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +304,7 @@ function onDelete() {
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
-function runStateType(stateType: string | null): TagType {
+function runStateType(stateType: string | null | undefined): TagType {
   switch (stateType) {
     case "COMPLETED":
       return "success";
@@ -314,8 +322,8 @@ function runStateType(stateType: string | null): TagType {
   }
 }
 
-function formatDuration(totalRunTime: number | null): string {
-  if (totalRunTime === null) return "—";
+function formatDuration(totalRunTime: number | null | undefined): string {
+  if (totalRunTime === null || totalRunTime === undefined) return "—";
   if (totalRunTime > 60) return ">1m";
   return `${totalRunTime.toFixed(1)}s`;
 }

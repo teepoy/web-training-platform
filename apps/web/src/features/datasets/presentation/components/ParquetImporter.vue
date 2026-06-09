@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import type { ImporterProps } from "@/shared/widgets/sdk";
-import { API_BASE } from "@/shared/api/client";
+import { importParquetApiV1PluginsImportParquetImportPost } from "@/generated/orval/endpoints/api";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();
@@ -25,25 +25,11 @@ async function submit() {
 
   loading.value = true;
   try {
-    const form = new FormData();
-    form.append("file", file.value);
-    form.append("dataset_id", props.datasetId);
-
-    const resp = await fetch(
-      `${API_BASE}/plugins/import-parquet/import?dataset_id=${encodeURIComponent(props.datasetId)}`,
-      { method: "POST", body: form },
+    const resp = await importParquetApiV1PluginsImportParquetImportPost(
+      { file: file.value as File },
+      { dataset_id: props.datasetId },
     );
-
-    if (!resp.ok) {
-      let detail = `Import failed: ${resp.status}`;
-      try {
-        const body = await resp.json();
-        detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-      } catch {}
-      throw new Error(detail);
-    }
-
-    const data = (await resp.json()) as {
+    const data = resp.data as {
       imported: number;
       failed: number;
       errors: string[];

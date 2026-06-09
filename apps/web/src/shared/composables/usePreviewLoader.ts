@@ -1,61 +1,82 @@
-import { ref, computed, watch, type Ref } from 'vue'
-import { listPreviewItems, type PreviewItem } from '../api/preview'
+import { ref, computed, type Ref } from "vue";
+import { useInfiniteQuery } from "@tanstack/vue-query";
+import { listPreviewItems, type PreviewItem } from "../api/preview";
 
 export interface UsePreviewLoaderOptions {
-  sessionId: string | Ref<string>
-  pageSize?: number
+  sessionId: string | Ref<string>;
+  pageSize?: number;
 }
 
 export function usePreviewLoader(options: UsePreviewLoaderOptions) {
-  const resolvedId = typeof options.sessionId === 'string'
-    ? ref(options.sessionId)
-    : options.sessionId
-  const pageSize = options.pageSize ?? 20
+  const resolvedId =
+    typeof options.sessionId === "string"
+      ? ref(options.sessionId)
+      : options.sessionId;
+  const pageSize = options.pageSize ?? 20;
 
-  const items = ref<PreviewItem[]>([])
-  const estimatedTotal = ref<number | null>(null)
-  const isLoading = ref(false)
-  const initialized = ref(false)
-  const cursor = ref<string | null>(null)
-  const hasMore = ref(true)
+  const infiniteQuery = useInfiniteQuery({
+    queryKey: computed(() => ["preview-items", resolvedId.value]),
+    queryFn: ({ pageParam }: { pageParam: string | null }) =>
+      listPreviewItems(resolvedId.value, pageParam, pageSize),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: false,
+  });
 
-  const loadedCount = computed(() => items.value.length)
+  const items = computed(() => {
+    const all = (infiniteQuery.data.value?.pages ?? []).flatMap(
+      (p) => p.items,
+    );
+    const seen = new Set<string>();
+    return all.filter((item: PreviewItem) => {
+      if (seen.has(item.upstream_item_id)) return false;
+      seen.add(item.upstream_item_id);
+      return true;
+    });
+  });
+
+  const estimatedTotal = computed(
+    () =>
+      infiniteQuery.data.value?.pages?.[
+        infiniteQuery.data.value.pages.length - 1
+      ]?.estimated_total ?? null,
+  );
+
+  const loadedCount = computed(() => items.value.length);
+
+  const isLoading = computed(
+    () =>
+      infiniteQuery.isFetching.value ||
+      infiniteQuery.isFetchingNextPage.value,
+  );
+
+  const hasMore = computed(
+    () => infiniteQuery.hasNextPage.value ?? true,
+  );
+
+  const initialized = computed(
+    () => infiniteQuery.data.value !== undefined,
+  );
 
   async function loadMore() {
-    if (!resolvedId.value) return
-    if (initialized.value && !hasMore.value) return
-    if (isLoading.value) return
+    if (
+      infiniteQuery.isFetching.value ||
+      infiniteQuery.isFetchingNextPage.value
+    )
+      return;
 
-    isLoading.value = true
-    try {
-      const page = await listPreviewItems(resolvedId.value, cursor.value, pageSize)
-      estimatedTotal.value = page.estimated_total
-
-      const newItems = page.items.filter(newItem =>
-        !items.value.some(existing => existing.upstream_item_id === newItem.upstream_item_id)
-      )
-
-      items.value = [...items.value, ...newItems]
-      cursor.value = page.next_cursor
-      hasMore.value = page.has_more
-      initialized.value = true
-    } finally {
-      isLoading.value = false
+    if (infiniteQuery.data.value === undefined) {
+      await infiniteQuery.refetch();
+      return;
     }
+
+    if (!infiniteQuery.hasNextPage.value) return;
+    await infiniteQuery.fetchNextPage();
   }
 
   function reset() {
-    items.value = []
-    estimatedTotal.value = null
-    cursor.value = null
-    hasMore.value = true
-    initialized.value = false
-    void loadMore()
+    infiniteQuery.refetch();
   }
-
-  watch(resolvedId, () => {
-    reset()
-  }, { immediate: false })
 
   return {
     items,
@@ -66,5 +87,5 @@ export function usePreviewLoader(options: UsePreviewLoaderOptions) {
     initialized,
     loadMore,
     reset,
-  }
+  };
 }

@@ -4,8 +4,7 @@ import path from "path";
 const config: StorybookConfig = {
   stories: [
     "../src/shared/**/*.stories.ts",
-    "../src/views/**/*.stories.ts",
-    "../src/modules/**/*.stories.ts",
+    "../src/features/**/*.stories.ts",
   ],
   addons: ["@storybook/addon-essentials"],
   framework: {

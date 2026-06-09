@@ -64,11 +64,14 @@
                       round
                       size="small"
                       style="cursor: pointer"
+                      data-testid="nav-avatar"
                     >{{ userInitials }}</n-avatar>
                   </n-dropdown>
                 </n-layout-header>
-                <n-layout-content style="padding: 24px; overflow-y: auto">
-                  <RouterView />
+                <n-layout-content style="padding: 24px; overflow-y: auto; display: flex; flex-direction: column;">
+                  <div style="flex: 1; min-height: 0;">
+                    <RouterView />
+                  </div>
                   <n-back-top />
                 </n-layout-content>
               </n-layout>
@@ -116,9 +119,7 @@ const isAuthPage = computed(() => AUTH_PATHS.includes(route.path));
 const isSettingsRoute = computed(() => route.path.startsWith("/settings"));
 const isAdminRoute = computed(() => route.path.startsWith("/admin"));
 
-// Always use dark theme for auth pages (they have dark gradient background)
 const computedTheme = computed(() => {
-  if (isAuthPage.value) return darkTheme;
   return uiStore.darkMode ? darkTheme : null;
 });
 
@@ -133,6 +134,7 @@ const themeOverrides: GlobalThemeOverrides = {
 const activeRoute = computed(() => {
   const p = route.path;
   if (p.startsWith("/datasets")) return "/datasets";
+  if (p.startsWith("/sc")) return "/sc";
   if (p.startsWith("/sensors")) return "/sensors";
   if (p.startsWith("/preview")) return "/preview";
   if (p.startsWith("/tasks")) return "/tasks";
@@ -152,6 +154,7 @@ const menuOptions = [
   { label: "Preview", key: "/preview" },
   { label: "Task Explorer", key: "/tasks" },
   { label: "Datasets", key: "/datasets" },
+  { label: "Semiconductor", key: "/sc" },
   { label: "Automations", key: "/sensors" },
 ];
 
@@ -193,6 +196,7 @@ function handleAvatarSelect(key: string) {
 onMounted(async () => {
   await authStore.initFromStorage();
   orgStore.initFromStorage();
+  uiStore.hydrateDarkMode();
   orgStore._queryClient = queryClient;
   if (authStore.isAuthenticated) {
     try {
@@ -209,24 +213,24 @@ watch(watchedTaskIds, (ids) => {
       id: detail.id,
       task_kind: detail.task_kind,
       execution_kind: detail.derived.execution_kind,
-      display_name: String(detail.meta.preset_id || detail.meta.model_id || detail.id),
+      display_name: String(detail.meta?.trainer_id || detail.meta?.model_id || detail.id),
       display_status: detail.derived.display_status,
       stage: detail.derived.stage,
-      dataset_id: String(detail.meta.dataset_id || ""),
-      model_id: detail.meta.model_id ? String(detail.meta.model_id) : null,
-      preset_id: detail.meta.preset_id ? String(detail.meta.preset_id) : null,
-      created_by: String((detail.raw.platform_job.created_by as string | undefined) || ""),
-      created_at: String((detail.raw.platform_job.created_at as string | undefined) || ""),
-      updated_at: String((detail.raw.platform_job.updated_at as string | undefined) || ""),
-      prefect_state: detail.derived.prefect_state,
+      dataset_id: String(detail.meta?.dataset_id || ""),
+      model_id: detail.meta?.model_id ? String(detail.meta.model_id) : null,
+      trainer_id: detail.meta?.trainer_id ? String(detail.meta.trainer_id) : null,
+      created_by: String((detail.raw.platform_job?.created_by as string | undefined) || ""),
+      created_at: String((detail.raw.platform_job?.created_at as string | undefined) || ""),
+      updated_at: String((detail.raw.platform_job?.updated_at as string | undefined) || ""),
+      prefect_state: detail.derived.prefect_state ?? null,
       work_pool_name: detail.raw.flow_run?.work_pool_name ? String(detail.raw.flow_run.work_pool_name) : null,
       work_queue_name: detail.raw.flow_run?.work_queue_name ? String(detail.raw.flow_run.work_queue_name) : null,
-      queue_priority: detail.derived.queue_priority,
-      queue_priority_label: detail.derived.queue_priority_label,
-      queue_depth_ahead: detail.derived.queue_depth_ahead,
-      capacity_status: detail.derived.capacity_status,
-      pool_concurrency_limit: detail.derived.pool_concurrency_limit,
-      pool_slots_used: detail.derived.pool_slots_used,
+      queue_priority: detail.derived.queue_priority ?? null,
+      queue_priority_label: detail.derived.queue_priority_label ?? '',
+      queue_depth_ahead: detail.derived.queue_depth_ahead ?? null,
+      capacity_status: detail.derived.capacity_status ?? '',
+      pool_concurrency_limit: detail.derived.pool_concurrency_limit ?? null,
+      pool_slots_used: detail.derived.pool_slots_used ?? null,
     };
     watchTask(task);
     void syncTask(task);

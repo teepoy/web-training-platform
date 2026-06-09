@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
+import { mountWithProviders } from "@/testing"
 import AgentChatDrawer from "./AgentChatDrawer.vue"
 import type { ChatEntry, AgentChatStatus } from "../../types/components"
 
@@ -26,23 +26,24 @@ const messages: ChatEntry[] = [
   },
 ]
 
-function mountDrawer(props: {
+async function mountDrawer(props: {
   messages: readonly ChatEntry[]
   status: AgentChatStatus
 }) {
-  return mount(AgentChatDrawer, { props })
+  const { wrapper } = await mountWithProviders(AgentChatDrawer, { props })
+  return wrapper
 }
 
 describe("AgentChatDrawer", () => {
-  it("shows FAB when idle with no messages", () => {
-    const wrapper = mountDrawer({ messages: [], status: "idle" })
+  it("shows FAB when idle with no messages", async () => {
+    const wrapper = await mountDrawer({ messages: [], status: "idle" })
 
     expect(wrapper.find(".acd-fab").exists()).toBe(true)
     expect(wrapper.find(".acd").exists()).toBe(false)
   })
 
   it("renders messages in drawer when open", async () => {
-    const wrapper = mountDrawer({ messages, status: "idle" })
+    const wrapper = await mountDrawer({ messages, status: "idle" })
     await wrapper.find(".acd-fab").trigger("click")
     await nextTick()
 
@@ -54,7 +55,7 @@ describe("AgentChatDrawer", () => {
   })
 
   it("shows abort button and loading dots when streaming", async () => {
-    const wrapper = mountDrawer({ messages, status: "streaming" })
+    const wrapper = await mountDrawer({ messages, status: "streaming" })
     await wrapper.find(".acd-fab").trigger("click")
     await nextTick()
 
@@ -63,7 +64,7 @@ describe("AgentChatDrawer", () => {
   })
 
   it("shows no streaming indicators when error", async () => {
-    const wrapper = mountDrawer({ messages, status: "error" })
+    const wrapper = await mountDrawer({ messages, status: "error" })
     await wrapper.find(".acd-fab").trigger("click")
     await nextTick()
 
@@ -75,7 +76,7 @@ describe("AgentChatDrawer", () => {
   })
 
   it("emits send when input submitted via Enter", async () => {
-    const wrapper = mountDrawer({ messages: [], status: "idle" })
+    const wrapper = await mountDrawer({ messages: [], status: "idle" })
     await wrapper.find(".acd-fab").trigger("click")
     await nextTick()
 

@@ -7,7 +7,7 @@ const MockPluginComponent = defineComponent({
 });
 
 const meta = {
-  title: "web-ui/components/FlowModal",
+  title: "Shared/FlowModal",
   component: FlowModal,
   args: {
     show: true,

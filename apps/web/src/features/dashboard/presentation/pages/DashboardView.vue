@@ -14,7 +14,7 @@
 
     <n-spin :show="isLoading">
       <n-space vertical size="large">
-        <n-card title="Work Pool" size="small">
+        <n-card title="Work Pool" size="small" data-testid="dashboard-work-pool-card">
           <template v-if="data?.work_pool">
             <n-space>
               <n-statistic label="Pool Name" :value="data.work_pool.name" />
@@ -27,7 +27,7 @@
             </n-space>
             <n-space style="margin-top: 12px" align="center">
               <span class="stat-label">Status</span>
-              <n-tag :type="poolStatusType(data.work_pool.status)" size="small" round>
+              <n-tag :type="poolStatusType(data.work_pool.status ?? '')" size="small" round>
                 {{ data.work_pool.status }}
               </n-tag>
               <span class="stat-label">Paused</span>
@@ -41,7 +41,7 @@
           </n-alert>
         </n-card>
 
-        <n-card title="Service Health" size="small">
+        <n-card title="Service Health" size="small" data-testid="dashboard-service-health-card">
           <n-data-table
             :columns="serviceColumns"
             :data="data?.services ?? []"
@@ -51,27 +51,27 @@
           />
         </n-card>
 
-        <n-card title="Job Queue" size="small">
+        <n-card title="Job Queue" size="small" data-testid="dashboard-job-queue-card">
           <n-grid :cols="5" :x-gap="16" :y-gap="16">
             <n-gi>
-              <n-statistic label="Queued" :value="String(data?.job_queue.queued ?? 0)" />
+              <n-statistic label="Queued" :value="String(data?.job_queue?.queued ?? 0)" />
             </n-gi>
             <n-gi>
-              <n-statistic label="Running" :value="String(data?.job_queue.running ?? 0)" />
+              <n-statistic label="Running" :value="String(data?.job_queue?.running ?? 0)" />
             </n-gi>
             <n-gi>
-              <n-statistic label="Completed" :value="String(data?.job_queue.completed ?? 0)" />
+              <n-statistic label="Completed" :value="String(data?.job_queue?.completed ?? 0)" />
             </n-gi>
             <n-gi>
-              <n-statistic label="Failed" :value="String(data?.job_queue.failed ?? 0)" />
+              <n-statistic label="Failed" :value="String(data?.job_queue?.failed ?? 0)" />
             </n-gi>
             <n-gi>
-              <n-statistic label="Cancelled" :value="String(data?.job_queue.cancelled ?? 0)" />
+              <n-statistic label="Cancelled" :value="String(data?.job_queue?.cancelled ?? 0)" />
             </n-gi>
           </n-grid>
         </n-card>
 
-        <n-card title="Recent Jobs" size="small">
+        <n-card title="Recent Jobs" size="small" data-testid="dashboard-recent-jobs-card">
           <n-data-table
             :columns="columns"
             :data="data?.recent_jobs ?? []"
@@ -89,22 +89,23 @@
 
 <script setup lang="ts">
 import { computed, h } from "vue";
-import { useQuery } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
-import { getDashboard } from "@/features/dashboard/infrastructure/api";
-import type { RecentJobSummary, ServiceStatus } from "@/features/dashboard/domain/models";
+import { useGetDashboardApiV1DashboardGet } from "@/generated/orval/endpoints/api";
+import type { RecentJobSummary, ServiceStatus } from "@/generated/orval/models";
 import { useOrgStore } from '@/features/auth/application/org';
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
 const orgStore = useOrgStore();
 
-const { data, isLoading } = useQuery({
-  queryKey: computed(() => ["dashboard", orgStore.currentOrgId]),
-  queryFn: () => getDashboard(),
-  refetchInterval: 10000,
-  enabled: computed(() => !!orgStore.currentOrgId),
+const { data, isLoading } = useGetDashboardApiV1DashboardGet({
+  query: {
+    select: (response) => response.data,
+    queryKey: computed(() => ["dashboard", orgStore.currentOrgId]),
+    refetchInterval: 10000,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
 });
 
 function statusType(status: string): TagType {
@@ -186,10 +187,10 @@ const columns = computed<DataTableColumns<RecentJobSummary>>(() => [
     render: (row) => row.dataset_id.slice(0, 8) + "…",
   },
   {
-    title: "Preset",
-    key: "preset_id",
+    title: "View",
+    key: "trainer_id",
     width: 110,
-    render: (row) => row.preset_id.slice(0, 8) + "…",
+    render: (row) => row.trainer_id.slice(0, 8) + "…",
   },
   {
     title: "Status",

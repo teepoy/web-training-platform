@@ -1,0 +1,12 @@
+id: forbid-export-from-generated-orval
+language: typescript
+severity: error
+ignores:
+  - '**/features/**/models.ts'
+rule:
+  kind: export_statement
+  has:
+    field: source
+    regex: '@/generated/orval'
+message: |
+  Do not re-export from generated/orval.

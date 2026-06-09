@@ -6,7 +6,6 @@ Usage::
     make seed ARGS="--list"
     make seed ARGS="mock-multi-image"
     make seed ARGS="imagenet-mock"
-    make seed ARGS="presets"
 """
 
 from __future__ import annotations

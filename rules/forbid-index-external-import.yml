@@ -1,0 +1,23 @@
+id: forbid-index-external-import
+language: typescript
+severity: error
+files:
+  - '**/index.ts'
+ignores:
+  - '**/shared/components/*/index.ts'
+  - '**/tests/fixtures/index.ts'
+rule:
+  any:
+    - kind: import_statement
+      has:
+        field: source
+        stopBy: end
+        regex: '^(\.\./|@/)'
+    - kind: export_statement
+      has:
+        field: source
+        stopBy: end
+        regex: '^(\.\./|@/)'
+message: |
+  index.ts must not import or re-export code from outside this module.
+  Only same-directory (./) imports/re-exports are allowed.

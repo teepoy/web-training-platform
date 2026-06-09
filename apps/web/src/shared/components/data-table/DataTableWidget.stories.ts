@@ -3,7 +3,7 @@ import DataTableWidget from "./DataTableWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/DataTableWidget",
+  title: "Shared/DataTableWidget",
   component: DataTableWidget,
   decorators: [provideWebUiContext()],
   args: {

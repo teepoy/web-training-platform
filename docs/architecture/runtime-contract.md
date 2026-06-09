@@ -310,9 +310,11 @@ Environment variable override: `GPU_WORKER_BASE_URL`.
 
 The legacy `inference.base_url` key is deprecated but still accepted as a fallback. New deployments must set `gpu_worker.base_url`.
 
-## Migration from runtime predecessor
+## Migration and Removal
 
-The existing `apps/inference/` service (`InferenceWorkerClient` → `POST /v1/predict`, `POST /v1/embed`) is forward-compatible with the GPU worker contract. The GPU worker retains these exact endpoints and response schemas. The V1 GPU worker adds training endpoints (`POST /v1/train` etc.) on top of the existing prediction/embedding surface.
+The direct API → inference worker path has been removed in favor of the unified GPU worker contract. The legacy client and its corresponding service boundary mocks have been deleted.
+
+The GPU worker retains the same prediction/embedding endpoints and response schemas for forward compatibility. For a detailed audit of the removal and the transition to the unified worker model, see `docs/architecture/api-sync-worker-callsites.md`.
 
 ## Verification Checklist
 

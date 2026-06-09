@@ -23,9 +23,8 @@ The manifests mirror the docker-compose stack so both environments run the same 
 | `kustomization.yaml` | Kustomize entrypoint — applies all base resources |
 | `observability/` | Monitoring stack manifests (Prometheus, Grafana, Loki, Alertmanager, exporters) |
 
-Legacy worker manifests have been removed. The current topology uses only
-`prefect-worker.yaml` for CPU orchestration and `gpu-worker.yaml` for GPU
-runtime execution.
+Legacy worker manifests have been removed. Prefect flows now run in-process
+within `apps/api`.
 
 ## Service map (mirrors docker-compose)
 
@@ -69,9 +68,6 @@ The following images must be available to the cluster (via registry or `minikube
 | Image | Built from | Notes |
 |-------|-----------|-------|
 | `finetune-api:latest` | `apps/api/Dockerfile` | |
-| `finetune-embedding:latest` | `apps/embedding/Dockerfile` | |
-| `finetune-gpu-worker:latest` | `apps/inference/Dockerfile` | CUDA-capable, requests `nvidia.com/gpu: 1` |
-| `finetune-prefect-worker:latest` | `apps/worker/Dockerfile` | CPU-only, no NVIDIA deps |
 
 Third-party images (`pgvector/pgvector:pg16`, `prefecthq/prefect:3.6.25-python3.12`,
 `minio/minio:RELEASE.2025-02-18T16-25-55Z`, `heartexlabs/label-studio:latest`) are
@@ -205,7 +201,7 @@ Open http://localhost:3000 — login with `admin` / `admin`.
 ## Rollback & Migration
 
 ### Migration from Legacy Workers
-Legacy worker manifests have been removed. The current topology uses `gpu-worker.yaml` (HTTP API) and `prefect-worker.yaml` (CPU orchestration).
+Legacy worker manifests have been removed. Prefect flows now run in-process within `apps/api`.
 
 ### Rollback Procedure
 If the new split topology fails in your cluster:

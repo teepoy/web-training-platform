@@ -1,0 +1,16 @@
+id: forbid-preset-python
+language: python
+severity: error
+ignores:
+  - '**/generated/**'
+  - '**/tests/**'
+rule:
+  any:
+    - kind: identifier
+      regex: '[pP]reset'
+    - kind: string
+      regex: '[pP]reset'
+    - kind: comment
+      regex: '[pP]reset'
+message: |
+  'preset' is deprecated. Use trainer, predictor, and view instead.

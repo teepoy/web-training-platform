@@ -25,7 +25,6 @@ class InMemoryArtifactStorage:
         return self._objects[object_name]
 
     async def delete(self, uri: str) -> None:
-        """Delete an object from in-memory storage."""
         prefix = "memory://"
         if not uri.startswith(prefix):
             raise FileNotFoundError(f"Unknown URI scheme: {uri!r}")
@@ -33,3 +32,6 @@ class InMemoryArtifactStorage:
         if object_name not in self._objects:
             raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
         del self._objects[object_name]
+
+    async def list_prefix(self, prefix: str) -> list[str]:
+        return [f"memory://{name}" for name in self._objects if name.startswith(prefix)]

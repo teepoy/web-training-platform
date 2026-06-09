@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
+import { mountWithProviders } from "@/testing";
 import PreviewItemDrawer from "./PreviewItemDrawer.vue";
 import type { PreviewItem } from "@/shared/api/preview";
 
@@ -20,7 +20,7 @@ function bodyText(): string {
 
 describe("PreviewItemDrawer", () => {
   it("does not render drawer content when show is false", async () => {
-    const wrapper = mount(PreviewItemDrawer, {
+    const { wrapper } = await mountWithProviders(PreviewItemDrawer, {
       props: {
         show: false,
         item: null,
@@ -35,7 +35,7 @@ describe("PreviewItemDrawer", () => {
   });
 
   it("renders image and upstream_item_id when show is true with a valid item", async () => {
-    mount(PreviewItemDrawer, {
+    await mountWithProviders(PreviewItemDrawer, {
       props: {
         show: true,
         item: validItem,
@@ -48,7 +48,7 @@ describe("PreviewItemDrawer", () => {
   });
 
   it('shows "No item selected" when show is true and item is null', async () => {
-    mount(PreviewItemDrawer, {
+    await mountWithProviders(PreviewItemDrawer, {
       props: {
         show: true,
         item: null,
@@ -61,7 +61,7 @@ describe("PreviewItemDrawer", () => {
   });
 
   it('shows "No metadata" when show is true and item has empty metadata', async () => {
-    mount(PreviewItemDrawer, {
+    await mountWithProviders(PreviewItemDrawer, {
       props: {
         show: true,
         item: {

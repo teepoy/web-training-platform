@@ -13,7 +13,7 @@ const sampleItem: PreviewItem = {
 };
 
 const meta = {
-  title: "web-ui/components/PreviewItemDrawer",
+  title: "Shared/PreviewItemDrawer",
   component: PreviewItemDrawer,
   args: {
     show: true,

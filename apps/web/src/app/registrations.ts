@@ -1,8 +1,9 @@
 import { createDescriptorRegistry } from "@/shared/widgets/sdk";
 import { classifyWidgetDescriptors } from "../features/classify/presentation/widgets/descriptors";
-import "../modules/dataset-classification/registrations";
-import "../modules/dataset-detection/registrations";
-import "../modules/dataset-vqa/registrations";
+import "../features/datasets/presentation/dataset-types/classification/registrations";
+import "../features/datasets/presentation/dataset-types/detection/registrations";
+import "../features/datasets/presentation/dataset-types/vqa/registrations";
+import "../features/datasets/presentation/dataset-types/sc/registrations";
 
 export const widgetRegistry = createDescriptorRegistry();
 

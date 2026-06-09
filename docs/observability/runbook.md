@@ -41,6 +41,13 @@ Verify component status using these commands. Replace `localhost` with your clus
 | **Grafana** | `curl -s http://localhost:3000/api/health` | `{"database": "ok"}` |
 | **Prefect Exporter** | `curl -s http://localhost:8000/metrics` | Prometheus metrics text |
 | **GPU Worker** | `curl -s http://localhost:8010/health` | `{"status": "healthy", ...}` |
+| **Platform API liveness** | `curl -s http://localhost:8000/health` | `{"status":"ok"}` |
+| **Platform API readiness** | `curl -s -i http://localhost:8000/ready` | HTTP 200 with `{"status":"ready"}`; HTTP 503 when PostgreSQL is unavailable |
+
+Docker Compose uses `/ready` for the API container healthcheck. Kubernetes uses
+`/ready` for the readiness probe and `/health` for the liveness probe, so a
+database outage removes the API from service without restarting an otherwise
+healthy process.
 
 ## 3. Alert Silencing
 

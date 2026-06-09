@@ -1,0 +1,58 @@
+# Prefect GPU worker — executes GPU-accelerated flows from the default-gpu pool.
+# Requests nvidia.com/gpu and uses node affinity to target GPU-capable nodes.
+#
+# PREFECT_API_URL is sourced from finetune-config ConfigMap (runtime-configurable).
+# The worker command is explicit here; the Dockerfile ENTRYPOINT is for Compose.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefect-worker-gpu
+  namespace: finetune
+  labels:
+    app: prefect-worker-gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefect-worker-gpu
+  template:
+    metadata:
+      labels:
+        app: prefect-worker-gpu
+    spec:
+      containers:
+        - name: prefect-worker-gpu
+          image: finetune-prefect-worker-gpu:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - uv
+            - run
+            - --directory
+            - apps/api
+            - prefect
+            - worker
+            - start
+            - --pool
+            - default-gpu
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+            limits:
+              nvidia.com/gpu: "1"
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
+      # Target GPU-capable nodes via taint toleration + node affinity
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: Exists

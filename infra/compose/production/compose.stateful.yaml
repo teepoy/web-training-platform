@@ -1,0 +1,108 @@
+# Stateful data plane — long-lived services that must be backed up before upgrades.
+# Holds: postgres, minio, redis, label-studio.
+# Run before any platform/observability services. Use the same lifecycle as backups.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: finetune
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ${INIT_SCRIPTS_DIR:-./init-scripts}:/docker-entrypoint-initdb.d:ro
+    networks:
+      finetune-prod:
+        aliases:
+          - postgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d finetune && psql -U \"$${POSTGRES_USER}\" -d prefect -c 'SELECT 1' >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks:
+      finetune-prod:
+        aliases:
+          - minio
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      finetune-prod:
+        aliases:
+          - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  label-studio:
+    image: ${LABEL_STUDIO_IMAGE:?Set LABEL_STUDIO_IMAGE to an immutable tag}
+    environment:
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRE_HOST: postgres
+      POSTGRE_PORT: "5432"
+      LABEL_STUDIO_USERNAME: ${LABEL_STUDIO_USERNAME:?Set LABEL_STUDIO_USERNAME}
+      LABEL_STUDIO_PASSWORD: ${LABEL_STUDIO_PASSWORD:?Set LABEL_STUDIO_PASSWORD}
+      LABEL_STUDIO_USER_TOKEN: ${LABEL_STUDIO_API_KEY:?Set LABEL_STUDIO_API_KEY}
+      LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
+    expose:
+      - "8080"
+    volumes:
+      - label-studio-data:/label-studio/data
+    networks:
+      finetune-prod:
+        aliases:
+          - label-studio
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  finetune-prod:
+    external: true
+    name: finetune-prod
+
+volumes:
+  postgres-data:
+    name: finetune-postgres-data
+  minio-data:
+    name: finetune-minio-data
+  redis-data:
+    name: finetune-redis-data
+  label-studio-data:
+    name: finetune-label-studio-data

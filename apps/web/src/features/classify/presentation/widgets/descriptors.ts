@@ -238,50 +238,7 @@ export const sampleViewerPlugin = defineDashboardWidget({
   },
 });
 
-export const waferMapPlugin = defineDashboardWidget({
-  key: "wafer-map",
-  component: defineAsyncComponent(
-    () => import("@/shared/components/wafer-map/WaferMapWidget.vue"),
-  ),
-  contract: {
-    displayName: "Wafer Map",
-    description: "Renders high-density wafer scatter points and emits linked selection/filter intents.",
-    acceptsProps: ["data", "config", "size"],
-    capabilities: {
-      reads: ["interaction-state"],
-      emits: ["select-samples", "select-predictions", "apply-filter", "clear-selection"],
-    },
-    selfTests: [
-      {
-        name: "brush updates linked collection",
-        objective: "Verify brush selection emits collection-scoped intents so linked tables can filter.",
-        steps: ["Render the widget with inline points and config.interaction.collection set.", "Brush-select a point subset in the wafer map."],
-        expected: ["The widget emits select-* and apply-filter intents with metadata.collection.", "A linked data-table widget on the same collection can reduce to selected rows."],
-      },
-    ],
-  },
-});
 
-export const blinkTablePlugin = defineDashboardWidget({
-  key: "blink-table",
-  component: defineAsyncComponent(
-    () => import("@/shared/components/blink-table/BlinkTableWidget.vue"),
-  ),
-  contract: {
-    displayName: "Blink Table",
-    description: "A/B blink comparison table for multi-image samples.",
-    acceptsProps: ["data", "config", "size"],
-    capabilities: { reads: [], emits: [] },
-    selfTests: [
-      {
-        name: "renders BlinkTable from inline data",
-        objective: "Verify the widget renders BlinkTable when provided with rows and columns.",
-        steps: ["Provide data.inline.rows with at least one BlinkRow.", "Provide data.inline.columns with at least one BlinkColumnDef."],
-        expected: ["BlinkTable component is rendered with the provided rows and columns."],
-      },
-    ],
-  },
-});
 
 export const classifyWidgetDescriptors = [
   annotationProgressPlugin,
@@ -294,6 +251,4 @@ export const classifyWidgetDescriptors = [
   metricCardsPlugin,
   predictionSummaryPlugin,
   sampleViewerPlugin,
-  waferMapPlugin,
-  blinkTablePlugin,
 ] as const;
