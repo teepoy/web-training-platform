@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.api.deps import get_label_studio_client
+from app.modules.datasets.port.http.deps import get_label_studio_client
 
 
 # ---------------------------------------------------------------------------

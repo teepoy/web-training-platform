@@ -6,8 +6,8 @@ from typing import Any, Generic, TypeVar
 from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
 
-from app.shared.api.schemas import ModelSpec, TaskSpec
-from app.shared.api.schemas import DatasetType
+from app.shared.api.schemas import TaskSpec
+
 
 T = TypeVar("T")
 
@@ -19,7 +19,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class CreateDatasetRequest(BaseModel):
     name: str
-    dataset_type: DatasetType | None = None
+    dataset_type: str | None = None
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
 
 
@@ -36,13 +36,6 @@ class BulkCreateSampleItem(BaseModel):
 
 class BulkCreateSampleRequest(BaseModel):
     items: list[BulkCreateSampleItem] = Field(default_factory=list)
-
-
-class CreatePresetRequest(BaseModel):
-    name: str
-    model_spec: ModelSpec
-    omegaconf_yaml: str
-    dataloader_ref: str
 
 
 class CreateScheduleRequest(BaseModel):
@@ -88,7 +81,6 @@ class WaferPointsResponse(BaseModel):
 
 class HealthStatus(BaseModel):
     status: str
-    auth_enabled: bool
 
 
 class UploadResponse(BaseModel):
@@ -377,7 +369,7 @@ class TaskTrackerSummaryResponse(BaseModel):
     stage: str
     dataset_id: str
     model_id: str | None = None
-    preset_id: str | None = None
+    trainer_id: str | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime

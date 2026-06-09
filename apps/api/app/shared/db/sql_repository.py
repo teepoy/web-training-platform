@@ -27,7 +27,6 @@ from app.shared.db.registry import (
     ScheduleORM,
     TrainingEventORM,
     TrainingJobORM,
-    TrainingPresetORM,
     UserORM,
 )
 from app.shared.api.schemas import (
@@ -35,9 +34,7 @@ from app.shared.api.schemas import (
     AnnotationVersion,
     ArtifactRef,
     Dataset,
-    DEFAULT_ORG_ID,
     Model,
-    ModelSpec,
     PlatformPrediction,
     PredictionCollection,
     PredictionCollectionItem,
@@ -49,9 +46,8 @@ from app.shared.api.schemas import (
     TaskSpec,
     TrainingEvent,
     TrainingJob,
-    TrainingPreset,
 )
-from app.shared.api.schemas import DatasetStorageMode, DatasetType, JobStatus
+from app.shared.api.schemas import DatasetStorageMode, JobStatus
 
 
 def _utcnow() -> datetime:
@@ -72,15 +68,18 @@ class SqlRepository:
     async def create_dataset(
         self, dataset: Dataset, org_id: str | None = None
     ) -> Dataset:
-        org_id = org_id or dataset.org_id or DEFAULT_ORG_ID
+        org_id = org_id or dataset.org_id
+        if org_id is None:
+            raise ValueError("org_id is required for create_dataset")
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
             row = DatasetORM(
                 id=dataset.id,
                 org_id=org_id,
                 name=dataset.name,
-                dataset_type=dataset.dataset_type.value,
-                task_spec=dataset.task_spec.model_dump(mode="json"),
+                dataset_type=dataset.dataset_type,
+                dataset_meta=dataset.task_spec.model_dump(mode="json"),
+                view_types=dataset.view_types,
                 is_public=dataset.is_public,
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
@@ -105,13 +104,15 @@ class SqlRepository:
                     org_id=r.org_id,
                     org_name=await _org_name_for(session, r.org_id),
                     name=r.name,
-                    dataset_type=cast(DatasetType, r.dataset_type),
-                    task_spec=cast(TaskSpec, r.task_spec),
+                    dataset_type=r.dataset_type,
+                    task_spec=cast(TaskSpec, r.dataset_meta),
+                    view_types=cast(list[str], r.view_types),
                     is_public=r.is_public,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
                     ls_project_id=r.ls_project_id,
                     storage_mode=cast(DatasetStorageMode, r.storage_mode),
+                    dataset_meta=r.dataset_meta,
                 )
                 for r in rows
             ]
@@ -130,13 +131,15 @@ class SqlRepository:
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 name=row.name,
-                dataset_type=cast(DatasetType, row.dataset_type),
-                task_spec=cast(TaskSpec, row.task_spec),
+                dataset_type=row.dataset_type,
+                task_spec=cast(TaskSpec, row.dataset_meta),
+                view_types=cast(list[str], row.view_types),
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
                 ls_project_id=row.ls_project_id,
                 storage_mode=cast(DatasetStorageMode, row.storage_mode),
+                dataset_meta=row.dataset_meta,
             )
 
     async def update_dataset_embed_config(
@@ -247,27 +250,30 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def update_dataset_task_spec(
-        self, dataset_id: str, task_spec: dict
+    async def update_dataset_meta(
+        self, dataset_id: str, meta_update: dict
     ) -> Dataset | None:
         async with self.session_factory() as session:
             row = await session.get(DatasetORM, dataset_id)
             if row is None:
                 return None
-            row.task_spec = task_spec
+            current = dict(row.dataset_meta or {})
+            row.dataset_meta = {**current, **meta_update}
             await session.commit()
             return Dataset(
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 name=row.name,
-                dataset_type=cast(DatasetType, row.dataset_type),
-                task_spec=cast(TaskSpec, row.task_spec),
+                dataset_type=row.dataset_type,
+                task_spec=cast(TaskSpec, row.dataset_meta),
+                view_types=cast(list[str], row.view_types),
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
                 ls_project_id=row.ls_project_id,
                 storage_mode=cast(DatasetStorageMode, row.storage_mode),
+                dataset_meta=row.dataset_meta,
             )
 
     async def set_dataset_public(self, dataset_id: str, is_public: bool) -> bool:
@@ -288,19 +294,12 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def create_sample(self, sample: Sample) -> Sample:
-        async with self.session_factory() as session:
-            session.add(
-                SampleORM(
-                    id=sample.id,
-                    dataset_id=sample.dataset_id,
-                    image_uris=sample.image_uris,
-                    metadata_json=sample.metadata,
-                    ls_task_id=sample.ls_task_id,
-                )
-            )
-            await session.commit()
-        return sample
+    # ── sample / annotation methods (db_full only) ──────────────────────────
+    # DEPRECATED(T27): These methods operate directly on SampleORM / AnnotationORM
+    # and serve only the DB_FULL storage mode.  External callers should migrate
+    # to DatasetStorageAgg via DatasetStorageFactory for cross-mode compatibility.
+    # Internal callers (DbFullSampleAccess) remain as transitional backends.
+    # DO NOT add new callers to these methods.
 
     async def create_samples(self, samples: list[Sample]) -> list[Sample]:
         if not samples:
@@ -377,6 +376,8 @@ class SqlRepository:
 
             return points
 
+    # DEPRECATED(T27): Direct SampleORM query — use storage.get_sample() via
+    # DatasetStorageFactory for cross-mode compatibility.
     async def get_sample(self, sample_id: str) -> Sample | None:
         async with self.session_factory() as session:
             row = await session.get(SampleORM, sample_id)
@@ -404,6 +405,7 @@ class SqlRepository:
         Uses a subquery to find the latest annotation per sample (MAX created_at).
 
         label_filter="__unlabeled__" → WHERE latest_annotation IS NULL
+        label_filter="__annotated__" → WHERE latest_annotation IS NOT NULL
         label_filter="cat" → WHERE latest_annotation.label == "cat"
         sample_ids=["a","b"] → WHERE SampleORM.id IN (...) (in addition to dataset/label filters)
         sample_ids=[] → returns ([], 0) without hitting the database
@@ -440,6 +442,7 @@ class SqlRepository:
                     AnnAlias.c.label.label("ann_label"),
                     AnnAlias.c.created_by.label("ann_created_by"),
                     AnnAlias.c.created_at.label("ann_created_at"),
+                    AnnAlias.c.annotation_value.label("ann_annotation_value"),
                 )
                 .where(SampleORM.dataset_id == dataset_id)
                 .outerjoin(
@@ -458,6 +461,8 @@ class SqlRepository:
             # Apply label filter
             if label_filter == "__unlabeled__":
                 stmt = stmt.where(AnnAlias.c.id.is_(None))
+            elif label_filter == "__annotated__":
+                stmt = stmt.where(AnnAlias.c.id.isnot(None))
             elif label_filter is not None:
                 stmt = stmt.where(AnnAlias.c.label == label_filter)
 
@@ -473,6 +478,13 @@ class SqlRepository:
                 stmt = stmt.order_by(AnnAlias.c.label.nullslast())
             elif order_by == "created_at":
                 stmt = stmt.order_by(SampleORM.created_at.desc())
+            elif order_by == "random":
+                # NOTE: func.random() produces a NEW random order on every query.
+                # Paginated consumers (offset/limit) may see the same samples appear
+                # on multiple pages because the random seed changes between requests.
+                # For deterministic pseudo-random pagination, a seeded approach would
+                # be needed (e.g. order_by=random:<seed>).
+                stmt = stmt.order_by(func.random())
             else:
                 stmt = stmt.order_by(SampleORM.id)
 
@@ -496,6 +508,7 @@ class SqlRepository:
                         "label": row["ann_label"],
                         "created_by": row["ann_created_by"],
                         "created_at": ann_created_at_str,
+                        "annotation_value": row.get("ann_annotation_value", {}),
                     }
 
                 result.append(
@@ -581,6 +594,10 @@ class SqlRepository:
                 "unlabeled_samples": total_samples - annotated_samples,
                 "label_counts": label_counts,
             }
+
+    # ── annotation methods (db_full only, FK to samples.id) ─────────────────
+    # DEPRECATED(T27): Use DatasetStorageAgg.{create_annotations,update_annotations,
+    # delete_annotations,get_annotation_stats} via DatasetStorageFactory instead.
 
     async def create_annotation(
         self, annotation: Annotation, user_id: str | None = None
@@ -677,98 +694,12 @@ class SqlRepository:
             await session.commit()
             return True
 
-    async def create_preset(
-        self, preset: TrainingPreset, org_id: str | None = None
-    ) -> TrainingPreset:
-        org_id = org_id or preset.org_id or DEFAULT_ORG_ID
-        async with self.session_factory() as session:
-            session.add(
-                TrainingPresetORM(
-                    id=preset.id,
-                    org_id=org_id,
-                    name=preset.name,
-                    model_spec=preset.model_spec.model_dump(mode="json"),
-                    omegaconf_yaml=preset.omegaconf_yaml,
-                    dataloader_ref=preset.dataloader_ref,
-                )
-            )
-            await session.commit()
-        return preset.model_copy(update={"org_id": org_id})
-
-    async def list_preset_ids(self, org_id: str | None = None) -> set[str]:
-        async with self.session_factory() as session:
-            stmt = select(TrainingPresetORM.id)
-            if org_id is not None:
-                stmt = stmt.where(TrainingPresetORM.org_id == org_id)
-            rows = (await session.execute(stmt)).scalars().all()
-            return set(rows)
-
-    async def ensure_preset_row(
-        self,
-        preset_id: str,
-        name: str,
-        model_spec: dict,
-        omegaconf_yaml: str,
-        dataloader_ref: str,
-        org_id: str | None = None,
-    ) -> None:
-        org_id = org_id or DEFAULT_ORG_ID
-        async with self.session_factory() as session:
-            existing = await session.get(TrainingPresetORM, preset_id)
-            if existing is not None:
-                return
-            session.add(
-                TrainingPresetORM(
-                    id=preset_id,
-                    org_id=org_id,
-                    name=name,
-                    model_spec=model_spec,
-                    omegaconf_yaml=omegaconf_yaml,
-                    dataloader_ref=dataloader_ref,
-                )
-            )
-            await session.commit()
-
-    async def list_presets(self, org_id: str | None = None) -> list[TrainingPreset]:
-        async with self.session_factory() as session:
-            stmt = select(TrainingPresetORM)
-            if org_id is not None:
-                stmt = stmt.where(TrainingPresetORM.org_id == org_id)
-            rows = (await session.execute(stmt)).scalars().all()
-            return [
-                TrainingPreset(
-                    id=r.id,
-                    org_id=r.org_id,
-                    name=r.name,
-                    model_spec=cast(ModelSpec, r.model_spec),
-                    omegaconf_yaml=r.omegaconf_yaml,
-                    dataloader_ref=r.dataloader_ref,
-                )
-                for r in rows
-            ]
-
-    async def get_preset(
-        self, preset_id: str, org_id: str | None = None
-    ) -> TrainingPreset | None:
-        async with self.session_factory() as session:
-            row = await session.get(TrainingPresetORM, preset_id)
-            if row is None:
-                return None
-            if org_id is not None and row.org_id != org_id:
-                return None
-            return TrainingPreset(
-                id=row.id,
-                org_id=row.org_id,
-                name=row.name,
-                model_spec=cast(ModelSpec, row.model_spec),
-                omegaconf_yaml=row.omegaconf_yaml,
-                dataloader_ref=row.dataloader_ref,
-            )
-
     async def create_job(
         self, job: TrainingJob, org_id: str | None = None, user_id: str | None = None
     ) -> TrainingJob:
-        org_id = org_id or job.org_id or DEFAULT_ORG_ID
+        org_id = org_id or job.org_id
+        if org_id is None:
+            raise ValueError("org_id is required for create_job")
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
             session.add(
@@ -776,7 +707,7 @@ class SqlRepository:
                     id=job.id,
                     org_id=org_id,
                     dataset_id=job.dataset_id,
-                    preset_id=job.preset_id,
+                    trainer_id=job.trainer_id,
                     status=job.status.value,
                     is_public=job.is_public,
                     created_by=job.created_by,
@@ -819,7 +750,9 @@ class SqlRepository:
             row = await session.get(TrainingJobORM, job_id)
             return None if row is None else row.external_job_id
 
-    async def list_jobs(self, org_id: str | None = None) -> list[TrainingJob]:
+    async def list_jobs(
+        self, org_id: str | None = None, dataset_id: str | None = None
+    ) -> list[TrainingJob]:
         async with self.session_factory() as session:
             stmt = select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc())
             if org_id is not None:
@@ -829,6 +762,8 @@ class SqlRepository:
                         TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
+            if dataset_id is not None:
+                stmt = stmt.where(TrainingJobORM.dataset_id == dataset_id)
             rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
@@ -839,7 +774,7 @@ class SqlRepository:
                         org_id=row.org_id,
                         org_name=await _org_name_for(session, row.org_id),
                         dataset_id=row.dataset_id,
-                        preset_id=row.preset_id,
+                        trainer_id=row.trainer_id,
                         status=cast(JobStatus, row.status),
                         created_by=row.created_by,
                         is_public=row.is_public,
@@ -866,7 +801,7 @@ class SqlRepository:
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 dataset_id=row.dataset_id,
-                preset_id=row.preset_id,
+                trainer_id=row.trainer_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
                 is_public=row.is_public,
@@ -935,7 +870,7 @@ class SqlRepository:
                 .scalars()
                 .all()
             )
-            return [
+            items = [
                 TrainingEvent(
                     job_id=r.job_id,
                     ts=r.ts,
@@ -944,12 +879,15 @@ class SqlRepository:
                     payload=r.payload,
                 )
                 for r in rows
-            ], total or 0
+            ]
+            return items, max(total or 0, offset + len(items))
 
     async def create_prediction_job(
         self, job: PredictionJob, org_id: str | None = None
     ) -> PredictionJob:
-        org_id = org_id or job.org_id or DEFAULT_ORG_ID
+        org_id = org_id or job.org_id
+        if org_id is None:
+            raise ValueError("org_id is required for create_prediction_job")
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
             session.add(
@@ -1203,7 +1141,7 @@ class SqlRepository:
             ]
 
     async def list_platform_predictions_for_job(
-        self, job_id: str, org_id: str
+        self, job_id: str, org_id: str, offset: int = 0, limit: int | None = None
     ) -> list[PlatformPrediction]:
         async with self.session_factory() as session:
             stmt = (
@@ -1211,7 +1149,10 @@ class SqlRepository:
                 .where(PlatformPredictionORM.job_id == job_id)
                 .where(PlatformPredictionORM.org_id == org_id)
                 .order_by(PlatformPredictionORM.created_at.asc())
+                .offset(offset)
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PlatformPrediction(
@@ -1485,7 +1426,7 @@ class SqlRepository:
 
             # Update pgvector column via raw SQL (Postgres only)
             try:
-                dialect_name = session.bind.dialect.name  # type: ignore[union-attr]
+                dialect_name = session.bind.dialect.name
             except Exception:
                 dialect_name = ""
             if dialect_name == "postgresql":
@@ -1532,7 +1473,7 @@ class SqlRepository:
         async with self.session_factory() as session:
             # Detect dialect
             try:
-                dialect = session.bind.dialect.name  # type: ignore[union-attr]
+                dialect = session.bind.dialect.name
             except Exception:
                 dialect = "sqlite"
 
@@ -1705,6 +1646,21 @@ class SqlRepository:
         async with self.session_factory() as session:
             result = await session.execute(
                 select(UserORM).where(UserORM.email == email)
+            )
+            row = result.scalar_one_or_none()
+            if row is not None:
+                session.expunge(row)
+            return row
+
+    async def get_user_by_oauth(
+        self, provider: str, provider_id: str
+    ) -> UserORM | None:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(UserORM).where(
+                    UserORM.oauth_provider == provider,
+                    UserORM.oauth_provider_id == provider_id,
+                )
             )
             row = result.scalar_one_or_none()
             if row is not None:
@@ -1894,15 +1850,11 @@ class SqlRepository:
         dataset_id: str | None = None,
         job_id: str | None = None,
     ) -> list[Model]:
-        """List model artifacts with full context (job, dataset, preset info)."""
         async with self.session_factory() as session:
             stmt = (
-                select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
+                select(ArtifactORM, TrainingJobORM, DatasetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .outerjoin(
-                    TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id
-                )
                 .where(ArtifactORM.kind == "model")
                 .where(
                     or_(
@@ -1932,22 +1884,18 @@ class SqlRepository:
                     job_id=artifact.job_id,
                     dataset_id=job.dataset_id,
                     dataset_name=dataset.name,
-                    preset_id=job.preset_id,
-                    preset_name=preset.name if preset else job.preset_id,
+                    trainer_id=job.trainer_id,
+                    trainer_name=job.trainer_id,
                 )
-                for artifact, job, dataset, preset in rows
+                for artifact, job, dataset in rows
             ]
 
     async def get_model(self, artifact_id: str, org_id: str) -> Model | None:
-        """Get a single model artifact with full context."""
         async with self.session_factory() as session:
             stmt = (
-                select(ArtifactORM, TrainingJobORM, DatasetORM, TrainingPresetORM)
+                select(ArtifactORM, TrainingJobORM, DatasetORM)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
-                .outerjoin(
-                    TrainingPresetORM, TrainingJobORM.preset_id == TrainingPresetORM.id
-                )
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
                 .where(
@@ -1960,7 +1908,7 @@ class SqlRepository:
             row = (await session.execute(stmt)).first()
             if row is None:
                 return None
-            artifact, job, dataset, preset = row
+            artifact, job, dataset = row
             return Model(
                 id=artifact.id,
                 uri=artifact.uri,
@@ -1974,8 +1922,8 @@ class SqlRepository:
                 job_id=artifact.job_id,
                 dataset_id=job.dataset_id,
                 dataset_name=dataset.name,
-                preset_id=job.preset_id,
-                preset_name=preset.name if preset else job.preset_id,
+                trainer_id=job.trainer_id,
+                trainer_name=job.trainer_id,
             )
 
     async def delete_artifact(self, artifact_id: str) -> bool:
@@ -2130,6 +2078,10 @@ class SqlRepository:
     # ------------------------------------------------------------------
     # Agent data queries
     # ------------------------------------------------------------------
+
+    # ── metadata analysis methods (db_full only, SampleORM.metadata_json) ───
+    # DEPRECATED(T27): Use DatasetStorageAgg or SampleAccess for storage-mode-aware
+    # access.  Direct SampleORM queries break sparse datasets.
 
     async def get_random_samples(self, dataset_id: str, limit: int = 100) -> list[dict]:
         """Return up to *limit* random samples from a dataset (metadata only)."""

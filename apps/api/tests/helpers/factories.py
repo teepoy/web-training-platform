@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import PRESET_ID
+from tests.conftest import TRAINER_ID
 
 
 def pytest_auth_headers() -> dict[str, str]:
@@ -218,14 +218,14 @@ def create_test_annotations(
 def create_test_training_job(
     client: TestClient,
     dataset_id: str,
-    preset_id: str | None = None,
+    trainer_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a training job via ``POST /api/v1/training-jobs``.
 
     Args:
         client: An active ``TestClient`` instance.
         dataset_id: Dataset to train on.
-        preset_id: Preset id (defaults to ``PRESET_ID`` from conftest).
+        trainer_id: Trainer id (defaults to ``TRAINER_ID`` from conftest).
 
     Returns:
         The job response dict containing at least ``id`` and ``status``.
@@ -237,7 +237,7 @@ def create_test_training_job(
         "/api/v1/training-jobs",
         json={
             "dataset_id": dataset_id,
-            "preset_id": preset_id or PRESET_ID,
+            "trainer_id": trainer_id or TRAINER_ID,
         },
     )
     assert resp.status_code == 200, (

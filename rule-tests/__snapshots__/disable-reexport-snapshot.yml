@@ -1,0 +1,42 @@
+id: disable-reexport
+snapshots:
+  export type { FooType } from "./types";:
+    labels:
+    - source: export type { FooType } from "./types";
+      style: primary
+      start: 0
+      end: 39
+    - source: ./types
+      style: secondary
+      start: 30
+      end: 37
+  export { Foo } from "./bar";:
+    labels:
+    - source: export { Foo } from "./bar";
+      style: primary
+      start: 0
+      end: 28
+    - source: ./bar
+      style: secondary
+      start: 21
+      end: 26
+  import type { BazType } from "./t"; export type { BazType };:
+    labels:
+    - source: export type { BazType };
+      style: primary
+      start: 36
+      end: 60
+    - source: '{ BazType }'
+      style: secondary
+      start: 48
+      end: 59
+  import { Bar } from "./baz"; export { Bar };:
+    labels:
+    - source: export { Bar };
+      style: primary
+      start: 29
+      end: 44
+    - source: '{ Bar }'
+      style: secondary
+      start: 36
+      end: 43

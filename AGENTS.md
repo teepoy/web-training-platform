@@ -1,332 +1,146 @@
-# PROJECT KNOWLEDGE BASE
+# Project Agent Guide
 
-## OVERVIEW
-Monorepo for an online finetune platform: FastAPI API, Vue 3 web app, Python SDK/CLI, and local/k8s deployment manifests. Runtime behavior is config-driven: local smoke uses SQLite + local execution, dev mode targets Postgres + MinIO + Kubeflow. Every dataset has a mandatory Label Studio project (`ls_project_id` is NOT NULL).
+This file is the root working guide for agents in this repository. Keep it concise. Stable product and architecture decisions belong in `CORE_DESIGNS.md`; detailed subsystem notes belong in the nearest subdirectory `AGENTS.md`.
 
-## STRUCTURE
+If this file conflicts with `CORE_DESIGNS.md`, treat `CORE_DESIGNS.md` as authoritative and surface the conflict instead of silently choosing a side.
+
+## Project Shape
+
+Monorepo for an online finetune platform:
+
+| Area | Path | Role |
+| --- | --- | --- |
+| API | `apps/api` | FastAPI control plane, metadata, auth, jobs, SSE, persistence |
+| Web | `apps/web` | Vue 3 + Vite frontend, widgets, dataset/job/schedule UI |
+| ML | `libs/ml` | Torch-first model implementations and training/prediction logic |
+| Platform runtime | `libs/platform-runtime` | Shared contracts, SDK/CLI, runtime clients |
+| SDK shim | `libs/python-sdk` | Compatibility re-exports; new code should prefer `platform_runtime` |
+| Infra | `infra` | Compose and Kubernetes manifests |
+| Docs | `docs` | Architecture, guides, protocols |
+
+Runtime topology:
+
 ```text
-./
-├── apps/api/           # FastAPI backend, config profiles, Alembic migrations, tests
-├── apps/api/app/modules/ # Domain-oriented backend modules (routes, services, flows)
-├── apps/api/app/shared/ # Shared backend dependencies, DB, generated models, infrastructure
-├── apps/api/app/flows/ # Legacy Prefect flow definitions and serve entrypoint
-├── apps/api/app/routers/  # Backend extension routes — explicit registry.py
-├── apps/web/           # Vue 3 SPA
-├── apps/web/src/app/   # Vue bootstrap, router, app shell, widget registrations
-├── apps/web/src/modules/ # Domain-oriented frontend modules
-├── apps/web/src/shared/ # Shared Vue components, composables, API client, widget SDK
-├── apps/web/.storybook/ # Storybook config + mock helpers
-├── apps/worker/        # Prefect flow-worker package (training/prediction/embedding)
-├── libs/python-sdk/    # ftctl CLI, FinetuneClient, agent wrappers
-├── infra/k8s/          # minikube/kubeflow manifests
-├── infra/compose/      # docker compose smoke stack
-└── docs/               # architecture and endpoint notes
+apps/api -> Prefect flows co-located under apps/api -> executable trainer/predictor registries
+apps/api -> libs/platform-runtime
 ```
 
-## COMMANDS
+## Core Rules
 
-**Prefer `make` targets over raw commands.** Run from repo root.
+- Read `CORE_DESIGNS.md` before non-trivial architecture, runtime, storage, dataset, auth, widget, or API contract work.
+- Keep route handlers thin; push persistence and business logic into services/repositories.
+- Do not add executable training/prediction logic to `apps/api`.
+- Do not import FastAPI/API internals from `libs/ml`.
+- Do not put module-private domain models in `libs/platform-runtime`; keep them in the owning module.
+- Do not change ORM schema without an Alembic migration.
+- Do not infer storage behavior from `dataset_type`; use `storage_mode` explicitly.
+- Do not couple platform `Sample.id` to upstream/domain IDs such as SC defect IDs.
+- Do not assume auth is enforced just because auth scaffolding exists.
+- Do not add hardcoded backend URLs; existing hardcodes are known debt.
+- Do not create new YAML preset mechanisms; use the registry/descriptor mechanisms described below.
+- Do not delete Alembic migrations unless the database state is intentionally reset too.
 
-| What                    | Command                                             | Notes                                                                                                                  |
-| ----------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Install all             | `make install`                                      | uv sync + pnpm install                                                                                                 |
-| Start API + Web         | `make dev`                                          | Parallel; Ctrl-C stops both                                                                                            |
-| Start API only          | `make dev-api`                                      | `API_PORT=9000` to override                                                                                            |
-| Start Web only          | `make dev-web`                                      | `WEB_PORT=3000` to override                                                                                            |
-| **Run all tests**       | `make test`                                         | API tests only (no frontend tests)                                                                                     |
-| **Run single test**     | `make test-api ARGS="-k test_health"`               | pytest `-k` filter                                                                                                     |
-| **Run test file**       | `make test-api ARGS="tests/test_vqa_runtime.py -v"` | Verbose single file                                                                                                    |
-| Build frontend          | `make build-web`                                    | vue-tsc + vite build                                                                                                   |
-| Alembic migrate         | `make db-migrate`                                   | `upgrade head`                                                                                                         |
-| Compose Alembic migrate | `make db-migrate-compose`                           | Runs `alembic upgrade head` in Compose API container                                                                   |
-| New migration           | `make db-revision MSG="add column"`                 | autogenerate                                                                                                           |
-| Reset app data          | `make reset-app-data`                               | Drops and recreates app tables in the configured DB                                                                    |
-| SDK CLI                 | `make ftctl ARGS="jobs ls"`                         | Wraps `ftctl`                                                                                                          |
-| Seed ImageNet mock      | `make seed-imagenet-mock`                           | Health-checks `API_URL` first; creates dataset `ImageNet-1K Mock` with 1000 offline synthetic samples                  |
-| Seed ImageNet POC       | `make seed-imagenet-poc`                            | Health-checks `API_URL` first; creates dataset `ImageNet-1K Real` with 64 real samples for prediction proof-of-concept |
-| Seed ImageNet full      | `make seed-imagenet-full`                           | Health-checks `API_URL` first; refreshes dataset `ImageNet-1K Real` via the full real ImageNet seeding path            |
-| Batch dev smoke         | `make smoke-dev-batch`                              | Run after `make seed-imagenet-mock` or `make seed-imagenet-poc`; verifies seeded batch prediction availability         |
-| Compose up/down         | `make up` / `make down`                             | Full Compose stack (dev profile, includes baked web container)                                                         |
-| Compose backend only    | `make up-stack`                                     | Compose stack without the baked web container                                                                          |
-| Ensure mock datasets    | `make ensure-mock-datasets`                         | Waits for API health and idempotently ensures `ImageNet-1K Mock` dataset exists (no model creation)                    |
-| Compose dev entrypoint  | `make updev`                                        | Starts compose backend, ensures mock datasets exist, then runs local Vite web dev server                               |
+## Commands
 
-| Web widget/shared tests | `pnpm --dir apps/web test:widgets` | vitest specs co-located under `apps/web/src/` |
-| Widget integration tests | `pnpm test:plugins` | vitest for widget registrations, if script is present |
-| **Storybook** | `pnpm storybook` | Widget component stories on port 6006 |
-| Build Storybook | `pnpm build-storybook` | Static build of Storybook |
+Prefer `make` targets from the repository root.
 
-Raw single-test (when Make is unavailable):
-```bash
-cd apps/api && uv run --extra dev pytest tests/test_datasets.py::test_create_dataset -v
-```
+| Task | Command |
+| --- | --- |
+| Install dependencies | `make install` |
+| Start compose dev stack | `make up-dev` |
+| Start API only | `make dev-api` |
+| Start web only | `make dev-web` |
+| Run backend tests + OpenAPI sync | `make test` |
+| Run one API test/filter | `make test-api ARGS="-k test_name"` |
+| Run frontend unit tests | `make test-web` |
+| Run frontend E2E tests | `make test-e2e` |
+| Full local verification | `make full-test` |
+| Build web | `make build-web` |
+| Generate OpenAPI spec + artifacts | `make generate` |
+| Apply migrations | `make db-migrate` |
+| Create migration | `make db-revision MSG="describe change"` |
+| Start compose backend only | `make up-dev --scale web=0` |
+| Start compose backend + local web | `make updev` |
+| Stop compose | `make down` |
+| Run CLI | `make ftctl ARGS="jobs ls"` |
 
-`make seed-imagenet-mock`, `make seed-imagenet-poc`, and `make seed-imagenet-full` now check `$(API_URL)/health` before running. Override with `API_URL=http://localhost:9000` when needed.
+Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
-## CODE STYLE — PYTHON
+## Verification
 
-No linter/formatter is configured. Follow these observed conventions exactly.
+- After modifying code, run the narrowest relevant tests first, then the required broader checks before handing off.
+- For backend Python changes, run `ruff check apps/api`, `uv run --directory apps/api pyright .`, and `make test`.
+- For frontend changes, run `make test-web` and `make build-web`; run `make test-e2e` when route/user-flow behavior changes.
+- For API contract changes, update route/schema code, run `make generate` to re-export `openapi/openapi.yaml` and regenerate all artifacts, then let `make test` run the OpenAPI sync check.
+- For Docker-relevant backend/frontend changes, verify the relevant compose image build when feasible: `docker compose -f infra/compose/docker-compose.yaml build api` or `docker compose -f infra/compose/docker-compose.yaml build web`.
+- If a required check cannot be run, state why and what remains unverified.
 
-- **Future annotations**: Every file starts with `from __future__ import annotations`.
-- **Type unions**: `X | None` (PEP 604), never `Optional[X]`.
-- **Type annotations**: All function signatures and return types annotated.
-- **Import order**: stdlib → third-party → local (`app.domain`, `app.db`, `app.services`). No enforced tool — keep consistent manually.
-- **Naming**: `snake_case` functions/variables, `PascalCase` classes, `UPPER_SNAKE` constants.
-- **ORM models**: `XxxORM` suffix (`DatasetORM`, `SampleORM`, `AnnotationORM`).
-- **Domain models**: Plain `BaseModel` — `Dataset`, `Sample`, `Annotation`.
-- **Request/Response schemas**: `XxxRequest` / `XxxResponse` suffix.
-- **Async**: All repository methods are `async def`. DB access via `async with self.session_factory() as session`.
-- **Error handling**: `raise HTTPException(status_code=N, detail="message")` in route handlers. Keep handlers thin; push logic into services.
+## Code Style
 
-## CODE STYLE — TYPESCRIPT / VUE
+Python:
 
-- **Strict mode**: `tsconfig.json` has `strict: true`. Never weaken it.
-- **Components**: Vue 3 Composition API with `<script setup lang="ts">`.
-- **Types**: All API types in `src/types.ts` as `export interface Xxx { ... }`.
-- **Naming**: `PascalCase` interfaces/components, `camelCase` variables/functions.
-- **Data fetching**: Vue Query (`@tanstack/vue-query`). State: Pinia.
-- **UI library**: Naive UI (`naive-ui`).
-- **API client**: `src/api.ts` — hardcodes `http://localhost:8000/api/v1`.
+- Start new Python files with `from __future__ import annotations`.
+- Use `X | None`, not `Optional[X]`.
+- Annotate function signatures and returns.
+- Keep imports ordered stdlib, third-party, local.
+- Repository methods are async and use explicit session scopes.
+- Prefer typed Protocol dependencies over `Any` containers or global service lookups.
 
-## TEST INFRASTRUCTURE
+TypeScript/Vue:
 
-- **Framework**: pytest + `fastapi.testclient.TestClient` (sync client over async app).
-- **Config**: Tests force `APP_CONFIG_PROFILE=test` in `conftest.py`.
-- **Auth mock**: `_mock_auth_deps` autouse fixture overrides auth for all tests. Use marker `@pytest.mark.no_auth_override` to skip.
-- **LS mock**: `_mock_ls_client` autouse fixture mocks Label Studio client. LS-specific tests (`test_ls_*.py`) manage their own overrides.
-- **Pattern**: `with TestClient(app) as c:` inside each test function.
-- **Markers**: `no_auth_override` — defined in `apps/api/pyproject.toml`.
+- Keep `strict: true`; do not suppress type errors with `as any`, `@ts-ignore`, or `@ts-expect-error`.
+- Use Vue 3 Composition API and `<script setup lang="ts">`.
+- Use Vue Query for server state and Pinia for app state.
+- Use Naive UI and existing shared components unless a task explicitly requires new visual design.
+- Import widget contracts from `@/shared/widgets/sdk`.
 
-## WHERE TO LOOK
-| Task                      | Location                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| API routes                | `apps/api/app/main.py`                                                       |
-| Runtime service wiring    | `apps/api/app/composition.py` (`AppContainer`, `build_app_container`)        |
-| Config profiles           | `apps/api/config/*.yaml` (`APP_CONFIG_PROFILE`)                              |
-| DB schema changes         | `apps/api/app/db/models.py` + `apps/api/alembic/`                            |
-| Frontend API calls        | `apps/web/src/shared/api/`                                                   |
-| Frontend bootstrap/routes | `apps/web/src/app/main.ts` + `apps/web/src/app/router.ts`                    |
-| Frontend modules          | `apps/web/src/modules/`                                                      |
-| Frontend views            | `apps/web/src/views/` + `apps/web/src/modules/*/views/`                      |
-| Prefect flows             | `apps/api/app/modules/*/infrastructure/flows/` + `apps/api/app/flows/`       |
-| Schedule service          | `apps/api/app/services/scheduler.py`                                         |
-| Agent runtime             | `apps/api/app/agent/`                                                        |
-| Preset definitions         | `apps/api/app/modules/dataset_{classification,detection,vqa}/presets/` | Decorator-based single-file presets (`@register`) — one .py = one complete preset |
-| Backend schema modules    | `apps/api/app/modules/dataset_{classification,detection,vqa}/domain/schema.py` | One Python module per dataset type; auto-registers on import        |
-| Frontend schema modules   | `src/modules/dataset-{classification,detection,vqa}/views/schema.ts` | One TS module per dataset type; self-registers on import            |
-| Dataset list shims        | `src/modules/dataset-{classification,detection,vqa}/views/ListShim.vue` | Per-type dataset list Vue components                                |
-| Seed scripts              | `libs/seedmaker/src/seedmaker/datasets/`                                     | Per-type seed scripts; share mock_item_generator logic with schema  |
-| Dataset storage modes     | `docs/architecture/dataset-storage-modes.md`                                 | Capability matrix for `db_full` vs `file_shard_sparse`, intent origin, and deferred scope |
-| Sparse dataset payload     | `apps/api/app/services/dataset_payload_store.py` + `apps/api/app/domain/dataset_payload.py` | Shard manifest, parquet payload storage, deterministic delete |
-| Sparse capability guards   | `apps/api/app/services/dataset_capability_guard.py`                           | `assert_not_sparse` guard for operations incompatible with `file_shard_sparse` |
-| Widget SDK contracts      | `apps/web/src/shared/widgets/sdk/`                                           | TypeScript widget type definitions and factories                    |
-| Shared web components     | `apps/web/src/shared/components/`                                            | Shared Vue/Naive UI components and dataset-list helpers             |
-| Widget SDK templates      | `apps/web/src/shared/widgets/sdk/templates/`                                 | Copy-paste starter templates for new widgets                        |
-| Frontend widget registry  | `apps/web/src/app/registrations.ts`                                          | Singleton `widgetRegistry` instance and explicit widget registration |
-| Shared sidebar widgets    | `apps/web/src/shared/components/<name>/index.ts`                             | Widget descriptors co-located with .vue components; self-contained directories |
-| Frontend importers        | `apps/web/src/registrations/import-*/`                                             | Import flow widgets (e.g. `import-manual`, `import-dataset-manual`) |
-| Frontend exporters        | `apps/web/src/registrations/export-*/`                                             | Export flow widgets (e.g. `export-preview`, `export-persist`)       |
-| Frontend preview launchers | `apps/web/src/registrations/preview-*/`                                            | Preview launcher descriptors (e.g. `preview-upstream`)                  |
-| Flow modal                | `apps/web/src/shared/components/flow-modal/FlowModal.vue`                    | 2-step modal: select type, then execute component                   |
-| Flow type selector        | `apps/web/src/shared/components/flow-type-selector/FlowTypeSelector.vue`     | Card grid for selecting a flow type                               |
-| Backend extension registry | `apps/api/app/routers/registry.py`                                           | Explicit list of backend extension routers                             |
-| Backend extension routes  | `apps/api/app/routers/*/router.py`                                           | One FastAPI router per backend extension                               |
-| Extension guide           | `docs/guides/extension-guide.md`                                      | Step-by-step guide for all 4 extension types                           |
-| Sensor registry         | `apps/api/app/sensors/registry.py`                                           | SensorRegistry — loads YAML sensor definitions |
-| Sensor YAML definitions | `apps/api/sensors/`                                                          | Engineer-authored sensor YAML files |
-| Sensor domain models    | `apps/api/app/domain/sensor.py`                                              | SensorSubscription, SensorCheckpoint, SensorEvent |
-| Sensor repository       | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for subscriptions + checkpoints |
-| Sensor dispatch service | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatch events to matching subscriptions |
-| Sensor API router       | `apps/api/app/routers/sensors/router.py`                                     | CRUD + event ingestion endpoints |
-| Sensor Prefect flow     | `apps/api/app/flows/dataset_size_sensor.py`                                  | Example sensor flow (polls dataset counts) |
-| Sensor pub/sub arch     | `docs/architecture/sensor-pubsub.md`                                         | Architecture overview |
-| Sensors frontend view   | `apps/web/src/views/SensorsView.vue`                                         | Sensor subscription management UI |
-| Widget contract shim      | `apps/web/src/components/classify/widgetContract.ts`                         | Re-exports SDK types; kept for backward compatibility               |
-| Storybook config          | `apps/web/.storybook/`                                                       | Storybook main.ts, preview.ts, mock helpers                         |
-| Widget stories            | `apps/web/src/**/*.stories.ts`                                              | Story files for app widgets and shared web components               |
+## Extension Patterns
 
-## CODE MAP
-| Symbol                  | Type       | Location                                                                 | Role                                                         |
-| ----------------------- | ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `app`                   | FastAPI    | `apps/api/app/main.py`                                                   | HTTP/SSE entrypoint                                          |
-| `AppContainer`          | composition root | `apps/api/app/composition.py`                                       | Dataclass holding all runtime singletons; built by `build_app_container(cfg)` in lifespan |
-| `TrainingOrchestrator`  | service    | `apps/api/app/services/orchestrator.py`                                  | Job persistence + notifications                              |
-| `SchedulerService`      | service    | `apps/api/app/services/scheduler.py`                                     | Prefect REST client                                          |
-| `SurfaceStore`          | service    | `apps/api/app/agent/surface_store.py`                                    | In-memory agent panel state                                  |
-| `SessionStore`          | service    | `apps/api/app/agent/session_store.py`                                    | In-memory conversation persistence (TTL-based)               |
-| `ClassifyAgent`         | service    | `apps/api/app/agent/runtime.py`                                          | LLM tool-calling loop for classify sidebar                   |
-| `GlobalAgent`           | service    | `apps/api/app/agent/global_runtime.py`                                   | Platform-wide LLM agent (read/write/sidebar)                 |
-| `useAgentCore`          | composable | `apps/web/src/shared/composables/useAgentCore.ts`                        | Shared SSE frame iteration, message accumulation, abort, status |
-| `useAgentAdapter`       | composable | `apps/web/src/features/agent/useAgentAdapter.ts`                         | App adapter: route context, auth wiring, panel orchestration |
-| `router`                | Vue Router | `apps/web/src/app/router.ts`                                             | `/datasets`, `/jobs`, `/schedules`                           |
-| `FinetuneClient`        | SDK        | `libs/python-sdk/ftsdk/client.py`                                        | Sync HTTP wrapper                                            |
-| `PreviewService`        | service    | `apps/api/app/services/preview_service.py`                               | Session lifecycle, item pagination, persist handoff          |
-| `PreviewStore`          | service    | `apps/api/app/services/preview_store.py`                                 | In-memory TTL session store                                  |
-| `MockUpstreamAdapter`   | service    | `apps/api/app/services/preview_upstream.py`                              | 50-item mock upstream; replace with real adapter             |
-| `usePreviewLoader`      | composable | `apps/web/src/composables/usePreviewLoader.ts`                           | Cursor-based preview item loader                             |
-| `PreviewClassifyView`   | view       | `apps/web/src/views/PreviewClassifyView.vue`                             | Preview workspace with grid + persist flow                   |
-| `widgetRegistry`        | singleton  | `apps/web/src/app/registrations.ts`                                      | Runtime registry of all frontend widgets                     |
-| `createDescriptorRegistry`  | factory    | `apps/web/src/shared/widgets/sdk/registry.ts`                            | Creates the `DescriptorRegistry` instance                        |
-| `useDatasetListSurface` | composable | `apps/web/src/shared/datasets/surface.ts`                                | Shared dataset list normalization, permissions, and UI props |
-| `buildDatasetColumns`   | function   | `apps/web/src/shared/datasets/surface.ts`                                | Shared dataset table column/action factory                   |
-| `defineDashboardWidget`   | factory    | `apps/web/src/shared/widgets/sdk/sidebar.ts`                             | Declares a dashboard widget                             |
-| `defineImporter`    | factory    | `apps/web/src/shared/widgets/sdk/importer.ts`                                | Declares an importer                               |
-| `defineExporter`    | factory    | `apps/web/src/shared/widgets/sdk/exporter.ts`                                | Declares an exporter                               |
-| `defineAgentSkill`      | factory    | `apps/web/src/shared/widgets/sdk/agent.ts`                               | Declares an agent skill                               |
-| `definePreviewLauncher`   | factory    | `apps/web/src/shared/widgets/sdk/preview.ts`                             | Declares a preview launcher                           |
-| `FlowModal`       | component  | `apps/web/src/shared/components/flow-modal/FlowModal.vue`       | 2-step modal: select type, then execute component            |
-| `FlowTypeSelector`    | component  | `apps/web/src/shared/components/flow-type-selector/FlowTypeSelector.vue` | Card grid for selecting a flow type                        |
-| `PanelHost`             | component  | `apps/web/src/shared/components/panel-host/PanelHost.vue`                 | Standalone panel renderer — renders SidebarPanelDescriptor[] anywhere |
-| `usePagePanels`         | composable | `apps/web/src/shared/composables/usePagePanels.ts`                        | Page-level provider for BROWSER_DASHBOARD_KEY + SIDEBAR_WIDGET_INTERACTION_KEY |
-| `PageProvider`          | component  | `apps/web/src/shared/components/page-provider/PageProvider.vue`           | Template-friendly wrapper for usePagePanels                   |
-| `useWaferHelpers`       | composable | `apps/web/src/shared/composables/useWaferHelpers.ts`                      | Shared wafer coordinate utilities (normalizeWaferPoint, injectWaferPanelData) |
-| `EXTENSION_ROUTERS`        | list       | `apps/api/app/routers/registry.py`                                       | Explicit list of all backend extension routers                  |
-| `register`               | decorator  | `apps/api/app/modules/presets/_registry.py`                                    | `@register` decorator: single-file preset registration (replaces YAML) |
-| `get_preset`             | function   | `apps/api/app/modules/presets/_registry.py`                                    | Look up registered preset class by ID |
-| `get_preset_meta`        | function   | `apps/api/app/modules/presets/_registry.py`                                    | Look up registered preset metadata by ID |
-| `PresetRegistry`         | class      | `apps/api/app/modules/presets/registry.py`                                     | Legacy YAML registry — bridges YAML + decorator presets |
-| `PresetSpec`             | model      | `apps/api/app/modules/presets/schema.py`                                       | Pydantic model for preset YAML (legacy compat) |
-| `SensorRegistry`        | class      | `apps/api/app/sensors/registry.py`                                           | Loads sensor YAML definitions; exposes get(id), list_all() |
-| `SensorDispatchService` | service    | `apps/api/app/services/sensor_dispatch.py`                                   | Dispatches sensor events to matching subscriptions; isolation per subscription |
-| `SensorRepository`      | repository | `apps/api/app/repositories/sensor_repository.py`                             | Async CRUD for SensorSubscriptionORM and SensorCheckpointORM |
-| `provideWidgetContext`  | decorator  | `apps/web/.storybook/mocks/widgetContext.ts`                             | Storybook decorator providing sidebar-widget injection keys  |
-| `mockImportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for importer props               |
-| `mockExportProps`       | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for exporter props               |
-| `mockPreviewProps`      | factory    | `apps/web/.storybook/mocks/flowProps.ts`                               | Storybook mock factory for preview launcher props            |
+Backend:
 
-## ANTI-PATTERNS — DO NOT
+- Views use `@view` and are imported by the API registration barrel.
+- Trainer/predictor metadata belongs to the API catalog; executable runtime callables belong to worker/inference runtime registries.
+- Dataset type integration must go through the dataset registry and per-type adapters, not shared hardcoded switch statements.
+- Dataset view sample APIs should resolve dataset type -> dataset class -> view adapter dynamically, not add one hardcoded route per view.
+- Dataset storage/operator code owns `db_full`, sparse shard, Parquet, manifest, and locator persistence details; domain import modules should produce generic dataset samples/import streams.
+- Prediction/training flows should execute via the runtime registry callable, not `container.gpu_worker` or hardcoded direct ML implementation calls.
+- Backend extension routers live under `apps/api/app/routers/<name>/router.py` and are listed in the extension router registry.
 
-### Architecture
-- Don't add route-level persistence; keep handlers thin, push logic into services/repository.
-- Don't change ORM models without a corresponding Alembic migration.
-- `apps/worker` is the Prefect flow-worker package; keep API, flow workers, and the inference service separated in dev/prod.
-- Don't assume Kubeflow/MinIO are live; smoke paths degrade gracefully.
-- Don't hardcode new backend URLs; the existing `localhost:8000` hardcode is a known debt.
-- Don't reuse example secrets (`postgres`, `minioadmin`) outside smoke.
-- Don't create new YAML-based presets — use the `@register` decorator in a single `.py` file under `apps/api/app/modules/dataset_*/presets/`.
-- Don't use `importlib.import_module()` or string-based entrypoints for new preset trainers/predictors — import classes directly in the preset file.
+Frontend:
 
-### Label Studio (LS)
-- Dataset = LS project. Every dataset has a mandatory `ls_project_id` (NOT NULL).
-- `ls_project_url` is computed at response time from config — never stored.
-- Platform predictions live in the API DB. Label Studio is only a temporary manual-annotation surface for synced prediction collections.
-- Don't use `cfg.label_studio.enabled` — it was removed. LS is always required; check `cfg.label_studio.url`.
-- Don't re-add the "link to LS" manual flow — it was intentionally removed.
-- VQA predictions are stored as Label Studio `textarea` results, not classification choices.
-- Prediction collection sync to LS is one-way and manual. Do not treat LS prediction IDs as durable platform provenance.
+- Register widgets/importers/exporters/preview launchers/agent skills through descriptors and app-level registration.
+- Do not register widgets directly in `main.ts`, page views, or sidebar shells.
+- Lazy-load widget components in descriptors when possible.
+- Use `FlowModal` and `FlowTypeSelector` for import/export/preview selection flows.
+- For page design-only iteration, use the `page-design-contract` skill and keep `*.design.vue` files out of production routes.
 
-### Widget Architecture
-- Don't register widgets directly in `main.ts`, `BrowserSidebar.vue`, or `DatasetDetailView.vue` — always add to `apps/web/src/registrations/index.ts`.
-- Each registration `index.ts` exports a named descriptor; the barrel file does the registration. Don't call `widgetRegistry.register*()` inside registration modules.
-- Don't import widget `.vue` files statically in registration `index.ts` — use `() => import(...)` (async) so the registry resolves components lazily.
-- Don't bypass `widgetRegistry` for sidebar rendering — app surfaces pass `widgetRegistry.getWidgetComponent(key)` into the shared `BrowserSidebar.vue` resolver prop.
-- Don't add new widget cases to `sidebarConfig.ts` — `SIDEBAR_WIDGETS` and `WIDGET_COMPONENTS` were intentionally removed; use `defineDashboardWidget` instead.
-- Don't import from `widgetContract.ts` for new widget code — import widget contracts from `@/shared/widgets/sdk`.
-- Don't add hardcoded import/export/preview modals to views — use `FlowModal` and `FlowTypeSelector` for the 2-step flow selection.
-- Backend extension routes must live under `apps/api/app/routers/<name>/router.py`; they must be added to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py` — don't manually import them in `main.py`.
+## OpenAPI Contract
 
-### Code Quality
-- Don't suppress type errors with `as any`, `@ts-ignore`, `@ts-expect-error`.
-- Don't weaken `strict: true` in tsconfig.
-- Don't skip `from __future__ import annotations` in new Python files.
-- Don't use `Optional[X]` — use `X | None`.
+`openapi/openapi.yaml` is the transport contract source of truth, re-exported from FastAPI routes by `make generate`.
 
-## CONVENTIONS
-- Python packages managed by `uv`; frontend by `pnpm`.
-- `APP_CONFIG_PROFILE=test` is test-only; supported runtime profiles are `dev` and `prod`.
-- `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect + shared S3-compatible storage.
-- K8s namespace: `finetune`; config via `finetune-config` and `finetune-secrets`.
-- Job progress exposed via SSE, not websockets.
-- Presets are engineer-managed **single Python files** (`apps/api/app/modules/dataset_*/presets/<id>.py`) decorated with `@register(...)`. YAML presets are legacy — new presets must use the decorator.
-- To add a new training preset: create `apps/api/app/modules/dataset_<type>/presets/<my_preset>.py`, decorate the class with `@register(id=..., name=..., ...)`, implement `.train()`, `.predict()`, and `.pipeline()` static methods, then add `from . import <my_preset>` to `apps/api/app/modules/dataset_<type>/presets/__init__.py`. Config, model metadata, trainer/predictor references are all direct Python imports — no YAML, no string importlib entries.
-- Seed scripts must resolve bundled presets from the read-only preset registry; they must not POST new training presets.
-- Active DSPy runtime path is VQA (`dspy-vqa-v1`); do not add placeholder DSPy trainer/predictor configs.
-- `storage_mode` (`db_full` | `file_shard_sparse`) is the dataset-level distinction for storage semantics. It is orthogonal to `dataset_type` — a classification dataset and a VQA dataset can each be either mode. Never infer storage behavior from the semantic type; always branch on `storage_mode`.
-- See `apps/api/AGENTS.md` and `apps/web/AGENTS.md` for sub-project details.
-- Widget SDK contracts and factories live in `apps/web/src/shared/widgets/sdk/`; import them via `@/shared/widgets/sdk`.
-- To add a reusable first-party widget: create the .vue component in `apps/web/src/shared/components/<name>/<Name>Widget.vue`, create a widget descriptor in `apps/web/src/shared/components/<name>/index.ts` via `defineDashboardWidget({...})`, export both from `apps/web/src/shared/index.ts`, then register the descriptor in `apps/web/src/app/registrations.ts`. Widget components are general-purpose and can be rendered via `PanelHost` anywhere in a page.
-- To add a new importer: create a descriptor alongside its component (shared components for reusable flows, or the owning module for domain-specific flows), export a named descriptor via `defineImporter({...})`, then register in `apps/web/src/app/registrations.ts`. Importers use `FlowModal` with `kind="import"` for a 2-step type-selection flow.
-- To add a new exporter: create a descriptor alongside its component, export a named descriptor via `defineExporter({...})`, then register in `apps/web/src/app/registrations.ts`. Exporters use `FlowModal` with `kind="export"`.
-- To add a new preview launcher: create a descriptor alongside its component, export a named descriptor via `definePreviewLauncher({...})`, then register in `apps/web/src/app/registrations.ts`. Preview launchers use `FlowTypeSelector` for a 2-step flow.
-- To add a new backend extension route: create `apps/api/app/routers/<name>/router.py` with an `APIRouter` named `router`, then add it to `EXTENSION_ROUTERS` in `apps/api/app/routers/registry.py`.
+When changing request/response DTOs:
 
-### Route Handler DI Patterns
-- Use FastAPI dependency functions from each module's `apps/api/app/modules/*/api/deps.py` for route handlers.
-- Runtime singletons are provided by `AppContainer` in `apps/api/app/composition.py`; access via `request.app.state.container` inside `get_xxx(request: Request)` dep functions.
-- Keep handlers thin: dependencies provide services, handlers delegate business logic to module services/repositories.
-- Test overrides: use `app.dependency_overrides[get_xxx] = lambda: FakeXxx()` — set before `with TestClient(app) as c:`, cleared after.
-- Do NOT import `container` or `services` from `app.main` in routers or tests.
-- Do NOT use `@inject`, `Provide[Container.xxx]`, or `container.override()` — the `dependency-injector` library is removed.
+1. Update route/schema DTO code.
+2. Run `make generate` (or the narrow generation target) to re-export `openapi/openapi.yaml` and regenerate backend/frontend artifacts.
+3. Update UI usage.
+4. Run `make test` to verify OpenAPI sync.
 
-## SERVICE BOUNDARY TESTING
-- Every external-service boundary (Prefect, inference worker, embedding gRPC, LLM) must have a corresponding autouse mock fixture in `apps/api/tests/conftest.py`. Current fixtures: `_mock_ls_client`, `_mock_embedding_service`, `_mock_inference_worker`.
-- Worker-side flow functions (`apps/api/app/flows/`, `apps/api/app/modules/dataset_*/runtime/`) must have direct unit tests that call them as plain Python with a real test DB and mocked external services. See `test_training_runner.py` and `test_prediction_flow.py` for the established pattern.
-- When adding a new external service integration, add the mock fixture FIRST, then write the flow/service code.
-- Flow tasks should use the `AppContainer` accessors from `app.state.container` (set by lifespan) or `build_flow_container(cfg)` for standalone Prefect flows.
+Do not hand-write duplicate transport DTOs that already exist in generated OpenAPI artifacts. Internal helper models and UI-only models are fine. Do not manually edit `openapi/openapi.yaml` — it is overwritten by `make generate`.
 
-## NOTES
-- No CI pipeline is configured. Conventions are enforced manually.
-- Test coverage is backend-only; frontend, SDK, and worker are untested.
-- Auth scaffolding exists but route protection is not wired — don't assume auth is enforced.
+## Local Knowledge
 
-## DOCUMENTATION RULE
-- After completing any non-trivial task, either:
-  1) update the relevant docs in `docs/` and/or `AGENTS.md`, or
-  2) explicitly ask the user whether they want docs updated in this change.
+- Root details: this file and `CORE_DESIGNS.md`.
+- API specifics: `apps/api/AGENTS.md`.
+- Web specifics: `apps/web/AGENTS.md`.
+- SDK shim specifics: `libs/python-sdk/AGENTS.md`.
+- Infra specifics: `infra/AGENTS.md`.
 
-## TEST RULE
-- Always run `make test` after modify code files and resolve any error.
+If local `AGENTS.md` files conflict with `CORE_DESIGNS.md`, follow `CORE_DESIGNS.md` and report the conflict.
 
-## TYPE CHECK & LINT RULE
-- After modifying Python code, run `uv run --directory apps/api pyright .` from repo root. Resolve all newly introduced diagnostics.
-  - Use `# pyright: ignore[...]` or `# type: ignore[report...]` to suppress false positives from third-party stub issues.
-  - If `pyright` is unavailable, use `uv tool run pyright apps/api`.
-- After modifying Python code, run `ruff check apps/api` from repo root. Fix all newly introduced errors.
-  - Run `ruff check apps/api --fix` for auto-fixable issues (unused imports, etc.).
-  - If `ruff` is unavailable, use `uv tool run ruff check apps/api`.
-- These commands replace the former "no linter" convention. Treat type/lint errors the same as test failures.
+## Git And Docs
 
-## IMPORT REPLACEMENT RULE
-
-- **Default tool**: `ast_grep_replace` for all import changes. Never use `sed` for import manipulation unless the change is demonstrably single-line, single-file, with no multi-line imports or string/comment collisions in that file.
-- **Why**: `sed` silently breaks multi-line imports (parenthesized `from` blocks), matches inside string literals and comments, and corrupts indentation in conditional imports. `ast_grep_replace` is AST-aware and preserves structure.
-- **Correct patterns**:
-
-| Language | Task | Pattern → Rewrite |
-|----------|------|-------------------|
-| Python | Rename module path | `from old.pkg import $$$` → `from new.pkg import $$$` |
-| Python | Rename exact import name | `from pkg import OldName` → `from pkg import NewName` |
-| TypeScript | Rename module path (named imports) | `import { $$$ } from 'old/pkg'` → `import { $$$ } from 'new/pkg'` |
-| TypeScript | Rename module path (default import) | `import $DEF from 'old/pkg'` → `import $DEF from 'new/pkg'` |
-
-- `$$$` (ellipsis) matches **zero or more nodes** at that position — handles single-line, multi-import, and parenthesized multi-line imports correctly.
-- **Add-to-import limitation**: `from pkg import $$$` → `from pkg import NewName, $$$` will **duplicate** `NewName` if already present. Always dry-run first (`dryRun=true`) and verify the result.
-
-## DOCKER BUILD RULE
-- After modifying backend or frontend code, verify Docker images build successfully:
-  - **API**: `docker compose -f infra/compose/docker-compose.yaml build api`
-  - **Web**: `docker compose -f infra/compose/docker-compose.yaml build web`
-- Treat Docker build failures the same as test failures — fix before committing.
-- If Docker is unavailable, run `make build-web` for frontend build verification as fallback.
-
-## COMMIT RULE
-- After completing code changes, remind the user to ask you to commit. Do not commit automatically — wait for the user to explicitly request it.
-
-## LOCAL ENV RULE
-- Keep the local dev environment newest after code or config changes.
-- If changes require rebuilding assets, restarting dev servers, or recreating compose services to take effect, do it proactively without waiting for the user to ask.
-
-## SMOKE TEST REMINDER
-
-**IMPORTANT: Run smoke tests after making significant changes.**
-
-Before considering a feature complete or a bug fixed:
-1. Run `make test` to verify backend tests pass
-2. Follow the verification steps: run `make test`, check auth/dataset/training flows in the browser, verify no console errors
-3. At minimum, verify:
-   - Auth flow (login/logout)
-   - Dataset creation (LS integration)
-   - Training job creation (SSE events)
-   - No console errors in browser
-
-Many features have broken silently during project evolution. Manual verification catches integration issues that unit tests miss.
+- Never revert or overwrite user changes unless explicitly asked.
+- Do not revert unrelated "wrong file write" changes; parallel agents may be working in unrelated domains, and these are often false alarms.
+- Do not commit unless the user explicitly asks.
+- After non-trivial code changes, update relevant docs or ask whether docs should be updated.
+- Before committing, inspect status, diff, and recent log; show the `CORE_DESIGNS.md` diff if that file changed.

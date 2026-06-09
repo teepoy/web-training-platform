@@ -21,7 +21,7 @@ const componentResolver = (key: string) => {
 const mockContext = { totalLoaded: 120, filteredCount: 90 };
 
 const meta = {
-  title: "web-ui/components/BrowserSidebar",
+  title: "Shared/BrowserSidebar",
   component: BrowserSidebar,
 } satisfies Meta<typeof BrowserSidebar>;
 

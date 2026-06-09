@@ -1,0 +1,910 @@
+{
+  "$defs": {
+    "AgentActionEvent": {
+      "properties": {
+        "event_type": {
+          "const": "agent-action",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "tool",
+        "summary"
+      ],
+      "title": "AgentActionEvent",
+      "type": "object"
+    },
+    "AgentMessageEvent": {
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "event_type": {
+          "const": "agent-message",
+          "title": "Event Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "content"
+      ],
+      "title": "AgentMessageEvent",
+      "type": "object"
+    },
+    "DoneEvent": {
+      "properties": {
+        "dataset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset Id"
+        },
+        "event_type": {
+          "const": "done",
+          "title": "Event Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type"
+      ],
+      "title": "DoneEvent",
+      "type": "object"
+    },
+    "ScErrorEvent": {
+      "properties": {
+        "error": {
+          "title": "Error",
+          "type": "string"
+        },
+        "event_type": {
+          "const": "error",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "flow_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow Run Id"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "event_type",
+        "error"
+      ],
+      "title": "ScErrorEvent",
+      "type": "object"
+    },
+    "ScProgressEvent": {
+      "properties": {
+        "dataset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset Id"
+        },
+        "event_type": {
+          "const": "progress",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "flow_run_id": {
+          "title": "Flow Run Id",
+          "type": "string"
+        },
+        "imported_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Imported Count"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "flow_run_id",
+        "status"
+      ],
+      "title": "ScProgressEvent",
+      "type": "object"
+    },
+    "SidebarUpdateEvent": {
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "event_type": {
+          "const": "sidebar-update",
+          "title": "Event Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "data"
+      ],
+      "title": "SidebarUpdateEvent",
+      "type": "object"
+    },
+    "TaskTrackerCheckResult": {
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "status"
+      ],
+      "title": "TaskTrackerCheckResult",
+      "type": "object"
+    },
+    "TaskTrackerDeepLinks": {
+      "properties": {
+        "platform_job_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform Job Url"
+        },
+        "prefect_deployment_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefect Deployment Url"
+        },
+        "prefect_run_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefect Run Url"
+        }
+      },
+      "title": "TaskTrackerDeepLinks",
+      "type": "object"
+    },
+    "TaskTrackerDerived": {
+      "properties": {
+        "active_node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Node"
+        },
+        "artifacts": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "capacity_status": {
+          "default": "unknown",
+          "title": "Capacity Status",
+          "type": "string"
+        },
+        "deep_links": {
+          "$ref": "#/$defs/TaskTrackerDeepLinks"
+        },
+        "display_status": {
+          "title": "Display Status",
+          "type": "string"
+        },
+        "dynamic_console_lines": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dynamic Console Lines",
+          "type": "array"
+        },
+        "execution_kind": {
+          "title": "Execution Kind",
+          "type": "string"
+        },
+        "pool_concurrency_limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pool Concurrency Limit"
+        },
+        "pool_slots_used": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pool Slots Used"
+        },
+        "prefect_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefect State"
+        },
+        "queue_depth_ahead": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Depth Ahead"
+        },
+        "queue_priority": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Priority"
+        },
+        "queue_priority_label": {
+          "default": "none",
+          "title": "Queue Priority Label",
+          "type": "string"
+        },
+        "scorecard": {
+          "$ref": "#/$defs/TaskTrackerScorecard"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        },
+        "stages": {
+          "items": {
+            "$ref": "#/$defs/TaskTrackerStage"
+          },
+          "title": "Stages",
+          "type": "array"
+        },
+        "summary_metrics": {
+          "$ref": "#/$defs/TaskTrackerSummaryMetrics"
+        },
+        "task_kind": {
+          "title": "Task Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_kind",
+        "execution_kind",
+        "display_status",
+        "stage"
+      ],
+      "title": "TaskTrackerDerived",
+      "type": "object"
+    },
+    "TaskTrackerDetailResponse": {
+      "properties": {
+        "derived": {
+          "$ref": "#/$defs/TaskTrackerDerived"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": true,
+          "title": "Meta",
+          "type": "object"
+        },
+        "raw": {
+          "$ref": "#/$defs/TaskTrackerRawPayload"
+        },
+        "task_kind": {
+          "title": "Task Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "task_kind",
+        "raw",
+        "derived"
+      ],
+      "title": "TaskTrackerDetailResponse",
+      "type": "object"
+    },
+    "TaskTrackerNode": {
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ended At"
+        },
+        "expected_start_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Start At"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "status"
+      ],
+      "title": "TaskTrackerNode",
+      "type": "object"
+    },
+    "TaskTrackerRawPayload": {
+      "properties": {
+        "deployment": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deployment"
+        },
+        "flow_run": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow Run"
+        },
+        "gpu_job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Job Id"
+        },
+        "logs": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Logs",
+          "type": "array"
+        },
+        "platform_job": {
+          "additionalProperties": true,
+          "title": "Platform Job",
+          "type": "object"
+        },
+        "work_pool": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Work Pool"
+        },
+        "work_queue": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Work Queue"
+        }
+      },
+      "title": "TaskTrackerRawPayload",
+      "type": "object"
+    },
+    "TaskTrackerScorecard": {
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/TaskTrackerCheckResult"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "default": 0,
+          "title": "Errors",
+          "type": "integer"
+        },
+        "warnings": {
+          "default": 0,
+          "title": "Warnings",
+          "type": "integer"
+        }
+      },
+      "title": "TaskTrackerScorecard",
+      "type": "object"
+    },
+    "TaskTrackerStage": {
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/TaskTrackerNode"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "status"
+      ],
+      "title": "TaskTrackerStage",
+      "type": "object"
+    },
+    "TaskTrackerStateChangeEvent": {
+      "properties": {
+        "event_type": {
+          "const": "state-change",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "task": {
+          "$ref": "#/$defs/TaskTrackerDetailResponse"
+        }
+      },
+      "required": [
+        "event_type",
+        "task"
+      ],
+      "title": "TaskTrackerStateChangeEvent",
+      "type": "object"
+    },
+    "TaskTrackerSummaryMetrics": {
+      "properties": {
+        "failed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Failed"
+        },
+        "processed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Processed"
+        },
+        "rate_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate Hint"
+        },
+        "skipped": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skipped"
+        },
+        "successful": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Successful"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        }
+      },
+      "title": "TaskTrackerSummaryMetrics",
+      "type": "object"
+    },
+    "TrainingEpochEvent": {
+      "properties": {
+        "event_type": {
+          "const": "epoch",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "job_id",
+        "ts",
+        "message"
+      ],
+      "title": "TrainingEpochEvent",
+      "type": "object"
+    },
+    "TrainingMetricEvent": {
+      "properties": {
+        "event_type": {
+          "const": "metric",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "job_id",
+        "ts",
+        "message"
+      ],
+      "title": "TrainingMetricEvent",
+      "type": "object"
+    },
+    "TrainingStatusEvent": {
+      "properties": {
+        "event_type": {
+          "const": "status",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_type",
+        "job_id",
+        "ts",
+        "message"
+      ],
+      "title": "TrainingStatusEvent",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "agent-action": "#/$defs/AgentActionEvent",
+      "agent-message": "#/$defs/AgentMessageEvent",
+      "done": "#/$defs/DoneEvent",
+      "epoch": "#/$defs/TrainingEpochEvent",
+      "error": "#/$defs/ScErrorEvent",
+      "metric": "#/$defs/TrainingMetricEvent",
+      "progress": "#/$defs/ScProgressEvent",
+      "sidebar-update": "#/$defs/SidebarUpdateEvent",
+      "state-change": "#/$defs/TaskTrackerStateChangeEvent",
+      "status": "#/$defs/TrainingStatusEvent"
+    },
+    "propertyName": "event_type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AgentMessageEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentActionEvent"
+    },
+    {
+      "$ref": "#/$defs/SidebarUpdateEvent"
+    },
+    {
+      "$ref": "#/$defs/DoneEvent"
+    },
+    {
+      "$ref": "#/$defs/ScProgressEvent"
+    },
+    {
+      "$ref": "#/$defs/ScErrorEvent"
+    },
+    {
+      "$ref": "#/$defs/TrainingEpochEvent"
+    },
+    {
+      "$ref": "#/$defs/TrainingMetricEvent"
+    },
+    {
+      "$ref": "#/$defs/TrainingStatusEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskTrackerStateChangeEvent"
+    }
+  ],
+  "title": "SSEEvent"
+}

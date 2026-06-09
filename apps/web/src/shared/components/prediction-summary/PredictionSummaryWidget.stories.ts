@@ -3,7 +3,7 @@ import PredictionSummaryWidget from "./PredictionSummaryWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/PredictionSummaryWidget",
+  title: "Shared/PredictionSummaryWidget",
   component: PredictionSummaryWidget,
   decorators: [
     provideWebUiContext({

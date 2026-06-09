@@ -3,7 +3,7 @@
 Run locally:
 
 ```bash
-uv run uvicorn app.main:app --reload --port 8000
+fastapi dev app/main.py
 ```
 
 Run migrations:

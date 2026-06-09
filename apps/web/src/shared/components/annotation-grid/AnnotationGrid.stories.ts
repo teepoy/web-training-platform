@@ -16,7 +16,7 @@ const annotationItems: AnnotationGridItem[] = Array.from({ length: 15 }, (_, i) 
 const labelSpace = ["cat", "dog", "bird", "fish", "rabbit"];
 
 const meta = {
-  title: "web-ui/components/AnnotationGrid",
+  title: "Shared/AnnotationGrid",
   component: AnnotationGrid,
   render: (args) => ({
     components: { AnnotationGrid },

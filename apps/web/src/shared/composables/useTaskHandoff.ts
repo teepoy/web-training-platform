@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue'
-import type { TaskTrackerDetail, TaskTrackerSummary } from '@/types'
 import { getTrackedTask } from '@/shared/api/task-tracker'
 import { buildTrackedTaskEventSource } from '@/shared/api/sse'
+import type { TaskTrackerDetailResponse as TaskTrackerDetail, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 
 const watchedTasks = ref<Record<string, TaskTrackerSummary>>({})
 const previousStatuses = new Map<string, string>()

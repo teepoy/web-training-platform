@@ -1,6 +1,4 @@
-import type { DatasetAnnotationStats } from "../api/types";
-
-export type { DatasetAnnotationStats as ClassifyDashboardStats };
+import type { DatasetAnnotationStats } from "@/generated/orval/models";
 
 export interface ClassifyDashboardContext {
   stats: DatasetAnnotationStats | null;

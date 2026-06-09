@@ -11,7 +11,7 @@ graph TB
     end
 
     subgraph CLI["💻 CLI / SDK"]
-        Ftctl["ftctl CLI<br/>libs/python-sdk/"]
+        Ftctl["ftctl CLI<br/>libs/platform-runtime/"]
         FinetuneClient["FinetuneClient<br/>(Sync HTTP Wrapper)"]
         Ftctl --> FinetuneClient
     end
@@ -54,7 +54,7 @@ graph TB
         Prefect[("Prefect Server :4200<br/>Flow Orchestration<br/>Work Pools")]
         LabelStudio["Label Studio :8080<br/>Manual Annotation UI"]
         LLM["LLM Provider<br/>(OpenAI/Qwen/Gemini/Anthropic)<br/>via litellm"]
-        Embedding["Embedding gRPC :50051<br/>Feature Extraction<br/>(CLIP, etc.)"]
+        Embedding["Embedding Service (future gRPC) :50051<br/>Feature Extraction<br/>(CLIP, etc.)"]
     end
 
     subgraph Workers["🔧 Workers"]
@@ -95,8 +95,8 @@ graph TB
     GlobalAgent -->|"Tool-calling"| LLM
     ClassifyAgent -->|"Tool-calling"| LLM
 
-    %% Backend → Embedding
-    Container -->|"gRPC"| Embedding
+    %% Backend → Embedding (future gRPC)
+    Container -->|"gRPC (future)"| Embedding
 
     %% Prefect → Workers
     Prefect -->|"Dispatch flow runs"| PrefectWorker

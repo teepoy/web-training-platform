@@ -67,7 +67,7 @@ class TestSessionStore:
     """Direct unit tests for SessionStore."""
 
     def test_create_and_retrieve_session(self) -> None:
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -84,7 +84,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_append_and_get_messages(self) -> None:
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -96,13 +96,13 @@ class TestSessionStore:
             ])
             msgs = await store.get_messages("sess-2")
             assert len(msgs) == 2
-            assert msgs[0]["content"] == "hello"  # pyright: ignore[reportTypedDictNotRequiredAccess]
-            assert msgs[1]["content"] == "hi there"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            assert msgs[0].get("content", "") == "hello"
+            assert msgs[1].get("content", "") == "hi there"
 
         asyncio.run(_run())
 
     def test_truncation(self) -> None:
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore(max_messages_per_session=5)
 
@@ -114,12 +114,12 @@ class TestSessionStore:
             msgs = await store.get_messages("sess-3")
             assert len(msgs) == 5
             # Should keep the last 5
-            assert msgs[0]["content"] == "msg-5"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            assert msgs[0].get("content", "") == "msg-5"
 
         asyncio.run(_run())
 
     def test_clear_session(self) -> None:
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore()
 
@@ -138,7 +138,7 @@ class TestSessionStore:
 
     def test_ttl_eviction(self) -> None:
         import time
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore(ttl_seconds=0)
 
@@ -152,7 +152,7 @@ class TestSessionStore:
         asyncio.run(_run())
 
     def test_max_sessions_cap(self) -> None:
-        from app.modules.agent.application.services.session_store import SessionStore
+        from app.modules.agent.app.services.session_store import SessionStore
 
         store = SessionStore(max_sessions=3)
 
@@ -176,7 +176,7 @@ class TestGlobalToolDefinitions:
     """Test that get_tool_definitions returns the right tools for context."""
 
     def test_tools_without_classify_context(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import get_tool_definitions
+        from app.modules.agent.adapter.tools.global_tools import get_tool_definitions
         from app.shared.api.schemas import AgentContext
 
         ctx = AgentContext(page="/datasets")
@@ -192,7 +192,7 @@ class TestGlobalToolDefinitions:
         assert "get_surface_state" not in tool_names
 
     def test_tools_with_classify_context(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import get_tool_definitions
+        from app.modules.agent.adapter.tools.global_tools import get_tool_definitions
         from app.shared.api.schemas import AgentContext
 
         ctx = AgentContext(page="/datasets/abc/classify", dataset_id="abc")
@@ -207,15 +207,15 @@ class TestGlobalToolDefinitions:
         assert "get_surface_state" in tool_names
 
     def test_read_tool_count(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import READ_TOOLS
+        from app.modules.agent.adapter.tools.global_tools import READ_TOOLS
         assert len(READ_TOOLS) == 10
 
     def test_write_tool_count(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import WRITE_TOOLS
+        from app.modules.agent.adapter.tools.global_tools import WRITE_TOOLS
         assert len(WRITE_TOOLS) == 5
 
     def test_sidebar_tool_count(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import SIDEBAR_TOOLS
+        from app.modules.agent.adapter.tools.global_tools import SIDEBAR_TOOLS
         assert len(SIDEBAR_TOOLS) == 3
 
 
@@ -228,7 +228,7 @@ class TestGlobalAssembler:
     """Test the global prompt assembler."""
 
     def test_basic_assembly(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.modules.agent.adapter.tools.global_assembler import assemble_global_prompt
         from app.shared.api.schemas import AgentContext
 
         async def _run():
@@ -246,7 +246,7 @@ class TestGlobalAssembler:
         asyncio.run(_run())
 
     def test_assembly_with_classify_page(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.modules.agent.adapter.tools.global_assembler import assemble_global_prompt
         from app.shared.api.schemas import AgentContext
 
         async def _run():
@@ -265,7 +265,7 @@ class TestGlobalAssembler:
         asyncio.run(_run())
 
     def test_assembly_with_platform_stats(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_assembler import assemble_global_prompt
+        from app.modules.agent.adapter.tools.global_assembler import assemble_global_prompt
         from app.shared.api.schemas import AgentContext
 
         async def _run():
@@ -275,7 +275,7 @@ class TestGlobalAssembler:
                 user_email="test@example.com",
                 org_id="org-1",
                 org_name="TestOrg",
-                platform_stats={"dataset_count": 5, "job_count": 10, "model_count": 3, "preset_count": 2},
+                platform_stats={"dataset_count": 5, "job_count": 10, "model_count": 3, "trainer_count": 2},
             )
             assert "Datasets: 5" in prompt
             assert "Training jobs: 10" in prompt
@@ -317,7 +317,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -325,7 +325,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -397,7 +397,7 @@ class TestGlobalAgentChat:
         with TestClient(app) as c:
             _create_dataset(c, name="global-chat-ds-1")
 
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -405,7 +405,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -483,7 +483,7 @@ class TestGlobalAgentChat:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="global-classify-ds")
 
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -491,7 +491,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -518,8 +518,8 @@ class TestGlobalAgentChat:
 
                     sidebar_evt = next(e for e in events if e["event"] == "sidebar-update")
                     sidebar_data = json.loads(sidebar_evt["data"])
-                    assert len(sidebar_data["panels"]) == 1
-                    assert sidebar_data["panels"][0]["id"] == "overview-chart"
+                    assert len(sidebar_data["data"]["panels"]) == 1
+                    assert sidebar_data["data"]["panels"][0]["id"] == "overview-chart"
             finally:
                 cfg.llm.base_url = original_base_url
                 cfg.llm.api_key = original_api_key
@@ -539,7 +539,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -547,7 +547,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", return_value=mock_llm_response):
                     # First message
                     r1 = c.post(
                         "/api/v1/agent/chat",
@@ -571,7 +571,7 @@ class TestGlobalAgentChat:
                     assert r2.status_code == 200
 
                     # Verify session store has accumulated messages
-                    session_store = app.state.container.session_store
+                    session_store = app.state.app_context.agent.session_store
 
                     async def _check():
                         msgs = await session_store.get_messages("persist-test-session")
@@ -612,7 +612,7 @@ class TestGlobalAgentChat:
         }
 
         with TestClient(app) as c:
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -620,7 +620,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={"message": "Hi"},
@@ -638,7 +638,7 @@ class TestGlobalAgentChat:
             raise RuntimeError("LLM is down")
 
         with TestClient(app) as c:
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -646,7 +646,7 @@ class TestGlobalAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.agent.application.services.global_runtime._call_llm", side_effect=_failing_llm):
+                with patch("app.modules.agent.app.services.global_runtime._call_llm", side_effect=_failing_llm):
                     r = c.post(
                         "/api/v1/agent/chat",
                         json={
@@ -675,7 +675,7 @@ class TestGlobalToolExecution:
     """Unit tests for global tool execute_* functions."""
 
     def test_execute_list_datasets(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_list_datasets
+        from app.modules.agent.adapter.tools.global_tools import execute_list_datasets
 
         async def _run():
             mock_repo = MagicMock()
@@ -693,7 +693,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_get_dataset_not_found(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_get_dataset
+        from app.modules.agent.adapter.tools.global_tools import execute_get_dataset
 
         async def _run():
             mock_repo = MagicMock()
@@ -706,25 +706,8 @@ class TestGlobalToolExecution:
 
         asyncio.run(_run())
 
-    def test_execute_list_presets(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_list_presets
-
-        async def _run():
-            mock_registry = MagicMock()
-            p = MagicMock()
-            p.id = "preset-1"
-            p.name = "ResNet50"
-            p.trainable = True
-            mock_registry.list_presets.return_value = [p]
-
-            result = await execute_list_presets(preset_registry=mock_registry)
-            assert result["count"] == 1
-            assert result["presets"][0]["name"] == "ResNet50"
-
-        asyncio.run(_run())
-
     def test_execute_get_dashboard(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_get_dashboard
+        from app.modules.agent.adapter.tools.global_tools import execute_get_dashboard
 
         async def _run():
             mock_repo = MagicMock()
@@ -744,7 +727,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_cancel_training_job_not_found(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_cancel_training_job
+        from app.modules.agent.adapter.tools.global_tools import execute_cancel_training_job
 
         async def _run():
             mock_repo = MagicMock()
@@ -759,7 +742,7 @@ class TestGlobalToolExecution:
         asyncio.run(_run())
 
     def test_execute_list_schedules(self) -> None:
-        from app.modules.agent.infrastructure.tools.global_tools import execute_list_schedules
+        from app.modules.agent.adapter.tools.global_tools import execute_list_schedules
 
         async def _run():
             mock_svc = MagicMock()
@@ -783,9 +766,9 @@ class TestGlobalAgentRuntime:
     """Unit tests for GlobalAgent class directly."""
 
     def test_summarise_tool_call_read(self) -> None:
-        from app.modules.agent.application.services.global_runtime import GlobalAgent
-        from app.modules.agent.application.services.session_store import SessionStore
-        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.app.services.global_runtime import GlobalAgent
+        from app.modules.agent.app.services.session_store import SessionStore
+        from app.modules.agent.app.services.surface_store import SurfaceStore
 
         agent = GlobalAgent(
             llm_base_url="http://fake:8080/v1",
@@ -794,11 +777,12 @@ class TestGlobalAgentRuntime:
             session_store=SessionStore(),
             surface_store=SurfaceStore(),
             repository=MagicMock(),
+            dataset_storage_factory=MagicMock(),
+            session_factory=MagicMock(),
             orchestrator=MagicMock(),
             prediction_orchestrator=MagicMock(),
             scheduler_service=MagicMock(),
             model_service=MagicMock(),
-            preset_registry=MagicMock(),
             label_studio_client=MagicMock(),
         )
 

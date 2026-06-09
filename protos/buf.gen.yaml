@@ -1,0 +1,11 @@
+version: v1
+plugins:
+  - name: python
+    out: ../libs/protos/src/proto_stubs
+    # protoc_path: protoc-29.3.0
+  - plugin: mypy
+    out: ../libs/protos/src/proto_stubs
+  - plugin: es
+    out: ../apps/web/src/features/sc/generated/proto
+    opt: target=ts
+    path: protoc-gen-es

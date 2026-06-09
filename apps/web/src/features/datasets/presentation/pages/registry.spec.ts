@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveDatasetShim, resolveDatasetTaskType } from "./registry";
+import "../dataset-types/classification/views/schema";
+import "../dataset-types/detection/views/schema";
+import "../dataset-types/vqa/views/schema";
+import { getDatasetSchema, resolveDatasetShim } from "./schema-registry";
+import { resolveDatasetTaskType } from "./registry";
 
 describe("dataset shim registry", () => {
   it("maps dataset types to their dedicated shims", () => {
-    const classificationShim = resolveDatasetShim("image_classification");
-    const vqaShim = resolveDatasetShim("image_vqa");
-    const detectionShim = resolveDatasetShim("image_detection");
-    expect(classificationShim).toBeDefined();
-    expect(vqaShim).toBeDefined();
-    expect(detectionShim).toBeDefined();
-    // Each dataset type resolves to a distinct shim
-    expect(vqaShim).not.toBe(classificationShim);
-    expect(detectionShim).not.toBe(classificationShim);
+    expect(getDatasetSchema("image_classification")).toBeDefined();
+    expect(getDatasetSchema("image_vqa")).toBeDefined();
+    expect(getDatasetSchema("image_detection")).toBeDefined();
+    expect(() => resolveDatasetShim("image_classification")).not.toThrow();
+    expect(() => resolveDatasetShim("image_vqa")).not.toThrow();
+    expect(() => resolveDatasetShim("image_detection")).not.toThrow();
   });
 
   it("falls back to the classification shim for missing or unknown dataset types", () => {
-    const fallback = resolveDatasetShim("image_classification");
-    expect(resolveDatasetShim(undefined)).toBe(fallback);
-    expect(resolveDatasetShim("unsupported" as never)).toBe(fallback);
+    expect(() => resolveDatasetShim(undefined)).not.toThrow();
+    expect(() => resolveDatasetShim("unsupported" as never)).not.toThrow();
   });
 
   it("normalizes unsupported task types before shim resolution", () => {

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import SampleViewerWidget from "./SampleViewerWidget.vue";
 
 const meta = {
-  title: "web-ui/widgets/SampleViewerWidget",
+  title: "Shared/SampleViewerWidget",
   component: SampleViewerWidget,
   args: {
     data: {

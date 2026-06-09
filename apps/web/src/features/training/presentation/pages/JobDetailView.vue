@@ -3,7 +3,7 @@
     <n-page-header :title="job ? job.id : 'Loading…'" @back="router.push('/jobs')">
       <template #subtitle>
         <n-space align="center" :size="8">
-          <n-tag v-if="job" :type="statusType(job.status)" size="small" round>
+          <n-tag v-if="job" :type="statusType(job.status!)" size="small" round>
             {{ job.status }}
           </n-tag>
           <span v-if="job" style="color: var(--n-text-color-3); font-size: 12px">
@@ -34,7 +34,7 @@
     <n-alert v-else-if="isError" type="error" :title="(error as Error)?.message ?? 'Failed to load job'" />
 
     <template v-else-if="job">
-      <n-card title="Training Progress" :bordered="true">
+      <n-card title="Training Progress" :bordered="true" data-testid="job-training-progress-card">
         <TrainingChart :events="events" :metrics-artifact="metricsArtifact" />
       </n-card>
 
@@ -80,15 +80,20 @@
 <script setup lang="ts">
 import { computed, ref, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useDialog, useMessage, NTag, NEllipsis } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { getApiBase } from "@/shared/api/client";
+import { withAuthQueryParams } from "@/shared/api/client";
 import TrainingChart from "@/shared/components/training-chart/TrainingChart.vue";
-import { getStoredToken } from '@/features/auth/application/store';
 import { useOrgStore } from '@/features/auth/application/org';
-import { cancelJob, getJob } from "../../infrastructure/api";
-import type { JobStatus, TrainingEvent } from '@/types';
+import {
+  useGetJobApiV1TrainingJobsJobIdGet,
+  useCancelJobApiV1TrainingJobsJobIdCancelPost,
+  downloadArtifactApiV1ArtifactsArtifactIdDownloadGet,
+  getDownloadArtifactApiV1ArtifactsArtifactIdDownloadGetUrl,
+} from "@/generated/orval/endpoints/api";
+import type { JobStatus, TrainingJob } from '@/generated/orval/models';
+import type { TrainingEvent } from '@/shared/types/components';
 import { useJobEvents } from "../../application/useJobEvents";
 
 const route = useRoute();
@@ -105,14 +110,16 @@ const {
   isLoading,
   isError,
   error,
-} = useQuery({
-  queryKey: computed(() => ["jobs", id.value]),
-  queryFn: () => getJob(id.value),
-  refetchInterval: 5000,
+} = useGetJobApiV1TrainingJobsJobIdGet(id, {
+  query: {
+    select: (response) => response.data as TrainingJob,
+    queryKey: computed(() => ["jobs", id.value]),
+    refetchInterval: 5000,
+  },
 });
 
 const metricsArtifactRef = computed(() =>
-  job.value?.artifact_refs.find((artifact) => artifact.kind === "metrics") ?? null,
+  job.value?.artifact_refs?.find((artifact: { kind: string }) => artifact.kind === "metrics") ?? null,
 );
 
 const { data: metricsArtifact } = useQuery({
@@ -122,24 +129,8 @@ const { data: metricsArtifact } = useQuery({
     if (!artifact || !artifact.id) {
       return null;
     }
-
-    const token = getStoredToken();
-    const headers: Record<string, string> = {
-      ...(orgStore.currentOrgId ? { "X-Organization-ID": orgStore.currentOrgId } : {}),
-    };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${getApiBase()}/artifacts/${encodeURIComponent(artifact.id)}/download`, {
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Metrics artifact fetch failed: ${response.status}`);
-    }
-
-    return (await response.json()) as Record<string, unknown>;
+    const resp = await downloadArtifactApiV1ArtifactsArtifactIdDownloadGet(artifact.id);
+    return resp.data as Record<string, unknown> | null;
   },
   enabled: computed(() => !!metricsArtifactRef.value?.id && !!orgStore.currentOrgId),
 });
@@ -245,15 +236,16 @@ const eventColumns = computed<DataTableColumns<TrainingEvent>>(() => [
   },
 ]);
 
-const cancelMutation = useMutation({
-  mutationFn: () => cancelJob(id.value),
-  onSuccess: () => {
-    message.success("Job cancelled");
-    qc.invalidateQueries({ queryKey: ["jobs", id.value] });
-    qc.invalidateQueries({ queryKey: ["jobs"] });
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to cancel job");
+const cancelMutation = useCancelJobApiV1TrainingJobsJobIdCancelPost({
+  mutation: {
+    onSuccess: () => {
+      message.success("Job cancelled");
+      qc.invalidateQueries({ queryKey: ["jobs", id.value] });
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (err: Error) => {
+      message.error(err.message ?? "Failed to cancel job");
+    },
   },
 });
 
@@ -264,7 +256,7 @@ function onCancelClick() {
     positiveText: "Cancel Job",
     negativeText: "Go Back",
     onPositiveClick: () => {
-      cancelMutation.mutate();
+      cancelMutation.mutate({ jobId: id.value });
     },
   });
 }
@@ -274,7 +266,9 @@ const downloadingId = ref<string | null>(null);
 async function onDownload(artifactId: string) {
   downloadingId.value = artifactId;
   try {
-    const downloadUrl = `${getApiBase()}/artifacts/${encodeURIComponent(artifactId)}/download`;
+    const downloadUrl = withAuthQueryParams(
+      getDownloadArtifactApiV1ArtifactsArtifactIdDownloadGetUrl(artifactId)
+    );
     window.open(downloadUrl, "_blank");
   } catch (err) {
     message.error((err as Error)?.message ?? "Download failed");

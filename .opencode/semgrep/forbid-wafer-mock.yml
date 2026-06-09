@@ -1,0 +1,28 @@
+rules:
+  - id: forbid-wafer-mock-import-from-app
+    message: |
+      Importing from wafer_mock in apps/api/app/ is forbidden except for SqliteScUpstream.
+      Use the Protocol interfaces defined in app/modules/sc/domain/ instead:
+        - ScUpstreamReader  (for inspection/defect queries)
+        - ScImageFetcher    (for image fetching)
+      Only container.py, flow definitions, and SqliteScUpstream are allowed
+      to import from wafer_mock so they can wire implementations at startup.
+    severity: ERROR
+    languages:
+      - python
+    paths:
+      include:
+        - apps/api/app/**
+      exclude:
+        - apps/api/app/modules/sc/container.py
+        - apps/api/app/**/conftest.py
+        - apps/api/app/**/tests/**
+        - apps/api/app/**/flows/**
+    patterns:
+      - pattern-either:
+          - pattern: from $MODULE import $NAMES
+          - pattern: import $MODULE
+      - metavariable-regex:
+          metavariable: $MODULE
+          regex: .*_wafer_mock.*
+      - pattern-not: from app.modules.sc.adapter._wafer_mock.sqlite_upstream import SqliteScUpstream

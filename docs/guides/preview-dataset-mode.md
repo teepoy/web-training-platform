@@ -14,10 +14,18 @@ The feature enables a "browse first, import later" workflow:
 1. **Launch Preview**: Navigate to `/preview` and enter a `collection_ref` (e.g., a path or identifier recognized by the upstream adapter).
 2. **Browse Collection**: View an infinite-scrolling grid of images fetched from the remote source.
 3. **Inspect Items**: Click individual items to open the Preview Item Drawer for detailed metadata inspection.
-4. **Persist Dataset**: 
+4. **Persist Dataset**:
    - Click "Persist Dataset" in the workspace header.
    - Select persistence scope: "Entire Collection" (import all remote items) or "Loaded Items Only" (import only what has been scrolled into view).
-5. **Handoff**: Upon successful persistence, the platform creates a permanent Dataset and redirects the user to `/datasets/:id/classify` to begin work.
+5. **Handoff**: Upon successful persistence, the platform creates a permanent Dataset and redirects the user to the dataset view route (`/datasets/:id/view/:viewType`) to begin work.
+
+## Image URL Handling
+
+Preview items may originate from remote storage or SC upstream/mock services, while persisted datasets should render dataset-owned images. Keep these paths separate:
+
+- Generic preview/storage URIs should be rendered through the shared frontend image adapter (`resolveImageUri()` / `resolveImageUris()`), which proxies protected storage URIs through the API and appends auth query parameters.
+- SC preview pages may use upstream compatibility image URLs while browsing an inspection before import, but imported sparse datasets should render images from dataset view rows and the sample image endpoint: `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...`.
+- Do not pass raw API paths that require auth directly into `<img>` elements. Browser-native image requests cannot send the API client's auth headers, so callers must use authenticated URL helpers.
 
 ## Architecture
 

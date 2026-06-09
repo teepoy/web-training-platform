@@ -26,8 +26,20 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> bool: ...
 
-    async def update_dataset_task_spec(
+    async def update_dataset_meta(
         self,
         dataset_id: str,
-        task_spec: dict,
+        meta_update: dict,
     ) -> Dataset | None: ...
+
+    async def set_dataset_public(
+        self,
+        dataset_id: str,
+        is_public: bool,
+    ) -> bool: ...
+
+    async def update_dataset_embed_config(
+        self,
+        dataset_id: str,
+        embed_config: dict,
+    ) -> None: ...

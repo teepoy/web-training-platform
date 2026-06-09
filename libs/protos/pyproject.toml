@@ -1,14 +1,16 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
 [project]
-name = "embedding-protos"
+name = "proto-stubs"
 version = "0.1.0"
-description = "Generated gRPC stubs for embedding service"
+description = "Generated protobuf stubs"
 requires-python = ">=3.11"
-dependencies = [
-  "grpcio>=1.68.0",
-  "protobuf>=5.29.0",
-]
+dependencies = ["grpcio==1.80.0", "protobuf==6.33.6"]
 
 [project.optional-dependencies]
-codegen = [
-  "grpcio-tools>=1.68.0",
-]
+codegen = ["grpcio-tools==1.80.0"]
+
+[tool.uv.build-backend]
+module-name = "proto_stubs"

@@ -101,6 +101,8 @@ class PredictionRepository(Protocol):
         self,
         job_id: str,
         org_id: str,
+        offset: int = 0,
+        limit: int | None = None,
     ) -> list[PlatformPrediction]: ...
 
     async def create_prediction_collection(

@@ -6,7 +6,7 @@ import json
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import PRESET_ID
+from tests.conftest import TRAINER_ID
 
 
 def _create_dataset(c: TestClient) -> str:
@@ -25,7 +25,7 @@ def _create_dataset(c: TestClient) -> str:
 def _create_job(c: TestClient, dataset_id: str) -> str:
     resp = c.post(
         "/api/v1/training-jobs",
-        json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "tester"},
+        json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID, "created_by": "tester"},
     )
     assert resp.status_code == 200
     return resp.json()["id"]
@@ -117,7 +117,7 @@ def test_upload_vqa_rejects_label_space() -> None:
                         "format": "pytorch",
                         "job_id": job_id,
                         "template_id": "vqa",
-                        "profile_id": "dspy-vqa-v1",
+                        "profile_id": "resnet50-sc-v1",
                         "model_spec": {
                             "framework": "dspy",
                             "architecture": "vqa-program",

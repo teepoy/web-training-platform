@@ -9,7 +9,7 @@
 import { computed, isRef, ref, type Ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { getAnnotationStats } from '../api/datasets'
-import type { DatasetAnnotationStats } from '../api'
+import type { DatasetAnnotationStats } from '@/generated/orval/models'
 import type { ClassifyDashboardContext } from '../types/sidebar-widgets'
 
 // ---------------------------------------------------------------------------

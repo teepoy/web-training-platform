@@ -16,13 +16,13 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
-from app.modules.datasets.api.deps import (
+from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.datasets.port.http.deps import (
     get_artifacts,
+    get_dataset_storage_factory,
     get_repository,
-    get_sample_access_factory,
 )
-from app.modules.datasets.interfaces.controllers.router import (
+from app.modules.datasets.port.http.router import (
     get_ls_read_repository_optional,
 )
 
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 def _clear_overrides() -> None:
     for dep in (
         get_repository,
-        get_sample_access_factory,
+        get_dataset_storage_factory,
         get_artifacts,
         get_ls_read_repository_optional,
     ):
@@ -125,12 +125,14 @@ def test_export_with_ls_project() -> None:
         }
     )
 
-    sample_access_factory_mock = MagicMock()
-    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+    storage_mock = AsyncMock()
+    storage_mock.list_samples = AsyncMock(return_value=([sample], 1))
+    storage_factory_mock = AsyncMock()
+    storage_factory_mock.open = AsyncMock(return_value=storage_mock)
 
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
-        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
         app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
         app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
         r = c.get(f"/api/v1/exports/{dataset.id}")
@@ -166,12 +168,14 @@ def test_export_no_ls_project_returns_500() -> None:
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=dataset)
 
-    sample_access_factory_mock = MagicMock()
-    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+    storage_mock = AsyncMock()
+    storage_mock.list_samples = AsyncMock(return_value=([], 0))
+    storage_factory_mock = AsyncMock()
+    storage_factory_mock.open = AsyncMock(return_value=storage_mock)
 
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
-        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
         r = c.get(f"/api/v1/exports/{dataset.id}")
         _clear_overrides()
 
@@ -196,12 +200,14 @@ def test_export_ls_db_failure_returns_502() -> None:
     ls_read_mock = AsyncMock()
     ls_read_mock.get_tasks_for_project = AsyncMock(side_effect=RuntimeError("LS DB connection refused"))
 
-    sample_access_factory_mock = MagicMock()
-    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+    storage_mock = AsyncMock()
+    storage_mock.list_samples = AsyncMock(return_value=([sample], 1))
+    storage_factory_mock = AsyncMock()
+    storage_factory_mock.open = AsyncMock(return_value=storage_mock)
 
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
-        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
         app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
         r = c.get(f"/api/v1/exports/{dataset.id}")
         _clear_overrides()
@@ -247,12 +253,14 @@ def test_export_persist_with_ls() -> None:
     artifacts_mock = AsyncMock()
     artifacts_mock.persist_dataset_export = AsyncMock(return_value="memory://exports/test.json")
 
-    sample_access_factory_mock = MagicMock()
-    sample_access_factory_mock.create = MagicMock(return_value=DbFullSampleAccess(repo_mock))
+    storage_mock = AsyncMock()
+    storage_mock.list_samples = AsyncMock(return_value=([sample], 1))
+    storage_factory_mock = AsyncMock()
+    storage_factory_mock.open = AsyncMock(return_value=storage_mock)
 
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
-        app.dependency_overrides[get_sample_access_factory] = lambda: sample_access_factory_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
         app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
         app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
         r = c.post(f"/api/v1/exports/{dataset.id}/persist")

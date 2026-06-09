@@ -1,0 +1,381 @@
+# ─────────────────────────────────────────────────────────────────────
+# Dev override compose file
+# Usage: docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml up -d
+# With profiles:
+#   --profile observability  → start observability stack
+#   --profile gpu            → start GPU worker + dcgm-exporter (Linux/NVIDIA only)
+#
+# CRITICAL: Compose override files REPLACE list fields entirely.
+# Every service fully redeclares ALL list fields:
+#   volumes, command, environment, depends_on, healthcheck,
+#   restart, ports, profiles, devices, privileged, deploy
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  # ───────────────────────────────────────────────────────────────────
+  # API — dev mode with bind mounts, hot reload, alembic auto‑migration
+  # ───────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: dev
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../libs/platform-runtime:/app/libs/platform-runtime
+      - ../../libs/protos:/app/libs/protos
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        "cd /app/apps/api && ( uv run --no-dev alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev fastapi dev app/main.py --host 0.0.0.0 --port 8000 --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos",
+      ]
+    environment:
+      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src
+      APP_CONFIG_PROFILE: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_UI_URL: http://localhost:4200
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      SC_PATCH_S3_ENDPOINT: minio:9000
+      SC_PATCH_S3_ACCESS_KEY: minioadmin
+      SC_PATCH_S3_SECRET_KEY: minioadmin
+      SC_PATCH_S3_BUCKET: sc-patch-images
+      SC_REVIEW_S3_ENDPOINT: minio:9000
+      SC_REVIEW_S3_ACCESS_KEY: minioadmin
+      SC_REVIEW_S3_SECRET_KEY: minioadmin
+      SC_REVIEW_S3_BUCKET: sc-review-images
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      label-studio:
+        condition: service_healthy
+      prefect-server:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: on-failure
+
+  # ───────────────────────────────────────────────────────────────────
+  # Web — Vite dev server with bind mount + hot module replacement
+  # ───────────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      target: dev
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
+    volumes:
+      - ../../apps/web:/app/apps/web
+    environment:
+      VITE_PROXY_TARGET: "http://api:8000"
+      VITE_API_BASE_URL: "http://api:8000"
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+    restart: on-failure
+
+  # ───────────────────────────────────────────────────────────────────
+  # Prefect CPU worker — bind-mounted sources for fast iteration
+  # ───────────────────────────────────────────────────────────────────
+  prefect-worker-cpu:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.prefect-worker-cpu
+      target: dev
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../libs/platform-runtime:/app/libs/platform-runtime
+      - ../../libs/protos:/app/libs/protos
+      - ../../libs/ml:/app/libs/ml
+      - ../../libs/seedmaker:/app/libs/seedmaker
+    environment:
+      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src:/app/libs/seedmaker/src
+      PREFECT_API_URL: http://prefect-server:4200/api
+      APP_CONFIG_PROFILE: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      SC_PATCH_S3_ENDPOINT: minio:9000
+      SC_PATCH_S3_ACCESS_KEY: minioadmin
+      SC_PATCH_S3_SECRET_KEY: minioadmin
+      SC_PATCH_S3_BUCKET: sc-patch-images
+      SC_REVIEW_S3_ENDPOINT: minio:9000
+      SC_REVIEW_S3_ACCESS_KEY: minioadmin
+      SC_REVIEW_S3_SECRET_KEY: minioadmin
+      SC_REVIEW_S3_BUCKET: sc-review-images
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ───────────────────────────────────────────────────────────────────
+  # Prefect GPU worker — profile-gated (Linux/NVIDIA only)
+  # ───────────────────────────────────────────────────────────────────
+  prefect-worker-gpu:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.prefect-worker-gpu
+      target: dev
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    profiles:
+      - gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../libs/platform-runtime:/app/libs/platform-runtime
+      - ../../libs/protos:/app/libs/protos
+      - ../../libs/ml:/app/libs/ml
+      - ../../libs/seedmaker:/app/libs/seedmaker
+    environment:
+      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src:/app/libs/seedmaker/src
+      PREFECT_API_URL: http://prefect-server:4200/api
+      APP_CONFIG_PROFILE: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: finetune-artifacts
+      SC_PATCH_S3_ENDPOINT: minio:9000
+      SC_PATCH_S3_ACCESS_KEY: minioadmin
+      SC_PATCH_S3_SECRET_KEY: minioadmin
+      SC_PATCH_S3_BUCKET: sc-patch-images
+      SC_REVIEW_S3_ENDPOINT: minio:9000
+      SC_REVIEW_S3_ACCESS_KEY: minioadmin
+      SC_REVIEW_S3_SECRET_KEY: minioadmin
+      SC_REVIEW_S3_BUCKET: sc-review-images
+      LABEL_STUDIO_URL: "http://label-studio:8080"
+      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ───────────────────────────────────────────────────────────────────
+  # Deployments bootstrap — creates work pools, registers flows
+  # ───────────────────────────────────────────────────────────────────
+  deployments-bootstrap:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.prefect-worker-cpu
+      target: dev
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    entrypoint: [""]
+    command: >
+      sh -c "
+        uv run --no-dev --directory apps/api prefect work-pool create default-cpu --type process || true;
+        uv run --no-dev --directory apps/api prefect work-pool create default-gpu --type process || true;
+        uv run --no-dev --directory apps/api ftapi deployments apply
+      "
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: "no"
+
+  # ───────────────────────────────────────────────────────────────────
+  # pgAdmin — PostgreSQL web admin UI
+  # ───────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - ./pgadmin-pgpass:/pgpass:ro
+    restart: on-failure
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Observability Stack — --profile observability
+  # ═══════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    profiles: ["observability"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:3.4.0
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.4.0
+    profiles: ["observability"]
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: ["observability"]
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    profiles: ["observability"]
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - "--port=8080"
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: ["observability"]
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+  prefect-exporter:
+    image: prefecthq/prefect:3.6.25-python3.12
+    profiles: ["observability"]
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      EXPORTER_PORT: "8000"
+    command:
+      - python
+      - /exporter/exporter.py
+    volumes:
+      - ./observability/prefect-exporter/exporter.py:/exporter/exporter.py:ro
+    restart: unless-stopped
+    depends_on:
+      - prefect-server
+
+  # ═══════════════════════════════════════════════════════════════════
+  # GPU Monitoring — --profile gpu  (Linux + NVIDIA only)
+  # ═══════════════════════════════════════════════════════════════════
+  dcgm-exporter:
+    image: nvidia/dcgm-exporter:3.4.1-3.6.2-ubuntu22.04
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────
+# Named volumes (dev‑only — base volumes are in docker-compose.yaml)
+# ─────────────────────────────────────────────────────────────────────
+volumes:
+  pgadmin-data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  alertmanager_data:

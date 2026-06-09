@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import unittest.mock as mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -40,43 +39,12 @@ def _create_dataset_and_sample(c: TestClient, with_image: bool = False) -> tuple
     return dataset_id, sample.json()["id"]
 
 
-@pytest.mark.no_embedding_override
-def test_embed_sample_success() -> None:
-    with mock.patch(
-        "app.shared.infrastructure.workers.embedding.EmbeddingClient.embed_image",
-        side_effect=_fake_embed_image,
-    ):
-        with TestClient(app) as c:
-            _, sample_id = _create_dataset_and_sample(c, with_image=True)
-
-            r = c.post(f"/api/v1/samples/{sample_id}/embed")
-            assert r.status_code == 200
-            body = r.json()
-            assert body["sample_id"] == sample_id
-            assert body["embedding_dim"] == 512
-            assert body["embed_model"] == "openai/clip-vit-base-patch32"
-
-
-def test_embed_sample_no_image() -> None:
-    with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c, with_image=False)
-
-        r = c.post(f"/api/v1/samples/{sample_id}/embed")
-        assert r.status_code == 400
-
-
-def test_embed_nonexistent_sample() -> None:
-    with TestClient(app) as c:
-        r = c.post("/api/v1/samples/nonexistent-embed-id/embed")
-        assert r.status_code == 404
-
-
 def test_upsert_and_get_sample_feature() -> None:
     with TestClient(app) as c:
         _, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            repo = app.state.container.prediction_repository
+            repo = app.state.app_context.prediction.prediction_repository
             feature = await repo.upsert_sample_feature(sample_id, FAKE_EMBEDDING, "test-model")
             assert feature.sample_id == sample_id
             assert len(feature.embedding) == 512
@@ -95,7 +63,7 @@ def test_get_sample_feature_returns_none_for_missing() -> None:
     with TestClient(app) as c:
 
         async def _run() -> None:
-            repo = app.state.container.prediction_repository
+            repo = app.state.app_context.prediction.prediction_repository
             result = await repo.get_sample_feature("does-not-exist-at-all")
             assert result is None
 
@@ -107,7 +75,7 @@ def test_upsert_sample_feature_idempotent() -> None:
         _, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            repo = app.state.container.prediction_repository
+            repo = app.state.app_context.prediction.prediction_repository
 
             first = [0.1] * 512
             second = [0.9] * 512

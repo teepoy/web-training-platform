@@ -22,21 +22,13 @@ import {
   type UseAgentCoreReturn,
   type UseAgentCoreOptions,
 } from "./useAgentCore";
-import { streamGlobalAgentChat } from "../infrastructure/api";
+import { streamGlobalAgentChat } from "@/shared/api/sse";
 import type {
   AgentContext,
   AgentPanelDescriptor,
-} from '@/shared/api/types';
-import type { AgentChatStatus, ChatEntry } from '@/shared/types/components';
+} from '@/generated/orval/models';
 import { useAuthStore } from '@/features/auth/application/store';
 import { GLOBAL_AGENT_PANELS_KEY } from "@/shared/keys";
-
-export type { AgentChatStatus, ChatEntry };
-
-export { useAgentCore };
-export type { UseAgentCoreReturn, UseAgentCoreOptions };
-
-export { GLOBAL_AGENT_PANELS_KEY };
 
 /** Injection key so child views know the global agent send function. */
 export const GLOBAL_AGENT_SEND_KEY: InjectionKey<

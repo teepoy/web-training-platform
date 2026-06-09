@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
@@ -12,17 +12,32 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
-COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
-COPY apps/embedding/pyproject.toml apps/embedding/pyproject.toml
+COPY libs/platform-runtime/pyproject.toml libs/platform-runtime/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
+COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
+COPY libs/seedmaker/pyproject.toml libs/seedmaker/pyproject.toml
 
 COPY libs/protos/ libs/protos/
-RUN uv sync --frozen --package finetune-api --no-install-workspace
+
+FROM base AS deps
+
+RUN uv sync --frozen --package finetune-api --no-dev --no-install-workspace
 
 COPY apps/api/ apps/api/
+COPY libs/platform-runtime/ libs/platform-runtime/
+COPY libs/ml/ libs/ml/
 COPY libs/seedmaker/ libs/seedmaker/
-RUN uv sync --frozen --package finetune-api
+
+RUN uv sync --frozen --package finetune-api --no-dev
+
+FROM deps AS dev
 
 WORKDIR /app/apps/api
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000", "--reload-dir", "/app/apps/api", "--reload-dir", "/app/libs/platform-runtime"]
+
+FROM deps AS prod
+
+WORKDIR /app/apps/api
+EXPOSE 8000
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

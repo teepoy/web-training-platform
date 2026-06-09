@@ -19,6 +19,7 @@ storage:
     secret_key: "minioadmin"
     bucket: "finetune-artifacts"
     secure: false
+  runtime_bucket: "finetune-runtime-inputs"
 
 k8s:
   namespace: "default"
@@ -77,25 +78,10 @@ oauth:
 prefect:
   api_url: "http://localhost:4200/api"
   ui_url: "http://localhost:4200"
-  work_pool_name: "training-pool"
+  work_pool_name: "default-cpu"
   work_pool_type: "process"
   flow_name: "train-job"
   concurrency_limit: 1
-
-embedding:
-  grpc_target: "localhost:50051"
-
-inference:
-  # Deprecated — use gpu_worker.base_url instead.
-  # Kept for backward compatibility; will be removed in a future release.
-  base_url: "http://localhost:8010"
-
-gpu_worker:
-  # V1 "fat-enough" GPU worker HTTP API base URL.
-  # The GPU worker exposes train/predict/embed endpoints. In V1 it reuses
-  # existing runtime/package code and artifact/config access.
-  # Required in dev/prod; test profile skips validation.
-  base_url: ""
 
 llm:
   # litellm-backed.  Model string controls provider routing:
@@ -115,9 +101,8 @@ label_studio:
   api_key: ""
   database_url: ""
 
-presets:
-  dir: "presets"
-  strict: false
+data:
+  dir: ""
 
 sensors:
   dir: "sensors"
@@ -127,6 +112,13 @@ agent:
   enabled: true
   max_panels: 8
   metadata_sample_size: 100
+
+redis:
+  enabled: false
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
 
 auth:
   enabled: true

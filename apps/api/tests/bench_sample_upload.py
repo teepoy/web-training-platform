@@ -19,13 +19,13 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///./bench-sample-upload-{uuid4().hex}.db"
 
-from app.modules.auth.interfaces.controllers.deps import get_current_org, get_current_user
+from app.modules.auth.port.http.deps import get_current_org, get_current_user
 from app.core.config import load_config
 from app.shared.db.base import Base
 from app.shared.db.session import create_engine
 from app.shared.api.schemas import Organization, User
 from app.main import app
-from app.modules.datasets.api.deps import get_label_studio_client
+from app.modules.datasets.port.http.deps import get_label_studio_client
 
 
 def reset_database() -> None:

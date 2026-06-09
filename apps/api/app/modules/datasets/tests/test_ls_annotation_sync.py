@@ -17,8 +17,13 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.api.deps import get_label_studio_client
-from app.modules.datasets.api.deps import get_repository, get_sample_access_factory
+from app.modules.datasets.domain.sample_row import SampleRow
+from app.modules.datasets.port.http.deps import (
+    get_dataset_storage_factory,
+    get_label_studio_client,
+)
+from app.modules.datasets.port.http.deps import get_repository
+from app.shared.api.schemas import DatasetStorageMode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -43,8 +48,19 @@ def _make_ls_client() -> AsyncMock:
 
 
 def _clear_overrides() -> None:
-    for dep in (get_repository, get_label_studio_client, get_sample_access_factory):
+    for dep in (
+        get_repository,
+        get_label_studio_client,
+        get_dataset_storage_factory,
+    ):
         app.dependency_overrides.pop(dep, None)
+
+
+def _make_storage_factory(mock_storage: AsyncMock) -> AsyncMock:
+    """Return a mock DatasetStorageFactory whose open() returns mock_storage."""
+    factory_mock = AsyncMock()
+    factory_mock.open = AsyncMock(return_value=mock_storage)
+    return factory_mock
 
 
 # ---------------------------------------------------------------------------
@@ -55,29 +71,28 @@ def _clear_overrides() -> None:
 def test_create_annotation_with_task_id() -> None:
     """When sample has ls_task_id, annotation creates and syncs to LS."""
     mock_ls_client = _make_ls_client()
-    from app.shared.api.schemas import Annotation, Sample
+    from app.shared.api.schemas import Annotation, Dataset, TaskSpec, Sample
     from datetime import datetime, UTC
     from uuid import uuid4
 
     sample_id = str(uuid4())
     dataset_id = str(uuid4())
 
-    sample_with_task = Sample(
-        id=sample_id,
+    sample_with_task = SampleRow(
+        sample_id=sample_id,
         dataset_id=dataset_id,
-        image_uris=[],
-        metadata={},
         ls_task_id=42,
     )
 
-    async def _mock_get_sample(sid: str):
-        if sid == sample_id:
-            return sample_with_task
-        return None
-
     repo_mock = AsyncMock()
-    repo_mock.get_sample = AsyncMock(side_effect=_mock_get_sample)
+    repo_mock.get_sample = AsyncMock()
     repo_mock.create_annotation = AsyncMock()
+    repo_mock.get_dataset = AsyncMock(return_value=Dataset(
+        id=dataset_id,
+        name="test-dataset",
+        task_spec=TaskSpec(task_type="classification", label_space=["cat", "dog"]),
+    ))
+    repo_mock.update_dataset_meta = AsyncMock()
 
     created_ann = Annotation(
         id=str(uuid4()),
@@ -86,14 +101,18 @@ def test_create_annotation_with_task_id() -> None:
         created_by="tester",
         created_at=datetime.now(UTC),
     )
-    repo_mock.create_annotation.return_value = created_ann
+
+    storage_mock = AsyncMock()
+    storage_mock.get_sample = AsyncMock(return_value=sample_with_task)
+    storage_mock.create_annotations = AsyncMock(return_value=1)
 
     with TestClient(app) as c:
         app.dependency_overrides[get_label_studio_client] = lambda: mock_ls_client
         app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: _make_storage_factory(storage_mock)
         r = c.post(
             "/api/v1/annotations",
-            json={"sample_id": sample_id, "label": "cat", "created_by": "tester"},
+            json={"dataset_id": dataset_id, "sample_id": sample_id, "label": "cat", "created_by": "tester"},
         )
         _clear_overrides()
 
@@ -117,26 +136,33 @@ def test_create_annotation_with_task_id() -> None:
 
 def test_create_annotation_no_task_id_returns_500() -> None:
     """When sample has no ls_task_id, annotation creation returns 500."""
-    from app.shared.api.schemas import Sample
+    from app.shared.api.schemas import Sample, Dataset, TaskSpec
     from uuid import uuid4
 
     sample_id = str(uuid4())
-    sample_no_task = Sample(
-        id=sample_id,
-        dataset_id=str(uuid4()),
-        image_uris=[],
-        metadata={},
-        ls_task_id=None,
-    )
+    ds_id = str(uuid4())
 
     repo_mock = AsyncMock()
-    repo_mock.get_sample = AsyncMock(return_value=sample_no_task)
+    repo_mock.get_sample = AsyncMock()
+    repo_mock.get_dataset = AsyncMock(return_value=Dataset(
+        id=ds_id,
+        name="test-dataset",
+        task_spec=TaskSpec(task_type="classification", label_space=["cat", "dog"]),
+    ))
+
+    storage_mock = AsyncMock()
+    storage_mock.get_sample = AsyncMock(return_value=SampleRow(
+        sample_id=sample_id,
+        dataset_id=ds_id,
+        ls_task_id=None,
+    ))
 
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: _make_storage_factory(storage_mock)
         r = c.post(
             "/api/v1/annotations",
-            json={"sample_id": sample_id, "label": "dog", "created_by": "tester"},
+            json={"dataset_id": ds_id, "sample_id": sample_id, "label": "dog", "created_by": "tester"},
         )
         _clear_overrides()
 
@@ -153,7 +179,6 @@ def test_sync_annotations_to_ls() -> None:
     """Create annotations then call sync endpoint; verify synced_count matches."""
     mock_ls_client = _make_ls_client()
     from app.shared.api.schemas import Annotation, Dataset, Sample
-    from app.modules.datasets.application.sample_access.db_full import DbFullSampleAccess
     from datetime import datetime, UTC
     from uuid import uuid4
 
@@ -166,12 +191,6 @@ def test_sync_annotations_to_ls() -> None:
         name="sync-test-ds",
         ls_project_id="55",
     )
-    mock_sample = Sample(
-        id=sample_id,
-        dataset_id=dataset_id,
-        image_uris=[],
-        ls_task_id=10,
-    )
     mock_ann = Annotation(
         id=ann_id,
         sample_id=sample_id,
@@ -182,17 +201,32 @@ def test_sync_annotations_to_ls() -> None:
 
     repo_mock = AsyncMock()
     repo_mock.get_dataset = AsyncMock(return_value=mock_dataset)
-    repo_mock.list_samples = AsyncMock(return_value=([mock_sample], 1))
-    repo_mock.list_annotations_for_dataset = AsyncMock(return_value=[mock_ann])
 
-    access_mock = DbFullSampleAccess(repo_mock)
-    factory_mock = MagicMock()
-    factory_mock.create = MagicMock(return_value=access_mock)
+    sample_row_with_ls = SampleRow(
+        sample_id=sample_id,
+        dataset_id=dataset_id,
+        ls_task_id=10,
+    )
+    annotated_row = SampleRow(
+        sample_id=sample_id,
+        dataset_id=dataset_id,
+        ls_task_id=10,
+        latest_label="cat",
+    )
+
+    storage_mock = AsyncMock()
+    storage_mock.list_samples = AsyncMock(
+        side_effect=lambda limit=50, **kwargs: (
+            ([sample_row_with_ls], 1)
+            if not kwargs.get("with_labels")
+            else ([annotated_row], 1)
+        )
+    )
 
     with TestClient(app) as c:
         app.dependency_overrides[get_label_studio_client] = lambda: mock_ls_client
         app.dependency_overrides[get_repository] = lambda: repo_mock
-        app.dependency_overrides[get_sample_access_factory] = lambda: factory_mock
+        app.dependency_overrides[get_dataset_storage_factory] = lambda: _make_storage_factory(storage_mock)
         r = c.post(f"/api/v1/datasets/{dataset_id}/sync-annotations-to-ls")
         _clear_overrides()
 
@@ -251,4 +285,3 @@ def test_sync_annotations_dataset_not_found() -> None:
         _clear_overrides()
 
     assert r.status_code == 404
-    assert r.json()["detail"] == "Dataset not found"

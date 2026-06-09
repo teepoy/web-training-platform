@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
-import { exportViaCube } from "@/shared/api/datasets";
+import { exportViaCube, buildExportDownloadUrl } from "@/shared/api/datasets";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
@@ -43,12 +43,15 @@ function done() {
         Export as Parquet
       </n-button>
 
-      <n-alert v-if="uri" type="success" :show-icon="false">
-        <template v-if="rowCount !== null">{{ rowCount }} rows exported.</template>
-        <div style="margin-top: 4px">
-          URI: {{ uri }}
-        </div>
-      </n-alert>
+      <n-space v-if="uri" vertical :size="4">
+        <template v-if="rowCount !== null">
+          <n-text>{{ rowCount }} rows exported</n-text>
+        </template>
+        <n-button tag="a" :href="buildExportDownloadUrl(uri)" download type="primary">
+          Download Parquet
+        </n-button>
+        <n-text depth="3" style="font-size: 11px; word-break: break-all">URI: {{ uri }}</n-text>
+      </n-space>
 
       <n-space justify="end">
         <n-button @click="props.onCancel()">Close</n-button>

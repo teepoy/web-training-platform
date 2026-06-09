@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.shared.api.schemas import Sample
 from tests.conftest import create_dataset, create_sample, create_job, upload_model
 
 def _setup_dataset_with_model(c: TestClient) -> tuple[str, str, str]:
@@ -474,3 +478,150 @@ def test_persist_export() -> None:
         body = resp.json()
         assert "uri" in body
         assert body["format_id"] == "annotation-version-full-context-v1"
+
+
+# ---------------------------------------------------------------------------
+# Test: Save review annotations — label_space auto-expand (db_full)
+#
+# Pre-fix regression test: saving a review annotation with a new final_label
+# MUST auto-expand the dataset's task_spec.label_space.  Currently (pre-fix)
+# the label_space is NOT expanded, so this test MUST FAIL.
+# After the fix (wiring DatasetService.merge_label_space), the test PASSES.
+# ---------------------------------------------------------------------------
+
+
+def test_save_review_auto_expand() -> None:
+    """Save review annotations with new final_label auto-expands label_space
+    (db_full storage mode).
+
+    Pre-fix state — this test MUST fail (label_space NOT auto-expanded).
+    After the fix, label_space contains "bird".
+    """
+    with TestClient(app) as c:
+        # Create dataset with label_space ["cat", "dog"]
+        dataset_id = create_dataset(c)
+
+        # Create sample, job, and model
+        sample_id = create_sample(c, dataset_id)
+        job_id = create_job(c, dataset_id)
+        model_id = upload_model(c, job_id)
+
+        # Create review action
+        create_resp = c.post(
+            "/api/v1/prediction-reviews",
+            json={"dataset_id": dataset_id, "model_id": model_id},
+        )
+        assert create_resp.status_code == 201
+        action_id = create_resp.json()["id"]
+
+        # Save annotations with final_label="bird" (outside current label_space)
+        resp = c.post(
+            f"/api/v1/prediction-reviews/{action_id}/annotations",
+            json={
+                "items": [
+                    {
+                        "sample_id": sample_id,
+                        "predicted_label": "cat",
+                        "final_label": "bird",
+                        "confidence": 0.85,
+                        "prediction_id": None,
+                    },
+                ],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Fetch dataset and inspect label_space
+        resp = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert resp.status_code == 200
+        label_space = resp.json()["task_spec"]["label_space"]
+
+        # "bird" MUST be in label_space (this assertion FAILS pre-fix)
+        assert "bird" in label_space, (
+            f"Expected 'bird' in label_space, but got {label_space}"
+        )
+        # Existing labels must still be present
+        assert "cat" in label_space, f"Expected 'cat' in label_space, got {label_space}"
+        assert "dog" in label_space, f"Expected 'dog' in label_space, got {label_space}"
+
+
+# ---------------------------------------------------------------------------
+# Test: Save review annotations — label_space auto-expand (sparse)
+#
+# Same test as above but for file_shard_sparse storage mode.
+# Pre-fix: MUST FAIL because label_space is NOT auto-expanded.
+# Post-fix: PASSES after merge_label_space is wired into save_review_annotations.
+# ---------------------------------------------------------------------------
+
+
+def test_save_review_auto_expand_sparse() -> None:
+    """Save review annotations with new final_label auto-expands label_space
+    (file_shard_sparse storage mode).
+
+    Pre-fix state — this test MUST fail (label_space NOT auto-expanded).
+    After the fix, label_space contains "bird".
+    """
+    with TestClient(app) as c:
+        # Create a file_shard_sparse dataset with label_space ["cat", "dog"]
+        resp = c.post(
+            "/api/v1/datasets",
+            json={
+                "name": "review-sparse-ds",
+                "dataset_type": "image_classification",
+                "task_spec": {
+                    "task_type": "classification",
+                    "label_space": ["cat", "dog"],
+                },
+                "storage_mode": "file_shard_sparse",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        dataset_id = resp.json()["id"]
+
+        # Create a sample directly in the DB (API doesn't support sample
+        # creation for sparse datasets due to LS project check)
+        repo = app.state.app_context.prediction.prediction_repository
+        sample_id = str(uuid4())
+        asyncio.run(repo.create_samples([Sample(id=sample_id, dataset_id=dataset_id)]))
+
+        # Create job + model
+        job_id = create_job(c, dataset_id)
+        model_id = upload_model(c, job_id)
+
+        # Create review action
+        create_resp = c.post(
+            "/api/v1/prediction-reviews",
+            json={"dataset_id": dataset_id, "model_id": model_id},
+        )
+        assert create_resp.status_code == 201
+        action_id = create_resp.json()["id"]
+
+        # Save annotations with final_label="bird" (outside current label_space)
+        resp = c.post(
+            f"/api/v1/prediction-reviews/{action_id}/annotations",
+            json={
+                "items": [
+                    {
+                        "sample_id": sample_id,
+                        "predicted_label": "cat",
+                        "final_label": "bird",
+                        "confidence": 0.85,
+                        "prediction_id": None,
+                    },
+                ],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Fetch dataset and inspect label_space
+        resp = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert resp.status_code == 200
+        label_space = resp.json()["task_spec"]["label_space"]
+
+        # "bird" MUST be in label_space (this assertion FAILS pre-fix)
+        assert "bird" in label_space, (
+            f"Expected 'bird' in label_space, but got {label_space}"
+        )
+        # Existing labels must still be present
+        assert "cat" in label_space, f"Expected 'cat' in label_space, got {label_space}"
+        assert "dog" in label_space, f"Expected 'dog' in label_space, got {label_space}"

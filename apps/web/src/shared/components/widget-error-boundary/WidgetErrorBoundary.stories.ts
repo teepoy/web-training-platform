@@ -10,7 +10,7 @@ const ThrowingChild = defineComponent({
 });
 
 const meta = {
-  title: "web-ui/components/WidgetErrorBoundary",
+  title: "Shared/WidgetErrorBoundary",
   component: WidgetErrorBoundary,
   args: {
     widgetId: "test-widget",

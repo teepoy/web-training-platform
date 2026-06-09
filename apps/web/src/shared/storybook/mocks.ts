@@ -1,5 +1,5 @@
 import type { Decorator } from "@storybook/vue3";
-import { provide, shallowRef } from "vue";
+import { provide, shallowRef, onUnmounted } from "vue";
 import {
   BROWSER_DASHBOARD_KEY,
 } from "@/shared/widgets/sdk";
@@ -10,6 +10,57 @@ import type {
   ExporterProps,
   PreviewLauncherRequiredProps,
 } from "@/shared/widgets/sdk";
+
+export interface FetchMockEntry {
+  urlPattern: string | RegExp;
+  method?: string;
+  response: {
+    status?: number;
+    body: unknown;
+    headers?: Record<string, string>;
+  };
+}
+
+export function provideFetchMock(entries: FetchMockEntry[]): Decorator {
+  return (story) => ({
+    components: { story },
+    setup() {
+      const originalFetch = window.fetch.bind(window);
+
+      window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const method = (init?.method ?? "GET").toUpperCase();
+
+        for (const entry of entries) {
+          const patternMatch =
+            typeof entry.urlPattern === "string"
+              ? url.includes(entry.urlPattern)
+              : entry.urlPattern.test(url);
+          const methodMatch = !entry.method || entry.method.toUpperCase() === method;
+
+          if (patternMatch && methodMatch) {
+            return new Response(JSON.stringify(entry.response.body), {
+              status: entry.response.status ?? 200,
+              headers: {
+                "Content-Type": "application/json",
+                ...(entry.response.headers ?? {}),
+              },
+            });
+          }
+        }
+
+        return originalFetch(input, init);
+      }) as typeof window.fetch;
+
+      onUnmounted(() => {
+        window.fetch = originalFetch;
+      });
+
+      return {};
+    },
+    template: "<story />",
+  });
+}
 
 export function mockImportProps(
   overrides: Partial<ImporterProps> = {},

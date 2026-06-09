@@ -1,47 +1,74 @@
 # Architecture
 
+## Runtime layer responsibilities
+
+| Layer | Package | Role |
+|-------|---------|------|
+| **Control plane** | `apps/api` | HTTP API, metadata catalog, auth, job creation, SSE events, result persistence |
+| **Flow runtime** | `apps/worker` | Prefect flow definitions, `flow_serve` bootstrap, CPU orchestration, delegates compute to inference |
+| **Compute plane** | `apps/inference` | Train/predict/embed HTTP endpoints, GPU resource management, model loading |
+| **ML library** | `libs/ml` | Torch-first model implementations, training loops, transforms |
+| **Shared runtime** | `libs/platform-runtime` | Contracts, DTOs, Protocols, SDK/CLI, cross-process client wrappers |
+
+Execution topology:
+
+```
+apps/api (control plane)
+  → Prefect server (orchestration)
+  → apps/worker (flow runtime)
+  → apps/inference (compute plane, GPU)
+  → libs/ml (model implementations)
+
+apps/api ──(shared contracts)──→ libs/platform-runtime ←── apps/worker, apps/inference
+```
+
+Future gRPC between worker and inference is documented but not yet implemented; HTTP is the current transport.
+
 ## Monorepo layout
 
 - `apps/api`: FastAPI backend with extensible domain interfaces and orchestration APIs
 - `apps/web`: Vue 3 frontend for datasets and jobs
 - `apps/worker`: Prefect flow-worker package for CPU orchestration and delegated flow execution
-- `apps/inference`: long-lived HTTP GPU runtime service for prediction and embedding execution
-- `libs/python-sdk`: Python SDK and CLI for automation and agent tool-calling
+- `apps/inference`: canonical GPU compute worker — FastAPI HTTP service for train, prediction, and embedding execution
+- `libs/platform-runtime`: Python SDK and CLI for automation and agent tool-calling (primary)
+- `libs/python-sdk`: Compatibility shim re-exporting from platform-runtime
 
-## Runtime Architecture
+## Service Architecture
 
-The platform uses a **two-role runtime model**:
+The platform uses a **two-role service model**:
 
-### Prefect worker (CPU-only)
+### Prefect worker (CPU orchestration; code in `apps/worker`)
 
-The `prefect-worker` is a Prefect V2 process worker that handles orchestration: it consumes CPU queues, manages flow runs, and delegates GPU work to the GPU worker via HTTP API calls. It never uses CUDA, never requests GPU resources, and never executes GPU workloads locally.
+The Prefect worker is the flow runtime: it consumes CPU queues, manages flow runs, and delegates GPU work to the inference worker via HTTP API calls. It never uses CUDA, never requests GPU resources, and never executes GPU workloads locally.
 
-- Orchestrates flow runs through Prefect
-- Executes CPU-bound flows directly (DSPy optimization, dataset drain)
-- Delegates GPU work (train, predict, embed) to the GPU worker via HTTP
+- Serves and executes Prefect flows (`train_job_flow`, `predict_job_flow`, etc.)
+- Executes CPU-bound flows directly (dataset drain, sensor polling)
+- Delegates GPU work (train, predict, embed) to `apps/inference` via HTTP
+- Owns the executable trainer/predictor registry (`worker.runtime.registry`)
 - Runs on a non-CUDA base image
 
-### GPU worker
+### GPU worker (compute plane; code in `apps/inference`)
 
-The `gpu-worker` is a standalone HTTP API service that owns GPU runtime execution. It exposes `/health`, `/metrics`, `/v1/train`, `/v1/predict`, `/v1/embed`, and train status/cancel/log endpoints.
+The inference worker is a standalone HTTP API service that owns GPU runtime execution. It exposes `/health`, `/metrics`, `/v1/train`, `/v1/predict`, `/v1/embed`, and train status/cancel/log endpoints.
 
 - Executes training, prediction, and embedding on GPU
 - Enforces V1 single-GPU job limits (HTTP 409 on concurrent training)
 - Provides idempotent job submission via `platform_job_id`
+- Loads executable trainers/predictors from `worker.runtime.registry`
 - Runs on a CUDA-capable PyTorch base image
 - On macOS/non-NVIDIA environments, starts with `gpu_info.available: false` (graceful degradation)
 
 ### Service map
 
-```
+```text
 postgres (:5432)          - shared by API, Prefect, Label Studio
 minio (:9000, :9001)      - artifact storage
 prefect-server (:4200)    - Prefect control plane
-embedding (:50051)        - embedding gRPC service
-gpu-worker (:8010)        - GPU runtime API (train/predict/embed)
+embedding (:50051)        - embedding service (future gRPC; not yet implemented)
+gpu-worker (:8010)        - GPU runtime API (train/predict/embed); built from apps/inference
 label-studio (:8080)      - annotation UI
-finetune-api (:8000)      - platform API
-prefect-worker            - CPU-only Prefect orchestration (no exposed port)
+finetune-api (:8000)      - platform API (control plane)
+prefect-worker            - CPU Prefect flow runtime (no exposed port); built from apps/worker
 ```
 
 ### Observability
@@ -81,13 +108,21 @@ Full runtime contract is documented in [`runtime-contract.md`](runtime-contract.
 ## Distributed training
 
 - Production target: Kubeflow Training Operator (`PyTorchJob`) via `KubeflowTrainingOperatorEngine`.
-- Training is routed through Prefect-owned workers in dev/prod, with GPU execution delegated to the GPU worker.
-- Kubeflow remains an adapter path, but dev/prod no longer rely on API-local execution fallbacks.
+- Training is routed through Prefect flows running in `apps/worker`, with GPU execution delegated to `apps/inference`.
+- Kubeflow remains an adapter path; dev/prod do not rely on API-local execution fallbacks.
 
 ## Artifact storage
 
 - Storage is selected by config, but `memory` is test-only. Dev/prod use MinIO/S3-compatible storage.
 - `ArtifactService` persists exported dataset payloads and job artifacts to storage, then records metadata/checksum in DB.
+
+## Dataset storage aggregate
+
+Dataset sample access is unified behind `DatasetStorageAgg` in `apps/api/app/modules/datasets/domain/storage_agg.py`. Callers open a dataset through `DatasetStorageFactory.open(dataset_id, org_id)`, which dispatches by `storage_mode` to `DbFullDatasetStorage` or `SparseDatasetStorage`.
+
+The aggregate is the only storage-mode boundary for sample listing, lazyframe reads, bulk sample writes, annotation persistence, prediction result persistence, feature search, and dataset deletion. Training and prediction flows use `list_samples(return_lazyframe=True, ...)`; SC import uses `write_samples(...)`. Legacy read layers such as `SampleAccessFactory`, `DatasetSampleService`, `SampleBulkAccess.open/materialize`, `BulkViewLoader`, and `RuntimeMaterializer` are not runtime fallbacks.
+
+Domain aggregates wrap storage aggregates for domain semantics. For SC, `ScDatasetAgg` is the intended home for wafer/defect-specific operations such as wafer point computation and `defect_id` annotation semantics; generic storage implementations stay type-agnostic.
 
 ## Prediction storage and review
 
@@ -99,14 +134,16 @@ Full runtime contract is documented in [`runtime-contract.md`](runtime-contract.
 ## Config + DI
 
 - OmegaConf files in `apps/api/config/` hold centralized settings.
-- `dependency-injector` container wires engines, notification sink, orchestrator, and feature services.
+- `AppContainer` dataclass in `apps/api/app/composition.py` wires services and repositories; built by `build_app_container(cfg)` in the FastAPI lifespan.
+- Worker-side composition uses `build_worker_container(cfg)` in `apps/worker/worker/composition.py`, which is API-free and loads config YAML directly via OmegaConf.
 - `test` uses SQLite async and in-memory storage, while `dev` and `prod` use Postgres plus shared object storage.
 
-## Prefect Delegation
+## Prefect / Worker / GPU Execution
 
 - The target model separates API orchestration from Prefect flow workers (CPU-only) and the GPU worker (runtime execution).
-- The `prefect-worker` consumes CPU queues and delegates GPU work to the `gpu-worker` via HTTP API calls.
-- CPU-only flows (DSPy optimization, dataset drain) execute directly in the Prefect worker.
-- The runtime uses two Docker images: `apps/inference/Dockerfile` (GPU worker) and `apps/worker/Dockerfile.cpu` (Prefect worker).
+- `apps/worker` owns Prefect flow definitions, the `flow_serve` bootstrap, and the executable trainer/predictor registry. Flows coordinate CPU orchestration (sample chunking, status polling, cancel detection, result persistence) and delegate GPU work to `apps/inference` via HTTP.
+- `apps/inference` is the canonical GPU compute plane. It exposes `/v1/train`, `/v1/predict`, `/v1/embed` endpoints, enforces V1 single-GPU limits, and loads executables from `worker.runtime.registry`.
+- API (`apps/api`) creates flow runs through the Prefect REST client but does not define `@flow` functions, does not serve flows, and does not import executable trainers/predictors. API-side trainer/predictor registrations are metadata catalogs only.
+- CPU-only flows (dataset drain, sensor polling) execute directly in the Prefect worker.
 - Cron-scheduled deployments are created through the API and consumed by the Prefect worker.
 - Full contract: [`runtime-contract.md`](runtime-contract.md).

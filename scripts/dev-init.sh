@@ -6,7 +6,6 @@
 # 1. Waits for services to be ready (API, Label Studio)
 # 2. Creates/ensures admin user exists
 # 3. Seeds Oxford Flowers dataset (limited samples for dev)
-# 4. Seeds YOLO classification training presets
 #
 # Usage:
 #   ./scripts/dev-init.sh                    # Default: 100 samples
@@ -142,7 +141,7 @@ else
 
     # Try to create superadmin via docker compose exec
     if docker compose -f "$COMPOSE_FILE" exec -T api \
-        uv run python -m app.cli create-superadmin \
+        uv run --no-dev python -m app.cli create-superadmin \
         --email="$ADMIN_EMAIL" \
         --password="$ADMIN_PASSWORD" \
         --name="Admin" 2>/dev/null; then
@@ -175,30 +174,32 @@ echo "----------------------------------------"
 echo ""
 
 # ============================================================
-# Step 3: Seed training presets
+# Summary
 # ============================================================
-log_info "Step 2: Seeding training presets..."
-
-cd "$REPO_ROOT"
-
-# Use uv to run the seed script
-if command -v uv &> /dev/null; then
-    uv run python scripts/seed.py presets \
-        --api-url "$API_URL" \
-        --compose-file "$COMPOSE_FILE" \
-        --no-promote
-else
-    python scripts/seed.py presets \
-        --api-url "$API_URL" \
-        --compose-file "$COMPOSE_FILE" \
-        --no-promote
-fi
-
-log_success "Training presets seeded"
-
-# ============================================================
-# Step 4: Seed Oxford Flowers dataset
-# ============================================================
+echo ""
+echo "========================================"
+echo "  Initialization Complete!"
+echo "========================================"
+echo ""
+echo "Services:"
+echo "  Web App:       http://localhost:3000"
+echo "  API:           $API_URL"
+echo "  Label Studio:  $LS_URL"
+echo "  pgAdmin:       http://localhost:5050"
+echo "  MinIO Console: http://localhost:9001"
+echo "  Prefect:       http://localhost:4200"
+echo ""
+echo "Credentials:"
+echo "  Platform:      $ADMIN_EMAIL / $ADMIN_PASSWORD"
+echo "  Label Studio:  admin@example.com / admin123"
+echo "  pgAdmin:       admin@example.com / admin123"
+echo "  MinIO:         minioadmin / minioadmin"
+echo ""
+echo "Next steps:"
+echo "  1. Open http://localhost:3000 in your browser"
+echo "  2. Login with admin credentials"
+echo "  3. Explore the Oxford Flowers dataset"
+echo "  4. Create a training job"
 echo ""
 log_info "Step 3: Seeding Oxford Flowers dataset..."
 
@@ -208,7 +209,7 @@ if [ "$MAX_SAMPLES" -gt 0 ]; then
 fi
 
 if command -v uv &> /dev/null; then
-    uv run python scripts/seed.py oxford-flowers $FLOWERS_ARGS
+    uv run --no-dev python scripts/seed.py oxford-flowers $FLOWERS_ARGS
 else
     python scripts/seed.py oxford-flowers $FLOWERS_ARGS
 fi
@@ -241,5 +242,5 @@ echo "Next steps:"
 echo "  1. Open http://localhost:3000 in your browser"
 echo "  2. Login with admin credentials"
 echo "  3. Explore the Oxford Flowers dataset"
-echo "  4. Create a training job using YOLO presets"
+echo "  4. Create a training job"
 echo ""

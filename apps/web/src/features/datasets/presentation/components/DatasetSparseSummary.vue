@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
 import { NCard, NDataTable, NDescriptions, NDescriptionsItem, NResult, NSpace, NSpin, NTag, NText, type DataTableColumns } from "naive-ui";
-import type { SparseSummaryResponse } from "@/types";
+import type { SparseSummaryResponse } from "@/generated/orval/models";
 
 const schemaColumns: DataTableColumns<{ name: string; type: string }> = [
   { title: "Column", key: "name", render: (row) => h("code", { style: "font-size: 12px" }, row.name) },
@@ -21,6 +21,10 @@ const props = defineProps<{
   isLoading: boolean;
 }>();
 
+const emit = defineEmits<{
+  (e: "select-sample", sampleId: string): void;
+}>();
+
 const sampleRowColumns = computed<DataTableColumns<Record<string, unknown>>>(() => {
   if (!props.sparseSummary?.sample_rows.length) return [];
   const keys = Object.keys(props.sparseSummary.sample_rows[0] ?? {});
@@ -37,6 +41,11 @@ const sampleRowColumns = computed<DataTableColumns<Record<string, unknown>>>(() 
   }));
 });
 
+function handleSampleRowClick(row: Record<string, unknown>) {
+  const sampleId = String(row.id ?? row.sample_id ?? "");
+  if (sampleId) emit("select-sample", sampleId);
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -48,7 +57,7 @@ function formatBytes(bytes: number): string {
   <n-result
     status="info"
     title="Sparse Dataset"
-    description="This dataset uses file-backed sparse storage. Individual sample browsing is not available."
+    description="This dataset uses file-backed sparse storage. Click a preview row below to view sample details."
     style="margin-top: 48px"
   >
     <template #footer>
@@ -78,7 +87,18 @@ function formatBytes(bytes: number): string {
           </n-card>
 
           <n-card v-if="sparseSummary.sample_rows.length > 0" title="Preview Rows (first shard)" size="small" style="width: 100%">
-            <n-data-table :columns="sampleRowColumns" :data="sparseSummary.sample_rows" :bordered="true" :single-line="false" size="small" :max-height="300" />
+            <n-data-table
+              :columns="sampleRowColumns"
+              :data="sparseSummary.sample_rows"
+              :bordered="true"
+              :single-line="false"
+              size="small"
+              :max-height="300"
+              :row-props="(row: Record<string, unknown>) => ({
+                style: 'cursor: pointer',
+                onClick: () => handleSampleRowClick(row),
+              })"
+            />
           </n-card>
         </template>
 

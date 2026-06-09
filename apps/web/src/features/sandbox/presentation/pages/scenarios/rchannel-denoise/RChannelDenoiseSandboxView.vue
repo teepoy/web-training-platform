@@ -125,8 +125,8 @@ import {
   resolveImageUris,
   listDatasets,
   type BrowserItem,
-  type SampleWithLabels,
 } from '@/shared'
+import type { SampleWithLabels } from "@/generated/orval/models";
 
 const IMAGE_LABELS = [
   '1. Noisy 32×32 (Salt & Pepper)',

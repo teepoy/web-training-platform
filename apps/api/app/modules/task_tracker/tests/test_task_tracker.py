@@ -9,8 +9,24 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.shared.api.schemas import TrainingEvent
-from app.modules.task_tracker.application.services.task_tracker import TaskTrackerService
-from tests.conftest import PRESET_ID
+from app.modules.task_tracker.app.services.task_tracker import TaskTrackerService
+from tests.conftest import TRAINER_ID
+
+
+@pytest.fixture(autouse=True)
+def _fast_polling():
+    """Reduce the 3s SSE poll sleep to 0 while keeping short sleeps intact,
+    so background training threads (0.2s polls) work correctly."""
+    _original_sleep = asyncio.sleep
+
+    async def _fast_sleep(delay: float, result=None):
+        if delay >= 2.0:
+            return await _original_sleep(0, result=result)
+        return await _original_sleep(delay, result=result)
+
+    asyncio.sleep = _fast_sleep
+    yield
+    asyncio.sleep = _original_sleep
 
 
 def _create_dataset(client: TestClient, name: str) -> str:
@@ -30,7 +46,7 @@ def test_task_tracker_lists_training_and_prediction_jobs() -> None:
         dataset_id = _create_dataset(client, "tracker-ds")
         training = client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         )
         assert training.status_code == 200
 
@@ -51,7 +67,7 @@ def test_task_tracker_detail_contains_raw_and_derived() -> None:
         dataset_id = _create_dataset(client, "tracker-detail")
         training = client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         )
         training.raise_for_status()
         task_id = training.json()["id"]
@@ -73,13 +89,13 @@ def test_task_tracker_detail_includes_gpu_job_id_from_events() -> None:
         dataset_id = _create_dataset(client, "tracker-gpu-correlation")
         training = client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         )
         training.raise_for_status()
         task_id = training.json()["id"]
 
         asyncio.run(
-            app.state.container.prediction_repository.add_event(
+            app.state.app_context.prediction.prediction_repository.add_event(
                 TrainingEvent(
                     job_id=task_id,
                     message="GPU job submitted",
@@ -102,7 +118,7 @@ def test_task_tracker_detail_omits_gpu_job_id_when_unavailable() -> None:
         dataset_id = _create_dataset(client, "tracker-no-gpu-correlation")
         training = client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         )
         training.raise_for_status()
         task_id = training.json()["id"]
@@ -119,7 +135,7 @@ def test_task_tracker_filters_by_kind() -> None:
         dataset_id = _create_dataset(client, "tracker-filter")
         client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         ).raise_for_status()
 
         prediction = client.post(f"/api/v1/datasets/{dataset_id}/features/extract")
@@ -137,7 +153,7 @@ def test_task_tracker_stream_returns_snapshot_events() -> None:
         dataset_id = _create_dataset(client, "tracker-stream")
         training = client.post(
             "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
         )
         training.raise_for_status()
         task_id = training.json()["id"]
@@ -189,7 +205,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
             return_value={
                 "id": "flow-run-1",
                 "deployment_id": "deployment-1",
-                "work_pool_name": "training-pool",
+                "work_pool_name": "default-cpu",
                 "work_queue_name": "train-gpu",
                 "state": {"type": "RUNNING", "name": "Running"},
             }
@@ -220,7 +236,7 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
         filter_flow_runs=AsyncMock(return_value=[]),
     )
 
-    from app.modules.task_tracker.api.deps import get_prefect_client
+    from app.modules.task_tracker.port.http.deps import get_prefect_client
 
     app.dependency_overrides[get_prefect_client] = lambda: prefect
     try:
@@ -228,12 +244,12 @@ def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None
             dataset_id = _create_dataset(client, "tracker-dynamic-flow")
             training = client.post(
                 "/api/v1/training-jobs",
-                json={"dataset_id": dataset_id, "preset_id": PRESET_ID},
+                json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID},
             )
             training.raise_for_status()
             task_id = training.json()["id"]
             asyncio.run(
-                app.state.container.prediction_repository.set_job_external_id(task_id, "flow-run-1")
+                app.state.app_context.prediction.prediction_repository.set_job_external_id(task_id, "flow-run-1")
             )
 
             detail = client.get(f"/api/v1/task-tracker/tasks/{task_id}")

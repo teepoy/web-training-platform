@@ -1,6 +1,6 @@
 <template>
   <div class="auth-page">
-    <n-card class="auth-card" title="Create Account">
+    <n-card class="auth-card" title="Create Account" data-testid="register-form">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
         <n-form-item label="Name" path="name">
           <n-input
@@ -8,6 +8,7 @@
             type="text"
             placeholder="Your name"
             :disabled="loading"
+            data-testid="register-name"
           />
         </n-form-item>
         <n-form-item label="Email" path="email">
@@ -16,6 +17,7 @@
             type="text"
             placeholder="you@example.com"
             :disabled="loading"
+            data-testid="register-email"
           />
         </n-form-item>
         <n-form-item label="Password" path="password">
@@ -25,12 +27,14 @@
             placeholder="Password"
             show-password-on="click"
             :disabled="loading"
+            data-testid="register-password"
           />
         </n-form-item>
         <n-button
           type="primary"
           block
           :loading="loading"
+          data-testid="register-submit"
           @click="handleSubmit"
         >
           Create Account

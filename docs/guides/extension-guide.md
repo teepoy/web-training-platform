@@ -610,7 +610,7 @@ After completing all steps above:
 
 ### Further reading
 
-- [`docs/architecture/dataset-schema-system.md`](../architecture/dataset-schema-system. architecture overviewmd)
-- [`docs/architecture/datasets-shim-architecture.md`](../architecture/datasets-shim-architecture. frontend shim detailmd)
-- `apps/api/app/domain/schemas/image_detection. reference implementation (backend)py`
-- `apps/web/src/views/datasets/schemas/image-detection. reference implementation (frontend)ts`
+- [Dataset schema system](../architecture/dataset-schema-system.md)
+- [Datasets shim architecture](../architecture/datasets-shim-architecture.md)
+- `apps/api/app/domain/schemas/image_detection.py` — backend reference implementation
+- `apps/web/src/views/datasets/schemas/image-detection.ts` — frontend reference implementation

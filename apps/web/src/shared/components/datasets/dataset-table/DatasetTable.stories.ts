@@ -26,7 +26,7 @@ const columns: DataTableColumns<StoryDataset> = [
 ];
 
 const meta = {
-  title: "web-ui/components/datasets/DatasetTable",
+  title: "Shared/DatasetTable",
   component: DatasetTable,
   args: {
     datasets: rows,

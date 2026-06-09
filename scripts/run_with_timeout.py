@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import signal
 import subprocess
-import sys
-import time
 
 
 def parse_args() -> argparse.Namespace:

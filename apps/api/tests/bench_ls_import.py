@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import math
 import time
+from typing import Any
 
 from label_studio_sdk import LabelStudio
+
 
 LS_URL = "http://localhost:8080"
 LS_API_KEY = "ls-smoke-token-for-local-dev"
@@ -33,7 +35,8 @@ def benchmark(total_tasks: int, batch_size: int, return_task_ids: bool) -> None:
         title=f"bench-import-{int(time.time())}",
         label_config=LABEL_CONFIG,
     )
-    project_id: int = int(project.id)  # type: ignore[arg-type]
+    assert project.id is not None
+    project_id: int = int(project.id)
 
     try:
         batches = math.ceil(total_tasks / batch_size)
@@ -43,11 +46,11 @@ def benchmark(total_tasks: int, batch_size: int, return_task_ids: bool) -> None:
         for batch_index in range(batches):
             remaining = total_tasks - imported
             current_batch_size = min(batch_size, remaining)
-            payload = build_batch(imported, current_batch_size)
+            payload: Any = build_batch(imported, current_batch_size)
             batch_started = time.perf_counter()
             response = client.projects.import_tasks(
                 id=project_id,
-                request=payload,  # pyright: ignore[reportArgumentType]
+                request=payload,
                 return_task_ids=return_task_ids,
             )
             batch_elapsed = time.perf_counter() - batch_started

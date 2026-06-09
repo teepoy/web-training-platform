@@ -1,3 +1,11 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""
+
 [project]
 name = "finetune-api"
 version = "0.1.0"
@@ -5,41 +13,51 @@ description = "Online finetune platform API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "bcrypt>=4.0.0",
-  "fastapi>=0.116.0",
-  "uvicorn>=0.35.0",
-  "pydantic>=2.11.0",
-  "omegaconf>=2.3.0",
-  "httpx>=0.28.0",
-  "prefect>=3.0.0",
-  "label-studio-sdk>=1.0.0",
-  "sqlalchemy>=2.0.36",
-  "aiosqlite>=0.20.0",
-  "asyncpg>=0.30.0",
-  "psycopg2-binary>=2.9.10",
-  "alembic>=1.14.1",
-  "minio>=7.2.14",
-  "kubernetes>=31.0.0",
-  "python-multipart>=0.0.9",
-  "python-jose[cryptography]>=3.3.0",
-  "pgvector>=0.3.0",
-  "grpcio>=1.68.0",
-  "embedding-protos",
-  "seedmaker",
-  "croniter>=2.0.0",
-  "pillow>=11.0.0",
-  "litellm>=1.30.0",
-  "pyarrow>=18.0.0",
+  "bcrypt==5.0.0",
+  "fastapi[standard]==0.135.2",
+  "uvicorn==0.42.0",
+  "pydantic==2.12.5",
+  "omegaconf==2.3.0",
+  "httpx==0.28.1",
+  "prefect==3.6.24",
+  "label-studio-sdk==2.0.19",
+  "sqlalchemy==2.0.48",
+  "aiosqlite==0.22.1",
+  "asyncpg==0.31.0",
+  "psycopg2-binary==2.9.11",
+  "alembic==1.18.4",
+  "minio==7.2.20",
+  "kubernetes==35.0.0",
+  "python-multipart==0.0.22",
+  "python-jose[cryptography]==3.5.0",
+  "pgvector==0.4.2",
+  "grpcio==1.80.0",
+  "proto-stubs",
+  "platform-runtime",
+  "finetune-ml",
+  "croniter==6.2.2",
+  "datasets>=3.0",
+  "pillow==12.2.0",
+  "litellm>=1",
+  "pyvips==2.2.3",
+  "pyvips-binary",
+  "pyarrow==24.0.0",
+  "polars>=1.0.0",
+  "redis>=5.0",
+  "nest-asyncio>=1.6.0",
 ]
 
 [project.optional-dependencies]
-dev = [
-  "pytest>=8.3.0",
-  "pytest-asyncio>=0.24.0",
-]
+dev = ["pytest==9.0.2", "pytest-asyncio==1.3.0", "seedmaker"]
+gpu = ["torch>=2.0", "torchvision>=0.15", "finetune-ml", "ultralytics>=8.4.58"]
+
+[project.scripts]
+ftapi = "app.cli:main"
 
 [tool.uv.sources]
-embedding-protos = { workspace = true }
+proto-stubs = { workspace = true }
+platform-runtime = { workspace = true }
+finetune-ml = { workspace = true }
 seedmaker = { workspace = true }
 
 [tool.pytest.ini_options]
@@ -48,24 +66,38 @@ python_files = "test_*.py *_test.py"
 faulthandler_timeout = 60
 faulthandler_exit_on_timeout = true
 markers = [
-    "no_auth_override: skip the global auth dependency override for this test",
-    "no_ls_override: skip the global Label Studio client override for this test",
-    "no_embedding_override: skip the global embedding service override for this test",
-    "no_inference_override: skip the global inference worker override for this test",
-    "no_gpu_worker_override: skip the global GPU worker override for this test",
-    "slow: marks tests as slow and skipped by default (run with -m slow)",
+  "no_auth_override: skip the global auth dependency override for this test",
+  "no_ls_override: skip the global Label Studio client override for this test",
+  "boundary: import/runtime boundary harness tests",
+  "slow: marks tests as slow and skipped by default (run with -m slow)",
 ]
 addopts = "-m 'not slow'"
 
 [dependency-groups]
 dev = [
-    "omegaconf>=2.3.0",
-    "pyright>=1.1.0",
+  "pytest==9.0.2",
+  "pyright==1.1.409",
+  "pytest-timeout>=2.4.0",
+  "finetune-api[gpu]",
 ]
+gpu = ["ultralytics>=8.4.58"]
 
 [tool.pyright]
+extraPaths = [
+  "../../libs/platform-runtime/src",
+  "../../libs/ml",
+  "../../libs/seedmaker/src",
+]
 exclude = [
   "app/shared/generated/**",
+  "app/modules/sc/generated/**",
+  "app/_torch_boundary_test.py",
+  "app/modules/embedding/flows/embed.py",
+  "app/modules/prediction/flows/_predictors/sc.py",
+  "app/modules/prediction/flows/_predictors/yolo_sc.py",
+  "app/modules/sc/tests/test_training_preview.py",
+  "app/modules/training/flows/_trainers/sc.py",
+  "app/modules/training/flows/_trainers/yolo_sc.py",
 ]
 typeCheckingMode = "basic"
 reportMissingImports = true

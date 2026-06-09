@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
-import { mount } from "@vue/test-utils";
+import { mountWithProviders } from "@/testing";
 import WidgetErrorBoundary from "./WidgetErrorBoundary.vue";
 
 const PROPS = {
@@ -12,13 +12,13 @@ const NormalChild = defineComponent({
   render: () => h("div", "Normal child content"),
 });
 
-function getErrorVm(wrapper: ReturnType<typeof mount>): { error: string | null } {
+function getErrorVm(wrapper: Awaited<ReturnType<typeof mountWithProviders>>["wrapper"]): { error: string | null } {
   return wrapper.vm as unknown as { error: string | null };
 }
 
 describe("WidgetErrorBoundary", () => {
-  it("renders normal child content without error", () => {
-    const wrapper = mount(WidgetErrorBoundary, {
+  it("renders normal child content without error", async () => {
+    const { wrapper } = await mountWithProviders(WidgetErrorBoundary, {
       props: PROPS,
       slots: { default: NormalChild },
     });
@@ -28,7 +28,7 @@ describe("WidgetErrorBoundary", () => {
   });
 
   it("displays widgetId and widgetComponent in error text when error is captured", async () => {
-    const wrapper = mount(WidgetErrorBoundary, {
+    const { wrapper } = await mountWithProviders(WidgetErrorBoundary, {
       props: PROPS,
       slots: { default: NormalChild },
     });
@@ -48,7 +48,7 @@ describe("WidgetErrorBoundary", () => {
   });
 
   it("retry button resets error state", async () => {
-    const wrapper = mount(WidgetErrorBoundary, {
+    const { wrapper } = await mountWithProviders(WidgetErrorBoundary, {
       props: PROPS,
       slots: { default: NormalChild },
     });
@@ -68,7 +68,7 @@ describe("WidgetErrorBoundary", () => {
   });
 
   it("error state includes widgetId and widgetComponent in message", async () => {
-    const wrapper = mount(WidgetErrorBoundary, {
+    const { wrapper } = await mountWithProviders(WidgetErrorBoundary, {
       props: PROPS,
       slots: { default: NormalChild },
     });

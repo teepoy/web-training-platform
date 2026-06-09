@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.config import load_config
-from app.modules.dashboard.application.services.service_health import ServiceHealthService
-from app.modules.dashboard.api.deps import get_prefect_client, get_repository, get_service_health
-from tests.conftest import PRESET_ID
+from app.modules.dashboard.app.services.service_health import ServiceHealthService
+from app.modules.dashboard.port.http.deps import get_prefect_client, get_repository, get_service_health
+from tests.conftest import TRAINER_ID
 
 
 def _create_job(c: TestClient) -> str:
@@ -26,7 +26,7 @@ def _create_job(c: TestClient) -> str:
     dataset_id = ds.json()["id"]
     job = c.post(
         "/api/v1/training-jobs",
-        json={"dataset_id": dataset_id, "preset_id": PRESET_ID, "created_by": "tester"},
+        json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID, "created_by": "tester"},
     )
     return job.json()["id"]
 
@@ -83,7 +83,7 @@ def test_dashboard_response_shape() -> None:
 
         # Each recent job has the expected fields
         for job in body["recent_jobs"]:
-            for field in ("id", "dataset_id", "preset_id", "status", "created_by", "created_at", "updated_at"):
+            for field in ("id", "dataset_id", "trainer_id", "status", "created_by", "created_at", "updated_at"):
                 assert field in job
 
         for service in body["services"]:
@@ -95,12 +95,9 @@ def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
     prefect_client = AsyncMock()
     prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
     prefect_client.list_work_queues.side_effect = Exception("no work queues available")
-    embedding_client = AsyncMock()
-    embedding_client.health.return_value = True
     service_health = ServiceHealthService(
         config=load_config(),
         prefect_client=prefect_client,
-        embedding_client=embedding_client,
     )
     job_repository = AsyncMock()
     job_repository.list_jobs.return_value = []
@@ -114,8 +111,6 @@ def test_dashboard_reports_prefect_worker_down_when_no_work_queues() -> None:
         services = {service["name"]: service for service in r.json()["services"]}
         assert services["prefect-worker"]["status"] == "down"
         assert "no work queues available" in services["prefect-worker"]["detail"]
-        assert "gpu-worker" in services
-        assert services["embedding"]["status"] == "healthy"
     finally:
         app.dependency_overrides.pop(get_repository, None)
         app.dependency_overrides.pop(get_service_health, None)
@@ -126,12 +121,9 @@ def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> No
     prefect_client = AsyncMock()
     prefect_client.get_work_pool.side_effect = lambda name: {"name": name}
     prefect_client.list_work_queues.side_effect = lambda _work_pool_name: [{"name": "default"}]
-    embedding_client = AsyncMock()
-    embedding_client.health.return_value = True
     service_health = ServiceHealthService(
         config=load_config(),
         prefect_client=prefect_client,
-        embedding_client=embedding_client,
     )
     job_repository = AsyncMock()
     job_repository.list_jobs.return_value = []
@@ -145,8 +137,6 @@ def test_dashboard_reports_prefect_worker_healthy_when_work_queues_exist() -> No
         services = {service["name"]: service for service in r.json()["services"]}
         assert services["prefect-worker"]["status"] == "healthy"
         assert "1 work queue(s)" in services["prefect-worker"]["detail"]
-        assert "gpu-worker" in services
-        assert services["embedding"]["status"] == "healthy"
     finally:
         app.dependency_overrides.pop(get_repository, None)
         app.dependency_overrides.pop(get_service_health, None)

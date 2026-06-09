@@ -21,7 +21,8 @@ class DatasetORM(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dataset_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    task_spec: Mapped[dict] = mapped_column(JSON, nullable=False)
+    view_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    dataset_meta: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     is_public: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="0"
     )

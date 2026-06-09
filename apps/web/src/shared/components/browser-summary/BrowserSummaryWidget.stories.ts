@@ -3,7 +3,7 @@ import BrowserSummaryWidget from "./BrowserSummaryWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/BrowserSummaryWidget",
+  title: "Shared/BrowserSummaryWidget",
   component: BrowserSummaryWidget,
   decorators: [provideWebUiContext()],
   args: {

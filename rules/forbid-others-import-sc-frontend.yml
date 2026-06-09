@@ -1,0 +1,18 @@
+id: forbid-features-import-sc
+language: typescript
+severity: error
+files:
+  - apps/web/src/features/datasets/**/*.ts
+  - apps/web/src/features/datasets/**/*.tsx
+  - apps/web/src/features/preview/**/*.ts
+  - apps/web/src/features/preview/**/*.tsx
+  - apps/web/src/features/classify/**/*.ts
+  - apps/web/src/features/classify/**/*.tsx
+  - apps/web/src/features/agent/**/*.ts
+  - apps/web/src/features/agent/**/*.tsx
+rule:
+  kind: import_statement
+  regex: "@/features/sc/"
+message: |
+  features/{datasets,preview,classify,agent} must not import from features/sc.
+  SC is a self-contained domain module.

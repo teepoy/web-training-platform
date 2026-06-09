@@ -3,7 +3,7 @@ import InteractiveScatterWidget from "./InteractiveScatterWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/InteractiveScatterWidget",
+  title: "Shared/InteractiveScatterWidget",
   component: InteractiveScatterWidget,
   decorators: [provideWebUiContext()],
   args: {

@@ -35,3 +35,7 @@ agent:
 
 auth:
   enabled: true
+
+sc:
+  mock:
+    db_url: "sqlite:////tmp/test_wafer.db"

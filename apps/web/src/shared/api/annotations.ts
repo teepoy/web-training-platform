@@ -1,36 +1,32 @@
-import { req } from "./client";
-import type {
-  Annotation,
-  UpdateAnnotationPayload,
-} from "./types";
+import {
+  createAnnotationApiV1AnnotationsPost,
+  updateAnnotationApiV1AnnotationsAnnotationIdPatch,
+  deleteAnnotationApiV1AnnotationsAnnotationIdDelete,
+} from "@/generated/orval/endpoints/api";
+import type { Annotation } from "@/generated/orval/models";
 
-export function createAnnotation(body: {
+export async function createAnnotation(body: {
+  dataset_id: string;
   sample_id: string;
   label: string;
   created_by?: string;
 }): Promise<Annotation> {
-  return req<Annotation>("/annotations", {
-    method: "POST",
-    body: JSON.stringify({
-      sample_id: body.sample_id,
-      label: body.label,
-      ...(body.created_by !== undefined
-        ? { created_by: body.created_by }
-        : {}),
-    }),
-  });
+  return (await
+    createAnnotationApiV1AnnotationsPost(
+      body as import("@/generated/orval/models/createAnnotationRequest").CreateAnnotationRequest,
+    )).data as Annotation;
 }
 
-export function updateAnnotation(
+export async function updateAnnotation(
   annotationId: string,
-  payload: UpdateAnnotationPayload,
+  datasetId: string,
+  payload: { label: string },
 ): Promise<Annotation> {
-  return req<Annotation>(`/annotations/${annotationId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return (await
+    updateAnnotationApiV1AnnotationsAnnotationIdPatch(annotationId, { dataset_id: datasetId, ...payload })).data as Annotation;
 }
 
-export function deleteAnnotation(annotationId: string): Promise<void> {
-  return req<void>(`/annotations/${annotationId}`, { method: "DELETE" });
+export async function deleteAnnotation(annotationId: string, datasetId: string): Promise<void> {
+  return (await
+    deleteAnnotationApiV1AnnotationsAnnotationIdDelete(annotationId, { dataset_id: datasetId })).data as void;
 }

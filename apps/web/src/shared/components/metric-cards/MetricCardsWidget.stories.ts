@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import MetricCardsWidget from "./MetricCardsWidget.vue";
 
 const meta = {
-  title: "web-ui/widgets/MetricCardsWidget",
+  title: "Shared/MetricCardsWidget",
   component: MetricCardsWidget,
   args: {
     data: {

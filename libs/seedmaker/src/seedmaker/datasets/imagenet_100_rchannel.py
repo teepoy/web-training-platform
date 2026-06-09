@@ -73,11 +73,12 @@ def _add_salt_pepper_noise(img: Image.Image, amount: float = 0.05) -> Image.Imag
 
     noisy = img.copy()
     pixels = noisy.load()
+    assert pixels is not None
 
     indices = random.sample(range(n_pixels), n_noisy)
     for i, idx in enumerate(indices):
         y, x = divmod(idx, w)
-        pixels[x, y] = 255 if i < n_salt else 0  # type: ignore[index]
+        pixels[x, y] = 255 if i < n_salt else 0
 
     return noisy
 
@@ -123,7 +124,7 @@ def run(args, runner: SeedRunner) -> int:
 
     print("[6/6] Streaming ImageNet-1K train split (first 100 classes) ...")
     try:
-        from datasets import load_dataset  # type: ignore[import-untyped]
+        from datasets import load_dataset  # pyright: ignore[reportMissingImports]
     except ImportError:
         print(
             "  ERROR: 'datasets' package not found. "

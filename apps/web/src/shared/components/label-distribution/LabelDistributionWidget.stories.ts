@@ -3,7 +3,7 @@ import LabelDistributionWidget from "./LabelDistributionWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/LabelDistributionWidget",
+  title: "Shared/LabelDistributionWidget",
   component: LabelDistributionWidget,
   decorators: [provideWebUiContext()],
   args: {

@@ -11,21 +11,9 @@ from pydantic import BaseModel, Field, field_validator
 T = TypeVar("T")
 
 
-class TaskType(str, Enum):
-    CLASSIFICATION = "classification"
-    VQA = "vqa"
-    DETECTION = "detection"
-
-
 class DatasetStorageMode(str, Enum):
     DB_FULL = "db_full"
     FILE_SHARD_SPARSE = "file_shard_sparse"
-
-
-class DatasetType(str, Enum):
-    IMAGE_CLASSIFICATION = "image_classification"
-    IMAGE_VQA = "image_vqa"
-    IMAGE_DETECTION = "image_detection"
 
 
 class ModelFramework(str, Enum):
@@ -45,7 +33,6 @@ class OrgRole(str, Enum):
     MEMBER = "member"
 
 
-DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
 SPARSE_NO_LS = "SPARSE_NO_LS"
 
 
@@ -65,12 +52,12 @@ class Model(ArtifactRef):
     job_id: str
     dataset_id: str | None = None
     dataset_name: str | None = None
-    preset_id: str | None = None
-    preset_name: str | None = None
+    trainer_id: str | None = None
+    trainer_name: str | None = None
 
 
 class TaskSpec(BaseModel):
-    task_type: TaskType = TaskType.CLASSIFICATION
+    task_type: str = "classification"
     label_space: list[str] = Field(default_factory=list)
     metadata_schema: dict[str, dict[str, str]] = Field(default_factory=dict)
 
@@ -78,9 +65,10 @@ class TaskSpec(BaseModel):
 class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    dataset_type: DatasetType = DatasetType.IMAGE_CLASSIFICATION
+    dataset_type: str = "image_classification"
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
-    org_id: str | None = DEFAULT_ORG_ID
+    view_types: list[str] = Field(default_factory=list)
+    org_id: str | None = None
     org_name: str = ""
     is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -89,6 +77,7 @@ class Dataset(BaseModel):
     ls_project_url: str | None = None
     storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
     capabilities: dict[str, bool] | None = None
+    dataset_meta: dict = Field(default_factory=dict)
 
 
 class Sample(BaseModel):
@@ -109,20 +98,6 @@ class Annotation(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class ModelSpec(BaseModel):
-    framework: ModelFramework = ModelFramework.PYTORCH
-    base_model: str
-
-
-class TrainingPreset(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    name: str
-    model_spec: ModelSpec
-    omegaconf_yaml: str
-    dataloader_ref: str
-    org_id: str | None = DEFAULT_ORG_ID
-
-
 class TrainingEvent(BaseModel):
     job_id: str
     ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -134,10 +109,10 @@ class TrainingEvent(BaseModel):
 class TrainingJob(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     dataset_id: str
-    preset_id: str
+    trainer_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
-    org_id: str | None = DEFAULT_ORG_ID
+    org_id: str | None = None
     org_name: str = ""
     is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -254,7 +229,7 @@ class PredictionJob(BaseModel):
     created_by: str
     target: str = "image_classification"
     model_version: str | None = None
-    org_id: str | None = DEFAULT_ORG_ID
+    org_id: str | None = None
     org_name: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -278,7 +253,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class CreateDatasetRequest(BaseModel):
     name: str
-    dataset_type: DatasetType | None = None
+    dataset_type: str | None = None
     task_spec: TaskSpec = Field(default_factory=TaskSpec)
     storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
 
@@ -319,6 +294,7 @@ class ImportVqaJsonlResponse(BaseModel):
 
 
 class CreateAnnotationRequest(BaseModel):
+    dataset_id: str
     sample_id: str
     label: str
     annotation_value: dict | list | None = None
@@ -326,19 +302,13 @@ class CreateAnnotationRequest(BaseModel):
 
 
 class UpdateAnnotationRequest(BaseModel):
+    dataset_id: str
     label: str
-
-
-class CreatePresetRequest(BaseModel):
-    name: str
-    model_spec: ModelSpec
-    omegaconf_yaml: str
-    dataloader_ref: str
 
 
 class CreateTrainingJobRequest(BaseModel):
     dataset_id: str
-    preset_id: str
+    trainer_id: str
     created_by: str = "demo-user"
 
 
@@ -530,7 +500,7 @@ class JobQueueStats(BaseModel):
 class RecentJobSummary(BaseModel):
     id: str
     dataset_id: str
-    preset_id: str
+    trainer_id: str
     status: str
     created_by: str
     created_at: str
@@ -551,6 +521,12 @@ class DatasetAnnotationStats(BaseModel):
     annotated_samples: int = 0
     unlabeled_samples: int = 0
     label_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class DatasetStatusResponse(BaseModel):
+    allow_train: bool
+    annotated_samples: int
+    total_samples: int
 
 
 class DashboardResponse(BaseModel):
@@ -706,7 +682,7 @@ class ModelResponse(BaseModel):
     job_id: str
     dataset_id: str
     dataset_name: str
-    preset_name: str
+    trainer_name: str
 
 
 class UploadModelRequest(BaseModel):
@@ -778,7 +754,7 @@ class RunPredictionRequest(BaseModel):
         description="Optional version tag for Label Studio filtering",
     )
     target: str = Field(
-        default="image_classification", description="Prediction target key in preset"
+        default="image_classification", description="Prediction target key in trainer"
     )
     prompt: str | None = Field(
         default=None, description="Optional runtime prompt/question override"
@@ -912,7 +888,7 @@ class TaskTrackerSummaryResponse(BaseModel):
     stage: str
     dataset_id: str
     model_id: str | None = None
-    preset_id: str | None = None
+    trainer_id: str | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -959,7 +935,7 @@ class PredictSingleRequest(BaseModel):
         description="Optional version tag for Label Studio filtering",
     )
     target: str = Field(
-        default="image_classification", description="Prediction target key in preset"
+        default="image_classification", description="Prediction target key in trainer"
     )
     prompt: str | None = Field(
         default=None, description="Optional runtime prompt/question override"

@@ -292,6 +292,67 @@ class PrefectClient:
             return result[0]["id"]
         return None
 
+    async def ensure_deployment(
+        self,
+        deployment_name: str,
+        flow_name: str,
+        work_pool_name: str,
+        *,
+        entrypoint: str | None = None,
+        path: str | None = None,
+        parameters: dict[str, object] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict:
+        """Ensure a deployment exists, creating it via the Prefect API if needed.
+
+        Parameters
+        ----------
+        deployment_name:
+            Name for the deployment (e.g. ``"train-job-deployment"``).
+        flow_name:
+            Name of the Prefect flow to deploy (e.g. ``"train-job"``).
+        work_pool_name:
+            Name of the work pool to assign the deployment to.
+        entrypoint:
+            Python module path to the flow function
+            (e.g. ``"app/modules/training/flows/train_job.py:train_job_flow"``).
+        path:
+            Working directory for flow execution (e.g. ``"/app/apps/api"``).
+        parameters:
+            Optional default parameter values for flow runs.
+        tags:
+            Optional list of tags.
+
+        Returns
+        -------
+        dict
+            The deployment object.
+        """
+        existing_id = await self.resolve_deployment_id(deployment_name)
+        if existing_id is not None:
+            return await self.get_deployment(existing_id)
+
+        flow_id = await self.resolve_flow_id(flow_name)
+        body: dict[str, object] = {
+            "name": deployment_name,
+            "flow_id": flow_id,
+            "work_pool_name": work_pool_name,
+        }
+        if entrypoint is not None:
+            body["entrypoint"] = entrypoint
+        if path is not None:
+            body["path"] = path
+        if parameters is not None:
+            body["parameters"] = parameters
+        if tags is not None:
+            body["tags"] = tags
+        return await self._request(
+            "POST",
+            "/deployments/",
+            json=body,
+            resource_label="deployment",
+        )
+
     async def get_deployment(self, deployment_id: str) -> dict:
         """Fetch a single deployment by ID."""
         return await self._request(

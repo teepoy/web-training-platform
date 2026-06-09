@@ -19,9 +19,9 @@ export { default as RunLogViewer } from "./components/run-log-viewer";
 export { default as SampleBrowser } from "./components/sample-browser";
 export { default as SampleDetailDrawer } from "./components/sample-detail-drawer";
 export { sampleViewerPlugin as SampleViewerWidget } from "./components/sample-viewer";
+export { waferMapPlugin as WaferMapWidget } from "./components/wafer-map";
 export { default as TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "./components/task-insight-modal";
 export { default as TrainingChart } from "./components/training-chart";
-export { waferMapPlugin as WaferMapWidget } from "./components/wafer-map";
 
 export { DATA_PIPELINE_KEY, createDataPipeline, createDataPipeline as useDataPipeline } from "./composables/useDataPipeline";
 export type { DataPipeline } from "./composables/useDataPipeline";
@@ -31,14 +31,13 @@ export { useClassifyDashboard } from "./composables/useClassifyDashboard";
 export { usePreviewLoader } from "./composables/usePreviewLoader";
 export { useSampleLoader } from "./composables/useSampleLoader";
 
-export { buildBlinkTableData, type BlinkSampleInput } from "./utils/blink-table-data";
 export { handleBrowserActivation } from "./components/sample-browser/browser-activation";
 export { resolveImageUri, resolveImageUris, registerImageAdapter, unregisterImageAdapter, listImageAdapters, FALLBACK_PLACEHOLDER } from "./utils/image-adapters";
 export { listDatasets } from "./api/datasets";
 export { buildDatasetColumns, useDatasetListSurface, resolveDefaultDatasetTaskType } from "./datasets/surface";
 export type { DatasetListItem, DatasetListUser, DatasetFlow, UseDatasetListSurfaceOptions, UseDatasetListSurfaceResult, BuildDatasetColumnsOptions } from "./datasets/types";
-export type { SampleWithLabels } from "./api/samples";
-export type { Dataset, DatasetAnnotationStats, SparseSummaryResponse, BulkAnnotationRequest, BulkAnnotationResponse, SyncResult, CreateDatasetBody, DashboardResponse, ExtractFeaturesResponse, SimilarityResponse, SelectionMetricsResponse, UncoveredHintsResponse, DatasetExport, PersistExportResponse, ExportFormatItem, BulkCreateSampleItem, BulkCreateSampleResponse, PaginatedResponse } from "./api/types";
+export type { SyncResult, CreateDatasetBody, ExtractFeaturesResponse, PaginatedResponse } from "./api/types";
+export type { SelectionMetricsResponse, UncoveredHintsResponse, DatasetExport, ExportFormatItem } from "./api/ui-helpers";
 export { listPreviewItems, type PreviewItem, type PreviewItemsPage, type PreviewPersistScope, type PreviewPersistStatus, type PreviewSession, createPreviewSession, getPreviewPersistStatus, getPreviewSession, startPreviewPersist } from "./api/preview";
 export { GLOBAL_AGENT_PANELS_KEY } from "./keys";
 
@@ -51,4 +50,3 @@ export { definePreviewLauncher, type PreviewLauncherDescriptor, type PreviewLaun
 export { createDescriptorRegistry, type DescriptorRegistry } from "./widgets/sdk";
 export type { FlowCard } from "./flow";
 export type { AgentChatStatus, ChatEntry, BrowserItem, WaferPoint, SidebarPanelDescriptor, TrainingEvent, RunLog, AnnotationGridItem } from "./types/components";
-export type { BlinkRow, BlinkColumnDef, BlinkTableProps, BlinkPhase } from "./types/blink-table";

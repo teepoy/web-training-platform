@@ -46,9 +46,7 @@ class PlatformPredictionORM(Base):
     dataset_id: Mapped[str] = mapped_column(
         ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    sample_id: Mapped[str] = mapped_column(
-        ForeignKey("samples.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    sample_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     model_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     target: Mapped[str] = mapped_column(String(64), nullable=False)
     job_id: Mapped[str | None] = mapped_column(

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from app.shared.api.schemas import Dataset
-from app.shared.api.schemas import DatasetType, TaskType
-from app.modules.datasets.domain.entities import schema_registry
-from app.modules.presets.schema import PresetSpec
+from app.core.registry import resolve_task_type
 
 
 @dataclass(frozen=True)
@@ -18,25 +16,12 @@ class UploadTemplateDefinition:
     profiles: tuple[dict[str, object], ...] = ()
 
 
-def _get_allowed_pairs() -> dict[DatasetType, TaskType]:
-    """Derive allowed dataset→task type pairs from the schema registry."""
-    return schema_registry.get_allowed_pairs()
-
-
-# Keep module-level name for backward compatibility; updated lazily via the function.
-ALLOWED_DATASET_TASK_PAIRS: dict[DatasetType, TaskType] = {
-    DatasetType.IMAGE_CLASSIFICATION: TaskType.CLASSIFICATION,
-    DatasetType.IMAGE_VQA: TaskType.VQA,
-    DatasetType.IMAGE_DETECTION: TaskType.DETECTION,
-}
-
-
 UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
     UploadTemplateDefinition(
         id="image-classifier",
         name="Image Classifier",
-        dataset_types=(DatasetType.IMAGE_CLASSIFICATION.value,),
-        task_types=(TaskType.CLASSIFICATION.value,),
+        dataset_types=("image_classification",),
+        task_types=("classification",),
         label_space_mode="required",
         profiles=(
             {
@@ -71,10 +56,10 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
         id="image-embedder",
         name="Image Embedder",
         dataset_types=(
-            DatasetType.IMAGE_CLASSIFICATION.value,
-            DatasetType.IMAGE_VQA.value,
+            "image_classification",
+            "image_vqa",
         ),
-        task_types=(TaskType.CLASSIFICATION.value, TaskType.VQA.value),
+        task_types=("classification", "vqa"),
         label_space_mode="forbidden",
         requires_embedding_metadata=True,
         profiles=(
@@ -99,8 +84,8 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
     UploadTemplateDefinition(
         id="vqa",
         name="VQA",
-        dataset_types=(DatasetType.IMAGE_VQA.value,),
-        task_types=(TaskType.VQA.value,),
+        dataset_types=("image_vqa",),
+        task_types=("vqa",),
         label_space_mode="forbidden",
         profiles=(
             {
@@ -125,46 +110,17 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
 
 
 def validate_dataset_contract(
-    dataset_type: DatasetType, task_type: TaskType, label_space: list[str]
+    dataset_type: str, task_type: str, label_space: list[str]
 ) -> None:
-    expected_task = ALLOWED_DATASET_TASK_PAIRS.get(dataset_type)
+    expected_task = resolve_task_type(dataset_type)
     if expected_task is None or expected_task != task_type:
         raise ValueError(
-            f"dataset_type '{dataset_type.value}' is incompatible with task_type '{task_type.value}'"
+            f"dataset_type '{dataset_type}' is incompatible with task_type '{task_type}'"
         )
-    schema = schema_registry.get(dataset_type.value)
-    if schema is not None:
-        mode = schema.label_space_mode
-        if mode == "required" and not label_space:
-            raise ValueError(
-                f"{dataset_type.value} datasets require a non-empty label space"
-            )
-        if mode == "forbidden" and label_space:
-            raise ValueError(
-                f"{dataset_type.value} datasets must not define a label space"
-            )
-    else:
-        # Legacy fallback for types not yet registered in schema_registry
-        if task_type == TaskType.CLASSIFICATION and not label_space:
-            raise ValueError("classification datasets require a non-empty label space")
-        if task_type == TaskType.VQA and label_space:
-            raise ValueError("vqa datasets must not define a label space")
-
-
-def validate_dataset_preset_training(dataset: Dataset, preset: PresetSpec) -> None:
-    dataset_type = dataset.dataset_type.value
-    task_type = dataset.task_spec.task_type.value
-    if dataset_type not in preset.compatibility.dataset_types:
-        raise ValueError(
-            f"preset '{preset.id}' does not support dataset_type '{dataset_type}'"
-        )
-    if task_type not in preset.compatibility.task_types:
-        raise ValueError(
-            f"preset '{preset.id}' does not support task_type '{task_type}'"
-        )
-    validate_dataset_contract(
-        dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space
-    )
+    if task_type == "classification" and not label_space:
+        raise ValueError("classification datasets require a non-empty label space")
+    if task_type == "vqa" and label_space:
+        raise ValueError("vqa datasets must not define a label space")
 
 
 def validate_model_prediction(
@@ -178,20 +134,20 @@ def validate_model_prediction(
         dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space
     )
 
-    if target == "vqa" and dataset.task_spec.task_type != TaskType.VQA:
+    if target == "vqa" and dataset.task_spec.task_type != "vqa":
         raise ValueError("target 'vqa' requires dataset task_type 'vqa'")
-    if target != "vqa" and dataset.task_spec.task_type == TaskType.VQA:
+    if target != "vqa" and dataset.task_spec.task_type == "vqa":
         raise ValueError("dataset task_type 'vqa' requires target 'vqa'")
 
     if target not in supported_targets:
         raise ValueError(f"model does not support prediction target '{target}'")
-    if dataset.dataset_type.value not in supported_dataset_types:
+    if dataset.dataset_type not in supported_dataset_types:
         raise ValueError(
-            f"model does not support dataset_type '{dataset.dataset_type.value}'"
+            f"model does not support dataset_type '{dataset.dataset_type}'"
         )
-    if dataset.task_spec.task_type.value not in supported_task_types:
+    if dataset.task_spec.task_type not in supported_task_types:
         raise ValueError(
-            f"model does not support task_type '{dataset.task_spec.task_type.value}'"
+            f"model does not support task_type '{dataset.task_spec.task_type}'"
         )
 
     if target == "image_classification":
@@ -234,12 +190,12 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
     if not isinstance(compatibility, dict):
         raise ValueError("upload compatibility metadata is required")
 
-    dataset_types = _as_str_list(compatibility.get("dataset_types"))  # type: ignore
-    task_types = _as_str_list(compatibility.get("task_types"))  # type: ignore
-    prediction_targets = _as_str_list(compatibility.get("prediction_targets"))  # type: ignore
-    label_space = _as_str_list(compatibility.get("label_space"))  # type: ignore
-    embedding_dimension = compatibility.get("embedding_dimension")  # type: ignore
-    normalized_output = compatibility.get("normalized_output")  # type: ignore
+    dataset_types = _as_str_list(compatibility.get("dataset_types"))
+    task_types = _as_str_list(compatibility.get("task_types"))
+    prediction_targets = _as_str_list(compatibility.get("prediction_targets"))
+    label_space = _as_str_list(compatibility.get("label_space"))
+    embedding_dimension = compatibility.get("embedding_dimension")
+    normalized_output = compatibility.get("normalized_output")
 
     if not dataset_types:
         dataset_types = list(template.dataset_types)
@@ -300,25 +256,17 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
 
 
 def build_trained_model_metadata(
-    dataset: Dataset, preset: PresetSpec, metadata: dict[str, object] | None = None
+    dataset: Dataset, trainer_id: str, metadata: dict[str, object] | None = None
 ) -> dict[str, object]:
     runtime_metadata = metadata.copy() if isinstance(metadata, dict) else {}
-    merged = {
+    return {
         **runtime_metadata,
-        "preset_id": preset.id,
-        "dataset_types": list(preset.compatibility.dataset_types),
-        "task_types": list(preset.compatibility.task_types),
-        "prediction_targets": list(preset.compatibility.prediction_targets),
-        "adapter": preset.io.adapter,
-        "label_space": list(dataset.task_spec.label_space),
+        "trainer_id": trainer_id,
+        "label_space": list(
+            getattr(dataset, "dataset_meta", {}).get("label_space", [])
+        ),
         "source_dataset_id": dataset.id,
-        "model_spec": {
-            "framework": preset.model.framework,
-            "architecture": preset.model.architecture,
-            "base_model": preset.model.base_model,
-        },
     }
-    return merged
 
 
 def _profile_prediction_targets(

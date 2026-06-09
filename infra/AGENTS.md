@@ -17,6 +17,34 @@ Operational manifests for local Compose smoke runs and minikube/Kubeflow deploym
 | API deploy | `k8s/api-deployment.yaml` | Uses `finetune-api:latest` |
 | Operator smoke job | `k8s/pytorchjob-smoke.yaml` | Requires Kubeflow Training Operator CRD |
 
+## WORK POOL LAYOUT
+
+The platform uses two Prefect work pools, each with a dedicated Dockerfile:
+
+| Pool | Service | GPU | Dockerfile |
+|------|---------|-----|------------|
+| `default-cpu` | `prefect-worker-cpu` | No | `apps/api/Dockerfile.prefect-worker-cpu` |
+| `default-gpu` | `prefect-worker-gpu` | Yes | `apps/api/Dockerfile.prefect-worker-gpu` |
+
+Both pools are created by the `deployments-bootstrap` service in `docker-compose.yaml`:
+
+```yaml
+uv run --directory apps/api prefect work-pool create default-cpu --type process || true;
+uv run --directory apps/api prefect work-pool create default-gpu --type process || true;
+uv run --directory apps/api ftapi deployments apply
+```
+
+- The GPU worker container (`prefect-worker-gpu`) is **profile-gated** (`profiles: [gpu]`) and only starts when `--profile gpu` is passed to `docker compose up`.
+- On macOS / non-NVIDIA hosts the GPU worker is simply omitted; the CPU pool handles all orchestration.
+
+### GPU Worker Race Warning (Host vs Compose)
+
+When running the GPU worker **on the host** (outside Compose) simultaneously with the Compose stack, the host worker can register itself with the same `default-gpu` work pool and steal flow runs from the containerized worker. To avoid this:
+
+- Set `PREFECT_WORKER_NAME` to a unique value on each worker instance.
+- Or use separate work queues within the pool (`gpu-compose`, `gpu-host`) and target flows explicitly.
+- Or stop the host worker when developing with the Compose stack.
+
 ## CONVENTIONS
 - Namespace is always `finetune`.
 - Kubernetes deploys expect `finetune-config` ConfigMap and `finetune-secrets` Secret.

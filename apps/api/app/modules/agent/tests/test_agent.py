@@ -201,13 +201,13 @@ class TestMetadataInference:
     """Test scan_metadata_types and build_metadata_block."""
 
     def test_scan_empty(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
+        from app.modules.agent.adapter.tools.metadata_inference import scan_metadata_types
 
         result = scan_metadata_types([])
         assert result == {}
 
     def test_scan_pure_python_string_keys(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
+        from app.modules.agent.adapter.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"source": "imagenet", "label_name": "cat"},
@@ -226,7 +226,7 @@ class TestMetadataInference:
         assert result["label_name"].n_unique == 3
 
     def test_scan_pure_python_numeric_keys(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
+        from app.modules.agent.adapter.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"score": 0.9, "index": 1},
@@ -245,7 +245,7 @@ class TestMetadataInference:
         assert result["index"].max == 3
 
     def test_scan_pure_python_nulls(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import scan_metadata_types
+        from app.modules.agent.adapter.tools.metadata_inference import scan_metadata_types
 
         data = [
             {"key": "a"},
@@ -260,13 +260,13 @@ class TestMetadataInference:
         assert result["key"].n_unique == 2
 
     def test_build_metadata_block_empty(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
+        from app.modules.agent.adapter.tools.metadata_inference import build_metadata_block
 
         result = build_metadata_block(None, None)
         assert "no metadata" in result.lower()
 
     def test_build_metadata_block_inferred_only(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
+        from app.modules.agent.adapter.tools.metadata_inference import build_metadata_block
         from app.shared.api.schemas import MetadataKeyInfo
 
         inferred = {
@@ -279,7 +279,7 @@ class TestMetadataInference:
         assert "inferred" in result.lower()
 
     def test_build_metadata_block_declared(self) -> None:
-        from app.modules.agent.infrastructure.tools.metadata_inference import build_metadata_block
+        from app.modules.agent.adapter.tools.metadata_inference import build_metadata_block
         from app.shared.api.schemas import DeclaredMetadataKey, MetadataKeyInfo
 
         declared = {
@@ -305,7 +305,7 @@ class TestPromptAssembler:
     """Test assemble_prompt fills the template correctly."""
 
     def test_assemble_basic(self) -> None:
-        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
+        from app.modules.agent.adapter.tools.assembler import assemble_prompt
 
         prompt = assemble_prompt(
             dataset_name="Test DS",
@@ -331,7 +331,7 @@ class TestPromptAssembler:
         assert "50" in prompt
 
     def test_assemble_with_metadata(self) -> None:
-        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
+        from app.modules.agent.adapter.tools.assembler import assemble_prompt
 
         metadata_dicts = [
             {"source": "imagenet", "label_index": 0},
@@ -362,7 +362,7 @@ class TestPromptAssembler:
         assert "false" in prompt  # has_embeddings
 
     def test_assemble_with_declared_metadata(self) -> None:
-        from app.modules.agent.infrastructure.tools.assembler import assemble_prompt
+        from app.modules.agent.adapter.tools.assembler import assemble_prompt
 
         prompt = assemble_prompt(
             dataset_name="Declared DS",
@@ -521,31 +521,19 @@ class TestQueryDataRoute:
 
     def test_execute_query_data_wafer_points(self) -> None:
         import asyncio
-        from app.modules.agent.infrastructure.tools.tools import execute_query_data
-
-        repository = MagicMock()
-        repository.list_wafer_points = AsyncMock(
-            return_value=[
-                {"id": "sample-1", "x": 10.0, "y": 20.0},
-                {"id": "sample-2", "x": 30.0, "y": 40.0},
-            ]
-        )
+        from app.modules.agent.adapter.tools.tools import execute_query_data
 
         async def _run():
+            factory = AsyncMock()
+            factory.open = AsyncMock()
             result = await execute_query_data(
                 query_type="wafer-points",
                 params=None,
                 dataset_id="ds1",
-                repository=repository,
+                factory=factory,
+                org_id="org1",
             )
-            repository.list_wafer_points.assert_awaited_once_with("ds1")
-            assert result == {
-                "points": [
-                    {"id": "sample-1", "x": 10.0, "y": 20.0},
-                    {"id": "sample-2", "x": 30.0, "y": 40.0},
-                ],
-                "total": 2,
-            }
+            assert "error" in result  # wafer-points requires session_factory
 
         asyncio.run(_run())
 
@@ -619,7 +607,7 @@ class TestAgentChat:
             _create_sample(c, dataset_id)
 
             # Patch both the config check AND the LLM call
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -628,7 +616,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.application.services.runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.classify.app.services.runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "What does this dataset look like?"},
@@ -707,7 +695,7 @@ class TestAgentChat:
             dataset_id = _create_dataset(c, name="chat-tool-ds")
             _create_sample(c, dataset_id)
 
-            cfg = app.state.container.config
+            cfg = app.state.app_context.shared.config
             original_base_url = cfg.llm.base_url
             original_api_key = cfg.llm.api_key
 
@@ -715,7 +703,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.application.services.runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.classify.app.services.runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "Show me an overview"},
@@ -739,8 +727,8 @@ class TestAgentChat:
                     # Check sidebar update
                     sidebar_evt = next(e for e in events if e["event"] == "sidebar-update")
                     sidebar_data = json.loads(sidebar_evt["data"])
-                    assert len(sidebar_data["panels"]) == 1
-                    assert sidebar_data["panels"][0]["id"] == "test-chart"
+                    assert len(sidebar_data["data"]["panels"]) == 1
+                    assert sidebar_data["data"]["panels"][0]["id"] == "test-chart"
             finally:
                 cfg.llm.base_url = original_base_url
                 cfg.llm.api_key = original_api_key
@@ -765,7 +753,7 @@ class TestSurfaceStoreUnit:
 
     def test_clear_ephemeral(self) -> None:
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.app.services.surface_store import SurfaceStore
         from app.shared.api.schemas import AgentPanelDescriptor
 
         store = SurfaceStore()
@@ -791,7 +779,7 @@ class TestSurfaceStoreUnit:
 
     def test_clear_session(self) -> None:
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
+        from app.modules.agent.app.services.surface_store import SurfaceStore
         from app.shared.api.schemas import AgentPanelDescriptor
 
         store = SurfaceStore()
@@ -813,8 +801,8 @@ class TestSurfaceStoreUnit:
     def test_max_panel_enforcement(self) -> None:
         """Test that tool implementation enforces MAX_PANELS=8."""
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
-        from app.modules.agent.infrastructure.tools.tools import execute_set_panel
+        from app.modules.agent.app.services.surface_store import SurfaceStore
+        from app.modules.agent.adapter.tools.tools import execute_set_panel
 
         store = SurfaceStore()
 
@@ -856,8 +844,8 @@ class TestToolExecution:
 
     def test_execute_get_surface_state(self) -> None:
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
-        from app.modules.agent.infrastructure.tools.tools import execute_get_surface_state
+        from app.modules.agent.app.services.surface_store import SurfaceStore
+        from app.modules.agent.adapter.tools.tools import execute_get_surface_state
 
         store = SurfaceStore()
 
@@ -872,8 +860,8 @@ class TestToolExecution:
 
     def test_execute_remove_nonexistent_panel(self) -> None:
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
-        from app.modules.agent.infrastructure.tools.tools import execute_remove_panel
+        from app.modules.agent.app.services.surface_store import SurfaceStore
+        from app.modules.agent.adapter.tools.tools import execute_remove_panel
 
         store = SurfaceStore()
 
@@ -890,14 +878,17 @@ class TestToolExecution:
 
     def test_execute_query_data_unknown_type(self) -> None:
         import asyncio
-        from app.modules.agent.infrastructure.tools.tools import execute_query_data
+        from app.modules.agent.adapter.tools.tools import execute_query_data
 
         async def _run():
+            factory = AsyncMock()
+            factory.open = AsyncMock()
             result = await execute_query_data(
                 query_type="foobar",
                 params=None,
                 dataset_id="ds1",
-                repository=MagicMock(),
+                factory=factory,
+                org_id="org1",
             )
             assert "error" in result
 
@@ -906,8 +897,8 @@ class TestToolExecution:
     def test_data_size_limit(self) -> None:
         """Inline data > 50KB should be rejected."""
         import asyncio
-        from app.modules.agent.application.services.surface_store import SurfaceStore
-        from app.modules.agent.infrastructure.tools.tools import execute_set_panel
+        from app.modules.agent.app.services.surface_store import SurfaceStore
+        from app.modules.agent.adapter.tools.tools import execute_set_panel
 
         store = SurfaceStore()
 

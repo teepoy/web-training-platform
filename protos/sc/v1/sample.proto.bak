@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package sc.v1;
+
+message ReviewImage {
+  string image_url = 1;
+  string image_name = 2;
+  int32 image_id = 3;
+  string image_type = 4;
+}
+
+message ScSampleItem {
+  string sample_id = 1;
+  string template_url = 2;
+  string defective_url = 3;
+  string difference_url = 4;
+  string defect_id = 5;
+  sint32 wafer_x = 6;
+  sint32 wafer_y = 7;
+  int32 rough_bin = 8;
+  optional int32 class_number = 9;
+  repeated ReviewImage review_images = 10;
+  int32 test_id = 11;
+}
+
+message InspectionSampleResponse {
+  repeated ScSampleItem items = 1;
+  int32 total = 2;
+  string inspection_time = 3;
+  int32 wafer_key = 4;
+}

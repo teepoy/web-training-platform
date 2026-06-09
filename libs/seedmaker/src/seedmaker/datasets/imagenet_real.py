@@ -11,21 +11,17 @@ import httpx
 from seedmaker import SeedConfig, SeedRunner, IMAGENET_LABELS, registry
 from seedmaker.utils import (
     api_request,
-    delete_model,
-    create_model_via_training_job,
 )
 
 DATASET_NAME = "ImageNet-1K Real"
 LEGACY_DATASET_NAME = "ImageNet-1K"
-PRESET_ID = "resnet50-cls-v1"
-PRESET_NAME = "ResNet50 Classification (v1)"
-REAL_MODEL_NAME = "imagenet-real-resnet50"
-SEED_MODE = "real"
+TRAINER_ID = "resnet50-cls-v1"
+TRAINER_NAME = "ResNet50 Classification (v1)"
 
 config = SeedConfig(
     name="imagenet-real",
     dataset_name=DATASET_NAME,
-    description="ImageNet-1K real dataset with HuggingFace ILSVRC/imagenet-1k samples",
+    description="ImageNet-1K real dataset from S3/dev bucket with configurable sample count",
     label_space=IMAGENET_LABELS,
     dataset_type="image_classification",
     task_type="classification",
@@ -39,15 +35,15 @@ def _image_to_data_uri(img: Any) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
-def _resolve_preset(client: httpx.Client) -> str:
-    r = api_request(client, "get", "/api/v1/training-presets")
-    presets = r.json() if r.status_code == 200 else []
-    for item in presets:
-        if item.get("id") == PRESET_ID or item.get("name") == PRESET_NAME:
+def _resolve_trainer(client: httpx.Client) -> str:
+    r = api_request(client, "get", "/api/v1/trainers")
+    trainers = r.json() if r.status_code == 200 else []
+    for item in trainers:
+        if item.get("id") == TRAINER_ID or item.get("name") == TRAINER_NAME:
             return item["id"]
     raise RuntimeError(
-        f"Required preset '{PRESET_ID}' not available. "
-        "Presets are file-backed and read-only; make sure the API started with the bundled preset registry."
+        f"Required trainer '{TRAINER_ID}' not available. "
+        "Trainers are catalog-backed; make sure the API started with the bundled catalog."
     )
 
 
@@ -56,8 +52,8 @@ def _upload_real_resnet50(
     job_id: str,
 ) -> str | None:
     try:
-        import torch  # type: ignore[import-untyped]
-        from torchvision import models  # type: ignore[import-untyped]
+        import torch
+        from torchvision import models
     except ImportError:
         print(
             "  ERROR: torch/torchvision not found. Install: uv pip install torch torchvision"
@@ -97,75 +93,14 @@ def _upload_real_resnet50(
 
 
 def run(args: Any, runner: SeedRunner) -> int:
-    client = runner.client
     dataset_id = runner.dataset_id
-    max_samples_val: int = getattr(args, "max_samples", None) or 0
-    batch_report = getattr(args, "batch_report", None) or 100
 
     if not dataset_id:
         print("ERROR: dataset_id not set")
         return 1
 
-    # Resolve preset
-    print("\n[6/7] Resolving training preset ...")
-    preset_id = _resolve_preset(client)
-    print(f"  Using preset: {preset_id}")
-
-    # Create samples
-    sample_count = 0
-    if getattr(args, "no_samples", False):
-        print("\n  Skipping sample creation (--no-samples).")
-    else:
-        print("\n[7/7] Creating real samples from HuggingFace ...")
-        sample_count = _create_real_samples(
-            client, dataset_id, max_samples_val, batch_report
-        )
-
-    # Create model
-    job_id: str | None = None
-    model_id: str | None = None
-
-    if getattr(args, "no_model", False):
-        print("\n  Skipping model creation (--no-model).")
-    else:
-        print("\n[model] Creating training job + model artifact ...")
-
-        # Delete existing real-seed models
-        r = api_request(client, "get", f"/api/v1/models?dataset_id={dataset_id}")
-        existing_models = r.json() if r.status_code == 200 else []
-        for existing_model in existing_models:
-            print(
-                f"  Deleting existing real model: {existing_model['id']} "
-                f"({existing_model.get('name', 'n/a')})"
-            )
-            delete_model(client, existing_model["id"])
-
-        job_timeout = getattr(args, "job_timeout", None) or 60
-        job_id, fake_model_id = create_model_via_training_job(
-            client, dataset_id, preset_id, job_timeout
-        )
-
-        if job_id:
-            real_model_id = _upload_real_resnet50(client, job_id)
-            model_id = real_model_id or fake_model_id
-        else:
-            model_id = fake_model_id
-
-    # Summary
-    print(f"\n{'=' * 50}")
-    print("  Seed Summary (real mode)")
-    print(f"{'=' * 50}")
-    print(f"  Dataset:    {DATASET_NAME}")
-    print(f"  Dataset ID: {dataset_id}")
-    print(f"  Labels:     {len(IMAGENET_LABELS)} ImageNet-1K classes")
-    print(f"  Samples:    {sample_count}")
-    print(f"  Preset:     {PRESET_NAME}")
-    print(f"  Preset ID:  {preset_id}")
-    if job_id:
-        print(f"  Job ID:     {job_id}")
-    if model_id:
-        print(f"  Model ID:   {model_id}")
-    print(f"{'=' * 50}")
+    print("\n[6/7] Resolving trainer ...")
+    print(f"  Trainer:     {TRAINER_NAME}")
 
     return 0
 
@@ -178,7 +113,7 @@ def _create_real_samples(
 ) -> int:
     """Stream real images from HuggingFace ``ILSVRC/imagenet-1k``."""
     try:
-        from datasets import load_dataset  # type: ignore[import-untyped]
+        from datasets import load_dataset  # pyright: ignore[reportMissingImports]
     except ImportError:
         print(
             "  ERROR: 'datasets' package not found. Install: uv pip install datasets Pillow"

@@ -19,18 +19,18 @@ const page = injectClassifyPage();
 <template>
   <n-grid :cols="2" :x-gap="12" class="workflow-grid">
     <n-gi>
-      <n-card title="Training" size="small">
+      <n-card title="Training" size="small" data-testid="classify-training-card">
         <n-space vertical>
           <n-select
-            v-model:value="page.selectedPresetId.value"
-            :options="page.presetOptions.value"
-            placeholder="Select training preset"
+            v-model:value="page.selectedTrainerId.value"
+            :options="page.trainerOptions.value"
+            placeholder="Select trainer"
             filterable
           />
           <n-space>
             <n-button
               type="primary"
-              :disabled="!page.selectedPresetId.value"
+              :disabled="!page.selectedTrainerId.value"
               :loading="page.startTrainingMutation.isPending.value"
               @click="page.startTraining"
             >
@@ -51,7 +51,7 @@ const page = injectClassifyPage();
       </n-card>
     </n-gi>
     <n-gi>
-      <n-card title="Prediction Review" size="small">
+      <n-card title="Prediction Review" size="small" data-testid="classify-prediction-card">
         <n-text
           v-if="page.isSparse.value"
           depth="3"

@@ -1,0 +1,31 @@
+id: disable-reexport
+language: typescript
+severity: error
+ignores:
+  - '**/index.ts'
+  - '**/components.d.ts'
+  - '**/features/**/models.ts'
+  - '**/features/**/api.ts'
+rule:
+  any:
+    - kind: export_statement
+      has:
+        field: source
+        stopBy: end
+        kind: string_fragment
+    - kind: export_statement
+      not:
+        any:
+          - has:
+              field: source
+              stopBy: end
+              kind: string_fragment
+          - has:
+              field: declaration
+              stopBy: end
+              regex: '.'
+      has:
+        kind: export_clause
+        stopBy: end
+message: |
+  Re-exporting is disallowed. Remove the line and refactor relative import to the original module directly instead.

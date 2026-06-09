@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from app.shared.api.schemas import DatasetType, TaskType
 
-
-def infer_dataset_type(task_type: TaskType) -> DatasetType:
-    if task_type == TaskType.VQA:
-        return DatasetType.IMAGE_VQA
-    return DatasetType.IMAGE_CLASSIFICATION
+def infer_dataset_type(task_type: str) -> str:
+    if task_type == "vqa":
+        return "image_vqa"
+    return "image_classification"
 
 
 def make_ls_image_url(uri: str) -> str:

@@ -24,9 +24,7 @@ import { useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { DatasetPageShell, type FlowCard } from "@/shared";
-import { deleteDataset, listDatasets, toggleDatasetPublic } from "@/features/datasets/infrastructure/api";
-import type { Dataset } from "@/features/datasets/domain/models";
-import type { User } from "@/features/auth/domain/models";
+import { deleteDataset, listDatasets, toggleDatasetPublic } from "@/shared/api/datasets";
 import { useOrgStore } from '@/features/auth/application/org';
 import { useAuthStore } from '@/features/auth/application/store';
 import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
@@ -34,8 +32,11 @@ import ManualDatasetImporter from "@/features/datasets/presentation/components/M
 import ParquetImporter from "@/features/datasets/presentation/components/ParquetImporter.vue";
 import UpstreamPreviewLauncher from "@/shared/components/upstream-preview-launcher/UpstreamPreviewLauncher.vue";
 import { useDatasetListSurface } from "@/features/datasets/application/surface";
-import { resolveDatasetShim, resolveDatasetTaskType } from "./registry";
-import { getActiveDatasetTaskType, getActiveDatasetType } from "./selection";
+import { resolveDatasetShim } from "./schema-registry";
+import { resolveDatasetTaskType } from "./registry";
+import { getActiveDatasetTaskType, getActiveDatasetType, getActiveViewTypes } from "./selection";
+import type { Dataset, UserResponse as User } from "@/generated/orval/models";
+import type { DatasetListItem } from "@/shared/datasets/types";
 
 const router = useRouter();
 const message = useMessage();
@@ -90,11 +91,11 @@ function handleTogglePublic(payload: { id: string; isPublic: boolean }) {
   toggleDatasetPublicMut.mutate(payload);
 }
 
-function handleDeleteDataset(row: Dataset) {
+function handleDeleteDataset(row: DatasetListItem) {
   if (!window.confirm(`Delete dataset '${row.name}'? This removes its local jobs, samples, models, and Label Studio project.`)) {
     return;
   }
-  deleteDatasetMut.mutate(row.id);
+  deleteDatasetMut.mutate(row.id!);
 }
 
 const importerFlows = computed<FlowCard[]>(() => [
@@ -130,8 +131,8 @@ const previewLauncherFlows = computed<FlowCard[]>(() => [
   },
 ]);
 
-const surface = useDatasetListSurface<Dataset, User>({
-  datasets,
+const surface = useDatasetListSurface<DatasetListItem, User>({
+  datasets: computed(() => (datasets.value ?? []) as DatasetListItem[]),
   isLoading,
   error,
   currentOrgId: computed(() => orgStore.currentOrgId),
@@ -146,6 +147,7 @@ const surface = useDatasetListSurface<Dataset, User>({
 
 const activeTaskType = computed(() => getActiveDatasetTaskType(datasets.value));
 const activeDatasetType = computed(() => getActiveDatasetType(datasets.value));
+const activeViewTypes = computed(() => getActiveViewTypes(datasets.value));
 
-const activeShim = computed(() => resolveDatasetShim(activeDatasetType.value));
+const activeShim = computed(() => resolveDatasetShim(activeDatasetType.value, activeViewTypes.value));
 </script>

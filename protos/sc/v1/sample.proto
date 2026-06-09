@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package sc.v1;
+
+message ReviewImage {
+  reserved 1;
+  string image_name = 2;
+  int32 image_id = 3;
+  string image_type = 4;
+}
+
+// # 定义正确
+message ScSampleItem {
+  // 移除了 sample_id
+  reserved 1, 2, 3, 4;
+  uint32 defect_id = 5;
+  sint32 wafer_x = 6;
+  sint32 wafer_y = 7;
+  int32 rough_bin = 8;
+  optional int32 class_number = 9;
+  repeated ReviewImage review_images = 10;
+  int64 inspection_time = 11;
+  int32 wafer_key = 12;
+  sint32 index_x = 13;
+  sint32 index_y = 14;
+  int32 adder = 15;
+  int32 cluster = 16;
+  int32 test_id = 17;
+}
+
+message InspectionSamplesDisplay {
+  // wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
+  repeated int32 wafer_xy_id = 1;
+  // die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
+  repeated int32 die_xy_id = 2;
+}
+
+message InspectionSampleResponse {
+  // Deprecated: use InspectionMapPointsResponse plus JSON review/sample-table
+  // endpoints for SC Preview. Kept for compatibility with legacy consumers.
+  repeated ScSampleItem items = 1;
+  int32 total = 2;
+  reserved 3;
+  int32 wafer_key = 4;
+  InspectionSamplesDisplay display = 5;
+}
+
+message InspectionMapPointsResponse {
+  // Deprecated: use WaferMapResponse for both Preview and Dataset View modes.
+  int32 total = 1;
+  int32 wafer_key = 2;
+  // wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
+  repeated int32 wafer_xy_id = 3;
+  // die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
+  repeated int32 die_xy_id = 4;
+}
+
+message InspectionReticleMapPointsResponse {
+  int32 total = 1;
+  int32 wafer_key = 2;
+  int32 x_die_count = 3;
+  int32 y_die_count = 4;
+  int32 die_size_x = 5;
+  int32 die_size_y = 6;
+  // reticle_x1, reticle_y1, defect_id1, reticle_x2, reticle_y2, defect_id2, ...
+  repeated int32 reticle_xy_id = 7;
+}
+
+// WaferGeometry carries the wafer-level parameters needed to render a die
+// grid background in the canvas wafer map.
+message WaferGeometry {
+  int32 wafer_radius_nm = 1;
+  int32 center_x = 2;
+  int32 center_y = 3;
+  int32 origin_x = 4;
+  int32 origin_y = 5;
+  int32 die_size_x = 6;
+  int32 die_size_y = 7;
+}
+
+// WaferMapResponse is the unified aggregated response for Preview mode
+// (inspection upstream) and Dataset View mode (dataset store).
+// Returns all three map datasets in a single response:
+//   - Wafer map points (wafer coordinates)
+//   - Die stack map points (die-relative coordinates)
+//   - Reticle map points (reticle-frame coordinates)
+//
+// Each per-point array packs 6 int32 values:
+//   [x, y, defect_id, class_number, rough_bin, has_review, x, y, ...]
+// where has_review is 0 or 1.
+//
+// Endpoints:
+//   GET /sc/inspections/{time}/{wafer_key}/map-data   (Preview)
+//   GET /sc/datasets/{dataset_id}/map-data             (Dataset View)
+message WaferMapResponse {
+  int32 total = 1;
+  int32 wafer_key = 2;
+  WaferGeometry geometry = 3;
+  // 6 ints per point: wafer_x, wafer_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 wafer_points = 4;
+  // 6 ints per point: die_x, die_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 die_points = 5;
+  // 6 ints per point: reticle_x, reticle_y, defect_id, class_number, rough_bin, has_review_image
+  repeated sint32 reticle_points = 6;
+  // Reticle grid configuration — number of dies grouped into each reticle frame
+  int32 reticle_x_die_count = 7;
+  int32 reticle_y_die_count = 8;
+  // True when point arrays contain grid-downsampled data (total still reports full count)
+  bool is_sampled = 9;
+}
+
+message DefectList {
+  int32 count = 1;
+  repeated int32 defect_ids = 2;
+}
+
+message ClassList {
+  map<string, DefectList> class_numbers = 1;
+  map<string, DefectList> rough_bins = 2;
+  map<string, DefectList> prediction = 3;
+  map<string, DefectList> labels = 4;
+}
+
+// InspectionSummaryResponse 被移除。使用 正常 restful json response

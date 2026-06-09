@@ -20,9 +20,12 @@ import type { SidebarPanelDescriptor } from "@/shared/types/components";
 import { useSampleBrowserPrefs } from "@/shared/stores/sampleBrowser";
 import type { BrowserItem, WaferPoint } from "@/shared/types/components";
 import { previewPanels } from "../config";
-import { getPreviewSession, startPreviewPersist } from "../infrastructure/api";
-import type { PreviewItem, PreviewPersistScope, PreviewSession } from '@/types';
-import { usePreviewLoader } from "./usePreviewLoader";
+import {
+  getPreviewSessionApiV1PreviewSessionsSessionIdGet,
+  startPreviewPersistApiV1PreviewSessionsSessionIdPersistPost,
+} from "@/generated/orval/endpoints/api";
+import type { PreviewItem, PreviewPersistScope, PreviewPersistStatus, PreviewSession } from '@/shared/api/preview';
+import { usePreviewLoader } from "@/shared/composables/usePreviewLoader";
 
 export const PREVIEW_PAGE_KEY: InjectionKey<PreviewPageState> =
   Symbol("previewPage");
@@ -121,7 +124,8 @@ export function usePreviewPage() {
 
   onMounted(async () => {
     try {
-      session.value = await getPreviewSession(sessionId.value);
+      const { data } = await getPreviewSessionApiV1PreviewSessionsSessionIdGet(sessionId.value);
+      session.value = data as PreviewSession;
       await loader.loadMore();
     } catch {
       sessionError.value = "Preview session not found or expired.";
@@ -133,10 +137,11 @@ export function usePreviewPage() {
   async function handlePersist() {
     isPersisting.value = true;
     try {
-      const status = await startPreviewPersist(
+      const { data } = await startPreviewPersistApiV1PreviewSessionsSessionIdPersistPost(
         sessionId.value,
-        persistScope.value,
+        { scope: persistScope.value },
       );
+      const status = data as PreviewPersistStatus;
       showPersistModal.value = false;
       message.success("Dataset persisted successfully!");
       await router.push(

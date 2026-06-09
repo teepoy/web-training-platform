@@ -8,7 +8,7 @@ import TrainingChart from "./TrainingChart.vue";
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 const meta = {
-  title: "web-ui/components/TrainingChart",
+  title: "Shared/TrainingChart",
   component: TrainingChart,
 } satisfies Meta<typeof TrainingChart>;
 

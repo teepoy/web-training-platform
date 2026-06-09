@@ -19,13 +19,13 @@
             v-model:value="formData.name"
             type="text"
             placeholder="Your name"
-            :disabled="loading"
+            :disabled="registerMutation.isPending.value"
           />
         </n-form-item>
         <n-button
           type="primary"
           block
-          :loading="loading"
+          :loading="registerMutation.isPending.value"
           @click="handleSubmit"
         >
           Complete Registration
@@ -53,7 +53,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '@/features/auth/application/store'
 import { useOrgStore } from '@/features/auth/application/org'
-import { authOAuthRegister } from '../../infrastructure/api'
+import { useOauthRegisterApiV1AuthOauthRegisterPost } from '@/generated/orval/endpoints/api'
+import type { LoginResponse } from '@/generated/orval/models'
 
 const router = useRouter()
 const route = useRoute()
@@ -62,8 +63,9 @@ const authStore = useAuthStore()
 const orgStore = useOrgStore()
 
 const formRef = ref<FormInst | null>(null)
-const loading = ref(false)
 const errorMessage = ref<string | null>(null)
+
+const registerMutation = useOauthRegisterApiV1AuthOauthRegisterPost()
 
 function getQueryParam(key: string): string {
   const raw = route.query[key]
@@ -99,22 +101,22 @@ async function handleSubmit() {
     return
   }
 
-  loading.value = true
   errorMessage.value = null
   try {
-    const resp = await authOAuthRegister({
-      state_token: stateToken,
-      name: formData.value.name,
+    const resp = await registerMutation.mutateAsync({
+      data: {
+        state_token: stateToken,
+        name: formData.value.name,
+      },
     })
-    await authStore.oauthLogin(resp.access_token)
+    const loginResp = resp.data as LoginResponse
+    await authStore.oauthLogin(loginResp.access_token)
     await orgStore.fetchOrganizations()
     router.replace('/datasets')
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Registration failed'
     message.error(msg)
     errorMessage.value = msg
-  } finally {
-    loading.value = false
   }
 }
 </script>

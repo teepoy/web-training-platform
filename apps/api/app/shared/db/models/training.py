@@ -12,19 +12,6 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class TrainingPresetORM(Base):
-    __tablename__ = "training_presets"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    org_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    model_spec: Mapped[dict] = mapped_column(JSON, nullable=False)
-    omegaconf_yaml: Mapped[str] = mapped_column(Text, nullable=False)
-    dataloader_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-
-
 class TrainingJobORM(Base):
     __tablename__ = "training_jobs"
 
@@ -35,7 +22,7 @@ class TrainingJobORM(Base):
     dataset_id: Mapped[str] = mapped_column(
         ForeignKey("datasets.id", ondelete="RESTRICT"), nullable=False
     )
-    preset_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trainer_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     is_public: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="0"

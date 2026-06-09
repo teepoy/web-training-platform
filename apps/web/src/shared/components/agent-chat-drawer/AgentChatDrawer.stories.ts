@@ -59,7 +59,7 @@ const OpenDrawerWrapper = defineComponent({
 })
 
 const meta = {
-  title: "web-ui/components/AgentChatDrawer",
+  title: "Shared/AgentChatDrawer",
   component: AgentChatDrawer,
   decorators: [
     () => ({

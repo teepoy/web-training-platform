@@ -1,185 +1,192 @@
-import { req } from "./client";
+import {
+  runPredictionsApiV1PredictionsRunPost,
+  listPredictionJobsApiV1PredictionJobsGet,
+  getPredictionJobApiV1PredictionJobsJobIdGet,
+  listPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGet,
+  listPredictionJobEventsApiV1PredictionJobsJobIdEventsGet,
+  cancelPredictionJobApiV1PredictionJobsJobIdCancelPost,
+  predictSingleApiV1PredictionsSinglePost,
+  listSamplePredictionsApiV1SamplesSampleIdPredictionsGet,
+  createPredictionCollectionApiV1PredictionCollectionsPost,
+  listPredictionCollectionsApiV1PredictionCollectionsGet,
+  syncPredictionCollectionToLabelStudioApiV1PredictionCollectionsCollectionIdSyncLabelStudioPost,
+  createReviewActionApiV1PredictionReviewsPost,
+  listReviewActionsApiV1PredictionReviewsGet,
+  getReviewActionApiV1PredictionReviewsActionIdGet,
+  deleteReviewActionApiV1PredictionReviewsActionIdDelete,
+  saveReviewAnnotationsApiV1PredictionReviewsActionIdAnnotationsPost,
+  listAnnotationVersionsApiV1PredictionReviewsActionIdAnnotationVersionsGet,
+  exportReviewVersionApiV1PredictionReviewsActionIdExportGet,
+  persistReviewExportApiV1PredictionReviewsActionIdExportPersistPost,
+} from "@/generated/orval/endpoints/api";
 import type {
-  PredictionJob,
-  PredictionResult,
-  PredictionEvent,
   RunPredictionRequest,
   PredictSingleRequest,
-  ReviewAction,
-  AnnotationVersion,
   SaveReviewAnnotationItem,
   SaveReviewAnnotationsResponse,
-  PredictionCollection,
-  CreatePredictionCollectionRequest,
-  SyncPredictionCollectionResponse,
-  VersionExportResponse,
-} from "./types";
+} from "@/generated/orval/models";
+import type { PredictionJobResponse as PredictionJob, PredictionResultResponse as PredictionResult, PredictionEventResponse as PredictionEvent, ReviewActionResponse as ReviewAction, AnnotationVersionResponse as AnnotationVersion, PredictionCollectionResponse as PredictionCollection, SyncPredictionCollectionResponse } from "@/generated/orval/models";
+import type { CreatePredictionCollectionRequest, VersionExportResponse } from "./types";
 
-export function runPredictions(
+export async function runPredictions(
   request: RunPredictionRequest,
 ): Promise<PredictionJob> {
-  return req<PredictionJob>("/predictions/run", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
+  return (await
+    runPredictionsApiV1PredictionsRunPost(
+      request as import("@/generated/orval/models/runPredictionRequest").RunPredictionRequest,
+    )).data as PredictionJob;
 }
 
-export function listPredictionJobs(): Promise<PredictionJob[]> {
-  return req<PredictionJob[]>("/prediction-jobs");
+export async function listPredictionJobs(): Promise<PredictionJob[]> {
+  return (await listPredictionJobsApiV1PredictionJobsGet()).data as PredictionJob[];
 }
 
-export function getPredictionJob(id: string): Promise<PredictionJob> {
-  return req<PredictionJob>(`/prediction-jobs/${id}`);
+export async function getPredictionJob(id: string): Promise<PredictionJob> {
+  return (await getPredictionJobApiV1PredictionJobsJobIdGet(id)).data as PredictionJob;
 }
 
-export function listPredictionJobPredictions(
+export async function listPredictionJobPredictions(
   id: string,
 ): Promise<PredictionResult[]> {
-  return req<PredictionResult[]>(`/prediction-jobs/${id}/predictions`);
+  return (await
+    listPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGet(id)).data as PredictionResult[];
 }
 
-export function listPredictionJobEvents(
+export async function listPredictionJobEvents(
   id: string,
 ): Promise<PredictionEvent[]> {
-  return req<PredictionEvent[]>(`/prediction-jobs/${id}/events`);
+  return (await
+    listPredictionJobEventsApiV1PredictionJobsJobIdEventsGet(id)).data as PredictionEvent[];
 }
 
-export function cancelPredictionJob(
+export async function cancelPredictionJob(
   id: string,
 ): Promise<{ cancelled: boolean }> {
-  return req<{ cancelled: boolean }>(`/prediction-jobs/${id}/cancel`, {
-    method: "POST",
-  });
+  return (await
+    cancelPredictionJobApiV1PredictionJobsJobIdCancelPost(id)).data as { cancelled: boolean };
 }
 
-export function predictSingle(
+export async function predictSingle(
   request: PredictSingleRequest,
 ): Promise<PredictionResult> {
-  return req<PredictionResult>("/predictions/single", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
+  return (await
+    predictSingleApiV1PredictionsSinglePost(
+      request as import("@/generated/orval/models/predictSingleRequest").PredictSingleRequest,
+    )).data as PredictionResult;
 }
 
-export function listSamplePredictions(
+export async function listSamplePredictions(
   sampleId: string,
   modelVersion?: string | null,
 ): Promise<PredictionResult[]> {
-  const qs = modelVersion
-    ? `?model_version=${encodeURIComponent(modelVersion)}`
-    : "";
-  return req<PredictionResult[]>(
-    `/samples/${sampleId}/predictions${qs}`,
-  );
+  return (await
+    listSamplePredictionsApiV1SamplesSampleIdPredictionsGet(sampleId, {
+      model_version: modelVersion ?? undefined,
+    })).data as PredictionResult[];
 }
 
-export function createPredictionCollection(
+export async function createPredictionCollection(
   request: CreatePredictionCollectionRequest,
 ): Promise<PredictionCollection> {
-  return req<PredictionCollection>("/prediction-collections", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
+  return (await
+    createPredictionCollectionApiV1PredictionCollectionsPost(
+      request as import("@/generated/orval/models/predictionCollectionRequest").PredictionCollectionRequest,
+    )).data as PredictionCollection;
 }
 
-export function listPredictionCollections(
+export async function listPredictionCollections(
   datasetId: string,
 ): Promise<PredictionCollection[]> {
-  return req<PredictionCollection[]>(
-    `/prediction-collections?dataset_id=${encodeURIComponent(datasetId)}`,
-  );
+  return (await
+    listPredictionCollectionsApiV1PredictionCollectionsGet({
+      dataset_id: datasetId,
+    })).data as PredictionCollection[];
 }
 
-export function syncPredictionCollection(
+export async function syncPredictionCollection(
   collectionId: string,
   syncTag?: string | null,
 ): Promise<SyncPredictionCollectionResponse> {
-  return req<SyncPredictionCollectionResponse>(
-    `/prediction-collections/${collectionId}/sync-label-studio`,
-    {
-      method: "POST",
-      body: JSON.stringify(syncTag ? { sync_tag: syncTag } : {}),
-    },
-  );
+  return (await
+    syncPredictionCollectionToLabelStudioApiV1PredictionCollectionsCollectionIdSyncLabelStudioPost(
+      collectionId,
+      {
+        sync_tag: syncTag ?? undefined,
+      } as import("@/generated/orval/models/syncPredictionCollectionRequest").SyncPredictionCollectionRequest,
+    )).data as SyncPredictionCollectionResponse;
 }
 
-export function createReviewAction(params: {
+export async function createReviewAction(params: {
   dataset_id: string;
   model_id: string;
   model_version?: string | null;
   collection_id?: string | null;
   sync_tag?: string | null;
 }): Promise<ReviewAction> {
-  return req<ReviewAction>("/prediction-reviews", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
+  return (await
+    createReviewActionApiV1PredictionReviewsPost(
+      params as import("@/generated/orval/models/createReviewActionRequest").CreateReviewActionRequest,
+    )).data as ReviewAction;
 }
 
-export function listReviewActions(
-  datasetId: string,
-): Promise<ReviewAction[]> {
-  return req<ReviewAction[]>(
-    `/prediction-reviews?dataset_id=${encodeURIComponent(datasetId)}`,
-  );
+export async function listReviewActions(datasetId: string): Promise<ReviewAction[]> {
+  return (await
+    listReviewActionsApiV1PredictionReviewsGet({
+      dataset_id: datasetId,
+    })).data as ReviewAction[];
 }
 
-export function getReviewAction(actionId: string): Promise<ReviewAction> {
-  return req<ReviewAction>(`/prediction-reviews/${actionId}`);
+export async function getReviewAction(actionId: string): Promise<ReviewAction> {
+  return (await
+    getReviewActionApiV1PredictionReviewsActionIdGet(actionId)).data as ReviewAction;
 }
 
-export function deleteReviewAction(actionId: string): Promise<void> {
-  return req<void>(`/prediction-reviews/${actionId}`, { method: "DELETE" });
+export async function deleteReviewAction(actionId: string): Promise<void> {
+  return (await
+    deleteReviewActionApiV1PredictionReviewsActionIdDelete(actionId)).data as void;
 }
 
-export function saveReviewAnnotations(
+export async function saveReviewAnnotations(
   actionId: string,
   items: SaveReviewAnnotationItem[],
 ): Promise<SaveReviewAnnotationsResponse> {
-  return req<SaveReviewAnnotationsResponse>(
-    `/prediction-reviews/${actionId}/annotations`,
-    {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    },
-  );
+  return (await
+    saveReviewAnnotationsApiV1PredictionReviewsActionIdAnnotationsPost(
+      actionId,
+      {
+        items,
+      } as import("@/generated/orval/models/saveReviewAnnotationsRequest").SaveReviewAnnotationsRequest,
+    )).data as SaveReviewAnnotationsResponse;
 }
 
-export function listAnnotationVersions(
+export async function listAnnotationVersions(
   actionId: string,
 ): Promise<AnnotationVersion[]> {
-  return req<AnnotationVersion[]>(
-    `/prediction-reviews/${actionId}/annotation-versions`,
-  );
+  return (await
+    listAnnotationVersionsApiV1PredictionReviewsActionIdAnnotationVersionsGet(
+      actionId,
+    )).data as AnnotationVersion[];
 }
 
-export function previewReviewExport(
+export async function previewReviewExport(
   actionId: string,
   formatId?: string,
 ): Promise<Record<string, unknown>> {
-  const params = new URLSearchParams();
-  if (formatId) params.set("format_id", formatId);
-  const qs = params.toString() ? `?${params.toString()}` : "";
-  return req<Record<string, unknown>>(
-    `/prediction-reviews/${actionId}/export${qs}`,
-  );
+  return (await
+    exportReviewVersionApiV1PredictionReviewsActionIdExportGet(actionId, {
+      format_id: formatId ?? undefined,
+    })).data as Record<string, unknown>;
 }
 
-export function persistReviewExport(
+export async function persistReviewExport(
   actionId: string,
   formatId?: string,
 ): Promise<VersionExportResponse> {
-  return req<VersionExportResponse>(
-    `/prediction-reviews/${actionId}/export/persist`,
-    {
-      method: "POST",
-      body: JSON.stringify({
+  return (await
+    persistReviewExportApiV1PredictionReviewsActionIdExportPersistPost(
+      actionId,
+      {
         format_id: formatId ?? "annotation-version-full-context-v1",
-      }),
-    },
-  );
+      } as import("@/generated/orval/models/versionExportRequest").VersionExportRequest,
+    )).data as VersionExportResponse;
 }
-
-export type { PredictionJob, PredictionResult, PredictionEvent, RunPredictionRequest, PredictSingleRequest, ReviewAction, AnnotationVersion, SaveReviewAnnotationItem, SaveReviewAnnotationsResponse, PredictionCollection, CreatePredictionCollectionRequest, SyncPredictionCollectionResponse, VersionExportResponse } from "./types";
-
-export type { ExportFormat } from "./types";

@@ -1,11 +1,11 @@
 import { defineStore } from "pinia";
 import {
-  authLogin,
-  authMe,
-  authRegister,
-  fetchHealthStatus,
-} from "../infrastructure/api";
-import type { User } from '@/types';
+  loginApiV1AuthLoginPost,
+  authMeApiV1AuthMeGet,
+  registerApiV1AuthRegisterPost,
+} from "@/generated/orval/endpoints/api";
+import type { UserResponse as User, UserWithOrgsResponse as UserWithOrgs, LoginResponse } from "@/generated/orval/models";
+import { useOrgStore } from "./org";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
@@ -54,6 +54,7 @@ export function getStoredToken(): string | null {
   if (isTokenExpired(token)) {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem("current_org_id");
     return null;
   }
 
@@ -63,13 +64,28 @@ export function getStoredToken(): string | null {
 export function clearStoredAuth(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem("current_org_id");
+}
+
+/**
+ * Resolve auth-enabled mode from VITE_AUTH_ENABLED env var.
+ *
+ * - `VITE_AUTH_ENABLED=true` or `'1'` → enabled
+ * - `VITE_AUTH_ENABLED=false` or `'0'` → disabled
+ * - Not set → enabled in production (`!import.meta.env.DEV`)
+ */
+function resolveAuthEnabled(): boolean {
+  const val = import.meta.env.VITE_AUTH_ENABLED;
+  if (val === 'true' || val === '1') return true;
+  if (val === 'false' || val === '0') return false;
+  return !import.meta.env.DEV;
 }
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: parseStoredUser(),
     token: getStoredToken(),
-    authEnabled: true,
+    authEnabled: resolveAuthEnabled(),
   }),
   getters: {
     isAuthenticated: (state) => (state.authEnabled ? state.token !== null : state.user !== null),
@@ -83,50 +99,49 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
-    async initAuthMode() {
-      for (let attempt = 1; attempt <= 10; attempt += 1) {
-        try {
-          const health = await fetchHealthStatus();
-          this.setAuthEnabled(health.auth_enabled);
-          return;
-        } catch {
-          if (attempt < 10) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            continue;
-          }
-        }
-      }
-
-      this.setAuthEnabled(true);
-    },
-
     async login(email: string, password: string) {
-      const resp = await authLogin(email, password);
-      const token = resp.access_token;
+      const resp = await loginApiV1AuthLoginPost({ email, password });
+      const loginData = resp.data as LoginResponse;
+      const token = loginData.access_token;
       localStorage.setItem(TOKEN_KEY, token);
-      const userWithOrgs = await authMe(token);
+      const meResp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
       this.token = token;
-      this.user = userWithOrgs;
-      localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+      this.user = meResp.data as UserWithOrgs;
+      localStorage.setItem(USER_KEY, JSON.stringify(meResp.data));
+      try {
+        useOrgStore().syncFromMeResponse((meResp.data as UserWithOrgs).organizations ?? []);
+      } catch {
+        // org store may not be available
+      }
     },
 
     async register(name: string, email: string, password: string) {
-      await authRegister(name, email, password);
+      await registerApiV1AuthRegisterPost({ name, email, password });
       await this.login(email, password);
     },
 
     async oauthLogin(token: string) {
       localStorage.setItem(TOKEN_KEY, token);
-      const userWithOrgs = await authMe(token);
+      const resp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
       this.token = token;
-      this.user = userWithOrgs;
-      localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+      this.user = resp.data as UserWithOrgs;
+      localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+      try {
+        useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+      } catch {
+        // org store may not be available
+      }
     },
 
     logout() {
       this.user = null;
       this.token = null;
       clearStoredAuth();
+      try {
+        useOrgStore().$reset();
+      } catch {
+        // org store may not be available
+      }
     },
 
     hydrateFromStorage() {
@@ -138,10 +153,15 @@ export const useAuthStore = defineStore("auth", {
       this.hydrateFromStorage();
       if (!this.authEnabled) {
         try {
-          const userWithOrgs = await authMe();
+          const resp = await authMeApiV1AuthMeGet();
           this.token = null;
-          this.user = userWithOrgs;
-          localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+          this.user = resp.data as UserWithOrgs;
+          localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+          try {
+            useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+          } catch {
+            // org store may not be available
+          }
         } catch {
           this.user = null;
           localStorage.removeItem(USER_KEY);
@@ -152,10 +172,15 @@ export const useAuthStore = defineStore("auth", {
       const token = this.token;
       if (!token) return;
       try {
-        const userWithOrgs = await authMe(token);
+        const resp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
         this.token = token;
-        this.user = userWithOrgs;
-        localStorage.setItem(USER_KEY, JSON.stringify(userWithOrgs));
+        this.user = resp.data as UserWithOrgs;
+        localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+        try {
+          useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+        } catch {
+          // org store may not be available
+        }
       } catch {
         this.logout();
       }

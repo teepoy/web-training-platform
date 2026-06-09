@@ -52,9 +52,12 @@
 import { ref, computed, watch } from "vue";
 import type { FormInst, FormRules } from "naive-ui";
 import { useMessage, NModal, NForm, NFormItem, NSelect, NInput, NSpace, NButton, NSwitch } from "naive-ui";
-import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { createSubscription, updateSubscription } from "@/features/sensors/infrastructure/api";
-import type { SensorDefinition, SensorSubscription, CreateSubscriptionBody, UpdateSubscriptionBody } from "@/features/sensors/domain/models";
+import { useQueryClient } from "@tanstack/vue-query";
+import {
+  useCreateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsPost,
+  useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch,
+} from "@/generated/orval/endpoints/api";
+import type { SensorDefinitionResponse as SensorDefinition, SensorSubscriptionResponse as SensorSubscription } from "@/generated/orval/models";
 
 const props = defineProps<{
   show: boolean;
@@ -117,29 +120,28 @@ function removeFilter(index: number) {
   filterPairs.value.splice(index, 1);
 }
 
-const createMutation = useMutation({
-  mutationFn: (body: CreateSubscriptionBody) => createSubscription(props.sensor.id, body),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
-    message.success("Subscription created");
-    emit("saved");
-    emit("update:show", false);
+const createMutation = useCreateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
+      message.success("Subscription created");
+      emit("saved");
+      emit("update:show", false);
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to create subscription"),
   },
-  onError: (err: Error) => message.error(err.message ?? "Failed to create subscription"),
 });
 
-const updateMutation = useMutation({
-  mutationFn: (body: UpdateSubscriptionBody) => {
-    if (!props.subscription) throw new Error("No subscription to update");
-    return updateSubscription(props.sensor.id, props.subscription.id, body);
+const updateMutation = useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
+      message.success("Subscription updated");
+      emit("saved");
+      emit("update:show", false);
+    },
+    onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
   },
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
-    message.success("Subscription updated");
-    emit("saved");
-    emit("update:show", false);
-  },
-  onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
 });
 
 const isSaving = computed(() => createMutation.isPending.value || updateMutation.isPending.value);
@@ -159,14 +161,21 @@ function onSubmit() {
 
     if (isEdit.value) {
       updateMutation.mutate({
-        filter_config: filterConfig,
-        enabled: formModel.value.enabled,
+        sensorId: props.sensor.id,
+        subId: props.subscription!.id,
+        data: {
+          filter_config: filterConfig,
+          enabled: formModel.value.enabled,
+        },
       });
     } else {
       createMutation.mutate({
-        workflow_type: formModel.value.workflow_type,
-        filter_config: filterConfig,
-        enabled: formModel.value.enabled,
+        sensorId: props.sensor.id,
+        data: {
+          workflow_type: formModel.value.workflow_type!,
+          filter_config: filterConfig,
+          enabled: formModel.value.enabled,
+        },
       });
     }
   });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NModal } from "naive-ui";
+import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useClassifyPage } from "../../application/useClassifyPage";
 import ClassifyAddLabelModal from "../components/ClassifyAddLabelModal.vue";
 import ClassifyBrowserArea from "../components/ClassifyBrowserArea.vue";
@@ -10,18 +11,11 @@ const page = useClassifyPage();
 </script>
 
 <template>
+  <FullScreenLayout>
   <div class="classify-page">
-    <div class="classify-main">
-      <ClassifyWorkflowCards />
-      <ClassifyPredictionJobs />
-      <ClassifyBrowserArea />
-    </div>
-
-    <component
-      :is="page.ClassifySidebar"
-      :panels="page.mergedPanels.value"
-      :context="page.pageDashboard"
-    />
+    <ClassifyWorkflowCards />
+    <ClassifyPredictionJobs />
+    <ClassifyBrowserArea />
 
     <ClassifyAddLabelModal />
 
@@ -42,20 +36,15 @@ const page = useClassifyPage();
       />
     </NModal>
   </div>
+  </FullScreenLayout>
 </template>
 
 <style scoped>
 .classify-page {
   display: flex;
-  min-height: calc(100vh - 96px);
-  gap: 12px;
-}
-
-.classify-main {
-  display: flex;
-  flex: 1;
-  min-width: 0;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 12px;
 }
 </style>

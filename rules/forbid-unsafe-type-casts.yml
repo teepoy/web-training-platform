@@ -1,0 +1,20 @@
+id: forbid-unsafe-type-casts
+language: typescript
+severity: error
+ignores:
+  - '**/generated/**'
+  - '**/*.spec.ts'
+  - '**/e2e-live/**'
+rule:
+  pattern: $A as unknown as $B
+message: |
+  Unsafe type cast with 'as unknown as' detected.
+  This double cast bypasses TypeScript's type checking and should be avoided.
+
+  Instead:
+  - Fix the actual type mismatch at the source
+  - Use proper type guards and narrowing
+  - Update OpenAPI schema if the generated type is incorrect
+  - Import the correct type from @/generated/orval/models
+
+  References: apps/web/AGENTS.md, docs/guides/strict-typing.md

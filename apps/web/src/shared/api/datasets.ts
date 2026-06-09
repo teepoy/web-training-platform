@@ -1,123 +1,142 @@
-import { req } from "./client";
+import {
+  listDatasetsApiV1DatasetsGet,
+  createDatasetApiV1DatasetsPost,
+  deleteDatasetApiV1DatasetsDatasetIdDelete,
+  getDatasetApiV1DatasetsDatasetIdGet,
+  updateLabelSpaceApiV1DatasetsDatasetIdLabelSpacePatch,
+  getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
+  getSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet,
+  setDatasetPublicApiV1DatasetsDatasetIdPublicPatch,
+  syncAnnotationsToLsApiV1DatasetsDatasetIdSyncAnnotationsToLsPost,
+  bulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost,
+  listExportFormatsApiV1ExportFormatsGet,
+  exportDatasetApiV1ExportsDatasetIdGet,
+  exportDatasetPersistApiV1ExportsDatasetIdPersistPost,
+  similaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGet,
+  selectionMetricsApiV1DatasetsDatasetIdSelectionMetricsGet,
+  uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet,
+  getEmbedConfigApiV1DatasetsDatasetIdEmbedConfigGet,
+  updateEmbedConfigApiV1DatasetsDatasetIdEmbedConfigPatch,
+  getDashboardApiV1DashboardGet,
+  queryDatasetDataApiV1DatasetsDatasetIdQueryPost,
+  extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPost,
+  listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
+} from "@/generated/orval/endpoints/api";
+import { orvalFetcher } from "@/shared/api/orval-fetcher";
 import { getApiBase } from "./client";
 import type {
-  Dataset,
   DatasetAnnotationStats,
   SparseSummaryResponse,
-  BulkAnnotationRequest,
   BulkAnnotationResponse,
-  SyncResult,
-  CreateDatasetBody,
   DashboardResponse,
-  ExtractFeaturesResponse,
   SimilarityResponse,
+  PersistExportResponse,
+  BulkCreateSampleItem,
+  BulkCreateSampleResponse,
+} from "@/generated/orval/models";
+import type { Dataset, SampleWithLabels } from "@/generated/orval/models";
+import type { SyncResult, CreateDatasetBody, ExtractFeaturesResponse, PaginatedResponse } from "./types";
+import type {
   SelectionMetricsResponse,
   UncoveredHintsResponse,
   DatasetExport,
-  PersistExportResponse,
   ExportFormatItem,
-  BulkCreateSampleItem,
-  BulkCreateSampleResponse,
-  PaginatedResponse,
-} from "./types";
+} from "./ui-helpers";
 
-export function listDatasets(): Promise<Dataset[]> {
-  return req<Dataset[]>("/datasets");
+export async function listDatasets(): Promise<Dataset[]> {
+  const res = await listDatasetsApiV1DatasetsGet();
+  if (res.status !== 200) {
+    throw new Error(`Failed to list datasets: ${res.status}`);
+  }
+  return res.data as Dataset[];
 }
 
-export function createDataset(body: CreateDatasetBody): Promise<Dataset> {
-  return req<Dataset>("/datasets", {
-    method: "POST",
-    body: JSON.stringify({
+export async function createDataset(body: CreateDatasetBody): Promise<Dataset> {
+  return (await
+    createDatasetApiV1DatasetsPost({
       name: body.name,
-      dataset_type: body.dataset_type,
+      dataset_type:
+        body.dataset_type as import("@/generated/orval/models/createDatasetRequestDatasetType").CreateDatasetRequestDatasetType,
       task_spec: body.task_spec ?? {
         task_type: "classification",
         label_space: [],
       },
       ...(body.storage_mode ? { storage_mode: body.storage_mode } : {}),
-    }),
-  });
+    })).data as Dataset;
 }
 
-export function deleteDataset(id: string): Promise<void> {
-  return req<void>(`/datasets/${id}`, { method: "DELETE" });
+export async function deleteDataset(id: string): Promise<void> {
+  return (await deleteDatasetApiV1DatasetsDatasetIdDelete(id)).data as void;
 }
 
-export function getDataset(id: string): Promise<Dataset> {
-  return req<Dataset>(`/datasets/${id}`);
+export async function getDataset(id: string): Promise<Dataset> {
+  return (await getDatasetApiV1DatasetsDatasetIdGet(id)).data as Dataset;
 }
 
-export function updateLabelSpace(
+export async function updateLabelSpace(
   datasetId: string,
   labelSpace: string[],
 ): Promise<Dataset> {
-  return req<Dataset>(`/datasets/${datasetId}/label-space`, {
-    method: "PATCH",
-    body: JSON.stringify({ label_space: labelSpace }),
-  });
+  return (await
+    updateLabelSpaceApiV1DatasetsDatasetIdLabelSpacePatch(datasetId, {
+      label_space: labelSpace,
+    })).data as Dataset;
 }
 
-export function getAnnotationStats(
+export async function getAnnotationStats(
   datasetId: string,
 ): Promise<DatasetAnnotationStats> {
-  return req<DatasetAnnotationStats>(
-    `/datasets/${datasetId}/annotation-stats`,
-  );
+  return (await
+    getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(datasetId)).data as DatasetAnnotationStats;
 }
 
-export function getSparseSummary(
+export async function getSparseSummary(
   datasetId: string,
 ): Promise<SparseSummaryResponse> {
-  return req<SparseSummaryResponse>(
-    `/datasets/${datasetId}/sparse-summary`,
-  );
+  return (await
+    getSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet(datasetId)).data as SparseSummaryResponse;
 }
 
-export function toggleDatasetPublic(
+export async function toggleDatasetPublic(
   id: string,
   isPublic: boolean,
 ): Promise<Dataset> {
-  return req<Dataset>(`/datasets/${id}/public`, {
-    method: "PATCH",
-    body: JSON.stringify({ is_public: isPublic }),
-  });
+  return (await
+    setDatasetPublicApiV1DatasetsDatasetIdPublicPatch(id, {
+      is_public: isPublic,
+    })).data as Dataset;
 }
 
-export function syncAnnotationsToLs(datasetId: string): Promise<SyncResult> {
-  return req<SyncResult>(`/datasets/${datasetId}/sync-annotations-to-ls`, {
-    method: "POST",
-  });
+export async function syncAnnotationsToLs(datasetId: string): Promise<SyncResult> {
+  return (await
+    syncAnnotationsToLsApiV1DatasetsDatasetIdSyncAnnotationsToLsPost(datasetId)).data as SyncResult;
 }
 
-export function bulkCreateAnnotations(
+export async function bulkCreateAnnotations(
   datasetId: string,
-  body: BulkAnnotationRequest,
+  body: import("@/generated/orval/models").BulkAnnotationRequest,
 ): Promise<BulkAnnotationResponse> {
-  return req<BulkAnnotationResponse>(
-    `/datasets/${datasetId}/annotations/bulk`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
+  return (await
+    bulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost(
+      datasetId,
+      body as import("@/generated/orval/models/bulkAnnotationRequest").BulkAnnotationRequest,
+    )).data as BulkAnnotationResponse;
 }
 
-export function listExportFormats(): Promise<ExportFormatItem[]> {
-  return req<ExportFormatItem[]>("/export-formats");
+export async function listExportFormats(): Promise<ExportFormatItem[]> {
+  return (await listExportFormatsApiV1ExportFormatsGet()).data as ExportFormatItem[];
 }
 
-export function getExport(datasetId: string): Promise<DatasetExport> {
-  return req<DatasetExport>(`/exports/${datasetId}`);
+export async function getExport(datasetId: string): Promise<DatasetExport> {
+  return (await
+    exportDatasetApiV1ExportsDatasetIdGet(datasetId)).data as DatasetExport;
 }
 
-export function persistExport(
+export async function persistExport(
   datasetId: string,
 ): Promise<PersistExportResponse> {
-  return req<PersistExportResponse>(`/exports/${datasetId}/persist`, {
-    method: "POST",
-  });
+  return (await
+    exportDatasetPersistApiV1ExportsDatasetIdPersistPost(datasetId)).data as PersistExportResponse;
 }
 
 export function importViaCube(
@@ -127,14 +146,15 @@ export function importViaCube(
     items: BulkCreateSampleItem[];
   },
 ): Promise<BulkCreateSampleResponse> {
-  return req<BulkCreateSampleResponse>(
-    `/plugins/${cubeId}/import`,
-    {
-      method: "POST",
-      body: JSON.stringify(body),
-    },
-    120_000,
-  );
+  return orvalFetcher<{
+    data: BulkCreateSampleResponse;
+    status: number;
+    headers: Headers;
+  }>(`/api/v1/plugins/${cubeId}/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.data);
 }
 
 export function exportViaCube(
@@ -144,88 +164,90 @@ export function exportViaCube(
     [key: string]: unknown;
   },
 ): Promise<Record<string, unknown>> {
-  return req<Record<string, unknown>>(`/plugins/${cubeId}/export`, {
+  const { dataset_id, ...restBody } = body;
+  const restProps = Object.keys(restBody).length > 0
+    ? { body: JSON.stringify(restBody) }
+    : {};
+  return orvalFetcher<{
+    data: Record<string, unknown>;
+    status: number;
+    headers: Headers;
+  }>(`/api/v1/plugins/${cubeId}/export?dataset_id=${encodeURIComponent(dataset_id)}`, {
     method: "POST",
-    body: JSON.stringify(body),
-  });
+    headers: { "Content-Type": "application/json" },
+    ...restProps,
+  }).then((r) => r.data);
 }
 
-export function extractFeatures(
+export async function extractFeatures(
   datasetId: string,
   force?: boolean,
 ): Promise<ExtractFeaturesResponse> {
-  const qs = force ? "?force=true" : "";
-  return req<ExtractFeaturesResponse>(
-    `/datasets/${datasetId}/features/extract${qs}`,
-    { method: "POST" },
-  );
+  return (await
+    extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPost(datasetId, {
+      force,
+    })).data as ExtractFeaturesResponse;
 }
 
-export function getSimilarity(
+export async function getSimilarity(
   datasetId: string,
   sampleId: string,
   k?: number,
 ): Promise<SimilarityResponse> {
-  const qs = k !== undefined ? `?k=${k}` : "";
-  return req<SimilarityResponse>(
-    `/datasets/${datasetId}/similarity/${sampleId}${qs}`,
-  );
+  return (await
+    similaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGet(
+      datasetId,
+      sampleId,
+      k !== undefined ? { k } : undefined,
+    )).data as SimilarityResponse;
 }
 
-export function getSelectionMetrics(
+export async function getSelectionMetrics(
   datasetId: string,
 ): Promise<SelectionMetricsResponse> {
-  return req<SelectionMetricsResponse>(
-    `/datasets/${datasetId}/selection-metrics`,
-  );
+  return (await
+    selectionMetricsApiV1DatasetsDatasetIdSelectionMetricsGet(datasetId)).data as SelectionMetricsResponse;
 }
 
-export function getUncoveredHints(
+export async function getUncoveredHints(
   datasetId: string,
 ): Promise<UncoveredHintsResponse> {
-  return req<UncoveredHintsResponse>(
-    `/datasets/${datasetId}/hints/uncovered`,
-  );
+  return (await
+    uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet(datasetId)).data as UncoveredHintsResponse;
 }
 
-export function getEmbedConfig(
+export async function getEmbedConfig(
   datasetId: string,
 ): Promise<Record<string, unknown>> {
-  return req<Record<string, unknown>>(
-    `/datasets/${datasetId}/embed-config`,
-  );
+  return (await
+    getEmbedConfigApiV1DatasetsDatasetIdEmbedConfigGet(datasetId)).data as Record<string, unknown>;
 }
 
-export function updateEmbedConfig(
+export async function updateEmbedConfig(
   datasetId: string,
   config: { model: string; dimension: number },
 ): Promise<Record<string, unknown>> {
-  return req<Record<string, unknown>>(
-    `/datasets/${datasetId}/embed-config`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(config),
-    },
-  );
+  return (await
+    updateEmbedConfigApiV1DatasetsDatasetIdEmbedConfigPatch(datasetId, config)).data as Record<string, unknown>;
 }
 
-export function getDashboard(): Promise<DashboardResponse> {
-  return req<DashboardResponse>("/dashboard");
+export async function getDashboard(): Promise<DashboardResponse> {
+  return (await getDashboardApiV1DashboardGet()).data as DashboardResponse;
 }
 
-export function queryDatasetData<T = Record<string, unknown>>(
+export async function queryDatasetData<T = Record<string, unknown>>(
   datasetId: string,
   queryType: string,
   params: Record<string, unknown> = {},
 ): Promise<T> {
-  return req<T>(`/datasets/${datasetId}/query`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query_type: queryType, params }),
-  });
+  return (await
+    queryDatasetDataApiV1DatasetsDatasetIdQueryPost(datasetId, {
+      query_type: queryType,
+      params,
+    })).data as T;
 }
 
-export function queryWaferPoints(
+export async function queryWaferPoints(
   datasetId: string,
 ): Promise<import("./types").WaferPointsQueryResponse> {
   return queryDatasetData<import("./types").WaferPointsQueryResponse>(
@@ -236,8 +258,8 @@ export function queryWaferPoints(
 
 export async function fetchSampleSlice(
   datasetId: string,
-  options: import("./types").FetchSampleSliceOptions = {},
-): Promise<PaginatedResponse<import("./types").SampleWithLabels>> {
+  options: import("./ui-helpers").FetchSampleSliceOptions = {},
+): Promise<PaginatedResponse<SampleWithLabels>> {
   const params: Record<string, unknown> = {};
   if (options.offset !== undefined) params.offset = options.offset;
   if (options.limit !== undefined) params.limit = options.limit;
@@ -249,7 +271,7 @@ export async function fetchSampleSlice(
   }
 
   const response = await queryDatasetData<{
-    items: import("./types").SampleWithLabels[];
+    items: SampleWithLabels[];
     total: number;
     error?: string;
   }>(datasetId, "sample-slice", params);
@@ -267,6 +289,26 @@ export async function fetchSampleSlice(
   return { items: response.items ?? [], total: response.total ?? 0 };
 }
 
+export async function getViewSamples<
+  T extends import("./types").ViewRowV1 = import("./types").ViewRowV1,
+>(
+  datasetId: string,
+  viewType: string,
+  offset?: number,
+  limit?: number,
+): Promise<import("./types").ViewPaginatedResponse<T>> {
+  return (await
+    listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
+      datasetId,
+      viewType,
+      offset !== undefined || limit !== undefined
+        ? { offset, limit }
+        : undefined,
+    )).data as import("./types").ViewPaginatedResponse<T>;
+}
+
 export { getApiBase };
 
-export type { SimilarityResponse } from "./types";
+export function buildExportDownloadUrl(uri: string): string {
+  return `/api/v1/exports/download?uri=${encodeURIComponent(uri)}`;
+}

@@ -3,7 +3,7 @@ import AnnotationProgressWidget from "./AnnotationProgressWidget.vue";
 import { provideWebUiContext } from "../../storybook/mocks";
 
 const meta = {
-  title: "web-ui/widgets/AnnotationProgressWidget",
+  title: "Shared/AnnotationProgressWidget",
   component: AnnotationProgressWidget,
   decorators: [provideWebUiContext()],
   args: {

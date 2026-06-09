@@ -21,3 +21,8 @@
 - Deleted the legacy `apps/api/app/modules/datasets/domain/schemas/` package directory and replaced it with a module file at `apps/api/app/modules/datasets/domain/schemas.py` to keep the legacy import path working for existing tests.
 - Updated `docs/architecture/datasets-shim-architecture.md` to point at the new per-type backend schema locations under `app/modules/dataset_*/domain/schema.py`.
 - Backend verification stayed green after the cleanup: `make test`, `ruff check apps/api`, and `uv run --directory apps/api pyright .`.
+
+## 2026-05-22 provided_views declarations
+- Added conservative `provided_views` to the three existing dataset schemas: classification, VQA, and detection.
+- Imported `ViewType` in each schema file and kept every other DatasetSchema field unchanged.
+- Verified import registration via schema_registry and confirmed non-empty provided_views for all three dataset types.

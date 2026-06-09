@@ -134,3 +134,37 @@
 - Deleted app/shared/deps.py after moving route dependency providers into module api/deps.py files.
 - Dataset utility helpers now live in app/shared/api/utils.py with legacy underscored aliases for existing call sites.
 - Dependency overrides in tests must import the exact provider used by the route; images/resolve belongs to models.api.deps, not datasets.api.deps.
+
+## T23-T28 Dataset Storage Agg & Cleanup - 2026-06-06
+
+### T26 DI Wiring (done)
+- Added `DatasetStorageFactory` to `DatasetsContext` (container.py)
+- Added `get_dataset_storage_factory` dep in `deps.py`
+- Factory wired in `init_datasets()` with `repo`, `storage`, `payload_store`, `ls_client`, `session_factory`
+
+### T23 Router Migration (partial)
+- Migrated `get_annotation_stats` and `get_dataset_status` to use `DatasetStorageAgg` via factory
+- Factory.open() raises `ValueError` on missing dataset → converted to HTTPException 404
+- Remaining routes marked with `# FIXME(T23)` because:
+  - Storage agg returns `SampleRow` not `Sample` (type mismatch with API response schemas)
+  - Write operations return `int` counts not domain objects (Annotation, Sample)
+  - LS project interaction lives outside storage agg scope
+
+### T27 Deprecated Methods (markers only)
+- Could NOT delete any SqlRepository methods — all have active callers:
+  - `db_full.py` (SampleAccess) calls all of them internally
+  - `feature_ops.py` uses repo.get_sample(), repo.list_samples(), repo.list_annotations_for_dataset()
+  - `classify router` uses repo.get_annotation_stats(), repo.get_random_samples(), repo.prediction_summary()
+  - `predict_job.py` uses repo.get_sample()
+  - Extension routers use repo.list_samples(), repo.create_annotation()
+- Added `# DEPRECATED(T27)` markers with migration path guidance
+
+### T28 Dead Code (done)
+- Removed `POST /samples/{sample_id}/upload` endpoint from router.py
+- Removed `update_sample` from `DatasetSampleService` and Protocol `IDatasetSampleService`
+- Cleaned up unused import `UpdateSampleImageResponse`
+
+### Verification
+- ruff: clean, pyright: 0 errors
+- Core dataset storage tests: 41/41 passed
+- Pre-existing test failures (not caused by this work): test_db_full_sample_access (org_id missing), test_preview_persist (org_id missing), test_ls_annotation_sync (dependency_overrides leak), test_view_endpoints (flaky state)

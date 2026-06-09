@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import PRESET_ID
+from tests.conftest import TRAINER_ID
 from tests.helpers.factories import (
     create_test_training_job,
     wait_for_job_completion,
@@ -57,7 +57,7 @@ def seeded_imagenet_mock() -> tuple[str, str]:
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(10, build_sample_item)
-        job = create_test_training_job(client, runner.dataset_id, PRESET_ID)
+        job = create_test_training_job(client, runner.dataset_id, TRAINER_ID)
         wait_for_job_completion(client, job["id"])
         return (runner.dataset_id, config.dataset_name)
 
@@ -80,26 +80,37 @@ def seeded_imagenet_poc() -> tuple[str, str]:
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(5, build_sample_item)
-        job = create_test_training_job(client, runner.dataset_id, PRESET_ID)
+        job = create_test_training_job(client, runner.dataset_id, TRAINER_ID)
         wait_for_job_completion(client, job["id"])
         return (runner.dataset_id, config.dataset_name)
 
 
 @pytest.fixture(scope="function")
 def seeded_wafer_demo() -> tuple[str, str]:
-    """Seed a Wafer Demo dataset with 50 samples carrying grid metadata.
+    """Seed a Wafer Demo dataset with 50 samples carrying wafer coordinates.
 
-    Each sample includes ``wafer_x`` / ``wafer_y`` spatial coordinates
-    derived from its index (10×5 grid).  Uses the seedmaker ``wafer-demo``
-    recipe config and item builder.
+    Uses the seedmaker ``wafer-demo`` recipe with SC PatchSample domain
+    models.
     """
-    from seedmaker.datasets.wafer_demo import config, build_sample_item
+    from app.modules.sc.models import PatchSample
+    from app.core.mapper_registry import mapper
+    from app.shared.api.schemas import Sample
+    from seedmaker.datasets.wafer_demo import config, build_patch_sample
 
     with TestClient(app) as client:
         runner = TestSeedRunner(client, config)
         runner.ensure_dataset()
         assert runner.dataset_id is not None
-        runner.upload_samples(50, build_sample_item)
+
+        did = runner.dataset_id
+        to_sample_fn = mapper.get_mapper(PatchSample, Sample)
+
+        def _build_item(idx: int) -> dict:
+            ps = PatchSample(**build_patch_sample(idx).model_dump())
+            sample = to_sample_fn(ps, dataset_id=did)
+            return sample.model_dump(include={"image_uris", "metadata"})
+
+        runner.upload_samples(50, _build_item)
         return (runner.dataset_id, config.dataset_name)
 
 

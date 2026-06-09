@@ -80,19 +80,22 @@
 
 <script setup lang="ts">
 import { ref, computed, h } from "vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NButton, NPopconfirm } from "naive-ui";
 import {
-  createToken,
-  listTokens,
-  deleteToken,
-  authKeys,
-} from "@/features/auth/infrastructure/api";
+  useCreateTokenApiV1AuthTokensPost,
+  useListTokensApiV1AuthTokensGet,
+  useDeleteTokenApiV1AuthTokensTokenIdDelete,
+} from "@/generated/orval/endpoints/api";
 import type {
   PersonalAccessToken,
   PersonalAccessTokenCreated,
-} from "@/features/auth/infrastructure/api";
+} from "@/shared/api/types";
+
+const authKeys = {
+  tokens: ["auth", "tokens"] as const,
+};
 
 const message = useMessage();
 const qc = useQueryClient();
@@ -103,31 +106,36 @@ const {
   isError,
   error,
   refetch,
-} = useQuery({
-  queryKey: authKeys.tokens,
-  queryFn: listTokens,
+} = useListTokensApiV1AuthTokensGet<PersonalAccessToken[], Error>({
+  query: {
+    select: (response) => response.data as PersonalAccessToken[],
+    queryKey: authKeys.tokens,
+  },
 });
 
 const createdToken = ref("");
 
-const createMutation = useMutation({
-  mutationFn: (name: string) => createToken(name),
-  onSuccess: (data: PersonalAccessTokenCreated) => {
-    qc.invalidateQueries({ queryKey: authKeys.tokens });
-    message.success("Access key created");
-    createdToken.value = data.token;
-    modalStep.value = "created";
+const createMutation = useCreateTokenApiV1AuthTokensPost({
+  mutation: {
+    onSuccess: (result) => {
+      const data = result.data as PersonalAccessTokenCreated;
+      qc.invalidateQueries({ queryKey: authKeys.tokens });
+      message.success("Access key created");
+      createdToken.value = data.token;
+      modalStep.value = "created";
+    },
+    onError: (err: Error) => message.error(err.message),
   },
-  onError: (err: Error) => message.error(err.message),
 });
 
-const deleteMutation = useMutation({
-  mutationFn: (id: string) => deleteToken(id),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: authKeys.tokens });
-    message.success("Access key deleted");
+const deleteMutation = useDeleteTokenApiV1AuthTokensTokenIdDelete({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: authKeys.tokens });
+      message.success("Access key deleted");
+    },
+    onError: (err: Error) => message.error(err.message),
   },
-  onError: (err: Error) => message.error(err.message),
 });
 
 const columns = computed<DataTableColumns<PersonalAccessToken>>(() => [
@@ -155,7 +163,7 @@ const columns = computed<DataTableColumns<PersonalAccessToken>>(() => [
         {
           onPositiveClick: (e: MouseEvent) => {
             e.stopPropagation();
-            deleteMutation.mutate(row.id);
+            deleteMutation.mutate({ tokenId: row.id });
           },
         },
         {
@@ -201,7 +209,7 @@ function onModalPositive() {
   if (modalStep.value === "form") {
     formRef.value?.validate((errors) => {
       if (errors) return;
-      createMutation.mutate(formModel.value.name);
+      createMutation.mutate({ data: { name: formModel.value.name } });
     });
     return false;
   }

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import GenericEChartsWidget from "./GenericEChartsWidget.vue";
 
 const meta = {
-  title: "web-ui/widgets/GenericEChartsWidget",
+  title: "Shared/GenericEChartsWidget",
   component: GenericEChartsWidget,
   args: {
     data: {

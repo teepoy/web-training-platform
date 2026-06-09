@@ -1,0 +1,54 @@
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
+
+# Install Python 3.12 (not available in stock Ubuntu 22.04 repos)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    python3.12 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+ARG UV_INDEX_URL=""
+ARG PIP_INDEX_URL=""
+
+ENV UV_INDEX_URL=${UV_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV UV_PYTHON=python3.12
+
+WORKDIR /app
+
+# Copy dependency manifests
+COPY pyproject.toml uv.lock ./
+COPY apps/api/pyproject.toml apps/api/pyproject.toml
+COPY libs/platform-runtime/pyproject.toml libs/platform-runtime/pyproject.toml
+COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
+COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
+COPY libs/seedmaker/pyproject.toml libs/seedmaker/pyproject.toml
+
+# 会让 ENV 失效？
+FROM base AS deps
+
+# Install external dependencies first (layer caching)
+COPY libs/protos/ libs/protos/
+RUN uv sync --frozen --package finetune-api --no-dev --extra gpu --no-install-workspace
+
+# Copy source code
+COPY apps/api/ apps/api/
+COPY libs/platform-runtime/ libs/platform-runtime/
+COPY libs/ml/ libs/ml/
+COPY libs/seedmaker/ libs/seedmaker/
+RUN uv sync --frozen --package finetune-api --no-dev --extra gpu
+
+
+FROM deps AS dev
+
+WORKDIR /app
+ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-gpu"]
+
+
+FROM deps AS prod
+
+WORKDIR /app/apps/api
+ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-gpu"]

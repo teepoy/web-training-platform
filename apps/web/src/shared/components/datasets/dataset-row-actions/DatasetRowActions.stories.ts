@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/vue3";
 import DatasetRowActions from "./DatasetRowActions.vue";
 
 const meta = {
-  title: "web-ui/components/datasets/DatasetRowActions",
+  title: "Shared/DatasetRowActions",
   component: DatasetRowActions,
   args: {
     row: {

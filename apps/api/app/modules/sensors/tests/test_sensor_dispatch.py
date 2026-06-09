@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.sensors.api.deps import get_prefect_client
+from app.modules.sensors.port.http.deps import get_prefect_client
 
 
 SENSOR_ID = "dataset_size_sensor"
@@ -20,7 +20,7 @@ def _workflow_type(client: TestClient) -> str:
 
 def _load_sensors() -> None:
     with TestClient(app):
-        loaded = app.state.container.sensor_registry.load()
+        loaded = app.state.app_context.sensors.sensor_registry.load()
     assert loaded > 0
 
 

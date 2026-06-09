@@ -4,66 +4,29 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from starlette.routing import compile_path
 
-from app.composition import AppContainer, build_app_container
-from app.modules.auth.interfaces.controllers.deps import (
+from app.composition import build_app_context
+from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
+    seed_dev_auth_context,
 )
-from app.modules.dashboard.api.deps import DashboardServiceDep
+from app.modules.dashboard.port.http.deps import DashboardServiceDep
 from app.shared.api.schemas import (
     DashboardResponse,
 )
 from app.core.config import load_config
-from app.shared.db.registry import OrganizationORM
 from app.shared.db.session import init_db
-from app.shared.db.sql_repository import SqlRepository
-from app.shared.api.schemas import DEFAULT_ORG_ID, Organization, User
+from app.shared.api.schemas import Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
-from app.modules import dataset_classification as _dataset_classification  # noqa: F401
-from app.modules import dataset_detection as _dataset_detection  # noqa: F401
-from app.modules import dataset_vqa as _dataset_vqa  # noqa: F401
+import app.registrations as _registrations  # noqa: F401
 
 _logger = logging.getLogger(__name__)
-
-
-def _build_state_container(api: FastAPI, cfg: Any) -> AppContainer:
-    container = build_app_container(cfg)
-    api.state.container = container
-    return container
-
-
-async def _sync_file_presets_to_db(container: AppContainer) -> None:
-    registry = container.preset_registry
-    repo = container.prediction_repository
-    if not isinstance(repo, SqlRepository):
-        raise TypeError("Prediction repository is not a SqlRepository")
-    existing_default_org = await repo.get_organization(DEFAULT_ORG_ID)
-    if existing_default_org is None:
-        await repo.create_organization(
-            OrganizationORM(
-                id=DEFAULT_ORG_ID,
-                name="Default",
-                slug="default",
-            )
-        )
-    existing = await repo.list_preset_ids()
-    for spec in registry.list_presets():
-        if spec.id in existing:
-            continue
-        legacy = registry.preset_to_api_dict(spec)
-        await repo.ensure_preset_row(
-            preset_id=spec.id,
-            name=spec.name,
-            model_spec=legacy.get("model_spec", {})
-            if isinstance(legacy.get("model_spec", {}), dict)
-            else {},
-            omegaconf_yaml=str(legacy.get("omegaconf_yaml", "")),
-            dataloader_ref=str(legacy.get("dataloader_ref", "")),
-        )
 
 
 def _strip_api_prefix(router: Any) -> None:
@@ -81,34 +44,118 @@ def _strip_api_prefix(router: Any) -> None:
         )
 
 
+async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
+    engine = str(cfg.execution.engine)
+    if engine != "prefect":
+        return
+
+    _logger.info("Ensuring Prefect deployments (execution.engine=prefect)")
+
+    deployments = [
+        # ── GPU pool ──
+        {
+            "deployment_name": "train-job-deployment",
+            "flow_name": "training-train-job",
+            "work_pool_name": "default-gpu",
+            "entrypoint": "app.modules.training.flows.train_job:train_job_flow",
+            "path": "",
+        },
+        {
+            "deployment_name": "predict-job-batch-deployment",
+            "flow_name": "prediction-predict-job",
+            "work_pool_name": "default-gpu",
+            "entrypoint": "app.modules.prediction.flows.predict_job:predict_job_flow",
+            "path": "",
+        },
+        {
+            "deployment_name": "embed-job-batch-deployment",
+            "flow_name": "embedding-embed",
+            "work_pool_name": "default-gpu",
+            "entrypoint": "app.modules.embedding.flows.embed:embed_flow",
+            "path": "",
+        },
+        # ── CPU pool ──
+        {
+            "deployment_name": "sc-import-deployment",
+            "flow_name": "sc-import-upstream",
+            "work_pool_name": "default-cpu",
+            "entrypoint": "app.modules.sc.adapter.flows.sc_import:sc_import",
+            "path": "",
+        },
+        {
+            "deployment_name": "timer-sensor",
+            "flow_name": "timer-sensor",
+            "work_pool_name": "default-cpu",
+            "entrypoint": "app.modules.sensors.adapter.flows.timer_sensor:timer_sensor",
+            "path": "",
+        },
+        {
+            "deployment_name": "dataset-size-sensor",
+            "flow_name": "dataset-size-sensor",
+            "work_pool_name": "default-cpu",
+            "entrypoint": "app.modules.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
+            "path": "",
+        },
+        {
+            "deployment_name": "drain-dataset",
+            "flow_name": "drain-dataset",
+            "work_pool_name": "default-cpu",
+            "entrypoint": "app.modules.datasets.adapter.flows.drain_dataset:drain_dataset",
+            "path": "",
+        },
+    ]
+
+    for dep in deployments:
+        try:
+            await prefect_client.ensure_deployment(
+                deployment_name=dep["deployment_name"],
+                flow_name=dep["flow_name"],
+                work_pool_name=dep["work_pool_name"],
+                entrypoint=dep.get("entrypoint"),
+                path=dep.get("path"),
+            )
+        except Exception:
+            _logger.warning(
+                "Failed to ensure deployment '%s'",
+                dep["deployment_name"],
+                exc_info=True,
+            )
+
+
 @asynccontextmanager
 async def lifespan(api: FastAPI):
     cfg = load_config()
-    container = _build_state_container(api, cfg)
-    import app.modules.prediction.infrastructure.flows.predict_job as _predict_job_mod
-    import app.modules.training.infrastructure.flows.train_job as _train_job_mod
+    ctx = build_app_context(cfg)
+    api.state.app_context = ctx
 
-    _predict_job_mod._app_container_ref = container
-    _train_job_mod._app_container_ref = container
     if bool(cfg.db.auto_create):
-        await init_db(container.db_engine)
+        await init_db(ctx.shared.db_engine)
 
-    registry = container.preset_registry
-    count = registry.load()
-    _logger.info("Preset registry: %d presets loaded", count)
+    if not bool(getattr(cfg.auth, "enabled", True)):
+        _logger.info("auth disabled — seeding dev user on startup")
+        await seed_dev_auth_context(ctx.shared.session_factory)
+
+    if ctx.sensors is None:
+        raise RuntimeError("AppContext sensors module was not initialized")
+
     try:
-        sensor_count = container.sensor_registry.load()
+        sensor_count = ctx.sensors.sensor_registry.load()
     except Exception:
         sensor_count = 0
     _logger.info("Sensor registry: %d sensors loaded", sensor_count)
-    await _sync_file_presets_to_db(container)
+
+    try:
+        await _ensure_prefect_deployments(cfg, ctx.shared.prefect_client)
+    except Exception:
+        _logger.warning("Failed to ensure Prefect deployments", exc_info=True)
 
     try:
         yield
     finally:
-        _predict_job_mod._app_container_ref = None
-        _train_job_mod._app_container_ref = None
-        await container.close()
+        prefect_close = getattr(ctx.shared.prefect_client, "close", None)
+        if prefect_close is not None:
+            await prefect_close()
+        await ctx.shared.db_engine.dispose()
 
 
 app = FastAPI(title="Online Finetune API", version="0.1.0", lifespan=lifespan)
@@ -131,19 +178,28 @@ for r in [*MODULE_ROUTERS, *EXTENSION_ROUTERS]:
 
 
 @app.get("/health")
-def health() -> dict[str, str | bool]:
-    cfg = (
-        app.state.container.config if hasattr(app.state, "container") else load_config()
-    )
-    return {
-        "status": "ok",
-        "auth_enabled": bool(getattr(cfg.auth, "enabled", True)),
-    }
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
-@app.get("/api/v1/health")
-def api_health() -> dict[str, str | bool]:
-    return health()
+@app.get(
+    "/ready",
+    response_model=dict[str, str],
+    responses={503: {"description": "Database unavailable"}},
+)
+async def readiness(request: Request) -> dict[str, str] | JSONResponse:
+    try:
+        async with (
+            request.app.state.app_context.shared.db_engine.connect() as connection
+        ):
+            await connection.execute(text("SELECT 1"))
+    except Exception:
+        _logger.warning("Readiness check failed: database unavailable", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable"},
+        )
+    return {"status": "ready"}
 
 
 @app.get("/api/v1/dashboard", response_model=DashboardResponse)

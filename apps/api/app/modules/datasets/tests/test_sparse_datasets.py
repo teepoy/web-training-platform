@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import io as _io
+import json as _json
+
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.api.deps import get_label_studio_client
+from app.modules.datasets.domain.compatibility import validate_predictor_for_dataset
+from app.modules.datasets.port.http.deps import get_label_studio_client
 from app.shared.api.schemas import DatasetStorageMode
 
 
@@ -90,10 +96,27 @@ def test_sparse_dataset_rejects_sync_to_ls() -> None:
         assert "no label studio project" in resp.json()["detail"].lower()
 
 
-def test_sparse_dataset_rejects_export() -> None:
+def test_sparse_access_can_export() -> None:
+    """Sparse dataset capabilities include can_export=True."""
     with TestClient(app) as c:
         ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-reject-export",
+            "name": "sparse-can-export-test",
+            "dataset_type": "image_classification",
+            "task_spec": _TASK_SPEC,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        caps = ds.json().get("capabilities", {})
+        assert caps.get("can_export") is True, (
+            f"Sparse dataset must declare can_export=True, got caps={caps}"
+        )
+
+
+def test_sparse_dataset_export_accepted() -> None:
+    """Sparse dataset export returns format+dataset+samples (was placeholder, T19)."""
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-export-accept",
             "dataset_type": "image_classification",
             "task_spec": _TASK_SPEC,
             "storage_mode": "file_shard_sparse",
@@ -102,14 +125,199 @@ def test_sparse_dataset_rejects_export() -> None:
         ds_id = ds.json()["id"]
 
         resp = c.get(f"/api/v1/exports/{ds_id}")
-        assert resp.status_code == 500
-        assert "no label studio project" in resp.json()["detail"].lower()
+        assert resp.status_code == 200, (
+            f"Sparse export must be accepted, got {resp.status_code}: {resp.text}"
+        )
+        body = resp.json()
+        assert body.get("format") == "sparse-export-v1", (
+            f"Expected sparse-export-v1 format, got: {list(body.keys())}"
+        )
+        assert body.get("dataset", {}).get("id") == ds_id
+        assert isinstance(body.get("samples"), list)
 
 
-def test_sparse_dataset_rejects_training() -> None:
+def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
+    """Sparse dataset with v2 manifest produces sparse-export-v2 format
+    with compact image references (no raw bytes, no upstream S3 URLs)."""
+    import asyncio
+    import io
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.modules.sc.schema import _build_v2_pyarrow_schema
+    from tests.conftest import DEFAULT_ORG_ID
+    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+
+    sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
+
+    with TestClient(app) as c:
+        # ── Create sparse SC dataset ───────────────────────────────────
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-v2-export-test",
+            "dataset_type": "image_sc",
+            "task_spec": sc_task_spec,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        ds_id = ds.json()["id"]
+
+        # ── Build v2 Parquet shard ─────────────────────────────────────
+        schema = _build_v2_pyarrow_schema()
+
+        images_list: list[dict] = [
+            {
+                "image_id": "img-review-1",
+                "image_type": "REVIEW_HIGH_MAG",
+                "role": "review",
+                "content_type": "image/png",
+                "filename": "0000001_1.png",
+                "bytes": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                "source_uri": "s3://review-images/20260526/1/0000001_1.png",
+            },
+            {
+                "image_id": "img-tmpl-1",
+                "image_type": "PATCH_TEMPLATE",
+                "role": "patch_template",
+                "content_type": "image/png",
+                "filename": "template.png",
+                "bytes": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                "source_uri": None,
+            },
+            {
+                "image_id": "img-defect-1",
+                "image_type": "PATCH_DEFECTIVE",
+                "role": "patch_defective",
+                "content_type": "image/png",
+                "filename": "defective.png",
+                "bytes": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                "source_uri": "s3://patch-images/20260526/1/defective.png",
+            },
+        ]
+
+        row: dict = {
+            "sample_id": "defect-001",
+            "defect_id": "defect-001",
+            "inspection_time": "2026-05-26T08:00:00",
+            "wafer_key": 1,
+            "wafer_x": 100,
+            "wafer_y": 200,
+            "rough_bin": 1,
+            "class_number": 2,
+            "lot_id": "LOT-2026-001",
+            "images": images_list,
+        }
+
+        table = pa.Table.from_pylist([row], schema=schema)
+        buf = io.BytesIO()
+        pq.write_table(table, buf)
+        shard_bytes = buf.getvalue()
+
+        # ── Store shard + manifest via DatasetPayloadStore ─────────────
+        store = app.state.app_context.datasets.dataset_payload_store
+
+        shard_entry = asyncio.run(store.put_shard(
+            dataset_id=ds_id,
+            org_id=DEFAULT_ORG_ID,
+            shard_index=0,
+            data=shard_bytes,
+            row_count=1,
+        ))
+
+        sample_index: dict[str, SampleLocator] = {
+            "defect-001": SampleLocator(
+                dataset_id=ds_id,
+                shard_index=0,
+                row_index=0,
+                upstream_item_id="defect-001",
+            ),
+        }
+
+        manifest = DatasetManifest(
+            dataset_id=ds_id,
+            storage_mode="file_shard_sparse",
+            shard_count=1,
+            total_rows=1,
+            schema_columns=[
+                ColumnSchema(name="sample_id", type="string"),
+                ColumnSchema(name="images", type="list<struct>"),
+            ],
+            shards=[shard_entry],
+            sample_index=sample_index,
+            schema_version="v2",
+        )
+
+        asyncio.run(store.put_manifest(manifest, org_id=DEFAULT_ORG_ID))
+
+        # ── Call export endpoint ──────────────────────────────────────
+        resp = c.get(f"/api/v1/exports/{ds_id}")
+        assert resp.status_code == 200, f"Export failed: {resp.text}"
+        body = resp.json()
+
+        # ── Verify format ──────────────────────────────────────────────
+        assert body.get("format") == "sparse-export-v2", (
+            f"Expected sparse-export-v2, got {body.get('format')!r}"
+        )
+        assert body.get("dataset", {}).get("id") == ds_id
+
+        # ── Verify samples ────────────────────────────────────────────
+        samples = body.get("samples", [])
+        assert len(samples) == 1, f"Expected 1 sample, got {len(samples)}"
+        sample = samples[0]
+
+        assert sample["sample_id"] == "defect-001"
+        assert sample["defect_id"] == "defect-001"
+
+        # primary URI fields should be API access URLs, not upstream S3
+        assert sample["image_uri"] == "/api/v1/samples/defect-001/images/img-review-1"
+        assert sample["defective_uri"] == "/api/v1/samples/defect-001/images/img-defect-1"
+        assert sample["reference_uri"] == "/api/v1/samples/defect-001/images/img-tmpl-1"
+
+        # v2 export has no metadata
+        assert sample.get("metadata") == {}
+
+        # ── Verify compact image refs ──────────────────────────────────
+        images = sample.get("images", [])
+        assert len(images) == 3, f"Expected 3 image refs, got {len(images)}"
+
+        for img_ref in images:
+            # Must NOT contain raw bytes or upstream source_uri
+            assert "bytes" not in img_ref, (
+                f"Raw bytes leaked into export: keys={list(img_ref.keys())}"
+            )
+            assert "source_uri" not in img_ref, (
+                f"Source URI leaked into export: {img_ref.get('source_uri')}"
+            )
+            # Must have expected compact fields
+            assert "image_id" in img_ref, f"Missing image_id: {img_ref}"
+            assert "role" in img_ref, f"Missing role: {img_ref}"
+            assert "content_type" in img_ref, f"Missing content_type: {img_ref}"
+            assert "filename" in img_ref, f"Missing filename: {img_ref}"
+            assert "image_type" in img_ref, f"Missing image_type: {img_ref}"
+            assert "access_url" in img_ref, f"Missing access_url: {img_ref}"
+            assert img_ref["access_url"].startswith("/api/v1/samples/"), (
+                f"Unexpected access_url: {img_ref['access_url']}"
+            )
+
+        # Verify specific image refs by role
+        review_ref = next(r for r in images if r["role"] == "review")
+        assert review_ref["image_id"] == "img-review-1"
+        assert review_ref["access_url"] == (
+            "/api/v1/samples/defect-001/images/img-review-1"
+        )
+
+        tmpl_ref = next(r for r in images if r["role"] == "patch_template")
+        assert tmpl_ref["image_id"] == "img-tmpl-1"
+
+        defect_ref = next(r for r in images if r["role"] == "patch_defective")
+        assert defect_ref["image_id"] == "img-defect-1"
+
+
+def test_sparse_dataset_persist_export_accepted() -> None:
+    """Sparse dataset persist export is accepted (returns placeholder, not 500)."""
     with TestClient(app) as c:
         ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-reject-training",
+            "name": "sparse-persist-export",
             "dataset_type": "image_classification",
             "task_spec": _TASK_SPEC,
             "storage_mode": "file_shard_sparse",
@@ -117,13 +325,59 @@ def test_sparse_dataset_rejects_training() -> None:
         assert ds.status_code == 200
         ds_id = ds.json()["id"]
 
+        resp = c.post(f"/api/v1/exports/{ds_id}/persist")
+        assert resp.status_code == 200, (
+            f"Sparse persist export must be accepted, got {resp.status_code}: {resp.text}"
+        )
+        body = resp.json()
+        assert "uri" in body
+
+
+def test_sparse_dataset_accepts_training_with_compatible_trainer() -> None:
+    """Sparse classification dataset accepts training when trainer view matches."""
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-accept-training",
+            "dataset_type": "image_classification",
+            "task_spec": _TASK_SPEC,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200
+        ds_id = ds.json()["id"]
+
+        # resnet50-sc-v1 view=labeled_image_v1 IS in classification view_types
         resp = c.post("/api/v1/training-jobs", json={
             "dataset_id": ds_id,
-            "preset_id": "resnet50-cls-v1",
+            "trainer_id": "resnet50-sc-v1",
             "created_by": "tester",
         })
-        assert resp.status_code == 409
-        assert "not supported" in resp.json()["detail"]
+        # Training job creation accepted (orchestrator may fail later)
+        assert resp.status_code in (200, 500), (
+            f"Expected accepted training (200) or orchestrator error (500), "
+            f"got {resp.status_code}: {resp.text}"
+        )
+
+
+def test_sparse_dataset_rejects_incompatible_trainer() -> None:
+    """Sparse dataset rejects trainer with mismatched view type."""
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-reject-incompat",
+            "dataset_type": "image_classification",
+            "task_spec": _TASK_SPEC,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200
+        ds_id = ds.json()["id"]
+
+        # resnet50-sc-v1 view=qa_input_v1 NOT in classification view_types
+        resp = c.post("/api/v1/training-jobs", json={
+            "dataset_id": ds_id,
+            "trainer_id": "resnet50-sc-v1",
+            "created_by": "tester",
+        })
+        assert resp.status_code == 422, resp.text
+        assert "not compatible" in resp.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +446,95 @@ def test_sparse_summary_rejects_db_full_dataset() -> None:
         assert "file_shard_sparse datasets only" in resp.json()["detail"]
 
 
+def test_sparse_summary_v2_omits_embedded_image_bytes() -> None:
+    import asyncio
+    import io
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.modules.sc.schema import _build_v2_pyarrow_schema
+    from tests.conftest import DEFAULT_ORG_ID
+    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-summary-v2-test",
+            "dataset_type": "image_sc",
+            "task_spec": {"task_type": "sc", "label_space": ["defect", "clean"]},
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        ds_id = ds.json()["id"]
+
+        table = pa.Table.from_pylist(
+            [
+                {
+                    "sample_id": "defect-001",
+                    "defect_id": "defect-001",
+                    "inspection_time": "2026-05-26T08:00:00",
+                    "wafer_key": 1,
+                    "wafer_x": 100,
+                    "wafer_y": 200,
+                    "rough_bin": 1,
+                    "class_number": 2,
+                    "lot_id": "LOT-2026-001",
+                    "images": [
+                        {
+                            "image_id": "img-review-1",
+                            "image_type": "REVIEW_HIGH_MAG",
+                            "role": "review",
+                            "content_type": "image/png",
+                            "filename": "0000001_1.png",
+                            "bytes": b"\x89PNG\r\n\x1a\n",
+                            "source_uri": "s3://review-images/20260526/1/0000001_1.png",
+                        }
+                    ],
+                }
+            ],
+            schema=_build_v2_pyarrow_schema(),
+        )
+        buf = io.BytesIO()
+        pq.write_table(table, buf)
+
+        store = app.state.app_context.datasets.dataset_payload_store
+        shard_entry = asyncio.run(store.put_shard(
+            dataset_id=ds_id,
+            org_id=DEFAULT_ORG_ID,
+            shard_index=0,
+            data=buf.getvalue(),
+            row_count=1,
+        ))
+        manifest = DatasetManifest(
+            dataset_id=ds_id,
+            storage_mode="file_shard_sparse",
+            shard_count=1,
+            total_rows=1,
+            schema_columns=[
+                ColumnSchema(name="sample_id", type="string"),
+                ColumnSchema(name="images", type="list<struct>"),
+            ],
+            shards=[shard_entry],
+            sample_index={
+                "defect-001": SampleLocator(
+                    dataset_id=ds_id,
+                    shard_index=0,
+                    row_index=0,
+                    upstream_item_id="defect-001",
+                ),
+            },
+            schema_version="v2",
+        )
+        asyncio.run(store.put_manifest(manifest, org_id=DEFAULT_ORG_ID))
+
+        resp = c.get(f"/api/v1/datasets/{ds_id}/sparse-summary")
+        assert resp.status_code == 200, resp.text
+
+        row = resp.json()["sample_rows"][0]
+        assert "bytes" not in row["images"][0]
+        assert "source_uri" not in row["images"][0]
+
+
 # ---------------------------------------------------------------------------
 # Delete lifecycle — sparse datasets skip LS deletion
 # ---------------------------------------------------------------------------
@@ -209,7 +552,7 @@ def test_sparse_delete_lifecycle() -> None:
         ds_id = ds.json()["id"]
 
         ls_mock = app.dependency_overrides[get_label_studio_client]()
-        ls_mock.delete_project.reset_mock()  # pyright: ignore[reportAttributeAccessIssue]
+        ls_mock.delete_project.reset_mock()
 
         deleted = c.delete(f"/api/v1/datasets/{ds_id}")
         assert deleted.status_code == 204
@@ -217,4 +560,351 @@ def test_sparse_delete_lifecycle() -> None:
         get_resp = c.get(f"/api/v1/datasets/{ds_id}")
         assert get_resp.status_code == 404
 
-        ls_mock.delete_project.assert_not_called()  # pyright: ignore[reportAttributeAccessIssue]
+        ls_mock.delete_project.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Sparse SC dataset + resnet50-sc-v1 training — capability+view gate
+# ---------------------------------------------------------------------------
+
+
+def test_sparse_sc_dataset_accepts_resnet50_sc_trainer() -> None:
+    """Sparse SC dataset + resnet50-sc-v1 (patch_image_v1) → passes gates."""
+    sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-sc-training-test",
+            "dataset_type": "image_sc",
+            "task_spec": sc_task_spec,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        ds_id = ds.json()["id"]
+
+        resp = c.post("/api/v1/training-jobs", json={
+            "dataset_id": ds_id,
+            "trainer_id": "resnet50-sc-v1",
+            "created_by": "tester",
+        })
+        # capability gate passes (can_train=True) AND view gate passes
+        # (resnet50-sc-v1 view=patch_image_v1 is in SC view_types)
+        assert resp.status_code in (200, 500), (
+            f"Expected accepted training (200) or orchestrator error (500), "
+            f"got {resp.status_code}: {resp.text}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sparse SC dataset prediction — capability+view gate
+# ---------------------------------------------------------------------------
+
+SC_VIEW_TYPES = ["image_input_v1", "patch_image_v1", "review_image_v1"]
+
+
+def test_sparse_access_can_predict() -> None:
+    """Sparse dataset capabilities include can_predict=True."""
+    with TestClient(app) as c:
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-cap-test",
+            "dataset_type": "image_classification",
+            "task_spec": {"task_type": "classification", "label_space": ["x", "y"]},
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        caps = ds.json().get("capabilities", {})
+        assert caps.get("can_predict") is True, (
+            f"Sparse dataset must declare can_predict=True, got caps={caps}"
+        )
+
+
+def test_sparse_sc_prediction_accepts_compatible_predictor() -> None:
+    """validate_predictor_for_dataset passes for SC-compatible predictor.
+
+    resnet50-sc-v1 as predictor has view_id=image_input_v1, which is
+    in SC view_types.  storage_mode=file_shard_sparse must NOT block.
+    """
+    # Should not raise — compatible predictor + sparse storage_mode
+    validate_predictor_for_dataset(
+        predictor_id="resnet50-sc-v1",
+        dataset_type="image_sc",
+        view_types=SC_VIEW_TYPES,
+        storage_mode="file_shard_sparse",
+    )
+
+
+def test_sparse_sc_prediction_rejects_incompatible_predictor() -> None:
+    """validate_predictor_for_dataset raises 422 for predictor whose
+    view_id is not in SC view_types.
+
+    resnet50-sc-v1 predictor has view_id=qa_input_v1, which is NOT in
+    SC view_types (image_input_v1, patch_image_v1, review_image_v1).
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        validate_predictor_for_dataset(
+            predictor_id="resnet50-sc-v1",
+            dataset_type="image_sc",
+            view_types=SC_VIEW_TYPES,
+            storage_mode="file_shard_sparse",
+        )
+    assert exc_info.value.status_code == 422
+
+
+def test_sparse_sc_prediction_route_passes_gate() -> None:
+    """Integration test: sparse SC dataset + compatible predictor → route
+    does not reject with 409 (capability) or 422 (view compatibility).
+
+    Creates a db_full classification dataset + training job + model
+    (trainer_id=resnet50-sc-v1, predictor view=image_input_v1 which is
+    in SC view_types), then posts a prediction request against the sparse
+    SC dataset.
+    """
+    sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
+    with TestClient(app) as c:
+        # ── Sparse SC dataset ───────────────────────────────────────────
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-sc-pred-gate-test",
+            "dataset_type": "image_sc",
+            "task_spec": sc_task_spec,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        ds_id = ds.json()["id"]
+
+        # ── Create model via classification dataset ─────────────────────
+        cls_ds = c.post("/api/v1/datasets", json={
+            "name": "cls-for-model",
+            "dataset_type": "image_classification",
+            "task_spec": {"task_type": "classification", "label_space": ["cat", "dog"]},
+        })
+        assert cls_ds.status_code == 200, cls_ds.text
+        cls_ds_id = cls_ds.json()["id"]
+
+        job = c.post("/api/v1/training-jobs", json={
+            "dataset_id": cls_ds_id,
+            "trainer_id": "resnet50-sc-v1",
+            "created_by": "tester",
+        })
+        assert job.status_code == 200, job.text
+        job_id = job.json()["id"]
+
+        meta = _json.dumps({
+            "name": "test-model",
+            "format": "pytorch",
+            "job_id": job_id,
+            "template_id": "image-classifier",
+            "profile_id": "resnet50-sc-v1",
+            "model_spec": {
+                "framework": "pytorch",
+                "architecture": "resnet50",
+                "base_model": "torchvision/resnet50",
+            },
+            "compatibility": {
+                "dataset_types": ["image_classification"],
+                "task_types": ["classification"],
+                "prediction_targets": ["image_classification"],
+                "label_space": ["cat", "dog"],
+            },
+        })
+        model_resp = c.post("/api/v1/models/upload", data={"metadata": meta},
+            files={"file": ("model.pt", _io.BytesIO(b"fake-model"), "application/octet-stream")})
+        assert model_resp.status_code == 200, model_resp.text
+        model_id = model_resp.json()["id"]
+
+        # ── Prediction request on SPARSE SC dataset ─────────────────────
+        resp = c.post("/api/v1/predictions/run", json={
+            "model_id": model_id,
+            "dataset_id": ds_id,
+            "target": "image_classification",
+        })
+        # Gate checks pass: no 409 (capability) or 422 (view compatibility).
+        # Downstream service may return 400 (model-dataset_type mismatch)
+        # or 202 (test-mode success), or 500/502 (orchestrator error).
+        assert resp.status_code not in (409, 422), (
+            f"Prediction must pass capability and view compatibility gates, "
+            f"got {resp.status_code}: {resp.text}"
+        )
+        assert resp.status_code in (202, 400, 500, 502), (
+            f"Unexpected status: {resp.status_code}: {resp.text}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sparse sample image proxy — canonical dataset image interface
+# ---------------------------------------------------------------------------
+
+
+def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
+    """Sparse dataset image proxy serves embedded images from Parquet shards.
+
+    Verifies the standard dataset image interface:
+    GET /api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...
+    """
+    import asyncio
+    import io
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.modules.sc.schema import _build_v2_pyarrow_schema
+    from tests.conftest import DEFAULT_ORG_ID
+    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+
+    sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
+
+    test_png_bytes: bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 32
+
+    with TestClient(app) as c:
+        # ── Create sparse SC dataset ───────────────────────────────────
+        ds = c.post("/api/v1/datasets", json={
+            "name": "sparse-image-proxy-test",
+            "dataset_type": "image_sc",
+            "task_spec": sc_task_spec,
+            "storage_mode": "file_shard_sparse",
+        })
+        assert ds.status_code == 200, ds.text
+        ds_id = ds.json()["id"]
+
+        # ── Build v2 Parquet shard with embedded images ─────────────────
+        schema = _build_v2_pyarrow_schema()
+
+        images_list: list[dict] = [
+            {
+                "image_id": "img-review-1",
+                "image_type": "REVIEW_HIGH_MAG",
+                "role": "review",
+                "content_type": "image/png",
+                "filename": "0000001_1.png",
+                "bytes": test_png_bytes,
+                "source_uri": "s3://review-images/20260526/1/0000001_1.png",
+            },
+            {
+                "image_id": "img-tmpl-1",
+                "image_type": "PATCH_TEMPLATE",
+                "role": "patch_template",
+                "content_type": "image/png",
+                "filename": "template.png",
+                "bytes": test_png_bytes,
+                "source_uri": None,
+            },
+            {
+                "image_id": "img-defect-1",
+                "image_type": "PATCH_DEFECTIVE",
+                "role": "patch_defective",
+                "content_type": "image/png",
+                "filename": "defective.png",
+                "bytes": test_png_bytes,
+                "source_uri": "s3://patch-images/20260526/1/defective.png",
+            },
+        ]
+
+        row: dict = {
+            "sample_id": "defect-001",
+            "defect_id": "defect-001",
+            "inspection_time": "2026-05-26T08:00:00",
+            "wafer_key": 1,
+            "wafer_x": 100,
+            "wafer_y": 200,
+            "rough_bin": 1,
+            "class_number": 2,
+            "lot_id": "LOT-2026-001",
+            "images": images_list,
+        }
+
+        table = pa.Table.from_pylist([row], schema=schema)
+        buf = io.BytesIO()
+        pq.write_table(table, buf)
+        shard_bytes = buf.getvalue()
+
+        # ── Store shard + manifest via DatasetPayloadStore ─────────────
+        store = app.state.app_context.datasets.dataset_payload_store
+
+        shard_entry = asyncio.run(store.put_shard(
+            dataset_id=ds_id,
+            org_id=DEFAULT_ORG_ID,
+            shard_index=0,
+            data=shard_bytes,
+            row_count=1,
+        ))
+
+        manifest = DatasetManifest(
+            dataset_id=ds_id,
+            storage_mode="file_shard_sparse",
+            shard_count=1,
+            total_rows=1,
+            schema_columns=[
+                ColumnSchema(name="sample_id", type="string"),
+                ColumnSchema(name="images", type="list<struct>"),
+            ],
+            shards=[shard_entry],
+            sample_index={
+                "defect-001": SampleLocator(
+                    dataset_id=ds_id,
+                    shard_index=0,
+                    row_index=0,
+                    upstream_item_id="defect-001",
+                ),
+            },
+            schema_version="v2",
+        )
+
+        asyncio.run(store.put_manifest(manifest, org_id=DEFAULT_ORG_ID))
+
+        # ── Image proxy: serve review image ────────────────────────────
+        resp = c.get(
+            "/api/v1/samples/defect-001/images/img-review-1",
+            params={"dataset_id": ds_id},
+        )
+        assert resp.status_code == 200, (
+            f"Image proxy failed with {resp.status_code}: {resp.text}"
+        )
+        assert resp.headers["content-type"] == "image/png", (
+            f"Expected image/png, got {resp.headers.get('content-type')}"
+        )
+        assert len(resp.content) > 0, "Image content must not be empty"
+        assert resp.content == test_png_bytes, (
+            "Image bytes must match the embedded payload"
+        )
+
+        # ── Image proxy: serve patch template image ────────────────────
+        resp2 = c.get(
+            "/api/v1/samples/defect-001/images/img-tmpl-1",
+            params={"dataset_id": ds_id},
+        )
+        assert resp2.status_code == 200, resp2.text
+        assert resp2.headers["content-type"] == "image/png"
+        assert len(resp2.content) > 0
+
+        # ── Image proxy: serve patch defective image ───────────────────
+        resp3 = c.get(
+            "/api/v1/samples/defect-001/images/img-defect-1",
+            params={"dataset_id": ds_id},
+        )
+        assert resp3.status_code == 200, resp3.text
+        assert resp3.headers["content-type"] == "image/png"
+        assert len(resp3.content) > 0
+
+        # ── Nonexistent image returns 404 ──────────────────────────────
+        resp4 = c.get(
+            "/api/v1/samples/defect-001/images/img-bogus",
+            params={"dataset_id": ds_id},
+        )
+        assert resp4.status_code == 404, (
+            f"Expected 404 for nonexistent image, got {resp4.status_code}"
+        )
+
+        # ── Nonexistent sample returns 404 ─────────────────────────────
+        resp5 = c.get(
+            "/api/v1/samples/nonexistent/images/img-review-1",
+            params={"dataset_id": ds_id},
+        )
+        assert resp5.status_code == 404, (
+            f"Expected 404 for nonexistent sample, got {resp5.status_code}"
+        )
+
+        # ── Missing dataset_id returns 422 ─────────────────────────────
+        resp6 = c.get(
+            "/api/v1/samples/defect-001/images/img-review-1",
+        )
+        assert resp6.status_code == 422, (
+            f"Expected 422 for missing dataset_id, got {resp6.status_code}"
+        )

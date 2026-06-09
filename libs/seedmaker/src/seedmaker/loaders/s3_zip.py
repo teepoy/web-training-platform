@@ -17,7 +17,7 @@ class S3ZipWriter:
         region: str = "us-east-1",
         samples_per_zip: int = 500,
     ) -> None:
-        import boto3  # type: ignore[import-untyped]
+        import boto3  # pyright: ignore[reportMissingImports]
 
         self._bucket = bucket
         self._prefix = prefix.rstrip("/")

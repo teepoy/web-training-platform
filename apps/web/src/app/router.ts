@@ -10,6 +10,7 @@ import { dashboardRoutes } from "@/features/dashboard/router";
 import { datasetRoutes } from "@/features/datasets/router";
 import { predictionRoutes } from "@/features/prediction/router";
 import { previewRoutes } from "@/features/preview/router";
+import { scRoutes } from "@/features/sc/router";
 import { scheduleRoutes } from "@/features/schedules/router";
 import { sensorRoutes } from "@/features/sensors/router";
 import { taskTrackerRoutes } from "@/features/task_tracker/router";
@@ -31,6 +32,7 @@ export const router = createRouter({
     ...scheduleRoutes,
     ...sensorRoutes,
     ...previewRoutes,
+    ...scRoutes,
     {
       path: "/admin",
       component: AdminLayout,

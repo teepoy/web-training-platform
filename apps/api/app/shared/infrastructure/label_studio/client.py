@@ -21,12 +21,10 @@ and Label Studio's structured annotation JSON format.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
-
-from pydantic import BaseModel
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +49,7 @@ class LabelStudioNotFoundError(LabelStudioError):
 # ---------------------------------------------------------------------------
 
 
-def _to_dict(obj: BaseModel | dict[str, object]) -> dict[str, object]:
+def _to_dict(obj: Any) -> dict[str, object]:
     """Convert a label-studio-sdk Pydantic model to a plain dict.
 
     The SDK returns Pydantic v2 model instances.  We normalise them to plain
@@ -72,7 +70,7 @@ def _wrap_sdk_error(exc: Exception) -> LabelStudioError:
     """Map a label-studio-sdk exception to our error hierarchy."""
     # Import lazily to avoid hard dependency at module load time
     try:
-        from label_studio_sdk.core.api_error import ApiError  # type: ignore[import-untyped]
+        from label_studio_sdk.core.api_error import ApiError  # pyright: ignore[reportMissingImports]
 
         if isinstance(exc, ApiError):
             if getattr(exc, "status_code", None) == 404:
@@ -107,7 +105,7 @@ class LabelStudioClient:
     """
 
     def __init__(self, url: str, api_key: str) -> None:
-        from label_studio_sdk.client import LabelStudio  # type: ignore[import-untyped]
+        from label_studio_sdk.client import LabelStudio  # pyright: ignore[reportMissingImports]
 
         self._client = LabelStudio(base_url=url, api_key=api_key)
 
@@ -169,7 +167,7 @@ class LabelStudioClient:
         """
         try:
             pager = await asyncio.to_thread(self._client.projects.list)
-            return [_to_dict(p) for p in pager]  # pyright: ignore[reportArgumentType]
+            return [_to_dict(p) for p in pager]
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
@@ -191,13 +189,10 @@ class LabelStudioClient:
             Updated project object.
         """
         try:
-            kwargs: dict[str, object] = {}
-            if label_config is not None:
-                kwargs["label_config"] = label_config
             result = await asyncio.to_thread(
                 self._client.projects.update,
                 id=project_id,
-                **kwargs,  # pyright: ignore[reportArgumentType]
+                label_config=label_config,
             )
             return _to_dict(result)
         except Exception as exc:
@@ -262,7 +257,7 @@ class LabelStudioClient:
             result = await asyncio.to_thread(
                 lambda: self._client.projects.import_tasks(
                     id=project_id,
-                    request=tasks,  # pyright: ignore[reportArgumentType]
+                    request=cast(Any, tasks),
                     return_task_ids=return_task_ids,
                 )
             )
@@ -299,7 +294,7 @@ class LabelStudioClient:
             )
             # SyncPagerExt wraps a SyncPager whose ``response`` is a
             # PaginatedRoleBasedTaskList with a ``total`` field.
-            tasks = [_to_dict(t) for t in pager]  # pyright: ignore[reportArgumentType]
+            tasks = [_to_dict(t) for t in pager]
             total: int = 0
             if hasattr(pager, "response") and pager.response is not None:
                 resp = pager.response
@@ -417,18 +412,12 @@ class LabelStudioClient:
             Created prediction object.
         """
         try:
-            kwargs: dict[str, object] = {
-                "task": task_id,
-                "result": result,
-            }
-            if model_version is not None:
-                kwargs["model_version"] = model_version
-            if score is not None:
-                kwargs["score"] = score
-
             prediction = await asyncio.to_thread(
                 self._client.predictions.create,
-                **kwargs,  # pyright: ignore[reportArgumentType]
+                task=task_id,
+                result=result,
+                model_version=model_version,
+                score=score,
             )
             return _to_dict(prediction)
         except Exception as exc:
@@ -518,7 +507,8 @@ class LabelStudioClient:
             XML labeling configuration string.
         """
         choices_xml = "\n".join(
-            f'      <Choice value="{label}"/>' for label in label_space
+            f'      <Choice value="{label}"/>'
+            for label in label_space or ["0", "1", "2"]
         )
         return (
             "<View>\n"

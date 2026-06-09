@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BrowserSidebar from "@/shared/components/browser-sidebar/BrowserSidebar.vue";
 import type { SidebarPanelDescriptor } from "../../config";
-import { widgetComponentMap } from "../widgets/widgetMap";
+import { widgetComponentMap } from "@/shared/widgets/widgetComponentMap";
 import {
   COLLAPSED_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,

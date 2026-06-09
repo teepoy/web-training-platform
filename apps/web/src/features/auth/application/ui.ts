@@ -3,7 +3,7 @@ import { defineStore } from "pinia";
 export const useUiStore = defineStore("ui", {
   state: () => ({
     sidebarCollapsed: false,
-    darkMode: true,
+    darkMode: false,
     toastQueue: [] as Array<{ type: string; message: string }>,
   }),
   actions: {

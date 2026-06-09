@@ -67,7 +67,7 @@ function submit() {
       });
 
       if (uploadFile.value) {
-        await uploadSampleImage(sample.id, uploadFile.value);
+        await uploadSampleImage(sample.id!, uploadFile.value, props.datasetId);
       }
 
       message.success("Sample created");

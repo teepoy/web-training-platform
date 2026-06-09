@@ -34,19 +34,22 @@ export interface DataPipeline<
 
 export const DATA_PIPELINE_KEY: InjectionKey<DataPipeline<any, any>> = Symbol("dataPipeline");
 
-export function createDataPipeline<TItem extends { id: string }>(
+export function createDataPipeline<
+  TItem extends { id: string },
+  TId = string,
+>(
   rawItems: Ref<TItem[]>,
-): DataPipeline<TItem> {
-  const nodes = shallowRef<Record<string, DataNode>>({});
+): DataPipeline<TItem, TId> {
+  const nodes = shallowRef<Record<string, DataNode<TId>>>({});
 
-  function walkChain(nodeId: string): Annotation[] {
+  function walkChain(nodeId: string): Annotation<TId>[] {
     const visited = new Set<string>();
-    const annotations: Annotation[] = [];
+    const annotations: Annotation<TId>[] = [];
     let currentId: string | null = nodeId;
 
     while (currentId && !visited.has(currentId)) {
       visited.add(currentId);
-      const node: DataNode | undefined = nodes.value[currentId];
+      const node: DataNode<TId> | undefined = nodes.value[currentId];
       if (node?.annotation.value) {
         annotations.push(node.annotation.value);
       }
@@ -56,10 +59,10 @@ export function createDataPipeline<TItem extends { id: string }>(
     return annotations;
   }
 
-  function register(id: string, parentId?: string): DataNode {
-    const annotation = shallowRef<Annotation | null>(null);
+  function register(id: string, parentId?: string): DataNode<TId> {
+    const annotation = shallowRef<Annotation<TId> | null>(null);
 
-    const child = computed<DataNode | null>(() => {
+    const child = computed<DataNode<TId> | null>(() => {
       const allNodes = nodes.value;
       for (const n of Object.values(allNodes)) {
         if (n.parentId === id) return n;
@@ -67,17 +70,17 @@ export function createDataPipeline<TItem extends { id: string }>(
       return null;
     });
 
-    const visibleAnnotations = computed<Annotation[]>(() => {
+    const visibleAnnotations = computed<Annotation<TId>[]>(() => {
       return walkChain(id);
     });
 
-    const node: DataNode = {
+    const node: DataNode<TId> = {
       id,
       parentId: parentId ?? null,
       annotation,
       child,
       visibleAnnotations,
-      annotate(kind: string, ids: string[]) {
+      annotate(kind: string, ids: TId[]) {
         annotation.value = { kind, ids: new Set(ids) };
       },
       clear() {
@@ -89,7 +92,7 @@ export function createDataPipeline<TItem extends { id: string }>(
     return node;
   }
 
-  function getNode(id: string): DataNode | undefined {
+  function getNode(id: string): DataNode<TId> | undefined {
     return nodes.value[id];
   }
 

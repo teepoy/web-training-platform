@@ -21,7 +21,9 @@ class UserORM(Base):
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    oauth_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    oauth_provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_superadmin: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="0"
     )

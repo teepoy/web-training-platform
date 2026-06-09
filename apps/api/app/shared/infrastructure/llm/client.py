@@ -23,8 +23,8 @@ import base64
 import logging
 from typing import Any
 
-import litellm  # type: ignore[import-untyped]
-from litellm.types.llms.openai import AllMessageValues  # type: ignore[import-untyped]
+import litellm
+from litellm.types.llms.openai import AllMessageValues
 
 _logger = logging.getLogger(__name__)
 
@@ -88,11 +88,11 @@ class OpenAICompatibleLlmClient:
             kwargs["api_base"] = self._base_url
 
         try:
-            response = await litellm.acompletion(**kwargs)
+            response: Any = await litellm.acompletion(**kwargs)
         except Exception as exc:
             raise LlmClientError(f"LLM request failed: {exc}") from exc
 
-        choices = response.choices  # type: ignore[union-attr]
+        choices = response.choices
         if not choices:
             raise LlmClientError("LLM response has no choices")
         content = choices[0].message.content
@@ -136,7 +136,7 @@ async def call_llm(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
 
-    response = await litellm.acompletion(**kwargs)
+    response: Any = await litellm.acompletion(**kwargs)
 
     # Convert to plain dict so callers can use it the same way as before
-    return response.model_dump()  # type: ignore[union-attr]
+    return response.model_dump()

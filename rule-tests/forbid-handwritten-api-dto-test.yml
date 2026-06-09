@@ -1,0 +1,11 @@
+id: forbid-handwritten-api-dto
+valid:
+  - "export interface Foo { data: string }"
+  - "export interface FooBar { data: string }"
+  - "const x = useApi().get('/endpoint');"
+  - "const y = await orvalClient.getData();"
+invalid:
+  - "export interface FooResponse { data: string }"
+  - "export interface BarRequest { query: string }"
+  - 'const a = req("/endpoint");'
+  - 'const b = req<UserWithOrgs>("/auth/me", { headers });'

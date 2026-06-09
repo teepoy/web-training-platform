@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
 import { configureTransport } from "@/shared/api/client";
+import { configureOrvalFetcher } from "@/shared/api/orval-fetcher";
 
 import "../style.css";
 import "./registrations";
@@ -44,6 +45,33 @@ configureTransport({
   },
 });
 
+configureOrvalFetcher({
+  getToken: () => {
+    try {
+      const auth = useAuthStore(pinia);
+      return auth.token ?? getStoredToken();
+    } catch {
+      return getStoredToken();
+    }
+  },
+  getOrgId: () => {
+    try {
+      return useOrgStore(pinia).currentOrgId;
+    } catch {
+      return null;
+    }
+  },
+  onAuthError: () => {
+    try {
+      const auth = useAuthStore(pinia);
+      auth.logout();
+    } catch {}
+    try {
+      router.push("/login");
+    } catch {}
+  },
+});
+
 const app = createApp(App);
 const pinia = createPinia();
 const queryClient = new QueryClient({
@@ -62,7 +90,6 @@ async function bootstrap(): Promise<void> {
   app.use(pinia);
   const authStore = useAuthStore(pinia);
   authStore.hydrateFromStorage();
-  await authStore.initAuthMode();
   app.use(router);
   app.use(VueQueryPlugin, { queryClient });
   app.mount("#app");
