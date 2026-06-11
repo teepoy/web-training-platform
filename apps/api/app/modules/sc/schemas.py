@@ -45,17 +45,50 @@ class ScInspectionReviewImagesResponse(BaseModel):
     total: int
 
 
+class ScSampleTableSort(BaseModel):
+    field: str
+    direction: Literal["asc", "desc"]
+
+
+class ScSampleTableSetFilter(BaseModel):
+    operator: Literal["in"]
+    values: list[float | str] = Field(min_length=1)
+
+
+class ScSampleTableRangeFilter(BaseModel):
+    operator: Literal["between"]
+    min: float
+    max: float
+
+
 class ScSampleTableRowsRequest(BaseModel):
     defect_ids: list[str] = Field(default_factory=list)
     page: int = Field(default=0, ge=0)
     page_size: int = Field(default=1000, ge=1, le=10000)
+    filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
+    sort: ScSampleTableSort | None = None
 
 
 class ScSampleTableRow(BaseModel):
     defect_id: str
     rough_bin: int
-    class_number: int | None = None
-    test_id: int = 0
+    class_number: int
+    test_id: int
+    wafer_x: int
+    wafer_y: int
+    index_x: int
+    index_y: int
+    adder: int
+    cluster_id: int
+    die_x: int
+    die_y: int
+    size_x: int
+    size_y: int
+    size_d: int
+    area: int
+    final_bin: int
+    manual_bin: int
+    kill_ratio: float
 
 
 class ScSampleTableRowsResponse(BaseModel):
@@ -118,3 +151,20 @@ class ScBulkAnnotationRequest(BaseModel):
 
 class ScBulkAnnotationResponse(BaseModel):
     created: int
+
+
+class ScFilterParams(BaseModel):
+    """Filter and grouping parameters for SC plot-points endpoints.
+
+    All fields are optional — when omitted no filtering is applied.
+    List fields accept exploded query format: ``?class_numbers=1&class_numbers=2``.
+    """
+
+    class_numbers: list[int] | None = None
+    rough_bins: list[int] | None = None
+    predictions: list[str] | None = None
+    annotations: list[str] | None = None
+    test_ids: list[int] | None = None
+    adders: list[int] | None = None
+    cluster_ids: list[int] | None = None
+    legend_group_by: str | None = None

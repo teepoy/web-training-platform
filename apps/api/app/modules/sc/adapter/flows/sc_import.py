@@ -11,6 +11,7 @@ from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
     iter_patch_samples_from_upstream_chunk,
 )
+from app.modules.sc.app.services.shuffle import get_shuffled_ids
 from app.modules.sc.schema import SC_SPARSE_SHARD_SCHEMA_V2
 from app.shared.api.schemas import (
     Dataset,
@@ -214,6 +215,7 @@ async def sc_import(
     org_id: str | None = None,
     max_rows: int | None = None,
     offset: int = 0,
+    total_available: int | None = None,
 ) -> dict:
     import app.registrations  # noqa: F401  # trigger all mapper registrations
 
@@ -235,10 +237,11 @@ async def sc_import(
             # Pre-check upstream for data before creating dataset
             try:
                 insp_dt = datetime.fromisoformat(source_inspection_time)
-                _, total = await upstream.list_samples(
+                lf = await upstream.list_samples(
                     insp_dt, source_wafer_key, offset=0, count=1
                 )
-                if total == 0:
+                df = await lf.collect_async()
+                if len(df) == 0:
                     logger.info(
                         "SC import: upstream has no data for inspection_time=%s "
                         "wafer_key=%d — skipping dataset creation",
@@ -310,22 +313,33 @@ async def sc_import(
             if insp_dt.tzinfo is None:
                 insp_dt = insp_dt.replace(tzinfo=timezone.utc)
 
+            lf = await upstream.list_samples(insp_dt, source_wafer_key, count=None)
+            df = await lf.collect_async()
+            total_rows_available = len(df)
+
+            if total_rows_available == 0:
+                return {"dataset_id": dataset_id, "imported_count": 0}
+
+            indices = get_shuffled_ids(list(range(total_rows_available)))
+            worker_indices = indices[offset:]
+            if max_rows is not None:
+                worker_indices = worker_indices[:max_rows]
+
+            filtered_df = df[worker_indices]
+
             async def _iter_rows():
                 imported = 0
-                async for chunk in upstream.stream(
-                    source_inspection_time, source_wafer_key, offset=offset
-                ):
-                    for patch_sample in iter_patch_samples_from_upstream_chunk(chunk):
-                        if max_rows is not None and imported >= max_rows:
-                            return
-                        images = await _build_image_structs(
-                            patch_sample=patch_sample,
-                            inspection_time=insp_dt,
-                            wafer_key=source_wafer_key,
-                            image_fetcher=image_fetcher,
-                        )
-                        imported += 1
-                        yield _patch_sample_to_parquet_row(patch_sample, images)
+                for patch_sample in iter_patch_samples_from_upstream_chunk(filtered_df):
+                    if max_rows is not None and imported >= max_rows:
+                        return
+                    images = await _build_image_structs(
+                        patch_sample=patch_sample,
+                        inspection_time=insp_dt,
+                        wafer_key=source_wafer_key,
+                        image_fetcher=image_fetcher,
+                    )
+                    imported += 1
+                    yield _patch_sample_to_parquet_row(patch_sample, images)
 
             imported_count = await storage.write_samples(
                 _iter_rows(),
@@ -344,27 +358,37 @@ async def sc_import(
 
         storage = await ctx.datasets.dataset_storage_factory.open(dataset_id, org_id)
 
+        lf_db = await upstream.list_samples(insp_dt, source_wafer_key, count=None)
+        df_db = await lf_db.collect_async()
+        total_rows_available_db = len(df_db)
+
+        if total_rows_available_db == 0:
+            return {"dataset_id": dataset_id, "imported_count": 0}
+
+        indices_db = get_shuffled_ids(list(range(total_rows_available_db)))
+        worker_indices_db = indices_db[offset:]
+        if max_rows is not None:
+            worker_indices_db = worker_indices_db[:max_rows]
+
+        filtered_df_db = df_db[worker_indices_db]
+
         async def _iter_rows():
             imported = 0
-            async for chunk in upstream.stream(
-                source_inspection_time, source_wafer_key, offset=offset
-            ):
-                for patch_sample in iter_patch_samples_from_upstream_chunk(chunk):
-                    if max_rows is not None and imported >= max_rows:
-                        return
-                    images = await _build_image_structs(
-                        patch_sample=patch_sample,
-                        inspection_time=insp_dt,
-                        wafer_key=source_wafer_key,
-                        image_fetcher=image_fetcher,
-                    )
-                    row = _patch_sample_to_parquet_row(patch_sample, images)
-                    row.image_uris = [
-                        img.source_uri or f"sc://{img.image_id}"
-                        for img in (images or [])
-                    ]
-                    imported += 1
-                    yield row
+            for patch_sample in iter_patch_samples_from_upstream_chunk(filtered_df_db):
+                if max_rows is not None and imported >= max_rows:
+                    return
+                images = await _build_image_structs(
+                    patch_sample=patch_sample,
+                    inspection_time=insp_dt,
+                    wafer_key=source_wafer_key,
+                    image_fetcher=image_fetcher,
+                )
+                row = _patch_sample_to_parquet_row(patch_sample, images)
+                row.image_uris = [
+                    img.source_uri or f"sc://{img.image_id}" for img in (images or [])
+                ]
+                imported += 1
+                yield row
 
         imported_count = await storage.write_samples(
             _iter_rows(),

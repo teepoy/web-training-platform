@@ -1,5 +1,15 @@
 # Compose Config
 
+For production hardening, split-stack deployment, backup, release, and rollback
+procedures, see
+[`docs/guides/production-compose-deployment.md`](../../docs/guides/production-compose-deployment.md).
+The deployable split manifests are:
+
+- `production/compose.stateful.yaml`
+- `production/compose.platform.yaml`
+- `production/compose.ops.yaml`
+- `production/compose.observability.yaml`
+
 ## Dev vs Prod Modes
 
 The compose stack now supports two modes via override files:
@@ -15,6 +25,11 @@ The compose stack now supports two modes via override files:
 - **minio** (`:9000`, `:9001`): S3-compatible storage
 - **prefect-server** (`:4200`): Prefect 3 control plane
 - **label-studio** (`:8080`): Annotation UI
+
+> **Production note:** The split-stack manifests separate stateful services
+> (`postgres`, `minio`, `redis`, `label-studio`) into `compose.stateful.yaml`.
+> `prefect-server` stays in `compose.platform.yaml` because it is stateless
+> (its DB lives in the stateful project's postgres).
 
 ### Dev Mode (`make up-dev`)
 Adds via `docker-compose.dev.yaml`:
@@ -36,12 +51,31 @@ Adds via `docker-compose.prod.yaml`:
 
 Prod mode does **not** include: pgadmin, deployments-bootstrap, automatic alembic migrations.
 
+### Production Split-Stack (real deployment)
+For production use the split-stack manifests under `infra/compose/production/`:
+
+| Step | Command | Description |
+|------|---------|-------------|
+| 1. Network | `make create-prod-network` | Create shared `finetune-prod` network |
+| 2. Stateful | `make up-prod-stateful` | `postgres`, `minio`, `redis`, `label-studio` |
+| 3. Platform | `make up-prod-platform` | `prefect-server`, `api`, `web`, `workers` |
+| 4. Ops | `make db-migrate-prod` | Alembic migrations (one-shot) |
+| 5. Ops | `make deployments-prod` | Prefect work pools + deployments (one-shot) |
+| 6. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ... |
+| 7. All-in-one | `make up-prod-all` | Steps 2 + 3 + 6 with 60s sleep between stateful and platform |
+
+The API performs startup readiness checks against `postgres`, `redis`, and `label-studio`.
+If any dependency is unreachable, the container exits with code 1 so the orchestrator
+restarts it after a delay. This replaces cross-project `depends_on` which is silently
+ignored across separate Compose projects.
+
 ### Migration Notes
 - `make up` → now redirects to `make up-dev` (deprecated)
 - `make up-stack` → now redirects to `make up-dev --scale web=0` (deprecated)
 - `make updev` → unchanged (starts compose backend + local Vite on host)
-- Flow deployment in prod: run `make ftctl ARGS="deployments apply"` manually
-- Alembic migrations in prod: run `make db-migrate-compose` separately
+- `make prod` → removed (was deprecated redirect to `make up-prod`)
+- Flow deployment in prod: run `make deployments-prod` (split-stack) or `make ftctl ARGS="deployments apply"` (manual)
+- Alembic migrations in prod: run `make db-migrate-prod` (split-stack) or `make db-migrate-compose` (dev)
 
 `docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
 infrastructure (postgres, minio, prefect-server, label-studio). Dev and prod overrides
@@ -67,16 +101,21 @@ hot reload and stable `/api` proxying to `localhost:8000`.
 
 ## Services
 
-The stack is split across three Compose files:
+The stack is split across multiple Compose files:
 
 - **Base infrastructure** (`docker-compose.yaml`): postgres, minio, prefect-server, label-studio
 - **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
 - **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
+- **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
+- **Production ops** (`production/compose.ops.yaml`): migrate, deployments (one-shot ops)
+- **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
 
 All services at a glance:
 
 - **postgres** (:5432): PostgreSQL with pgvector, shared by API, Prefect, and Label Studio
 - **minio** (:9000, :9001): S3-compatible artifact storage
+- **redis** (no exposed port): Redis with appendonly persistence, used by API and workers
 - **prefect-server** (:4200): Prefect 3 control plane
 - **label-studio** (:8080): Annotation UI
 - **api** (:8000): Platform API (dev: fastapi hot-reload with bind mounts; prod: uvicorn workers with baked image)
@@ -85,6 +124,8 @@ All services at a glance:
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).
 - **deployments-bootstrap** (dev-only): One-shot service that creates work pools and registers flow deployments.
 - **pgadmin** (:5050, dev-only): Optional PostgreSQL admin UI
+- **migrate** (ops profile, one-shot): Runs Alembic migrations in production.
+- **deployments** (ops profile, one-shot): Creates Prefect work pools and applies flow deployments.
 
 ## Notes
 

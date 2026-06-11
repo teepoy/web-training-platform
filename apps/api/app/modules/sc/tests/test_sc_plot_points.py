@@ -87,15 +87,23 @@ def test_plot_points_forwards_reticle_options() -> None:
             )
         assert resp.status_code == 200
         mock_svc.build_plot_points_response.assert_awaited_once_with(
-            _DATASET_ID,
-            "00000000-0000-0000-0000-000000000001",
-            sampled=True,
-            target_resolution=600,
-            reticle_x_die_count=4,
-            reticle_y_die_count=6,
-            reticle_x_die_shift=1,
-            reticle_y_die_shift=-2,
-        )
+                _DATASET_ID,
+                "00000000-0000-0000-0000-000000000001",
+                sampled=True,
+                target_resolution=600,
+                reticle_x_die_count=4,
+                reticle_y_die_count=6,
+                reticle_x_die_shift=1,
+                reticle_y_die_shift=-2,
+                legend_group_by=None,
+                class_numbers=None,
+                rough_bins=None,
+                predictions=None,
+                annotations=None,
+                test_ids=None,
+                adders=None,
+                cluster_ids=None,
+            )
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
@@ -173,6 +181,43 @@ def test_class_list_happy_path() -> None:
         msg.ParseFromString(resp.content)
         assert list(msg.class_numbers["7"].defect_ids) == [1, 2]
         mock_svc.build_class_list_response.assert_awaited_once()
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
+def test_class_list_forwards_query_filters() -> None:
+    mock_svc = AsyncMock(spec=ScPlotPointsService)
+    mock_svc.build_class_list_response = AsyncMock(return_value=make_class_list_pb(
+        pl.DataFrame(
+            {
+                "defect_id": [1],
+                "class_number": [7],
+                "rough_bin": [3],
+                "predicted_label": ["scratch"],
+                "label": ["review"],
+            }
+        )
+    ))
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                f"{_CLASS_LIST_ENDPOINT}?class_numbers=7&rough_bins=3"
+                "&predictions=scratch&annotations=review&test_ids=2"
+                "&adders=1&cluster_ids=9&legend_group_by=annotation"
+            )
+        assert resp.status_code == 200, resp.text
+        mock_svc.build_class_list_response.assert_awaited_once_with(
+            _DATASET_ID,
+            "00000000-0000-0000-0000-000000000001",
+            class_numbers=[7],
+            rough_bins=[3],
+            predictions=["scratch"],
+            annotations=["review"],
+            test_ids=[2],
+            adders=[1],
+            cluster_ids=[9],
+        )
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 

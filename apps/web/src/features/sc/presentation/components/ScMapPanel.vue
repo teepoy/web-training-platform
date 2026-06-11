@@ -9,13 +9,11 @@ import ScDieStackMap from "./ScDieStackMap.vue";
 import ScReticleMap from "./ScReticleMap.vue";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
-import { parsePoints, getDefectIdsByClass, getDefectIdsByBin } from "./scMapUtils";
+import { parsePoints } from "./scMapUtils";
 import type { ClassList, DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction";
 type LegendKey = number | string;
-const UNLABELED_KEY = "__unlabeled__";
-const NO_PREDICTION_KEY = "__no_prediction__";
 
 const props = defineProps<{
   // Tab control
@@ -52,15 +50,23 @@ const props = defineProps<{
 
   // Zoom viewport
   zoom?: { x: number; y: number; w: number; h: number } | null;
+
+  /** Box-selection query function (mode, region) → defect IDs.
+   *  Parent curries inspection identity; ScMapPanel curries mode for each child map. */
+  queryBoxSelection?: (mode: "wafer" | "die" | "reticle", region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
+
+  // Highlight defect IDs from table selection (cyan overlay)
+  highlightDefectIds?: number[];
 }>();
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
   (e: "update:reticleOptions", v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number }): void;
   (e: "select-points", payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } }): void;
-  (e: "filter-region", payload: { mode: "wafer" | "die" | "reticle"; region: { x: number; y: number; w: number; h: number } }): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
+  (e: "selection-change", ids: number[]): void;
+  (e: "legend-group-change", groupBy: string | null): void;
 }>();
 
 const internalTab = ref<"wafer" | "die" | "reticle">(props.activeMapTab ?? "wafer");
@@ -144,7 +150,8 @@ function savePersistedState(key: string, value: boolean): void {
   localStorage.setItem(key, String(value));
 }
 
-watch(legendSource, () => {
+watch(legendSource, (newSource) => {
+  emit("legend-group-change", newSource || null);
   selectedClassNumber.value = null;
   selectedIds.value = new Set();
 });
@@ -157,9 +164,30 @@ watch(drawerVisible, (val) => {
   savePersistedState("sc_map_panel.drawer_collapsed", !val);
 });
 
-const handleFilterRegion = (region: { x: number; y: number; w: number; h: number }) => {
+// Curried queryBoxSelection for each map wrapper (bakes in the mode)
+interface BoxRegion { x: number; y: number; w: number; h: number }
+const waferBoxQuery = computed(() => {
+  const q = props.queryBoxSelection;
+  if (!q) return undefined;
+  return (region: BoxRegion) => q("wafer", region);
+});
+const dieBoxQuery = computed(() => {
+  const q = props.queryBoxSelection;
+  if (!q) return undefined;
+  return (region: BoxRegion) => q("die", region);
+});
+const reticleBoxQuery = computed(() => {
+  const q = props.queryBoxSelection;
+  if (!q) return undefined;
+  return (region: BoxRegion) => q("reticle", region);
+});
+
+const selectionIds = ref<number[]>([]);
+const handleSelectionChange = (ids: number[]) => {
   selectedClassNumber.value = null;
-  emit("filter-region", { mode: internalTab.value, region });
+  selectedIds.value = new Set(ids);
+  selectionIds.value = ids;
+  emit("selection-change", ids);
 };
 
 const handleZoomIn = (vp: { x: number; y: number; w: number; h: number } | null) => {
@@ -192,48 +220,41 @@ const currentLegendPoints = computed(() => {
 });
 
 const parsedCache = computed(() => parsePoints(currentLegendPoints.value));
-const allDefectIds = computed(() => {
-  const ids = new Set<number>();
-  for (const group of Object.values(props.classList?.classNumbers ?? {})) {
-    for (const id of group.defectIds) ids.add(id);
-  }
-  if (ids.size === 0) {
-    for (const group of Object.values(props.classList?.roughBins ?? {})) {
-      for (const id of group.defectIds) ids.add(id);
-    }
-  }
-  if (ids.size === 0) {
-    for (const point of parsedCache.value) ids.add(point.defectId);
-  }
-  return ids;
-});
 
-function groupsWithMissing(
-  groups: Record<string, DefectList> | undefined,
+// Compute missing "Unlabeled" / "No Prediction" groups for annotation/prediction legends.
+// Takes all defect IDs from parsedCache, subtracts IDs already assigned in the groups.
+function withMissingGroup(
+  source: Record<string, DefectList> | undefined,
   missingKey: string,
-): Record<string, DefectList> {
-  const result = { ...(groups ?? {}) };
-  const assigned = new Set<number>();
-  for (const group of Object.values(result)) {
-    for (const id of group.defectIds) assigned.add(id);
+): Record<string, DefectList> | undefined {
+  if (!source) return source;
+  const allIds = new Set<string>();
+  for (const group of Object.values(props.classList?.classNumbers ?? {})) {
+    for (const id of group.defectIds) allIds.add(String(id));
   }
-  const missingIds = [...allDefectIds.value].filter((id) => !assigned.has(id));
-  if (missingIds.length > 0) {
-    result[missingKey] = {
-      $typeName: "sc.v1.DefectList",
-      count: missingIds.length,
-      defectIds: missingIds,
-    };
+  if (allIds.size === 0) {
+    for (const point of parsedCache.value) allIds.add(String(point.defectId));
   }
-  return result;
+  if (allIds.size === 0) return source;
+  const assigned = new Set<string>();
+  for (const g of Object.values(source)) {
+    for (const id of g.defectIds ?? []) assigned.add(String(id));
+  }
+  const missing = [...allIds].filter((id) => !assigned.has(id)).map(Number);
+  if (missing.length === 0) return source;
+  return {
+    ...source,
+    [missingKey]: { defectIds: missing, count: missing.length } as unknown as DefectList,
+  };
 }
 
 const annotationGroups = computed(() =>
-  groupsWithMissing(props.classList?.labels, UNLABELED_KEY),
+  withMissingGroup(props.classList?.labels, '__unlabeled__'),
 );
 const predictionGroups = computed(() =>
-  groupsWithMissing(props.classList?.prediction, NO_PREDICTION_KEY),
+  withMissingGroup(props.classList?.prediction, '__unlabeled__'),
 );
+
 const showWaferLoading = computed(
   () => Boolean(props.mapLoading) && (props.waferPoints?.length ?? 0) === 0,
 );
@@ -262,15 +283,20 @@ const handleLegendSelect = (key: LegendKey | null) => {
     const compactGroup = compactGroups?.[String(key)];
     const ids = compactGroup?.defectIds ?? (
       typeof key === "number"
-        ? legendSource.value === "bin"
-          ? getDefectIdsByBin(parsedCache.value, key)
-          : getDefectIdsByClass(parsedCache.value, key)
+        ? parsedCache.value
+            .filter((point) =>
+              legendSource.value === "bin"
+                ? point.roughBin === key
+                : point.classNumber === key,
+            )
+            .map((point) => point.defectId)
         : []
     );
     selectedIds.value = new Set(ids);
     emit("select-points", { ids, region: ZERO_REGION });
   }
 };
+
 </script>
 
 <template>
@@ -307,9 +333,11 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :geometry="waferGeometry"
                 :waferRadiusNm="waferRadiusNm"
                 :selectedIds="selectedIds"
+                :highlightDefectIds="highlightDefectIds"
+                :query-box-selection="waferBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.wafer"
-                @filter-region="handleFilterRegion"
+                @selection-change="handleSelectionChange"
                 @zoom-in="handleZoomIn"
               />
             </NSpin>
@@ -323,9 +351,11 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :die-size-x="waferGeometry?.dieSizeX"
                 :die-size-y="waferGeometry?.dieSizeY"
                 :selectedIds="selectedIds"
+                :highlightDefectIds="highlightDefectIds"
+                :query-box-selection="dieBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.die"
-                @filter-region="handleFilterRegion"
+                @selection-change="handleSelectionChange"
                 @zoom-in="handleZoomIn"
               />
             </NSpin>
@@ -342,9 +372,11 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :dieSizeX="reticleDieSizeX"
                 :dieSizeY="reticleDieSizeY"
                 :selectedIds="selectedIds"
+                :highlightDefectIds="highlightDefectIds"
+                :query-box-selection="reticleBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.reticle"
-                @filter-region="handleFilterRegion"
+                @selection-change="handleSelectionChange"
                 @zoom-in="handleZoomIn"
               />
               <div v-else class="reticle-map-placeholder">
@@ -434,29 +466,33 @@ const handleLegendSelect = (key: LegendKey | null) => {
           </template>
         </NButton>
 
-        <div class="drawer-header" v-show="drawerVisible">
-          <NSelect
-            data-testid="sc-legend-source-select"
-            v-model:value="legendSource"
-            :options="legendSourceOptions"
-            size="small"
-            placeholder="Source"
-          />
-        </div>
+        <NTabs v-show="drawerVisible" type="segment" animated data-testid="sc-map-drawer-tabs" size="small" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+          <NTabPane name="legend" tab="Legend" data-testid="sc-legend-tab" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+            <div class="drawer-header">
+              <NSelect
+                data-testid="sc-legend-source-select"
+                v-model:value="legendSource"
+                :options="legendSourceOptions"
+                size="small"
+                placeholder="Source"
+              />
+            </div>
 
-        <div v-show="drawerVisible" style="flex: 1; min-height: 0; overflow-y: auto;">
-          <ScLegend
-            :points="[]"
-            :fullPoints="currentLegendPoints"
-            :class-numbers="classList?.classNumbers"
-            :rough-bins="classList?.roughBins"
-            :annotations="annotationGroups"
-            :predictions="predictionGroups"
-            :selectedClassNumber="selectedClassNumber"
-            :legendSource="legendSource"
-            @select-class="handleLegendSelect"
-          />
-        </div>
+            <div style="flex: 1; min-height: 0; overflow-y: auto;">
+              <ScLegend
+                :points="[]"
+                :fullPoints="currentLegendPoints"
+                :class-numbers="classList?.classNumbers"
+                :rough-bins="classList?.roughBins"
+                :annotations="annotationGroups"
+                :predictions="predictionGroups"
+                :selectedClassNumber="selectedClassNumber"
+                :legendSource="legendSource"
+                @select-class="handleLegendSelect"
+              />
+            </div>
+          </NTabPane>
+        </NTabs>
       </aside>
       </div>
     </div>
@@ -564,6 +600,22 @@ const handleLegendSelect = (key: LegendKey | null) => {
 .drawer-header {
   padding: 8px 8px 4px;
   flex-shrink: 0;
+}
+
+/* Ensure drawer NTabs legend/filter panes scroll properly */
+.legend-drawer :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.legend-drawer :deep(.n-tab-pane) {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .sc-map-error {

@@ -8,6 +8,7 @@ import {
   padStride3to6,
   createRafThrottle,
   buildPointLookup,
+  getPackedPointIdsInRegion,
   truncatePoints,
   MAX_RENDERED_POINTS,
 } from "../scMapUtils";
@@ -151,6 +152,19 @@ describe("padStride3to6", () => {
 describe("MAX_RENDERED_POINTS", () => {
   it("is 50000", () => {
     expect(MAX_RENDERED_POINTS).toBe(50000);
+  });
+});
+
+describe("getPackedPointIdsInRegion", () => {
+  it("returns only points inside the inclusive box", () => {
+    const points = [
+      10, 20, 101, 1, 0, 0,
+      30, 40, 102, 1, 0, 0,
+      50, 60, 103, 1, 0, 0,
+    ];
+    expect(
+      getPackedPointIdsInRegion(points, { x: 10, y: 20, w: 20, h: 20 }),
+    ).toEqual([101, 102]);
   });
 });
 

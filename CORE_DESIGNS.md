@@ -112,8 +112,8 @@ Dataset image access 必须通过平台后端代理表达。`file_shard_sparse` 
 
 Label Studio 是人工标注界面和临时同步界面，不是平台 prediction 的事实来源。
 
-- 平台 prediction 写入 API DB。
-- Prediction review 的 provenance 指向平台 prediction id，不指向 Label Studio prediction id。
+- 平台 prediction 通过 `DatasetStorageAgg.write_predictions(...)` 按 `storage_mode` 持久化：`db_full` 写入 API DB 的 `platform_predictions`，`file_shard_sparse` 写入 dataset-owned per-job prediction Parquet shards 和 `job_result.json`。Prediction flow 不得绕过 aggregate 直接写 repository、ORM 或对象存储。
+- Prediction review 的 provenance 指向平台存储拥有的 prediction identity，不指向 Label Studio prediction id。`db_full` 使用平台 prediction id；`file_shard_sparse` 使用 prediction job、sample 和模型 provenance。
 - Prediction collection 同步到 Label Studio 是显式人工操作，不是默认持久化路径。
 - `ls_project_url` 等环境相关 URL 按当前配置计算，不作为数据库事实持久化。
 

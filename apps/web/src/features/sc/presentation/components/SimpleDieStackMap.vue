@@ -108,13 +108,10 @@ function renderBackground() {
   if (dieSizeX > 0 && dieSizeY > 0) {
     const [left, bottom] = dataToScreen(0, 0);
     const [right, top] = dataToScreen(dieSizeX, dieSizeY);
-    bgCtx.strokeStyle = "#000000";
+    bgCtx.strokeStyle = "#9ca3af";
     bgCtx.lineWidth = 1;
     bgCtx.strokeRect(left, top, right - left, bottom - top);
   }
-  bgCtx.strokeStyle = "#1f2937";
-  bgCtx.lineWidth = 1;
-  bgCtx.strokeRect(0.5, 0.5, canvasW - 1, canvasH - 1);
 }
 
 function renderPoints() {

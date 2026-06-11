@@ -3875,6 +3875,89 @@ paths:
             type: string
           - type: 'null'
           title: Mode
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
       responses:
         '200':
           description: Return unified aggregated map protobuf (wafer + die + reticle)
@@ -3910,6 +3993,89 @@ paths:
         schema:
           type: integer
           title: Wafer Key
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
       responses:
         '200':
           description: Return compact SC class/bin defect-id lists
@@ -4022,6 +4188,89 @@ paths:
           type: integer
           default: 0
           title: Reticleydieshift
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
       responses:
         '200':
           description: Return SC sparse plot point arrays as WaferMapResponse protobuf
@@ -4051,6 +4300,89 @@ paths:
         schema:
           type: string
           title: Dataset Id
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
       responses:
         '200':
           description: Return compact SC class/bin/prediction/label defect-id lists
@@ -6746,6 +7078,24 @@ components:
       - defect_id
       - review_images
       title: ScReviewImagesByDefectItem
+    ScSampleTableRangeFilter:
+      properties:
+        operator:
+          type: string
+          const: between
+          title: Operator
+        min:
+          type: number
+          title: Min
+        max:
+          type: number
+          title: Max
+      type: object
+      required:
+      - operator
+      - min
+      - max
+      title: ScSampleTableRangeFilter
     ScSampleTableRow:
       properties:
         defect_id:
@@ -6755,18 +7105,77 @@ components:
           type: integer
           title: Rough Bin
         class_number:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: Class Number
         test_id:
           type: integer
           title: Test Id
-          default: 0
+        wafer_x:
+          type: integer
+          title: Wafer X
+        wafer_y:
+          type: integer
+          title: Wafer Y
+        index_x:
+          type: integer
+          title: Index X
+        index_y:
+          type: integer
+          title: Index Y
+        adder:
+          type: integer
+          title: Adder
+        cluster_id:
+          type: integer
+          title: Cluster Id
+        die_x:
+          type: integer
+          title: Die X
+        die_y:
+          type: integer
+          title: Die Y
+        size_x:
+          type: integer
+          title: Size X
+        size_y:
+          type: integer
+          title: Size Y
+        size_d:
+          type: integer
+          title: Size D
+        area:
+          type: integer
+          title: Area
+        final_bin:
+          type: integer
+          title: Final Bin
+        manual_bin:
+          type: integer
+          title: Manual Bin
+        kill_ratio:
+          type: number
+          title: Kill Ratio
       type: object
       required:
       - defect_id
       - rough_bin
+      - class_number
+      - test_id
+      - wafer_x
+      - wafer_y
+      - index_x
+      - index_y
+      - adder
+      - cluster_id
+      - die_x
+      - die_y
+      - size_x
+      - size_y
+      - size_d
+      - area
+      - final_bin
+      - manual_bin
+      - kill_ratio
       title: ScSampleTableRow
     ScSampleTableRowsRequest:
       properties:
@@ -6786,6 +7195,19 @@ components:
           minimum: 1.0
           title: Page Size
           default: 1000
+        filter:
+          anyOf:
+          - additionalProperties:
+              anyOf:
+              - $ref: '#/components/schemas/ScSampleTableSetFilter'
+              - $ref: '#/components/schemas/ScSampleTableRangeFilter'
+            type: object
+          - type: 'null'
+          title: Filter
+        sort:
+          anyOf:
+          - $ref: '#/components/schemas/ScSampleTableSort'
+          - type: 'null'
       type: object
       title: ScSampleTableRowsRequest
     ScSampleTableRowsResponse:
@@ -6803,6 +7225,41 @@ components:
       - items
       - total
       title: ScSampleTableRowsResponse
+    ScSampleTableSetFilter:
+      properties:
+        operator:
+          type: string
+          const: in
+          title: Operator
+        values:
+          items:
+            anyOf:
+            - type: number
+            - type: string
+          type: array
+          minItems: 1
+          title: Values
+      type: object
+      required:
+      - operator
+      - values
+      title: ScSampleTableSetFilter
+    ScSampleTableSort:
+      properties:
+        field:
+          type: string
+          title: Field
+        direction:
+          type: string
+          enum:
+          - asc
+          - desc
+          title: Direction
+      type: object
+      required:
+      - field
+      - direction
+      title: ScSampleTableSort
     ScheduleResponse:
       properties:
         id:

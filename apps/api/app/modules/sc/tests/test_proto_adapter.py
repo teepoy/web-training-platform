@@ -62,6 +62,24 @@ def test_make_class_list_groups_defect_ids() -> None:
     assert list(msg.rough_bins["4"].defect_ids) == [101, 103]
     assert list(msg.prediction["scratch"].defect_ids) == [101, 103]
     assert list(msg.labels["review"].defect_ids) == [101, 103]
+    assert list(msg.labels["__unlabeled__"].defect_ids) == [102]
+
+
+def test_make_class_list_groups_missing_predictions_as_unlabeled() -> None:
+    df = pl.DataFrame(
+        {
+            "defect_id": [101, 102],
+            "class_number": [1, 1],
+            "rough_bin": [4, 4],
+            "predicted_label": ["scratch", None],
+            "label": ["review", "review"],
+        }
+    )
+
+    msg = sample_pb2.ClassList()
+    msg.ParseFromString(make_class_list_pb(df))
+
+    assert list(msg.prediction["__unlabeled__"].defect_ids) == [102]
 
 
 # ── DataFrame-based WaferMapResponse tests ─────────────────────────────────

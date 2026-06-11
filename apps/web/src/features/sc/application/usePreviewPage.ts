@@ -16,15 +16,17 @@ import {
   getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
 import { getApiBase } from "@/shared/api/client";
-import { withAuthQueryParams } from "@/shared/api/client";
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import {
   type ClassList,
   ReviewImageSchema,
   ScSampleItemSchema,
-  WaferMapResponseSchema,
 } from "../generated/proto/sc/v1/sample_pb";
 import { fetchScInspectionClassList } from "../api/classList";
+import {
+  fetchScInspectionMapPoints,
+  type ScMapFilter,
+} from "../api/plotPoints";
 import type { ScSampleItem } from "../generated/proto/sc/v1/sample_pb";
 import type {
   InspectionSummaryItem,
@@ -32,6 +34,10 @@ import type {
   ScImportPayload,
   ScImportResponse,
 } from "../domain/models";
+import type {
+  ScSampleTableFilter,
+  ScSampleTableSort,
+} from "../domain/sampleTable";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
@@ -87,6 +93,10 @@ export interface PreviewTab {
   reticleDieSizeY: number;
   reticleOptions: ReticleMapOptions;
   zoom: { x: number; y: number; w: number; h: number } | null;
+  selectedDefectIds: number[];
+  tableFilter: ScSampleTableFilter;
+  tableSort: ScSampleTableSort | null;
+  legendGroupBy: string | null;
 }
 
 type MapMode = "wafer" | "die" | "reticle";
@@ -115,8 +125,21 @@ export interface PreviewPageState {
   fetchSamplesForTab: (tab: PreviewTab) => Promise<void>;
   fetchPreviewDataForTab: (tab: PreviewTab) => Promise<void>;
   setMapTab: (tabId: string, value: "wafer" | "die" | "reticle") => void;
-  setZoom: (tabId: string, vp: { x: number; y: number; w: number; h: number } | null) => Promise<void>;
-  updateReticleOptions: (tabId: string, options: ReticleMapOptions) => Promise<void>;
+  setZoom: (
+    tabId: string,
+    vp: { x: number; y: number; w: number; h: number } | null,
+  ) => Promise<void>;
+  updateReticleOptions: (
+    tabId: string,
+    options: ReticleMapOptions,
+  ) => Promise<void>;
+  setSelectedDefectIds: (tabId: string, ids: number[]) => void;
+  handleTableFilterChange: (tabId: string, filter: ScSampleTableFilter) => void;
+  handleTableSortChange: (
+    tabId: string,
+    sort: { field: string; direction: "asc" | "desc" | null },
+  ) => void;
+  handleLegendGroupByChange: (tabId: string, groupBy: string | null) => void;
   rowKey: (row: InspectionSummaryItem) => string;
   rowProps: (row: InspectionSummaryItem) => Record<string, unknown>;
 
@@ -158,7 +181,11 @@ export function usePreviewPage(): PreviewPageState {
 
   function getDefaultDateRange(): [number, number] {
     const now = new Date();
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const today = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
     const yesterday = today - 24 * 60 * 60 * 1000;
     const tomorrow = today + 24 * 60 * 60 * 1000;
     return [yesterday, tomorrow];
@@ -180,21 +207,22 @@ export function usePreviewPage(): PreviewPageState {
   const searchNonce = ref(0);
 
   const inspectionsQuery = useGetInspectionsApiV1ScInspectionsGet(
-    computed(
-      () => searchParams.value ?? { start_time: "", end_time: "" },
-    ),
+    computed(() => searchParams.value ?? { start_time: "", end_time: "" }),
     {
       query: {
         enabled: computed(() => searchParams.value !== null),
         staleTime: 0,
-        queryKey: computed(() => [
-          "api",
-          "v1",
-          "sc",
-          "inspections",
-          searchNonce.value,
-          searchParams.value ?? { start_time: "", end_time: "" },
-        ] as const),
+        queryKey: computed(
+          () =>
+            [
+              "api",
+              "v1",
+              "sc",
+              "inspections",
+              searchNonce.value,
+              searchParams.value ?? { start_time: "", end_time: "" },
+            ] as const,
+        ),
       },
     },
   );
@@ -256,6 +284,10 @@ export function usePreviewPage(): PreviewPageState {
       reticleDieSizeY: 100000,
       reticleOptions: { ...DEFAULT_RETICLE_MAP_OPTIONS },
       zoom: null,
+      selectedDefectIds: [],
+      tableFilter: {},
+      tableSort: null,
+      legendGroupBy: null,
     });
     activeTabId.value = id;
   }
@@ -265,7 +297,9 @@ export function usePreviewPage(): PreviewPageState {
     const label = row.lot_id
       ? `${row.lot_id} / W${row.wafer_key}`
       : `W${row.wafer_key}`;
-    const reticleOptions = normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS);
+    const reticleOptions = normalizeReticleMapOptions(
+      DEFAULT_RETICLE_MAP_OPTIONS,
+    );
     const tab: PreviewTab = {
       id,
       type: "inspection",
@@ -275,7 +309,6 @@ export function usePreviewPage(): PreviewPageState {
       inspectionItem: row,
       samples: [],
       samplesTotal: row.defects,
-      zoom: null,
       samplesLoading: false,
       samplesError: null,
       patchSamples: makePatchSamples(row),
@@ -306,6 +339,11 @@ export function usePreviewPage(): PreviewPageState {
       reticleDieSizeX: row.die_size_x || 100000,
       reticleDieSizeY: row.die_size_y || 100000,
       reticleOptions,
+      zoom: null,
+      selectedDefectIds: [],
+      tableFilter: {},
+      tableSort: null,
+      legendGroupBy: null,
     };
     tabs.value.push(tab);
     activeTabId.value = id;
@@ -354,7 +392,13 @@ export function usePreviewPage(): PreviewPageState {
       const results = await Promise.all(
         modes.map(async (mode) => ({
           mode,
-          result: await _fetchMapData(tab, mode, opts),
+          result: await _fetchMapData(
+            tab,
+            mode,
+            opts,
+            undefined,
+            tab.legendGroupBy ?? undefined,
+          ),
         })),
       );
 
@@ -366,15 +410,17 @@ export function usePreviewPage(): PreviewPageState {
       const geo = firstResult?.geometry;
       const baseUpdate: Partial<PreviewTab> = {
         mapLoading: false,
-        waferGeometry: geo ? {
-          waferRadiusNm: geo.waferRadiusNm,
-          centerX: geo.centerX,
-          centerY: geo.centerY,
-          originX: geo.originX,
-          originY: geo.originY,
-          dieSizeX: geo.dieSizeX,
-          dieSizeY: geo.dieSizeY,
-        } : tabs.value[idx2].waferGeometry,
+        waferGeometry: geo
+          ? {
+              waferRadiusNm: geo.waferRadiusNm,
+              centerX: geo.centerX,
+              centerY: geo.centerY,
+              originX: geo.originX,
+              originY: geo.originY,
+              dieSizeX: geo.dieSizeX,
+              dieSizeY: geo.dieSizeY,
+            }
+          : tabs.value[idx2].waferGeometry,
         reticleXDieCount: firstResult?.reticleXDieCount || opts.xDieCount,
         reticleYDieCount: firstResult?.reticleYDieCount || opts.yDieCount,
         reticleDieSizeX: geo?.dieSizeX ?? tabs.value[idx2].reticleDieSizeX,
@@ -389,23 +435,21 @@ export function usePreviewPage(): PreviewPageState {
       for (const { mode, result } of results) {
         if (mode === "wafer") baseUpdate.waferDisplay = result.waferPoints;
         if (mode === "die") baseUpdate.dieDisplay = result.diePoints;
-        if (mode === "reticle") baseUpdate.reticleDisplay = result.reticlePoints;
+        if (mode === "reticle")
+          baseUpdate.reticleDisplay = result.reticlePoints;
       }
       tabs.value[idx2] = {
         ...current,
         ...baseUpdate,
         fullWaferDisplay: current.zoom
           ? current.fullWaferDisplay
-          : baseUpdate.waferDisplay
-            ?? current.fullWaferDisplay,
+          : (baseUpdate.waferDisplay ?? current.fullWaferDisplay),
         fullDieDisplay: current.zoom
           ? current.fullDieDisplay
-          : baseUpdate.dieDisplay
-            ?? current.fullDieDisplay,
+          : (baseUpdate.dieDisplay ?? current.fullDieDisplay),
         fullReticleDisplay: current.zoom
           ? current.fullReticleDisplay
-          : baseUpdate.reticleDisplay
-            ?? current.fullReticleDisplay,
+          : (baseUpdate.reticleDisplay ?? current.fullReticleDisplay),
       };
     } catch (err) {
       const idx2 = tabs.value.findIndex((t) => t.id === tabId);
@@ -413,7 +457,8 @@ export function usePreviewPage(): PreviewPageState {
         tabs.value[idx2] = {
           ...tabs.value[idx2],
           mapLoading: false,
-          mapError: err instanceof Error ? err.message : "Failed to fetch map points",
+          mapError:
+            err instanceof Error ? err.message : "Failed to fetch map points",
         };
       }
     }
@@ -424,6 +469,8 @@ export function usePreviewPage(): PreviewPageState {
     const classList = await fetchScInspectionClassList(
       tab.inspectionTime,
       tab.waferKey,
+      undefined,
+      tab.legendGroupBy ?? undefined,
     );
     const idx = tabs.value.findIndex((item) => item.id === tab.id);
     if (idx !== -1) {
@@ -435,27 +482,22 @@ export function usePreviewPage(): PreviewPageState {
     tab: PreviewTab,
     mode: MapMode,
     opts: ReturnType<typeof normalizeReticleMapOptions>,
+    filter?: ScMapFilter,
+    legendGroupBy?: string,
   ) {
-    const params = new URLSearchParams();
-    params.set("mode", mode);
-    params.set("sampled", "true");
-    params.set("gridSizeNm", "600");
-    params.set("reticleXDieCount", String(opts.xDieCount));
-    params.set("reticleYDieCount", String(opts.yDieCount));
-    params.set("reticleXDieShift", String(opts.xDieShift));
-    params.set("reticleYDieShift", String(opts.yDieShift));
-    if (tab.zoom) {
-      params.set("zoomX", String(Math.round(tab.zoom.x)));
-      params.set("zoomY", String(Math.round(tab.zoom.y)));
-      params.set("zoomW", String(Math.round(tab.zoom.w)));
-      params.set("zoomH", String(Math.round(tab.zoom.h)));
+    const inspectionTime = tab.inspectionTime;
+    const waferKey = tab.waferKey;
+    if (!inspectionTime || waferKey === undefined) {
+      throw new Error("Missing inspectionTime or waferKey on tab");
     }
-    let url = `${getApiBase()}/sc/inspections/${tab.inspectionTime}/${tab.waferKey}/map-points?${params.toString()}`;
-    url = withAuthQueryParams(url);
-    const resp = await fetch(url, { headers: { Accept: "application/x-protobuf" } });
-    if (!resp.ok) throw new Error(`Map points request failed: ${resp.status}`);
-    const blob = await resp.blob();
-    return fromBinary(WaferMapResponseSchema, new Uint8Array(await blob.arrayBuffer()));
+    return fetchScInspectionMapPoints(
+      inspectionTime,
+      waferKey,
+      opts,
+      filter,
+      legendGroupBy,
+      { mode, zoom: tab.zoom },
+    );
   }
 
   async function fetchReviewImagesForTab(tab: PreviewTab): Promise<void> {
@@ -463,13 +505,19 @@ export function usePreviewPage(): PreviewPageState {
     if (!tab.inspectionTime || tab.waferKey === undefined) return;
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
-    tabs.value[idx] = { ...tabs.value[idx], reviewLoading: true, reviewError: null };
+    tabs.value[idx] = {
+      ...tabs.value[idx],
+      reviewLoading: true,
+      reviewError: null,
+    };
     try {
-      const { data } = await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
-        tab.inspectionTime,
-        tab.waferKey,
-      );
-      if (!data || !("items" in data)) throw new Error("Invalid review images response");
+      const { data } =
+        await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
+          tab.inspectionTime,
+          tab.waferKey,
+        );
+      if (!data || !("items" in data))
+        throw new Error("Invalid review images response");
       const inspectionTime = inspectionTimeEpochSeconds(tab.inspectionTime);
       const reviewSamples = data.items.map((item) =>
         create(ScSampleItemSchema, {
@@ -500,7 +548,10 @@ export function usePreviewPage(): PreviewPageState {
           ...tabs.value[idx2],
           reviewSamples: [],
           reviewLoading: false,
-          reviewError: err instanceof Error ? err.message : "Failed to fetch review images",
+          reviewError:
+            err instanceof Error
+              ? err.message
+              : "Failed to fetch review images",
         };
       }
     }
@@ -538,7 +589,10 @@ export function usePreviewPage(): PreviewPageState {
     }
   }
 
-  async function setZoom(tabId: string, vp: { x: number; y: number; w: number; h: number } | null): Promise<void> {
+  async function setZoom(
+    tabId: string,
+    vp: { x: number; y: number; w: number; h: number } | null,
+  ): Promise<void> {
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     const tab = tabs.value[idx];
@@ -558,7 +612,10 @@ export function usePreviewPage(): PreviewPageState {
     await fetchMapPointsForTab(tabs.value[idx], [tab.activeMapTab]);
   }
 
-  async function updateReticleOptions(tabId: string, options: ReticleMapOptions): Promise<void> {
+  async function updateReticleOptions(
+    tabId: string,
+    options: ReticleMapOptions,
+  ): Promise<void> {
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     const normalized = normalizeReticleMapOptions(options);
@@ -572,6 +629,61 @@ export function usePreviewPage(): PreviewPageState {
       mapError: null,
     };
     await fetchMapPointsForTab(tabs.value[idx], ["reticle"]);
+  }
+
+  function setSelectedDefectIds(tabId: string, ids: number[]): void {
+    const idx = tabs.value.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    tabs.value[idx] = {
+      ...tabs.value[idx],
+      selectedDefectIds: ids,
+    };
+  }
+
+  function handleTableFilterChange(
+    tabId: string,
+    filter: ScSampleTableFilter,
+  ): void {
+    const idx = tabs.value.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    tabs.value[idx] = {
+      ...tabs.value[idx],
+      tableFilter: filter,
+    };
+  }
+
+  function handleTableSortChange(
+    tabId: string,
+    sort: { field: string; direction: "asc" | "desc" | null },
+  ): void {
+    const idx = tabs.value.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    tabs.value[idx] = {
+      ...tabs.value[idx],
+      tableSort: sort.direction
+        ? { field: sort.field, direction: sort.direction }
+        : null,
+    };
+  }
+
+  function handleLegendGroupByChange(
+    tabId: string,
+    groupBy: string | null,
+  ): void {
+    const idx = tabs.value.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    tabs.value[idx] = {
+      ...tabs.value[idx],
+      legendGroupBy: groupBy,
+      zoom: null,
+      waferDisplay: tabs.value[idx].fullWaferDisplay,
+      dieDisplay: tabs.value[idx].fullDieDisplay,
+      reticleDisplay: tabs.value[idx].fullReticleDisplay,
+    };
+    void Promise.all([
+      fetchMapPointsForTab(tabs.value[idx]),
+      fetchClassListForTab(tabs.value[idx]),
+    ]);
   }
 
   function rowKey(row: InspectionSummaryItem): string {
@@ -706,7 +818,10 @@ export function usePreviewPage(): PreviewPageState {
           imported_count: data.imported_count || 0,
           remaining_count: data.remaining_count || 0,
         };
-        if (data.dataset_id && data.dataset_id !== openedImportDatasetId.value) {
+        if (
+          data.dataset_id &&
+          data.dataset_id !== openedImportDatasetId.value
+        ) {
           openedImportDatasetId.value = data.dataset_id;
           datasetId.value = data.dataset_id;
           showImportModal.value = false;
@@ -726,7 +841,10 @@ export function usePreviewPage(): PreviewPageState {
         isImporting.value = false;
         showImportModal.value = false;
         es.close();
-        if (data.dataset_id && data.dataset_id !== openedImportDatasetId.value) {
+        if (
+          data.dataset_id &&
+          data.dataset_id !== openedImportDatasetId.value
+        ) {
           message.success(`Dataset created: ${data.dataset_id}`);
           window.open(`/datasets/${data.dataset_id}/sc/classify`, "_blank");
         }
@@ -775,7 +893,9 @@ export function usePreviewPage(): PreviewPageState {
       const orvalResp = await importMutation.mutateAsync({ data: req });
       const resp = orvalResp.data as ScImportResponse;
       if (resp.flow_run_id && resp.status !== "failed") {
-        message.info("Import started. The dataset will open after the first samples are available.");
+        message.info(
+          "Import started. The dataset will open after the first samples are available.",
+        );
         connectImportSSE(resp.flow_run_id, resp.dataset_id || undefined);
       } else {
         isImporting.value = false;
@@ -824,6 +944,10 @@ export function usePreviewPage(): PreviewPageState {
     setMapTab,
     setZoom,
     updateReticleOptions,
+    setSelectedDefectIds,
+    handleTableFilterChange,
+    handleTableSortChange,
+    handleLegendGroupByChange,
     rowKey,
     rowProps,
 

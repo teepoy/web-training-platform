@@ -35,6 +35,7 @@ import type {
   ScBoxRegion,
   ScMapMode,
 } from "@/features/sc/api/boxFilter";
+import { fetchScDatasetBoxFilter } from "@/features/sc/api/boxFilter";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
@@ -67,21 +68,15 @@ function goBack() {
   router.back();
 }
 
-/** Bridge numeric IDs from map components select-points → waferFilterIds strings. */
-function onMapSelect(payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } }): void {
-  const ids = payload.ids.map(String);
-  page.waferFilterIds.value = ids.length > 0 ? ids : null;
-}
-
-async function onMapFilterRegion(payload: {
-  mode: ScMapMode;
-  region: ScBoxRegion;
-}): Promise<void> {
-  await page.applyMapBoxFilter(payload.mode, payload.region);
-}
-
-function clearFilter(): void {
-  page.waferFilterIds.value = null;
+/** Curried box-selection: bakes datasetId + reticleOptions, takes mode + region → defect IDs. */
+async function queryBoxSelection(mode: ScMapMode, region: ScBoxRegion): Promise<number[]> {
+  const result = await fetchScDatasetBoxFilter(
+    page.datasetId.value,
+    mode,
+    region,
+    page.reticleOptions.value,
+  );
+  return result.defect_ids.map(Number);
 }
 
 const selectedDraftCount = computed(() => {
@@ -306,9 +301,9 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               <NRadioButton value="blink">Blink Table</NRadioButton>
               <NRadioButton value="map">Map</NRadioButton>
             </NRadioGroup>
-            <span v-if="page.mapFilterCount.value > 0" class="sc-filter-hint">
-              {{ page.mapFilterCount.value }} filtered
-              <NButton text size="tiny" type="primary" @click="clearFilter">Clear</NButton>
+            <span v-if="page.activeFilterCount.value > 0" class="sc-filter-hint">
+              {{ page.activeFilterCount.value }} filter(s) active
+              <NButton text size="tiny" type="primary" @click="page.clearMapFilter()">Clear</NButton>
             </span>
           </div>
           <NSpin :show="page.activeTab.value === 'blink' ? page.isBlinkLoading.value : page.isMapLoading.value" class="sc-blink-spin">
@@ -346,11 +341,14 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :legend-sources="['class', 'bin', 'annotation', 'prediction']"
               :selected-ids="page.mapSelectedDefectIds.value"
               :zoom="page.mapZoom.value"
+              :query-box-selection="queryBoxSelection"
               @update:active-map-tab="page.setActiveMapTab"
               @update:reticle-options="page.updateReticleOptions"
-              @select-points="onMapSelect"
-              @filter-region="onMapFilterRegion"
+              @select-points="({ ids }) => page.handleBoxSelectionChange(ids)"
               @zoom-in="page.setMapZoom"
+              @filter-change="page.handleMapFilterChange"
+              @selection-change="page.handleBoxSelectionChange"
+              @legend-group-change="page.handleLegendGroupByChange"
               @retry="() => {}"
             />
           </NSpin>

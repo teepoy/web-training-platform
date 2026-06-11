@@ -46,6 +46,17 @@ _REQUIRED_POINT_COLUMNS = frozenset(
 )
 
 
+def _apply_sample_filters(
+    lf: pl.LazyFrame,
+    **filters,
+) -> pl.LazyFrame:
+    columns = set(lf.collect_schema().names())
+    for col, values in filters.items():
+        if values and col in columns:
+            lf = lf.filter(pl.col(col).is_in(values))
+    return lf
+
+
 def _require_int(mapping: dict, key: str) -> int:
     value = mapping[key]
     if isinstance(value, bool):
@@ -119,6 +130,14 @@ class ScPlotPointsService:
         reticle_y_die_count: int = 5,
         reticle_x_die_shift: int = 0,
         reticle_y_die_shift: int = 0,
+        legend_group_by: str | None = None,
+        class_numbers: list[int] | None = None,
+        rough_bins: list[int] | None = None,
+        predictions: list[str] | None = None,
+        annotations: list[str] | None = None,
+        test_ids: list[int] | None = None,
+        adders: list[int] | None = None,
+        cluster_ids: list[int] | None = None,
     ) -> bytes:
         storage = await self._storage_factory.open(dataset_id, org_id)
 
@@ -133,6 +152,16 @@ class ScPlotPointsService:
             )
 
         lf = cast(pl.LazyFrame, await storage.list_samples(return_lazyframe=True))
+        lf = _apply_sample_filters(
+            lf,
+            class_number=class_numbers,
+            rough_bin=rough_bins,
+            predicted_label=predictions,
+            label=annotations,
+            test_id=test_ids,
+            adder=adders,
+            cluster_id=cluster_ids,
+        )
         df: pl.DataFrame = await lf.collect_async()
 
         missing_columns = _REQUIRED_POINT_COLUMNS - set(df.columns)
@@ -230,12 +259,21 @@ class ScPlotPointsService:
             include_reticle_points=True,
             sampled=sampled,
             target_resolution=target_resolution,
+            group_by=legend_group_by,
         )
 
     async def build_class_list_response(
         self,
         dataset_id: str,
         org_id: str,
+        *,
+        class_numbers: list[int] | None = None,
+        rough_bins: list[int] | None = None,
+        predictions: list[str] | None = None,
+        annotations: list[str] | None = None,
+        test_ids: list[int] | None = None,
+        adders: list[int] | None = None,
+        cluster_ids: list[int] | None = None,
     ) -> bytes:
         storage = await self._storage_factory.open(dataset_id, org_id)
         dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
@@ -256,13 +294,28 @@ class ScPlotPointsService:
                 with_predictions=True,
             ),
         )
-        df = await lf.select(
+        lf = _apply_sample_filters(
+            lf,
+            class_number=class_numbers,
+            rough_bin=rough_bins,
+            predicted_label=predictions,
+            label=annotations,
+            test_id=test_ids,
+            adder=adders,
+            cluster_id=cluster_ids,
+        )
+        class_list_cols = [
             "defect_id",
             "class_number",
             "rough_bin",
             "predicted_label",
             "label",
-        ).collect_async()
+        ]
+        columns = set(lf.collect_schema().names())
+        for col in ("test_id", "adder", "cluster_id"):
+            if col in columns:
+                class_list_cols.append(col)
+        df = await lf.select(class_list_cols).collect_async()
         return make_class_list_pb(df)
 
     async def filter_dataset_box(

@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  NButton,
-  NResult,
-  NText,
-} from "naive-ui";
+import { NButton, NResult, NText } from "naive-ui";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
@@ -13,6 +9,10 @@ import type {
   ScSampleItem,
 } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
+import type {
+  ScSampleTableFilter,
+  ScSampleTableSort,
+} from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import {
   fetchScInspectionBoxFilter,
@@ -62,13 +62,32 @@ const props = defineProps<{
   reticleDieSizeY?: number;
   reticleOptions?: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
+  selectedDefectIds?: number[];
+  tableFilter?: ScSampleTableFilter;
+  tableSort?: ScSampleTableSort | null;
 }>();
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
   (e: "update:reticleOptions", v: ReticleMapOptions): void;
-  (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
-  (e: "select-points", payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } }): void;
+  (
+    e: "zoom-in",
+    vp: { x: number; y: number; w: number; h: number } | null,
+  ): void;
+  (
+    e: "select-points",
+    payload: {
+      ids: number[];
+      region: { x: number; y: number; w: number; h: number };
+    },
+  ): void;
+  (e: "table-filter-change", filter: ScSampleTableFilter): void;
+  (
+    e: "table-sort-change",
+    sort: { field: string; direction: "asc" | "desc" | null },
+  ): void;
+  (e: "table-selection-change", ids: number[]): void;
+  (e: "legend-group-change", groupBy: string | null): void;
   (e: "retry"): void;
 }>();
 
@@ -147,69 +166,54 @@ function onRowResizeEnd(e: PointerEvent): void {
 }
 
 // ── Selection state ──────────────────────────────
-const selectedDefectIds = ref<Set<string>>(new Set());
-const selectionVersion = ref(0);
+const mapSelectionIds = ref<number[]>([]);
 
-function onSelectPoints(payload: { ids: (string | number)[]; region: { x: number; y: number; w: number; h: number } }): void {
-  if (payload.ids.length === 0) {
-    selectedDefectIds.value = new Set();
-  } else {
-    for (const id of payload.ids) selectedDefectIds.value.add(String(id));
-  }
-  selectionVersion.value++;
-  emit("select-points", { ids: payload.ids.map(Number), region: payload.region });
-}
-
-async function onFilterRegion(payload: {
-  mode: ScMapMode;
-  region: ScBoxRegion;
-}): Promise<void> {
-  if (!props.inspectionTime || props.waferKey === undefined) return;
-  const result = await fetchScInspectionBoxFilter(
-    props.inspectionTime,
-    props.waferKey,
-    payload.mode,
-    payload.region,
-    reticleOptionsModel.value,
-  );
-  onSelectPoints({
-    ids: result.defect_ids,
-    region: payload.region,
-  });
-}
-
-function clearSelection(): void {
-  selectedDefectIds.value = new Set();
-  selectionVersion.value++;
-}
+const selectionVersion = computed(() =>
+  mapSelectionIds.value.length > 0 ? mapSelectionIds.value.join(",") : "0",
+);
 
 const filteredSamples = computed<ScSampleItem[]>(() => {
-  if (selectedDefectIds.value.size === 0) return props.samples;
-  const filter = selectedDefectIds.value;
-  return props.samples.filter((s) => filter.has(String(s.defectId)));
+  if (mapSelectionIds.value.length === 0) return props.samples;
+  const filter = new Set(mapSelectionIds.value);
+  return props.samples.filter((s) => filter.has(s.defectId));
 });
 
-const filteredDefectIds = computed<string[]>(() =>
-  filteredSamples.value.map((sample) => String(sample.defectId)),
+const filteredDefectIds = computed<string[] | undefined>(() =>
+  mapSelectionIds.value.length > 0
+    ? mapSelectionIds.value.map(String)
+    : undefined,
 );
 
 const filteredReviewSamples = computed<ScSampleItem[]>(() => {
   const samples = props.reviewSamples ?? [];
-  if (selectedDefectIds.value.size === 0) return samples;
-  const filter = selectedDefectIds.value;
-  return samples.filter((s) => filter.has(String(s.defectId)));
+  if (mapSelectionIds.value.length === 0) return samples;
+  const filter = new Set(mapSelectionIds.value);
+  return samples.filter((s) => filter.has(s.defectId));
 });
 
 const filteredTotal = computed<number>(() => {
-  if (selectedDefectIds.value.size === 0) return props.samplesTotal;
+  if (mapSelectionIds.value.length === 0) return props.samplesTotal;
   return filteredSamples.value.length;
 });
-const mapSelectedDefectIds = computed(
-  () =>
-    new Set(
-      [...selectedDefectIds.value].map(Number).filter(Number.isFinite),
-    ),
-);
+
+// Legend-only selection IDs for map highlighting (map wrapper manages box-selection internally)
+const legendSelectedIds = computed<ReadonlySet<number>>(() => new Set());
+
+// ── queryBoxSelection: curried API call for map wrapper box-selection ──
+async function queryBoxSelection(
+  mode: ScMapMode,
+  region: ScBoxRegion,
+): Promise<number[]> {
+  if (!props.inspectionTime || props.waferKey === undefined) return [];
+  const result = await fetchScInspectionBoxFilter(
+    props.inspectionTime,
+    props.waferKey,
+    mode,
+    region,
+    reticleOptionsModel.value,
+  );
+  return result.defect_ids.map(Number);
+}
 
 const reticleOptionsModel = computed<ReticleMapOptions>(() => ({
   xDieCount: props.reticleOptions?.xDieCount ?? props.reticleXDieCount ?? 10,
@@ -218,8 +222,12 @@ const reticleOptionsModel = computed<ReticleMapOptions>(() => ({
   yDieShift: props.reticleOptions?.yDieShift ?? 0,
 }));
 
-const reticleDieSizeXModel = computed(() => props.reticleDieSizeX ?? props.inspectionItem?.die_size_x ?? 100000);
-const reticleDieSizeYModel = computed(() => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 100000);
+const reticleDieSizeXModel = computed(
+  () => props.reticleDieSizeX ?? props.inspectionItem?.die_size_x ?? 100000,
+);
+const reticleDieSizeYModel = computed(
+  () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 100000,
+);
 
 // ── Full-points fallback (empty array is not nullish, so `??` won't work) ──
 const effectiveWaferFullPoints = computed<number[] | undefined>(() => {
@@ -236,7 +244,6 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
   const f = props.fullReticleDisplay;
   return f && f.length > 0 ? f : props.reticleDisplay;
 });
-
 </script>
 
 <template>
@@ -283,14 +290,18 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
           :reticle-die-size-x="reticleDieSizeXModel"
           :reticle-die-size-y="reticleDieSizeYModel"
           :reticle-options="reticleOptionsModel"
-          :selected-ids="mapSelectedDefectIds"
+          :selected-ids="legendSelectedIds"
+          :highlight-defect-ids="selectedDefectIds"
+          :query-box-selection="queryBoxSelection"
           :zoom="zoom"
           :map-loading="mapLoading"
           :map-error="mapError"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
-          @select-points="onSelectPoints"
-          @filter-region="onFilterRegion"
+          @selection-change="(ids: number[]) => (mapSelectionIds = ids)"
+          @legend-group-change="
+            (groupBy) => emit('legend-group-change', groupBy)
+          "
           @zoom-in="(vp) => emit('zoom-in', vp)"
           @retry="() => emit('retry')"
         />
@@ -311,6 +322,12 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
         :wafer-key="waferKey"
         :loading="false"
         :total="filteredTotal"
+        :selected-defect-ids="new Set(selectedDefectIds ?? [])"
+        :filter="tableFilter"
+        :sort="tableSort"
+        @selection-change="(ids) => emit('table-selection-change', ids)"
+        @filter-change="(filter) => emit('table-filter-change', filter)"
+        @sort-change="(sort) => emit('table-sort-change', sort)"
       />
     </div>
 
@@ -334,7 +351,7 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
         :review-error="reviewError"
         :blink-interval-ms="800"
         :initial-blink-enabled="true"
-        :selected-defect-ids="selectedDefectIds"
+        :selected-defect-ids="new Set(mapSelectionIds.map(String))"
       />
     </div>
   </div>

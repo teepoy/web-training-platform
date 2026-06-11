@@ -164,6 +164,56 @@ def test_inspection_samples_success(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_sample_table_rows_filters_sorts_then_paginates(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            summary = client.get(
+                "/api/v1/sc/inspections",
+                params={"start_time": SAFE_START, "end_time": SAFE_END},
+            )
+            first = _parse_summary_resp(summary.content)["items"][0]
+            url = (
+                f"/api/v1/sc/inspections/{first['inspection_time']}/"
+                f"{first['wafer_key']}/sample-table-rows"
+            )
+
+            response = client.post(
+                url,
+                json={
+                    "page": 0,
+                    "page_size": 5,
+                    "filter": {
+                        "rough_bin": {
+                            "operator": "in",
+                            "values": [1, 2, 3],
+                        },
+                        "wafer_x": {
+                            "operator": "between",
+                            "min": -1_000_000,
+                            "max": 1_000_000,
+                        },
+                    },
+                    "sort": {"field": "defect_id", "direction": "desc"},
+                },
+            )
+
+            assert response.status_code == 200, response.text
+            body = response.json()
+            defect_ids = [int(row["defect_id"]) for row in body["items"]]
+            assert defect_ids == sorted(defect_ids, reverse=True)
+            assert len(body["items"]) <= 5
+            assert all(row["rough_bin"] in {1, 2, 3} for row in body["items"])
+            assert all(
+                -1_000_000 <= row["wafer_x"] <= 1_000_000
+                for row in body["items"]
+            )
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_inspection_split_preview_endpoints_success(
     mock_wafer_db_reader,
 ):
@@ -275,6 +325,21 @@ def test_inspection_split_preview_endpoints_success(
                 "rough_bin",
                 "class_number",
                 "test_id",
+                "wafer_x",
+                "wafer_y",
+                "index_x",
+                "index_y",
+                "adder",
+                "cluster_id",
+                "die_x",
+                "die_y",
+                "size_x",
+                "size_y",
+                "size_d",
+                "area",
+                "final_bin",
+                "manual_bin",
+                "kill_ratio",
             }
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)

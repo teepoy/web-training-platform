@@ -211,9 +211,16 @@ function openClassify(url: string) {
             :reticle-die-size-y="page.activeTab.value.reticleDieSizeY"
             :reticle-options="page.activeTab.value.reticleOptions"
             :zoom="page.activeTab.value.zoom"
+            :selected-defect-ids="page.activeTab.value.selectedDefectIds"
+            :table-filter="page.activeTab.value.tableFilter"
+            :table-sort="page.activeTab.value.tableSort"
             @update:active-map-tab="(v: 'wafer' | 'die' | 'reticle') => page.activeTab.value && page.setMapTab(page.activeTab.value.id, v)"
             @update:reticle-options="(v) => page.activeTab.value && page.updateReticleOptions(page.activeTab.value.id, v)"
             @zoom-in="(vp) => page.activeTab.value && page.setZoom(page.activeTab.value.id, vp)"
+            @table-selection-change="(ids) => page.activeTab.value && page.setSelectedDefectIds(page.activeTab.value.id, ids)"
+            @table-filter-change="(filter) => page.activeTab.value && page.handleTableFilterChange(page.activeTab.value.id, filter)"
+            @table-sort-change="(sort) => page.activeTab.value && page.handleTableSortChange(page.activeTab.value.id, sort)"
+            @legend-group-change="(groupBy) => page.activeTab.value && page.handleLegendGroupByChange(page.activeTab.value.id, groupBy)"
             @retry="page.activeTab.value && page.fetchPreviewDataForTab(page.activeTab.value)"
           />
         </div>

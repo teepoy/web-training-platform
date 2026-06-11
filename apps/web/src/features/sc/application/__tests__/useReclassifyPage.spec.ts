@@ -496,48 +496,19 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
     expect(secondPageOffsets[0]).toBe(200);
   });
 
-  it("re-queries view samples with selected defect IDs", async () => {
-    const requestedFilters: string[] = [];
-    server.use(
-      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
-        const url = new URL(request.url);
-        const sampleIds = url.searchParams.get("sampleIds") ?? "";
-        requestedFilters.push(sampleIds);
-        const ids = sampleIds ? sampleIds.split(",") : ["1", "2"];
-        return HttpResponse.json({
-          items: ids.map((id, index) => ({
-            ...makeViewSampleRows(1, index)[0],
-            defect_id: id,
-          })),
-          total: ids.length,
-        });
-      }),
-    );
-
+  it("uses map box-selection IDs as the reclassify selection", async () => {
     const { state } = await mountPage("ds-filter-query", DEFAULT_DATASET);
-    await new Promise((r) => setTimeout(r, 30));
+    state.handleBoxSelectionChange([274, 103]);
 
-    state.waferFilterIds.value = ["274", "103"];
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(requestedFilters).toContain("103,274");
-    expect(state.scSamples.value.map((sample: { defectId: string }) => sample.defectId))
-      .toEqual(["103", "274"]);
+    expect([...state.selectedDefectIds.value]).toEqual(["274", "103"]);
+    expect([...state.mapSelectedDefectIds.value]).toEqual([274, 103]);
   });
 
-  it("accumulates backend box-filter IDs without selecting blink rows", async () => {
-    server.use(
-      http.post("/api/v1/sc/datasets/:id/box-filter", async ({ request }) => {
-        const body = await request.json() as { mode: string };
-        expect(body.mode).toBe("wafer");
-        return HttpResponse.json({ defect_ids: ["103", "274"], total: 2 });
-      }),
-    );
-
+  it("clears the reclassify selection when the map emits an empty selection", async () => {
     const { state } = await mountPage("ds-box-filter", DEFAULT_DATASET);
-    await state.applyMapBoxFilter("wafer", { x: 1, y: 2, w: 3, h: 4 });
+    state.handleBoxSelectionChange([103, 274]);
+    state.handleBoxSelectionChange([]);
 
-    expect(state.waferFilterIds.value).toEqual(["103", "274"]);
     expect(state.selectedDefectIds.value.size).toBe(0);
   });
 });

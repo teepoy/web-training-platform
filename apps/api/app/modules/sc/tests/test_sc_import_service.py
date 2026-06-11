@@ -103,13 +103,12 @@ class _MockPayloadStore:
 
 
 class _MockUpstream:
-    def __init__(self, inspection_return=None, row_count: int = 0) -> None:
+    def __init__(self, inspection_return=None, row_count: int = 1000) -> None:
         self._inspection_return = inspection_return
         self._row_count = row_count
-        self.stream_offsets: list[int] = []
+        self.list_samples_calls: list[tuple] = []
 
     async def list_inspections(self, start_time, end_time):
-        import polars as pl
 
         return pl.LazyFrame([])
 
@@ -121,20 +120,43 @@ class _MockUpstream:
         inspection_time,
         wafer_key,
         offset=0,
-        count=50,
+        count=None,
         reticle_size_x=1,
         reticle_size_y=1,
         reticle_offset_x=0,
         reticle_offset_y=0,
     ):
-        import polars as pl
+
+        self.list_samples_calls.append((inspection_time, wafer_key, offset, count))
 
         if offset < 0:
             raise ValueError(f"offset must be >= 0, got {offset}")
-        return pl.DataFrame({"defect_id": [1]}).lazy()
+
+        if count == 1:
+            # Pre-check mode
+            return pl.DataFrame({"defect_id": [1] if self._row_count > 0 else []}).lazy()
+
+        # Full mode (count=None)
+        rows = []
+        for defect_id in range(1, self._row_count + 1):
+            rows.append(
+                {
+                    "sample_id": str(defect_id),
+                    "inspection_time": str(inspection_time),
+                    "wafer_key": wafer_key,
+                    "defect_id": str(defect_id),
+                    "lot_id": "LOT-001",
+                    "wafer_x": defect_id,
+                    "wafer_y": defect_id,
+                    "die_x": 0,
+                    "die_y": 0,
+                    "rough_bin": 1,
+                    "class_number": 1,
+                }
+            )
+        return pl.DataFrame(rows).lazy()
 
     async def list_review_images(self, inspection_time, wafer_key):
-        import polars as pl
 
         return pl.LazyFrame([])
 
@@ -147,43 +169,8 @@ class _MockUpstream:
         reticle_offset_x=0,
         reticle_offset_y=0,
     ):
-        import polars as pl
 
         return pl.LazyFrame([])
-
-    def stream(
-        self,
-        source_inspection_time: str,
-        source_wafer_key: int,
-        offset: int = 0,
-    ):
-        self.stream_offsets.append(offset)
-
-        async def _gen():
-            rows = []
-            for defect_id in range(offset + 1, self._row_count + 1):
-                rows.append(
-                    {
-                        "sample_id": str(defect_id),
-                        "inspection_time": source_inspection_time,
-                        "wafer_key": source_wafer_key,
-                        "defect_id": str(defect_id),
-                        "lot_id": "LOT-001",
-                        "wafer_x": defect_id,
-                        "wafer_y": defect_id,
-                        "die_x": 0,
-                        "die_y": 0,
-                        "rough_bin": 1,
-                        "class_number": 1,
-                    }
-                )
-                if len(rows) >= 1000:
-                    yield pl.DataFrame(rows)
-                    rows = []
-            if rows:
-                yield pl.DataFrame(rows)
-
-        return _gen()
 
 
 class _MockImageFetcher:
@@ -220,7 +207,7 @@ def _make_service(
         prefect_client=prefect_client,
         repository=repository or _MockRepository(),
         payload_store=payload_store or _MockPayloadStore(),
-        upstream_reader=upstream_reader or _MockUpstream(),
+        upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
         image_fetcher=_MockImageFetcher(),
     )
 
@@ -249,7 +236,7 @@ async def test_hybrid_submit_with_large_max_rows() -> None:
     assert flow_run_id == "test-run-id-123"
     assert mock_prefect.parameters["offset"] == 30_000
     assert mock_prefect.parameters["max_rows"] == 20_000
-    assert upstream.stream_offsets == [0]
+    assert len(upstream.list_samples_calls) >= 1
     assert payload_store.manifest is not None
     assert payload_store.manifest.total_rows == 30_000
 
@@ -447,7 +434,6 @@ async def test_submit_import_prefect_resolve_raises_returns_failed() -> None:
 @pytest.mark.asyncio
 async def test_direct_import_persists_geometry_metadata() -> None:
     """Direct (sync) import should persist wafer geometry in dataset_meta."""
-    from app.modules.sc.app.services.import_rows import _geometry_from_inspection
 
     mock_inspection = ScInspectionRecord(
         inspection_time=datetime(2024, 1, 15, 8, 30, 0, tzinfo=timezone.utc),
@@ -502,3 +488,117 @@ async def test_direct_import_persists_geometry_metadata() -> None:
     assert geometry["lot_id"] == "LOT-001"
     assert geometry["wafer_id"] == "W-001"
     assert geometry["device"] == "DEVICE-A"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_shuffle_uses_shuffled_ids() -> None:
+    mock_prefect = _MockPrefectSuccess()
+    upstream = _MockUpstream(row_count=100_000)
+    service = _make_service(mock_prefect, upstream_reader=upstream)
+
+    status, _ = await service.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Hybrid shuffle 100k",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=100_000,
+    )
+
+    assert status.status == "running"
+    assert mock_prefect.parameters["total_available"] == 100_000
+    assert mock_prefect.parameters["offset"] == 30_000
+
+
+@pytest.mark.asyncio
+async def test_hybrid_shuffle_exhausted_early() -> None:
+    mock_prefect = _MockPrefectSuccess()
+    upstream = _MockUpstream(row_count=1000)
+    service = _make_service(mock_prefect, upstream_reader=upstream)
+
+    status, flow_run_id = await service.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Hybrid shuffle exhausted",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=50_000,
+    )
+
+    assert status.status == "completed"
+    assert mock_prefect.create_calls == 0
+    assert flow_run_id is None
+
+
+@pytest.mark.asyncio
+async def test_hybrid_shuffle_prefect_params() -> None:
+    mock_prefect = _MockPrefectSuccess()
+    upstream = _MockUpstream(row_count=50_000)
+    service = _make_service(mock_prefect, upstream_reader=upstream)
+
+    status, _ = await service.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Hybrid shuffle params",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=50_000,
+    )
+
+    assert status.status == "running"
+    assert "total_available" in mock_prefect.parameters
+    assert isinstance(mock_prefect.parameters["offset"], int)
+
+
+@pytest.mark.asyncio
+async def test_direct_import_uses_shuffled_ids() -> None:
+    mock_prefect = _MockPrefectSuccess()
+    payload_store = _MockPayloadStore()
+    upstream = _MockUpstream(row_count=100)
+    service = _make_service(mock_prefect, upstream_reader=upstream, payload_store=payload_store)
+
+    status, flow_run_id = await service.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Shuffle direct",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=50,
+    )
+
+    assert status.status == "completed"
+    assert flow_run_id is None
+    assert len(upstream.list_samples_calls) >= 1
+    assert payload_store.manifest is not None
+    assert payload_store.manifest.total_rows == 50
+
+
+@pytest.mark.asyncio
+async def test_direct_import_shuffle_reproducible() -> None:
+    payload_store_a = _MockPayloadStore()
+    upstream_a = _MockUpstream(row_count=100)
+    service_a = _make_service(_MockPrefectSuccess(), upstream_reader=upstream_a, payload_store=payload_store_a)
+    await service_a.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Reproducible A",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=50,
+    )
+
+    payload_store_b = _MockPayloadStore()
+    upstream_b = _MockUpstream(row_count=100)
+    service_b = _make_service(_MockPrefectSuccess(), upstream_reader=upstream_b, payload_store=payload_store_b)
+    await service_b.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=1,
+        dataset_name="Reproducible B",
+        storage_mode="file_shard_sparse",
+        org_id="test-org",
+        max_rows=50,
+    )
+
+    assert payload_store_a.manifest is not None
+    assert payload_store_b.manifest is not None
+    assert payload_store_a.manifest.total_rows == payload_store_b.manifest.total_rows

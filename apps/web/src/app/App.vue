@@ -196,6 +196,7 @@ function handleAvatarSelect(key: string) {
 onMounted(async () => {
   await authStore.initFromStorage();
   orgStore.initFromStorage();
+  uiStore.hydrateDarkMode();
   orgStore._queryClient = queryClient;
   if (authStore.isAuthenticated) {
     try {

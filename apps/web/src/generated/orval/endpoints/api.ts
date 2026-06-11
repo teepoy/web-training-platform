@@ -65,6 +65,7 @@ import type {
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGet200,
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGetParams,
   ExtractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams,
+  GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams,
   GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams,
   GetInspectionsApiV1ScInspectionsGetParams,
   GetJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams,
@@ -73,6 +74,7 @@ import type {
   GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams,
   GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams,
   GetRunLogsApiV1RunsRunIdLogsGetParams,
+  GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams,
   GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetParams,
   GetTrainerRouteApiV1TrainersTrainerIdGet200,
   GlobalChatRequest,
@@ -10481,16 +10483,25 @@ export type getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassL
 }
 
 export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetUrl = (inspectionTime: string,
-    waferKey: number,) => {
+    waferKey: number,
+    params?: GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
-  return `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/class-list`
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/class-list?${normalizedParams.toString()}` : `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/class-list`
 }
 
 export const getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet = async (inspectionTime: string,
-    waferKey: number, options?: RequestInit): Promise<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse> => {
+    waferKey: number,
+    params?: GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams, options?: RequestInit): Promise<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse> => {
 
-  return orvalFetcher<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse>(getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetUrl(inspectionTime,waferKey),
+  return orvalFetcher<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse>(getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetUrl(inspectionTime,waferKey,params),
   {
     ...options,
     method: 'GET'
@@ -10502,22 +10513,24 @@ export const getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClass
 
 
 export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,) => {
-    return ['api','v1','sc','inspections',inspectionTime,waferKey,'class-list'] as const;
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>,) => {
+    return ['api','v1','sc','inspections',inspectionTime,waferKey,'class-list', ...(params ? [params]: [])] as const;
     }
 
 
 export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryOptions = <TData = Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryKey(inspectionTime,waferKey);
+  const queryKey =  getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryKey(inspectionTime,waferKey,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>> = ({ signal }) => getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet(unref(inspectionTime),unref(waferKey), { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>> = ({ signal }) => getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
 
 
 
@@ -10536,11 +10549,12 @@ export type GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassL
 
 export function useGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet<TData = Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError = HTTPValidationError>(
  inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryOptions(inspectionTime,waferKey,options)
+  const queryOptions = getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryOptions(inspectionTime,waferKey,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -10728,15 +10742,24 @@ export type getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse = 
   headers: Headers;
 }
 
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl = (datasetId: string,) => {
+export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl = (datasetId: string,
+    params?: GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
-  return `/api/v1/sc/datasets/${datasetId}/class-list`
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/sc/datasets/${datasetId}/class-list?${normalizedParams.toString()}` : `/api/v1/sc/datasets/${datasetId}/class-list`
 }
 
-export const getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet = async (datasetId: string, options?: RequestInit): Promise<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse> => {
+export const getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet = async (datasetId: string,
+    params?: GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams, options?: RequestInit): Promise<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse> => {
 
-  return orvalFetcher<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse>(getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl(datasetId),
+  return orvalFetcher<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse>(getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl(datasetId,params),
   {
     ...options,
     method: 'GET'
@@ -10747,21 +10770,23 @@ export const getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet = async (
 
 
 
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey = (datasetId: MaybeRef<string>,) => {
-    return ['api','v1','sc','datasets',datasetId,'class-list'] as const;
+export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey = (datasetId: MaybeRef<string>,
+    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>,) => {
+    return ['api','v1','sc','datasets',datasetId,'class-list', ...(params ? [params]: [])] as const;
     }
 
 
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions = <TData = Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions = <TData = Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>,
+    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey(datasetId);
+  const queryKey =  getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey(datasetId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>> = ({ signal }) => getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet(unref(datasetId), { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>> = ({ signal }) => getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet(unref(datasetId),unref(params), { signal, ...requestOptions });
 
 
 
@@ -10779,11 +10804,12 @@ export type GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryError 
  */
 
 export function useGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet<TData = Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError = HTTPValidationError>(
- datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+ datasetId: MaybeRef<string>,
+    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions(datasetId,options)
+  const queryOptions = getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions(datasetId,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

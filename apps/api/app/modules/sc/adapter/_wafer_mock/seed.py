@@ -95,7 +95,9 @@ CLASS_WEIGHTS: list[float] = [
 
 
 def _generate_class() -> int:
-    return random.choices(range(len(DEFECT_CLASSES)), weights=CLASS_WEIGHTS, k=1)[0]
+    return random.choices(
+        range(len(DEFECT_CLASSES[:3])), weights=CLASS_WEIGHTS[:3], k=1
+    )[0]
 
 
 def seed_classes(session: Session) -> None:
@@ -178,6 +180,11 @@ def _make_defect(
     r = random.uniform(0, wafer_radius * 0.95)
     wafer_x = center_x + int(r * math.cos(angle))
     wafer_y = center_y + int(r * math.sin(angle))
+    index_x = int((wafer_x - origin_x) / die_size_x)
+    index_y = int((wafer_y - origin_y) / die_size_y)
+    size_x = random.randint(50, 500)
+    size_y = random.randint(50, 500)
+    size_d = int(math.sqrt(size_x**2 + size_y**2))
     return InspectDefectORM(
         wafer_key=wafer_key,
         inspection_time=inspection_time,
@@ -187,11 +194,20 @@ def _make_defect(
         rough_bin=class_number if class_number > 0 else 1,
         wafer_x=wafer_x,
         wafer_y=wafer_y,
-        index_x=int((wafer_x - origin_x) / die_size_x),
-        index_y=int((wafer_y - origin_y) / die_size_y),
+        index_x=index_x,
+        index_y=index_y,
         adder=0,
         cluster=0,
         images=images,
+        die_x=index_x,
+        die_y=index_y,
+        size_x=size_x,
+        size_y=size_y,
+        size_d=size_d,
+        area=size_x * size_y,
+        final_bin=random.randint(0, 255),
+        manual_bin=random.randint(0, 255),
+        kill_ratio=round(random.uniform(0.0, 1.0), 3),
     )
 
 

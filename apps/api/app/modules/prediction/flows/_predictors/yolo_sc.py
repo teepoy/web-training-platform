@@ -9,7 +9,7 @@ import io
 import time
 import tempfile
 from pathlib import Path
-from typing import Any, Generator, cast
+from typing import Any, Generator, Mapping, Sequence, cast
 
 from PIL import Image
 from prefect import get_run_logger
@@ -20,6 +20,28 @@ from platform_runtime.contracts import (
     PredictContext,
 )
 from app.modules.prediction.flows._predictors import predictor
+
+
+def _resolve_labels(
+    model: Any,
+    model_ref: ModelRef,
+    ctx: PredictContext,
+) -> list[str]:
+    names = getattr(model, "names", None)
+    if isinstance(names, Mapping):
+        return [str(names[index]) for index in sorted(names)]
+    if isinstance(names, Sequence) and not isinstance(names, (str, bytes)):
+        return [str(name) for name in names]
+
+    metadata_labels = model_ref.metadata.get("label_space", [])
+    if isinstance(metadata_labels, Sequence) and not isinstance(
+        metadata_labels, (str, bytes)
+    ):
+        labels = [str(label) for label in metadata_labels]
+        if labels:
+            return labels
+
+    return list(ctx.dataset_ref.label_space)
 
 
 @predictor(
@@ -54,21 +76,13 @@ def yolo_sc_predictor(
     _storage = artifact_storage
     _uri = model_ref.uri
 
-    async def _fetch_and_load() -> tuple[bytes, Any]:
-        raw = await _storage.get_bytes(_uri)
-        checkpoint = torch.load(
-            io.BytesIO(raw), map_location=device, weights_only=False
-        )
-        return raw, checkpoint
+    async def _fetch_model() -> bytes:
+        return await _storage.get_bytes(_uri)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
-        raw_bytes, checkpoint = _pool.submit(
-            lambda: asyncio.new_event_loop().run_until_complete(_fetch_and_load())
+        raw_bytes = _pool.submit(
+            lambda: asyncio.new_event_loop().run_until_complete(_fetch_model())
         ).result()
-
-    labels = list(checkpoint.get("labels", []))
-    if not labels:
-        raise ValueError("checkpoint has no labels — cannot create classifier")
 
     _tmp_dir = tempfile.TemporaryDirectory()
     _tmp_path = Path(_tmp_dir.name) / "model.pt"
@@ -77,6 +91,9 @@ def yolo_sc_predictor(
     try:
         model = YOLO(str(_tmp_path))
         model.to(device)
+        labels = _resolve_labels(model, model_ref, ctx)
+        if not labels:
+            raise ValueError("YOLO model has no class names")
     except Exception:
         _tmp_dir.cleanup()
         raise

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from datetime import datetime
 
 import polars as pl
 from sqlalchemy import create_engine
+import async_lru
 
 from app.modules.sc.domain.models import ScInspectionRecord
 
@@ -34,6 +34,15 @@ _SCHEMA_OVERRIDES = {
     "recipe_key": pl.Int32,
     "origin_index_x": pl.Int32,
     "origin_index_y": pl.Int32,
+    "die_x": pl.Int32,
+    "die_y": pl.Int32,
+    "size_x": pl.Int32,
+    "size_y": pl.Int32,
+    "size_d": pl.Int32,
+    "area": pl.Int32,
+    "final_bin": pl.Int32,
+    "manual_bin": pl.Int32,
+    "kill_ratio": pl.Float64,
 }
 
 
@@ -64,51 +73,6 @@ class SqliteScUpstream:
 
     async def _read(self, query: str, **kwargs: object) -> pl.LazyFrame:
         return await asyncio.to_thread(self._read_sync, query, **kwargs)
-
-    def stream(
-        self,
-        source_inspection_time: str,
-        source_wafer_key: int,
-        offset: int = 0,
-    ) -> AsyncIterator[pl.DataFrame]:
-        async def _gen() -> AsyncIterator[pl.DataFrame]:
-            if offset < 0:
-                raise ValueError(f"offset must be >= 0, got {offset}")
-
-            dt = datetime.fromisoformat(source_inspection_time)
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-            sqlite_dt = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-
-            query = f"""
-            SELECT d.*, s.lot_id, s.origin_x, s.origin_y, s.die_size_x, s.die_size_y
-            FROM inspect_defect d
-            JOIN insp_wafer_summary s ON d.wafer_key = s.wafer_key
-                AND d.inspection_time = s.inspection_time
-            WHERE d.inspection_time = '{sqlite_dt}' AND d.wafer_key = {source_wafer_key}
-            ORDER BY d.defect_id
-            """
-            lf = await self._read(query)
-            lf = lf.with_columns(
-                [
-                    (
-                        (pl.col("wafer_x") - pl.col("origin_x")) % pl.col("die_size_x")
-                    ).alias("die_x"),
-                    (
-                        (pl.col("wafer_y") - pl.col("origin_y")) % pl.col("die_size_y")
-                    ).alias("die_y"),
-                ]
-            )
-
-            total_df = await lf.select(pl.len()).collect_async()
-            total: int = total_df.item()
-
-            for batch_offset in range(offset, total, BATCH_SIZE):
-                batch_lf = lf.slice(batch_offset, BATCH_SIZE)
-                df = await batch_lf.collect_async()
-                yield df
-
-        return _gen()
 
     async def get_inspection(
         self, inspection_time: datetime, wafer_key: int
@@ -151,12 +115,13 @@ class SqliteScUpstream:
             origin_index_y=row["origin_index_y"],
         )
 
+    @async_lru.alru_cache(maxsize=3)
     async def list_samples(
         self,
         inspection_time: datetime,
         wafer_key: int,
         offset: int = 0,
-        count: int = 50,
+        count: int | None = None,
         reticle_size_x: int = 1,
         reticle_size_y: int = 1,
         reticle_offset_x: int = 0,
@@ -208,7 +173,10 @@ class SqliteScUpstream:
                 ).alias("reticle_y"),
             ]
         )
-        lf = lf.slice(offset, count)
+        if count is not None:
+            lf = lf.slice(offset, count)
+        elif offset:
+            lf = lf.slice(offset)
         return lf
 
     async def list_wafer_points(

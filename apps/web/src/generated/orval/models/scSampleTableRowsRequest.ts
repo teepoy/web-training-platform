@@ -4,6 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScSampleTableRowsRequestFilter } from './scSampleTableRowsRequestFilter';
+import type { ScSampleTableRowsRequestSort } from './scSampleTableRowsRequestSort';
 
 export interface ScSampleTableRowsRequest {
   defect_ids?: string[];
@@ -14,4 +16,6 @@ export interface ScSampleTableRowsRequest {
    * @maximum 10000
    */
   page_size?: number;
+  filter?: ScSampleTableRowsRequestFilter;
+  sort?: ScSampleTableRowsRequestSort;
 }

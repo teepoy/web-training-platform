@@ -6,7 +6,8 @@ Operational manifests for local Compose smoke runs and minikube/Kubeflow deploym
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Compose stack | `compose/docker-compose.yaml` | Postgres, MinIO, API |
+| Compose stack | `compose/docker-compose.yaml` | Postgres, MinIO, API (dev/validation) |
+| Compose split stack | `compose/production/` | `compose.stateful.yaml`, `compose.platform.yaml`, `compose.ops.yaml`, `compose.observability.yaml` (production) |
 | Compose usage | `compose/README.md` | Up/down command |
 | K8s base apply | `k8s/kustomization.yaml` | Namespace + base resources |
 | K8s bootstrap docs | `k8s/README.md` | Apply + verify steps |
@@ -50,6 +51,11 @@ When running the GPU worker **on the host** (outside Compose) simultaneously wit
 - Kubernetes deploys expect `finetune-config` ConfigMap and `finetune-secrets` Secret.
 - Dev profile means Postgres + MinIO + in-cluster Kubeflow client wiring.
 - Local Compose uses the same broad service names (`postgres`, `minio`, `api`) as the app config expects.
+- Production split-stack uses 4 independent Compose projects sharing an external `finetune-prod` network:
+  - `finetune-stateful` (postgres, minio, redis, label-studio)
+  - `finetune-platform` (prefect-server, api, web, workers)
+  - `finetune-ops` (migrate, deployments — one-shot)
+  - `finetune-observability` (prometheus, grafana, loki, exporters)
 
 ## ANTI-PATTERNS
 - Don’t use `secret.example.yaml` values outside smoke/local testing.

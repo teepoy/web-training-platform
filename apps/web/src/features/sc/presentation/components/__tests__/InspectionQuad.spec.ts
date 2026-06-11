@@ -17,7 +17,16 @@ const ScMapPanel = defineComponent({
   template: "<div />",
 });
 
-const Stub = defineComponent({ template: "<div />" });
+const Stub = defineComponent({
+  name: "ScSampleTable",
+  props: {
+    filter: Object,
+    sort: Object,
+    selectedDefectIds: Object,
+  },
+  emits: ["filter-change", "sort-change", "selection-change"],
+  template: "<div />",
+});
 
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import { MIXED_CLASS_POINTS } from "./scMapFixtures";
@@ -118,5 +127,48 @@ describe("InspectionQuad", () => {
     const mapPanel = wrapper.findComponent({ name: "ScMapPanel" });
     expect(mapPanel.exists()).toBe(true);
     expect(mapPanel.props("dieFullPoints")).toBeUndefined();
+  });
+
+  it("forwards controlled table state and table events", async () => {
+    const wrapper = mount(InspectionQuad, {
+      props: {
+        samples: [],
+        samplesTotal: 3,
+        samplesLoading: false,
+        samplesError: null,
+        activeMapTab: "wafer",
+        tableFilter: {
+          rough_bin: { operator: "in", values: [1, 2] },
+        },
+        tableSort: { field: "defect_id", direction: "desc" },
+        selectedDefectIds: [2],
+      },
+      global: {
+        stubs: {
+          ScMapPanel,
+          ScSampleTable: Stub,
+          ScPreviewBlinkVirtualTable: defineComponent({ template: "<div />" }),
+        },
+      },
+    });
+    const table = wrapper.findComponent({ name: "ScSampleTable" });
+
+    expect(table.props("filter")).toEqual({
+      rough_bin: { operator: "in", values: [1, 2] },
+    });
+    expect(table.props("sort")).toEqual({
+      field: "defect_id",
+      direction: "desc",
+    });
+
+    table.vm.$emit("selection-change", [1, 2]);
+    table.vm.$emit("filter-change", {
+      rough_bin: { operator: "in", values: [2, 3] },
+    });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("table-selection-change")?.[0]).toEqual([[1, 2]]);
+    expect(wrapper.emitted("table-filter-change")?.[0]).toEqual([
+      { rough_bin: { operator: "in", values: [2, 3] } },
+    ]);
   });
 });

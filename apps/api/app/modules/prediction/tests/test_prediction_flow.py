@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -363,76 +363,56 @@ def test_run_prediction_job_embedding_target() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_predict_chunk_missing_model() -> None:
-    """predict_chunk raises ValueError when model does not exist."""
-    with TestClient(app):
-        _install_flow_worker_mocks()
-        predict_chunk = getattr(_predict_flow_module(), "predict_chunk")
-
-        with pytest.raises(ValueError, match="Model not found"):
-            asyncio.run(
-                predict_chunk.fn(
-                    job_id="pred-missing-model",
-                    model_id="nonexistent-model",
-                    org_id=DEFAULT_ORG_ID,
-                    target="image_classification",
-                    prompt=None,
-                    sample_ids=["sample-1"],
-                )
-            )
-
-
-def test_predict_chunk_empty_samples() -> None:
-    """predict_chunk returns empty list when no sample IDs resolve."""
-    with TestClient(app) as c:
-        _install_flow_worker_mocks()
-        dataset_id, model_id, _ = _seed_prediction_setup(c, n_samples=1)
-
-        predict_chunk = getattr(_predict_flow_module(), "predict_chunk")
-
-        result = asyncio.run(
-            predict_chunk.fn(
-                job_id="pred-empty-samples",
-                model_id=model_id,
-                org_id=DEFAULT_ORG_ID,
-                target="image_classification",
-                prompt=None,
-                sample_ids=["nonexistent-sample-id"],
-            )
-        )
-
-        assert result == []
-
-
-def test_persist_chunk_results_writes_predictions() -> None:
-    """persist_chunk_results creates prediction records and events in DB."""
-    with TestClient(app) as c:
-        _install_flow_worker_mocks()
-        dataset_id, model_id, sample_ids = _seed_prediction_setup(c, n_samples=2)
-        job_id = _create_prediction_job_record(dataset_id, model_id)
-
-        worker_results = [
-            {"sample_id": sid, "label": "cat", "confidence": 0.95, "scores": {"cat": 0.95, "dog": 0.05}}
-            for sid in sample_ids
+def test_persist_worker_results_uses_storage_aggregate() -> None:
+    """Chunk persistence delegates prediction storage to DatasetStorageAgg."""
+    predict_job_mod = _predict_flow_module()
+    repo = MagicMock()
+    repo.add_prediction_event = AsyncMock()
+    storage_agg = MagicMock()
+    storage_agg.get_samples_batch = AsyncMock(
+        return_value=[
+            SimpleNamespace(sample_id="sample-1"),
+            SimpleNamespace(sample_id="sample-2"),
         ]
+    )
+    captured: list[Any] = []
 
-        persist_chunk_results = getattr(_predict_flow_module(), "persist_chunk_results")
+    async def _write_predictions(results, **kwargs):
+        async for result in results:
+            captured.append(result)
+        return len(captured)
 
-        result = asyncio.run(
-            persist_chunk_results.fn(
-                job_id=job_id,
-                model_id=model_id,
-                org_id=DEFAULT_ORG_ID,
-                target="image_classification",
-                model_version="test-v1",
-                sample_ids=sample_ids,
-                worker_results=worker_results,
-            )
+    storage_agg.write_predictions = AsyncMock(side_effect=_write_predictions)
+    model = SimpleNamespace(id="model-1")
+
+    result = asyncio.run(
+        predict_job_mod._persist_worker_results(
+            repo=repo,
+            storage_agg=storage_agg,
+            job_id="job-1",
+            model=model,
+            target="image_classification",
+            model_version="v1",
+            sample_ids=["sample-1", "sample-2"],
+            worker_results=[
+                {
+                    "sample_id": "sample-1",
+                    "label": "cat",
+                    "confidence": 0.9,
+                },
+                {
+                    "sample_id": "sample-2",
+                    "label": "dog",
+                    "confidence": 0.8,
+                },
+            ],
         )
+    )
 
-        assert result["successful"] == 2
-        assert result["failed"] == 0
-        assert len(result["predictions"]) == 2
+    assert [item.predicted_label for item in captured] == ["cat", "dog"]
+    storage_agg.write_predictions.assert_awaited_once()
+    assert result["successful"] == 2
+    assert result["failed"] == 0
 
 
 # ---------------------------------------------------------------------------

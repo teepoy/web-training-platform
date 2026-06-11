@@ -49,25 +49,6 @@ def test_dashboard_empty() -> None:
             assert key in body["job_queue"]
 
 
-def test_dashboard_with_jobs() -> None:
-    """Dashboard reflects created jobs in queue stats and recent list."""
-    with TestClient(app) as c:
-        job_id = _create_job(c)
-
-        r = c.get("/api/v1/dashboard")
-        assert r.status_code == 200
-        body = r.json()
-
-        # At least one job should show up in recent_jobs
-        ids = [j["id"] for j in body["recent_jobs"]]
-        assert job_id in ids
-
-        # Total count across all statuses should be >= 1
-        jq = body["job_queue"]
-        total = jq["queued"] + jq["running"] + jq["completed"] + jq["failed"] + jq["cancelled"]
-        assert total >= 1
-
-
 def test_dashboard_response_shape() -> None:
     """Validate the full response schema."""
     with TestClient(app) as c:

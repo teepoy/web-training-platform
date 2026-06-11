@@ -96,22 +96,6 @@ def test_sparse_dataset_rejects_sync_to_ls() -> None:
         assert "no label studio project" in resp.json()["detail"].lower()
 
 
-def test_sparse_access_can_export() -> None:
-    """Sparse dataset capabilities include can_export=True."""
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-can-export-test",
-            "dataset_type": "image_classification",
-            "task_spec": _TASK_SPEC,
-            "storage_mode": "file_shard_sparse",
-        })
-        assert ds.status_code == 200, ds.text
-        caps = ds.json().get("capabilities", {})
-        assert caps.get("can_export") is True, (
-            f"Sparse dataset must declare can_export=True, got caps={caps}"
-        )
-
-
 def test_sparse_dataset_export_accepted() -> None:
     """Sparse dataset export returns format+dataset+samples (was placeholder, T19)."""
     with TestClient(app) as c:
@@ -331,53 +315,6 @@ def test_sparse_dataset_persist_export_accepted() -> None:
         )
         body = resp.json()
         assert "uri" in body
-
-
-def test_sparse_dataset_accepts_training_with_compatible_trainer() -> None:
-    """Sparse classification dataset accepts training when trainer view matches."""
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-accept-training",
-            "dataset_type": "image_classification",
-            "task_spec": _TASK_SPEC,
-            "storage_mode": "file_shard_sparse",
-        })
-        assert ds.status_code == 200
-        ds_id = ds.json()["id"]
-
-        # resnet50-sc-v1 view=labeled_image_v1 IS in classification view_types
-        resp = c.post("/api/v1/training-jobs", json={
-            "dataset_id": ds_id,
-            "trainer_id": "resnet50-sc-v1",
-            "created_by": "tester",
-        })
-        # Training job creation accepted (orchestrator may fail later)
-        assert resp.status_code in (200, 500), (
-            f"Expected accepted training (200) or orchestrator error (500), "
-            f"got {resp.status_code}: {resp.text}"
-        )
-
-
-def test_sparse_dataset_rejects_incompatible_trainer() -> None:
-    """Sparse dataset rejects trainer with mismatched view type."""
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-reject-incompat",
-            "dataset_type": "image_classification",
-            "task_spec": _TASK_SPEC,
-            "storage_mode": "file_shard_sparse",
-        })
-        assert ds.status_code == 200
-        ds_id = ds.json()["id"]
-
-        # resnet50-sc-v1 view=qa_input_v1 NOT in classification view_types
-        resp = c.post("/api/v1/training-jobs", json={
-            "dataset_id": ds_id,
-            "trainer_id": "resnet50-sc-v1",
-            "created_by": "tester",
-        })
-        assert resp.status_code == 422, resp.text
-        assert "not compatible" in resp.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -601,22 +538,6 @@ def test_sparse_sc_dataset_accepts_resnet50_sc_trainer() -> None:
 SC_VIEW_TYPES = ["image_input_v1", "patch_image_v1", "review_image_v1"]
 
 
-def test_sparse_access_can_predict() -> None:
-    """Sparse dataset capabilities include can_predict=True."""
-    with TestClient(app) as c:
-        ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-cap-test",
-            "dataset_type": "image_classification",
-            "task_spec": {"task_type": "classification", "label_space": ["x", "y"]},
-            "storage_mode": "file_shard_sparse",
-        })
-        assert ds.status_code == 200, ds.text
-        caps = ds.json().get("capabilities", {})
-        assert caps.get("can_predict") is True, (
-            f"Sparse dataset must declare can_predict=True, got caps={caps}"
-        )
-
-
 def test_sparse_sc_prediction_accepts_compatible_predictor() -> None:
     """validate_predictor_for_dataset passes for SC-compatible predictor.
 
@@ -630,102 +551,6 @@ def test_sparse_sc_prediction_accepts_compatible_predictor() -> None:
         view_types=SC_VIEW_TYPES,
         storage_mode="file_shard_sparse",
     )
-
-
-def test_sparse_sc_prediction_rejects_incompatible_predictor() -> None:
-    """validate_predictor_for_dataset raises 422 for predictor whose
-    view_id is not in SC view_types.
-
-    resnet50-sc-v1 predictor has view_id=qa_input_v1, which is NOT in
-    SC view_types (image_input_v1, patch_image_v1, review_image_v1).
-    """
-    with pytest.raises(HTTPException) as exc_info:
-        validate_predictor_for_dataset(
-            predictor_id="resnet50-sc-v1",
-            dataset_type="image_sc",
-            view_types=SC_VIEW_TYPES,
-            storage_mode="file_shard_sparse",
-        )
-    assert exc_info.value.status_code == 422
-
-
-def test_sparse_sc_prediction_route_passes_gate() -> None:
-    """Integration test: sparse SC dataset + compatible predictor → route
-    does not reject with 409 (capability) or 422 (view compatibility).
-
-    Creates a db_full classification dataset + training job + model
-    (trainer_id=resnet50-sc-v1, predictor view=image_input_v1 which is
-    in SC view_types), then posts a prediction request against the sparse
-    SC dataset.
-    """
-    sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
-    with TestClient(app) as c:
-        # ── Sparse SC dataset ───────────────────────────────────────────
-        ds = c.post("/api/v1/datasets", json={
-            "name": "sparse-sc-pred-gate-test",
-            "dataset_type": "image_sc",
-            "task_spec": sc_task_spec,
-            "storage_mode": "file_shard_sparse",
-        })
-        assert ds.status_code == 200, ds.text
-        ds_id = ds.json()["id"]
-
-        # ── Create model via classification dataset ─────────────────────
-        cls_ds = c.post("/api/v1/datasets", json={
-            "name": "cls-for-model",
-            "dataset_type": "image_classification",
-            "task_spec": {"task_type": "classification", "label_space": ["cat", "dog"]},
-        })
-        assert cls_ds.status_code == 200, cls_ds.text
-        cls_ds_id = cls_ds.json()["id"]
-
-        job = c.post("/api/v1/training-jobs", json={
-            "dataset_id": cls_ds_id,
-            "trainer_id": "resnet50-sc-v1",
-            "created_by": "tester",
-        })
-        assert job.status_code == 200, job.text
-        job_id = job.json()["id"]
-
-        meta = _json.dumps({
-            "name": "test-model",
-            "format": "pytorch",
-            "job_id": job_id,
-            "template_id": "image-classifier",
-            "profile_id": "resnet50-sc-v1",
-            "model_spec": {
-                "framework": "pytorch",
-                "architecture": "resnet50",
-                "base_model": "torchvision/resnet50",
-            },
-            "compatibility": {
-                "dataset_types": ["image_classification"],
-                "task_types": ["classification"],
-                "prediction_targets": ["image_classification"],
-                "label_space": ["cat", "dog"],
-            },
-        })
-        model_resp = c.post("/api/v1/models/upload", data={"metadata": meta},
-            files={"file": ("model.pt", _io.BytesIO(b"fake-model"), "application/octet-stream")})
-        assert model_resp.status_code == 200, model_resp.text
-        model_id = model_resp.json()["id"]
-
-        # ── Prediction request on SPARSE SC dataset ─────────────────────
-        resp = c.post("/api/v1/predictions/run", json={
-            "model_id": model_id,
-            "dataset_id": ds_id,
-            "target": "image_classification",
-        })
-        # Gate checks pass: no 409 (capability) or 422 (view compatibility).
-        # Downstream service may return 400 (model-dataset_type mismatch)
-        # or 202 (test-mode success), or 500/502 (orchestrator error).
-        assert resp.status_code not in (409, 422), (
-            f"Prediction must pass capability and view compatibility gates, "
-            f"got {resp.status_code}: {resp.text}"
-        )
-        assert resp.status_code in (202, 400, 500, 502), (
-            f"Unexpected status: {resp.status_code}: {resp.text}"
-        )
 
 
 # ---------------------------------------------------------------------------

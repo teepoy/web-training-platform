@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, and_
+from sqlalchemy import DateTime, Float, Integer, String, and_
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
 
 
@@ -65,6 +65,15 @@ class InspectDefectORM(Base):
     adder: Mapped[int] = mapped_column(Integer, nullable=False)
     cluster: Mapped[int] = mapped_column(Integer, nullable=False)
     images: Mapped[int] = mapped_column(Integer, nullable=False)
+    die_x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    die_y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size_x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size_y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size_d: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    area: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    final_bin: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    manual_bin: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kill_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     review_images: Mapped[list[InspectImageORM]] = relationship(
         "InspectImageORM",

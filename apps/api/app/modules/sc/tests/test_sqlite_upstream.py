@@ -192,8 +192,8 @@ async def test_list_inspections(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stream_batches(tmp_path):
-    """Verify stream yields data in batches of pl.DataFrame."""
+async def test_list_samples_full_returns_all_rows(tmp_path):
+    """list_samples(count=None) should return all rows with expected columns."""
     db_path = str(tmp_path / "test.db")
     create_mock_sc_db(db_path)
     try:
@@ -203,45 +203,34 @@ async def test_stream_batches(tmp_path):
         lf = await upstream._read("SELECT * FROM insp_wafer_summary LIMIT 1")
         insp = lf.collect()
         insp_time_str: str = insp["inspection_time"][0]
-        # Convert to ISO format (realistic caller input per Protocol contract)
         insp_dt = datetime.strptime(insp_time_str, "%Y-%m-%d %H:%M:%S.%f")
-        iso_time = insp_dt.isoformat()
         wafer_key: int = int(insp["wafer_key"][0])
 
-        batches: list[pl.DataFrame] = []
-        async for batch in upstream.stream(iso_time, wafer_key):
-            assert isinstance(batch, pl.DataFrame), "Each batch must be a pl.DataFrame"
-            for col in [
-                "defect_id",
-                "inspection_time",
-                "wafer_key",
-                "lot_id",
-                "wafer_x",
-                "wafer_y",
-                "die_x",
-                "die_y",
-                "rough_bin",
-            ]:
-                assert col in batch.columns, f"Missing stream column: {col}"
-            normalized = list(iter_patch_samples_from_upstream_chunk(batch))
-            assert normalized, "Stream batch must normalize into PatchSample rows"
-            assert normalized[0].lot_id
-            assert normalized[0].defect_id
-            batches.append(batch)
+        samples_lf = await upstream.list_samples(insp_dt, wafer_key, count=None)
+        df = await samples_lf.collect_async()
 
-        total = sum(len(b) for b in batches)
-        # Seeded data has 10 defects per wafer, all in one (or few) batches
-        assert total > 0, "Should have at least some rows"
-        # Each batch should not exceed BATCH_SIZE (50K)
-        for i, b in enumerate(batches):
-            assert len(b) <= 50_000, f"Batch {i} exceeds 50K rows"
+        assert isinstance(df, pl.DataFrame), "Result must be a pl.DataFrame"
+        for col in [
+            "defect_id",
+            "wafer_x",
+            "wafer_y",
+            "die_x",
+            "die_y",
+            "reticle_x",
+            "reticle_y",
+            "class_number",
+            "rough_bin",
+            "images",
+        ]:
+            assert col in df.columns, f"Missing column: {col}"
+        assert len(df) > 0, "Should have at least some rows"
     finally:
         teardown_mock_sc_db(db_path)
 
 
 @pytest.mark.asyncio
-async def test_stream_offset_skips_rows(tmp_path):
-    """stream(offset=N) skips the first N rows in deterministic defect_id order."""
+async def test_list_samples_offset_skips_rows(tmp_path):
+    """list_samples(offset=N) skips the first N rows in deterministic defect_id order."""
     db_path = str(tmp_path / "test.db")
     create_mock_sc_db(db_path)
     try:
@@ -250,24 +239,18 @@ async def test_stream_offset_skips_rows(tmp_path):
         insp = lf.collect()
         insp_time_str: str = insp["inspection_time"][0]
         insp_dt = datetime.strptime(insp_time_str, "%Y-%m-%d %H:%M:%S.%f")
-        iso_time = insp_dt.isoformat()
         wafer_key: int = int(insp["wafer_key"][0])
 
-        batches = [batch async for batch in upstream.stream(iso_time, wafer_key)]
-        offset_batches = [
-            batch async for batch in upstream.stream(iso_time, wafer_key, offset=3)
-        ]
-        beyond_batches = [
-            batch
-            async for batch in upstream.stream(iso_time, wafer_key, offset=999_999)
-        ]
+        all_lf = await upstream.list_samples(insp_dt, wafer_key, count=None)
+        all_df = await all_lf.collect_async()
+        offset_lf = await upstream.list_samples(insp_dt, wafer_key, offset=3, count=None)
+        offset_df = await offset_lf.collect_async()
+        beyond_lf = await upstream.list_samples(insp_dt, wafer_key, offset=999_999, count=None)
+        beyond_df = await beyond_lf.collect_async()
 
-        all_rows = pl.concat(batches)
-        offset_rows = pl.concat(offset_batches)
-
-        assert len(offset_rows) == len(all_rows) - 3
-        assert offset_rows["defect_id"][0] == all_rows["defect_id"][3]
-        assert beyond_batches == []
+        assert len(offset_df) == len(all_df) - 3
+        assert offset_df["defect_id"][0] == all_df["defect_id"][3]
+        assert len(beyond_df) == 0
     finally:
         teardown_mock_sc_db(db_path)
 

@@ -101,6 +101,23 @@ export function getDefectIdsByBin(points: ScatterPoint[], bin: number): number[]
   return points.filter((p) => p.roughBin === bin).map((p) => p.defectId);
 }
 
+export function getPackedPointIdsInRegion(
+  points: number[],
+  region: { x: number; y: number; w: number; h: number },
+): number[] {
+  const maxX = region.x + region.w;
+  const maxY = region.y + region.h;
+  const ids: number[] = [];
+  for (let i = 0; i + STRIDE - 1 < points.length; i += STRIDE) {
+    const x = points[i];
+    const y = points[i + 1];
+    if (x >= region.x && x <= maxX && y >= region.y && y <= maxY) {
+      ids.push(points[i + 2]);
+    }
+  }
+  return ids;
+}
+
 /**
  * Map a rough bin value to a deterministic HSL color.
  */

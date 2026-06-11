@@ -128,6 +128,9 @@ const handleSelect = (key: LegendKey) => {
 <style scoped>
 .sc-legend {
   padding: 4px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 .sc-legend-list {
   display: flex;

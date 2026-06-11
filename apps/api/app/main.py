@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -127,6 +128,53 @@ async def lifespan(api: FastAPI):
     cfg = load_config()
     ctx = build_app_context(cfg)
     api.state.app_context = ctx
+
+    # ── Startup readiness checks ─────────────────────────────────────────────
+    # Fail fast if stateful dependencies are not reachable.  The container
+    # orchestrator (Compose / Kubernetes) should restart the pod after a delay.
+    # ──────────────────────────────────────────────────────────────────────
+
+    # 1. Postgres
+    try:
+        async with ctx.shared.db_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        _logger.info("Readiness check passed: postgres")
+    except Exception:
+        _logger.error("Readiness check failed: postgres unreachable", exc_info=True)
+        sys.exit(1)
+
+    # 2. Redis (if enabled)
+    if bool(getattr(cfg, "redis", None) and getattr(cfg.redis, "enabled", False)):
+        import redis.asyncio as redis_client  # type: ignore[import-untyped]
+
+        try:
+            r = redis_client.Redis(
+                host=str(cfg.redis.host),
+                port=int(cfg.redis.port),
+                password=str(cfg.redis.password) if cfg.redis.password else None,
+                db=int(cfg.redis.db),
+                socket_connect_timeout=5,
+            )
+            await r.ping()  # type: ignore[awaitable]
+            await r.close()
+            _logger.info("Readiness check passed: redis")
+        except Exception:
+            _logger.error("Readiness check failed: redis unreachable", exc_info=True)
+            sys.exit(1)
+
+    # 3. Label Studio
+    ls_url = str(cfg.label_studio.url)
+    if ls_url:
+        try:
+            import urllib.request
+
+            urllib.request.urlopen(f"{ls_url}/health", timeout=5)
+            _logger.info("Readiness check passed: label-studio")
+        except Exception:
+            _logger.error(
+                "Readiness check failed: label-studio unreachable", exc_info=True
+            )
+            sys.exit(1)
 
     if bool(cfg.db.auto_create):
         await init_db(ctx.shared.db_engine)

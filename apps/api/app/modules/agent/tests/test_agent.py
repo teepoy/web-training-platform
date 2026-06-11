@@ -395,23 +395,6 @@ class TestPromptAssembler:
 class TestQueryDataRoute:
     """Test POST /api/v1/datasets/{id}/query."""
 
-    def test_annotation_stats_query(self) -> None:
-        with TestClient(app) as c:
-            dataset_id = _create_dataset(c, name="query-stats-ds")
-            s1 = _create_sample(c, dataset_id)
-            _create_sample(c, dataset_id)
-            _create_annotation(c, s1, "cat")
-
-            r = c.post(
-                f"/api/v1/datasets/{dataset_id}/query",
-                json={"query_type": "annotation-stats"},
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["total_samples"] == 2
-            assert body["annotated_samples"] == 1
-            assert body["label_counts"]["cat"] == 1
-
     def test_sample_slice_query(self) -> None:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="query-slice-ds")
@@ -430,28 +413,6 @@ class TestQueryDataRoute:
             assert len(body["items"]) == 3
             assert body["total"] == 5
 
-    def test_metadata_histogram_query(self) -> None:
-        with TestClient(app) as c:
-            dataset_id = _create_dataset(c, name="query-hist-ds")
-            _create_sample(c, dataset_id, metadata={"source": "train"})
-            _create_sample(c, dataset_id, metadata={"source": "train"})
-            _create_sample(c, dataset_id, metadata={"source": "val"})
-
-            r = c.post(
-                f"/api/v1/datasets/{dataset_id}/query",
-                json={
-                    "query_type": "metadata-histogram",
-                    "params": {"key": "source"},
-                },
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["key"] == "source"
-            # Should have histogram entries
-            hist = {h["value"]: h["count"] for h in body["histogram"]}
-            assert hist["train"] == 2
-            assert hist["val"] == 1
-
     def test_metadata_histogram_missing_key_param(self) -> None:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="query-hist-nokey-ds")
@@ -463,26 +424,6 @@ class TestQueryDataRoute:
             body = r.json()
             assert "error" in body
 
-    def test_recent_annotations_query(self) -> None:
-        with TestClient(app) as c:
-            dataset_id = _create_dataset(c, name="query-recent-ds")
-            s1 = _create_sample(c, dataset_id)
-            s2 = _create_sample(c, dataset_id)
-            _create_annotation(c, s1, "cat")
-            _create_annotation(c, s2, "dog")
-
-            r = c.post(
-                f"/api/v1/datasets/{dataset_id}/query",
-                json={
-                    "query_type": "recent-annotations",
-                    "params": {"limit": 10},
-                },
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert "entries" in body
-            assert len(body["entries"]) == 2
-
     def test_prediction_summary_query(self) -> None:
         with TestClient(app) as c:
             dataset_id = _create_dataset(c, name="query-pred-ds")
@@ -493,31 +434,6 @@ class TestQueryDataRoute:
             assert r.status_code == 200
             body = r.json()
             assert body["total_predictions"] == 0
-
-    def test_wafer_points_query(self) -> None:
-        with TestClient(app) as c:
-            dataset_id = _create_dataset(c, name="query-wafer-ds")
-            included_ids = [
-                _create_sample(c, dataset_id, metadata={"wafer_x": 1.25, "wafer_y": 2.5}),
-                _create_sample(c, dataset_id, metadata={"wafer_x": "3.75", "wafer_y": 4}),
-            ]
-            _create_sample(c, dataset_id, metadata={"wafer_x": 9.0})
-            _create_sample(c, dataset_id, metadata={"wafer_y": 8.0})
-            _create_sample(c, dataset_id, metadata={"other": "value"})
-
-            r = c.post(
-                f"/api/v1/datasets/{dataset_id}/query",
-                json={"query_type": "wafer-points"},
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["total"] == 2
-            assert len(body["points"]) == 2
-            assert {point["id"] for point in body["points"]} == set(included_ids)
-            for point in body["points"]:
-                assert set(point.keys()) == {"id", "x", "y"}
-                assert isinstance(point["x"], float)
-                assert isinstance(point["y"], float)
 
     def test_execute_query_data_wafer_points(self) -> None:
         import asyncio

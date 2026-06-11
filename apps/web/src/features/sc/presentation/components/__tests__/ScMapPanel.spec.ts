@@ -10,6 +10,14 @@ vi.mock("../ScWaferMap.vue", () => ({
         type: Object,
         default: undefined,
       },
+      highlightDefectIds: {
+        type: Array,
+        default: undefined,
+      },
+      queryBoxSelection: {
+        type: Function,
+        default: undefined,
+      },
     },
     template: "<div />",
   })
@@ -51,6 +59,28 @@ describe("ScMapPanel", () => {
     expect(wrapper.findComponent({ name: 'ScWaferMap' }).exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ScDieStackMap' }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'ScReticleMap' }).exists()).toBe(false);
+  });
+
+  it("removes the legacy filter tab", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanel, {
+      props: { waferPoints: MIXED_CLASS_POINTS },
+    });
+
+    expect(wrapper.find('[data-testid="sc-filter-tab"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Filter");
+  });
+
+  it("passes table highlight IDs to the active map", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanel, {
+      props: {
+        waferPoints: MIXED_CLASS_POINTS,
+        highlightDefectIds: [101, 103],
+      },
+    });
+
+    expect(
+      wrapper.findComponent({ name: "ScWaferMap" }).props("highlightDefectIds"),
+    ).toEqual([101, 103]);
   });
 
   it("clicking die tab shows sc-die-stack-canvas", async () => {
@@ -97,21 +127,19 @@ describe("ScMapPanel", () => {
     expect(wrapper.emitted("select-points")?.[0]).toEqual([{ ids: [101, 102], region: { x: 0, y: 0, w: 0, h: 0 } }]);
   });
 
-  it("forwards box regions without calculating point IDs", async () => {
+  it("curries the wafer mode into the box selection query", async () => {
+    const queryBoxSelection = vi.fn().mockResolvedValue([101]);
     const { wrapper } = await mountWithProviders(ScMapPanel, {
-      props: { waferPoints: MIXED_CLASS_POINTS },
+      props: { waferPoints: MIXED_CLASS_POINTS, queryBoxSelection },
     });
     const region = { x: 10, y: 20, w: 30, h: 40 };
 
-    wrapper.findComponent({ name: "ScWaferMap" }).vm.$emit(
-      "filter-region",
-      region,
-    );
+    const query = wrapper
+      .findComponent({ name: "ScWaferMap" })
+      .props("queryBoxSelection") as (region: typeof region) => Promise<number[]>;
+    await query(region);
 
-    expect(wrapper.emitted("filter-region")?.[0]).toEqual([
-      { mode: "wafer", region },
-    ]);
-    expect(wrapper.emitted("select-points")).toBeUndefined();
+    expect(queryBoxSelection).toHaveBeenCalledWith("wafer", region);
   });
 
   it("uses compact class-list IDs for legend selection", async () => {
@@ -401,7 +429,33 @@ describe("ScMapPanel", () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS }
     });
-    // garbage → loadPersistedState returns false (default) → !false = true → drawer expanded
     expect(wrapper.find('[data-testid="sc-map-drawer"]').exists()).toBe(true);
+  });
+
+  it("falls back to sampled points when classList is missing", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanel, {
+      props: { waferPoints: MIXED_CLASS_POINTS },
+    });
+
+    const legend = wrapper.findComponent({ name: "ScLegend" });
+    legend.vm.$emit("select-class", 1);
+    expect(wrapper.emitted("select-points")?.[0]).toEqual([
+      { ids: [101, 102], region: { x: 0, y: 0, w: 0, h: 0 } },
+    ]);
+  });
+
+  it("falls back to sampled points when classList is null", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanel, {
+      props: {
+        waferPoints: MIXED_CLASS_POINTS,
+        classList: null,
+      },
+    });
+
+    const legend = wrapper.findComponent({ name: "ScLegend" });
+    legend.vm.$emit("select-class", 1);
+    expect(wrapper.emitted("select-points")?.[0]).toEqual([
+      { ids: [101, 102], region: { x: 0, y: 0, w: 0, h: 0 } },
+    ]);
   });
 });

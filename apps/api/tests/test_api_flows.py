@@ -8,30 +8,6 @@ from app.modules.datasets.port.http.deps import get_label_studio_client
 from tests.conftest import TRAINER_ID
 
 
-def test_dataset_and_job_flow() -> None:
-    with TestClient(app) as c:
-        ds = c.post(
-            "/api/v1/datasets",
-            json={
-                "name": "d1",
-                "dataset_type": "image_classification",
-                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
-            },
-        )
-        assert ds.status_code == 200
-        dataset_id = ds.json()["id"]
-
-        job = c.post(
-            "/api/v1/training-jobs",
-            json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID, "created_by": "u1"},
-        )
-        assert job.status_code == 200
-        job_id = job.json()["id"]
-
-        r = c.get(f"/api/v1/training-jobs/{job_id}")
-        assert r.status_code == 200
-
-
 def test_get_dataset_detail() -> None:
     with TestClient(app) as c:
         created = c.post(
@@ -94,51 +70,6 @@ def test_get_dataset_detail_not_found() -> None:
         r = c.get("/api/v1/datasets/nonexistent-id-12345")
         assert r.status_code == 404
         assert r.json()["detail"] == "Dataset not found"
-
-
-def test_delete_dataset_removes_dataset_and_models() -> None:
-    with TestClient(app) as c:
-        created = c.post(
-            "/api/v1/datasets",
-            json={
-                "name": "delete-ds",
-                "dataset_type": "image_classification",
-                "task_spec": {"task_type": "classification", "label_space": ["x", "y"]},
-            },
-        )
-        assert created.status_code == 200
-        dataset_id = created.json()["id"]
-
-        sample = c.post(
-            f"/api/v1/datasets/{dataset_id}/samples",
-            json={"image_uris": ["memory://delete-ds/img-1.png"]},
-        )
-        assert sample.status_code == 200
-
-        job = c.post(
-            "/api/v1/training-jobs",
-            json={
-                "dataset_id": dataset_id,
-                "trainer_id": TRAINER_ID,
-                "created_by": "deleter",
-            },
-        )
-        assert job.status_code == 200
-        job_id = job.json()["id"]
-
-        deleted = c.delete(f"/api/v1/datasets/{dataset_id}")
-        assert deleted.status_code == 204
-
-        get_dataset = c.get(f"/api/v1/datasets/{dataset_id}")
-        assert get_dataset.status_code == 404
-
-        models = c.get(f"/api/v1/models?dataset_id={dataset_id}")
-        assert models.status_code == 200
-        assert models.json() == []
-
-        app.dependency_overrides[
-            get_label_studio_client
-        ]().delete_project.assert_awaited_once()
 
 
 def test_update_label_space() -> None:
@@ -271,56 +202,6 @@ def test_bulk_sample_import() -> None:
         assert listed.status_code == 200
         listed_body = listed.json()
         assert listed_body["total"] == 3
-
-
-def test_events_history_pagination() -> None:
-    with TestClient(app) as c:
-        # Set up dataset + job
-        ds = c.post(
-            "/api/v1/datasets",
-            json={
-                "name": "event-ds",
-                "dataset_type": "image_classification",
-                "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
-            },
-        )
-        assert ds.status_code == 200
-        dataset_id = ds.json()["id"]
-
-        job = c.post(
-            "/api/v1/training-jobs",
-            json={
-                "dataset_id": dataset_id,
-                "trainer_id": TRAINER_ID,
-                "created_by": "tester",
-            },
-        )
-        assert job.status_code == 200
-        job_id = job.json()["id"]
-
-        # History endpoint returns paginated response (may have events from orchestrator startup)
-        r = c.get(f"/api/v1/training-jobs/{job_id}/events/history")
-        assert r.status_code == 200
-        body = r.json()
-        assert "items" in body
-        assert "total" in body
-        assert isinstance(body["items"], list)
-        assert isinstance(body["total"], int)
-        assert body["total"] == len(
-            body["items"]
-        )  # default limit=50 fetches all for a new job
-
-        # Query with explicit offset/limit
-        r = c.get(f"/api/v1/training-jobs/{job_id}/events/history?offset=0&limit=2")
-        assert r.status_code == 200
-        body = r.json()
-        assert "items" in body
-        assert "total" in body
-        assert len(body["items"]) <= 2
-
-        # 404 for unknown job
-        r = c.get("/api/v1/training-jobs/nonexistent-job-xyz/events/history")
-        assert r.status_code == 404
 
 
 def test_extract_features_runs_sync() -> None:

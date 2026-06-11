@@ -1,0 +1,44 @@
+# ============================================================
+#  finetune-platform — App plane (.env.example)
+# ============================================================
+
+# API database
+DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
+
+# Prefect
+PREFECT_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/prefect
+PREFECT_UI_URL=https://prefect.example.com
+
+# MinIO / S3 (all buckets)
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=<access-key>
+MINIO_SECRET_KEY=<secret-key>
+MINIO_BUCKET=finetune-artifacts
+SC_PATCH_S3_ENDPOINT=minio:9000
+SC_PATCH_S3_ACCESS_KEY=<access-key>
+SC_PATCH_S3_SECRET_KEY=<secret-key>
+SC_PATCH_S3_BUCKET=sc-patch-images
+SC_REVIEW_S3_ENDPOINT=minio:9000
+SC_REVIEW_S3_ACCESS_KEY=<access-key>
+SC_REVIEW_S3_SECRET_KEY=<secret-key>
+SC_REVIEW_S3_BUCKET=sc-review-images
+
+# Label Studio (shared with stateful project)
+POSTGRES_USER=finetune
+POSTGRES_PASSWORD=<strong-password>
+LABEL_STUDIO_USERNAME=<admin-email>
+LABEL_STUDIO_PASSWORD=<strong-password>
+LABEL_STUDIO_API_KEY=<token>
+LABEL_STUDIO_EXTERNAL_URL=https://labels.example.com
+LABEL_STUDIO_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/labelstudio
+
+# Images — immutable tags required
+FINETUNE_API_IMAGE=registry.example.com/finetune-api:<release>
+FINETUNE_WEB_IMAGE=registry.example.com/finetune-web:<release>
+FINETUNE_CPU_WORKER_IMAGE=registry.example.com/finetune-cpu-worker:<release>
+FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
+
+# LLM (optional)
+LLM_BASE_URL=
+LLM_API_KEY=
+LLM_MODEL=qwen/qwen-max

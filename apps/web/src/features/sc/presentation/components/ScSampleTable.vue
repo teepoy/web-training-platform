@@ -1,16 +1,23 @@
-<!--
-  ScSampleTable — SC-specific virtualized sample data table.
-  Uses virtual-window page loading (1k per page), so large inspection tables can
-  jump directly to any offset without rendering placeholder defaults.
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useVirtualizer } from "@tanstack/vue-virtual";
-import { NEmpty, NSpin, NText } from "naive-ui";
-import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import { computed, h, ref, watch } from "vue";
 import {
-  getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost,
-} from "@/generated/orval/endpoints/api";
+  NButton,
+  NDataTable,
+  NInputNumber,
+  NSpace,
+  NText,
+  type DataTableBaseColumn,
+  type DataTableColumns,
+  type DataTableFilterState,
+  type DataTableRowKey,
+  type DataTableSortState,
+} from "naive-ui";
+import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import type {
+  ScSampleTableFilter,
+  ScSampleTableSort,
+} from "@/features/sc/domain/sampleTable";
+import { getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost } from "@/generated/orval/endpoints/api";
 import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
 
 const props = defineProps<{
@@ -21,108 +28,348 @@ const props = defineProps<{
   waferKey?: number;
   loading: boolean;
   total: number;
+  selectedDefectIds?: ReadonlySet<number>;
+  filter?: ScSampleTableFilter;
+  sort?: ScSampleTableSort | null;
 }>();
 
-// ── Column definitions ───────────────────────────
-interface SampleRow {
-  defectId: string;
-  waferX: number | undefined;
-  waferY: number | undefined;
-  roughBin: number | undefined;
-  classNumber: number | undefined;
-  testId: number | undefined;
-}
+const emit = defineEmits<{
+  (e: "selection-change", ids: number[]): void;
+  (e: "filter-change", filter: ScSampleTableFilter): void;
+  (
+    e: "sort-change",
+    sort: { field: string; direction: "asc" | "desc" | null },
+  ): void;
+}>();
 
-interface SampleColumn {
-  key: string;
+interface ColumnDefinition {
+  key: keyof ScSampleTableRow;
   title: string;
   width: number;
-  render?: (row: SampleRow) => string;
+  filter: "set" | "range";
+  render?: (row: ScSampleTableRow) => string;
 }
 
-const columns: SampleColumn[] = [
-  { key: "defectId", title: "Defect ID", width: 180 },
+const columnDefinitions: ColumnDefinition[] = [
+  { key: "defect_id", title: "Defect ID", width: 100, filter: "set" },
+  { key: "test_id", title: "Test ID", width: 80, filter: "set" },
+  { key: "index_x", title: "Index X", width: 70, filter: "range" },
+  { key: "index_y", title: "Index Y", width: 70, filter: "range" },
+  { key: "wafer_x", title: "Wafer X", width: 90, filter: "range" },
+  { key: "wafer_y", title: "Wafer Y", width: 90, filter: "range" },
+  { key: "die_x", title: "Die X", width: 70, filter: "range" },
+  { key: "die_y", title: "Die Y", width: 70, filter: "range" },
+  { key: "size_x", title: "Size X", width: 70, filter: "range" },
+  { key: "size_y", title: "Size Y", width: 70, filter: "range" },
+  { key: "size_d", title: "Size D", width: 70, filter: "range" },
+  { key: "area", title: "Area", width: 80, filter: "range" },
+  { key: "class_number", title: "Class", width: 70, filter: "set" },
+  { key: "rough_bin", title: "Rough Bin", width: 80, filter: "set" },
+  { key: "final_bin", title: "Final Bin", width: 80, filter: "set" },
+  { key: "manual_bin", title: "Manual Bin", width: 90, filter: "set" },
+  { key: "adder", title: "Adder", width: 70, filter: "set" },
+  { key: "cluster_id", title: "Cluster ID", width: 80, filter: "set" },
   {
-    key: "classNumber",
-    title: "Class Number",
-    width: 120,
-    render(row) {
-      return row.classNumber !== undefined ? String(row.classNumber) : "\u2014";
-    },
-  },
-  {
-    key: "testId",
-    title: "Test ID",
-    width: 100,
-    render(row) {
-      return row.testId !== undefined ? String(row.testId) : "\u2014";
-    },
-  },
-  {
-    key: "roughBin",
-    title: "Rough Bin",
-    width: 100,
-    render(row) {
-      return row.roughBin !== undefined ? String(row.roughBin) : "\u2014";
-    },
+    key: "kill_ratio",
+    title: "Kill Ratio",
+    width: 90,
+    filter: "range",
+    render: (row) => row.kill_ratio.toFixed(3),
   },
 ];
 
-const resolvedDefectIds = computed(() =>
-  props.defectIds ?? (props.samples ?? []).map((sample) => String(sample.defectId)),
-);
-
 const PAGE_SIZE = 1000;
+const SCROLL_LOAD_THRESHOLD_PX = 240;
+const SCROLL_X = 1590;
 
-// ── Sparse page cache keyed by the virtual row window ─────
-
-const queryEnabled = computed(
+const resolvedDefectIds = computed(
   () =>
-    !!props.inspectionTime &&
-    props.waferKey !== undefined &&
-    resolvedDefectIds.value.length > 0,
+    props.defectIds ??
+    (props.samples ?? []).map((sample) => String(sample.defectId)),
 );
-
+const queryEnabled = computed(
+  () => Boolean(props.inspectionTime) && props.waferKey !== undefined,
+);
 const tableQueryKey = computed(() =>
   [
-    "sc",
-    "sample-table-rows",
     props.inspectionTime,
     props.waferKey,
-    resolvedDefectIds.value.length,
-    resolvedDefectIds.value[0],
-    resolvedDefectIds.value[resolvedDefectIds.value.length - 1],
+    resolvedDefectIds.value.join(","),
+    JSON.stringify(props.filter ?? {}),
+    JSON.stringify(props.sort ?? null),
+  ].join(":"),
+);
+const filterOptionsScopeKey = computed(() =>
+  [
+    props.inspectionTime,
+    props.waferKey,
+    resolvedDefectIds.value.join(","),
   ].join(":"),
 );
 
-const loadedTotal = computed(() => resolvedDefectIds.value.length);
-
-const rowsByDefectId = ref<Record<string, ScSampleTableRow>>({});
-const loadedPageIndexes = ref<Set<number>>(new Set());
-const loadingPageIndexes = ref<Set<number>>(new Set());
+const rows = ref<ScSampleTableRow[]>([]);
+const serverTotal = ref(props.total);
+const nextPage = ref(0);
+const isFetching = ref(false);
 const pageError = ref<string | null>(null);
+const selectedIds = ref<Set<number>>(new Set());
+const filterState = ref<
+  Record<string, { min: number | null; max: number | null }>
+>({});
+const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>(
+  {},
+);
+let requestVersion = 0;
 
-const loadedRowCount = computed(() => Object.keys(rowsByDefectId.value).length);
-const hasMore = computed(() => loadedRowCount.value < loadedTotal.value);
-const isFetching = computed(() => loadingPageIndexes.value.size > 0);
+const hasMore = computed(() => rows.value.length < serverTotal.value);
+const checkedRowKeys = computed<DataTableRowKey[]>(() =>
+  Array.from(selectedIds.value),
+);
 
-function setLoadingPage(page: number, loading: boolean): void {
-  const next = new Set(loadingPageIndexes.value);
-  if (loading) next.add(page);
-  else next.delete(page);
-  loadingPageIndexes.value = next;
+function getFilterState(field: string): {
+  min: number | null;
+  max: number | null;
+} {
+  if (!filterState.value[field]) {
+    filterState.value[field] = { min: null, max: null };
+  }
+  return filterState.value[field];
 }
 
-async function fetchPage(page: number): Promise<void> {
-  if (!queryEnabled.value) return;
-  if (loadedPageIndexes.value.has(page) || loadingPageIndexes.value.has(page))
+function applyRangeFilter(field: string): void {
+  const state = filterState.value[field];
+  if (
+    !state ||
+    state.min === null ||
+    state.max === null ||
+    state.min > state.max
+  ) {
     return;
+  }
+  emit("filter-change", {
+    ...(props.filter ?? {}),
+    [field]: {
+      operator: "between",
+      min: state.min,
+      max: state.max,
+    },
+  });
+}
 
-  const start = page * PAGE_SIZE;
-  const slice = resolvedDefectIds.value.slice(start, start + PAGE_SIZE);
-  if (slice.length === 0) return;
+function clearFilter(field: string): void {
+  const next = { ...(props.filter ?? {}) };
+  delete next[field];
+  filterState.value[field] = { min: null, max: null };
+  emit("filter-change", next);
+}
 
-  setLoadingPage(page, true);
+function handleSorter(sortState: DataTableSortState | null): void {
+  if (!sortState || sortState.order === false) {
+    emit("sort-change", {
+      field: String(sortState?.columnKey ?? props.sort?.field ?? ""),
+      direction: null,
+    });
+    return;
+  }
+  emit("sort-change", {
+    field: String(sortState.columnKey),
+    direction: sortState.order === "ascend" ? "asc" : "desc",
+  });
+}
+
+function getSetFilterValues(field: string): Array<string | number> {
+  const filter = props.filter?.[field];
+  return filter?.operator === "in" ? filter.values : [];
+}
+
+function getRangeFilterValues(field: string): number[] {
+  const filter = props.filter?.[field];
+  return filter?.operator === "between" ? [filter.min, filter.max] : [];
+}
+
+function getSetFilterOptions(definition: ColumnDefinition) {
+  const field = definition.key;
+  const values = new Map<string, string | number>();
+  for (const value of discoveredSetFilterValues.value[String(field)] ?? []) {
+    values.set(String(value), value);
+  }
+  for (const value of getSetFilterValues(String(field))) {
+    values.set(String(value), value);
+  }
+  return Array.from(values.values())
+    .sort((left, right) =>
+      typeof left === "number" && typeof right === "number"
+        ? left - right
+        : String(left).localeCompare(String(right), undefined, {
+            numeric: true,
+          }),
+    )
+    .map((value) => ({ label: String(value), value }));
+}
+
+function renderRangeFilterMenu(field: string, hide: () => void) {
+  return h("div", { class: "sst-filter-popover" }, [
+    h(NSpace, { wrap: false }, () => [
+      h(NInputNumber, {
+        value: getFilterState(field).min,
+        placeholder: "Min",
+        size: "small",
+        style: { width: "100px" },
+        "onUpdate:value": (value: number | null) => {
+          getFilterState(field).min = value;
+        },
+      }),
+      h(NInputNumber, {
+        value: getFilterState(field).max,
+        placeholder: "Max",
+        size: "small",
+        style: { width: "100px" },
+        "onUpdate:value": (value: number | null) => {
+          getFilterState(field).max = value;
+        },
+      }),
+    ]),
+    h(NSpace, { size: 4 }, () => [
+      h(
+        NButton,
+        {
+          size: "tiny",
+          onClick: () => {
+            applyRangeFilter(field);
+            hide();
+          },
+        },
+        () => "Apply",
+      ),
+      h(
+        NButton,
+        {
+          size: "tiny",
+          quaternary: true,
+          onClick: () => {
+            clearFilter(field);
+            hide();
+          },
+        },
+        () => "Clear",
+      ),
+    ]),
+  ]);
+}
+
+function handleFilters(
+  filterState: DataTableFilterState,
+  sourceColumn: { key: string | number },
+): void {
+  const field = String(sourceColumn.key);
+  const definition = columnDefinitions.find(
+    (column) => String(column.key) === field,
+  );
+  if (definition?.filter !== "set") return;
+
+  const selected = filterState[field];
+  const values = Array.isArray(selected)
+    ? selected.filter(
+        (value): value is string | number =>
+          typeof value === "string" || typeof value === "number",
+      )
+    : [];
+  const next = { ...(props.filter ?? {}) };
+  if (values.length === 0) {
+    delete next[field];
+  } else {
+    next[field] = { operator: "in", values };
+  }
+  emit("filter-change", next);
+}
+
+const columns = computed<DataTableColumns<ScSampleTableRow>>(() => [
+  {
+    type: "selection",
+    fixed: "left",
+    width: 40,
+  },
+  ...columnDefinitions.map(
+    (definition): DataTableBaseColumn<ScSampleTableRow> => {
+      const field = String(definition.key);
+      return {
+        key: definition.key,
+        title: definition.title,
+        width: definition.width,
+        fixed: definition.key === "defect_id" ? ("left" as const) : undefined,
+        ellipsis: { tooltip: true },
+        sorter: true,
+        sortOrder:
+          props.sort?.field === field
+            ? props.sort.direction === "asc"
+              ? ("ascend" as const)
+              : ("descend" as const)
+            : false,
+        filter: true,
+        filterOptionValues:
+          definition.filter === "set"
+            ? getSetFilterValues(field)
+            : getRangeFilterValues(field),
+        filterOptions:
+          definition.filter === "set"
+            ? getSetFilterOptions(definition)
+            : undefined,
+        filterMultiple: definition.filter === "set",
+        renderFilterMenu:
+          definition.filter === "range"
+            ? ({ hide }: { hide: () => void }) =>
+                renderRangeFilterMenu(field, hide)
+            : undefined,
+        render: definition.render
+          ? (row: ScSampleTableRow) => definition.render?.(row) ?? ""
+          : undefined,
+      };
+    },
+  ),
+]);
+
+function updateSelection(keys: DataTableRowKey[]): void {
+  const next = new Set(
+    keys.map(Number).filter((value) => Number.isFinite(value)),
+  );
+  selectedIds.value = next;
+  emit("selection-change", Array.from(next));
+}
+
+function toggleRow(row: ScSampleTableRow): void {
+  const id = Number(row.defect_id);
+  if (!Number.isFinite(id)) return;
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+  emit("selection-change", Array.from(next));
+}
+
+function rowProps(row: ScSampleTableRow): Record<string, unknown> {
+  return {
+    class: selectedIds.value.has(Number(row.defect_id))
+      ? "sst-row--selected"
+      : undefined,
+    onClick: (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(".n-checkbox, button, input")
+      ) {
+        return;
+      }
+      toggleRow(row);
+    },
+  };
+}
+
+async function fetchNextPage(): Promise<void> {
+  if (!queryEnabled.value || isFetching.value || !hasMore.value) return;
+
+  const page = nextPage.value;
+  const version = requestVersion;
+  isFetching.value = true;
   pageError.value = null;
   try {
     const { data } =
@@ -130,186 +377,167 @@ async function fetchPage(page: number): Promise<void> {
         props.inspectionTime!,
         props.waferKey!,
         {
-          defect_ids: slice,
-          page: 0,
+          defect_ids: resolvedDefectIds.value,
+          page,
           page_size: PAGE_SIZE,
+          filter: props.filter,
+          sort: props.sort ?? undefined,
         },
       );
-    if (!data || !("items" in data))
+    if (!data || !("items" in data)) {
       throw new Error("Invalid sample table response");
-
-    const nextRows = { ...rowsByDefectId.value };
-    for (const row of data.items) {
-      nextRows[row.defect_id] = row;
     }
-    rowsByDefectId.value = nextRows;
-    loadedPageIndexes.value = new Set([...loadedPageIndexes.value, page]);
-  } catch (err) {
-    pageError.value =
-      err instanceof Error ? err.message : "Failed to load sample table rows";
+    if (version !== requestVersion) return;
+
+    rows.value = page === 0 ? data.items : [...rows.value, ...data.items];
+    for (const definition of columnDefinitions) {
+      if (definition.filter !== "set") continue;
+      const field = String(definition.key);
+      const values = new Map(
+        (discoveredSetFilterValues.value[field] ?? []).map((value) => [
+          String(value),
+          value,
+        ]),
+      );
+      for (const row of data.items) {
+        const value = row[definition.key];
+        if (typeof value === "string" || typeof value === "number") {
+          values.set(String(value), value);
+        }
+      }
+      discoveredSetFilterValues.value[field] = Array.from(values.values());
+    }
+    serverTotal.value = data.total;
+    nextPage.value = page + 1;
+  } catch (error) {
+    if (version === requestVersion) {
+      pageError.value =
+        error instanceof Error
+          ? error.message
+          : "Failed to load sample table rows";
+    }
   } finally {
-    setLoadingPage(page, false);
+    if (version === requestVersion) {
+      isFetching.value = false;
+    }
   }
 }
 
-// ── Row accessor ──────────────────────────────────
-function getRow(index: number): SampleRow {
-  const defectId = resolvedDefectIds.value[index] ?? "";
-  const row = rowsByDefectId.value[defectId];
-  return {
-    defectId,
-    waferX: undefined,
-    waferY: undefined,
-    roughBin: row?.rough_bin ?? undefined,
-    classNumber: row?.class_number ?? undefined,
-    testId: row?.test_id ?? undefined,
-  };
+function handleScroll(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const remaining =
+    target.scrollHeight - target.scrollTop - target.clientHeight;
+  if (remaining <= SCROLL_LOAD_THRESHOLD_PX) {
+    void fetchNextPage();
+  }
 }
 
-function cellValue(row: SampleRow, colKey: string): string {
-  const col = columns.find((c) => c.key === colKey);
-  if (col?.render) return col.render(row);
-  return String((row as unknown as Record<string, unknown>)[colKey] ?? "");
-}
-
-// ── Virtualizer ───────────────────────────────────
-const tableRef = ref<HTMLElement | null>(null);
-const ROW_HEIGHT = 36;
-const ROW_OVERSCAN = 16;
-
-const virtualizer = useVirtualizer({
-  get count() {
-    return resolvedDefectIds.value.length;
-  },
-  getScrollElement: () => tableRef.value,
-  estimateSize: () => ROW_HEIGHT,
-  overscan: ROW_OVERSCAN,
-});
-
-function fetchPagesForVirtualRows(): void {
-  const pages = new Set<number>();
-  for (const item of virtualizer.value.getVirtualItems()) {
-    pages.add(Math.floor(item.index / PAGE_SIZE));
-  }
-  for (const page of pages) {
-    void fetchPage(page);
-  }
+function clearSelection(): void {
+  selectedIds.value = new Set();
+  emit("selection-change", []);
 }
 
 watch(
-  tableQueryKey,
+  filterOptionsScopeKey,
   () => {
-    rowsByDefectId.value = {};
-    loadedPageIndexes.value = new Set();
-    loadingPageIndexes.value = new Set();
-    pageError.value = null;
-    if (queryEnabled.value) void fetchPage(0);
-    virtualizer.value.scrollToIndex(0);
+    discoveredSetFilterValues.value = {};
   },
   { immediate: true },
 );
 
 watch(
-  () => virtualizer.value.getVirtualItems().map((item) => item.index).join(","),
-  () => fetchPagesForVirtualRows(),
+  tableQueryKey,
+  () => {
+    requestVersion += 1;
+    rows.value = [];
+    serverTotal.value = resolvedDefectIds.value.length || props.total;
+    nextPage.value = 0;
+    isFetching.value = false;
+    pageError.value = null;
+    if (queryEnabled.value) void fetchNextPage();
+  },
+  { immediate: true },
 );
 
-const initialLoading = computed(
-  () =>
-    props.inspectionTime !== undefined &&
-    props.waferKey !== undefined &&
-    resolvedDefectIds.value.length > 0 &&
-    loadedRowCount.value === 0 &&
-    isFetching.value,
+watch(
+  () => props.selectedDefectIds,
+  (ids) => {
+    selectedIds.value = new Set(ids ?? []);
+  },
+  { immediate: true },
 );
 
-const queryError = computed(() => pageError.value);
+watch(
+  () => props.filter,
+  (filter) => {
+    for (const definition of columnDefinitions) {
+      const field = String(definition.key);
+      const value = filter?.[field];
+      filterState.value[field] =
+        value?.operator === "between"
+          ? { min: value.min, max: value.max }
+          : { min: null, max: null };
+    }
+  },
+  { immediate: true, deep: true },
+);
 </script>
 
 <template>
   <div class="sst">
     <div class="sst-header">
       <NText depth="2" class="sst-header-label">
-        Sample Data ({{ total }})
+        Sample Data ({{ serverTotal }})
       </NText>
-      <NText v-if="loadedTotal > 0" depth="3" class="sst-loaded-info">
-        {{ loadedRowCount }} / {{ loadedTotal }} loaded
-      </NText>
-    </div>
-    <div ref="tableRef" class="sst-scroll" @scroll="fetchPagesForVirtualRows">
-      <NSpin :show="loading || initialLoading">
-        <!-- Column headers (sticky) -->
-        <div class="sst-col-headers">
-          <span
-            v-for="col in columns"
-            :key="col.key"
-            :style="{
-              width: col.width + 'px',
-              flexShrink: 0,
-              padding: '4px 8px',
-              fontWeight: 600,
-              fontSize: '12px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }"
-          >{{ col.title }}</span>
-        </div>
-        <!-- Virtual body -->
-        <div
-          :style="{
-            height: virtualizer.getTotalSize() + 'px',
-            position: 'relative',
-          }"
+      <div class="sst-header-actions">
+        <NButton
+          v-if="selectedIds.size > 0"
+          size="tiny"
+          quaternary
+          @click="clearSelection"
         >
-          <div
-            v-for="vRow in virtualizer.getVirtualItems()"
-            :key="String(vRow.key)"
-            :style="{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: ROW_HEIGHT + 'px',
-              transform: `translateY(${vRow.start}px)`,
-              display: 'flex',
-              alignItems: 'center',
-              borderBottom: '1px solid var(--n-border-color, #333)',
-            }"
-            :class="{ 'sst-row--odd': vRow.index % 2 === 1 }"
-          >
-            <span
-              v-for="col in columns"
-              :key="col.key"
-              :style="{
-                width: col.width + 'px',
-                flexShrink: 0,
-                padding: '0 8px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }"
-            >{{ cellValue(getRow(vRow.index), col.key) }}</span>
-          </div>
-        </div>
-        <!-- Empty state -->
-        <NEmpty
-          v-if="!initialLoading && !loading && resolvedDefectIds.length === 0"
-          description="No samples"
-          style="padding: 32px 0;"
-        />
-      </NSpin>
+          Clear Selection ({{ selectedIds.size }})
+        </NButton>
+        <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
+          {{ rows.length }} / {{ serverTotal }} loaded
+        </NText>
+      </div>
     </div>
 
-    <div v-if="isFetching || hasMore" class="sst-footer">
-      <NSpin v-if="isFetching" size="small" />
-      <NText depth="3" style="font-size: 11px;">
-        {{ isFetching ? "Loading visible rows..." : "Scroll to load rows" }}
-      </NText>
-    </div>
+    <NDataTable
+      class="sst-table"
+      :columns="columns"
+      :data="rows"
+      :row-key="(row: ScSampleTableRow) => Number(row.defect_id)"
+      :row-props="rowProps"
+      :checked-row-keys="checkedRowKeys"
+      :loading="loading || (isFetching && rows.length === 0)"
+      :scroll-x="SCROLL_X"
+      :min-row-height="36"
+      :single-line="false"
+      :striped="true"
+      :virtual-scroll="true"
+      :virtual-scroll-x="true"
+      remote
+      flex-height
+      size="small"
+      @scroll="handleScroll"
+      @update:filters="handleFilters"
+      @update:sorter="handleSorter"
+      @update:checked-row-keys="updateSelection"
+    >
+      <template #empty>
+        <NText depth="3">No samples</NText>
+      </template>
+    </NDataTable>
 
-    <!-- Error -->
-    <NText v-if="queryError" type="error" class="sst-error">{{ queryError }}</NText>
+    <div v-if="isFetching && rows.length > 0" class="sst-footer">
+      <NText depth="3">Loading more rows...</NText>
+    </div>
+    <NText v-if="pageError" type="error" class="sst-error">
+      {{ pageError }}
+    </NText>
   </div>
 </template>
 
@@ -341,36 +569,40 @@ const queryError = computed(() => pageError.value);
   letter-spacing: 0.5px;
 }
 
-.sst-loaded-info {
+.sst-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sst-loaded-info,
+.sst-footer {
   font-size: 11px;
 }
 
-.sst-scroll {
+.sst-table {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-}
-
-.sst-col-headers {
-  display: flex;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--n-color, #1a1a1a);
-  border-bottom: 2px solid var(--n-border-color, #555);
 }
 
 .sst-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 0 4px;
-  flex-shrink: 0;
+  padding-top: 4px;
+  text-align: center;
 }
 
 .sst-error {
-  margin-top: 4px;
+  padding-top: 4px;
   font-size: 12px;
+}
+
+:deep(.sst-row--selected td) {
+  background: rgba(76, 128, 240, 0.15) !important;
+}
+
+.sst-filter-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
 }
 </style>

@@ -6,8 +6,13 @@ dependency-guard behavior is correct, and catalog entries are consistent.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
 import pytest
-from platform_runtime.contracts import TrainContext
+from platform_runtime.contracts import DatasetRef, ModelRef, PredictContext, TrainContext
 
 from app.core.registry import get_predictor_by_id, get_trainer_by_id
 from app.modules.types import catalog
@@ -148,6 +153,70 @@ def test_yolo_predictor_is_generator() -> None:
     assert inspect.isgeneratorfunction(fn), (
         "yolo-sc-v1 must be a generator function"
     )
+
+
+def test_yolo_predictor_loads_native_ultralytics_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.prediction.flows._predictors import yolo_sc
+
+    checkpoint_bytes = b"native-ultralytics-checkpoint"
+    loaded_bytes: list[bytes] = []
+
+    class ArtifactStorage:
+        async def get_bytes(self, uri: str) -> bytes:
+            assert uri == "memory://model.pt"
+            return checkpoint_bytes
+
+    class FakeModel:
+        names = {0: "defect", 1: "clean"}
+
+        def to(self, device: object) -> None:
+            assert device == "cpu"
+
+    def fake_yolo(path: str) -> FakeModel:
+        loaded_bytes.append(Path(path).read_bytes())
+        return FakeModel()
+
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False),
+        mps=SimpleNamespace(is_available=lambda: False),
+        device=lambda value: value,
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        SimpleNamespace(YOLO=fake_yolo),
+    )
+    monkeypatch.setattr(
+        yolo_sc,
+        "get_run_logger",
+        lambda: SimpleNamespace(info=lambda *args: None),
+    )
+
+    class EmptyLazyFrame:
+        def collect(self) -> Any:
+            return SimpleNamespace(iter_rows=lambda named: [])
+
+    model_ref = ModelRef(uri="memory://model.pt")
+    ctx = PredictContext(
+        job_id="test-yolo-native-checkpoint",
+        dataset_ref=DatasetRef(dataset_id="d1", label_space=["fallback"]),
+        model_ref=model_ref,
+    )
+
+    predictions = list(
+        yolo_sc.yolo_sc_predictor(
+            artifact_storage=ArtifactStorage(),
+            ctx=ctx,
+            lazyframe=EmptyLazyFrame(),
+            model_ref=model_ref,
+        )
+    )
+
+    assert predictions == []
+    assert loaded_bytes == [checkpoint_bytes]
 
 
 @pytest.mark.skip(reason="Requires Prefect flow/task run context for get_run_logger()")

@@ -10,6 +10,12 @@ from proto_stubs.sc.v1 import sample_pb2
 
 __all__ = ["make_class_list_pb", "make_wafer_map_response_pb"]
 
+LEGEND_COLUMN_MAP: dict[str, str] = {
+    "class": "class_number",
+    "bin": "rough_bin",
+    "annotation": "label",
+    "prediction": "predicted_label",
+}
 
 _WAFER_MAP_REQUIRED_COLUMNS = frozenset(
     {
@@ -30,6 +36,7 @@ _WAFER_MAP_REQUIRED_COLUMNS = frozenset(
 def _downsample_df(
     df: pl.DataFrame, x_col: str, y_col: str, grid_size: int
 ) -> pl.DataFrame:
+    """Grid-downsample by keeping one point per grid cell."""
     if grid_size <= 0 or len(df) == 0:
         return df
     return (
@@ -38,6 +45,27 @@ def _downsample_df(
             (pl.col(y_col) // grid_size).alias("_gy"),
         )
         .unique(subset=["_gx", "_gy"], keep="first")
+        .drop(["_gx", "_gy"])
+    )
+
+
+def _downsample_grouped(
+    df: pl.DataFrame,
+    x_col: str,
+    y_col: str,
+    grid_size: int,
+    group_col: str,
+) -> pl.DataFrame:
+    """Keep the first point for each legend group and grid cell."""
+    if grid_size <= 0 or len(df) == 0:
+        return df
+
+    return (
+        df.with_columns(
+            (pl.col(x_col) // grid_size).alias("_gx"),
+            (pl.col(y_col) // grid_size).alias("_gy"),
+        )
+        .unique(subset=[group_col, "_gx", "_gy"], keep="first", maintain_order=True)
         .drop(["_gx", "_gy"])
     )
 
@@ -65,6 +93,7 @@ def _populate_defect_groups(
     df: pl.DataFrame,
     *,
     value_column: str,
+    null_key: str | None = None,
 ) -> None:
     if value_column not in df.columns or len(df) == 0:
         return
@@ -78,6 +107,17 @@ def _populate_defect_groups(
         item = target[str(row[value_column])]
         item.count = len(defect_ids)
         item.defect_ids.extend(defect_ids)
+    if null_key is not None:
+        null_ids = (
+            df.filter(pl.col(value_column).is_null())
+            .select(pl.col("defect_id").cast(pl.Int32))
+            .to_series()
+            .to_list()
+        )
+        if null_ids:
+            item = target[null_key]
+            item.count = len(null_ids)
+            item.defect_ids.extend(null_ids)
 
 
 def make_class_list_pb(df: pl.DataFrame) -> bytes:
@@ -88,8 +128,24 @@ def make_class_list_pb(df: pl.DataFrame) -> bytes:
     msg = sample_pb2.ClassList()
     _populate_defect_groups(msg.class_numbers, df, value_column="class_number")
     _populate_defect_groups(msg.rough_bins, df, value_column="rough_bin")
-    _populate_defect_groups(msg.prediction, df, value_column="predicted_label")
-    _populate_defect_groups(msg.labels, df, value_column="label")
+    _populate_defect_groups(
+        msg.prediction,
+        df,
+        value_column="predicted_label",
+        null_key="__unlabeled__",
+    )
+    _populate_defect_groups(
+        msg.labels,
+        df,
+        value_column="label",
+        null_key="__unlabeled__",
+    )
+    if "test_id" in df.columns:
+        _populate_defect_groups(msg.test_ids, df, value_column="test_id")
+    if "adder" in df.columns:
+        _populate_defect_groups(msg.adders, df, value_column="adder")
+    if "cluster_id" in df.columns:
+        _populate_defect_groups(msg.clusters, df, value_column="cluster_id")
     return msg.SerializeToString()
 
 
@@ -115,6 +171,7 @@ def make_wafer_map_response_pb(
     zoom_w: int | None = None,
     zoom_h: int | None = None,
     map_mode: Literal["wafer", "die", "reticle"] | None = None,
+    group_by: str | None = None,
 ) -> bytes:
     """Build a WaferMapResponse protobuf with wafer/die/reticle point arrays.
 
@@ -165,6 +222,7 @@ def make_wafer_map_response_pb(
 
     msg.reticle_x_die_count = reticle_x_die_count
     msg.reticle_y_die_count = reticle_y_die_count
+    msg.legend_group_by = group_by or ""
 
     n = len(df)
 
@@ -176,9 +234,25 @@ def make_wafer_map_response_pb(
         die_cell = max(1, max(die_size_x, die_size_y) // target_resolution)
         reticle_cell = max(1, max(max_reticle_x, max_reticle_y) // target_resolution)
 
-        wafer_df = _downsample_df(df, "wafer_x", "wafer_y", wafer_cell)
-        die_df = _downsample_df(df, "die_x", "die_y", die_cell)
-        reticle_df = _downsample_df(df, "reticle_x", "reticle_y", reticle_cell)
+        if group_by is not None:
+            group_col = LEGEND_COLUMN_MAP.get(group_by)
+            if group_col is None:
+                raise ValueError(
+                    f"make_wafer_map_response_pb: unknown group_by value "
+                    f"'{group_by}'; must be one of {sorted(LEGEND_COLUMN_MAP)}"
+                )
+            wafer_df = _downsample_grouped(
+                df, "wafer_x", "wafer_y", wafer_cell, group_col
+            )
+            die_df = _downsample_grouped(df, "die_x", "die_y", die_cell, group_col)
+            reticle_df = _downsample_grouped(
+                df, "reticle_x", "reticle_y", reticle_cell, group_col
+            )
+        else:
+            wafer_df = _downsample_df(df, "wafer_x", "wafer_y", wafer_cell)
+            die_df = _downsample_df(df, "die_x", "die_y", die_cell)
+            reticle_df = _downsample_df(df, "reticle_x", "reticle_y", reticle_cell)
+
         msg.is_sampled = True
     else:
         wafer_df = die_df = reticle_df = df

@@ -21,6 +21,10 @@ const props = defineProps<{
   dieSizeX?: number;
   /** Die height (nm). Default 5_000_000. */
   dieSizeY?: number;
+  /** Die grid origin X coordinate (nm). Defaults to centerX for backward compat. */
+  originX?: number;
+  /** Die grid origin Y coordinate (nm). Defaults to centerY for backward compat. */
+  originY?: number;
 }>();
 
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -47,6 +51,8 @@ const dieSizeX = computed(() => props.dieSizeX ?? DEFAULT_DIE_SIZE_X);
 const dieSizeY = computed(() => props.dieSizeY ?? DEFAULT_DIE_SIZE_Y);
 const centerX = computed(() => props.centerX ?? 0);
 const centerY = computed(() => props.centerY ?? 0);
+const originX = computed(() => props.originX ?? centerX.value);
+const originY = computed(() => props.originY ?? centerY.value);
 
 let dieGridData: { x: number; y: number; valid: boolean }[] = [];
 let gridExtent = 0;
@@ -89,10 +95,10 @@ function buildDieGrid() {
   const minY = z ? z.y : centerY.value - waferRadiusNm;
   const maxY = z ? z.y + z.h : centerY.value + waferRadiusNm;
 
-  const ixStart = Math.floor((minX - centerX.value) / dw) - 1;
-  const ixEnd = Math.ceil((maxX - centerX.value) / dw) + 1;
-  const iyStart = Math.floor((minY - centerY.value) / dh) - 1;
-  const iyEnd = Math.ceil((maxY - centerY.value) / dh) + 1;
+  const ixStart = Math.floor((minX - originX.value) / dw) - 1;
+  const ixEnd = Math.ceil((maxX - originX.value) / dw) + 1;
+  const iyStart = Math.floor((minY - originY.value) / dh) - 1;
+  const iyEnd = Math.ceil((maxY - originY.value) / dh) + 1;
 
   gridExtent = Math.max(Math.abs(ixStart), Math.abs(ixEnd), Math.abs(iyStart), Math.abs(iyEnd));
 
@@ -102,8 +108,8 @@ function buildDieGrid() {
   const r = waferRadiusNm;
   for (let ix = ixStart; ix <= ixEnd; ix++) {
     for (let iy = iyStart; iy <= iyEnd; iy++) {
-      const left = centerX.value + ix * dw;
-      const top = centerY.value + iy * dh;
+      const left = originX.value + ix * dw;
+      const top = originY.value + iy * dh;
       const right = left + dw;
       const bottom = top + dh;
 
@@ -200,20 +206,24 @@ function renderBackground() {
       const dw = dieSizeX.value * scale;
       const dh = dieSizeY.value * scale;
       ctx.fillStyle = die.valid ? "#ffffff" : "#9ca3af";
-      ctx.fillRect(Math.round(dx), Math.round(dy - dh), Math.round(dw), Math.round(dh));
+      const left = Math.round(dx);
+      const right = Math.round(dx + dw);
+      const top = Math.round(dy - dh);
+      const bottom = Math.round(dy);
+      ctx.fillRect(left, top, right - left, bottom - top);
     }
 
     ctx.beginPath();
     ctx.strokeStyle = DIE_LINE_COLOR;
     ctx.lineWidth = 1;
 
-    const ixMin = Math.floor((zMinX - centerX.value) / dieSizeX.value);
-    const ixMax = Math.ceil((zMaxX - centerX.value) / dieSizeX.value);
-    const iyMin = Math.floor((zMinY - centerY.value) / dieSizeY.value);
-    const iyMax = Math.ceil((zMaxY - centerY.value) / dieSizeY.value);
+    const ixMin = Math.floor((zMinX - originX.value) / dieSizeX.value);
+    const ixMax = Math.ceil((zMaxX - originX.value) / dieSizeX.value);
+    const iyMin = Math.floor((zMinY - originY.value) / dieSizeY.value);
+    const iyMax = Math.ceil((zMaxY - originY.value) / dieSizeY.value);
 
     for (let ix = ixMin; ix <= ixMax + 1; ix++) {
-      const dataX = centerX.value + ix * dieSizeX.value;
+      const dataX = originX.value + ix * dieSizeX.value;
       const [sx] = dataToScreen(dataX, 0);
       const [, sy1] = dataToScreen(0, zMinY);
       const [, sy2] = dataToScreen(0, zMaxY);
@@ -221,7 +231,7 @@ function renderBackground() {
       ctx.lineTo(Math.round(sx) + 0.5, sy2);
     }
     for (let iy = iyMin; iy <= iyMax + 1; iy++) {
-      const dataY = centerY.value + iy * dieSizeY.value;
+      const dataY = originY.value + iy * dieSizeY.value;
       const [sx1] = dataToScreen(zMinX, 0);
       const [sx2] = dataToScreen(zMaxX, 0);
       const [, sy] = dataToScreen(0, dataY);
@@ -259,7 +269,11 @@ function renderBackground() {
       const dw = dieSizeX.value * scale;
       const dh = dieSizeY.value * scale;
       ctx.fillStyle = die.valid ? "#ffffff" : "#9ca3af";
-      ctx.fillRect(Math.round(dx), Math.round(dy - dh), Math.round(dw), Math.round(dh));
+      const left = Math.round(dx);
+      const right = Math.round(dx + dw);
+      const top = Math.round(dy - dh);
+      const bottom = Math.round(dy);
+      ctx.fillRect(left, top, right - left, bottom - top);
     }
 
     ctx.beginPath();
@@ -267,7 +281,7 @@ function renderBackground() {
     ctx.lineWidth = 1;
 
     for (let ix = -gridExtent; ix <= gridExtent + 1; ix++) {
-      const dataX = centerX.value + ix * dieSizeX.value;
+      const dataX = originX.value + ix * dieSizeX.value;
       const [sx] = dataToScreen(dataX, 0);
       const [, sy1] = dataToScreen(0, zMinY);
       const [, sy2] = dataToScreen(0, zMaxY);
@@ -275,7 +289,7 @@ function renderBackground() {
       ctx.lineTo(Math.round(sx) + 0.5, sy2);
     }
     for (let iy = -gridExtent; iy <= gridExtent + 1; iy++) {
-      const dataY = centerY.value + iy * dieSizeY.value;
+      const dataY = originY.value + iy * dieSizeY.value;
       const [sx1] = dataToScreen(zMinX, 0);
       const [sx2] = dataToScreen(zMaxX, 0);
       const [, sy] = dataToScreen(0, dataY);

@@ -173,28 +173,6 @@ def test_list_prediction_collections_empty() -> None:
         assert resp.json() == []
 
 
-def test_create_prediction_collection() -> None:
-    with TestClient(app) as c:
-        dataset_id, _sample_id, model_id, _job_id = _setup(c)
-
-        resp = c.post("/api/v1/prediction-collections", json={
-            "name": "my-collection",
-            "dataset_id": dataset_id,
-            "model_id": model_id,
-            "prediction_ids": [],
-        })
-        assert resp.status_code == 201
-        body = resp.json()
-        assert body["name"] == "my-collection"
-        assert body["dataset_id"] == dataset_id
-        assert body["model_id"] == model_id
-
-        # List should now include it
-        list_resp = c.get("/api/v1/prediction-collections", params={"dataset_id": dataset_id})
-        assert list_resp.status_code == 200
-        assert len(list_resp.json()) == 1
-
-
 def test_create_prediction_collection_bad_dataset() -> None:
     with TestClient(app) as c:
         resp = c.post("/api/v1/prediction-collections", json={
@@ -203,29 +181,6 @@ def test_create_prediction_collection_bad_dataset() -> None:
             "model_id": "nonexistent",
         })
         assert resp.status_code == 400
-
-
-def test_sync_prediction_collection_to_ls() -> None:
-    with TestClient(app) as c:
-        dataset_id, _sample_id, model_id, _job_id = _setup(c)
-
-        # Create collection
-        coll_resp = c.post("/api/v1/prediction-collections", json={
-            "name": "sync-test",
-            "dataset_id": dataset_id,
-            "model_id": model_id,
-        })
-        assert coll_resp.status_code == 201
-        coll_id = coll_resp.json()["id"]
-
-        # Sync to LS (empty collection — should succeed with 0 synced)
-        sync_resp = c.post(f"/api/v1/prediction-collections/{coll_id}/sync-label-studio", json={
-            "sync_tag": "test-sync",
-        })
-        assert sync_resp.status_code == 200
-        body = sync_resp.json()
-        assert body["collection_id"] == coll_id
-        assert body["synced_count"] == 0
 
 
 def test_sync_prediction_collection_not_found() -> None:

@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-page">
+  <div class="auth-page" :style="themeStyleVars">
     <n-card class="auth-card" title="Create Account" data-testid="register-form">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
         <n-form-item label="Name" path="name">
@@ -49,14 +49,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage, type FormInst, type FormRules } from 'naive-ui'
+import { useMessage, useThemeVars, type FormInst, type FormRules } from 'naive-ui'
 import { useAuthStore } from '@/features/auth/application/store'
 
 const router = useRouter()
 const message = useMessage()
 const authStore = useAuthStore()
+const themeVars = useThemeVars()
+const themeStyleVars = computed(() => ({
+  '--auth-bg-start': themeVars.value.bodyColor,
+  '--auth-bg-mid': themeVars.value.cardColor,
+  '--auth-bg-end': themeVars.value.modalColor,
+  '--auth-shadow': themeVars.value.boxShadow1,
+}))
 
 import { useOrgStore } from '@/features/auth/application/org'
 const orgStore = useOrgStore()
@@ -102,13 +109,13 @@ async function handleSubmit() {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+  background: linear-gradient(135deg, var(--auth-bg-start) 0%, var(--auth-bg-mid) 50%, var(--auth-bg-end) 100%);
 }
 
 .auth-card {
   width: 360px;
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--auth-shadow);
 }
 
 .auth-link {

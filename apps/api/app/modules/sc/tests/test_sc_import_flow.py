@@ -5,6 +5,7 @@ import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import polars as pl
 import pytest
 
 from app.modules.sc.models import PatchSample
@@ -108,7 +109,7 @@ class TestScImportFlow:
                 for i in range(1, 6):
                     yield _mock_patch_sample(str(i))
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 result = asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",
@@ -187,7 +188,7 @@ class TestScImportFlow:
                 for i in range(1, 6):
                     yield _mock_patch_sample(str(i))
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 result = asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",
@@ -226,24 +227,40 @@ class TestScImportFlow:
         assert ctx.datasets.dataset_payload_store is not None
 
     def test_sc_import_passes_offset_to_sparse_upstream(self) -> None:
-        """Sparse flow keeps storage aggregate path and passes offset to upstream."""
+        """Sparse flow keeps storage aggregate path and streams all data for in-memory shuffle."""
 
         class FakeUpstream:
             def __init__(self) -> None:
-                self.offsets: list[int] = []
+                self.list_samples_calls: list[tuple] = []
 
-            def stream(
+            async def list_samples(
                 self,
-                source_inspection_time: str,
-                source_wafer_key: int,
-                offset: int = 0,
+                inspection_time,
+                wafer_key,
+                offset=0,
+                count=None,
+                reticle_size_x=1,
+                reticle_size_y=1,
+                reticle_offset_x=0,
+                reticle_offset_y=0,
             ):
-                self.offsets.append(offset)
-
-                async def _gen():
-                    yield _mock_patch_sample("31")
-
-                return _gen()
+                self.list_samples_calls.append((inspection_time, wafer_key, offset, count))
+                rows = []
+                for i in range(1, 101):
+                    rows.append({
+                        "sample_id": str(i),
+                        "defect_id": str(i),
+                        "inspection_time": "2024-01-15T08:30:00",
+                        "wafer_key": 1,
+                        "wafer_x": i,
+                        "wafer_y": i,
+                        "die_x": 0,
+                        "die_y": 0,
+                        "rough_bin": 1,
+                        "class_number": 1,
+                        "lot_id": "LOT-001",
+                    })
+                return pl.DataFrame(rows).lazy()
 
         class FakeStorage:
             def __init__(self) -> None:
@@ -289,12 +306,35 @@ class TestScImportFlow:
         finally:
             _remove_mock_context()
 
-        assert result == {"dataset_id": "ds-existing", "imported_count": 1}
-        assert upstream.offsets == [30]
-        assert len(storage.rows) == 1
+        assert result["dataset_id"] == "ds-existing"
+        assert result["imported_count"] == 70
+        assert len(upstream.list_samples_calls) == 1
+        assert len(storage.rows) == 70
         ctx.datasets.dataset_storage_factory.open.assert_awaited_once_with(
             "ds-existing", "test-org"
         )
+
+    def test_sc_import_shuffle_reproducible(self) -> None:
+        """Two calls to get_shuffled_ids with the same input produce the same order."""
+        from app.modules.sc.app.services.shuffle import get_shuffled_ids
+
+        all_ids = list(range(1, 101))
+        first = get_shuffled_ids(all_ids)
+        second = get_shuffled_ids(all_ids)
+        assert first == second
+
+    def test_sc_import_no_overlap_with_api(self) -> None:
+        """API slice and worker slice of shuffled IDs have zero intersection."""
+        from app.modules.sc.app.services.shuffle import get_shuffled_ids
+
+        all_ids = list(range(1, 1001))
+        shuffled = get_shuffled_ids(all_ids)
+        api_ids = set(shuffled[:30])
+        worker_ids = set(shuffled[30:])
+        assert api_ids & worker_ids == set()
+        assert len(api_ids) == 30
+        assert len(worker_ids) == 970
+        assert api_ids | worker_ids == set(all_ids)
 
     @pytest.mark.skip(reason="Requires Prefect server infra")
     def test_sc_import_uses_sc_dataset_type(self) -> None:
@@ -329,7 +369,7 @@ class TestScImportFlow:
                 return
                 yield
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",
@@ -376,7 +416,7 @@ class TestScImportFlow:
                 raise Exception("Connection refused")
                 yield
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 result = asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",
@@ -484,7 +524,7 @@ class TestScImportFlow:
                 return
                 yield
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 result = asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",
@@ -556,7 +596,7 @@ class TestScImportFlow:
                 for i in range(1, 4):
                     yield _mock_patch_sample(str(i))
 
-            with pytest.MonkeyPatch.context() as mp:
+            with pytest.MonkeyPatch.context():
                 result = asyncio.run(
                     sc_import(
                         source_inspection_time="2024-01-15T08:30:00",

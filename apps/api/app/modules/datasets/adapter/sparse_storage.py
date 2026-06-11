@@ -514,9 +514,8 @@ class SparseDatasetStorage:
     ) -> dict[str, dict[str, Any]]:
         """Load prediction results, optionally filtered by job_id.
 
-        Predictions are stored as per-shard parquet files under
-        ``datasets/{org_id}/{dataset_id}/predictions/``.  Each shard
-        maps to its source shard via ``shard_index``.
+        Predictions are stored as per-job parquet files under
+        ``datasets/{org_id}/{dataset_id}/predictions/``.
         """
         import pyarrow.parquet as pq
 
@@ -538,10 +537,16 @@ class SparseDatasetStorage:
                 for row in rows:
                     sid = str(row.get("sample_id", ""))
                     if sid:
+                        all_scores = row.get("all_scores")
+                        if isinstance(all_scores, str):
+                            try:
+                                all_scores = _json.loads(all_scores)
+                            except (TypeError, ValueError):
+                                all_scores = None
                         results[sid] = {
                             "predicted_label": str(row.get("predicted_label", "")),
                             "confidence": row.get("confidence"),
-                            "all_scores": row.get("all_scores"),
+                            "all_scores": all_scores,
                             "model_id": str(row.get("model_id", "")),
                             "target": str(row.get("target", "")),
                             "model_version": row.get("model_version"),
@@ -994,9 +999,10 @@ class SparseDatasetStorage:
         model_version: str | None = None,
         batch_size: int = 500,
     ) -> int:
-        """Persist predictions as per-shard parquet files under
-        ``predictions/{job_id}/``, then write a ``job_result.json``
-        manifest after all batches are complete.
+        """Persist predictions as per-job parquet shards.
+
+        Writes ``predictions/{job_id}/{shard_index}.parquet`` followed by a
+        lightweight ``job_result.json`` manifest.
         """
 
         prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/{job_id}/"
@@ -1030,7 +1036,6 @@ class SparseDatasetStorage:
             )
             total += len(batch)
 
-        # Write job_result.json manifest
         manifest_payload = {
             "job_id": job_id,
             "model_id": model_id,
@@ -1055,7 +1060,6 @@ class SparseDatasetStorage:
         model_id: str,
         model_version: str | None,
     ) -> None:
-        import pyarrow as pa
         import pyarrow.parquet as pq
 
         rows: list[dict[str, Any]] = []
@@ -1065,7 +1069,7 @@ class SparseDatasetStorage:
                     "sample_id": r.sample_id,
                     "predicted_label": r.predicted_label,
                     "confidence": r.confidence,
-                    "all_scores": (_json.dumps(r.all_scores) if r.all_scores else None),
+                    "all_scores": _json.dumps(r.all_scores) if r.all_scores else None,
                     "model_id": model_id,
                     "target": r.target,
                     "model_version": model_version,
@@ -1078,9 +1082,8 @@ class SparseDatasetStorage:
         buf = _io.BytesIO()
         pq.write_table(table, buf, compression="snappy")
 
-        shard_key = f"{prefix}{shard_index:04d}.parquet"
         await self._storage.put_bytes(
-            object_name=shard_key,
+            object_name=f"{prefix}{shard_index:04d}.parquet",
             data=buf.getvalue(),
             content_type="application/octet-stream",
         )
@@ -1088,9 +1091,7 @@ class SparseDatasetStorage:
     # ── prediction_summary ──────────────────────────────────────────
 
     async def prediction_summary(self) -> dict:
-        """Read prediction parquet shards from object storage and
-        aggregate total counts, model breakdowns, and label distribution.
-        """
+        """Aggregate prediction parquet shards from object storage."""
         import pyarrow.parquet as pq
 
         prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"

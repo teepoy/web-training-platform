@@ -7,7 +7,7 @@
 import { computed, ref, watch } from "vue";
 import SimpleWaferMap from "./SimpleWaferMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
-import { classColor } from "./scMapUtils";
+import { classColor, getPackedPointIdsInRegion } from "./scMapUtils";
 
 const STRIDE = 6;
 const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
@@ -27,22 +27,28 @@ const props = defineProps<{
   waferRadiusNm?: number;
   geometry?: WaferGeometry | null;
   selectedIds?: Set<number>;
+  highlightDefectIds?: number[];
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
+  queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
 }>();
 
 const emit = defineEmits<{
-  (e: "filter-region", region: { x: number; y: number; w: number; h: number }): void;
+  (e: "selection-change", ids: number[]): void;
   (e: "zoom-in", viewport: { x: number; y: number; w: number; h: number } | null): void;
 }>();
 
 type Mode = "select" | "zoomin";
 const mode = computed(() => props.mode ?? "select");
 
+const isBoxSelecting = ref(false);
+let selectionSeq = 0;
+
 const containerRef = ref<HTMLDivElement | null>(null);
 const overlayRef = ref<HTMLCanvasElement | null>(null);
 
 const waferRadiusNm = computed(() => props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM);
+const pointCount = computed(() => Math.floor((props.points?.length ?? 0) / STRIDE));
 
 const colorMap = computed<Record<string, string>>(() => {
   const pts = props.points;
@@ -171,7 +177,7 @@ function onPointerUp(e: PointerEvent) {
   if (mode.value === "zoomin") {
     emit("zoom-in", { x, y, w: X - x, h: Y - y });
   } else {
-    emit("filter-region", { x, y, w: X - x, h: Y - y });
+    void handleBoxSelect({ x, y, w: X - x, h: Y - y });
   }
 
   dragRect.value = null;
@@ -185,6 +191,27 @@ function drawOverlay() {
   if (!ctx) return;
   if (cvs.width !== _cw || cvs.height !== _ch) { cvs.width = _cw; cvs.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
+
+  // Draw highlight defect IDs as cyan 3x3 dots
+  const highlightPoints =
+    props.fullPoints && props.fullPoints.length > 0 ? props.fullPoints : props.points;
+  if (props.highlightDefectIds && props.highlightDefectIds.length > 0 && highlightPoints) {
+    const highlightSet = new Set(props.highlightDefectIds);
+    const pts = highlightPoints;
+    const count = Math.floor(pts.length / STRIDE);
+    ctx.fillStyle = "#00FFFF";
+    for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+      const defectId = pts[i + 2];
+      if (highlightSet.has(defectId)) {
+        const x = pts[i];
+        const y = pts[i + 1];
+        const sx = (x + _ox) * _s + _cx;
+        const sy = _cy - (y + _oy) * _s;
+        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+      }
+    }
+  }
+
   const r = dragRect.value;
   if (!r) return;
   const fill = mode.value === "zoomin" ? "rgba(34,197,94,0.15)" : "rgba(59,130,246,0.15)";
@@ -197,7 +224,36 @@ function drawOverlay() {
 }
 
 function onDblClick() {
-  if (mode.value === "zoomin" && props.zoom) emit("zoom-in", null);
+  if (mode.value === "zoomin" && props.zoom) {
+    emit("zoom-in", null);
+  } else if (mode.value === "select") {
+    selectionSeq += 1;
+    emit("selection-change", []);
+  }
+}
+
+// ── Box select handler ──
+async function handleBoxSelect(region: { x: number; y: number; w: number; h: number }) {
+  const thisSeq = ++selectionSeq;
+  const immediateIds = getPackedPointIdsInRegion(props.points ?? [], region);
+  const currentIds = props.selectedIds ?? new Set<number>();
+  const merged = new Set([...currentIds, ...immediateIds]);
+  emit("selection-change", [...merged]);
+
+  if (!props.queryBoxSelection) {
+    return;
+  }
+  isBoxSelecting.value = true;
+  try {
+    const ids = await props.queryBoxSelection(region);
+    if (thisSeq !== selectionSeq) return;
+    const next = new Set([...currentIds, ...ids]);
+    if (next.size !== currentIds.size) {
+      emit("selection-change", [...next]);
+    }
+  } finally {
+    isBoxSelecting.value = false;
+  }
 }
 
 // ── Resize ──
@@ -212,6 +268,9 @@ watch(containerRef, (el) => {
 
 watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 
+watch(() => props.highlightDefectIds, () => { drawOverlay(); }, { deep: true });
+watch(() => [props.points, props.fullPoints], () => { drawOverlay(); }, { deep: true });
+
 watch(() => props.geometry, (geo) => {
   console.log("[ScWaferMap] geometry received", geo ?? null);
   recalcTransform();
@@ -221,29 +280,38 @@ watch(() => props.geometry, (geo) => {
 
 <template>
   <div ref="containerRef" class="swm-wrap">
-    <SimpleWaferMap
-      :points="simplePoints"
-      :colorMap="colorMap"
-      :zoom="props.zoom ?? undefined"
-      :center-x="props.geometry?.centerX"
-      :center-y="props.geometry?.centerY"
-      :die-size-x="props.geometry?.dieSizeX"
-      :die-size-y="props.geometry?.dieSizeY"
-    />
-    <canvas
-      ref="overlayRef"
-      class="swm-ol"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-      @pointercancel="onPointerUp"
-      @pointerleave="onPointerUp"
-      @dblclick="onDblClick"
-    />
+    <div v-if="pointCount === 0" class="swm-empty">No points</div>
+    <template v-else>
+      <SimpleWaferMap
+        :points="simplePoints"
+        :colorMap="colorMap"
+        :zoom="props.zoom ?? undefined"
+        :center-x="props.geometry?.centerX"
+        :center-y="props.geometry?.centerY"
+        :origin-x="props.geometry?.originX"
+        :origin-y="props.geometry?.originY"
+        :die-size-x="props.geometry?.dieSizeX"
+        :die-size-y="props.geometry?.dieSizeY"
+      />
+      <canvas
+        ref="overlayRef"
+        class="swm-ol"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+        @pointerleave="onPointerUp"
+        @dblclick="onDblClick"
+      />
+      <div class="swm-footer">{{ pointCount }} points</div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .swm-wrap { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .swm-ol { position: absolute; inset: 0; pointer-events: auto; touch-action: none; z-index: 1; }
+.swm-empty, .swm-footer { padding: 6px; color: #888; font-size: 12px; text-align: center; }
+.swm-empty { margin: auto; }
+.swm-footer { position: absolute; right: 0; bottom: 0; pointer-events: none; }
 </style>

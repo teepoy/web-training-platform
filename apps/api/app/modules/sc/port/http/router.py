@@ -23,6 +23,7 @@ from app.modules.sc.port.http.deps import (
 from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
+    _apply_sample_filters,
     filter_box_defect_ids,
 )
 from app.modules.sc.proto_adapter import (
@@ -32,6 +33,7 @@ from app.modules.sc.proto_adapter import (
 from app.modules.sc.schemas import (
     ScBoxFilterRequest,
     ScBoxFilterResponse,
+    ScFilterParams,
     ScInspectionReviewImagesResponse,
     ScImportRequest,
     ScImportResponse,
@@ -54,11 +56,58 @@ from app.modules.sc.domain.models import (
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
+_SAMPLE_TABLE_COLUMNS = {
+    "defect_id": "defect_id",
+    "rough_bin": "rough_bin",
+    "class_number": "class_number",
+    "test_id": "test_id",
+    "wafer_x": "wafer_x",
+    "wafer_y": "wafer_y",
+    "index_x": "index_x",
+    "index_y": "index_y",
+    "die_x": "index_x",
+    "die_y": "index_y",
+    "size_x": "size_x",
+    "size_y": "size_y",
+    "size_d": "size_d",
+    "area": "area",
+    "final_bin": "final_bin",
+    "manual_bin": "manual_bin",
+    "adder": "adder",
+    "cluster_id": "cluster",
+    "kill_ratio": "kill_ratio",
+}
+
 
 # Inspection API — reads through the SC upstream reader Protocol
 
 
 MAX_INSPECTION_RANGE_DAYS = 365
+
+
+def get_sc_filter_params(
+    class_numbers: Annotated[list[int] | None, Query()] = None,
+    rough_bins: Annotated[list[int] | None, Query()] = None,
+    predictions: Annotated[list[str] | None, Query()] = None,
+    annotations: Annotated[list[str] | None, Query()] = None,
+    test_ids: Annotated[list[int] | None, Query()] = None,
+    adders: Annotated[list[int] | None, Query()] = None,
+    cluster_ids: Annotated[list[int] | None, Query()] = None,
+    legend_group_by: Annotated[
+        Literal["class", "bin", "annotation", "prediction"] | None,
+        Query(),
+    ] = None,
+) -> ScFilterParams:
+    return ScFilterParams(
+        class_numbers=class_numbers,
+        rough_bins=rough_bins,
+        predictions=predictions,
+        annotations=annotations,
+        test_ids=test_ids,
+        adders=adders,
+        cluster_ids=cluster_ids,
+        legend_group_by=legend_group_by,
+    )
 
 
 @router.get("/inspections")
@@ -178,6 +227,7 @@ async def get_inspection_map_points(
     zoom_w: int | None = Query(default=None, alias="zoomW"),
     zoom_h: int | None = Query(default=None, alias="zoomH"),
     mode: Literal["wafer", "die", "reticle"] | None = Query(default=None),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
 ):
     """Unified aggregated map endpoint for Preview mode.
 
@@ -205,6 +255,16 @@ async def get_inspection_map_points(
         reticle_offset_x=reticle_x_die_shift,
         reticle_offset_y=reticle_y_die_shift,
     )
+    samples_lf = _apply_sample_filters(
+        samples_lf,
+        class_number=filters.class_numbers,
+        rough_bin=filters.rough_bins,
+        predicted_label=filters.predictions,
+        label=filters.annotations,
+        test_id=filters.test_ids,
+        adder=filters.adders,
+        cluster_id=filters.cluster_ids,
+    )
     df = await samples_lf.collect_async()
     df = df.with_columns((pl.col("images") > 0).cast(pl.Int32).alias("has_review"))
     body = make_wafer_map_response_pb(
@@ -226,6 +286,7 @@ async def get_inspection_map_points(
         zoom_w=zoom_w,
         zoom_h=zoom_h,
         map_mode=mode,
+        group_by=filters.legend_group_by,
     )
     return Response(content=body, media_type="application/x-protobuf")
 
@@ -247,6 +308,7 @@ async def get_inspection_class_list(
     upstream_reader: ScUpstreamReaderDep,
     inspection_time: str,
     wafer_key: int,
+    filters: ScFilterParams = Depends(get_sc_filter_params),
 ) -> Response:
     insp_dt = _parse_inspection_time(inspection_time)
     inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
@@ -261,11 +323,32 @@ async def get_inspection_class_list(
         offset=0,
         count=1_000_000,
     )
-    df = await samples_lf.select(
-        "defect_id",
-        "class_number",
-        "rough_bin",
-    ).collect_async()
+    samples_lf = _apply_sample_filters(
+        samples_lf,
+        class_number=filters.class_numbers,
+        rough_bin=filters.rough_bins,
+        predicted_label=filters.predictions,
+        label=filters.annotations,
+        test_id=filters.test_ids,
+        adder=filters.adders,
+        cluster_id=filters.cluster_ids,
+    )
+    columns = set(samples_lf.collect_schema().names())
+    class_list_columns = [
+        column
+        for column in (
+            "defect_id",
+            "class_number",
+            "rough_bin",
+            "predicted_label",
+            "label",
+            "test_id",
+            "adder",
+            "cluster_id",
+        )
+        if column in columns
+    ]
+    df = await samples_lf.select(class_list_columns).collect_async()
     return Response(
         content=make_class_list_pb(df),
         media_type="application/x-protobuf",
@@ -338,6 +421,7 @@ async def get_sc_dataset_plot_points(
     reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
     reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
     reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
 ) -> Response:
     try:
         body = await service.build_plot_points_response(
@@ -349,6 +433,14 @@ async def get_sc_dataset_plot_points(
             reticle_y_die_count=reticle_y_die_count,
             reticle_x_die_shift=reticle_x_die_shift,
             reticle_y_die_shift=reticle_y_die_shift,
+            legend_group_by=filters.legend_group_by,
+            class_numbers=filters.class_numbers,
+            rough_bins=filters.rough_bins,
+            predictions=filters.predictions,
+            annotations=filters.annotations,
+            test_ids=filters.test_ids,
+            adders=filters.adders,
+            cluster_ids=filters.cluster_ids,
         )
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -375,9 +467,20 @@ async def get_sc_dataset_class_list(
     service: ScPlotPointsServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
 ) -> Response:
     try:
-        body = await service.build_class_list_response(dataset_id, org.id)
+        body = await service.build_class_list_response(
+            dataset_id,
+            org.id,
+            class_numbers=filters.class_numbers,
+            rough_bins=filters.rough_bins,
+            predictions=filters.predictions,
+            annotations=filters.annotations,
+            test_ids=filters.test_ids,
+            adders=filters.adders,
+            cluster_ids=filters.cluster_ids,
+        )
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ScPlotPointsRejectedError as exc:
@@ -477,6 +580,8 @@ async def get_inspection_sample_table_rows(
     defect_ids = payload.defect_ids
     page = payload.page
     page_size = payload.page_size
+    filter_params = payload.filter
+    sort_params = payload.sort
 
     requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
     requested_set = set(requested) if requested else None
@@ -493,29 +598,81 @@ async def get_inspection_sample_table_rows(
         samples_df = samples_df.filter(
             pl.col("defect_id").cast(pl.Utf8).is_in(requested_set)
         )
-        total_matched = len(samples_df)
-        page_df = samples_df.slice(page * page_size, page_size)
     else:
-        total_matched = inspection.defects
         samples_lf = await upstream_reader.list_samples(
             insp_dt,
             wafer_key,
-            offset=page * page_size,
-            count=page_size,
+            offset=0,
+            count=inspection.defects,
         )
-        page_df = await samples_lf.collect_async()
+        samples_df = await samples_lf.collect_async()
+
+    if filter_params:
+        for field, filter_value in filter_params.items():
+            col = _SAMPLE_TABLE_COLUMNS.get(field)
+            if col is None or col not in samples_df.columns:
+                continue
+            if filter_value.operator == "in":
+                values = [
+                    str(value) if field == "defect_id" else value
+                    for value in filter_value.values
+                ]
+                samples_df = samples_df.filter(
+                    pl.col(col).cast(pl.Utf8).is_in(values)
+                    if field == "defect_id"
+                    else pl.col(col).is_in(values)
+                )
+            else:
+                samples_df = samples_df.filter(
+                    (pl.col(col) >= filter_value.min)
+                    & (pl.col(col) <= filter_value.max)
+                )
+
+    if sort_params:
+        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
+        if sort_field is not None and sort_field in samples_df.columns:
+            samples_df = samples_df.sort(
+                sort_field, descending=(sort_params.direction == "desc")
+            )
+    elif requested is not None:
+        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
+        samples_df = (
+            samples_df.with_columns(
+                pl.col("defect_id")
+                .cast(pl.Utf8)
+                .replace_strict(request_order, default=len(request_order))
+                .alias("_request_order")
+            )
+            .sort("_request_order")
+            .drop("_request_order")
+        )
+
+    total_matched = len(samples_df)
+    page_df = samples_df.slice(page * page_size, page_size)
     matched: list[ScSampleTableRow] = [
         ScSampleTableRow(
             defect_id=str(row["defect_id"]),
             rough_bin=row["rough_bin"],
-            class_number=row.get("class_number"),
+            class_number=row["class_number"],
+            test_id=row["test_id"],
+            wafer_x=row["wafer_x"],
+            wafer_y=row["wafer_y"],
+            index_x=row["index_x"],
+            index_y=row["index_y"],
+            adder=row["adder"],
+            cluster_id=row["cluster"],
+            die_x=row["index_x"],
+            die_y=row["index_y"],
+            size_x=row["size_x"],
+            size_y=row["size_y"],
+            size_d=row["size_d"],
+            area=row["area"],
+            final_bin=row["final_bin"],
+            manual_bin=row["manual_bin"],
+            kill_ratio=row["kill_ratio"],
         )
         for row in page_df.to_dicts()
     ]
-
-    if requested is not None:
-        order_map = {row.defect_id: row for row in matched}
-        matched = [order_map[did] for did in requested if did in order_map]
 
     return ScSampleTableRowsResponse(items=matched, total=total_matched)
 

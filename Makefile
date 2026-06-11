@@ -15,7 +15,19 @@ API_PORT    ?= 8000
 API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
-COMPOSE_PROD := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
+COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
+
+# ──────────────────────────────────────────────
+# Production split-stack (infra/compose/production/)
+# ──────────────────────────────────────────────
+PROD_NETWORK                ?= finetune-prod
+PROD_STATEFUL_ENV           ?= /srv/finetune/stateful/.env
+PROD_PLATFORM_ENV           ?= /srv/finetune/platform/.env
+PROD_OBSERVABILITY_ENV      ?= /srv/finetune/observability/.env
+COMPOSE_PROD_STATEFUL       := infra/compose/production/compose.stateful.yaml
+COMPOSE_PROD_PLATFORM       := infra/compose/production/compose.platform.yaml
+COMPOSE_PROD_OPS            := infra/compose/production/compose.ops.yaml
+COMPOSE_PROD_OBSERVABILITY  := infra/compose/production/compose.observability.yaml
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 LITELLM_LOCAL_MODEL_COST_MAP="True"
@@ -211,7 +223,7 @@ seed-dev: seed-wafer-mock ## Seed dev demo data (wafer-demo + mock SQLite, dev-n
 seed-wafer-mock: ## Seed mock wafer inspection SQLite database (100K defects)
 	cd apps/api && uv run python -m app.modules.sc.adapter._wafer_mock.seed mass \
 		--db-url "sqlite:///wafer_inspection.db" \
-		--defects 100000 --imaged 100 --images-per 5 --reset
+		--defects 1000000 --imaged 100 --images-per 5 --reset
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
@@ -276,7 +288,7 @@ up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
 	docker compose -f $(COMPOSE_DEV) up -d
 
 .PHONY: up-prod
-up-prod: ## Start compose prod stack (no mounts, uvicorn --workers, nginx serve)
+up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-compose.prod.yaml)
 	docker compose -f $(COMPOSE_PROD) up -d
 
 .PHONY: build-dev
@@ -284,7 +296,7 @@ build-dev: ## Build all dev-target Docker images
 	docker compose -f $(COMPOSE_DEV) build
 
 .PHONY: build-prod
-build-prod: ## Build all prod-target Docker images
+build-prod: ## Build all prod-target Docker images (local validation stack)
 	docker compose -f $(COMPOSE_PROD) build
 
 .PHONY: logs-dev
@@ -292,17 +304,12 @@ logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS)
 
 .PHONY: logs-prod
-logs-prod: ## Tail prod compose logs (usage: make logs-prod ARGS="api")
+logs-prod: ## Tail local prod validation stack logs (usage: make logs-prod ARGS="api")
 	docker compose -f $(COMPOSE_PROD) logs -f $(ARGS)
 
 .PHONY: build
 build: ## Build all dev-target Docker images (use build-dev/build-prod explicitly)
 	docker compose -f $(COMPOSE_DEV) build
-
-.PHONY: prod
-prod: ## [DEPRECATED] Use `make up-prod` instead. Redirects to prod mode.
-	@echo "⚠️  'make prod' is deprecated. Use 'make up-prod' instead." >&2
-	@$(MAKE) up-prod
 
 .PHONY: export-bundle
 export-bundle: ## Export source snapshot and docker images to a tar bundle
@@ -391,13 +398,77 @@ db-migrate-compose: ## Run Alembic migrations inside Compose API container (dev 
 	docker compose -f $(COMPOSE_DEV) run --rm api /bin/sh -lc 'cd /app/apps/api && /app/.venv/bin/alembic upgrade head'
 
 .PHONY: down
-down: ## Stop all compose stacks (dev + prod)
+down: ## Stop dev compose stack only
 	@docker compose -f $(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
-	@docker compose -f $(COMPOSE_PROD) down --remove-orphans 2>/dev/null || true
 
 .PHONY: logs
 logs: ## Tail dev compose logs (use logs-dev/logs-prod explicitly)
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS) -n 1000
+
+# ──────────────────────────────────────────────
+# Production split-stack targets
+# ──────────────────────────────────────────────
+
+.PHONY: create-prod-network
+create-prod-network: ## Create the shared finetune-prod Docker network
+	@docker network create $(PROD_NETWORK) 2>/dev/null || true
+
+.PHONY: up-prod-stateful
+up-prod-stateful: ## Start production stateful data plane (postgres, minio, redis, label-studio)
+	docker compose --env-file $(PROD_STATEFUL_ENV) -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) up -d
+
+.PHONY: down-prod-stateful
+down-prod-stateful: ## Stop production stateful data plane
+	@docker compose -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) down --remove-orphans 2>/dev/null || true
+
+.PHONY: logs-prod-stateful
+logs-prod-stateful: ## Tail production stateful logs (usage: make logs-prod-stateful ARGS="postgres")
+	docker compose -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) logs -f $(ARGS)
+
+.PHONY: up-prod-platform
+up-prod-platform: ## Start production app platform (prefect-server, api, web, workers)
+	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) up -d
+
+.PHONY: down-prod-platform
+down-prod-platform: ## Stop production app platform
+	@docker compose -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) down --remove-orphans 2>/dev/null || true
+
+.PHONY: logs-prod-platform
+logs-prod-platform: ## Tail production platform logs (usage: make logs-prod-platform ARGS="api")
+	docker compose -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) logs -f $(ARGS)
+
+.PHONY: up-prod-ops
+up-prod-ops: ## Run production ops one-shots (migrate + deployments) — requires platform env
+	@echo "Running production ops (migrate + deployments)..."
+	$(MAKE) db-migrate-prod && $(MAKE) deployments-prod
+
+.PHONY: db-migrate-prod
+db-migrate-prod: ## Run Alembic migrations in production (one-shot)
+	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm migrate
+
+.PHONY: deployments-prod
+deployments-prod: ## Apply Prefect deployments in production (one-shot)
+	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm deployments
+
+.PHONY: up-prod-observability
+up-prod-observability: ## Start production observability stack (prometheus, grafana, loki, ...)
+	docker compose --env-file $(PROD_OBSERVABILITY_ENV) -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) up -d
+
+.PHONY: down-prod-observability
+down-prod-observability: ## Stop production observability stack
+	@docker compose -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) down --remove-orphans 2>/dev/null || true
+
+.PHONY: logs-prod-observability
+logs-prod-observability: ## Tail production observability logs (usage: make logs-prod-observability ARGS="prometheus")
+	docker compose -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) logs -f $(ARGS)
+
+.PHONY: up-prod-all
+up-prod-all: ## Start stateful + platform + observability (with 60s sleep between stateful and platform)
+	$(MAKE) up-prod-stateful
+	@echo "Waiting 60s for stateful services to be ready..."
+	@sleep 60
+	$(MAKE) up-prod-platform
+	$(MAKE) up-prod-observability
 
 .PHONY: save-images
 save-images: ## Save all compose Docker images as .tar archives
@@ -430,4 +501,8 @@ help: ## Show this help message
 	@printf '  \033[36m%-16s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stuck timeout for stack dumps in seconds (default: 60)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "ARGS" "Extra args passed to test/ftctl/logs"
 	@printf '  \033[36m%-16s\033[0m %s\n' "MSG" "Alembic revision message"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_NETWORK" "Shared Docker network for production split stack (default: finetune-prod)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_STATEFUL_ENV" "Path to stateful .env file (default: /srv/finetune/stateful/.env)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_PLATFORM_ENV" "Path to platform .env file (default: /srv/finetune/platform/.env)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_OBSERVABILITY_ENV" "Path to observability .env file (default: /srv/finetune/observability/.env)"
 	@echo

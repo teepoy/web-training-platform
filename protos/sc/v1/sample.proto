@@ -107,6 +107,9 @@ message WaferMapResponse {
   int32 reticle_y_die_count = 8;
   // True when point arrays contain grid-downsampled data (total still reports full count)
   bool is_sampled = 9;
+  // Active grouping dimension for frontend legend rendering.
+  // Empty string means default grouping (class_number).
+  string legend_group_by = 10;
 }
 
 message DefectList {
@@ -119,6 +122,9 @@ message ClassList {
   map<string, DefectList> rough_bins = 2;
   map<string, DefectList> prediction = 3;
   map<string, DefectList> labels = 4;
+  map<string, DefectList> test_ids = 5;
+  map<string, DefectList> adders = 6;
+  map<string, DefectList> clusters = 7;
 }
 
 // InspectionSummaryResponse 被移除。使用 正常 restful json response

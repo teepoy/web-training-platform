@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -31,7 +30,7 @@ class ScUpstreamReader(Protocol):
         inspection_time: datetime,
         wafer_key: int,
         offset: int = 0,
-        count: int = 50,
+        count: int | None = None,
         reticle_size_x: int = 1,
         reticle_size_y: int = 1,
         reticle_offset_x: int = 0,
@@ -53,18 +52,3 @@ class ScUpstreamReader(Protocol):
         reticle_offset_x: int = 0,
         reticle_offset_y: int = 0,
     ) -> pl.LazyFrame: ...
-
-    def stream(
-        self,
-        source_inspection_time: str,
-        source_wafer_key: int,
-        offset: int = 0,
-    ) -> AsyncIterator[pl.DataFrame]:
-        """Return an async iterator over DataFrame chunks.
-
-        Implementations must return a synchronous callable that produces
-        an ``AsyncIterator`` (e.g. a generator-based async iterator).
-        ``offset`` skips the first N upstream rows in deterministic stream
-        order.
-        """
-        ...

@@ -48,9 +48,7 @@ async def yolo_sc_train(
         raise ValueError("no lazyframe provided for training")
 
     label_space: list[str] = list(ctx.dataset_ref.label_space)
-    label_map: dict[str, int] = {
-        label: idx for idx, label in enumerate(label_space)
-    }
+    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
 
     # ── Device selection ──────────────────────────────────────────────
     if torch.cuda.is_available():
@@ -100,9 +98,7 @@ async def yolo_sc_train(
 
             sample_count += 1
             if sample_count % 500 == 0:
-                logger.info(
-                    "YOLO SC dataset build: %d samples prepared", sample_count
-                )
+                logger.info("YOLO SC dataset build: %d samples prepared", sample_count)
 
         if sample_count == 0:
             raise ValueError("no valid defective images with labels found in LazyFrame")
@@ -136,27 +132,14 @@ async def yolo_sc_train(
             best_pt_path = os.path.join(tmpdir, "train_run", "weights", "last.pt")
 
         with open(best_pt_path, "rb") as fh:
-            model_bytes = fh.read()
-
-        checkpoint: dict[str, Any] = {
-            "model_bytes": model_bytes,
-            "num_classes": num_classes,
-            "labels": labels,
-            "label_to_idx": label_to_idx,
-            "architecture": "yolov8n-cls",
-            "framework": "ultralytics",
-            "created_at": datetime.now(UTC).isoformat(),
-        }
-        buf = io.BytesIO()
-        torch.save(checkpoint, buf)
-        buf.seek(0)
+            checkpoint_bytes = fh.read()
 
         checkpoint_object = f"models/{ctx.job_id}/checkpoint.pt"
         metrics_object = f"models/{ctx.job_id}/metrics.json"
 
         model_uri = await artifact_storage.put_bytes(
             object_name=checkpoint_object,
-            data=buf.read(),
+            data=checkpoint_bytes,
             content_type="application/octet-stream",
         )
 
@@ -201,6 +184,9 @@ async def yolo_sc_train(
                 "framework": "ultralytics",
                 "architecture": "yolov8n-cls",
                 "trained_samples": sample_count,
+                "label_space": labels,
+                "label_to_idx": label_to_idx,
+                "created_at": datetime.now(UTC).isoformat(),
             },
         )
 

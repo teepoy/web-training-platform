@@ -13,10 +13,8 @@ import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
-from uuid import uuid4
 
 from prefect import flow, get_run_logger, task
-from pydantic import BaseModel
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -29,6 +27,9 @@ from platform_runtime.contracts import (
 
 from app.composition import AppContainer, build_flow_container
 from app.core.config import load_config
+from app.modules.datasets.domain.sample_row import (
+    PredictionResult as StoragePredictionResult,
+)
 from app.modules.prediction.flows._predictors import get_predictor
 
 from app.shared.api.schemas import (
@@ -45,7 +46,6 @@ from app.shared.db.models import (
     AnnotationORM,
     ArtifactORM,
     DatasetORM,
-    PlatformPredictionORM,
     PredictionEventORM,
     PredictionJobORM,
     SampleFeatureORM,
@@ -54,20 +54,6 @@ from app.shared.db.models import (
 )
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-
-
-class PredictionResult(BaseModel):
-    id: str | None = None
-    sample_id: str
-    predicted_label: str
-    confidence: float | None
-    all_scores: dict[str, float] | None = None
-    model_id: str | None = None
-    target: str | None = None
-    model_version: str | None = None
-    job_id: str | None = None
-    created_at: datetime | None = None
-    error: str | None = None
 
 
 @dataclass
@@ -169,32 +155,6 @@ class PredictionRepository:
                 )
             )
             await session.commit()
-
-    async def create_platform_prediction(
-        self, result: PredictionResult, *, org_id: str, dataset_id: str
-    ) -> PredictionResult:
-        async with self.session_factory() as session:
-            row = PlatformPredictionORM(
-                id=result.id or str(uuid4()),
-                org_id=org_id,
-                dataset_id=dataset_id,
-                sample_id=result.sample_id,
-                model_id=result.model_id or "",
-                target=result.target or "image_classification",
-                job_id=result.job_id,
-                model_version=result.model_version,
-                predicted_label=result.predicted_label,
-                confidence=result.confidence,
-                all_scores_json=result.all_scores,
-                error=result.error,
-                created_by="system",
-                created_at=result.created_at or datetime.now(UTC),
-            )
-            session.add(row)
-            await session.commit()
-            return result.model_copy(
-                update={"id": row.id, "created_at": row.created_at}
-            )
 
     async def get_sample_feature(self, sample_id: str) -> SampleFeature | None:
         async with self.session_factory() as session:
@@ -484,12 +444,21 @@ async def persist_chunk_results(
         if model is None:
             logger.error("persist_chunk_results: model not found model_id=%s", model_id)
             raise ValueError(f"Model not found: {model_id}")
+        if model.dataset_id is None:
+            raise ValueError(f"Model has no dataset: {model_id}")
+        factory = DatasetStorageFactory(
+            repo=sql_repo,
+            storage=container.artifact_storage,
+            payload_store=container.dataset_payload_store,
+            ls_client=container.label_studio_client,
+            session_factory=container.session_factory,
+        )
+        storage_agg = await factory.open(model.dataset_id, org_id=org_id)
         outcome = await _persist_worker_results(
             repo=repo,
-            sql_repo=sql_repo,
+            storage_agg=storage_agg,
             job_id=job_id,
             model=model,
-            org_id=org_id,
             target=target,
             model_version=model_version,
             sample_ids=sample_ids,
@@ -510,10 +479,9 @@ async def persist_chunk_results(
 async def _persist_worker_results(
     *,
     repo: PredictionRepository,
-    sql_repo: SqlRepository,
+    storage_agg: Any,
     job_id: str,
     model: Model,
-    org_id: str,
     target: str,
     model_version: str | None,
     sample_ids: list[str],
@@ -524,13 +492,15 @@ async def _persist_worker_results(
     successful = 0
     failed = 0
     predictions: list[dict[str, Any]] = []
-    for sample_id in sample_ids:
-        sample = await sql_repo.get_sample(sample_id)
+    storage_results: list[StoragePredictionResult] = []
+    samples = await storage_agg.get_samples_batch(sample_ids)
+    for sample_id, sample in zip(sample_ids, samples, strict=True):
         if sample is None:
             failed += 1
             continue
         worker_result = worker_by_sample.get(
-            sample.id, {"sample_id": sample.id, "error": "missing worker result"}
+            sample.sample_id,
+            {"sample_id": sample.sample_id, "error": "missing worker result"},
         )
         confidence_raw = worker_result.get("confidence")
         confidence = (
@@ -543,8 +513,8 @@ async def _persist_worker_results(
             else None
         )
         runtime_error = worker_result.get("error")
-        result = PredictionResult(
-            sample_id=sample.id,
+        result = StoragePredictionResult(
+            sample_id=sample.sample_id,
             predicted_label=(str(worker_result.get("label", "")) or "embedding")
             if target == "embedding"
             else str(worker_result.get("label", "")),
@@ -556,14 +526,35 @@ async def _persist_worker_results(
             job_id=job_id,
             error=str(runtime_error) if runtime_error else None,
         )
-        stored = await repo.create_platform_prediction(
-            result, org_id=org_id, dataset_id=sample.dataset_id
+        storage_results.append(result)
+        predictions.append(
+            {
+                "sample_id": result.sample_id,
+                "predicted_label": result.predicted_label,
+                "confidence": result.confidence,
+                "all_scores": result.all_scores,
+                "model_id": result.model_id,
+                "target": result.target,
+                "model_version": result.model_version,
+                "job_id": result.job_id,
+                "error": result.error,
+            }
         )
-        predictions.append(stored.model_dump(mode="json"))
-        if stored.error:
+        if result.error:
             failed += 1
         else:
             successful += 1
+
+    async def result_stream():
+        for result in storage_results:
+            yield result
+
+    await storage_agg.write_predictions(
+        result_stream(),
+        job_id=job_id,
+        model_id=model.id,
+        model_version=version_tag,
+    )
     await repo.add_prediction_event(
         PredictionEvent(
             job_id=job_id,
@@ -668,69 +659,65 @@ async def _run_prediction_job_with_container(
         "started_at": datetime.now(UTC).isoformat(),
         "model_version": model_version or f"model-{model_id[:8]}",
     }
-    await repo.update_prediction_job_status(
-        job_id, JobStatus.RUNNING, summary=summary
-    )
+    await repo.update_prediction_job_status(job_id, JobStatus.RUNNING, summary=summary)
 
-    for pred in predictor_fn(
-        artifact_storage=container.artifact_storage,
-        ctx=ctx,
-        lazyframe=lf,
-        model_ref=model_ref,
-    ):
-        sample_id = str(pred.get("sample_id", ""))
-        confidence_raw = pred.get("confidence")
-        confidence = (
-            float(confidence_raw)
-            if isinstance(confidence_raw, int | float)
-            else None
-        )
-        scores = pred.get("scores")
-        all_scores = (
-            {str(k): float(v) for k, v in scores.items()}
-            if isinstance(scores, dict)
-            else None
-        )
-        result = PredictionResult(
-            sample_id=sample_id,
-            predicted_label=str(pred.get("label", "")),
-            confidence=confidence,
-            all_scores=all_scores,
-            model_id=model.id,
-            target=target,
-            model_version=model_version,
-            job_id=job_id,
-            error=pred.get("error"),
-        )
-        try:
-            stored = await repo.create_platform_prediction(
-                result, org_id=org_id, dataset_id=dataset_id
+    async def prediction_results():
+        for pred in predictor_fn(
+            artifact_storage=container.artifact_storage,
+            ctx=ctx,
+            lazyframe=lf,
+            model_ref=model_ref,
+        ):
+            sample_id = str(pred.get("sample_id", ""))
+            confidence_raw = pred.get("confidence")
+            confidence = (
+                float(confidence_raw)
+                if isinstance(confidence_raw, int | float)
+                else None
             )
-            if stored.error:
+            scores = pred.get("scores")
+            all_scores = (
+                {str(k): float(v) for k, v in scores.items()}
+                if isinstance(scores, dict)
+                else None
+            )
+            result = StoragePredictionResult(
+                sample_id=sample_id,
+                predicted_label=str(pred.get("label", "")),
+                confidence=confidence,
+                all_scores=all_scores,
+                model_id=model.id,
+                target=target,
+                model_version=summary["model_version"],
+                job_id=job_id,
+                error=pred.get("error"),
+            )
+            if result.error:
                 summary["failed"] += 1
                 logger.warning(
                     "prediction failed for sample %s: %s",
                     sample_id,
-                    stored.error,
+                    result.error,
                 )
             else:
                 summary["successful"] += 1
-        except Exception as exc:
-            summary["failed"] += 1
-            logger.error(
-                "persist prediction failed for sample %s: %s",
-                sample_id,
-                exc,
-            )
-        summary["processed"] += 1
-        if summary["processed"] % 50 == 0:
-            logger.info(
-                "prediction progress: %d/%d (ok=%d fail=%d)",
-                summary["processed"],
-                summary["total_samples"],
-                summary["successful"],
-                summary["failed"],
-            )
+            summary["processed"] += 1
+            if summary["processed"] % 50 == 0:
+                logger.info(
+                    "prediction progress: %d/%d (ok=%d fail=%d)",
+                    summary["processed"],
+                    summary["total_samples"],
+                    summary["successful"],
+                    summary["failed"],
+                )
+            yield result
+
+    await storage_agg.write_predictions(
+        prediction_results(),
+        job_id=job_id,
+        model_id=model.id,
+        model_version=summary["model_version"],
+    )
 
     summary["completed_at"] = datetime.now(UTC).isoformat()
     await repo.update_prediction_job_status(

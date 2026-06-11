@@ -45,6 +45,7 @@ dependencies = [
   "polars>=1.0.0",
   "redis>=5.0",
   "nest-asyncio>=1.6.0",
+  "async-lru>=2.3.0",
 ]
 
 [project.optional-dependencies]

@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ScSampleTableRowClassNumber = number | null;
+export type ScSampleTableSetFilterValuesItem = number | string;

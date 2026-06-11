@@ -31,11 +31,6 @@ import type { Trainer } from "@/shared/api/types";
 import type { TrainingJob } from "@/generated/orval/models";
 import { fetchScPlotPoints } from "../api/plotPoints";
 import { fetchScDatasetClassList } from "../api/classList";
-import {
-  fetchScDatasetBoxFilter,
-  type ScBoxRegion,
-  type ScMapMode,
-} from "../api/boxFilter";
 import type { ClassList } from "../generated/proto/sc/v1/sample_pb";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
@@ -189,9 +184,13 @@ export interface ReclassifyPageState {
   setActiveMapTab: (mode: MapMode) => void;
   setMapZoom: (viewport: MapViewport | null) => void;
   waferDisplay: ComputedRef<number[]>;
-  waferFilterIds: Ref<string[] | null>;
-  mapFilterCount: ComputedRef<number>;
-  applyMapBoxFilter: (mode: ScMapMode, region: ScBoxRegion) => Promise<void>;
+  mapFilter: Ref<Record<string, (number|string)[]>>;
+  legendGroupBy: Ref<string | null>;
+  activeFilterCount: ComputedRef<number>;
+  handleMapFilterChange: (filter: Record<string, (number|string)[]>) => void;
+  handleLegendGroupByChange: (source: string | null) => void;
+  clearMapFilter: () => void;
+  handleBoxSelectionChange: (ids: number[]) => void;
   selectedDefectIds: ComputedRef<Set<string>>;
   mapSelectedDefectIds: ComputedRef<Set<number>>;
   selectedCount: ComputedRef<number>;
@@ -324,11 +323,11 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Dataset-scoped samples (SC patch_image_v1 view) ────────────────
 
   const pageSize = 200;
-  const waferFilterIds = ref<string[] | null>(null);
-  const sampleFilterKey = computed(() =>
-    waferFilterIds.value?.length
-      ? [...waferFilterIds.value].sort().join(",")
-      : "",
+
+  const mapFilter = ref<Record<string, (number|string)[]>>({});
+  const legendGroupBy = ref<string | null>(null);
+  const activeFilterCount = computed(
+    () => Object.values(mapFilter.value).filter((v) => v && v.length > 0).length,
   );
 
   const reticleOptionsState = ref<ReticleMapOptions>({
@@ -340,13 +339,24 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const plotPointsQuery = useQuery({
     queryKey: computed(() => ["sc", "plot-points", datasetId.value]),
-    queryFn: () => fetchScPlotPoints(datasetId.value, reticleOptions.value),
+    queryFn: () =>
+      fetchScPlotPoints(
+        datasetId.value,
+        reticleOptions.value,
+        mapFilter.value,
+        legendGroupBy.value ?? undefined,
+      ),
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
   });
   const classListQuery = useQuery({
     queryKey: computed(() => ["sc", "class-list", datasetId.value]),
-    queryFn: () => fetchScDatasetClassList(datasetId.value),
+    queryFn: () =>
+      fetchScDatasetClassList(
+        datasetId.value,
+        mapFilter.value,
+        legendGroupBy.value ?? undefined,
+      ),
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
   });
@@ -357,7 +367,6 @@ export function useReclassifyPage(): ReclassifyPageState {
       "sc",
       "view-samples-paged",
       datasetId.value,
-      sampleFilterKey.value,
     ]),
     initialPageParam: 0,
     queryFn: async ({ pageParam }: { pageParam: number }) => {
@@ -368,7 +377,6 @@ export function useReclassifyPage(): ReclassifyPageState {
           {
             offset: pageParam,
             limit: pageSize,
-            sampleIds: sampleFilterKey.value || undefined,
           },
         );
       return (resp.data ?? { items: [], total: 0 }) as ScViewRowsPage;
@@ -686,30 +694,36 @@ export function useReclassifyPage(): ReclassifyPageState {
   );
   const reticleMapError = computed<string | null>(() => null);
 
-  // ── Wafer filter state (keyed by defectId string) ──────────────────
+  // ── Map filter + selection state ─────────────────────────────────────
 
   const filteredScSamples = computed<ReclassifySample[]>(() => scSamples.value);
-  const mapFilterCount = computed(() => waferFilterIds.value?.length ?? 0);
 
-  async function applyMapBoxFilter(
-    mode: ScMapMode,
-    region: ScBoxRegion,
-  ): Promise<void> {
-    try {
-      const result = await fetchScDatasetBoxFilter(
-        datasetId.value,
-        mode,
-        region,
-        reticleOptions.value,
-      );
-      const next = new Set(waferFilterIds.value ?? []);
-      for (const defectId of result.defect_ids) next.add(defectId);
-      waferFilterIds.value = next.size > 0 ? [...next] : null;
-    } catch (error) {
-      message.error(
-        (error as Error)?.message ?? "Failed to filter samples by map box",
-      );
-    }
+  function handleMapFilterChange(filter: Record<string, (number|string)[]>): void {
+    mapFilter.value = filter;
+    void Promise.all([
+      plotPointsQuery.refetch(),
+      classListQuery.refetch(),
+    ]);
+  }
+
+  function handleLegendGroupByChange(source: string | null): void {
+    legendGroupBy.value = source;
+    void Promise.all([
+      plotPointsQuery.refetch(),
+      classListQuery.refetch(),
+    ]);
+  }
+
+  function clearMapFilter(): void {
+    mapFilter.value = {};
+    void Promise.all([
+      plotPointsQuery.refetch(),
+      classListQuery.refetch(),
+    ]);
+  }
+
+  function handleBoxSelectionChange(ids: number[]): void {
+    reclassifyStore.setSelectedDefectIds(datasetId.value, ids.map(String));
   }
 
   // ── Selection state (Blink table box-selection, separate from filter) ─
@@ -720,7 +734,9 @@ export function useReclassifyPage(): ReclassifyPageState {
   const mapSelectedDefectIds = computed(
     () =>
       new Set(
-        (waferFilterIds.value ?? []).map(Number).filter(Number.isFinite),
+        [...selectedDefectIds.value]
+          .map(Number)
+          .filter(Number.isFinite),
       ),
   );
 
@@ -965,7 +981,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     const sampled = data.items.map((row) => String(row.defect_id));
     if (sampled.length === 0) return;
 
-    waferFilterIds.value = sampled;
+    reclassifyStore.setSelectedDefectIds(datasetId.value, sampled);
 
     if (assignDefaultDraftLabel.value) {
       const firstLabel = effectiveLabels.value[0];
@@ -1065,18 +1081,27 @@ export function useReclassifyPage(): ReclassifyPageState {
 
             if (pStatus === "completed") {
               trainPredictStatusMessage.value = "";
-              void queryClient.invalidateQueries({
-                queryKey: [
-                  "api",
-                  "v1",
-                  "datasets",
-                  datasetId.value,
-                  "latest-predictions",
-                ],
-              });
-              void queryClient.invalidateQueries({
-                queryKey: ["sc", "class-list", datasetId.value],
-              });
+              await Promise.all([
+                queryClient.refetchQueries({
+                  queryKey: [
+                    "api",
+                    "v1",
+                    "datasets",
+                    datasetId.value,
+                    "latest-predictions",
+                  ],
+                }),
+                queryClient.refetchQueries({
+                  queryKey: ["sc", "class-list", datasetId.value],
+                }),
+                queryClient.refetchQueries({
+                  queryKey: [
+                    "sc",
+                    "view-annotations-paged",
+                    datasetId.value,
+                  ],
+                }),
+              ]);
               if (mounted.value) {
                 message.success("Prediction done");
               }
@@ -1139,9 +1164,13 @@ export function useReclassifyPage(): ReclassifyPageState {
     setActiveMapTab,
     setMapZoom,
     waferDisplay,
-    waferFilterIds,
-    mapFilterCount,
-    applyMapBoxFilter,
+    mapFilter,
+    legendGroupBy,
+    activeFilterCount,
+    handleMapFilterChange,
+    handleLegendGroupByChange,
+    clearMapFilter,
+    handleBoxSelectionChange,
     selectedDefectIds,
     mapSelectedDefectIds,
     selectedCount,

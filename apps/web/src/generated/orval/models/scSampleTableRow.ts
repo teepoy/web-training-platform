@@ -4,11 +4,25 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSampleTableRowClassNumber } from './scSampleTableRowClassNumber';
 
 export interface ScSampleTableRow {
   defect_id: string;
   rough_bin: number;
-  class_number?: ScSampleTableRowClassNumber;
-  test_id?: number;
+  class_number: number;
+  test_id: number;
+  wafer_x: number;
+  wafer_y: number;
+  index_x: number;
+  index_y: number;
+  adder: number;
+  cluster_id: number;
+  die_x: number;
+  die_y: number;
+  size_x: number;
+  size_y: number;
+  size_d: number;
+  area: number;
+  final_bin: number;
+  manual_bin: number;
+  kill_ratio: number;
 }

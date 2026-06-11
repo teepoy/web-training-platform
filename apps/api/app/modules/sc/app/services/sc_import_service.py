@@ -6,6 +6,7 @@ from collections.abc import Awaitable
 from datetime import datetime, timezone
 from typing import Any, Protocol, cast
 
+
 from app.modules.datasets.app.services.sparse_import_operator import (
     SparseImportOperator,
 )
@@ -16,6 +17,7 @@ from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
     iter_patch_samples_from_upstream_chunk,
 )
+from app.modules.sc.app.services.shuffle import get_shuffled_ids
 from app.modules.sc.schema import (
     SC_SPARSE_SHARD_SCHEMA_V2,
     _build_v2_pyarrow_schema,
@@ -340,6 +342,7 @@ class ScImportService:
         prefect_offset = 0
         prefect_max_rows = max_rows
         hybrid_imported_count = 0
+        total_available: int | None = None
 
         if (
             not force_prefect_flow
@@ -386,7 +389,13 @@ class ScImportService:
                 )
                 return completed_status, None
 
-            prefect_offset = DIRECT_IMPORT_MAX_ROWS
+            total_available_raw = result.get("total_available")
+            total_available = (
+                int(total_available_raw)
+                if isinstance(total_available_raw, (int, float))
+                else None
+            )
+            prefect_offset = hybrid_imported_count
             if max_rows is not None:
                 prefect_max_rows = max_rows - DIRECT_IMPORT_MAX_ROWS
 
@@ -432,6 +441,7 @@ class ScImportService:
                     "org_id": org_id,
                     "max_rows": prefect_max_rows,
                     "offset": prefect_offset,
+                    "total_available": total_available,
                 },
             )
             flow_run_id = run["id"]
@@ -505,38 +515,42 @@ class ScImportService:
             await self._payload_store.put_manifest(manifest, org_id=org_id)
 
         batch: list[dict[str, Any]] = []
-        async for chunk in self._upstream.stream(
-            source_inspection_time, source_wafer_key
-        ):
-            for patch_sample in iter_patch_samples_from_upstream_chunk(chunk):
-                images = await _build_image_structs(
-                    patch_sample=patch_sample,
-                    inspection_time=insp_dt,
-                    wafer_key=source_wafer_key,
-                    image_fetcher=self._image_fetcher,
+
+        lf = await self._upstream.list_samples(insp_dt, source_wafer_key, count=None)
+        df = await lf.collect_async()
+        total_rows_available = len(df)
+
+        if total_rows_available == 0:
+            return {"dataset_id": dataset_id, "imported_count": 0, "total_available": 0}
+
+        indices = get_shuffled_ids(list(range(total_rows_available)))
+        selected_indices = indices[:max_rows] if max_rows is not None else indices
+
+        filtered_df = df[selected_indices]
+
+        for patch_sample in iter_patch_samples_from_upstream_chunk(filtered_df):
+            images = await _build_image_structs(
+                patch_sample=patch_sample,
+                inspection_time=insp_dt,
+                wafer_key=source_wafer_key,
+                image_fetcher=self._image_fetcher,
+            )
+            batch.append(_patch_sample_to_parquet_row(patch_sample, images))
+            if len(batch) >= batch_size:
+                shard_entry, locators = await operator.flush_shard(
+                    shard_index=shard_count,
+                    rows=batch,
+                    pyarrow_schema=pyarrow_schema,
+                    row_id_key="defect_id",
                 )
-                batch.append(_patch_sample_to_parquet_row(patch_sample, images))
-                if len(batch) >= batch_size:
-                    shard_entry, locators = await operator.flush_shard(
-                        shard_index=shard_count,
-                        rows=batch,
-                        pyarrow_schema=pyarrow_schema,
-                        row_id_key="defect_id",
-                    )
-                    shard_entries.append(shard_entry)
-                    sample_index.update(locators)
-                    total_rows += len(batch)
-                    shard_count += 1
-                    await publish_manifest()
-                    batch = []
+                shard_entries.append(shard_entry)
+                sample_index.update(locators)
+                total_rows += len(batch)
+                shard_count += 1
+                await publish_manifest()
+                batch = []
 
-                if max_rows is not None and total_rows >= max_rows:
-                    break
-
-            if max_rows is not None and total_rows >= max_rows:
-                break
-
-        if batch and (max_rows is None or total_rows < max_rows):
+        if batch:
             shard_entry, locators = await operator.flush_shard(
                 shard_index=shard_count,
                 rows=batch,
@@ -559,7 +573,11 @@ class ScImportService:
                 shard_count,
             )
 
-        return {"dataset_id": dataset_id, "imported_count": total_rows}
+        return {
+            "dataset_id": dataset_id,
+            "imported_count": total_rows,
+            "total_available": total_rows_available,
+        }
 
     async def _create_dataset(
         self,
