@@ -362,27 +362,87 @@ export function useReclassifyPage(): ReclassifyPageState {
   });
   const classList = computed(() => classListQuery.data.value ?? null);
 
+  // ── Selection state (Blink table box-selection, separate from filter) ─
+
+  function handleBoxSelectionChange(ids: number[]): void {
+    reclassifyStore.setSelectedDefectIds(datasetId.value, ids.map(String));
+  }
+
+  const selectedDefectIds = computed(
+    () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
+  );
+  const mapSelectedDefectIds = computed(
+    () =>
+      new Set(
+        [...selectedDefectIds.value]
+          .map(Number)
+          .filter(Number.isFinite),
+      ),
+  );
+
+  const selectedCount = computed(() => selectedDefectIds.value.size);
+
+  function selectDefectIds(ids: string[], mode: SelectionMode): void {
+    if (mode === "replace") {
+      reclassifyStore.setSelectedDefectIds(datasetId.value, ids);
+    } else if (mode === "add") {
+      const next = new Set(selectedDefectIds.value);
+      for (const id of ids) {
+        next.add(id);
+      }
+      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
+    } else {
+      // toggle
+      const next = new Set(selectedDefectIds.value);
+      for (const id of ids) {
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+      }
+      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
+    }
+  }
+
+  function clearSelection(): void {
+    reclassifyStore.clearSelectedDefectIds(datasetId.value);
+  }
+
   const sampleRowsInfiniteQuery = useInfiniteQuery({
     queryKey: computed(() => [
       "sc",
       "view-samples-paged",
       datasetId.value,
+      selectedDefectIds.value.size > 0
+        ? [...selectedDefectIds.value].sort().join(",")
+        : null,
     ]),
     initialPageParam: 0,
     queryFn: async ({ pageParam }: { pageParam: number }) => {
+      const selected = selectedDefectIds.value;
+      if (selected.size > 0) {
+        const ids = [...selected].slice(pageParam, pageParam + pageSize);
+        const resp =
+          await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
+            datasetId.value,
+            "patch_image_v1",
+            { sampleIds: ids.join(","), limit: ids.length },
+          );
+        return (resp.data ?? { items: [], total: selected.size }) as ScViewRowsPage;
+      }
       const resp =
         await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
           datasetId.value,
           "patch_image_v1",
-          {
-            offset: pageParam,
-            limit: pageSize,
-          },
+          { offset: pageParam, limit: pageSize },
         );
       return (resp.data ?? { items: [], total: 0 }) as ScViewRowsPage;
     },
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((n, p) => n + p.items.length, 0);
+      const selected = selectedDefectIds.value;
+      if (selected.size > 0) return loaded < selected.size ? loaded : undefined;
       return loaded < lastPage.total ? loaded : undefined;
     },
     enabled: computed(() => !!selectedDataset.value),
@@ -414,6 +474,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const annotationLabels = computed(() => {
     const map = new Map<string, string>();
     for (const [label, group] of Object.entries(classList.value?.labels ?? {})) {
+      if (label === '__unlabeled__') continue;
       for (const defectId of group.defectIds) {
         map.set(String(defectId), label);
       }
@@ -562,6 +623,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     for (const [label, group] of Object.entries(
       classList.value?.prediction ?? {},
     )) {
+      if (label === '__unlabeled__') continue;
       for (const defectId of group.defectIds) {
         map[String(defectId)] = label;
       }
@@ -720,53 +782,6 @@ export function useReclassifyPage(): ReclassifyPageState {
       plotPointsQuery.refetch(),
       classListQuery.refetch(),
     ]);
-  }
-
-  function handleBoxSelectionChange(ids: number[]): void {
-    reclassifyStore.setSelectedDefectIds(datasetId.value, ids.map(String));
-  }
-
-  // ── Selection state (Blink table box-selection, separate from filter) ─
-
-  const selectedDefectIds = computed(
-    () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
-  );
-  const mapSelectedDefectIds = computed(
-    () =>
-      new Set(
-        [...selectedDefectIds.value]
-          .map(Number)
-          .filter(Number.isFinite),
-      ),
-  );
-
-  const selectedCount = computed(() => selectedDefectIds.value.size);
-
-  function selectDefectIds(ids: string[], mode: SelectionMode): void {
-    if (mode === "replace") {
-      reclassifyStore.setSelectedDefectIds(datasetId.value, ids);
-    } else if (mode === "add") {
-      const next = new Set(selectedDefectIds.value);
-      for (const id of ids) {
-        next.add(id);
-      }
-      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
-    } else {
-      // toggle
-      const next = new Set(selectedDefectIds.value);
-      for (const id of ids) {
-        if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
-      }
-      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
-    }
-  }
-
-  function clearSelection(): void {
-    reclassifyStore.clearSelectedDefectIds(datasetId.value);
   }
 
   // ── Annotation draft state (keyed by defectId) ──────────────────────

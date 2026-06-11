@@ -22,6 +22,7 @@ from app.shared.api.schemas import (
     DashboardResponse,
 )
 from app.core.config import load_config
+from app.core.logger import init_logging
 from app.shared.db.session import init_db
 from app.shared.api.schemas import Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
@@ -126,6 +127,7 @@ async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
 @asynccontextmanager
 async def lifespan(api: FastAPI):
     cfg = load_config()
+    init_logging(cfg)
     ctx = build_app_context(cfg)
     api.state.app_context = ctx
 

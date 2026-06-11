@@ -192,7 +192,7 @@ const blinkImageUrlsByDefectId = computed<Record<string, ScBlinkImageUrls>>(() =
 const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {};
   for (const s of page.scSamples.value) {
-    if (s.currentLabel) map[s.defectId] = s.currentLabel;
+    if (s.currentLabel && s.currentLabel !== '__unlabeled__') map[s.defectId] = s.currentLabel;
   }
   return map;
 });

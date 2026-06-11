@@ -181,9 +181,10 @@ function openClassify(url: string) {
           </div>
 
           <!-- Inspection tab -->
-          <InspectionQuad
-            v-else-if="page.activeTab.value?.type === 'inspection'"
-            :key="page.activeTabId.value ?? undefined"
+          <KeepAlive :max="3">
+            <InspectionQuad
+              v-if="page.activeTab.value?.type === 'inspection'"
+              :key="page.activeTabId.value ?? undefined"
             :samples="page.activeTab.value.patchSamples"
             :samples-total="page.activeTab.value.inspectionItem?.defects ?? page.activeTab.value.samplesTotal"
             :samples-loading="page.activeTab.value.samplesLoading"
@@ -223,6 +224,7 @@ function openClassify(url: string) {
             @legend-group-change="(groupBy) => page.activeTab.value && page.handleLegendGroupByChange(page.activeTab.value.id, groupBy)"
             @retry="page.activeTab.value && page.fetchPreviewDataForTab(page.activeTab.value)"
           />
+          </KeepAlive>
         </div>
       </template>
     </div>

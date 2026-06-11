@@ -268,8 +268,9 @@ watch(containerRef, (el) => {
 
 watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 
-watch(() => props.highlightDefectIds, () => { drawOverlay(); }, { deep: true });
-watch(() => [props.points, props.fullPoints], () => { drawOverlay(); }, { deep: true });
+watch(() => props.highlightDefectIds, () => { drawOverlay(); });
+watch(() => props.points, () => { drawOverlay(); });
+watch(() => props.fullPoints, () => { drawOverlay(); });
 
 watch(() => props.geometry, (geo) => {
   console.log("[ScWaferMap] geometry received", geo ?? null);

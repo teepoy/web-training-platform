@@ -190,8 +190,9 @@ watch(() => props.selectedIds, (incoming) => {
   if (changed) selectionState.value = new Set(cur);
 }, { immediate: true });
 
-watch(() => props.highlightDefectIds, () => { drawOverlay(); }, { deep: true });
-watch(() => [props.points, props.fullPoints], () => { drawOverlay(); }, { deep: true });
+watch(() => props.highlightDefectIds, () => { drawOverlay(); });
+watch(() => props.points, () => { drawOverlay(); });
+watch(() => props.fullPoints, () => { drawOverlay(); });
 </script>
 
 <template>

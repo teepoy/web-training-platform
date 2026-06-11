@@ -351,7 +351,7 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
         :review-error="reviewError"
         :blink-interval-ms="800"
         :initial-blink-enabled="true"
-        :selected-defect-ids="new Set(mapSelectionIds.map(String))"
+        :selected-defect-ids="new Set()"
       />
     </div>
   </div>
