@@ -23,12 +23,6 @@ def _parse_summary_resp(body: bytes) -> dict:
     return json.loads(body)
 
 
-def _parse_sample_resp(body: bytes) -> sample_pb2.InspectionSampleResponse:
-    msg = sample_pb2.InspectionSampleResponse()
-    msg.ParseFromString(body)
-    return msg
-
-
 def _parse_map_points_resp(body: bytes) -> sample_pb2.WaferMapResponse:
     msg = sample_pb2.WaferMapResponse()
     msg.ParseFromString(body)

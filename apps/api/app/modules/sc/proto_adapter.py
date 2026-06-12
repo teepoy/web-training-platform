@@ -8,7 +8,7 @@ import polars as pl
 
 from proto_stubs.sc.v1 import sample_pb2
 
-__all__ = ["make_class_list_pb", "make_wafer_map_response_pb"]
+__all__ = ["make_wafer_map_response_pb"]
 
 LEGEND_COLUMN_MAP: dict[str, str] = {
     "class": "class_number",
@@ -120,35 +120,6 @@ def _populate_defect_groups(
             item.defect_ids.extend(null_ids)
 
 
-def make_class_list_pb(df: pl.DataFrame) -> bytes:
-    """Build compact class/bin/prediction/label defect-id groups."""
-    if "defect_id" not in df.columns:
-        raise ValueError("make_class_list_pb: missing required column: defect_id")
-
-    msg = sample_pb2.ClassList()
-    _populate_defect_groups(msg.class_numbers, df, value_column="class_number")
-    _populate_defect_groups(msg.rough_bins, df, value_column="rough_bin")
-    _populate_defect_groups(
-        msg.prediction,
-        df,
-        value_column="predicted_label",
-        null_key="__unlabeled__",
-    )
-    _populate_defect_groups(
-        msg.labels,
-        df,
-        value_column="label",
-        null_key="__unlabeled__",
-    )
-    if "test_id" in df.columns:
-        _populate_defect_groups(msg.test_ids, df, value_column="test_id")
-    if "adder" in df.columns:
-        _populate_defect_groups(msg.adders, df, value_column="adder")
-    if "cluster_id" in df.columns:
-        _populate_defect_groups(msg.clusters, df, value_column="cluster_id")
-    return msg.SerializeToString()
-
-
 def make_wafer_map_response_pb(
     df: pl.DataFrame,
     *,
@@ -190,6 +161,7 @@ def make_wafer_map_response_pb(
         )
 
     original_total = len(df)
+    full_df = df
 
     # ── Zoom filtering ─────────────────────────────────────────────────
     if zoom_x is not None and zoom_w is not None:
@@ -223,6 +195,21 @@ def make_wafer_map_response_pb(
     msg.reticle_x_die_count = reticle_x_die_count
     msg.reticle_y_die_count = reticle_y_die_count
     msg.legend_group_by = group_by or ""
+    group_col = LEGEND_COLUMN_MAP.get(group_by) if group_by else None
+    if group_col:
+        null_key = "__unlabeled__" if group_by in ("annotation", "prediction") else None
+        _populate_defect_groups(
+            msg.legend_groups,
+            full_df,
+            value_column=group_col,
+            null_key=null_key,
+        )
+    else:
+        _populate_defect_groups(
+            msg.legend_groups,
+            full_df,
+            value_column="class_number",
+        )
 
     n = len(df)
 

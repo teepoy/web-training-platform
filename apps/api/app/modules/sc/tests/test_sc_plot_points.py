@@ -15,13 +15,12 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsService,
 )
 from app.modules.sc.port.http.deps import get_sc_plot_points_service
-from app.modules.sc.proto_adapter import make_class_list_pb, make_wafer_map_response_pb
-from proto_stubs.sc.v1.sample_pb2 import ClassList, WaferMapResponse
+from app.modules.sc.proto_adapter import make_wafer_map_response_pb
+from proto_stubs.sc.v1.sample_pb2 import WaferMapResponse
 
 PB_CONTENT_TYPE = "application/x-protobuf"
 _DATASET_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 _ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/plot-points"
-_CLASS_LIST_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/class-list"
 _BOX_FILTER_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/box-filter"
 
 
@@ -153,71 +152,6 @@ def test_plot_points_empty_dataset() -> None:
         msg.ParseFromString(resp.content)
         assert len(msg.wafer_points) == 0
         assert len(msg.die_points) == 0
-    finally:
-        app.dependency_overrides.pop(get_sc_plot_points_service, None)
-
-
-def test_class_list_happy_path() -> None:
-    pb_bytes = make_class_list_pb(
-        pl.DataFrame(
-            {
-                "defect_id": [1, 2],
-                "class_number": [7, 7],
-                "rough_bin": [3, 4],
-                "predicted_label": ["scratch", "clean"],
-                "label": ["review", None],
-            }
-        )
-    )
-    mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_class_list_response = AsyncMock(return_value=pb_bytes)
-    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
-    try:
-        with TestClient(app) as client:
-            resp = client.get(_CLASS_LIST_ENDPOINT)
-        assert resp.status_code == 200, resp.text
-        assert resp.headers.get("content-type", "").startswith(PB_CONTENT_TYPE)
-        msg = ClassList()
-        msg.ParseFromString(resp.content)
-        assert list(msg.class_numbers["7"].defect_ids) == [1, 2]
-        mock_svc.build_class_list_response.assert_awaited_once()
-    finally:
-        app.dependency_overrides.pop(get_sc_plot_points_service, None)
-
-
-def test_class_list_forwards_query_filters() -> None:
-    mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_class_list_response = AsyncMock(return_value=make_class_list_pb(
-        pl.DataFrame(
-            {
-                "defect_id": [1],
-                "class_number": [7],
-                "rough_bin": [3],
-                "predicted_label": ["scratch"],
-                "label": ["review"],
-            }
-        )
-    ))
-    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
-    try:
-        with TestClient(app) as client:
-            resp = client.get(
-                f"{_CLASS_LIST_ENDPOINT}?class_numbers=7&rough_bins=3"
-                "&predictions=scratch&annotations=review&test_ids=2"
-                "&adders=1&cluster_ids=9&legend_group_by=annotation"
-            )
-        assert resp.status_code == 200, resp.text
-        mock_svc.build_class_list_response.assert_awaited_once_with(
-            _DATASET_ID,
-            "00000000-0000-0000-0000-000000000001",
-            class_numbers=[7],
-            rough_bins=[3],
-            predictions=["scratch"],
-            annotations=["review"],
-            test_ids=[2],
-            adders=[1],
-            cluster_ids=[9],
-        )
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 

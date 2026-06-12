@@ -22,10 +22,9 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     points: defaultPoints,
-    fullPoints: defaultPoints,
   },
 };
 
 export const Empty: Story = {
-  args: { points: [], fullPoints: [] },
+  args: { points: [] },
 };

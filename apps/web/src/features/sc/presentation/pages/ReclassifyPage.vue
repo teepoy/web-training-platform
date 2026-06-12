@@ -337,7 +337,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :reticle-die-size-x="page.reticleDieSizeX.value"
               :reticle-die-size-y="page.reticleDieSizeY.value"
               :reticle-options="page.reticleOptions.value"
-              :class-list="page.classList.value"
+              :legend-groups="page.classList.value"
               :legend-sources="['class', 'bin', 'annotation', 'prediction']"
               :selected-ids="page.mapSelectedDefectIds.value"
               :zoom="page.mapZoom.value"

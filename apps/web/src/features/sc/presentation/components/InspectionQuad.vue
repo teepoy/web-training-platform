@@ -5,7 +5,7 @@ import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
 import type {
-  ClassList,
+  DefectList,
   ScSampleItem,
 } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
@@ -53,10 +53,10 @@ const props = defineProps<{
   /** Pre-computed reticle display flat array [reticleX, reticleY, id, ...] from backend */
   reticleDisplay?: number[];
   /** Full (unsampled) arrays for selection only — used when total >= 50k */
-  fullWaferDisplay?: number[];
-  fullDieDisplay?: number[];
-  fullReticleDisplay?: number[];
-  classList?: ClassList | null;
+  unzoomedWaferDisplay?: number[];
+  unzoomedDieDisplay?: number[];
+  unzoomedReticleDisplay?: number[];
+  legendGroups?: Record<string, DefectList> | null;
   reticleXDieCount?: number;
   reticleYDieCount?: number;
   reticleDieSizeX?: number;
@@ -230,19 +230,19 @@ const reticleDieSizeYModel = computed(
   () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 100000,
 );
 
-// ── Full-points fallback (empty array is not nullish, so `??` won't work) ──
-const effectiveWaferFullPoints = computed<number[] | undefined>(() => {
-  const f = props.fullWaferDisplay;
+// ── Unzoomed-points fallback (empty array is not nullish, so `??` won't work) ──
+const effectiveWaferPoints = computed<number[] | undefined>(() => {
+  const f = props.unzoomedWaferDisplay;
   return f && f.length > 0 ? f : props.waferDisplay;
 });
 
-const effectiveDieFullPoints = computed<number[] | undefined>(() => {
-  const f = props.fullDieDisplay;
+const effectiveDiePoints = computed<number[] | undefined>(() => {
+  const f = props.unzoomedDieDisplay;
   return f && f.length > 0 ? f : props.dieDisplay;
 });
 
-const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
-  const f = props.fullReticleDisplay;
+const effectiveReticlePoints = computed<number[] | undefined>(() => {
+  const f = props.unzoomedReticleDisplay;
   return f && f.length > 0 ? f : props.reticleDisplay;
 });
 
@@ -301,12 +301,12 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
         <ScMapPanel
           :active-map-tab="activeMapTab"
           :wafer-points="waferDisplay"
-          :wafer-full-points="effectiveWaferFullPoints"
+          :wafer-full-points="effectiveWaferPoints"
           :die-points="dieDisplay"
-          :die-full-points="effectiveDieFullPoints"
+          :die-full-points="effectiveDiePoints"
           :reticle-points="reticleDisplay"
-          :reticle-full-points="effectiveReticleFullPoints"
-          :class-list="classList"
+          :reticle-full-points="effectiveReticlePoints"
+          :legend-groups="legendGroups"
           :wafer-geometry="waferGeometry"
           :wafer-radius-nm="waferGeometry?.waferRadiusNm ?? undefined"
           :reticle-x-die-count="reticleOptionsModel.xDieCount"

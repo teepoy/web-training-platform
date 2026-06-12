@@ -28,28 +28,13 @@ const makeDefectList = (defectIds: number[]) => ({
   count: defectIds.length,
   defectIds,
 });
-const storyClassList = {
-  $typeName: "sc.v1.ClassList" as const,
-  classNumbers: Object.fromEntries(
+const storyLegendGroups: Record<string, { $typeName: string; count: number; defectIds: number[] }> =
+  storyDefectIds.length > 0 ? Object.fromEntries(
     Array.from({ length: 5 }, (_, classNumber) => [
       String(classNumber),
       makeDefectList(storyDefectIds.filter((id) => (id - 1) % 5 === classNumber)),
     ]),
-  ),
-  roughBins: Object.fromEntries(
-    Array.from({ length: 3 }, (_, roughBin) => [
-      String(roughBin),
-      makeDefectList(storyDefectIds.filter((id) => (id - 1) % 3 === roughBin)),
-    ]),
-  ),
-  labels: {
-    Reviewed: makeDefectList(storyDefectIds.filter((id) => id % 4 === 0)),
-  },
-  prediction: {
-    Scratch: makeDefectList(storyDefectIds.filter((id) => id % 5 === 0)),
-    Particle: makeDefectList(storyDefectIds.filter((id) => id % 5 === 1)),
-  },
-};
+  ) : {};
 const waferGeometry = {
   centerX: 120_000,
   centerY: 90_000,
@@ -108,7 +93,7 @@ export const ReticleTab: Story = {
       yDieShift: 0,
     },
     legendSources: ["class", "bin", "annotation", "prediction"],
-    classList: storyClassList,
+    legendGroups: storyLegendGroups,
   },
 };
 

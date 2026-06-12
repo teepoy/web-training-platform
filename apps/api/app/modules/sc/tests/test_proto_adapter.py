@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from app.modules.sc import proto_adapter
-from app.modules.sc.proto_adapter import make_class_list_pb, make_wafer_map_response_pb
+from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from proto_stubs.sc.v1 import sample_pb2
 
 
@@ -41,45 +41,6 @@ def _parse(body: bytes) -> sample_pb2.WaferMapResponse:
     msg = sample_pb2.WaferMapResponse()
     msg.ParseFromString(body)
     return msg
-
-
-def test_make_class_list_groups_defect_ids() -> None:
-    df = pl.DataFrame(
-        {
-            "defect_id": [101, 102, 103],
-            "class_number": [1, 1, 2],
-            "rough_bin": [4, 5, 4],
-            "predicted_label": ["scratch", "clean", "scratch"],
-            "label": ["review", None, "review"],
-        }
-    )
-
-    msg = sample_pb2.ClassList()
-    msg.ParseFromString(make_class_list_pb(df))
-
-    assert msg.class_numbers["1"].count == 2
-    assert list(msg.class_numbers["1"].defect_ids) == [101, 102]
-    assert list(msg.rough_bins["4"].defect_ids) == [101, 103]
-    assert list(msg.prediction["scratch"].defect_ids) == [101, 103]
-    assert list(msg.labels["review"].defect_ids) == [101, 103]
-    assert list(msg.labels["__unlabeled__"].defect_ids) == [102]
-
-
-def test_make_class_list_groups_missing_predictions_as_unlabeled() -> None:
-    df = pl.DataFrame(
-        {
-            "defect_id": [101, 102],
-            "class_number": [1, 1],
-            "rough_bin": [4, 4],
-            "predicted_label": ["scratch", None],
-            "label": ["review", "review"],
-        }
-    )
-
-    msg = sample_pb2.ClassList()
-    msg.ParseFromString(make_class_list_pb(df))
-
-    assert list(msg.prediction["__unlabeled__"].defect_ids) == [102]
 
 
 # ── DataFrame-based WaferMapResponse tests ─────────────────────────────────

@@ -18,11 +18,10 @@ import {
 import { getApiBase } from "@/shared/api/client";
 import { create } from "@bufbuild/protobuf";
 import {
-  type ClassList,
+  type DefectList,
   ReviewImageSchema,
   ScSampleItemSchema,
 } from "../generated/proto/sc/v1/sample_pb";
-import { fetchScInspectionClassList } from "../api/classList";
 import {
   fetchScInspectionMapPoints,
   type ScMapFilter,
@@ -82,11 +81,11 @@ export interface PreviewTab {
   dieDisplay: number[];
   /** Pre-computed reticle display flat array [reticleX, reticleY, id, ...] from backend */
   reticleDisplay: number[];
-  /** Full (unsampled) arrays for selection spatial index — populated via second request when total >= 50000 */
-  fullWaferDisplay: number[];
-  fullDieDisplay: number[];
-  fullReticleDisplay: number[];
-  classList: ClassList | null;
+  /** Unzoomed display arrays — backup of the full display before zooming, restored on zoom-out / map-tab switch */
+  unzoomedWaferDisplay: number[];
+  unzoomedDieDisplay: number[];
+  unzoomedReticleDisplay: number[];
+  legendGroups: Record<string, DefectList> | null;
   reticleXDieCount: number;
   reticleYDieCount: number;
   reticleDieSizeX: number;
@@ -274,10 +273,10 @@ export function usePreviewPage(): PreviewPageState {
       waferDisplay: [],
       dieDisplay: [],
       reticleDisplay: [],
-      fullWaferDisplay: [],
-      fullDieDisplay: [],
-      fullReticleDisplay: [],
-      classList: null,
+      unzoomedWaferDisplay: [],
+      unzoomedDieDisplay: [],
+      unzoomedReticleDisplay: [],
+      legendGroups: null,
       reticleXDieCount: 10,
       reticleYDieCount: 10,
       reticleDieSizeX: 100000,
@@ -330,10 +329,10 @@ export function usePreviewPage(): PreviewPageState {
       waferDisplay: [],
       dieDisplay: [],
       reticleDisplay: [],
-      fullWaferDisplay: [],
-      fullDieDisplay: [],
-      fullReticleDisplay: [],
-      classList: null,
+      unzoomedWaferDisplay: [],
+      unzoomedDieDisplay: [],
+      unzoomedReticleDisplay: [],
+      legendGroups: null,
       reticleXDieCount: reticleOptions.xDieCount,
       reticleYDieCount: reticleOptions.yDieCount,
       reticleDieSizeX: row.die_size_x || 100000,
@@ -372,7 +371,6 @@ export function usePreviewPage(): PreviewPageState {
   async function fetchPreviewDataForTab(tab: PreviewTab): Promise<void> {
     await Promise.allSettled([
       fetchMapPointsForTab(tab),
-      fetchClassListForTab(tab),
       fetchReviewImagesForTab(tab),
     ]);
   }
@@ -389,18 +387,37 @@ export function usePreviewPage(): PreviewPageState {
 
     const opts = normalizeReticleMapOptions(tab.reticleOptions);
     try {
-      const results = await Promise.all(
-        modes.map(async (mode) => ({
-          mode,
-          result: await _fetchMapData(
-            tab,
+      const allThree = modes.length === 3;
+      const results: { mode: MapMode; result: Awaited<ReturnType<typeof _fetchMapData>> }[] = [];
+
+      if (allThree && !tab.zoom) {
+        const combined = await _fetchMapData(
+          tab,
+          undefined,
+          opts,
+          undefined,
+          tab.legendGroupBy ?? undefined,
+        );
+        results.push(
+          { mode: "wafer", result: combined },
+          { mode: "die", result: combined },
+          { mode: "reticle", result: combined },
+        );
+      } else {
+        const perMode = await Promise.all(
+          modes.map(async (mode) => ({
             mode,
-            opts,
-            undefined,
-            tab.legendGroupBy ?? undefined,
-          ),
-        })),
-      );
+            result: await _fetchMapData(
+              tab,
+              mode,
+              opts,
+              undefined,
+              tab.legendGroupBy ?? undefined,
+            ),
+          })),
+        );
+        results.push(...perMode);
+      }
 
       const idx2 = tabs.value.findIndex((t) => t.id === tabId);
       if (idx2 === -1) return;
@@ -431,6 +448,7 @@ export function usePreviewPage(): PreviewPageState {
           xDieShift: opts.xDieShift,
           yDieShift: opts.yDieShift,
         },
+        legendGroups: firstResult?.legendGroups ?? null,
       };
       for (const { mode, result } of results) {
         if (mode === "wafer") baseUpdate.waferDisplay = result.waferPoints;
@@ -441,15 +459,15 @@ export function usePreviewPage(): PreviewPageState {
       tabs.value[idx2] = {
         ...current,
         ...baseUpdate,
-        fullWaferDisplay: current.zoom
-          ? current.fullWaferDisplay
-          : (baseUpdate.waferDisplay ?? current.fullWaferDisplay),
-        fullDieDisplay: current.zoom
-          ? current.fullDieDisplay
-          : (baseUpdate.dieDisplay ?? current.fullDieDisplay),
-        fullReticleDisplay: current.zoom
-          ? current.fullReticleDisplay
-          : (baseUpdate.reticleDisplay ?? current.fullReticleDisplay),
+        unzoomedWaferDisplay: current.zoom
+          ? current.unzoomedWaferDisplay
+          : (baseUpdate.waferDisplay ?? current.unzoomedWaferDisplay),
+        unzoomedDieDisplay: current.zoom
+          ? current.unzoomedDieDisplay
+          : (baseUpdate.dieDisplay ?? current.unzoomedDieDisplay),
+        unzoomedReticleDisplay: current.zoom
+          ? current.unzoomedReticleDisplay
+          : (baseUpdate.reticleDisplay ?? current.unzoomedReticleDisplay),
       };
     } catch (err) {
       const idx2 = tabs.value.findIndex((t) => t.id === tabId);
@@ -464,23 +482,9 @@ export function usePreviewPage(): PreviewPageState {
     }
   }
 
-  async function fetchClassListForTab(tab: PreviewTab): Promise<void> {
-    if (!tab.inspectionTime || tab.waferKey === undefined) return;
-    const classList = await fetchScInspectionClassList(
-      tab.inspectionTime,
-      tab.waferKey,
-      undefined,
-      tab.legendGroupBy ?? undefined,
-    );
-    const idx = tabs.value.findIndex((item) => item.id === tab.id);
-    if (idx !== -1) {
-      tabs.value[idx] = { ...tabs.value[idx], classList };
-    }
-  }
-
   async function _fetchMapData(
     tab: PreviewTab,
-    mode: MapMode,
+    mode: MapMode | undefined,
     opts: ReturnType<typeof normalizeReticleMapOptions>,
     filter?: ScMapFilter,
     legendGroupBy?: string,
@@ -496,7 +500,7 @@ export function usePreviewPage(): PreviewPageState {
       opts,
       filter,
       legendGroupBy,
-      { mode, zoom: tab.zoom },
+      mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
     );
   }
 
@@ -582,9 +586,9 @@ export function usePreviewPage(): PreviewPageState {
         ...tab,
         activeMapTab: value,
         zoom: null,
-        waferDisplay: tab.fullWaferDisplay,
-        dieDisplay: tab.fullDieDisplay,
-        reticleDisplay: tab.fullReticleDisplay,
+        waferDisplay: tab.unzoomedWaferDisplay,
+        dieDisplay: tab.unzoomedDieDisplay,
+        reticleDisplay: tab.unzoomedReticleDisplay,
       };
     }
   }
@@ -602,9 +606,9 @@ export function usePreviewPage(): PreviewPageState {
         zoom: null,
         mapLoading: false,
         mapError: null,
-        waferDisplay: tab.fullWaferDisplay,
-        dieDisplay: tab.fullDieDisplay,
-        reticleDisplay: tab.fullReticleDisplay,
+        waferDisplay: tab.unzoomedWaferDisplay,
+        dieDisplay: tab.unzoomedDieDisplay,
+        reticleDisplay: tab.unzoomedReticleDisplay,
       };
       return;
     }
@@ -625,7 +629,7 @@ export function usePreviewPage(): PreviewPageState {
       reticleXDieCount: normalized.xDieCount,
       reticleYDieCount: normalized.yDieCount,
       reticleDisplay: [],
-      fullReticleDisplay: [],
+      unzoomedReticleDisplay: [],
       mapError: null,
     };
     await fetchMapPointsForTab(tabs.value[idx], ["reticle"]);
@@ -676,14 +680,11 @@ export function usePreviewPage(): PreviewPageState {
       ...tabs.value[idx],
       legendGroupBy: groupBy,
       zoom: null,
-      waferDisplay: tabs.value[idx].fullWaferDisplay,
-      dieDisplay: tabs.value[idx].fullDieDisplay,
-      reticleDisplay: tabs.value[idx].fullReticleDisplay,
+      waferDisplay: tabs.value[idx].unzoomedWaferDisplay,
+      dieDisplay: tabs.value[idx].unzoomedDieDisplay,
+      reticleDisplay: tabs.value[idx].unzoomedReticleDisplay,
     };
-    void Promise.all([
-      fetchMapPointsForTab(tabs.value[idx]),
-      fetchClassListForTab(tabs.value[idx]),
-    ]);
+    void fetchMapPointsForTab(tabs.value[idx]);
   }
 
   function rowKey(row: InspectionSummaryItem): string {

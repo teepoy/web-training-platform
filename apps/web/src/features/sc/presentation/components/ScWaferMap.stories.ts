@@ -21,9 +21,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  args: { points: makeStride6Points(10), fullPoints: makeStride6Points(10) },
+  args: { points: makeStride6Points(10) },
 };
 
 export const Empty: Story = {
-  args: { points: [], fullPoints: [] },
+  args: { points: [] },
 };

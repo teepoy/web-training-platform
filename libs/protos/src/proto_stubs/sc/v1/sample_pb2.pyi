@@ -104,148 +104,7 @@ class ScSampleItem(_message.Message):
 Global___ScSampleItem: _TypeAlias = ScSampleItem  # noqa: Y015
 
 @_typing.final
-class InspectionSamplesDisplay(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    WAFER_XY_ID_FIELD_NUMBER: _builtins.int
-    DIE_XY_ID_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def wafer_xy_id(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
-        """wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ..."""
-
-    @_builtins.property
-    def die_xy_id(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
-        """die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ..."""
-
-    def __init__(
-        self,
-        *,
-        wafer_xy_id: _abc.Iterable[_builtins.int] | None = ...,
-        die_xy_id: _abc.Iterable[_builtins.int] | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["die_xy_id", b"die_xy_id", "wafer_xy_id", b"wafer_xy_id"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___InspectionSamplesDisplay: _TypeAlias = InspectionSamplesDisplay  # noqa: Y015
-
-@_typing.final
-class InspectionSampleResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    ITEMS_FIELD_NUMBER: _builtins.int
-    TOTAL_FIELD_NUMBER: _builtins.int
-    WAFER_KEY_FIELD_NUMBER: _builtins.int
-    DISPLAY_FIELD_NUMBER: _builtins.int
-    total: _builtins.int
-    wafer_key: _builtins.int
-    @_builtins.property
-    def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___ScSampleItem]:
-        """Deprecated: use InspectionMapPointsResponse plus JSON review/sample-table
-        endpoints for SC Preview. Kept for compatibility with legacy consumers.
-        """
-
-    @_builtins.property
-    def display(self) -> Global___InspectionSamplesDisplay: ...
-    def __init__(
-        self,
-        *,
-        items: _abc.Iterable[Global___ScSampleItem] | None = ...,
-        total: _builtins.int = ...,
-        wafer_key: _builtins.int = ...,
-        display: Global___InspectionSamplesDisplay | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["display", b"display"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["display", b"display", "items", b"items", "total", b"total", "wafer_key", b"wafer_key"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___InspectionSampleResponse: _TypeAlias = InspectionSampleResponse  # noqa: Y015
-
-@_typing.final
-class InspectionMapPointsResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    TOTAL_FIELD_NUMBER: _builtins.int
-    WAFER_KEY_FIELD_NUMBER: _builtins.int
-    WAFER_XY_ID_FIELD_NUMBER: _builtins.int
-    DIE_XY_ID_FIELD_NUMBER: _builtins.int
-    total: _builtins.int
-    """Deprecated: use WaferMapResponse for both Preview and Dataset View modes."""
-    wafer_key: _builtins.int
-    @_builtins.property
-    def wafer_xy_id(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
-        """wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ..."""
-
-    @_builtins.property
-    def die_xy_id(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
-        """die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ..."""
-
-    def __init__(
-        self,
-        *,
-        total: _builtins.int = ...,
-        wafer_key: _builtins.int = ...,
-        wafer_xy_id: _abc.Iterable[_builtins.int] | None = ...,
-        die_xy_id: _abc.Iterable[_builtins.int] | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["die_xy_id", b"die_xy_id", "total", b"total", "wafer_key", b"wafer_key", "wafer_xy_id", b"wafer_xy_id"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___InspectionMapPointsResponse: _TypeAlias = InspectionMapPointsResponse  # noqa: Y015
-
-@_typing.final
-class InspectionReticleMapPointsResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    TOTAL_FIELD_NUMBER: _builtins.int
-    WAFER_KEY_FIELD_NUMBER: _builtins.int
-    X_DIE_COUNT_FIELD_NUMBER: _builtins.int
-    Y_DIE_COUNT_FIELD_NUMBER: _builtins.int
-    DIE_SIZE_X_FIELD_NUMBER: _builtins.int
-    DIE_SIZE_Y_FIELD_NUMBER: _builtins.int
-    RETICLE_XY_ID_FIELD_NUMBER: _builtins.int
-    total: _builtins.int
-    wafer_key: _builtins.int
-    x_die_count: _builtins.int
-    y_die_count: _builtins.int
-    die_size_x: _builtins.int
-    die_size_y: _builtins.int
-    @_builtins.property
-    def reticle_xy_id(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
-        """reticle_x1, reticle_y1, defect_id1, reticle_x2, reticle_y2, defect_id2, ..."""
-
-    def __init__(
-        self,
-        *,
-        total: _builtins.int = ...,
-        wafer_key: _builtins.int = ...,
-        x_die_count: _builtins.int = ...,
-        y_die_count: _builtins.int = ...,
-        die_size_x: _builtins.int = ...,
-        die_size_y: _builtins.int = ...,
-        reticle_xy_id: _abc.Iterable[_builtins.int] | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "reticle_xy_id", b"reticle_xy_id", "total", b"total", "wafer_key", b"wafer_key", "x_die_count", b"x_die_count", "y_die_count", b"y_die_count"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___InspectionReticleMapPointsResponse: _TypeAlias = InspectionReticleMapPointsResponse  # noqa: Y015
-
-@_typing.final
 class WaferGeometry(_message.Message):
-    """WaferGeometry carries the wafer-level parameters needed to render a die
-    grid background in the canvas wafer map.
-    """
-
     DESCRIPTOR: _descriptor.Descriptor
 
     WAFER_RADIUS_NM_FIELD_NUMBER: _builtins.int
@@ -301,6 +160,27 @@ class WaferMapResponse(_message.Message):
 
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class LegendGroupsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___DefectList: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___DefectList | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
     TOTAL_FIELD_NUMBER: _builtins.int
     WAFER_KEY_FIELD_NUMBER: _builtins.int
     GEOMETRY_FIELD_NUMBER: _builtins.int
@@ -311,6 +191,7 @@ class WaferMapResponse(_message.Message):
     RETICLE_Y_DIE_COUNT_FIELD_NUMBER: _builtins.int
     IS_SAMPLED_FIELD_NUMBER: _builtins.int
     LEGEND_GROUP_BY_FIELD_NUMBER: _builtins.int
+    LEGEND_GROUPS_FIELD_NUMBER: _builtins.int
     total: _builtins.int
     wafer_key: _builtins.int
     reticle_x_die_count: _builtins.int
@@ -336,6 +217,12 @@ class WaferMapResponse(_message.Message):
     def reticle_points(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
         """6 ints per point: reticle_x, reticle_y, defect_id, class_number, rough_bin, has_review_image"""
 
+    @_builtins.property
+    def legend_groups(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]:
+        """Defect ID groups for the active legend dimension.
+        Key is the group name (e.g. "3" for class_number 3, "__unlabeled__" for missing labels).
+        """
+
     def __init__(
         self,
         *,
@@ -349,10 +236,11 @@ class WaferMapResponse(_message.Message):
         reticle_y_die_count: _builtins.int = ...,
         is_sampled: _builtins.bool = ...,
         legend_group_by: _builtins.str = ...,
+        legend_groups: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["geometry", b"geometry"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["die_points", b"die_points", "geometry", b"geometry", "is_sampled", b"is_sampled", "legend_group_by", b"legend_group_by", "reticle_points", b"reticle_points", "reticle_x_die_count", b"reticle_x_die_count", "reticle_y_die_count", b"reticle_y_die_count", "total", b"total", "wafer_key", b"wafer_key", "wafer_points", b"wafer_points"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["die_points", b"die_points", "geometry", b"geometry", "is_sampled", b"is_sampled", "legend_group_by", b"legend_group_by", "legend_groups", b"legend_groups", "reticle_points", b"reticle_points", "reticle_x_die_count", b"reticle_x_die_count", "reticle_y_die_count", b"reticle_y_die_count", "total", b"total", "wafer_key", b"wafer_key", "wafer_points", b"wafer_points"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -380,194 +268,3 @@ class DefectList(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___DefectList: _TypeAlias = DefectList  # noqa: Y015
-
-@_typing.final
-class ClassList(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    @_typing.final
-    class ClassNumbersEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class RoughBinsEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class PredictionEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class LabelsEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class TestIdsEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class AddersEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    @_typing.final
-    class ClustersEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
-
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___DefectList: ...
-        def __init__(
-            self,
-            *,
-            key: _builtins.str = ...,
-            value: Global___DefectList | None = ...,
-        ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-    CLASS_NUMBERS_FIELD_NUMBER: _builtins.int
-    ROUGH_BINS_FIELD_NUMBER: _builtins.int
-    PREDICTION_FIELD_NUMBER: _builtins.int
-    LABELS_FIELD_NUMBER: _builtins.int
-    TEST_IDS_FIELD_NUMBER: _builtins.int
-    ADDERS_FIELD_NUMBER: _builtins.int
-    CLUSTERS_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def class_numbers(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def rough_bins(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def prediction(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def labels(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def test_ids(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def adders(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    @_builtins.property
-    def clusters(self) -> _containers.MessageMap[_builtins.str, Global___DefectList]: ...
-    def __init__(
-        self,
-        *,
-        class_numbers: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        rough_bins: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        prediction: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        labels: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        test_ids: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        adders: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-        clusters: _abc.Mapping[_builtins.str, Global___DefectList] | None = ...,
-    ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["adders", b"adders", "class_numbers", b"class_numbers", "clusters", b"clusters", "labels", b"labels", "prediction", b"prediction", "rough_bins", b"rough_bins", "test_ids", b"test_ids"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
-
-Global___ClassList: _TypeAlias = ClassList  # noqa: Y015

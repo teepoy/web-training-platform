@@ -30,8 +30,7 @@ import { runPredictions, getPredictionJob } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type { TrainingJob } from "@/generated/orval/models";
 import { fetchScPlotPoints } from "../api/plotPoints";
-import { fetchScDatasetClassList } from "../api/classList";
-import type { ClassList } from "../generated/proto/sc/v1/sample_pb";
+import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
@@ -177,7 +176,7 @@ export interface ReclassifyPageState {
   effectiveLabels: ComputedRef<string[]>;
   labelOptions: ComputedRef<string[]>;
   classNumberOptions: ComputedRef<string[]>;
-  classList: ComputedRef<ClassList | null>;
+  classList: ComputedRef<Record<string, DefectList> | null>;
 
   activeMapTab: Ref<MapMode>;
   mapZoom: ComputedRef<MapViewport | null>;
@@ -349,18 +348,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
   });
-  const classListQuery = useQuery({
-    queryKey: computed(() => ["sc", "class-list", datasetId.value]),
-    queryFn: () =>
-      fetchScDatasetClassList(
-        datasetId.value,
-        mapFilter.value,
-        legendGroupBy.value ?? undefined,
-      ),
-    enabled: computed(() => !!selectedDataset.value),
-    retry: false,
-  });
-  const classList = computed(() => classListQuery.data.value ?? null);
+  const classList = computed(() => plotPointsQuery.data.value?.legendGroups ?? null);
 
   // ── Selection state (Blink table box-selection, separate from filter) ─
 
@@ -473,13 +461,15 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const annotationLabels = computed(() => {
     const map = new Map<string, string>();
-    for (const [label, group] of Object.entries(classList.value?.labels ?? {})) {
-      if (label === '__unlabeled__') continue;
-      for (const defectId of group.defectIds) {
-        map.set(String(defectId), label);
+    if (legendGroupBy.value === "annotation") {
+      for (const [label, group] of Object.entries(classList.value ?? {})) {
+        if (label === "__unlabeled__") continue;
+        for (const defectId of group.defectIds) {
+          map.set(String(defectId), label);
+        }
       }
+      if (map.size > 0) return map;
     }
-    if (map.size > 0) return map;
     for (const page of annotationsInfiniteQuery.data.value?.pages ?? []) {
       for (const item of page.items ?? []) {
         const label = item.latest_annotation?.label;
@@ -531,7 +521,6 @@ export function useReclassifyPage(): ReclassifyPageState {
   const samplesError = computed<string | null>(
     () =>
       (plotPointsQuery.error.value as Error)?.message ??
-      (classListQuery.error.value as Error)?.message ??
       (sampleRowsInfiniteQuery.error.value as Error)?.message ??
       (annotationsInfiniteQuery.error.value as Error)?.message ??
       null,
@@ -550,10 +539,14 @@ export function useReclassifyPage(): ReclassifyPageState {
       scSamples.value.length,
   );
 
-  const annotatedCount = computed<number>(
-    () => Object.values(classList.value?.labels ?? {})
-      .reduce((count, group) => count + group.count, 0),
-  );
+  const annotatedCount = computed<number>(() => {
+    if (legendGroupBy.value === "annotation") {
+      return Object.values(classList.value ?? {}).reduce(
+        (count, group) => count + group.count, 0,
+      );
+    }
+    return annotationsInfiniteQuery.data.value?.pages?.[0]?.total ?? 0;
+  });
 
   async function fetchMoreSamples(): Promise<unknown> {
     if (
@@ -595,7 +588,9 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Label options ───────────────────────────────────────────────────
 
   const roughBinOptions = computed(() => {
-    const values = Object.keys(classList.value?.roughBins ?? {});
+    const values = legendGroupBy.value === "bin"
+      ? Object.keys(classList.value ?? {})
+      : [];
     if (values.length > 0) return values.sort((a, b) => Number(a) - Number(b));
     return packedPointOptions(plotPointsQuery.data.value?.waferPoints ?? [], 4);
   });
@@ -606,8 +601,9 @@ export function useReclassifyPage(): ReclassifyPageState {
   });
 
   const classNumberOptions = computed(() => {
-    const values = Object.keys(classList.value?.classNumbers ?? {})
-      .sort((a, b) => Number(a) - Number(b));
+    const values = legendGroupBy.value === "class"
+      ? Object.keys(classList.value ?? {}).sort((a, b) => Number(a) - Number(b))
+      : [];
     if (values.length === 0) {
       const pointValues = packedPointOptions(
         plotPointsQuery.data.value?.waferPoints ?? [],
@@ -620,15 +616,15 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const predictionLabels = computed<Record<string, string>>(() => {
     const map: Record<string, string> = {};
-    for (const [label, group] of Object.entries(
-      classList.value?.prediction ?? {},
-    )) {
-      if (label === '__unlabeled__') continue;
-      for (const defectId of group.defectIds) {
-        map[String(defectId)] = label;
+    if (legendGroupBy.value === "prediction") {
+      for (const [label, group] of Object.entries(classList.value ?? {})) {
+        if (label === "__unlabeled__") continue;
+        for (const defectId of group.defectIds) {
+          map[String(defectId)] = label;
+        }
       }
+      if (Object.keys(map).length > 0) return map;
     }
-    if (Object.keys(map).length > 0) return map;
     for (const page of annotationsInfiniteQuery.data.value?.pages ?? []) {
       for (const item of page.items ?? []) {
         const label = (item.latest_prediction as Record<string, unknown> | null | undefined)?.predicted_label as string | null | undefined;
@@ -762,26 +758,17 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function handleMapFilterChange(filter: Record<string, (number|string)[]>): void {
     mapFilter.value = filter;
-    void Promise.all([
-      plotPointsQuery.refetch(),
-      classListQuery.refetch(),
-    ]);
+    void plotPointsQuery.refetch();
   }
 
   function handleLegendGroupByChange(source: string | null): void {
     legendGroupBy.value = source;
-    void Promise.all([
-      plotPointsQuery.refetch(),
-      classListQuery.refetch(),
-    ]);
+    void plotPointsQuery.refetch();
   }
 
   function clearMapFilter(): void {
     mapFilter.value = {};
-    void Promise.all([
-      plotPointsQuery.refetch(),
-      classListQuery.refetch(),
-    ]);
+    void plotPointsQuery.refetch();
   }
 
   // ── Annotation draft state (keyed by defectId) ──────────────────────

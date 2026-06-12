@@ -14,7 +14,6 @@ const props = defineProps<{
   dieSizeX: number;
   dieSizeY: number;
   points?: number[];
-  fullPoints?: number[];
   selectedIds?: Set<number>;
   highlightDefects?: HighlightDefect[];
   zoom?: { x: number; y: number; w: number; h: number } | null;

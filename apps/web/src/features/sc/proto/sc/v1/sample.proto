@@ -28,46 +28,6 @@ message ScSampleItem {
   int32 test_id = 17;
 }
 
-message InspectionSamplesDisplay {
-  // wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
-  repeated int32 wafer_xy_id = 1;
-  // die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
-  repeated int32 die_xy_id = 2;
-}
-
-message InspectionSampleResponse {
-  // Deprecated: use InspectionMapPointsResponse plus JSON review/sample-table
-  // endpoints for SC Preview. Kept for compatibility with legacy consumers.
-  repeated ScSampleItem items = 1;
-  int32 total = 2;
-  reserved 3;
-  int32 wafer_key = 4;
-  InspectionSamplesDisplay display = 5;
-}
-
-message InspectionMapPointsResponse {
-  // Deprecated: use WaferMapResponse for both Preview and Dataset View modes.
-  int32 total = 1;
-  int32 wafer_key = 2;
-  // wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
-  repeated int32 wafer_xy_id = 3;
-  // die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
-  repeated int32 die_xy_id = 4;
-}
-
-message InspectionReticleMapPointsResponse {
-  int32 total = 1;
-  int32 wafer_key = 2;
-  int32 x_die_count = 3;
-  int32 y_die_count = 4;
-  int32 die_size_x = 5;
-  int32 die_size_y = 6;
-  // reticle_x1, reticle_y1, defect_id1, reticle_x2, reticle_y2, defect_id2, ...
-  repeated int32 reticle_xy_id = 7;
-}
-
-// WaferGeometry carries the wafer-level parameters needed to render a die
-// grid background in the canvas wafer map.
 message WaferGeometry {
   int32 wafer_radius_nm = 1;
   int32 center_x = 2;
@@ -110,21 +70,14 @@ message WaferMapResponse {
   // Active grouping dimension for frontend legend rendering.
   // Empty string means default grouping (class_number).
   string legend_group_by = 10;
+  // Defect ID groups for the active legend dimension.
+  // Key is the group name (e.g. "3" for class_number 3, "__unlabeled__" for missing labels).
+  map<string, DefectList> legend_groups = 11;
 }
 
 message DefectList {
   int32 count = 1;
   repeated int32 defect_ids = 2;
-}
-
-message ClassList {
-  map<string, DefectList> class_numbers = 1;
-  map<string, DefectList> rough_bins = 2;
-  map<string, DefectList> prediction = 3;
-  map<string, DefectList> labels = 4;
-  map<string, DefectList> test_ids = 5;
-  map<string, DefectList> adders = 6;
-  map<string, DefectList> clusters = 7;
 }
 
 // InspectionSummaryResponse 被移除。使用 正常 restful json response

@@ -6,11 +6,6 @@ import {
   routeLocationKey,
 } from "vue-router";
 import { provide, onUnmounted } from "vue";
-import { create, toBinary } from "@bufbuild/protobuf";
-import {
-  InspectionSampleResponseSchema,
-  ScSampleItemSchema,
-} from "../../generated/proto/sc/v1/sample_pb";
 import type { InspectionSummaryPage } from "../../domain/models";
 import PreviewPage from "./PreviewPage.vue";
 
@@ -77,83 +72,6 @@ const MOCK_INSPECTIONS_JSON = JSON.stringify({
   total: 3,
 } satisfies InspectionSummaryPage);
 
-const MOCK_SAMPLE_COUNT = 100;
-const WAFER_RADIUS_NM = 150_000_000;
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-
-function mockSampleItems() {
-  const items = new Array(MOCK_SAMPLE_COUNT);
-  for (let i = 0; i < MOCK_SAMPLE_COUNT; i++) {
-    const ratio = (i + 0.5) / MOCK_SAMPLE_COUNT;
-    const r = Math.sqrt(ratio) * WAFER_RADIUS_NM * 0.98;
-    const theta = i * GOLDEN_ANGLE;
-    items[i] = {
-      defectId: i + 1,
-      waferX: Math.round(r * Math.cos(theta)),
-      waferY: Math.round(r * Math.sin(theta)),
-      roughBin: (Math.abs(i) % 5) + 1,
-      classNumber: i % 2 === 0 ? (i % 3) + 1 : undefined,
-      inspectionTime: INSPECTION_TIME_BIGINT,
-      waferKey: 1,
-      reviewImages: [],
-    };
-  }
-  return items;
-}
-
-function makeWaferDisplay(count: number): number[] {
-  const arr: number[] = new Array(count * 6);
-  for (let i = 0; i < count; i++) {
-    const ratio = (i + 0.5) / count;
-    const r = Math.sqrt(ratio) * WAFER_RADIUS_NM * 0.98;
-    const theta = i * GOLDEN_ANGLE;
-    arr[i * 6] = Math.round(r * Math.cos(theta));
-    arr[i * 6 + 1] = Math.round(r * Math.sin(theta));
-    arr[i * 6 + 2] = i + 1;
-    arr[i * 6 + 3] = i % 2 === 0 ? (i % 3) + 1 : 0;
-    arr[i * 6 + 4] = (Math.abs(i) % 5) + 1;
-    arr[i * 6 + 5] = 0;
-  }
-  return arr;
-}
-
-function makeDieDisplay(count: number): number[] {
-  const arr: number[] = new Array(count * 6);
-  for (let i = 0; i < count; i++) {
-    const ratio = (i + 0.5) / count;
-    const r = Math.sqrt(ratio) * WAFER_RADIUS_NM * 0.98;
-    const theta = i * GOLDEN_ANGLE;
-    const wx = Math.round(r * Math.cos(theta));
-    const wy = Math.round(r * Math.sin(theta));
-    arr[i * 6] = ((wx % 8_000_000) + 8_000_000) % 8_000_000;
-    arr[i * 6 + 1] = ((wy % 5_000_000) + 5_000_000) % 5_000_000;
-    arr[i * 6 + 2] = i + 1;
-    arr[i * 6 + 3] = i % 2 === 0 ? (i % 3) + 1 : 0;
-    arr[i * 6 + 4] = (Math.abs(i) % 5) + 1;
-    arr[i * 6 + 5] = 0;
-  }
-  return arr;
-}
-
-let _mockSamplesBinary: Uint8Array | null = null;
-
-function getMockSamplesBinary(): Uint8Array {
-  if (_mockSamplesBinary) return _mockSamplesBinary;
-  const protoItems = mockSampleItems().map((i) => create(ScSampleItemSchema, i));
-  _mockSamplesBinary = toBinary(
-    InspectionSampleResponseSchema,
-    create(InspectionSampleResponseSchema, {
-      items: protoItems,
-      total: MOCK_SAMPLE_COUNT,
-      waferKey: 1,
-      display: {
-        waferXyId: makeWaferDisplay(MOCK_SAMPLE_COUNT),
-        dieXyId: makeDieDisplay(MOCK_SAMPLE_COUNT),
-      },
-    }),
-  );
-  return _mockSamplesBinary;
-}
 
 const originalFetch = window.fetch.bind(window);
 

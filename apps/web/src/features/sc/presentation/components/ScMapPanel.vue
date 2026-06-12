@@ -11,7 +11,7 @@ import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { parsePoints } from "./scMapUtils";
 import type { HighlightDefect } from "./types";
-import type { ClassList, DefectList } from "../../generated/proto/sc/v1/sample_pb";
+import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction";
 type LegendKey = number | string;
@@ -46,7 +46,7 @@ const props = defineProps<{
   // Legend control (optional)
   legendPoints?: number[];
   legendSources?: LegendSource[];
-  classList?: ClassList | null;
+  legendGroups?: Record<string, DefectList> | null;
   selectedIds?: ReadonlySet<number>;
 
   // Zoom viewport
@@ -222,38 +222,11 @@ const currentLegendPoints = computed(() => {
 
 const parsedCache = computed(() => parsePoints(currentLegendPoints.value));
 
-// Compute missing "Unlabeled" / "No Prediction" groups for annotation/prediction legends.
-// Takes all defect IDs from parsedCache, subtracts IDs already assigned in the groups.
-function withMissingGroup(
-  source: Record<string, DefectList> | undefined,
-  missingKey: string,
-): Record<string, DefectList> | undefined {
-  if (!source) return source;
-  const allIds = new Set<string>();
-  for (const group of Object.values(props.classList?.classNumbers ?? {})) {
-    for (const id of group.defectIds) allIds.add(String(id));
-  }
-  if (allIds.size === 0) {
-    for (const point of parsedCache.value) allIds.add(String(point.defectId));
-  }
-  if (allIds.size === 0) return source;
-  const assigned = new Set<string>();
-  for (const g of Object.values(source)) {
-    for (const id of g.defectIds ?? []) assigned.add(String(id));
-  }
-  const missing = [...allIds].filter((id) => !assigned.has(id)).map(Number);
-  if (missing.length === 0) return source;
-  return {
-    ...source,
-    [missingKey]: { defectIds: missing, count: missing.length } as unknown as DefectList,
-  };
-}
-
 const annotationGroups = computed(() =>
-  withMissingGroup(props.classList?.labels, '__unlabeled__'),
+  legendSource.value === "annotation" ? (props.legendGroups ?? undefined) : undefined,
 );
 const predictionGroups = computed(() =>
-  withMissingGroup(props.classList?.prediction, '__unlabeled__'),
+  legendSource.value === "prediction" ? (props.legendGroups ?? undefined) : undefined,
 );
 
 const showWaferLoading = computed(
@@ -275,13 +248,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
     emit("select-points", { ids: [], region: ZERO_REGION });
   } else {
     selectedClassNumber.value = key;
-    const compactGroups = {
-      class: props.classList?.classNumbers,
-      bin: props.classList?.roughBins,
-      annotation: annotationGroups.value,
-      prediction: predictionGroups.value,
-    }[legendSource.value];
-    const compactGroup = compactGroups?.[String(key)];
+    const compactGroup = props.legendGroups?.[String(key)];
     const ids = compactGroup?.defectIds ?? (
       typeof key === "number"
         ? parsedCache.value
@@ -330,7 +297,6 @@ const handleLegendSelect = (key: LegendKey | null) => {
             <NSpin :show="showWaferLoading">
               <ScWaferMap
                 :points="waferPoints"
-                :fullPoints="waferFullPoints"
                 :geometry="waferGeometry"
                 :waferRadiusNm="waferRadiusNm"
                 :selectedIds="selectedIds"
@@ -348,7 +314,6 @@ const handleLegendSelect = (key: LegendKey | null) => {
             <NSpin :show="showDieLoading">
               <ScDieStackMap
                 :points="diePoints"
-                :fullPoints="dieFullPoints"
                 :die-size-x="waferGeometry?.dieSizeX"
                 :die-size-y="waferGeometry?.dieSizeY"
                 :selectedIds="selectedIds"
@@ -367,7 +332,6 @@ const handleLegendSelect = (key: LegendKey | null) => {
               <ScReticleMap
                 v-if="reticleXDieCount !== undefined && reticleYDieCount !== undefined && reticleDieSizeX !== undefined && reticleDieSizeY !== undefined"
                 :points="reticlePoints"
-                :fullPoints="reticleFullPoints"
                 :xDieCount="reticleXDieCount"
                 :yDieCount="reticleYDieCount"
                 :dieSizeX="reticleDieSizeX"
@@ -483,8 +447,8 @@ const handleLegendSelect = (key: LegendKey | null) => {
               <ScLegend
                 :points="[]"
                 :fullPoints="currentLegendPoints"
-                :class-numbers="classList?.classNumbers"
-                :rough-bins="classList?.roughBins"
+                :class-numbers="legendSource === 'class' ? (legendGroups ?? undefined) : undefined"
+                :rough-bins="legendSource === 'bin' ? (legendGroups ?? undefined) : undefined"
                 :annotations="annotationGroups"
                 :predictions="predictionGroups"
                 :selectedClassNumber="selectedClassNumber"

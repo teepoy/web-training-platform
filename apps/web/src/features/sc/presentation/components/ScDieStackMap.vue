@@ -11,7 +11,6 @@ import type { ScBoxRegion } from "@/features/sc/api/boxFilter";
 
 const props = defineProps<{
   points?: number[];
-  fullPoints?: number[];
   dieSizeX?: number;
   dieSizeY?: number;
   selectedIds?: Set<number>;

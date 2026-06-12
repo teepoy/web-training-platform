@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file sc/v1/sample.proto.
  */
 export const file_sc_v1_sample: GenFile = /*@__PURE__*/
-  fileDesc("ChJzYy92MS9zYW1wbGUucHJvdG8SBXNjLnYxIk0KC1Jldmlld0ltYWdlEhIKCmltYWdlX25hbWUYAiABKAkSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCUoECAEQAiLEAgoMU2NTYW1wbGVJdGVtEhEKCWRlZmVjdF9pZBgFIAEoDRIPCgd3YWZlcl94GAYgASgREg8KB3dhZmVyX3kYByABKBESEQoJcm91Z2hfYmluGAggASgFEhkKDGNsYXNzX251bWJlchgJIAEoBUgAiAEBEikKDXJldmlld19pbWFnZXMYCiADKAsyEi5zYy52MS5SZXZpZXdJbWFnZRIXCg9pbnNwZWN0aW9uX3RpbWUYCyABKAMSEQoJd2FmZXJfa2V5GAwgASgFEg8KB2luZGV4X3gYDSABKBESDwoHaW5kZXhfeRgOIAEoERINCgVhZGRlchgPIAEoBRIPCgdjbHVzdGVyGBAgASgFEg8KB3Rlc3RfaWQYESABKAVCDwoNX2NsYXNzX251bWJlckoECAEQAkoECAIQA0oECAMQBEoECAQQBSJCChhJbnNwZWN0aW9uU2FtcGxlc0Rpc3BsYXkSEwoLd2FmZXJfeHlfaWQYASADKAUSEQoJZGllX3h5X2lkGAIgAygFIpgBChhJbnNwZWN0aW9uU2FtcGxlUmVzcG9uc2USIgoFaXRlbXMYASADKAsyEy5zYy52MS5TY1NhbXBsZUl0ZW0SDQoFdG90YWwYAiABKAUSEQoJd2FmZXJfa2V5GAQgASgFEjAKB2Rpc3BsYXkYBSABKAsyHy5zYy52MS5JbnNwZWN0aW9uU2FtcGxlc0Rpc3BsYXlKBAgDEAQiZwobSW5zcGVjdGlvbk1hcFBvaW50c1Jlc3BvbnNlEg0KBXRvdGFsGAEgASgFEhEKCXdhZmVyX2tleRgCIAEoBRITCgt3YWZlcl94eV9pZBgDIAMoBRIRCglkaWVfeHlfaWQYBCADKAUirwEKIkluc3BlY3Rpb25SZXRpY2xlTWFwUG9pbnRzUmVzcG9uc2USDQoFdG90YWwYASABKAUSEQoJd2FmZXJfa2V5GAIgASgFEhMKC3hfZGllX2NvdW50GAMgASgFEhMKC3lfZGllX2NvdW50GAQgASgFEhIKCmRpZV9zaXplX3gYBSABKAUSEgoKZGllX3NpemVfeRgGIAEoBRIVCg1yZXRpY2xlX3h5X2lkGAcgAygFIpgBCg1XYWZlckdlb21ldHJ5EhcKD3dhZmVyX3JhZGl1c19ubRgBIAEoBRIQCghjZW50ZXJfeBgCIAEoBRIQCghjZW50ZXJfeRgDIAEoBRIQCghvcmlnaW5feBgEIAEoBRIQCghvcmlnaW5feRgFIAEoBRISCgpkaWVfc2l6ZV94GAYgASgFEhIKCmRpZV9zaXplX3kYByABKAUihQIKEFdhZmVyTWFwUmVzcG9uc2USDQoFdG90YWwYASABKAUSEQoJd2FmZXJfa2V5GAIgASgFEiYKCGdlb21ldHJ5GAMgASgLMhQuc2MudjEuV2FmZXJHZW9tZXRyeRIUCgx3YWZlcl9wb2ludHMYBCADKBESEgoKZGllX3BvaW50cxgFIAMoERIWCg5yZXRpY2xlX3BvaW50cxgGIAMoERIbChNyZXRpY2xlX3hfZGllX2NvdW50GAcgASgFEhsKE3JldGljbGVfeV9kaWVfY291bnQYCCABKAUSEgoKaXNfc2FtcGxlZBgJIAEoCBIXCg9sZWdlbmRfZ3JvdXBfYnkYCiABKAkiLwoKRGVmZWN0TGlzdBINCgVjb3VudBgBIAEoBRISCgpkZWZlY3RfaWRzGAIgAygFIs4GCglDbGFzc0xpc3QSOQoNY2xhc3NfbnVtYmVycxgBIAMoCzIiLnNjLnYxLkNsYXNzTGlzdC5DbGFzc051bWJlcnNFbnRyeRIzCgpyb3VnaF9iaW5zGAIgAygLMh8uc2MudjEuQ2xhc3NMaXN0LlJvdWdoQmluc0VudHJ5EjQKCnByZWRpY3Rpb24YAyADKAsyIC5zYy52MS5DbGFzc0xpc3QuUHJlZGljdGlvbkVudHJ5EiwKBmxhYmVscxgEIAMoCzIcLnNjLnYxLkNsYXNzTGlzdC5MYWJlbHNFbnRyeRIvCgh0ZXN0X2lkcxgFIAMoCzIdLnNjLnYxLkNsYXNzTGlzdC5UZXN0SWRzRW50cnkSLAoGYWRkZXJzGAYgAygLMhwuc2MudjEuQ2xhc3NMaXN0LkFkZGVyc0VudHJ5EjAKCGNsdXN0ZXJzGAcgAygLMh4uc2MudjEuQ2xhc3NMaXN0LkNsdXN0ZXJzRW50cnkaRgoRQ2xhc3NOdW1iZXJzRW50cnkSCwoDa2V5GAEgASgJEiAKBXZhbHVlGAIgASgLMhEuc2MudjEuRGVmZWN0TGlzdDoCOAEaQwoOUm91Z2hCaW5zRW50cnkSCwoDa2V5GAEgASgJEiAKBXZhbHVlGAIgASgLMhEuc2MudjEuRGVmZWN0TGlzdDoCOAEaRAoPUHJlZGljdGlvbkVudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBGkAKC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBGkEKDFRlc3RJZHNFbnRyeRILCgNrZXkYASABKAkSIAoFdmFsdWUYAiABKAsyES5zYy52MS5EZWZlY3RMaXN0OgI4ARpACgtBZGRlcnNFbnRyeRILCgNrZXkYASABKAkSIAoFdmFsdWUYAiABKAsyES5zYy52MS5EZWZlY3RMaXN0OgI4ARpCCg1DbHVzdGVyc0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBYgZwcm90bzM");
+  fileDesc("ChJzYy92MS9zYW1wbGUucHJvdG8SBXNjLnYxIk0KC1Jldmlld0ltYWdlEhIKCmltYWdlX25hbWUYAiABKAkSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCUoECAEQAiLEAgoMU2NTYW1wbGVJdGVtEhEKCWRlZmVjdF9pZBgFIAEoDRIPCgd3YWZlcl94GAYgASgREg8KB3dhZmVyX3kYByABKBESEQoJcm91Z2hfYmluGAggASgFEhkKDGNsYXNzX251bWJlchgJIAEoBUgAiAEBEikKDXJldmlld19pbWFnZXMYCiADKAsyEi5zYy52MS5SZXZpZXdJbWFnZRIXCg9pbnNwZWN0aW9uX3RpbWUYCyABKAMSEQoJd2FmZXJfa2V5GAwgASgFEg8KB2luZGV4X3gYDSABKBESDwoHaW5kZXhfeRgOIAEoERINCgVhZGRlchgPIAEoBRIPCgdjbHVzdGVyGBAgASgFEg8KB3Rlc3RfaWQYESABKAVCDwoNX2NsYXNzX251bWJlckoECAEQAkoECAIQA0oECAMQBEoECAQQBSKYAQoNV2FmZXJHZW9tZXRyeRIXCg93YWZlcl9yYWRpdXNfbm0YASABKAUSEAoIY2VudGVyX3gYAiABKAUSEAoIY2VudGVyX3kYAyABKAUSEAoIb3JpZ2luX3gYBCABKAUSEAoIb3JpZ2luX3kYBSABKAUSEgoKZGllX3NpemVfeBgGIAEoBRISCgpkaWVfc2l6ZV95GAcgASgFIo8DChBXYWZlck1hcFJlc3BvbnNlEg0KBXRvdGFsGAEgASgFEhEKCXdhZmVyX2tleRgCIAEoBRImCghnZW9tZXRyeRgDIAEoCzIULnNjLnYxLldhZmVyR2VvbWV0cnkSFAoMd2FmZXJfcG9pbnRzGAQgAygREhIKCmRpZV9wb2ludHMYBSADKBESFgoOcmV0aWNsZV9wb2ludHMYBiADKBESGwoTcmV0aWNsZV94X2RpZV9jb3VudBgHIAEoBRIbChNyZXRpY2xlX3lfZGllX2NvdW50GAggASgFEhIKCmlzX3NhbXBsZWQYCSABKAgSFwoPbGVnZW5kX2dyb3VwX2J5GAogASgJEkAKDWxlZ2VuZF9ncm91cHMYCyADKAsyKS5zYy52MS5XYWZlck1hcFJlc3BvbnNlLkxlZ2VuZEdyb3Vwc0VudHJ5GkYKEUxlZ2VuZEdyb3Vwc0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBIi8KCkRlZmVjdExpc3QSDQoFY291bnQYASABKAUSEgoKZGVmZWN0X2lkcxgCIAMoBWIGcHJvdG8z");
 
 /**
  * @generated from message sc.v1.ReviewImage
@@ -119,157 +119,6 @@ export const ScSampleItemSchema: GenMessage<ScSampleItem> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 1);
 
 /**
- * @generated from message sc.v1.InspectionSamplesDisplay
- */
-export type InspectionSamplesDisplay = Message<"sc.v1.InspectionSamplesDisplay"> & {
-  /**
-   * wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
-   *
-   * @generated from field: repeated int32 wafer_xy_id = 1;
-   */
-  waferXyId: number[];
-
-  /**
-   * die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
-   *
-   * @generated from field: repeated int32 die_xy_id = 2;
-   */
-  dieXyId: number[];
-};
-
-/**
- * Describes the message sc.v1.InspectionSamplesDisplay.
- * Use `create(InspectionSamplesDisplaySchema)` to create a new message.
- */
-export const InspectionSamplesDisplaySchema: GenMessage<InspectionSamplesDisplay> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 2);
-
-/**
- * @generated from message sc.v1.InspectionSampleResponse
- */
-export type InspectionSampleResponse = Message<"sc.v1.InspectionSampleResponse"> & {
-  /**
-   * Deprecated: use InspectionMapPointsResponse plus JSON review/sample-table
-   * endpoints for SC Preview. Kept for compatibility with legacy consumers.
-   *
-   * @generated from field: repeated sc.v1.ScSampleItem items = 1;
-   */
-  items: ScSampleItem[];
-
-  /**
-   * @generated from field: int32 total = 2;
-   */
-  total: number;
-
-  /**
-   * @generated from field: int32 wafer_key = 4;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: sc.v1.InspectionSamplesDisplay display = 5;
-   */
-  display?: InspectionSamplesDisplay | undefined;
-};
-
-/**
- * Describes the message sc.v1.InspectionSampleResponse.
- * Use `create(InspectionSampleResponseSchema)` to create a new message.
- */
-export const InspectionSampleResponseSchema: GenMessage<InspectionSampleResponse> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 3);
-
-/**
- * @generated from message sc.v1.InspectionMapPointsResponse
- */
-export type InspectionMapPointsResponse = Message<"sc.v1.InspectionMapPointsResponse"> & {
-  /**
-   * Deprecated: use WaferMapResponse for both Preview and Dataset View modes.
-   *
-   * @generated from field: int32 total = 1;
-   */
-  total: number;
-
-  /**
-   * @generated from field: int32 wafer_key = 2;
-   */
-  waferKey: number;
-
-  /**
-   * wafer_x1, wafer_y1, defect_id1, wafer_x2, wafer_y2, defect_id2, ...
-   *
-   * @generated from field: repeated int32 wafer_xy_id = 3;
-   */
-  waferXyId: number[];
-
-  /**
-   * die_x1, die_y1, defect_id1, die_x2, die_y2, defect_id2, ...
-   *
-   * @generated from field: repeated int32 die_xy_id = 4;
-   */
-  dieXyId: number[];
-};
-
-/**
- * Describes the message sc.v1.InspectionMapPointsResponse.
- * Use `create(InspectionMapPointsResponseSchema)` to create a new message.
- */
-export const InspectionMapPointsResponseSchema: GenMessage<InspectionMapPointsResponse> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 4);
-
-/**
- * @generated from message sc.v1.InspectionReticleMapPointsResponse
- */
-export type InspectionReticleMapPointsResponse = Message<"sc.v1.InspectionReticleMapPointsResponse"> & {
-  /**
-   * @generated from field: int32 total = 1;
-   */
-  total: number;
-
-  /**
-   * @generated from field: int32 wafer_key = 2;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: int32 x_die_count = 3;
-   */
-  xDieCount: number;
-
-  /**
-   * @generated from field: int32 y_die_count = 4;
-   */
-  yDieCount: number;
-
-  /**
-   * @generated from field: int32 die_size_x = 5;
-   */
-  dieSizeX: number;
-
-  /**
-   * @generated from field: int32 die_size_y = 6;
-   */
-  dieSizeY: number;
-
-  /**
-   * reticle_x1, reticle_y1, defect_id1, reticle_x2, reticle_y2, defect_id2, ...
-   *
-   * @generated from field: repeated int32 reticle_xy_id = 7;
-   */
-  reticleXyId: number[];
-};
-
-/**
- * Describes the message sc.v1.InspectionReticleMapPointsResponse.
- * Use `create(InspectionReticleMapPointsResponseSchema)` to create a new message.
- */
-export const InspectionReticleMapPointsResponseSchema: GenMessage<InspectionReticleMapPointsResponse> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 5);
-
-/**
- * WaferGeometry carries the wafer-level parameters needed to render a die
- * grid background in the canvas wafer map.
- *
  * @generated from message sc.v1.WaferGeometry
  */
 export type WaferGeometry = Message<"sc.v1.WaferGeometry"> & {
@@ -314,7 +163,7 @@ export type WaferGeometry = Message<"sc.v1.WaferGeometry"> & {
  * Use `create(WaferGeometrySchema)` to create a new message.
  */
 export const WaferGeometrySchema: GenMessage<WaferGeometry> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 6);
+  messageDesc(file_sc_v1_sample, 2);
 
 /**
  * WaferMapResponse is the unified aggregated response for Preview mode
@@ -397,6 +246,14 @@ export type WaferMapResponse = Message<"sc.v1.WaferMapResponse"> & {
    * @generated from field: string legend_group_by = 10;
    */
   legendGroupBy: string;
+
+  /**
+   * Defect ID groups for the active legend dimension.
+   * Key is the group name (e.g. "3" for class_number 3, "__unlabeled__" for missing labels).
+   *
+   * @generated from field: map<string, sc.v1.DefectList> legend_groups = 11;
+   */
+  legendGroups: { [key: string]: DefectList };
 };
 
 /**
@@ -404,7 +261,7 @@ export type WaferMapResponse = Message<"sc.v1.WaferMapResponse"> & {
  * Use `create(WaferMapResponseSchema)` to create a new message.
  */
 export const WaferMapResponseSchema: GenMessage<WaferMapResponse> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 7);
+  messageDesc(file_sc_v1_sample, 3);
 
 /**
  * @generated from message sc.v1.DefectList
@@ -426,51 +283,4 @@ export type DefectList = Message<"sc.v1.DefectList"> & {
  * Use `create(DefectListSchema)` to create a new message.
  */
 export const DefectListSchema: GenMessage<DefectList> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 8);
-
-/**
- * @generated from message sc.v1.ClassList
- */
-export type ClassList = Message<"sc.v1.ClassList"> & {
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> class_numbers = 1;
-   */
-  classNumbers: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> rough_bins = 2;
-   */
-  roughBins: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> prediction = 3;
-   */
-  prediction: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> labels = 4;
-   */
-  labels: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> test_ids = 5;
-   */
-  testIds: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> adders = 6;
-   */
-  adders: { [key: string]: DefectList };
-
-  /**
-   * @generated from field: map<string, sc.v1.DefectList> clusters = 7;
-   */
-  clusters: { [key: string]: DefectList };
-};
-
-/**
- * Describes the message sc.v1.ClassList.
- * Use `create(ClassListSchema)` to create a new message.
- */
-export const ClassListSchema: GenMessage<ClassList> = /*@__PURE__*/
-  messageDesc(file_sc_v1_sample, 9);
+  messageDesc(file_sc_v1_sample, 4);

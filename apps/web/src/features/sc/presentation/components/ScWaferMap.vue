@@ -24,7 +24,6 @@ interface WaferGeometry {
 
 const props = defineProps<{
   points?: number[];
-  fullPoints?: number[];
   waferRadiusNm?: number;
   geometry?: WaferGeometry | null;
   selectedIds?: Set<number>;
@@ -262,7 +261,6 @@ watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 watch(() => props.highlightDefects, () => { drawOverlay(); });
 
 watch(() => props.geometry, (geo) => {
-  console.log("[ScWaferMap] geometry received", geo ?? null);
   recalcTransform();
   drawOverlay();
 }, { immediate: true });

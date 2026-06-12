@@ -52,7 +52,7 @@ describe("InspectionQuad", () => {
     expect(wrapper.exists()).toBe(true);
   });
 
-  it("resolves effectiveDieFullPoints to dieDisplay when fullDieDisplay is empty []", () => {
+  it("resolves effectiveDiePoints to dieDisplay when unzoomedDieDisplay is empty []", () => {
     const stride6Data = MIXED_CLASS_POINTS;
     const wrapper = mount(InspectionQuad, {
       props: {
@@ -62,7 +62,7 @@ describe("InspectionQuad", () => {
         samplesError: null,
         activeMapTab: "die",
         dieDisplay: stride6Data,
-        fullDieDisplay: [],
+        unzoomedDieDisplay: [],
       },
       global: {
         stubs: {
@@ -79,7 +79,7 @@ describe("InspectionQuad", () => {
     expect(mapPanel.props("dieFullPoints")).not.toEqual([]);
   });
 
-  it("forwards full-die array when fullDieDisplay has data", () => {
+  it("forwards unzoomed-die array when unzoomedDieDisplay has data", () => {
     const stride6Data = MIXED_CLASS_POINTS;
     const fullData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     const wrapper = mount(InspectionQuad, {
@@ -90,7 +90,7 @@ describe("InspectionQuad", () => {
         samplesError: null,
         activeMapTab: "die",
         dieDisplay: stride6Data,
-        fullDieDisplay: fullData,
+        unzoomedDieDisplay: fullData,
       },
       global: {
         stubs: {
@@ -106,7 +106,7 @@ describe("InspectionQuad", () => {
     expect(mapPanel.props("dieFullPoints")).toEqual(fullData);
   });
 
-  it("passes undefined when both fullDieDisplay and dieDisplay are undefined", () => {
+  it("passes undefined when both unzoomedDieDisplay and dieDisplay are undefined", () => {
     const wrapper = mount(InspectionQuad, {
       props: {
         samples: [],

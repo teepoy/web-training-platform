@@ -5,9 +5,8 @@ const meta = {
   title: "Shared/UpstreamPreviewLauncher",
   component: UpstreamPreviewLauncher,
   args: {
-    onComplete: (result: { sessionId: string }) =>
-      console.log("Preview completed:", result.sessionId),
-    onCancel: () => console.log("Preview cancelled"),
+    onComplete: (_result: { sessionId: string }) => {},
+    onCancel: () => {},
   },
 } satisfies Meta<typeof UpstreamPreviewLauncher>;
 

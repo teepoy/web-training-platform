@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, type Component } from "vue";
 import { useRoute } from "vue-router";
 import {
   NInput,
   NInputNumber,
   NButton,
-  NDataTable,
   NDatePicker,
   NModal,
   NProgress,
@@ -17,6 +16,7 @@ import {
   useThemeVars,
 } from "naive-ui";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
+import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { usePreviewPage } from "@/features/sc/application/usePreviewPage";
 
@@ -62,17 +62,71 @@ const containerStyle = computed(() => ({
   "--cv-divider": themeVars.value.dividerColor,
 }));
 
-function rowKey(row: Parameters<typeof page.rowKey>[0]): string {
-  return page.rowKey(row);
-}
-
-function rowProps(row: Parameters<typeof page.rowProps>[0]): Record<string, unknown> {
-  return page.rowProps(row);
-}
-
 function openClassify(url: string) {
   window.open(url, '_blank');
 }
+
+const activeComponent = computed<Component>(() =>
+  page.activeTab.value?.type === "inspection" ? InspectionQuad : ScSummaryTab,
+);
+
+const activeComponentProps = computed((): Record<string, unknown> => {
+  const tab = page.activeTab.value;
+  if (!tab) return {};
+  if (tab.type === "summary") {
+    return {
+      dateRange: page.dateRange.value,
+      summariesLoading: page.summariesLoading.value,
+      summaries: page.summaries.value,
+      inspectionColumns: page.inspectionColumns,
+      classifyDisabled: !page.datasetId.value.trim(),
+      "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
+      onSearch: () => page.searchInspections(),
+      onOpenClassify: () => openClassify(page.classifyHref.value),
+      onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),
+    };
+  }
+  return {
+    samples: tab.patchSamples,
+    samplesTotal: tab.inspectionItem?.defects ?? tab.samplesTotal,
+    samplesLoading: tab.samplesLoading,
+    samplesError: tab.samplesError,
+    inspectionItem: tab.inspectionItem,
+    inspectionTime: tab.inspectionTime,
+    waferKey: tab.waferKey,
+    reviewSamples: tab.reviewSamples,
+    reviewLoading: tab.reviewLoading,
+    reviewError: tab.reviewError,
+    mapLoading: tab.mapLoading,
+    mapError: tab.mapError,
+    activeMapTab: tab.activeMapTab,
+    waferGeometry: tab.waferGeometry,
+    waferDisplay: tab.waferDisplay,
+    dieDisplay: tab.dieDisplay,
+    reticleDisplay: tab.reticleDisplay,
+    unzoomedWaferDisplay: tab.unzoomedWaferDisplay,
+    unzoomedDieDisplay: tab.unzoomedDieDisplay,
+    unzoomedReticleDisplay: tab.unzoomedReticleDisplay,
+    legendGroups: tab.legendGroups,
+    reticleXDieCount: tab.reticleXDieCount,
+    reticleYDieCount: tab.reticleYDieCount,
+    reticleDieSizeX: tab.reticleDieSizeX,
+    reticleDieSizeY: tab.reticleDieSizeY,
+    reticleOptions: tab.reticleOptions,
+    zoom: tab.zoom,
+    selectedDefectIds: tab.selectedDefectIds,
+    tableFilter: tab.tableFilter,
+    tableSort: tab.tableSort,
+    "onUpdate:activeMapTab": (v: "wafer" | "die" | "reticle") => page.setMapTab(tab.id, v),
+    "onUpdate:reticleOptions": (v: Parameters<typeof page.updateReticleOptions>[1]) => page.updateReticleOptions(tab.id, v),
+    onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) => page.setZoom(tab.id, vp),
+    onTableSelectionChange: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
+    onTableFilterChange: (filter: Parameters<typeof page.handleTableFilterChange>[1]) => page.handleTableFilterChange(tab.id, filter),
+    onTableSortChange: (sort: { field: string; direction: "asc" | "desc" | null }) => page.handleTableSortChange(tab.id, sort),
+    onLegendGroupChange: (groupBy: string | null) => page.handleLegendGroupByChange(tab.id, groupBy),
+    onRetry: () => page.fetchPreviewDataForTab(tab),
+  };
+});
 </script>
 
 <template>
@@ -152,78 +206,12 @@ function openClassify(url: string) {
         </div>
 
         <div class="sc-preview-tab-content">
-          <!-- Summary tab -->
-          <div v-if="page.activeTab.value?.type === 'summary'" class="sc-preview-tab-summary">
-            <div class="sc-preview-search-bar">
-              <NSpace align="center" :wrap="false">
-                <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
-                <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
-            <NButton size="small" :disabled="!page.datasetId.value.trim()" @click="openClassify(page.classifyHref.value)">Classify</NButton>
-              </NSpace>
-            </div>
-            <div class="sc-preview-table-wrapper">
-              <NDataTable
-                :columns="page.inspectionColumns"
-                :data="page.summaries.value"
-                :row-key="rowKey"
-                :row-props="rowProps"
-                :single-line="false"
-                striped
-                size="small"
-                flex-height
-                style="flex: 1"
-              >
-              <template #empty>
-                <NText depth="3">No inspections</NText>
-              </template>
-              </NDataTable>
-            </div>
-          </div>
-
-          <!-- Inspection tab -->
           <KeepAlive :max="3">
-            <InspectionQuad
-              v-if="page.activeTab.value?.type === 'inspection'"
-              :key="page.activeTabId.value ?? undefined"
-            :samples="page.activeTab.value.patchSamples"
-            :samples-total="page.activeTab.value.inspectionItem?.defects ?? page.activeTab.value.samplesTotal"
-            :samples-loading="page.activeTab.value.samplesLoading"
-            :samples-error="page.activeTab.value.samplesError"
-            :inspection-item="page.activeTab.value.inspectionItem"
-            :inspection-time="page.activeTab.value.inspectionTime"
-            :wafer-key="page.activeTab.value.waferKey"
-            :review-samples="page.activeTab.value.reviewSamples"
-            :review-loading="page.activeTab.value.reviewLoading"
-            :review-error="page.activeTab.value.reviewError"
-            :map-loading="page.activeTab.value.mapLoading"
-            :map-error="page.activeTab.value.mapError"
-            :active-map-tab="page.activeTab.value.activeMapTab"
-            :wafer-geometry="page.activeTab.value.waferGeometry"
-            :wafer-display="page.activeTab.value.waferDisplay"
-            :die-display="page.activeTab.value.dieDisplay"
-            :reticle-display="page.activeTab.value.reticleDisplay"
-            :full-wafer-display="page.activeTab.value.fullWaferDisplay"
-            :full-die-display="page.activeTab.value.fullDieDisplay"
-            :full-reticle-display="page.activeTab.value.fullReticleDisplay"
-            :class-list="page.activeTab.value.classList"
-            :reticle-x-die-count="page.activeTab.value.reticleXDieCount"
-            :reticle-y-die-count="page.activeTab.value.reticleYDieCount"
-            :reticle-die-size-x="page.activeTab.value.reticleDieSizeX"
-            :reticle-die-size-y="page.activeTab.value.reticleDieSizeY"
-            :reticle-options="page.activeTab.value.reticleOptions"
-            :zoom="page.activeTab.value.zoom"
-            :selected-defect-ids="page.activeTab.value.selectedDefectIds"
-            :table-filter="page.activeTab.value.tableFilter"
-            :table-sort="page.activeTab.value.tableSort"
-            @update:active-map-tab="(v: 'wafer' | 'die' | 'reticle') => page.activeTab.value && page.setMapTab(page.activeTab.value.id, v)"
-            @update:reticle-options="(v) => page.activeTab.value && page.updateReticleOptions(page.activeTab.value.id, v)"
-            @zoom-in="(vp) => page.activeTab.value && page.setZoom(page.activeTab.value.id, vp)"
-            @table-selection-change="(ids) => page.activeTab.value && page.setSelectedDefectIds(page.activeTab.value.id, ids)"
-            @table-filter-change="(filter) => page.activeTab.value && page.handleTableFilterChange(page.activeTab.value.id, filter)"
-            @table-sort-change="(sort) => page.activeTab.value && page.handleTableSortChange(page.activeTab.value.id, sort)"
-            @legend-group-change="(groupBy) => page.activeTab.value && page.handleLegendGroupByChange(page.activeTab.value.id, groupBy)"
-            @retry="page.activeTab.value && page.fetchPreviewDataForTab(page.activeTab.value)"
-          />
+            <component
+              :is="activeComponent"
+              :key="page.activeTabId.value ?? 'summary'"
+              v-bind="activeComponentProps"
+            />
           </KeepAlive>
         </div>
       </template>

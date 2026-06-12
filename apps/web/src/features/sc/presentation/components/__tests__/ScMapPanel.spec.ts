@@ -150,18 +150,12 @@ describe("ScMapPanel", () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: {
         waferPoints: MIXED_CLASS_POINTS.slice(0, 6),
-        classList: {
-          $typeName: "sc.v1.ClassList",
-          classNumbers: {
-            "9": {
-              $typeName: "sc.v1.DefectList",
-              count: 2,
-              defectIds: [501, 502],
-            },
+        legendGroups: {
+          "9": {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [501, 502],
           },
-          roughBins: {},
-          prediction: {},
-          labels: {},
         },
       },
     });
@@ -333,17 +327,11 @@ describe("ScMapPanel", () => {
       props: {
         waferPoints: MIXED_CLASS_POINTS,
         legendSources: ["class", "bin", "annotation", "prediction"],
-        classList: {
-          $typeName: "sc.v1.ClassList",
-          classNumbers: {},
-          roughBins: {},
-          labels: {},
-          prediction: {
-            Scratch: {
-              $typeName: "sc.v1.DefectList",
-              count: 2,
-              defectIds: [501, 502],
-            },
+        legendGroups: {
+          Scratch: {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [501, 502],
           },
         },
       },
@@ -371,24 +359,17 @@ describe("ScMapPanel", () => {
       props: {
         waferPoints: MIXED_CLASS_POINTS,
         legendSources: ["class", "bin", "annotation", "prediction"],
-        classList: {
-          $typeName: "sc.v1.ClassList",
-          classNumbers: {
-            "0": {
-              $typeName: "sc.v1.DefectList",
-              count: 3,
-              defectIds: [101, 102, 103],
-            },
+        legendGroups: {
+          Reviewed: {
+            $typeName: "sc.v1.DefectList",
+            count: 1,
+            defectIds: [101],
           },
-          roughBins: {},
-          labels: {
-            Reviewed: {
-              $typeName: "sc.v1.DefectList",
-              count: 1,
-              defectIds: [101],
-            },
+          __unlabeled__: {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [102, 103],
           },
-          prediction: {},
         },
       },
     });
@@ -436,7 +417,7 @@ describe("ScMapPanel", () => {
     expect(wrapper.find('[data-testid="sc-map-drawer"]').exists()).toBe(true);
   });
 
-  it("falls back to sampled points when classList is missing", async () => {
+  it("falls back to sampled points when legendGroups is missing", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS },
     });
@@ -448,11 +429,11 @@ describe("ScMapPanel", () => {
     ]);
   });
 
-  it("falls back to sampled points when classList is null", async () => {
+  it("falls back to sampled points when legendGroups is null", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: {
         waferPoints: MIXED_CLASS_POINTS,
-        classList: null,
+        legendGroups: null,
       },
     });
 

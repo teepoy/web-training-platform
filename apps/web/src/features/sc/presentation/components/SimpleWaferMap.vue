@@ -156,14 +156,7 @@ function recalcTransform() {
   const viewMaxX = (canvasW - cx) / scale - offsetX;
   const viewMinY = -(canvasH - cy) / scale - offsetY;
   const viewMaxY = cy / scale - offsetY;
-  console.log("[SimpleWaferMap] recalcTransform", {
-    canvasW, canvasH, cx, cy,
-    scale, offsetX, offsetY,
-    centerX: centerX.value, centerY: centerY.value,
-    waferRadiusNm,
-    zoom: props.zoom ?? null,
-    viewport: { x: viewMinX, y: viewMinY, w: viewMaxX - viewMinX, h: viewMaxY - viewMinY },
-  });
+
 }
 
 function dataToScreen(x: number, y: number): [number, number] {
@@ -383,11 +376,7 @@ function fullRender() {
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-    console.log("[SimpleWaferMap] fullRender", {
-      pointCount: pts.length,
-      pointBounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
-      firstPoint: { x: pts[0].x, y: pts[0].y },
-    });
+
   }
 
   renderBackground();
