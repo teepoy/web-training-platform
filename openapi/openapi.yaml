@@ -7134,6 +7134,12 @@ components:
         die_y:
           type: integer
           title: Die Y
+        reticle_x:
+          type: integer
+          title: Reticle X
+        reticle_y:
+          type: integer
+          title: Reticle Y
         size_x:
           type: integer
           title: Size X
@@ -7169,6 +7175,8 @@ components:
       - cluster_id
       - die_x
       - die_y
+      - reticle_x
+      - reticle_y
       - size_x
       - size_y
       - size_d
@@ -7208,6 +7216,24 @@ components:
           anyOf:
           - $ref: '#/components/schemas/ScSampleTableSort'
           - type: 'null'
+        reticle_x_die_count:
+          type: integer
+          minimum: 1.0
+          title: Reticle X Die Count
+          default: 10
+        reticle_y_die_count:
+          type: integer
+          minimum: 1.0
+          title: Reticle Y Die Count
+          default: 10
+        reticle_x_die_shift:
+          type: integer
+          title: Reticle X Die Shift
+          default: 0
+        reticle_y_die_shift:
+          type: integer
+          title: Reticle Y Die Shift
+          default: 0
       type: object
       title: ScSampleTableRowsRequest
     ScSampleTableRowsResponse:

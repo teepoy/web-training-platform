@@ -10,6 +10,7 @@ import ScReticleMap from "./ScReticleMap.vue";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { parsePoints } from "./scMapUtils";
+import type { HighlightDefect } from "./types";
 import type { ClassList, DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction";
@@ -55,8 +56,8 @@ const props = defineProps<{
    *  Parent curries inspection identity; ScMapPanel curries mode for each child map. */
   queryBoxSelection?: (mode: "wafer" | "die" | "reticle", region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
 
-  // Highlight defect IDs from table selection (cyan overlay)
-  highlightDefectIds?: number[];
+  // Highlight defects from table selection (cyan overlay, self-contained coordinates)
+  highlightDefects?: HighlightDefect[];
 }>();
 
 const emit = defineEmits<{
@@ -333,7 +334,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :geometry="waferGeometry"
                 :waferRadiusNm="waferRadiusNm"
                 :selectedIds="selectedIds"
-                :highlightDefectIds="highlightDefectIds"
+                :highlightDefects="highlightDefects"
                 :query-box-selection="waferBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.wafer"
@@ -351,7 +352,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :die-size-x="waferGeometry?.dieSizeX"
                 :die-size-y="waferGeometry?.dieSizeY"
                 :selectedIds="selectedIds"
-                :highlightDefectIds="highlightDefectIds"
+                :highlightDefects="highlightDefects"
                 :query-box-selection="dieBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.die"
@@ -372,7 +373,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :dieSizeX="reticleDieSizeX"
                 :dieSizeY="reticleDieSizeY"
                 :selectedIds="selectedIds"
-                :highlightDefectIds="highlightDefectIds"
+                :highlightDefects="highlightDefects"
                 :query-box-selection="reticleBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.reticle"

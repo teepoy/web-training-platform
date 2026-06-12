@@ -10,7 +10,7 @@ vi.mock("../ScWaferMap.vue", () => ({
         type: Object,
         default: undefined,
       },
-      highlightDefectIds: {
+      highlightDefects: {
         type: Array,
         default: undefined,
       },
@@ -70,17 +70,21 @@ describe("ScMapPanel", () => {
     expect(wrapper.text()).not.toContain("Filter");
   });
 
-  it("passes table highlight IDs to the active map", async () => {
+  it("passes table highlight defects to the active map", async () => {
+    const highlightDefects = [
+      { defectId: 101, waferX: 10, waferY: 20, dieX: 30, dieY: 40, reticleX: 50, reticleY: 60 },
+      { defectId: 103, waferX: 15, waferY: 25, dieX: 35, dieY: 45, reticleX: 55, reticleY: 65 },
+    ];
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: {
         waferPoints: MIXED_CLASS_POINTS,
-        highlightDefectIds: [101, 103],
+        highlightDefects,
       },
     });
 
     expect(
-      wrapper.findComponent({ name: "ScWaferMap" }).props("highlightDefectIds"),
-    ).toEqual([101, 103]);
+      wrapper.findComponent({ name: "ScWaferMap" }).props("highlightDefects"),
+    ).toEqual(highlightDefects);
   });
 
   it("clicking die tab shows sc-die-stack-canvas", async () => {

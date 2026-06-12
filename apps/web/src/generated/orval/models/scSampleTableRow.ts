@@ -18,6 +18,8 @@ export interface ScSampleTableRow {
   cluster_id: number;
   die_x: number;
   die_y: number;
+  reticle_x: number;
+  reticle_y: number;
   size_x: number;
   size_y: number;
   size_d: number;

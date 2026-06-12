@@ -184,6 +184,17 @@ export function buildPointLookup(points: ScatterPoint[]): Map<number, ScatterPoi
 }
 
 /**
+ * Build an O(1) defectId → {x, y} coordinate lookup from a packed STRIDE=6 array.
+ */
+export function buildPackedCoordMap(packed: number[]): Map<number, { x: number; y: number }> {
+  const map = new Map<number, { x: number; y: number }>();
+  for (let i = 0; i + STRIDE - 1 < packed.length; i += STRIDE) {
+    map.set(packed[i + 2], { x: packed[i], y: packed[i + 1] });
+  }
+  return map;
+}
+
+/**
  * Truncate a flat STRIDE=6 points array if it exceeds maxPoints.
  * Returns the truncated array and whether truncation occurred.
  */

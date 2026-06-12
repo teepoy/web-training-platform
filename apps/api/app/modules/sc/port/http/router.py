@@ -582,6 +582,10 @@ async def get_inspection_sample_table_rows(
     page_size = payload.page_size
     filter_params = payload.filter
     sort_params = payload.sort
+    reticle_size_x = payload.reticle_x_die_count
+    reticle_size_y = payload.reticle_y_die_count
+    reticle_offset_x = payload.reticle_x_die_shift
+    reticle_offset_y = payload.reticle_y_die_shift
 
     requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
     requested_set = set(requested) if requested else None
@@ -593,6 +597,10 @@ async def get_inspection_sample_table_rows(
             wafer_key,
             offset=0,
             count=max_defects,
+            reticle_size_x=reticle_size_x,
+            reticle_size_y=reticle_size_y,
+            reticle_offset_x=reticle_offset_x,
+            reticle_offset_y=reticle_offset_y,
         )
         samples_df = await samples_lf.collect_async()
         samples_df = samples_df.filter(
@@ -604,6 +612,10 @@ async def get_inspection_sample_table_rows(
             wafer_key,
             offset=0,
             count=inspection.defects,
+            reticle_size_x=reticle_size_x,
+            reticle_size_y=reticle_size_y,
+            reticle_offset_x=reticle_offset_x,
+            reticle_offset_y=reticle_offset_y,
         )
         samples_df = await samples_lf.collect_async()
 
@@ -663,6 +675,8 @@ async def get_inspection_sample_table_rows(
             cluster_id=row["cluster"],
             die_x=row["index_x"],
             die_y=row["index_y"],
+            reticle_x=row.get("reticle_x", 0),
+            reticle_y=row.get("reticle_y", 0),
             size_x=row["size_x"],
             size_y=row["size_y"],
             size_d=row["size_d"],

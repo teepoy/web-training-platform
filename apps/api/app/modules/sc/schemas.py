@@ -67,6 +67,10 @@ class ScSampleTableRowsRequest(BaseModel):
     page_size: int = Field(default=1000, ge=1, le=10000)
     filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
     sort: ScSampleTableSort | None = None
+    reticle_x_die_count: int = Field(default=10, ge=1)
+    reticle_y_die_count: int = Field(default=10, ge=1)
+    reticle_x_die_shift: int = 0
+    reticle_y_die_shift: int = 0
 
 
 class ScSampleTableRow(BaseModel):
@@ -82,6 +86,8 @@ class ScSampleTableRow(BaseModel):
     cluster_id: int
     die_x: int
     die_y: int
+    reticle_x: int
+    reticle_y: int
     size_x: int
     size_y: int
     size_d: int

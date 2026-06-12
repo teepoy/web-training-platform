@@ -5,6 +5,7 @@
 import { computed, ref, watch } from "vue";
 import SimpleDieStackMap from "./SimpleDieStackMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
+import type { HighlightDefect } from "./types";
 import { classColor, getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
 import type { ScBoxRegion } from "@/features/sc/api/boxFilter";
 
@@ -14,7 +15,7 @@ const props = defineProps<{
   dieSizeX?: number;
   dieSizeY?: number;
   selectedIds?: Set<number>;
-  highlightDefectIds?: number[];
+  highlightDefects?: HighlightDefect[];
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: ScBoxRegion) => Promise<number[]>;
@@ -99,23 +100,13 @@ function drawOverlay() {
   if (c.width !== _cw || c.height !== _ch) { c.width = _cw; c.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
 
-  // Draw highlight defect IDs as cyan 3x3 dots
-  const highlightPoints =
-    props.fullPoints && props.fullPoints.length > 0 ? props.fullPoints : props.points;
-  if (props.highlightDefectIds && props.highlightDefectIds.length > 0 && highlightPoints) {
-    const highlightSet = new Set(props.highlightDefectIds);
-    const pts = highlightPoints;
-    const count = Math.floor(pts.length / STRIDE);
+  // Draw highlight defects as cyan 3x3 dots
+  if (props.highlightDefects && props.highlightDefects.length > 0) {
     ctx.fillStyle = "#00FFFF";
-    for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
-      const defectId = pts[i + 2];
-      if (highlightSet.has(defectId)) {
-        const x = pts[i];
-        const y = pts[i + 1];
-        const sx = (x + _ox) * _s + _cx;
-        const sy = _cy - (y + _oy) * _s;
-        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
-      }
+    for (const hd of props.highlightDefects) {
+      const sx = (hd.dieX + _ox) * _s + _cx;
+      const sy = _cy - (hd.dieY + _oy) * _s;
+      ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
     }
   }
 
@@ -150,9 +141,7 @@ watch(() => props.selectedIds, (newSelected) => {
   if (changed) selectionState.value = new Set(cur);
 }, { immediate: true });
 
-watch(() => props.highlightDefectIds, () => { drawOverlay(); });
-watch(() => props.points, () => { drawOverlay(); });
-watch(() => props.fullPoints, () => { drawOverlay(); });
+watch(() => props.highlightDefects, () => { drawOverlay(); });
 </script>
 
 <template>

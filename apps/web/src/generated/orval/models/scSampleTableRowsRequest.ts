@@ -18,4 +18,10 @@ export interface ScSampleTableRowsRequest {
   page_size?: number;
   filter?: ScSampleTableRowsRequestFilter;
   sort?: ScSampleTableRowsRequestSort;
+  /** @minimum 1 */
+  reticle_x_die_count?: number;
+  /** @minimum 1 */
+  reticle_y_die_count?: number;
+  reticle_x_die_shift?: number;
+  reticle_y_die_shift?: number;
 }

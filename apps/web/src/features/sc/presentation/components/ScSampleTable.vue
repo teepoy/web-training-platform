@@ -31,6 +31,10 @@ const props = defineProps<{
   selectedDefectIds?: ReadonlySet<number>;
   filter?: ScSampleTableFilter;
   sort?: ScSampleTableSort | null;
+  reticleXDieCount?: number;
+  reticleYDieCount?: number;
+  reticleXDieShift?: number;
+  reticleYDieShift?: number;
 }>();
 
 const emit = defineEmits<{
@@ -382,6 +386,10 @@ async function fetchNextPage(): Promise<void> {
           page_size: PAGE_SIZE,
           filter: props.filter,
           sort: props.sort ?? undefined,
+          reticle_x_die_count: props.reticleXDieCount ?? 10,
+          reticle_y_die_count: props.reticleYDieCount ?? 10,
+          reticle_x_die_shift: props.reticleXDieShift ?? 0,
+          reticle_y_die_shift: props.reticleYDieShift ?? 0,
         },
       );
     if (!data || !("items" in data)) {
@@ -482,6 +490,28 @@ watch(
   },
   { immediate: true, deep: true },
 );
+
+defineExpose({
+  getDefectCoords(defectId: number): {
+    waferX: number;
+    waferY: number;
+    dieX: number;
+    dieY: number;
+    reticleX: number;
+    reticleY: number;
+  } | undefined {
+    const row = rows.value.find((r) => Number(r.defect_id) === defectId);
+    if (!row) return undefined;
+    return {
+      waferX: row.wafer_x,
+      waferY: row.wafer_y,
+      dieX: row.die_x,
+      dieY: row.die_y,
+      reticleX: row.reticle_x,
+      reticleY: row.reticle_y,
+    };
+  },
+});
 </script>
 
 <template>

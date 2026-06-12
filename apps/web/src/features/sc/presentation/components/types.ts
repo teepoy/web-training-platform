@@ -6,3 +6,13 @@ export interface DieStackPoint {
   classNumber: number | null;
   defectId: string;
 }
+
+export interface HighlightDefect {
+  defectId: number;
+  waferX: number;
+  waferY: number;
+  dieX: number;
+  dieY: number;
+  reticleX: number;
+  reticleY: number;
+}

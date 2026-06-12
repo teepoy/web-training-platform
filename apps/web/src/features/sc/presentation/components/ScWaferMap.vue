@@ -7,6 +7,7 @@
 import { computed, ref, watch } from "vue";
 import SimpleWaferMap from "./SimpleWaferMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
+import type { HighlightDefect } from "./types";
 import { classColor, getPackedPointIdsInRegion } from "./scMapUtils";
 
 const STRIDE = 6;
@@ -27,7 +28,7 @@ const props = defineProps<{
   waferRadiusNm?: number;
   geometry?: WaferGeometry | null;
   selectedIds?: Set<number>;
-  highlightDefectIds?: number[];
+  highlightDefects?: HighlightDefect[];
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
@@ -192,23 +193,13 @@ function drawOverlay() {
   if (cvs.width !== _cw || cvs.height !== _ch) { cvs.width = _cw; cvs.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
 
-  // Draw highlight defect IDs as cyan 3x3 dots
-  const highlightPoints =
-    props.fullPoints && props.fullPoints.length > 0 ? props.fullPoints : props.points;
-  if (props.highlightDefectIds && props.highlightDefectIds.length > 0 && highlightPoints) {
-    const highlightSet = new Set(props.highlightDefectIds);
-    const pts = highlightPoints;
-    const count = Math.floor(pts.length / STRIDE);
+  // Draw highlight defects as cyan 3x3 dots
+  if (props.highlightDefects && props.highlightDefects.length > 0) {
     ctx.fillStyle = "#00FFFF";
-    for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
-      const defectId = pts[i + 2];
-      if (highlightSet.has(defectId)) {
-        const x = pts[i];
-        const y = pts[i + 1];
-        const sx = (x + _ox) * _s + _cx;
-        const sy = _cy - (y + _oy) * _s;
-        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
-      }
+    for (const hd of props.highlightDefects) {
+      const sx = (hd.waferX + _ox) * _s + _cx;
+      const sy = _cy - (hd.waferY + _oy) * _s;
+      ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
     }
   }
 
@@ -268,9 +259,7 @@ watch(containerRef, (el) => {
 
 watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 
-watch(() => props.highlightDefectIds, () => { drawOverlay(); });
-watch(() => props.points, () => { drawOverlay(); });
-watch(() => props.fullPoints, () => { drawOverlay(); });
+watch(() => props.highlightDefects, () => { drawOverlay(); });
 
 watch(() => props.geometry, (geo) => {
   console.log("[ScWaferMap] geometry received", geo ?? null);

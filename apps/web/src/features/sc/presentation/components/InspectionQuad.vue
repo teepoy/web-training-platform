@@ -14,6 +14,7 @@ import type {
   ScSampleTableSort,
 } from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
+import type { HighlightDefect } from "@/features/sc/presentation/components/types";
 import {
   fetchScInspectionBoxFilter,
   type ScBoxRegion,
@@ -244,6 +245,29 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
   const f = props.fullReticleDisplay;
   return f && f.length > 0 ? f : props.reticleDisplay;
 });
+
+const sampleTableRef = ref<InstanceType<typeof ScSampleTable> | null>(null);
+
+const highlightDefects = computed<HighlightDefect[]>(() => {
+  const ids = props.selectedDefectIds;
+  if (!ids || ids.length === 0) return [];
+
+  const result: HighlightDefect[] = [];
+  for (const id of ids) {
+    const coords = sampleTableRef.value?.getDefectCoords?.(id);
+    if (!coords) continue;
+    result.push({
+      defectId: id,
+      waferX: coords.waferX,
+      waferY: coords.waferY,
+      dieX: coords.dieX,
+      dieY: coords.dieY,
+      reticleX: coords.reticleX,
+      reticleY: coords.reticleY,
+    });
+  }
+  return result;
+});
 </script>
 
 <template>
@@ -291,7 +315,7 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
           :reticle-die-size-y="reticleDieSizeYModel"
           :reticle-options="reticleOptionsModel"
           :selected-ids="legendSelectedIds"
-          :highlight-defect-ids="selectedDefectIds"
+          :highlight-defects="highlightDefects"
           :query-box-selection="queryBoxSelection"
           :zoom="zoom"
           :map-loading="mapLoading"
@@ -316,6 +340,7 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
         @pointercancel="onRowResizeEnd"
       />
       <ScSampleTable
+        ref="sampleTableRef"
         :key="selectionVersion"
         :defect-ids="filteredDefectIds"
         :inspection-time="inspectionTime"
@@ -325,6 +350,10 @@ const effectiveReticleFullPoints = computed<number[] | undefined>(() => {
         :selected-defect-ids="new Set(selectedDefectIds ?? [])"
         :filter="tableFilter"
         :sort="tableSort"
+        :reticle-x-die-count="reticleOptionsModel.xDieCount"
+        :reticle-y-die-count="reticleOptionsModel.yDieCount"
+        :reticle-x-die-shift="reticleOptionsModel.xDieShift"
+        :reticle-y-die-shift="reticleOptionsModel.yDieShift"
         @selection-change="(ids) => emit('table-selection-change', ids)"
         @filter-change="(filter) => emit('table-filter-change', filter)"
         @sort-change="(sort) => emit('table-sort-change', sort)"
