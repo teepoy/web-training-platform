@@ -11,16 +11,13 @@ from app.modules.datasets.app.services.dataset_capability_guard import (
 )
 from platform_runtime.sparse import DatasetPayloadStore
 from app.modules.datasets.app.services.dataset_service import DatasetService
-from app.modules.datasets.app.services.feature_ops import FeatureOpsService
 
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.datasets.domain.repository import DatasetRepository
-from app.shared.application.artifacts import ArtifactService
 from app.shared.domain.protocols import (
     ArtifactStorage,
     LabelStudioClient,
 )
-from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
 
 
 def get_repository(request: Request) -> DatasetRepository:
@@ -47,24 +44,11 @@ def get_config(request: Request) -> DictConfig:
     return request.app.state.app_context.shared.config
 
 
-def get_feature_ops(request: Request) -> FeatureOpsService:
-    ctx = request.app.state.app_context
-    return FeatureOpsService(
-        repository=ctx.prediction.prediction_repository,
-    )
-
-
-def get_artifacts(request: Request) -> ArtifactService:
-    ctx = request.app.state.app_context
-    return ArtifactService(
-        storage=ctx.shared.artifact_storage,
-        repository=ctx.prediction.prediction_repository,
-    )
-
-
 def get_dataset_service(
     repository: Annotated[DatasetRepository, Depends(get_repository)],
-    storage_factory: Annotated[DatasetStorageFactory, Depends(get_dataset_storage_factory)],
+    storage_factory: Annotated[
+        DatasetStorageFactory, Depends(get_dataset_storage_factory)
+    ],
     ls_client: Annotated[LabelStudioClient, Depends(get_label_studio_client)],
     storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
     payload_store: Annotated[DatasetPayloadStore, Depends(get_dataset_payload_store)],
@@ -83,18 +67,6 @@ def get_dataset_service(
 
 DatasetServiceDep = Annotated[DatasetService, Depends(get_dataset_service)]
 LabelStudioClientDep = Annotated[LabelStudioClient, Depends(get_label_studio_client)]
-
-
-def get_sc_dataset_reader(request: Request) -> ScDatasetReader:
-    return request.app.state.app_context.sc.dataset_reader
-
-
-def get_sc_dataset_store(request: Request) -> ScDatasetStore:
-    return request.app.state.app_context.sc.dataset_store
-
-
-ScDatasetReaderDep = Annotated[ScDatasetReader, Depends(get_sc_dataset_reader)]
-ScDatasetStoreDep = Annotated[ScDatasetStore, Depends(get_sc_dataset_store)]
 
 
 def get_session_factory(request: Request) -> async_sessionmaker:

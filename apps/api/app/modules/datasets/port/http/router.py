@@ -20,7 +20,10 @@ from fastapi import (
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
     LabelStudioClientDep,
+    get_artifact_storage,
+    get_dataset_payload_store,
     get_dataset_storage_factory,
+    get_repository,
 )
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.datasets.domain.sample_row import BulkSampleRow
@@ -82,16 +85,11 @@ from app.modules.datasets.app.services.sparse_export import SparseExportAssemble
 from app.shared.application.artifacts import ArtifactService
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.domain.repository import DatasetRepository
-from app.modules.datasets.port.http.deps import (
-    get_artifact_storage,
-    get_artifacts,
-    get_dataset_payload_store,
-    get_feature_ops,
-    get_repository,
+from app.modules.prediction.port.http.deps import (
+    get_artifact_service,
+    get_feature_ops_service,
 )
-from app.modules.datasets.port.http.deps import ScDatasetReaderDep, ScDatasetStoreDep
 from app.shared.api.utils import _infer_dataset_type, _make_ls_image_url
-from app.modules.sc.schemas import ScBulkAnnotationRequest, ScBulkAnnotationResponse
 from app.shared.infrastructure.label_studio.client import (
     LabelStudioNotFoundError,
     platform_annotation_to_ls,
@@ -1280,54 +1278,6 @@ async def bulk_create_annotations(
 
 
 @router.post(
-    "/datasets/{dataset_id}/annotations/bulk-sc",
-    response_model=ScBulkAnnotationResponse,
-)
-async def sc_bulk_create_annotations(
-    dataset_id: str,
-    payload: ScBulkAnnotationRequest,
-    dataset_reader: ScDatasetReaderDep,
-    dataset_store: ScDatasetStoreDep,
-    dataset_service: DatasetServiceDep,
-    repo: DatasetRepository = Depends(get_repository),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> ScBulkAnnotationResponse:
-    ds = await dataset_reader.get_dataset(dataset_id, org_id=org.id)
-    if ds is None:
-        ds = await dataset_reader.get_dataset(dataset_id)
-    if ds is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-
-    defect_ids = {item.defect_id for item in payload.annotations}
-    mapping = await dataset_store.map_defect_ids_to_sample_ids(
-        dataset_reader, dataset_id, defect_ids, org_id=org.id
-    )
-
-    created = 0
-    created_labels: set[str] = set()
-    for item in payload.annotations:
-        sample_id = mapping.get(item.defect_id)
-        if sample_id is None:
-            continue
-        ann = Annotation(
-            id=__import__("uuid").uuid4().hex,
-            sample_id=sample_id,
-            label=item.label,
-            created_by=current_user.id,
-        )
-        await dataset_reader.create_annotation(ann, dataset_id=dataset_id)
-        created += 1
-        created_labels.add(item.label)
-
-    # ── Auto-expand label_space with newly introduced labels ──────────
-    if created_labels:
-        await dataset_service.merge_label_space(dataset_id, created_labels)
-
-    return ScBulkAnnotationResponse(created=created)
-
-
-@router.post(
     "/datasets/{dataset_id}/sync-annotations-to-ls",
     response_model=SyncAnnotationsResponse,
 )
@@ -1397,7 +1347,7 @@ async def export_dataset(
     ls_read_repository: LsReadRepository | None = Depends(
         get_ls_read_repository_optional
     ),
-    artifacts: ArtifactService = Depends(get_artifacts),
+    artifacts: ArtifactService = Depends(get_artifact_service),
     payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> dict:
@@ -1438,7 +1388,7 @@ async def export_dataset_persist(
     ls_read_repository: LsReadRepository | None = Depends(
         get_ls_read_repository_optional
     ),
-    artifacts: ArtifactService = Depends(get_artifacts),
+    artifacts: ArtifactService = Depends(get_artifact_service),
     payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> PersistExportResponse:
@@ -1503,7 +1453,7 @@ async def similarity_search(
     k: int = 5,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops),
+    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
 ):
     storage = await _open_storage(factory, dataset_id, org_id=org.id)
     sample_row = await storage.get_sample(sample_id)
@@ -1518,7 +1468,7 @@ async def selection_metrics(
     factory: DatasetStorageFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops),
+    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
 ) -> dict:
     storage = await _open_storage(factory, dataset_id, org_id=org.id)
     samples, _ = await storage.list_samples(limit=100_000)
@@ -1539,7 +1489,7 @@ async def uncovered_hints(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops),
+    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
 ) -> dict:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:

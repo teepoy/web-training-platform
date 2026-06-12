@@ -16,11 +16,12 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.datasets.port.http.deps import (
-    get_artifacts,
     get_dataset_storage_factory,
     get_repository,
+)
+from app.modules.prediction.port.http.deps import (
+    get_artifact_service as get_artifacts,
 )
 from app.modules.datasets.port.http.router import (
     get_ls_read_repository_optional,

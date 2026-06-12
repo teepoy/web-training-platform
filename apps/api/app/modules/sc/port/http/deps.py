@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
 from app.modules.sc.app.services.sc_import_service import ScImportService
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sprite_service import SpriteService
@@ -41,6 +42,14 @@ def get_dataset_payload_store(request: Request) -> DatasetPayloadStore:
     return request.app.state.app_context.datasets.dataset_payload_store
 
 
+def get_sc_dataset_reader(request: Request) -> ScDatasetReader:
+    return request.app.state.app_context.sc.dataset_reader
+
+
+def get_sc_dataset_store(request: Request) -> ScDatasetStore:
+    return request.app.state.app_context.sc.dataset_store
+
+
 ScImportServiceDep = Annotated[ScImportService, Depends(get_sc_import_service)]
 ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]
 PrefectClientDep = Annotated[PrefectClient, Depends(get_prefect_client)]
@@ -52,3 +61,5 @@ ScPlotPointsServiceDep = Annotated[
 DatasetPayloadStoreDep = Annotated[
     DatasetPayloadStore, Depends(get_dataset_payload_store)
 ]
+ScDatasetReaderDep = Annotated[ScDatasetReader, Depends(get_sc_dataset_reader)]
+ScDatasetStoreDep = Annotated[ScDatasetStore, Depends(get_sc_dataset_store)]

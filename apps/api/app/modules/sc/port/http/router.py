@@ -11,8 +11,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
+from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.datasets.port.http.deps import (
+    DatasetServiceDep,
+    get_repository,
+)
 from app.modules.sc.port.http.deps import (
     DatasetPayloadStoreDep,
+    ScDatasetReaderDep,
+    ScDatasetStoreDep,
     ScImageFetcherDep,
     ScImportServiceDep,
     PrefectClientDep,
@@ -27,12 +34,13 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     filter_box_defect_ids,
 )
 from app.modules.sc.proto_adapter import (
-    make_class_list_pb,
     make_wafer_map_response_pb,
 )
 from app.modules.sc.schemas import (
     ScBoxFilterRequest,
     ScBoxFilterResponse,
+    ScBulkAnnotationRequest,
+    ScBulkAnnotationResponse,
     ScFilterParams,
     ScInspectionReviewImagesResponse,
     ScImportRequest,
@@ -45,7 +53,7 @@ from app.modules.sc.schemas import (
     ScSampleTableRowsRequest,
     ScSampleTableRowsResponse,
 )
-from app.shared.api.schemas import Organization, User
+from app.shared.api.schemas import Annotation, Organization, User
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import DoneEvent, ScErrorEvent, ScProgressEvent, SSEEvent
 from app.modules.sc.domain.models import (
@@ -291,70 +299,6 @@ async def get_inspection_map_points(
     return Response(content=body, media_type="application/x-protobuf")
 
 
-@router.get(
-    "/inspections/{inspection_time}/{wafer_key}/class-list",
-    responses={
-        200: {
-            "description": "Return compact SC class/bin defect-id lists",
-            "content": {
-                "application/x-protobuf": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            },
-        }
-    },
-)
-async def get_inspection_class_list(
-    upstream_reader: ScUpstreamReaderDep,
-    inspection_time: str,
-    wafer_key: int,
-    filters: ScFilterParams = Depends(get_sc_filter_params),
-) -> Response:
-    insp_dt = _parse_inspection_time(inspection_time)
-    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
-    if inspection is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
-        )
-    samples_lf = await upstream_reader.list_samples(
-        insp_dt,
-        wafer_key,
-        offset=0,
-        count=1_000_000,
-    )
-    samples_lf = _apply_sample_filters(
-        samples_lf,
-        class_number=filters.class_numbers,
-        rough_bin=filters.rough_bins,
-        predicted_label=filters.predictions,
-        label=filters.annotations,
-        test_id=filters.test_ids,
-        adder=filters.adders,
-        cluster_id=filters.cluster_ids,
-    )
-    columns = set(samples_lf.collect_schema().names())
-    class_list_columns = [
-        column
-        for column in (
-            "defect_id",
-            "class_number",
-            "rough_bin",
-            "predicted_label",
-            "label",
-            "test_id",
-            "adder",
-            "cluster_id",
-        )
-        if column in columns
-    ]
-    df = await samples_lf.select(class_list_columns).collect_async()
-    return Response(
-        content=make_class_list_pb(df),
-        media_type="application/x-protobuf",
-    )
-
-
 @router.post(
     "/inspections/{inspection_time}/{wafer_key}/box-filter",
     response_model=ScBoxFilterResponse,
@@ -434,45 +378,6 @@ async def get_sc_dataset_plot_points(
             reticle_x_die_shift=reticle_x_die_shift,
             reticle_y_die_shift=reticle_y_die_shift,
             legend_group_by=filters.legend_group_by,
-            class_numbers=filters.class_numbers,
-            rough_bins=filters.rough_bins,
-            predictions=filters.predictions,
-            annotations=filters.annotations,
-            test_ids=filters.test_ids,
-            adders=filters.adders,
-            cluster_ids=filters.cluster_ids,
-        )
-    except ScPlotPointsNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScPlotPointsRejectedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=body, media_type="application/x-protobuf")
-
-
-@router.get(
-    "/datasets/{dataset_id}/class-list",
-    responses={
-        200: {
-            "description": "Return compact SC class/bin/prediction/label defect-id lists",
-            "content": {
-                "application/x-protobuf": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            },
-        }
-    },
-)
-async def get_sc_dataset_class_list(
-    dataset_id: str,
-    service: ScPlotPointsServiceDep,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    filters: ScFilterParams = Depends(get_sc_filter_params),
-) -> Response:
-    try:
-        body = await service.build_class_list_response(
-            dataset_id,
-            org.id,
             class_numbers=filters.class_numbers,
             rough_bins=filters.rough_bins,
             predictions=filters.predictions,
@@ -1100,3 +1005,59 @@ async def start_sc_import(
         imported_count=status.imported_count,
         error=status.error,
     )
+
+
+# ── SC annotation endpoints under datasets namespace ──────────────────────
+# These routes semantically belong to SC but sit under /datasets/
+# because they operate on dataset-owned SC samples. Using a separate
+# sub-router avoids the /api/v1/sc/ prefix while keeping the code in
+# the SC module that owns the domain logic.
+
+sc_datasets_router = APIRouter(prefix="/api/v1", tags=["sc"])
+
+
+@sc_datasets_router.post(
+    "/datasets/{dataset_id}/annotations/bulk-sc",
+    response_model=ScBulkAnnotationResponse,
+)
+async def sc_bulk_create_annotations(
+    dataset_id: str,
+    payload: ScBulkAnnotationRequest,
+    dataset_reader: ScDatasetReaderDep,
+    dataset_store: ScDatasetStoreDep,
+    dataset_service: DatasetServiceDep,
+    repo: Annotated[DatasetRepository, Depends(get_repository)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+) -> ScBulkAnnotationResponse:
+    ds = await dataset_reader.get_dataset(dataset_id, org_id=org.id)
+    if ds is None:
+        ds = await dataset_reader.get_dataset(dataset_id)
+    if ds is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+
+    defect_ids = {item.defect_id for item in payload.annotations}
+    mapping = await dataset_store.map_defect_ids_to_sample_ids(
+        dataset_reader, dataset_id, defect_ids, org_id=org.id
+    )
+
+    created = 0
+    created_labels: set[str] = set()
+    for item in payload.annotations:
+        sample_id = mapping.get(item.defect_id)
+        if sample_id is None:
+            continue
+        ann = Annotation(
+            id=__import__("uuid").uuid4().hex,
+            sample_id=sample_id,
+            label=item.label,
+            created_by=current_user.id,
+        )
+        await dataset_reader.create_annotation(ann, dataset_id=dataset_id)
+        created += 1
+        created_labels.add(item.label)
+
+    if created_labels:
+        await dataset_service.merge_label_space(dataset_id, created_labels)
+
+    return ScBulkAnnotationResponse(created=created)
