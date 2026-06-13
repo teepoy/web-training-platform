@@ -4,6 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["mypy-protobuf==5.1.0"]
 
+[tool.uv]
+concurrent-downloads = 4
+
 [tool.uv.extra-build-dependencies]
 antlr4-python3-runtime = ["setuptools"]
 

@@ -111,6 +111,13 @@ function onBlinkTableSelect(
 // ── Keyboard shortcuts: digit 1-9 applies label by class index ──────
 
 function handleKeydown(e: KeyboardEvent): void {
+  if (e.key === "Escape") {
+    if (page.selectedDefectIds.value.size > 0) {
+      page.clearSelection();
+      return;
+    }
+  }
+
   const digit = Number(e.key);
   if (!Number.isFinite(digit) || digit < 1 || digit > 9) return;
 
@@ -340,6 +347,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :legend-groups="page.classList.value"
               :legend-sources="['class', 'bin', 'annotation', 'prediction']"
               :selected-ids="page.mapSelectedDefectIds.value"
+              :highlight-defects="page.highlightDefects.value"
               :zoom="page.mapZoom.value"
               :query-box-selection="queryBoxSelection"
               @update:active-map-tab="page.setActiveMapTab"
