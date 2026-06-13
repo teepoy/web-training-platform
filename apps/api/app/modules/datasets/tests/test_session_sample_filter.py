@@ -39,6 +39,7 @@ async def test_dataset_session_forwards_sample_ids(
         offset=20,
         limit=10,
         with_labels=True,
+        with_predictions=True,
         order_by="id",
         sample_ids=["101", "205"],
     )

@@ -258,7 +258,7 @@ class SparseDatasetStorage:
     # ── shard navigation ────────────────────────────────────────────
 
     @staticmethod
-    def _sorted_shard_ids(manifest: DatasetManifest) -> list[str]:
+    def _sorted_shard_ids(manifest: DatasetManifest, ids: list[str]) -> list[str]:
         """Return sample_ids sorted by (shard_index, row_index)."""
 
         def _natural_key(sid: str) -> tuple[int, int]:
@@ -267,7 +267,7 @@ class SparseDatasetStorage:
                 return (0, 0)
             return (loc.shard_index, loc.row_index)
 
-        return sorted(manifest.sample_index.keys(), key=_natural_key)
+        return sorted(ids, key=_natural_key)
 
     async def _read_sample_from_locator(
         self, locator: SampleLocator, manifest: DatasetManifest
@@ -365,7 +365,7 @@ class SparseDatasetStorage:
             rng.shuffle(all_sids)
         else:
             # Natural order: by (shard_index, row_index)
-            all_sids = self._sorted_shard_ids(manifest)
+            all_sids = self._sorted_shard_ids(manifest, all_sids)
 
         # ── predictions ──────────────────────────────────────────
         predictions_by_sample: dict[str, Any] = {}

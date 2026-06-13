@@ -555,6 +555,11 @@ def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchIma
     die_x = kwargs.pop("die_x", 0)
     die_y = kwargs.pop("die_y", 0)
     label = row.latest_label or row.label or ""
+    pred = row.latest_prediction or {}
+    predicted_label = str(pred.get("predicted_label") or "")
+    confidence = pred.get("confidence")
+    if confidence is not None:
+        confidence = float(confidence)
     sc_fields = _sample_row_meta_to_sc_fields(row)
     images = _embedded_bytes_to_sc_image_refs(row, dataset_id=ds_id)
     return ScPatchImageV1Row(
@@ -563,6 +568,8 @@ def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchIma
         die_y=die_y,
         images=images,
         label=label,
+        predicted_label=predicted_label,
+        confidence=confidence,
         **sc_fields,
     )
 

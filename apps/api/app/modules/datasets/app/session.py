@@ -62,6 +62,7 @@ class DatasetSession:
             offset=offset,
             limit=limit,
             with_labels=True,
+            with_predictions=True,
             order_by=order_by,
             sample_ids=sample_ids,
         )

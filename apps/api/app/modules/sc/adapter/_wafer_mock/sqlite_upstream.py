@@ -134,7 +134,10 @@ class SqliteScUpstream:
         )
         insp_str = insp_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
         query = f"""
-        SELECT d.*, s.origin_x, s.origin_y, s.die_size_x, s.die_size_y
+        SELECT d.*,
+               s.lot_id, s.wafer_id, s.layer_id, s.recipe_key, s.inspect_equip_id,
+               s.device, s.center_x, s.center_y,
+               s.origin_x, s.origin_y, s.die_size_x, s.die_size_y
         FROM inspect_defect d
         JOIN insp_wafer_summary s ON d.wafer_key = s.wafer_key AND d.inspection_time = s.inspection_time
         WHERE d.inspection_time = '{insp_str}' AND d.wafer_key = {wafer_key}

@@ -93,7 +93,6 @@ export * from './exportParquetApiV1PluginsExportParquetExportPostParams';
 export * from './exportReviewVersionApiV1PredictionReviewsActionIdExportGet200';
 export * from './exportReviewVersionApiV1PredictionReviewsActionIdExportGetParams';
 export * from './extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams';
-export * from './getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams';
 export * from './getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams';
 export * from './getInspectionsApiV1ScInspectionsGetParams';
 export * from './getJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams';
@@ -102,7 +101,6 @@ export * from './getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectId
 export * from './getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams';
 export * from './getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams';
 export * from './getRunLogsApiV1RunsRunIdLogsGetParams';
-export * from './getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams';
 export * from './getScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetParams';
 export * from './getTrainerRouteApiV1TrainersTrainerIdGet200';
 export * from './globalChatRequest';

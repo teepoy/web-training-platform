@@ -65,7 +65,6 @@ import type {
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGet200,
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGetParams,
   ExtractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams,
-  GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams,
   GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams,
   GetInspectionsApiV1ScInspectionsGetParams,
   GetJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams,
@@ -74,7 +73,6 @@ import type {
   GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams,
   GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams,
   GetRunLogsApiV1RunsRunIdLogsGetParams,
-  GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams,
   GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetParams,
   GetTrainerRouteApiV1TrainersTrainerIdGet200,
   GlobalChatRequest,
@@ -2347,83 +2345,6 @@ export const useBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost =
       > => {
 
       const mutationOptions = getBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPostMutationOptions(options);
-
-      return useMutation(mutationOptions);
-    }
-
-/**
- * @summary Sc Bulk Create Annotations
- */
-export type scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse = {
-  data: ScBulkAnnotationResponse | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostUrl = (datasetId: string,) => {
-
-
-  return `/api/v1/datasets/${datasetId}/annotations/bulk-sc`
-}
-
-export const scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost = async (datasetId: string,
-    scBulkAnnotationRequest: ScBulkAnnotationRequest, options?: RequestInit): Promise<scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse> => {
-
-  return orvalFetcher<scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse>(getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostUrl(datasetId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      scBulkAnnotationRequest,)
-  }
-);}
-
-
-
-
-export const getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext> => {
-
-const mutationKey = ['scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, {datasetId: string;data: ScBulkAnnotationRequest}> = (props) => {
-          const {datasetId,data} = props ?? {};
-
-          return  scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost(datasetId,data,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult = NonNullable<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>>
-    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationBody = ScBulkAnnotationRequest
-    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationError = HTTPValidationError
-
-    /**
- * @summary Sc Bulk Create Annotations
- */
-export const useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationReturnType<
-        Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>,
-        TError,
-        {datasetId: string;data: ScBulkAnnotationRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }
@@ -10474,99 +10395,6 @@ export function useGetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKe
 
 
 /**
- * @summary Get Inspection Class List
- */
-export type getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse = {
-  data: unknown | Blob | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetUrl = (inspectionTime: string,
-    waferKey: number,
-    params?: GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/class-list?${normalizedParams.toString()}` : `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/class-list`
-}
-
-export const getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet = async (inspectionTime: string,
-    waferKey: number,
-    params?: GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams, options?: RequestInit): Promise<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse> => {
-
-  return orvalFetcher<getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetResponse>(getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetUrl(inspectionTime,waferKey,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>,) => {
-    return ['api','v1','sc','inspections',inspectionTime,waferKey,'class-list', ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryOptions = <TData = Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryKey(inspectionTime,waferKey,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>> = ({ signal }) => getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>
-}
-
-export type GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryResult = NonNullable<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>>
-export type GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Inspection Class List
- */
-
-export function useGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet<TData = Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params?: MaybeRef<GetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetInspectionClassListApiV1ScInspectionsInspectionTimeWaferKeyClassListGetQueryOptions(inspectionTime,waferKey,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
  * @summary Filter Inspection Box
  */
 export type filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPostResponse = {
@@ -10722,94 +10550,6 @@ export function useGetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGet<T
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetQueryOptions(datasetId,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Get Sc Dataset Class List
- */
-export type getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse = {
-  data: unknown | Blob | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl = (datasetId: string,
-    params?: GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/datasets/${datasetId}/class-list?${normalizedParams.toString()}` : `/api/v1/sc/datasets/${datasetId}/class-list`
-}
-
-export const getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet = async (datasetId: string,
-    params?: GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams, options?: RequestInit): Promise<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse> => {
-
-  return orvalFetcher<getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetResponse>(getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetUrl(datasetId,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey = (datasetId: MaybeRef<string>,
-    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>,) => {
-    return ['api','v1','sc','datasets',datasetId,'class-list', ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions = <TData = Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>,
-    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryKey(datasetId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>> = ({ signal }) => getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet(unref(datasetId),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>
-}
-
-export type GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryResult = NonNullable<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>>
-export type GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Sc Dataset Class List
- */
-
-export function useGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet<TData = Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError = HTTPValidationError>(
- datasetId: MaybeRef<string>,
-    params?: MaybeRef<GetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetClassListApiV1ScDatasetsDatasetIdClassListGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetScDatasetClassListApiV1ScDatasetsDatasetIdClassListGetQueryOptions(datasetId,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -11703,6 +11443,83 @@ export const useStartScImportApiV1ScImportPost = <TError = HTTPValidationError,
       > => {
 
       const mutationOptions = getStartScImportApiV1ScImportPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Sc Bulk Create Annotations
+ */
+export type scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse = {
+  data: ScBulkAnnotationResponse | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/datasets/${datasetId}/annotations/bulk-sc`
+}
+
+export const scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost = async (datasetId: string,
+    scBulkAnnotationRequest: ScBulkAnnotationRequest, options?: RequestInit): Promise<scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse> => {
+
+  return orvalFetcher<scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostResponse>(getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostUrl(datasetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scBulkAnnotationRequest,)
+  }
+);}
+
+
+
+
+export const getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext> => {
+
+const mutationKey = ['scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, {datasetId: string;data: ScBulkAnnotationRequest}> = (props) => {
+          const {datasetId,data} = props ?? {};
+
+          return  scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost(datasetId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult = NonNullable<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>>
+    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationBody = ScBulkAnnotationRequest
+    export type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Sc Bulk Create Annotations
+ */
+export const useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>, TError,{datasetId: string;data: ScBulkAnnotationRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost>>,
+        TError,
+        {datasetId: string;data: ScBulkAnnotationRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

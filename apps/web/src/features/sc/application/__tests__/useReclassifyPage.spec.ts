@@ -98,23 +98,39 @@ const DEFAULT_DATASET: ScDatasetInfo = {
 
 describe("useReclassifyPage - predictionLabels", () => {
   it("maps sample_id to predicted_label", async () => {
-    const predictionsData = {
+    const viewSamplesData = {
       pages: [
         {
           items: [
             {
-              id: "s1",
-              latest_prediction: {
-                predicted_label: "Scratch",
-                confidence: 0.95,
-              },
+              sample_id: "s1",
+              defect_id: "s1",
+              inspection_time: "2026-01-01T00:00:00",
+              wafer_key: 1,
+              wafer_x: 0,
+              wafer_y: 0,
+              die_x: 0,
+              die_y: 0,
+              rough_bin: 1,
+              class_number: 1,
+              images: [],
+              predicted_label: "Scratch",
+              confidence: 0.95,
             },
             {
-              id: "s2",
-              latest_prediction: {
-                predicted_label: "Clean",
-                confidence: 0.80,
-              },
+              sample_id: "s2",
+              defect_id: "s2",
+              inspection_time: "2026-01-01T00:00:00",
+              wafer_key: 1,
+              wafer_x: 0,
+              wafer_y: 0,
+              die_x: 0,
+              die_y: 0,
+              rough_bin: 1,
+              class_number: 1,
+              images: [],
+              predicted_label: "Clean",
+              confidence: 0.80,
             },
           ],
           total: 2,
@@ -125,8 +141,8 @@ describe("useReclassifyPage - predictionLabels", () => {
 
     const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, [
       {
-        key: ["sc", "view-annotations-paged", "ds-test-1"],
-        data: predictionsData,
+        key: ["sc", "view-samples-paged", "ds-test-1", null],
+        data: viewSamplesData,
       },
     ]);
 
@@ -136,10 +152,36 @@ describe("useReclassifyPage - predictionLabels", () => {
   });
 
   it("returns empty object when predictions are empty", async () => {
+    const emptySamplesData = {
+      pages: [
+        {
+          items: [
+            {
+              sample_id: "s1",
+              defect_id: "s1",
+              inspection_time: "2026-01-01T00:00:00",
+              wafer_key: 1,
+              wafer_x: 0,
+              wafer_y: 0,
+              die_x: 0,
+              die_y: 0,
+              rough_bin: 1,
+              class_number: 1,
+              images: [],
+              predicted_label: "",
+              confidence: null,
+            },
+          ],
+          total: 1,
+        },
+      ],
+      pageParams: [0],
+    };
+
     const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, [
       {
-        key: ["sc", "view-annotations-paged", "ds-test-1"],
-        data: { pages: [{ items: [], total: 0 }], pageParams: [0] },
+        key: ["sc", "view-samples-paged", "ds-test-1", null],
+        data: emptySamplesData,
       },
     ]);
 
@@ -496,19 +538,18 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
     expect(secondPageOffsets[0]).toBe(200);
   });
 
-  it("uses map box-selection IDs as the reclassify selection", async () => {
+  it("uses map box-selection IDs as BlinkTable data source filter", async () => {
     const { state } = await mountPage("ds-filter-query", DEFAULT_DATASET);
     state.handleBoxSelectionChange([274, 103]);
 
-    expect([...state.selectedDefectIds.value]).toEqual(["274", "103"]);
-    expect([...state.mapSelectedDefectIds.value]).toEqual([274, 103]);
+    expect([...state.mapFilteredIds.value].sort()).toEqual(["274", "103"].sort());
   });
 
-  it("clears the reclassify selection when the map emits an empty selection", async () => {
+  it("clears the BlinkTable data source filter when the map emits an empty selection", async () => {
     const { state } = await mountPage("ds-box-filter", DEFAULT_DATASET);
     state.handleBoxSelectionChange([103, 274]);
     state.handleBoxSelectionChange([]);
 
-    expect(state.selectedDefectIds.value.size).toBe(0);
+    expect(state.mapFilteredIds.value.size).toBe(0);
   });
 });

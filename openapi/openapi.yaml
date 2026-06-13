@@ -896,38 +896,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/datasets/{dataset_id}/annotations/bulk-sc:
-    post:
-      tags:
-      - datasets
-      summary: Sc Bulk Create Annotations
-      operationId: sc_bulk_create_annotations_api_v1_datasets__dataset_id__annotations_bulk_sc_post
-      parameters:
-      - name: dataset_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Dataset Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScBulkAnnotationRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ScBulkAnnotationResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/datasets/{dataset_id}/sync-annotations-to-ls:
     post:
       tags:
@@ -3974,124 +3942,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/inspections/{inspection_time}/{wafer_key}/class-list:
-    get:
-      tags:
-      - sc
-      summary: Get Inspection Class List
-      operationId: get_inspection_class_list_api_v1_sc_inspections__inspection_time___wafer_key__class_list_get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: class_numbers
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Class Numbers
-      - name: rough_bins
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Rough Bins
-      - name: predictions
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: string
-          - type: 'null'
-          title: Predictions
-      - name: annotations
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: string
-          - type: 'null'
-          title: Annotations
-      - name: test_ids
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Test Ids
-      - name: adders
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Adders
-      - name: cluster_ids
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Cluster Ids
-      - name: legend_group_by
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - enum:
-            - class
-            - bin
-            - annotation
-            - prediction
-            type: string
-          - type: 'null'
-          title: Legend Group By
-      responses:
-        '200':
-          description: Return compact SC class/bin defect-id lists
-          content:
-            application/json:
-              schema: {}
-            application/x-protobuf:
-              schema:
-                type: string
-                format: binary
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/inspections/{inspection_time}/{wafer_key}/box-filter:
     post:
       tags:
@@ -4274,118 +4124,6 @@ paths:
       responses:
         '200':
           description: Return SC sparse plot point arrays as WaferMapResponse protobuf
-          content:
-            application/json:
-              schema: {}
-            application/x-protobuf:
-              schema:
-                type: string
-                format: binary
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/datasets/{dataset_id}/class-list:
-    get:
-      tags:
-      - sc
-      summary: Get Sc Dataset Class List
-      operationId: get_sc_dataset_class_list_api_v1_sc_datasets__dataset_id__class_list_get
-      parameters:
-      - name: dataset_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Dataset Id
-      - name: class_numbers
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Class Numbers
-      - name: rough_bins
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Rough Bins
-      - name: predictions
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: string
-          - type: 'null'
-          title: Predictions
-      - name: annotations
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: string
-          - type: 'null'
-          title: Annotations
-      - name: test_ids
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Test Ids
-      - name: adders
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Adders
-      - name: cluster_ids
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Cluster Ids
-      - name: legend_group_by
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - enum:
-            - class
-            - bin
-            - annotation
-            - prediction
-            type: string
-          - type: 'null'
-          title: Legend Group By
-      responses:
-        '200':
-          description: Return compact SC class/bin/prediction/label defect-id lists
           content:
             application/json:
               schema: {}
@@ -4807,6 +4545,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScImportResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/annotations/bulk-sc:
+    post:
+      tags:
+      - sc
+      summary: Sc Bulk Create Annotations
+      operationId: sc_bulk_create_annotations_api_v1_datasets__dataset_id__annotations_bulk_sc_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScBulkAnnotationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScBulkAnnotationResponse'
         '422':
           description: Validation Error
           content:
