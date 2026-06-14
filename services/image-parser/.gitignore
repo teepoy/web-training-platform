@@ -1,6 +1,5 @@
-vendor/
 *.tar
 gen/
-server
-seed
-bench
+/server
+/seed
+/bench

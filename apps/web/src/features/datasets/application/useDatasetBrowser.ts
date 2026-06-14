@@ -11,7 +11,7 @@ import {
   useDataPipeline,
 } from "@/shared";
 import type { BrowserItem, WaferPoint } from "@/shared/types/components";
-import { datasetPanels } from "@/_legacy/features/classify/config";
+import { datasetPanels } from "@/legacy/features/classify/config";
 
 interface UseDatasetBrowserOptions {
   datasetId: ComputedRef<string>;

@@ -87,5 +87,4 @@ apps/web/tests/.auth/
 /graphify-out/
 /issues/
 /legacy/issues/
-go.work.sum
 infra/compose/data/
