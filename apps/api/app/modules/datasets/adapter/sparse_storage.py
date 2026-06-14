@@ -248,8 +248,8 @@ class SparseDatasetStorage:
                     access_url=access_url,
                     image_type=str(img.get("image_type", "")),
                     review_image_id=(
-                        int(rid)
-                        if (rid := img.get("review_image_id")) is not None
+                        rid
+                        if isinstance(rid := img.get("review_image_id"), int)
                         else None
                     ),
                 )

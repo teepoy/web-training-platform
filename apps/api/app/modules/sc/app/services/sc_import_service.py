@@ -200,6 +200,9 @@ class ScImportService:
         max_rows: int | None = None,
         force_prefect_flow: bool = False,
     ) -> tuple[ScImportStatus, str | None]:
+        assert self._upstream is not None
+        assert self._repo is not None
+        assert self._payload_store is not None
         # ── Pre-check: skip dataset creation when upstream has no data ──
         try:
             insp_dt = datetime.fromisoformat(source_inspection_time)
@@ -300,6 +303,10 @@ class ScImportService:
         logger: logging.Logger | logging.LoggerAdapter | None = None,
     ) -> dict[str, object]:
         """Direct sparse import for small datasets (≤30k rows)."""
+        assert self._upstream is not None
+        assert self._payload_store is not None
+        _payload_store = self._payload_store
+        _upstream = self._upstream
         schema_columns = [
             ColumnSchema(name=c["name"], type=c["type"])
             for c in SC_SPARSE_SHARD_SCHEMA_V2
@@ -313,7 +320,7 @@ class ScImportService:
         operator = SparseImportOperator(
             dataset_id=dataset_id,
             org_id=org_id,
-            payload_store=cast(DatasetPayloadStore, self._payload_store),
+            payload_store=cast(DatasetPayloadStore, _payload_store),
         )
         shard_entries: list[ShardEntry] = []
         sample_index: dict[str, SampleLocator] = {}
@@ -332,11 +339,11 @@ class ScImportService:
                 sample_index=sample_index,
                 schema_version="v2",
             )
-            await self._payload_store.put_manifest(manifest, org_id=org_id)
+            await _payload_store.put_manifest(manifest, org_id=org_id)
 
         batch: list[dict[str, Any]] = []
 
-        lf = await self._upstream.list_samples(insp_dt, source_wafer_key, count=None)
+        lf = await _upstream.list_samples(insp_dt, source_wafer_key, count=None)
         df = await lf.collect_async()
         total_rows_available = len(df)
 
@@ -410,6 +417,9 @@ class ScImportService:
         org_id: str,
         label_space: list[str] | None,
     ) -> Dataset | None:
+        assert self._repo is not None
+        assert self._payload_store is not None
+        assert self._upstream is not None
         try:
             dataset = Dataset(
                 name=dataset_name,

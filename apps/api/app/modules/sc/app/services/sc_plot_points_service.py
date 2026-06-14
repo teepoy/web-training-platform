@@ -229,19 +229,7 @@ class ScPlotPointsService:
         )
 
         if "has_review" not in df.columns:
-            df = df.with_columns(
-                pl.col("images")
-                .fill_null([])
-                .list.eval(
-                    pl.when(pl.element().struct.field("role") == "review")
-                    .then(pl.lit(1))
-                    .otherwise(pl.lit(0))
-                )
-                .list.sum()
-                .gt(0)
-                .cast(pl.Int32)
-                .alias("has_review")
-            )
+            df = df.with_columns(pl.lit(0).cast(pl.Int32).alias("has_review"))
 
         return make_wafer_map_response_pb(
             df,
