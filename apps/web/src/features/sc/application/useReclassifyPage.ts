@@ -515,7 +515,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   );
 
   const isMapLoading = computed(
-    () => plotPointsQuery.isLoading.value,
+    () => plotPointsQuery.isLoading.value || plotPointsQuery.isFetching.value,
   );
   const samplesError = computed<string | null>(
     () =>
@@ -875,21 +875,50 @@ export function useReclassifyPage(): ReclassifyPageState {
       mutation: {
         onSuccess: (
           data: ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
+          variables,
         ) => {
           const created = (data.data as { created: number }).created;
           message.success(`Created ${created} annotations`);
+
+          const submittedLabels: Record<string, string> = {};
+          for (const ann of variables.data.annotations) {
+            submittedLabels[ann.defect_id] = ann.label;
+          }
           annotationDraft.value = {};
           pendingLabels.value = [];
-          void queryClient.refetchQueries({
+
+          const sampleQueries = queryClient.getQueriesData({
+            queryKey: ["sc", "view-samples-paged", datasetId.value],
+            exact: false,
+          });
+          for (const [queryKey, oldData] of sampleQueries) {
+            if (!oldData) continue;
+            queryClient.setQueryData(queryKey, (cached: any) => {
+              if (!cached?.pages) return cached;
+              return {
+                ...cached,
+                pages: cached.pages.map((page: any) => ({
+                  ...page,
+                  items: page.items?.map((item: ScViewRow) => {
+                    const newLabel =
+                      submittedLabels[String(item.defect_id)];
+                    if (newLabel !== undefined) {
+                      return { ...item, label: newLabel };
+                    }
+                    return item;
+                  }),
+                })),
+              };
+            });
+          }
+
+          void queryClient.invalidateQueries({
             queryKey: ["sc", "plot-points", datasetId.value],
           });
-          void queryClient.refetchQueries({
+          void queryClient.invalidateQueries({
             queryKey: ["sc", "class-list", datasetId.value],
           });
-          void queryClient.refetchQueries({
-            queryKey: ["sc", "view-samples-paged", datasetId.value],
-          });
-          void queryClient.refetchQueries({
+          void queryClient.invalidateQueries({
             queryKey: ["api", "v1", "datasets", datasetId.value],
           });
         },

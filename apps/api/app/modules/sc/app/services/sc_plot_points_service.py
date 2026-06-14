@@ -151,7 +151,14 @@ class ScPlotPointsService:
                 "plot-points requires a file_shard_sparse dataset"
             )
 
-        lf = cast(pl.LazyFrame, await storage.list_samples(return_lazyframe=True))
+        lf = cast(
+            pl.LazyFrame,
+            await storage.list_samples(
+                return_lazyframe=True,
+                with_labels=(legend_group_by == "annotation" or bool(annotations)),
+                with_predictions=(legend_group_by == "prediction" or bool(predictions)),
+            ),
+        )
         lf = _apply_sample_filters(
             lf,
             class_number=class_numbers,
