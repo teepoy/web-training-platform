@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-parser
+  namespace: finetune
+  labels:
+    app: image-parser
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-parser
+  template:
+    metadata:
+      labels:
+        app: image-parser
+    spec:
+      containers:
+        - name: image-parser
+          image: ${IMAGE_PARSER_IMAGE}
+          ports:
+            - containerPort: 8090
+              name: http
+            - containerPort: 9092
+              name: grpc
+          env:
+            - name: PORT
+              value: "8090"
+            - name: GRPC_PORT
+              value: "9092"
+            - name: CACHE_SIZE_MB
+              value: "32768"
+            - name: S3_MAX_CONNS
+              value: "1000"
+            - name: S3_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: S3_ENDPOINT
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finetune-secrets
+                  key: MINIO_SECRET_KEY
+            - name: S3_REGION
+              value: "us-east-1"
+            - name: S3_USE_PATH_STYLE
+              value: "true"
+            - name: SC_UPSTREAM_ADDR
+              value: "sc-upstream:9091"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-parser
+  namespace: finetune
+  labels:
+    app: image-parser
+spec:
+  type: ClusterIP
+  selector:
+    app: image-parser
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+    - name: grpc
+      port: 9092
+      targetPort: 9092

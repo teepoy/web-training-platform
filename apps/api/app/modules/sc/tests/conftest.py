@@ -2,22 +2,19 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Generator
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.modules.sc.adapter import ScDatasetStore
-from app.modules.sc.adapter._wafer_mock.sqlite_upstream import SqliteScUpstream
-from app.modules.sc.tests.db_fixture import create_mock_sc_db, teardown_mock_sc_db
-from app.modules.sc.adapter._wafer_mock.cache import PatchImageCache
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 
 
 @pytest.fixture
 def mock_sc_db_path() -> Generator[str, None, None]:
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
-    create_mock_sc_db(db_path)
     yield db_path
-    teardown_mock_sc_db(db_path)
 
 
 @pytest.fixture
@@ -26,20 +23,9 @@ def mock_sc_db(mock_sc_db_path: str) -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def mock_wafer_db_reader(mock_sc_db_path: str) -> SqliteScUpstream:
-    return SqliteScUpstream(db_url=f"sqlite:///{mock_sc_db_path}")
-
-
-@pytest.fixture
-def mock_patch_image_cache() -> Generator[PatchImageCache, None, None]:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cache = PatchImageCache(
-            cache_dir=tmpdir,
-            ttl_seconds=60,
-            max_size_bytes=10 * 1024 * 1024,
-        )
-        yield cache
-        cache.clear()
+def mock_wafer_db_reader() -> ScUpstreamReader:
+    mock_reader = AsyncMock(spec=ScUpstreamReader)
+    return mock_reader
 
 
 @pytest.fixture

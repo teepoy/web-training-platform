@@ -39,8 +39,6 @@ dependencies = [
   "datasets>=3.0",
   "pillow==12.2.0",
   "litellm>=1",
-  "pyvips==2.2.3",
-  "pyvips-binary",
   "pyarrow==24.0.0",
   "polars>=1.0.0",
   "redis>=5.0",

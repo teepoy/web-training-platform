@@ -7,7 +7,6 @@ from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
 from app.modules.sc.adapter.batch_reader import ScBatchReader
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sc_import_service import ScImportService
-from app.modules.sc.app.services.sprite_service import SpriteService
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.shared.context import SharedInfra
@@ -24,7 +23,6 @@ class ScContext:
     dataset_reader: ScDatasetReader
     upstream_reader: ScUpstreamReader
     batch_reader: ScBatchReader
-    sprite_service: SpriteService
     plot_points_service: ScPlotPointsService
 
 
@@ -36,11 +34,6 @@ def init_sc(
     image_fetcher: ScImageFetcher | None = None,
     storage_factory: DatasetStorageFactory | None = None,
 ) -> ScContext:
-    """Create ScContext with explicit upstream and image fetcher ports.
-
-    The composition root (composition.py) provides concrete implementations.
-    For dev/test, use the mock adapters in ``app.modules.sc.adapter._wafer_mock``.
-    """
     repository = SqlRepository(session_factory=shared.session_factory)
     batch_reader = ScBatchReader(async_engine=shared.db_engine)
     if dataset_payload_store is None:
@@ -52,38 +45,33 @@ def init_sc(
     )
 
     if upstream_reader is None:
-        from app.modules.sc.adapter._wafer_mock.sqlite_upstream import SqliteScUpstream
+        import os
+
+        from app.modules.sc.adapter.grpc_upstream import GrpcScUpstream
 
         cfg = shared.config
         sc_cfg = getattr(cfg, "sc", None)
-        mock_cfg = getattr(sc_cfg, "mock", None) if sc_cfg else None
-        db_url = mock_cfg.db_url if mock_cfg else "sqlite:///./wafer_inspection.db"
-        upstream_reader = SqliteScUpstream(db_url=db_url)
+        upstream_cfg = getattr(sc_cfg, "upstream", None) if sc_cfg else None
+        grpc_addr = (
+            upstream_cfg.grpc_addr
+            if upstream_cfg
+            else os.environ.get("SC_UPSTREAM_ADDR", "sc-upstream:9091")
+        )
+        flight_addr = (
+            upstream_cfg.flight_addr
+            if upstream_cfg
+            else os.environ.get("SC_UPSTREAM_FLIGHT_ADDR", "grpc://sc-upstream:9093")
+        )
+        upstream_reader = GrpcScUpstream(grpc_addr=grpc_addr, flight_addr=flight_addr)
 
     if image_fetcher is None:
-        from app.modules.sc.adapter._wafer_mock import PatchImageCache
-        from app.modules.sc.adapter._wafer_mock.image_service import ScImageService
+        import os
 
-        cfg = shared.config
-        _data_dir = str(cfg.data.dir) if cfg.data.dir else None
-        redis_cfg = getattr(cfg, "redis", None)
-        if redis_cfg is not None and getattr(redis_cfg, "enabled", False):
-            import redis as _redis
+        from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
 
-            from app.modules.sc.adapter._wafer_mock.redis_cache import (
-                RedisPatchImageCache,
-            )
-
-            _host = getattr(redis_cfg, "host", "localhost")
-            _port = int(getattr(redis_cfg, "port", 6379))
-            _password = getattr(redis_cfg, "password", "") or None
-            _db = int(getattr(redis_cfg, "db", 0))
-            _client = _redis.Redis(host=_host, port=_port, password=_password, db=_db)
-            image_cache = RedisPatchImageCache(redis_client=_client)
-        else:
-            image_cache = PatchImageCache(data_dir=_data_dir)
-
-        image_fetcher = ScImageService(cache=image_cache)
+        image_fetcher = GrpcImageFetcher(
+            addr=os.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+        )
 
     svc = ScImportService(
         prefect_client=shared.prefect_client,
@@ -92,8 +80,6 @@ def init_sc(
         upstream_reader=upstream_reader,
         image_fetcher=image_fetcher,
     )
-
-    sprite_service = SpriteService(image_fetcher=image_fetcher)
 
     if storage_factory is None:
         storage_factory = DatasetStorageFactory(
@@ -117,6 +103,5 @@ def init_sc(
         dataset_reader=dataset_reader,
         upstream_reader=upstream_reader,
         batch_reader=batch_reader,
-        sprite_service=sprite_service,
         plot_points_service=plot_points_service,
     )

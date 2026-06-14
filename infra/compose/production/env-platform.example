@@ -37,6 +37,12 @@ FINETUNE_API_IMAGE=registry.example.com/finetune-api:<release>
 FINETUNE_WEB_IMAGE=registry.example.com/finetune-web:<release>
 FINETUNE_CPU_WORKER_IMAGE=registry.example.com/finetune-cpu-worker:<release>
 FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
+IMAGE_PARSER_IMAGE=registry.example.com/image-parser:<release>
+SC_UPSTREAM_IMAGE=registry.example.com/sc-upstream:<release>
+
+# Upstream DB (sc-upstream)
+UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
+ZIPS_DB_URL=sqlite:////data/inspection_zips.db
 
 # LLM (optional)
 LLM_BASE_URL=

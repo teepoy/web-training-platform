@@ -242,9 +242,9 @@ def test_serve_patch_image_review_type_with_review_image_id_fetches_review_bucke
 
     with TestClient(app) as client:
         from app.modules.sc.port.http.deps import get_image_fetcher
-        from app.modules.sc.adapter._wafer_mock.image_service import ScImageService
+        from app.modules.sc.domain.image_fetcher import ScImageFetcher
 
-        mock_service = mock.AsyncMock(spec=ScImageService)
+        mock_service = mock.AsyncMock(spec=ScImageFetcher)
         mock_service.get_image_bytes = mock.AsyncMock(return_value=fake_image_bytes)
 
         app.dependency_overrides[get_image_fetcher] = lambda: mock_service

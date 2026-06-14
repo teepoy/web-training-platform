@@ -160,31 +160,8 @@ class _MockUpstream:
 
         return pl.LazyFrame([])
 
-    async def list_wafer_points(
-        self,
-        inspection_time,
-        wafer_key,
-        reticle_size_x=1,
-        reticle_size_y=1,
-        reticle_offset_x=0,
-        reticle_offset_y=0,
-    ):
-
-        return pl.LazyFrame([])
-
 
 class _MockImageFetcher:
-    def proxy_url(
-        self,
-        *,
-        inspection_time: str,
-        wafer_key: int,
-        defect_id: str,
-        image_type: str,
-        s3_path: str | None = None,
-    ) -> str:
-        return ""
-
     async def get_image_bytes(
         self,
         *,

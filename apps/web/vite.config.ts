@@ -38,6 +38,21 @@ export default defineConfig({
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
       },
+      "/api/v1/sc/images/": { // ast-grep-ignore: forbid-raw-api-url
+        target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
+      "/api/v1/sc/sprites/": { // ast-grep-ignore: forbid-raw-api-url
+        target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
+      "/api/v1/sc/warm/": { // ast-grep-ignore: forbid-raw-api-url
+        target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,

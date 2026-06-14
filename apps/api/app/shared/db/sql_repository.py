@@ -352,30 +352,6 @@ class SqlRepository:
                 for r in rows
             ], total or 0
 
-    async def list_wafer_points(self, dataset_id: str) -> list[dict[str, object]]:
-        async with self.session_factory() as session:
-            rows = await session.execute(
-                select(SampleORM.id, SampleORM.metadata_json).where(
-                    SampleORM.dataset_id == dataset_id
-                )
-            )
-
-            points: list[dict[str, object]] = []
-            for sample_id, metadata_json in rows.all():
-                metadata = metadata_json if isinstance(metadata_json, dict) else {}
-                wafer_x = metadata.get("wafer_x")
-                wafer_y = metadata.get("wafer_y")
-                if wafer_x is None or wafer_y is None:
-                    continue
-                try:
-                    x = float(wafer_x)
-                    y = float(wafer_y)
-                except (TypeError, ValueError):
-                    continue
-                points.append({"id": sample_id, "x": x, "y": y})
-
-            return points
-
     # DEPRECATED(T27): Direct SampleORM query — use storage.get_sample() via
     # DatasetStorageFactory for cross-mode compatibility.
     async def get_sample(self, sample_id: str) -> Sample | None:

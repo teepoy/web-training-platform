@@ -362,17 +362,6 @@ class TestV2SparseImportBytes:
             ) -> pl.LazyFrame:
                 return pl.LazyFrame([])
 
-            async def list_wafer_points(
-                self,
-                inspection_time: datetime,
-                wafer_key: int,
-                reticle_size_x: int = 1,
-                reticle_size_y: int = 1,
-                reticle_offset_x: int = 0,
-                reticle_offset_y: int = 0,
-            ) -> pl.LazyFrame:
-                return pl.LazyFrame([])
-
             def stream(
                 self,
                 source_inspection_time: str,
@@ -386,17 +375,6 @@ class TestV2SparseImportBytes:
                 return _iter_samples()
 
         class FakeImageFetcher:
-            def proxy_url(
-                self,
-                *,
-                inspection_time: str,
-                wafer_key: int,
-                defect_id: str,
-                image_type: str,
-                s3_path: str | None = None,
-            ) -> str:
-                return f"mock-sc://{image_type}/{defect_id}"
-
             async def get_image_bytes(
                 self,
                 *,

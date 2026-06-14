@@ -42,13 +42,3 @@ class ScUpstreamReader(Protocol):
         inspection_time: datetime,
         wafer_key: int,
     ) -> pl.LazyFrame: ...
-
-    async def list_wafer_points(
-        self,
-        inspection_time: datetime,
-        wafer_key: int,
-        reticle_size_x: int = 1,
-        reticle_size_y: int = 1,
-        reticle_offset_x: int = 0,
-        reticle_offset_y: int = 0,
-    ) -> pl.LazyFrame: ...

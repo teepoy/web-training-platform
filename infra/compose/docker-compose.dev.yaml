@@ -98,6 +98,7 @@ services:
     environment:
       VITE_PROXY_TARGET: "http://api:8000"
       VITE_API_BASE_URL: "http://api:8000"
+      VITE_IMAGE_PARSER_TARGET: "http://image-parser:8090"
     depends_on:
       - api
     ports:

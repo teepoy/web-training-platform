@@ -1,0 +1,6 @@
+vendor/
+*.tar
+gen/
+server
+seed
+bench

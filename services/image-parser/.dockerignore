@@ -1,0 +1,10 @@
+.git
+*.tar
+*.tar.gz
+server
+seed
+bench
+Dockerfile
+Dockerfile.base
+run_benchmarks.sh
+.env

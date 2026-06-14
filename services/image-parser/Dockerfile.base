@@ -1,0 +1,19 @@
+FROM --platform=linux/amd64 debian:bookworm-20241223-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvips42 \
+    libglib2.0-0 \
+    libexpat1 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libwebp7 \
+    libtiff6 \
+    libheif1 \
+    liblcms2-2 \
+    libimagequant0 \
+    libcgif0 \
+    libexif12 \
+    libspng0 \
+    libopenjp2-7 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*

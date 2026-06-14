@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package sc.v1;
 
+option go_package = "ft-platform/protos/gen/go/sc/v1;scv1";
+
 message ReviewImage {
   reserved 1;
   string image_name = 2;
