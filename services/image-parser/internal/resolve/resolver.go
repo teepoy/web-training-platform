@@ -102,7 +102,7 @@ func (r *Resolver) GetPatchImage(inspectionTime string, waferKey int, defectIDSt
 
 	ck := cache.CacheKey(ref.Bucket, ref.Key)
 	zipData, err := r.ZipCache.GetOrLoad(ck, func() ([]byte, error) {
-		return zipreader.DownloadFullZip(s3client.Get(), ref.Bucket, ref.Key)
+		return zipreader.DownloadFullZip(s3client.GetZips(), ref.Bucket, ref.Key)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("download zip: %w", err)
@@ -148,7 +148,7 @@ func (r *Resolver) GetPatchImageFromZips(zips []CacheZipRef, defectIDStr string,
 	prefix := fmt.Sprintf("%06d", did)
 	ck := cache.CacheKey(ref.Bucket, ref.Key)
 	zipData, err := r.ZipCache.GetOrLoad(ck, func() ([]byte, error) {
-		return zipreader.DownloadFullZip(s3client.Get(), ref.Bucket, ref.Key)
+		return zipreader.DownloadFullZip(s3client.GetZips(), ref.Bucket, ref.Key)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("download zip: %w", err)
@@ -214,7 +214,7 @@ func parseS3Filespec(filespec string) (bucket, key string) {
 }
 
 func GetRawS3Object(bucket, key string) ([]byte, error) {
-	cli := s3client.Get()
+	cli := s3client.GetReview()
 	return zipreader.DownloadFullZip(cli, bucket, key)
 }
 

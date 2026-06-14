@@ -3,7 +3,6 @@ module image-parser
 go 1.26.0
 
 require (
-	ft-platform/protos/gen/go v0.0.0
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.25
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.24
@@ -14,9 +13,8 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	golang.org/x/sync v0.21.0
 	google.golang.org/grpc v1.81.1
+	google.golang.org/protobuf v1.36.11
 )
-
-replace ft-platform/protos/gen/go => ../../protos/gen/go
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
@@ -62,5 +60,4 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 )

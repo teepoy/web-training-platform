@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	scv1 "ft-platform/protos/gen/go/sc/v1"
+	scv1 "image-parser/gen/go/sc/v1"
 )
 
 type UpstreamClient struct {

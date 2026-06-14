@@ -25,7 +25,7 @@ const (
 )
 
 func main() {
-	client := s3client.Get()
+	client := s3client.GetZips()
 
 	if err := ensureBucket(client); err != nil {
 		log.Fatalf("failed to ensure bucket: %v", err)

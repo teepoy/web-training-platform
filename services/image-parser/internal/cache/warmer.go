@@ -28,7 +28,7 @@ func (w *Warmer) Warm(bucket string, keys []string) {
 			defer func() { <-sem }()
 			ck := CacheKey(bucket, key)
 			w.zip.GetOrLoad(ck, func() ([]byte, error) {
-				return zipreader.DownloadFullZip(s3client.Get(), bucket, key)
+				return zipreader.DownloadFullZip(s3client.GetZips(), bucket, key)
 			})
 		}(k)
 	}

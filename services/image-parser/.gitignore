@@ -1,5 +1,4 @@
 *.tar
-gen/
 /server
 /seed
 /bench

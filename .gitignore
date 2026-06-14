@@ -88,3 +88,4 @@ apps/web/tests/.auth/
 /issues/
 /legacy/issues/
 infra/compose/data/
+/dist/

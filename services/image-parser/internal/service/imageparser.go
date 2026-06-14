@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/h2non/bimg"
-	imageparserv1 "ft-platform/protos/gen/go/imageparser/v1"
+	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/cache"
 	"image-parser/internal/s3client"
 	"image-parser/internal/sprite"
@@ -111,7 +111,7 @@ func (s *ImageParserService) V2Sprite(ctx context.Context, req *imageparserv1.V2
 		ck := cache.CacheKey(req.Bucket, key)
 
 		zipData, err := s.cache.GetOrLoad(ck, func() ([]byte, error) {
-			return zipreader.DownloadFullZip(s3client.Get(), req.Bucket, key)
+			return zipreader.DownloadFullZip(s3client.GetZips(), req.Bucket, key)
 		})
 		if err != nil {
 			return nil, err
@@ -173,7 +173,7 @@ func (s *ImageParserService) fetchImage(fn fetchFn, bucket, key, prefix string) 
 func (s *ImageParserService) fetchFromCache(bucket, key, prefix string) ([]byte, string, error) {
 	ck := cache.CacheKey(bucket, key)
 	zipData, err := s.cache.GetOrLoad(ck, func() ([]byte, error) {
-		return zipreader.DownloadFullZip(s3client.Get(), bucket, key)
+		return zipreader.DownloadFullZip(s3client.GetZips(), bucket, key)
 	})
 	if err != nil {
 		return nil, "", err
@@ -182,7 +182,7 @@ func (s *ImageParserService) fetchFromCache(bucket, key, prefix string) ([]byte,
 }
 
 func (s *ImageParserService) fetchLazy(bucket, key, prefix string) ([]byte, string, error) {
-	return zipreader.GetImageFromS3Zip(s3client.Get(), bucket, key, prefix, s.cache)
+	return zipreader.GetImageFromS3Zip(s3client.GetZips(), bucket, key, prefix, s.cache)
 }
 
 func extractIndex(prefix string) (int, error) {

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
-	imageparserv1 "ft-platform/protos/gen/go/imageparser/v1"
+	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/auth"
 	"image-parser/internal/cache"
 	"image-parser/internal/client"
@@ -33,7 +33,8 @@ func main() {
 	}
 
 	s3client.MaxConns = int32(*s3MaxConns)
-	_ = s3client.Get()
+	_ = s3client.GetZips()
+	_ = s3client.GetReview()
 
 	zipCache, err := cache.New(*cacheSizeMB, 10*time.Minute)
 	if err != nil {

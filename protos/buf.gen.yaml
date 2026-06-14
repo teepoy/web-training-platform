@@ -4,11 +4,3 @@ plugins:
     out: ../libs/protos/src/proto_stubs
   - plugin: mypy
     out: ../libs/protos/src/proto_stubs
-  - plugin: go
-    out: ../protos/gen/go
-    opt: paths=source_relative
-    path: protoc-gen-go
-  - plugin: go-grpc
-    out: ../protos/gen/go
-    opt: paths=source_relative
-    path: protoc-gen-go-grpc

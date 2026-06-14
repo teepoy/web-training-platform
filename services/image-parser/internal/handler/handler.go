@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	imageparserv1 "ft-platform/protos/gen/go/imageparser/v1"
+	imageparserv1 "image-parser/gen/go/imageparser/v1"
 )
 
 type Handler struct {

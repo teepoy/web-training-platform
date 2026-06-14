@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	imageparserv1 "ft-platform/protos/gen/go/imageparser/v1"
+	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/resolve"
 )
 

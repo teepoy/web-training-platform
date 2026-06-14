@@ -165,7 +165,7 @@ generate-sse-types: ## Generate SSE JSON schema and frontend TypeScript types
 generate-openapi-artifacts: generate-openapi-spec generate-api-models generate-orval generate-sse-types ## Generate backend/frontend transport artifacts
 
 .PHONY: generate-protos
-generate-protos: ## Generate SC protobuf Python, Go, and TypeScript stubs from protos/
+generate-protos: ## Generate protobuf Python, TypeScript, and Go stubs from protos/
 	mkdir -p libs/protos/src/proto_stubs/sc/v1 $(WEB_DIR)/src/features/sc/generated/proto
 	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && \
 		npx buf generate && \
@@ -176,6 +176,8 @@ generate-protos: ## Generate SC protobuf Python, Go, and TypeScript stubs from p
 		--grpc_python_out=libs/protos/src/proto_stubs \
 		$(PROTO_DIR)/imageparser/v1/service.proto
 	sed -i '' 's/^from imageparser\.v1 import/from proto_stubs.imageparser.v1 import/' libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py
+	cd services/image-parser && mkdir -p gen/go && npx buf generate ../../protos --template buf.gen.yaml
+	cd services/image-parser && go mod tidy
 
 .PHONY: generate-protos-deps
 generate-protos-deps: ## Verify buf CLI, protoc, protoc-gen-go, protoc-gen-go-grpc, protoc-gen-mypy are available
@@ -310,7 +312,7 @@ up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-comp
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
-	docker compose -f $(COMPOSE_DEV) build
+	docker compose -f $(COMPOSE_DEV) build image-parser
 
 .PHONY: build-prod
 build-prod: ## Build all prod-target Docker images (local validation stack)
@@ -490,6 +492,15 @@ up-prod-all: ## Start stateful + platform + observability (with 60s sleep betwee
 .PHONY: save-images
 save-images: ## Save all compose Docker images as .tar archives
 	bash scripts/save-compose-images.sh $(ARGS)
+
+.PHONY: image-parser-export
+image-parser-export: ## Build and export image-parser as offline loadable tar.gz
+	@echo "Building image-parser ..."
+	docker build --platform linux/amd64 -t image-parser:latest -f services/image-parser/Dockerfile .
+	@mkdir -p dist
+	@echo "Saving image-parser:latest -> dist/image-parser.tar.gz"
+	docker save image-parser:latest | gzip > dist/image-parser.tar.gz
+	@echo "Done: dist/image-parser.tar.gz ($(shell du -h dist/image-parser.tar.gz | cut -f1))"
 
 .PHONY: k8s-apply
 k8s-apply: ## Apply Kubernetes manifests
