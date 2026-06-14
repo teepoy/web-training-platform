@@ -78,7 +78,7 @@ const columnDefinitions: ColumnDefinition[] = [
     title: "Kill Ratio",
     width: 90,
     filter: "range",
-    render: (row) => row.kill_ratio.toFixed(3),
+    render: (row) => row.kill_ratio != null ? row.kill_ratio.toFixed(3) : '-',
   },
 ];
 

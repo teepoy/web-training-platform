@@ -19,6 +19,7 @@ from app.modules.sc.port.http.deps import (
     DatasetPayloadStoreDep,
     ScDatasetReaderDep,
     ScDatasetStoreDep,
+    ScImageFetcherDep,
     ScImportServiceDep,
     PrefectClientDep,
     ScPlotPointsServiceDep,
@@ -820,3 +821,146 @@ async def sc_bulk_create_annotations(
         await dataset_service.merge_label_space(dataset_id, created_labels)
 
     return ScBulkAnnotationResponse(created=created)
+
+
+@router.get(
+    "/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}",
+    response_class=Response,
+)
+async def serve_sc_sample_image(
+    dataset_id: str,
+    sample_id: str,
+    image_id: str,
+    org: Annotated[Organization, Depends(get_current_org)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    image_fetcher: ScImageFetcherDep,
+    payload_store: DatasetPayloadStoreDep,
+) -> Response:
+    from typing import cast as _cast
+    from platform_runtime.sparse.reader import SparseManifestReader
+    from app.shared.domain.protocols import ArtifactStorage
+
+    store = payload_store
+    storage: ArtifactStorage = store._storage  # type: ignore[reportPrivateUsage]
+    reader = SparseManifestReader()
+
+    try:
+        manifest = await payload_store.get_manifest(dataset_id, org.id)
+    except (FileNotFoundError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset not found or has no manifest: {dataset_id}",
+        )
+
+    locator = manifest.sample_index.get(sample_id)
+    if locator is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample not found in dataset {dataset_id}: {sample_id}",
+        )
+
+    if locator.shard_index < 0 or locator.shard_index >= len(manifest.shards):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Shard index out of range for sample {sample_id}",
+        )
+
+    shard = manifest.shards[locator.shard_index]
+    if locator.row_index < 0 or locator.row_index >= shard.row_count:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Row index out of range for sample {sample_id}",
+        )
+
+    try:
+        rows = await reader.read_row_batch(
+            shard.uri,
+            locator.row_index,
+            1,
+            storage,
+            columns=["images", "inspection_time", "wafer_key", "defect_id"],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read shard row: {exc}",
+        )
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample row not found in shard: {sample_id}",
+        )
+
+    row = rows[0]
+    images_raw = row.get("images")
+    if images_raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No images column for sample: {sample_id}",
+        )
+
+    images_list: list[dict[str, object]] = []
+    if isinstance(images_raw, list):
+        images_list = [dict(img) if isinstance(img, dict) else {} for img in images_raw]
+
+    matched: dict[str, object] | None = None
+    for img in images_list:
+        if str(img.get("image_id", "")) == image_id:
+            matched = img
+            break
+
+    if matched is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Image {image_id} not found in sample {sample_id}",
+        )
+
+    raw_bytes = matched.get("bytes")
+    if isinstance(raw_bytes, bytes):
+        content_type = str(matched.get("content_type", ""))
+        if not content_type or "/" not in content_type:
+            content_type = "application/octet-stream"
+        filename = str(matched.get("filename", f"{sample_id}_{image_id}"))
+        return Response(
+            content=raw_bytes,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=1200",
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
+        )
+
+    inspection_time = str(row.get("inspection_time", ""))
+    wafer_key_raw = row.get("wafer_key", 0)
+    wafer_key = int(_cast(int, wafer_key_raw)) if wafer_key_raw is not None else 0
+    defect_id = str(row.get("defect_id", ""))
+    image_type = str(matched.get("image_type", ""))
+    review_image_id_raw = matched.get("review_image_id")
+    review_image_id = (
+        int(_cast(int, review_image_id_raw))
+        if review_image_id_raw is not None
+        else None
+    )
+
+    fetched_bytes = await image_fetcher.get_image_bytes(
+        inspection_time=inspection_time,
+        wafer_key=wafer_key,
+        defect_id=defect_id,
+        image_type=image_type,
+        review_image_id=review_image_id,
+    )
+
+    content_type = str(matched.get("content_type", ""))
+    if not content_type or "/" not in content_type:
+        content_type = "application/octet-stream"
+    filename = str(matched.get("filename", f"{sample_id}_{image_id}"))
+
+    return Response(
+        content=fetched_bytes,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=1200",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )

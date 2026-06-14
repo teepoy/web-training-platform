@@ -1,7 +1,6 @@
 from __future__ import annotations
 # pyright: reportMissingImports=false
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,7 +10,6 @@ from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
     iter_patch_samples_from_upstream_chunk,
 )
-from app.modules.sc.app.services.shuffle import get_shuffled_ids
 from app.modules.sc.schema import SC_SPARSE_SHARD_SCHEMA_V2
 from app.shared.api.schemas import (
     Dataset,
@@ -45,13 +43,7 @@ async def _build_image_structs(
     patch_sample: Any,
     inspection_time: Any,
     wafer_key: int,
-    image_fetcher: Any,
 ) -> list[Any]:
-    """Fetch all images for a single SC defect, returning BulkImageRef objects.
-
-    Fetches review images, PATCH_TEMPLATE, PATCH_DEFECTIVE, and difference
-    images in parallel via ``asyncio.gather``.
-    """
     from app.modules.datasets.domain.sample_row import BulkImageRef
 
     images: list[Any] = []
@@ -63,61 +55,15 @@ async def _build_image_structs(
     )
 
     review_images: list[Any] = getattr(patch_sample, "review_images", []) or []
-    review_fetches: list[tuple[Any, int]] = []
-
-    fetches: list[Any] = []
     for review_image in review_images:
-        review_fetches.append((review_image, len(fetches)))
-        fetches.append(
-            image_fetcher.get_image_bytes(
-                inspection_time=insp_time_str,
-                wafer_key=wafer_key,
-                defect_id=defect_id,
-                image_type="review",
-                review_image_id=review_image.image_id,
-            )
-        )
-
-    template_fetch_index = len(fetches)
-    fetches.append(
-        image_fetcher.get_image_bytes(
-            inspection_time=insp_time_str,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            image_type="PATCH_TEMPLATE",
-        )
-    )
-    defective_fetch_index = len(fetches)
-    fetches.append(
-        image_fetcher.get_image_bytes(
-            inspection_time=insp_time_str,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            image_type="PATCH_DEFECTIVE",
-        )
-    )
-    difference_fetch_index = len(fetches)
-    fetches.append(
-        image_fetcher.get_image_bytes(
-            inspection_time=insp_time_str,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            image_type="difference",
-        )
-    )
-
-    fetched = await asyncio.gather(*fetches)
-
-    for review_image, review_fetch_index in review_fetches:
-        review_bytes = fetched[review_fetch_index]
         images.append(
             BulkImageRef(
                 image_id=str(review_image.image_id),
-                image_type=review_image.image_type or "REVIEW_HIGH_MAG",
+                image_type="review",
                 role="review",
                 content_type="image/png",
                 filename=review_image.image_name,
-                bytes_=review_bytes,
+                bytes_=None,
                 source_uri=(
                     f"mock-sc://review/{insp_time_str}/{wafer_key}/{defect_id}/"
                     f"{review_image.image_id}"
@@ -125,45 +71,42 @@ async def _build_image_structs(
             )
         )
 
-    template_bytes = fetched[template_fetch_index]
     images.append(
         BulkImageRef(
             image_id=f"{defect_id}_template",
-            image_type="PATCH_TEMPLATE",
+            image_type="template",
             role="patch_template",
             content_type="image/png",
             filename="template.png",
-            bytes_=template_bytes,
+            bytes_=None,
             source_uri=(
                 f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/template.png"
             ),
         )
     )
 
-    defective_bytes = fetched[defective_fetch_index]
     images.append(
         BulkImageRef(
             image_id=f"{defect_id}_defective",
-            image_type="PATCH_DEFECTIVE",
+            image_type="defective",
             role="patch_defective",
             content_type="image/png",
             filename="defective.png",
-            bytes_=defective_bytes,
+            bytes_=None,
             source_uri=(
                 f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/defective.png"
             ),
         )
     )
 
-    difference_bytes = fetched[difference_fetch_index]
     images.append(
         BulkImageRef(
             image_id=f"{defect_id}_difference",
-            image_type="PATCH_DIFFERENCE",
+            image_type="difference",
             role="patch_difference",
             content_type="image/png",
             filename="difference.png",
-            bytes_=difference_bytes,
+            bytes_=None,
             source_uri=(
                 f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/difference.png"
             ),
@@ -294,8 +237,6 @@ async def sc_import(
         if dataset_id is None:
             raise RuntimeError("SC import dataset_id was not resolved")
 
-        image_fetcher = ctx.sc.image_fetcher
-
         if storage_mode == "file_shard_sparse":
             from platform_runtime.sparse.models import ColumnSchema
 
@@ -320,8 +261,7 @@ async def sc_import(
             if total_rows_available == 0:
                 return {"dataset_id": dataset_id, "imported_count": 0}
 
-            indices = get_shuffled_ids(list(range(total_rows_available)))
-            worker_indices = indices[offset:]
+            worker_indices = list(range(offset, total_rows_available))
             if max_rows is not None:
                 worker_indices = worker_indices[:max_rows]
 
@@ -336,7 +276,6 @@ async def sc_import(
                         patch_sample=patch_sample,
                         inspection_time=insp_dt,
                         wafer_key=source_wafer_key,
-                        image_fetcher=image_fetcher,
                     )
                     imported += 1
                     yield _patch_sample_to_parquet_row(patch_sample, images)
@@ -365,8 +304,7 @@ async def sc_import(
         if total_rows_available_db == 0:
             return {"dataset_id": dataset_id, "imported_count": 0}
 
-        indices_db = get_shuffled_ids(list(range(total_rows_available_db)))
-        worker_indices_db = indices_db[offset:]
+        worker_indices_db = list(range(offset, total_rows_available_db))
         if max_rows is not None:
             worker_indices_db = worker_indices_db[:max_rows]
 
@@ -381,7 +319,6 @@ async def sc_import(
                     patch_sample=patch_sample,
                     inspection_time=insp_dt,
                     wafer_key=source_wafer_key,
-                    image_fetcher=image_fetcher,
                 )
                 row = _patch_sample_to_parquet_row(patch_sample, images)
                 row.image_uris = [

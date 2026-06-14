@@ -9,7 +9,7 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 from prefect import get_run_logger
@@ -89,8 +89,15 @@ class ScTrainingDataset(Dataset[tuple[Any, Any, int]]):
         if not defective_imgs or not reference_imgs:
             raise RuntimeError(f"Sample {sample_id}: missing image bytes")
 
-        defective_bytes: Any = defective_imgs[0]["bytes"]
-        reference_bytes: Any = reference_imgs[0]["bytes"]
+        defective_bytes: bytes | None = cast(
+            bytes | None, defective_imgs[0].get("bytes")
+        )
+        reference_bytes: bytes | None = cast(
+            bytes | None, reference_imgs[0].get("bytes")
+        )
+
+        if not defective_bytes or not reference_bytes:
+            raise RuntimeError(f"Sample {sample_id}: image bytes not available")
 
         def_img = Image.open(io.BytesIO(defective_bytes)).convert("RGB")
         ref_img = Image.open(io.BytesIO(reference_bytes)).convert("RGB")
@@ -111,6 +118,7 @@ async def resnet_sc_train(
     *,
     artifact_storage: Any = None,
     lazyframe: Any | None = None,
+    image_fetcher: Any = None,
     **kwargs: Any,
 ) -> TrainResult:
     logger = get_run_logger()
@@ -124,6 +132,45 @@ async def resnet_sc_train(
 
     if artifact_storage is None:
         raise ValueError("artifact_storage is required for resnet50-sc-v1 training")
+
+    if image_fetcher is not None:
+        import asyncio as _asyncio_im
+
+        df = lazyframe.collect() if lazyframe is not None else None
+        if df is not None:
+            _fetches: list[Any] = []
+            _targets: list[dict[str, Any]] = []
+
+            for row in df.iter_rows(named=True):
+                images_list: list[dict[str, Any]] = row.get("images") or []
+                for img in images_list:
+                    role = img.get("role", "")
+                    if role not in ("patch_template", "patch_defective"):
+                        continue
+                    if img.get("bytes") is not None:
+                        continue
+                    _fetches.append(
+                        image_fetcher.get_image_bytes(
+                            inspection_time=str(row.get("inspection_time", "")),
+                            wafer_key=int(row.get("wafer_key", 0) or 0),
+                            defect_id=str(row.get("defect_id", "")),
+                            image_type=str(img.get("image_type", "")),
+                            review_image_id=cast(
+                                int | None,
+                                img.get("review_image_id")
+                                if img.get("review_image_id") is not None
+                                else None,
+                            ),
+                        )
+                    )
+                    _targets.append(img)
+
+            if _fetches:
+                _resolved = await _asyncio_im.gather(*_fetches)
+                for img, _bytes in zip(_targets, _resolved):
+                    img["bytes"] = _bytes
+
+            lazyframe = df.lazy()
 
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")

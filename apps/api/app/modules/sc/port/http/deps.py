@@ -56,3 +56,4 @@ DatasetPayloadStoreDep = Annotated[
 ]
 ScDatasetReaderDep = Annotated[ScDatasetReader, Depends(get_sc_dataset_reader)]
 ScDatasetStoreDep = Annotated[ScDatasetStore, Depends(get_sc_dataset_store)]
+ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]

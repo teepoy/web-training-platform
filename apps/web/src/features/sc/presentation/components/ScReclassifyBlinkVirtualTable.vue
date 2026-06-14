@@ -20,6 +20,7 @@ const props = withDefaults(
     hasNextPage?: boolean;
     isFetchingNextPage?: boolean;
     onLoadMore?: () => void;
+    inspectionTime?: string;
   }>(),
   {
     reviewCount: 3,
@@ -117,6 +118,7 @@ onBeforeUnmount(() => {
       :show-prediction-badges="true"
       :show-mode-switch="true"
       :overscan="overscan"
+      :inspection-time="inspectionTime"
       @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
     />
     <Teleport v-if="getScrollContainer()" :to="getScrollContainer()!">

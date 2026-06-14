@@ -31,6 +31,7 @@ def resnet_sc_predictor(
     ctx: PredictContext,
     lazyframe: Any,
     model_ref: ModelRef,
+    image_fetcher: Any = None,
 ) -> Generator[dict[str, Any], None, None]:
     logger = get_run_logger()
 
@@ -108,12 +109,34 @@ def resnet_sc_predictor(
     total_batches = (total + batch_size - 1) // batch_size
     t_start = time.monotonic()
 
+    _cache: dict[tuple[str, int, str, str, int | None], bytes] = {}
+    _insp_time = str(rows[0].get("inspection_time", "")) if rows else ""
+    _wafer_key = int(rows[0].get("wafer_key", 0) or 0) if rows else 0
+
+    if image_fetcher is not None:
+        try:
+            import asyncio as _asyncio_pr_warm
+
+            _asyncio_pr_warm.run(
+                image_fetcher.warm_cache(
+                    inspection_time=_insp_time, wafer_key=_wafer_key
+                )
+            )
+        except Exception:
+            logger.warning("Warm-cache failed, continuing without warm")
+
+    def _cache_key(
+        defect_id: str, image_type: str, review_image_id: int | None
+    ) -> tuple[str, int, str, str, int | None]:
+        return (_insp_time, _wafer_key, defect_id, image_type, review_image_id)
+
     for start in range(0, total, batch_size):
         end = min(start + batch_size, total)
         batch_no = start // batch_size + 1
-        def_batch: list[torch.Tensor] = []
-        ref_batch: list[torch.Tensor] = []
-        batch_ids: list[str] = []
+
+        _pending_fetches: list[Any] = []  # coroutines
+        _pending_imgs: list[dict[str, object]] = []
+        _pending_batch_sids: list[str] = []
 
         for i in range(start, end):
             row = rows[i]
@@ -130,16 +153,113 @@ def resnet_sc_predictor(
                 }
                 continue
 
-            def_bytes = defective_imgs[0]["bytes"]
-            ref_bytes = reference_imgs[0]["bytes"]
-            def_img = Image.open(io.BytesIO(cast(bytes, def_bytes))).convert("RGB")
-            ref_img = Image.open(io.BytesIO(cast(bytes, ref_bytes))).convert("RGB")
+            def_bytes: object | None = defective_imgs[0].get("bytes")
+            ref_bytes: object | None = reference_imgs[0].get("bytes")
+
+            if def_bytes is not None and ref_bytes is not None:
+                _pending_imgs.append(
+                    {
+                        "_def_bytes": def_bytes,
+                        "_ref_bytes": ref_bytes,
+                        "_sid": sample_id,
+                    }
+                )
+                continue
+
+            if image_fetcher is None:
+                yield {
+                    "sample_id": sample_id,
+                    "label": "",
+                    "confidence": None,
+                    "error": "image bytes not available (no fetcher)",
+                }
+                continue
+
+            d_type = str(defective_imgs[0].get("image_type", ""))
+            r_type = str(reference_imgs[0].get("image_type", ""))
+            d_rid = cast(int | None, defective_imgs[0].get("review_image_id"))
+            r_rid = cast(int | None, reference_imgs[0].get("review_image_id"))
+            defect_id = str(row.get("defect_id", ""))
+
+            d_key = _cache_key(defect_id, d_type, d_rid)
+            r_key = _cache_key(defect_id, r_type, r_rid)
+            d_cached = _cache.get(d_key)
+            r_cached = _cache.get(r_key)
+
+            if d_cached is not None and r_cached is not None:
+                _pending_imgs.append(
+                    {"_def_bytes": d_cached, "_ref_bytes": r_cached, "_sid": sample_id}
+                )
+                continue
+
+            async def _resolve_via_batch() -> tuple[str, bytes, bytes]:
+                imgs_for_batch: list[dict[str, object]] = []
+                if d_cached is None:
+                    imgs_for_batch.append(
+                        {
+                            "defect_id": defect_id,
+                            "image_type": d_type,
+                            "review_image_id": d_rid,
+                        }
+                    )
+                if r_cached is None:
+                    imgs_for_batch.append(
+                        {
+                            "defect_id": defect_id,
+                            "image_type": r_type,
+                            "review_image_id": r_rid,
+                        }
+                    )
+                results = await image_fetcher.get_image_bytes_batch(
+                    inspection_time=_insp_time,
+                    wafer_key=_wafer_key,
+                    images=imgs_for_batch,
+                )
+                d_res = d_cached
+                r_res = r_cached
+                for r in results:
+                    img_bytes = cast(bytes, r.get("image_data"))
+                    if r.get("defect_id") == defect_id:
+                        if r.get("image_type") == d_type and d_res is None:
+                            _cache[d_key] = img_bytes
+                            d_res = img_bytes
+                        elif r.get("image_type") == r_type and r_res is None:
+                            _cache[r_key] = img_bytes
+                            r_res = img_bytes
+                if d_res is None or r_res is None:
+                    raise RuntimeError(f"Batch fetch failed for sample {sample_id}")
+                return sample_id, d_res, r_res
+
+            _pending_fetches.append(_resolve_via_batch())
+            _pending_batch_sids.append(sample_id)
+
+        if _pending_fetches:
+            import asyncio as _asyncio_pr_b
+
+            async def _gather_all() -> list[Any]:
+                return await _asyncio_pr_b.gather(*_pending_fetches)
+
+            _all_resolved = _asyncio_pr_b.run(_gather_all())
+            for _sid, _d, _r in _all_resolved:
+                _pending_imgs.append({"_def_bytes": _d, "_ref_bytes": _r, "_sid": _sid})
+
+        if not _pending_imgs:
+            continue
+
+        def_batch: list[torch.Tensor] = []
+        ref_batch: list[torch.Tensor] = []
+        batch_ids: list[str] = []
+
+        for _img in _pending_imgs:
+            def_img = Image.open(io.BytesIO(cast(bytes, _img["_def_bytes"]))).convert(
+                "RGB"
+            )
+            ref_img = Image.open(io.BytesIO(cast(bytes, _img["_ref_bytes"]))).convert(
+                "RGB"
+            )
             def_batch.append(cast(Any, _transform(def_img)))
             ref_batch.append(cast(Any, _transform(ref_img)))
-            batch_ids.append(sample_id)
-
-        if not def_batch:
-            continue
+            batch_ids.append(str(_img["_sid"]))
 
         def_tensor = torch.stack(def_batch).to(device)
         ref_tensor = torch.stack(ref_batch).to(device)

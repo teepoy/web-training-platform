@@ -425,7 +425,7 @@ func normalizeInspectionTime(raw string) string {
 	if err != nil {
 		return raw
 	}
-	if ts > 10_000_000_000_000 {
+	if ts > 999_999_999_999 {
 		ts = ts / 1000
 	}
 	return time.Unix(ts, 0).UTC().Format(time.RFC3339)

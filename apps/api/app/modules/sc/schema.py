@@ -57,7 +57,8 @@ SC_IMAGE_STRUCT_DTYPE = pa.struct(
         pa.field("role", pa.string(), nullable=False),
         pa.field("content_type", pa.string(), nullable=False),
         pa.field("filename", pa.string(), nullable=False),
-        pa.field("bytes", pa.binary(), nullable=False),
+        pa.field("bytes", pa.binary(), nullable=True),
+        pa.field("review_image_id", pa.int32(), nullable=True),
         pa.field("source_uri", pa.string(), nullable=True),
     ]
 )
@@ -69,9 +70,8 @@ image_id : string (not nullable)
     Unique identifier for the image within the sample.
     Corresponds to ``ReviewImage.image_id`` (int serialized as string).
 image_type : string (not nullable)
-    Image category (e.g. ``"REVIEW_HIGH_MAG"``, ``"PATCH_TEMPLATE"``,
-    ``"PATCH_DEFECTIVE"``, ``"PATCH_DIFFERENCE"``).  Corresponds to
-    ``ReviewImage.image_type`` for review images.
+    Image category.  One of ``"template"``, ``"defective"``,
+    ``"difference"``, ``"review"``.
 role : string (not nullable)
     Semantic role.  One of ``"review"``, ``"patch_template"``,
     ``"patch_defective"``, ``"patch_difference"``.  See :data:`IMAGE_ROLES`
@@ -80,8 +80,13 @@ content_type : string (not nullable)
     MIME type (e.g. ``"image/jpeg"``, ``"image/png"``).
 filename : string (not nullable)
     Original filename (e.g. ``"0000001_1.jpg"``, ``"template.png"``).
-bytes : binary (not nullable)
-    Raw image bytes.  Guaranteed present for v2 — no URI-only shards.
+bytes : binary (nullable)
+    Raw image bytes.  ``None`` when not yet fetched; resolved lazily via
+    :class:`~app.modules.sc.domain.image_fetcher.ScImageFetcher`.
+review_image_id : int32 (nullable)
+    The ``review_image_id`` value for review images; ``None`` for
+    patch/template/difference images.  Used as part of the
+    ``GetScImageRequest`` to refetch images lazily.
 source_uri : string (nullable)
     Optional upstream / provenance URI (e.g.
     ``"s3://review-images/20250101_120000/1/0000001_1.jpg"``).

@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ImageParser_Health_FullMethodName     = "/imageparser.v1.ImageParser/Health"
-	ImageParser_GetImage_FullMethodName   = "/imageparser.v1.ImageParser/GetImage"
-	ImageParser_Sprite_FullMethodName     = "/imageparser.v1.ImageParser/Sprite"
-	ImageParser_V2Sprite_FullMethodName   = "/imageparser.v1.ImageParser/V2Sprite"
-	ImageParser_GetScImage_FullMethodName = "/imageparser.v1.ImageParser/GetScImage"
+	ImageParser_Health_FullMethodName          = "/imageparser.v1.ImageParser/Health"
+	ImageParser_GetImage_FullMethodName        = "/imageparser.v1.ImageParser/GetImage"
+	ImageParser_Sprite_FullMethodName          = "/imageparser.v1.ImageParser/Sprite"
+	ImageParser_V2Sprite_FullMethodName        = "/imageparser.v1.ImageParser/V2Sprite"
+	ImageParser_GetScImage_FullMethodName      = "/imageparser.v1.ImageParser/GetScImage"
+	ImageParser_BatchGetScImage_FullMethodName = "/imageparser.v1.ImageParser/BatchGetScImage"
+	ImageParser_WarmScCache_FullMethodName     = "/imageparser.v1.ImageParser/WarmScCache"
 )
 
 // ImageParserClient is the client API for ImageParser service.
@@ -35,6 +37,8 @@ type ImageParserClient interface {
 	Sprite(ctx context.Context, in *SpriteRequest, opts ...grpc.CallOption) (*SpriteResponse, error)
 	V2Sprite(ctx context.Context, in *V2SpriteRequest, opts ...grpc.CallOption) (*V2SpriteResponse, error)
 	GetScImage(ctx context.Context, in *GetScImageRequest, opts ...grpc.CallOption) (*GetScImageResponse, error)
+	BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error)
+	WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error)
 }
 
 type imageParserClient struct {
@@ -95,6 +99,26 @@ func (c *imageParserClient) GetScImage(ctx context.Context, in *GetScImageReques
 	return out, nil
 }
 
+func (c *imageParserClient) BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchGetScImageResponse)
+	err := c.cc.Invoke(ctx, ImageParser_BatchGetScImage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *imageParserClient) WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WarmScCacheResponse)
+	err := c.cc.Invoke(ctx, ImageParser_WarmScCache_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ImageParserServer is the server API for ImageParser service.
 // All implementations must embed UnimplementedImageParserServer
 // for forward compatibility.
@@ -104,6 +128,8 @@ type ImageParserServer interface {
 	Sprite(context.Context, *SpriteRequest) (*SpriteResponse, error)
 	V2Sprite(context.Context, *V2SpriteRequest) (*V2SpriteResponse, error)
 	GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error)
+	BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error)
+	WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error)
 	mustEmbedUnimplementedImageParserServer()
 }
 
@@ -128,6 +154,12 @@ func (UnimplementedImageParserServer) V2Sprite(context.Context, *V2SpriteRequest
 }
 func (UnimplementedImageParserServer) GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetScImage not implemented")
+}
+func (UnimplementedImageParserServer) BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchGetScImage not implemented")
+}
+func (UnimplementedImageParserServer) WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WarmScCache not implemented")
 }
 func (UnimplementedImageParserServer) mustEmbedUnimplementedImageParserServer() {}
 func (UnimplementedImageParserServer) testEmbeddedByValue()                     {}
@@ -240,6 +272,42 @@ func _ImageParser_GetScImage_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ImageParser_BatchGetScImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchGetScImageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ImageParserServer).BatchGetScImage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ImageParser_BatchGetScImage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ImageParserServer).BatchGetScImage(ctx, req.(*BatchGetScImageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ImageParser_WarmScCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WarmScCacheRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ImageParserServer).WarmScCache(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ImageParser_WarmScCache_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ImageParserServer).WarmScCache(ctx, req.(*WarmScCacheRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ImageParser_ServiceDesc is the grpc.ServiceDesc for ImageParser service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +334,14 @@ var ImageParser_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetScImage",
 			Handler:    _ImageParser_GetScImage_Handler,
+		},
+		{
+			MethodName: "BatchGetScImage",
+			Handler:    _ImageParser_BatchGetScImage_Handler,
+		},
+		{
+			MethodName: "WarmScCache",
+			Handler:    _ImageParser_WarmScCache_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

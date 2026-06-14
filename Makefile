@@ -170,6 +170,12 @@ generate-protos: ## Generate SC protobuf Python, Go, and TypeScript stubs from p
 	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && \
 		npx buf generate && \
 		npx buf generate --template buf.gen.web.yaml --path sc/v1/sample.proto
+	python -m grpc_tools.protoc \
+		--proto_path=$(PROTO_DIR) \
+		--python_out=libs/protos/src/proto_stubs \
+		--grpc_python_out=libs/protos/src/proto_stubs \
+		$(PROTO_DIR)/imageparser/v1/service.proto
+	sed -i '' 's/^from imageparser\.v1 import/from proto_stubs.imageparser.v1 import/' libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py
 
 .PHONY: generate-protos-deps
 generate-protos-deps: ## Verify buf CLI, protoc, protoc-gen-go, protoc-gen-go-grpc, protoc-gen-mypy are available

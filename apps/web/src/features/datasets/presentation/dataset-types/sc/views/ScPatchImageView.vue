@@ -127,6 +127,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
+import { withAuthQueryParams } from "@/shared/api/client";
 import {
   NButton,
   NCollapse,
@@ -180,6 +181,12 @@ interface ScReviewImageV1Row {
 }
 
 function patchRoleImageUrl(row: ScSampleApiRow, role: string): string {
+  const img = (row.images ?? []).find(
+    (i) => (i.role || "").toLowerCase() === role.toLowerCase()
+  );
+  if (img?.url) {
+    return withAuthQueryParams(img.url);
+  }
   if (row.inspection_time === undefined || row.wafer_key === undefined || row.defect_id === undefined) {
     return "";
   }
@@ -189,6 +196,9 @@ function patchRoleImageUrl(row: ScSampleApiRow, role: string): string {
 }
 
 function reviewRoleImageUrl(row: ScSampleApiRow, image: ScSampleImage): string {
+  if (image.url) {
+    return withAuthQueryParams(image.url);
+  }
   if (row.inspection_time === undefined || row.wafer_key === undefined || row.defect_id === undefined) {
     return "";
   }

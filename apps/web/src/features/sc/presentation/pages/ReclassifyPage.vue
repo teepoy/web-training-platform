@@ -327,6 +327,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :annotation-drafts="page.annotationDraft.value"
               :has-next-page="page.hasMoreSamples.value"
               :is-fetching-next-page="page.isFetchingMoreSamples.value"
+              :inspection-time="page.inspectionContext.value?.inspectionTime ?? ''"
               @select-samples="onBlinkTableSelect"
                :on-load-more="page.fetchMoreSamples"
             />

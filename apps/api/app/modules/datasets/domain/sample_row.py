@@ -57,11 +57,11 @@ class SampleRow:
 
 @dataclass
 class BulkImageRef:
-    """Image payload for bulk import — carries raw bytes."""
+    """Image payload for bulk import — carries raw bytes (nullable)."""
 
     image_id: str
     role: str
-    bytes_: bytes
+    bytes_: bytes | None = None
     image_type: str = ""
     content_type: str = "image/png"
     filename: str = ""

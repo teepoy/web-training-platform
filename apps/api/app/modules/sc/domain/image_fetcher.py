@@ -4,8 +4,6 @@ from typing import Protocol
 
 
 class ScImageFetcher(Protocol):
-    """Protocol for fetching SC wafer inspection images."""
-
     async def get_image_bytes(
         self,
         *,
@@ -16,3 +14,19 @@ class ScImageFetcher(Protocol):
         s3_path: str | None = None,
         review_image_id: int | None = None,
     ) -> bytes: ...
+
+    async def get_image_bytes_batch(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        images: list[dict[str, object]],
+    ) -> list[dict[str, object]]: ...
+
+    async def warm_cache(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        defect_ids: list[int] | None = None,
+    ) -> dict[str, object]: ...

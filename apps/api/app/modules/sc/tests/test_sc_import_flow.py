@@ -314,28 +314,6 @@ class TestScImportFlow:
             "ds-existing", "test-org"
         )
 
-    def test_sc_import_shuffle_reproducible(self) -> None:
-        """Two calls to get_shuffled_ids with the same input produce the same order."""
-        from app.modules.sc.app.services.shuffle import get_shuffled_ids
-
-        all_ids = list(range(1, 101))
-        first = get_shuffled_ids(all_ids)
-        second = get_shuffled_ids(all_ids)
-        assert first == second
-
-    def test_sc_import_no_overlap_with_api(self) -> None:
-        """API slice and worker slice of shuffled IDs have zero intersection."""
-        from app.modules.sc.app.services.shuffle import get_shuffled_ids
-
-        all_ids = list(range(1, 1001))
-        shuffled = get_shuffled_ids(all_ids)
-        api_ids = set(shuffled[:30])
-        worker_ids = set(shuffled[30:])
-        assert api_ids & worker_ids == set()
-        assert len(api_ids) == 30
-        assert len(worker_ids) == 970
-        assert api_ids | worker_ids == set(all_ids)
-
     @pytest.mark.skip(reason="Requires Prefect server infra")
     def test_sc_import_uses_sc_dataset_type(self) -> None:
         """Flow passes dataset_type='image_sc' and task_type='sc' to repo."""

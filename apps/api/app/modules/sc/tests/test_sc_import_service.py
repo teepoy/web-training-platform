@@ -174,6 +174,24 @@ class _MockImageFetcher:
     ) -> bytes:
         return b""
 
+    async def get_image_bytes_batch(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        images: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        return images
+
+    async def warm_cache(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        defect_ids: list[int] | None = None,
+    ) -> dict[str, object]:
+        return {"status": "ok"}
+
 
 def _make_service(
     prefect_client, upstream_reader=None, repository=None, payload_store=None

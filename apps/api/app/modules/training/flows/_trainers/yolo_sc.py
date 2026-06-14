@@ -10,7 +10,7 @@ from __future__ import annotations
 # pyright: reportMissingImports=false, reportPrivateImportUsage=false
 
 from prefect import get_run_logger
-from typing import Any
+from typing import Any, cast
 
 from app.modules.sc.schema import find_images_by_role
 from platform_runtime.contracts import TrainContext, TrainResult
@@ -27,6 +27,7 @@ async def yolo_sc_train(
     *,
     artifact_storage: Any = None,
     lazyframe: Any | None = None,
+    image_fetcher: Any = None,
     **kwargs: Any,
 ) -> TrainResult:
     import io
@@ -46,6 +47,43 @@ async def yolo_sc_train(
 
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")
+
+    # ── Pre-resolve image bytes concurrently ─────────────────────────
+    if image_fetcher is not None and lazyframe is not None:
+        import asyncio as _asyncio_yolo
+
+        _lf: Any = lazyframe
+        df = _lf.collect()
+        _fetches: list[Any] = []
+        _targets: list[dict[str, Any]] = []
+        for row in df.iter_rows(named=True):
+            images_list: list[dict[str, Any]] = row.get("images") or []
+            for img in images_list:
+                role = img.get("role", "")
+                if role not in ("patch_template", "patch_defective"):
+                    continue
+                if img.get("bytes") is not None:
+                    continue
+                _fetches.append(
+                    image_fetcher.get_image_bytes(
+                        inspection_time=str(row.get("inspection_time", "")),
+                        wafer_key=int(row.get("wafer_key", 0) or 0),
+                        defect_id=str(row.get("defect_id", "")),
+                        image_type=str(img.get("image_type", "")),
+                        review_image_id=cast(
+                            int | None,
+                            img.get("review_image_id")
+                            if img.get("review_image_id") is not None
+                            else None,
+                        ),
+                    )
+                )
+                _targets.append(img)
+        if _fetches:
+            _resolved = await _asyncio_yolo.gather(*_fetches)
+            for img, _bytes in zip(_targets, _resolved):
+                img["bytes"] = _bytes
+        lazyframe = df.lazy()
 
     label_space: list[str] = list(ctx.dataset_ref.label_space)
     label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
@@ -78,16 +116,31 @@ async def yolo_sc_train(
             images_list: list[dict[str, Any]] = row.get("images") or []
 
             defective_imgs = find_images_by_role(images_list, "patch_defective")
-            if not defective_imgs:
+            template_imgs = find_images_by_role(images_list, "patch_template")
+            if not defective_imgs or not template_imgs:
                 continue
 
             label: str | None = row.get("label")
             if not label or label not in label_map:
                 continue
 
-            defective_bytes: Any = defective_imgs[0]["bytes"]
+            defective_bytes: bytes | None = cast(
+                bytes | None, defective_imgs[0].get("bytes")
+            )
+            template_bytes: bytes | None = cast(
+                bytes | None, template_imgs[0].get("bytes")
+            )
+            if not defective_bytes or not template_bytes:
+                continue
 
-            pil_img = Image.open(io.BytesIO(defective_bytes)).convert("RGB")
+            defective_img = Image.open(io.BytesIO(defective_bytes)).convert("RGB")
+            template_img = Image.open(io.BytesIO(template_bytes)).convert("RGB")
+
+            stacked = Image.new("RGB", (defective_img.width, defective_img.height * 2))
+            stacked.paste(defective_img, (0, 0))
+            stacked.paste(template_img, (0, defective_img.height))
+
+            pil_img = stacked.resize((224, 224), Image.Resampling.LANCZOS)
             img_path = os.path.join(images_dir, f"{sample_id}.jpg")
             pil_img.save(img_path, "JPEG")
 

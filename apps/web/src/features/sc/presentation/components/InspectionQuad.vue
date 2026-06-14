@@ -381,6 +381,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
         :blink-interval-ms="800"
         :initial-blink-enabled="true"
         :selected-defect-ids="new Set()"
+        :inspection-time="inspectionTime"
       />
     </div>
   </div>

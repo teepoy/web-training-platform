@@ -662,11 +662,20 @@ async def _run_prediction_job_with_container(
     await repo.update_prediction_job_status(job_id, JobStatus.RUNNING, summary=summary)
 
     async def prediction_results():
+        image_fetcher = None
+        if dataset.dataset_type == "image_sc":
+            import os as _os_pj
+            from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
+
+            image_fetcher = GrpcImageFetcher(
+                addr=_os_pj.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+            )
         for pred in predictor_fn(
             artifact_storage=container.artifact_storage,
             ctx=ctx,
             lazyframe=lf,
             model_ref=model_ref,
+            image_fetcher=image_fetcher,
         ):
             sample_id = str(pred.get("sample_id", ""))
             confidence_raw = pred.get("confidence")

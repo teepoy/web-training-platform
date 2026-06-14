@@ -13,6 +13,7 @@ import {
   useQueryClient,
 } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
+import { withAuthQueryParams } from "@/shared/api/client";
 import { buildBlinkTableData } from "@/shared/utils/blink-table-data";
 import type { BlinkSampleInput } from "@/shared/utils/blink-table-data";
 import type { AnnotationGridItem } from "@/shared/types/components";
@@ -242,6 +243,9 @@ export interface ReclassifyPageState {
 }
 
 function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
+  if (image.url) {
+    return withAuthQueryParams(image.url);
+  }
   const rawRole = (image.role || image.image_type || "").toLowerCase();
   if (rawRole === "review") {
     const imageId = Number(image.image_id);

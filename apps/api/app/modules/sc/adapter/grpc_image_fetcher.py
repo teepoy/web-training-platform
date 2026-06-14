@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from grpc import aio as grpc_aio
 
 from proto_stubs.imageparser.v1 import service_pb2 as pb
@@ -38,6 +40,55 @@ class GrpcImageFetcher:
         )
         resp = await stub.GetScImage(req)
         return resp.image_data
+
+    async def get_image_bytes_batch(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        images: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        stub = self._ensure_channel()
+        refs = [
+            pb.ScImageRef(
+                defect_id=str(img.get("defect_id", "")),
+                image_type=str(img.get("image_type", "")),
+                review_image_id=int(cast(object, img.get("review_image_id", 0)) or 0),  # type: ignore[arg-type]
+            )
+            for img in images
+        ]
+        req = pb.BatchGetScImageRequest(
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            images=refs,
+        )
+        resp = await stub.BatchGetScImage(req)
+        return [
+            {
+                "defect_id": r.defect_id,
+                "image_type": r.image_type,
+                "image_data": r.image_data,
+                "content_type": r.content_type,
+                "error": r.error,
+            }
+            for r in resp.results
+        ]
+
+    async def warm_cache(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        defect_ids: list[int] | None = None,
+    ) -> dict[str, object]:
+        stub = self._ensure_channel()
+        req = pb.WarmScCacheRequest(
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            defect_ids=defect_ids or [],
+        )
+        resp = await stub.WarmScCache(req)
+        return {"status": resp.status, "zips_warmed": resp.zips_warmed}
 
     async def close(self) -> None:
         if self._channel is not None:

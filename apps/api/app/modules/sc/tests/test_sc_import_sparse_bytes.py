@@ -133,41 +133,45 @@ async def _mock_image_structs(
     return [
         {
             "image_id": str(defect_id),
-            "image_type": "REVIEW_HIGH_MAG",
+            "image_type": "review",
             "role": "review",
             "content_type": "image/png",
             "filename": f"{defect_id}_review_1.png",
             "bytes": f"review-bytes-{defect_id}".encode(),
+            "review_image_id": 1,
             "source_uri": f"mock-sc://review/"
             f"2026-05-26T08:00:00+00:00/1/{defect_id}",
         },
         {
             "image_id": f"{defect_id}_template",
-            "image_type": "PATCH_TEMPLATE",
+            "image_type": "template",
             "role": "patch_template",
             "content_type": "image/png",
             "filename": "template.png",
             "bytes": b"template-bytes",
+            "review_image_id": None,
             "source_uri": f"mock-sc://patch/"
             f"2026-05-26T08:00:00+00:00/1/{defect_id}/template.png",
         },
         {
             "image_id": f"{defect_id}_defective",
-            "image_type": "PATCH_DEFECTIVE",
+            "image_type": "defective",
             "role": "patch_defective",
             "content_type": "image/png",
             "filename": "defective.png",
             "bytes": b"defective-bytes",
+            "review_image_id": None,
             "source_uri": f"mock-sc://patch/"
             f"2026-05-26T08:00:00+00:00/1/{defect_id}/defective.png",
         },
         {
             "image_id": f"{defect_id}_difference",
-            "image_type": "PATCH_DIFFERENCE",
+            "image_type": "difference",
             "role": "patch_difference",
             "content_type": "image/png",
             "filename": "difference.png",
             "bytes": b"difference-bytes",
+            "review_image_id": None,
             "source_uri": f"mock-sc://patch/"
             f"2026-05-26T08:00:00+00:00/1/{defect_id}/difference.png",
         },
@@ -194,7 +198,7 @@ class TestV2SparseImportBytes:
         images = [
             {
                 "image_id": "42",
-                "image_type": "REVIEW_HIGH_MAG",
+                "image_type": "review",
                 "role": "review",
                 "content_type": "image/png",
                 "filename": "42_review_1.png",
@@ -203,7 +207,7 @@ class TestV2SparseImportBytes:
             },
             {
                 "image_id": "42_template",
-                "image_type": "PATCH_TEMPLATE",
+                "image_type": "template",
                 "role": "patch_template",
                 "content_type": "image/png",
                 "filename": "template.png",
@@ -223,38 +227,11 @@ class TestV2SparseImportBytes:
 
     # -- _build_image_structs unit test -------------------------------------
 
-    def test_build_image_structs_calls_image_fetcher(self) -> None:
-        """Assert ``_build_image_structs`` fetches all review and patch roles."""
+    def test_build_image_structs_metadata_only(self) -> None:
+        """Assert ``_build_image_structs`` returns metadata structs with bytes=None."""
         from app.modules.sc.app.services.sc_import_service import (
             _build_image_structs,
         )
-
-        MOCK_REVIEWS = {1: b"mock-review-1-bytes", 2: b"mock-review-2-bytes"}
-        MOCK_TEMPLATE = b"mock-template-bytes"
-        MOCK_DEFECTIVE = b"mock-defective-bytes"
-        MOCK_DIFFERENCE = b"mock-difference-bytes"
-
-        async def mock_get_image_bytes(
-            *,
-            inspection_time: str,
-            wafer_key: int,
-            defect_id: str,
-            image_type: str,
-            s3_path: str | None = None,
-            review_image_id: int | None = None,
-        ) -> bytes:
-            if image_type == "review":
-                return MOCK_REVIEWS[review_image_id or 0]
-            if image_type == "PATCH_TEMPLATE":
-                return MOCK_TEMPLATE
-            if image_type == "PATCH_DEFECTIVE":
-                return MOCK_DEFECTIVE
-            if image_type == "difference":
-                return MOCK_DIFFERENCE
-            raise RuntimeError(f"Unexpected image_type: {image_type}")
-
-        image_fetcher = MagicMock()
-        image_fetcher.get_image_bytes = mock_get_image_bytes
 
         ps = _sample_with_review("42")
         ps.review_images.append(
@@ -269,7 +246,6 @@ class TestV2SparseImportBytes:
                 patch_sample=ps,
                 inspection_time=INSP_DT,
                 wafer_key=1,
-                image_fetcher=image_fetcher,
             )
         )
 
@@ -284,24 +260,9 @@ class TestV2SparseImportBytes:
 
         review_imgs = [img for img in images if img["role"] == "review"]
         assert [img["image_id"] for img in review_imgs] == ["1", "2"]
-        assert [img["bytes"] for img in review_imgs] == [
-            MOCK_REVIEWS[1],
-            MOCK_REVIEWS[2],
-        ]
-        assert all(img["content_type"] == "image/png" for img in review_imgs)
-
-        template_img = next(img for img in images if img["role"] == "patch_template")
-        assert template_img["bytes"] == MOCK_TEMPLATE
-        assert template_img["filename"] == "template.png"
-
-        defective_img = next(img for img in images if img["role"] == "patch_defective")
-        assert defective_img["bytes"] == MOCK_DEFECTIVE
-        assert defective_img["filename"] == "defective.png"
-
-        difference_img = next(img for img in images if img["role"] == "patch_difference")
-        assert difference_img["bytes"] == MOCK_DIFFERENCE
-        assert difference_img["image_type"] == "PATCH_DIFFERENCE"
-        assert difference_img["filename"] == "difference.png"
+        assert [img["image_type"] for img in review_imgs] == ["review", "review"]
+        assert all(img["bytes"] is None for img in images)
+        assert all(img["content_type"] == "image/png" for img in images)
 
     def test_import_as_sparse_shards_preserves_order_and_manifest(self) -> None:
         """Direct sparse import test using SparseImportOperator + helpers."""
@@ -458,7 +419,6 @@ class TestV2SparseImportBytes:
 
             batch: list[dict[str, Any]] = []
             fake_upstream = FakeUpstream()
-            fake_fetcher = FakeImageFetcher()
             async for patch_sample in fake_upstream.stream(
                 "2026-05-26T08:00:00+00:00", 1
             ):
@@ -466,7 +426,6 @@ class TestV2SparseImportBytes:
                     patch_sample=patch_sample,
                     inspection_time=insp_dt,
                     wafer_key=1,
-                    image_fetcher=fake_fetcher,
                 )
                 batch.append(_patch_sample_to_parquet_row(patch_sample, images))
                 if len(batch) >= batch_size:
@@ -685,6 +644,7 @@ class TestV2EmbeddedImageSchema:
             "content_type": pa.string(),
             "filename": pa.string(),
             "bytes": pa.binary(),
+            "review_image_id": pa.int32(),
             "source_uri": pa.string(),
         }
         actual_fields = {f.name: f.type for f in SC_IMAGE_STRUCT_DTYPE}
@@ -702,11 +662,13 @@ class TestV2EmbeddedImageSchema:
 
         field_map = {f.name: f for f in SC_IMAGE_STRUCT_DTYPE}
         non_nullable = {"image_id", "image_type", "role", "content_type",
-                        "filename", "bytes"}
+                        "filename"}
         for name in non_nullable:
             assert not field_map[name].nullable, (
                 f"Field {name!r} must be non-nullable"
             )
+        assert field_map["bytes"].nullable, "Field 'bytes' must be nullable"
+        assert field_map["review_image_id"].nullable, "Field 'review_image_id' must be nullable"
         assert field_map["source_uri"].nullable, (
             "Field 'source_uri' must be nullable"
         )

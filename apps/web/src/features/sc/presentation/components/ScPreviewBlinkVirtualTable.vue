@@ -14,6 +14,7 @@ const props = withDefaults(
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
     overscan?: number;
+    inspectionTime?: string;
   }>(),
   {
     samples: () => [],
@@ -44,6 +45,7 @@ const emit = defineEmits<{
     :show-prediction-badges="false"
     :show-mode-switch="true"
     :overscan="props.overscan"
+    :inspection-time="props.inspectionTime"
     @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
   />
 </template>
