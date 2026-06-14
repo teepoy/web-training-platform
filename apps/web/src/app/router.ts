@@ -5,11 +5,9 @@ import { sandboxRoutes } from "@/features/sandbox/router";
 import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
 import { authRoutes } from "@/features/auth/router";
-import { classifyRoutes } from "@/features/classify/router";
 import { dashboardRoutes } from "@/features/dashboard/router";
 import { datasetRoutes } from "@/features/datasets/router";
 import { predictionRoutes } from "@/features/prediction/router";
-import { previewRoutes } from "@/features/preview/router";
 import { scRoutes } from "@/features/sc/router";
 import { scheduleRoutes } from "@/features/schedules/router";
 import { sensorRoutes } from "@/features/sensors/router";
@@ -21,17 +19,15 @@ const AUTH_ROUTES = ["/login", "/register", "/auth/oauth/success", "/auth/oauth/
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", redirect: "/preview" },
+    { path: "/", redirect: "/sc/preview" },
     ...authRoutes,
     ...dashboardRoutes,
     ...taskTrackerRoutes,
     ...datasetRoutes,
-    ...classifyRoutes,
     ...trainingRoutes,
     ...predictionRoutes,
     ...scheduleRoutes,
     ...sensorRoutes,
-    ...previewRoutes,
     ...scRoutes,
     {
       path: "/admin",
@@ -50,7 +46,7 @@ export const router = createRouter({
       ],
     },
     ...(import.meta.env.DEV ? sandboxRoutes : []),
-    { path: "/:pathMatch(.*)*", name: "not-found", redirect: "/preview" },
+    { path: "/:pathMatch(.*)*", name: "not-found", redirect: "/sc/preview" },
   ],
 });
 

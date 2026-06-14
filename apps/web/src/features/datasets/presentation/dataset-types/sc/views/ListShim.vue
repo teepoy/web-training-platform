@@ -1,12 +1,6 @@
 <template>
   <div data-testid="datasets-shim-sc">
-    <DatasetToolbar
-      title="Semiconductor Datasets"
-      :importer-flows="importerFlows"
-      :preview-launcher-flows="previewLauncherFlows"
-      @import-complete="emit('import-complete')"
-      @preview-complete="(res) => emit('preview-complete', res)"
-    />
+    <DatasetToolbar title="Semiconductor Datasets" />
 
     <n-alert type="info" style="margin-bottom: 16px">
       Semiconductor inspection workspace — wafer defect classification and review.
@@ -27,20 +21,16 @@
 import { computed, h } from "vue";
 import type { DataTableColumns } from "naive-ui";
 import { NAlert, NButton, NDataTable, NTag, NText } from "naive-ui";
-import { DatasetToolbar, type FlowCard } from "@/shared";
+import { DatasetToolbar } from "@/shared";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
 const props = defineProps<{
   datasets: DatasetListItem[];
   currentOrgId: string | null;
   isSuperadmin: boolean;
-  importerFlows: FlowCard[];
-  previewLauncherFlows: FlowCard[];
 }>();
 
 const emit = defineEmits<{
-  "import-complete": [];
-  "preview-complete": [result: unknown];
   view: [id: string];
   "toggle-public": [payload: { id: string; isPublic: boolean }];
   delete: [row: DatasetListItem];

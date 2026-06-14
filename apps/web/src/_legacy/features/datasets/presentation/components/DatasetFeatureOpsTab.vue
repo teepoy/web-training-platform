@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { NAlert, NButton, NCard, NDataTable, NFormItem, NSelect, NSpace, NStatistic, NTag, NText } from "naive-ui";
-import { useFeatureOps } from "../../application/useFeatureOps";
+import { useFeatureOps } from "@/features/datasets/application/useFeatureOps";
 
 const props = defineProps<{
   datasetId: string;

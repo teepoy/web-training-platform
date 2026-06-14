@@ -1,11 +1,6 @@
 <template>
   <div data-testid="datasets-shim-classification">
-    <DatasetToolbar
-      :importer-flows="importerFlows"
-      :preview-launcher-flows="previewLauncherFlows"
-      @import-complete="emit('import-complete')"
-      @preview-complete="(res) => emit('preview-complete', res)"
-    />
+    <DatasetToolbar />
 
     <DatasetTable
       :datasets="datasets"
@@ -17,7 +12,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { DatasetTable, DatasetToolbar, type FlowCard } from "@/shared";
+import { DatasetTable, DatasetToolbar } from "@/shared";
 import { buildDatasetColumns } from "@/features/datasets/application/surface";
 import { resolveDatasetTaskType } from "@/features/datasets/presentation/pages/registry";
 import type { DatasetListItem } from "@/shared/datasets/types";
@@ -26,13 +21,9 @@ const props = defineProps<{
   datasets: DatasetListItem[];
   currentOrgId: string | null;
   isSuperadmin: boolean;
-  importerFlows: FlowCard[];
-  previewLauncherFlows: FlowCard[];
 }>();
 
 const emit = defineEmits<{
-  "import-complete": [];
-  "preview-complete": [result: unknown];
   "view": [id: string];
   "toggle-public": [payload: { id: string; isPublic: boolean }];
   "delete": [row: DatasetListItem];

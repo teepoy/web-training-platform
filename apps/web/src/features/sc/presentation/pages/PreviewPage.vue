@@ -62,10 +62,6 @@ const containerStyle = computed(() => ({
   "--cv-divider": themeVars.value.dividerColor,
 }));
 
-function openClassify(url: string) {
-  window.open(url, '_blank');
-}
-
 const activeComponent = computed<Component>(() =>
   page.activeTab.value?.type === "inspection" ? InspectionQuad : ScSummaryTab,
 );
@@ -79,10 +75,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       summariesLoading: page.summariesLoading.value,
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns,
-      classifyDisabled: !page.datasetId.value.trim(),
       "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
       onSearch: () => page.searchInspections(),
-      onOpenClassify: () => openClassify(page.classifyHref.value),
       onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),
     };
   }
