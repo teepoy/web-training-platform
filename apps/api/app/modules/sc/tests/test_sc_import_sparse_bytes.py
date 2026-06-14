@@ -695,7 +695,8 @@ class TestV2EmbeddedImageSchema:
         names = {c["name"] for c in SC_SPARSE_SHARD_SCHEMA_V2}
         expected_scalars = {
             "sample_id", "defect_id", "inspection_time", "wafer_key",
-            "wafer_x", "wafer_y", "rough_bin", "class_number", "lot_id",
+            "wafer_x", "wafer_y", "die_x", "die_y",
+            "rough_bin", "class_number", "lot_id", "has_review",
         }
         for name in expected_scalars:
             assert name in names, (

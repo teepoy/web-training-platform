@@ -105,7 +105,9 @@ func (s *SCRoutes) HandleSCPatchSprite(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("%s: %v", t, err)})
 			return
 		}
+		acquireBimg()
 		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		releaseBimg()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -176,7 +178,9 @@ func (s *SCRoutes) HandleSCReviewSprite(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
+		acquireBimg()
 		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		releaseBimg()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -239,7 +243,9 @@ func (s *SCRoutes) HandleSCPatchBatchSprite(c *gin.Context) {
 				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("defect %s %s: %v", did, t, err)})
 				return
 			}
-			resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+			acquireBimg()
+		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		releaseBimg()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -318,7 +324,9 @@ func (s *SCRoutes) HandleSCReviewBatchSprite(c *gin.Context) {
 			if err != nil {
 				continue
 			}
-			resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+			acquireBimg()
+		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		releaseBimg()
 			if err != nil {
 				continue
 			}

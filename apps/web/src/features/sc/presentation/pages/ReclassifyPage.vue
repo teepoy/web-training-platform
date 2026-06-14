@@ -276,6 +276,13 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
           <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
             Sampling
           </NButton>
+          <NButton
+            size="small"
+            quaternary
+            @click="router.push('/sc/handbook')"
+          >
+            Handbook
+          </NButton>
           <NTooltip placement="bottom-end">
             <template #trigger>
               <NButton
@@ -328,6 +335,9 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :has-next-page="page.hasMoreSamples.value"
               :is-fetching-next-page="page.isFetchingMoreSamples.value"
               :inspection-time="page.inspectionContext.value?.inspectionTime ?? ''"
+              :review-samples="page.reviewSamples.value"
+              :review-loading="page.reviewLoading.value"
+              :review-error="page.reviewError.value"
               @select-samples="onBlinkTableSelect"
                :on-load-more="page.fetchMoreSamples"
             />

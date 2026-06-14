@@ -494,7 +494,7 @@ def _embedded_bytes_to_sc_image_refs(
                 ScImageRef(
                     role=img.role or img.image_id,
                     image_id=img.image_id,
-                    image_type=img.content_type,
+                    image_type=img.image_type or img.content_type,
                     content_type=img.content_type,
                     url=url,
                     bytes=img.bytes_,

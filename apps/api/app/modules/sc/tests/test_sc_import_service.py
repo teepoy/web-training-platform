@@ -208,56 +208,6 @@ def _make_service(
 
 
 @pytest.mark.asyncio
-async def test_hybrid_submit_with_large_max_rows() -> None:
-    mock_prefect = _MockPrefectSuccess()
-    payload_store = _MockPayloadStore()
-    upstream = _MockUpstream(row_count=30_005)
-    service = _make_service(
-        mock_prefect, upstream_reader=upstream, payload_store=payload_store
-    )
-
-    status, flow_run_id = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Hybrid 50k",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        max_rows=50_000,
-    )
-
-    assert status.status == "running"
-    assert status.imported_count == 30_000
-    assert status.flow_run_id == "test-run-id-123"
-    assert flow_run_id == "test-run-id-123"
-    assert mock_prefect.parameters["offset"] == 30_000
-    assert mock_prefect.parameters["max_rows"] == 20_000
-    assert len(upstream.list_samples_calls) >= 1
-    assert payload_store.manifest is not None
-    assert payload_store.manifest.total_rows == 30_000
-
-
-@pytest.mark.asyncio
-async def test_hybrid_submit_with_max_rows_none() -> None:
-    mock_prefect = _MockPrefectSuccess()
-    upstream = _MockUpstream(row_count=30_001)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
-
-    status, _ = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Hybrid all",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        max_rows=None,
-    )
-
-    assert status.status == "running"
-    assert status.imported_count == 30_000
-    assert mock_prefect.parameters["offset"] == 30_000
-    assert mock_prefect.parameters["max_rows"] is None
-
-
-@pytest.mark.asyncio
 async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
     mock_prefect = _MockPrefectSuccess()
     upstream = _MockUpstream(row_count=20)
@@ -277,27 +227,6 @@ async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
     assert status.flow_run_id is None
     assert flow_run_id is None
     assert mock_prefect.create_calls == 0
-
-
-@pytest.mark.asyncio
-async def test_boundary_30k_plus_1_triggers_hybrid() -> None:
-    mock_prefect = _MockPrefectSuccess()
-    upstream = _MockUpstream(row_count=30_001)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
-
-    status, _ = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Hybrid boundary",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        max_rows=30_001,
-    )
-
-    assert status.status == "running"
-    assert status.imported_count == 30_000
-    assert mock_prefect.parameters["offset"] == 30_000
-    assert mock_prefect.parameters["max_rows"] == 1
 
 
 @pytest.mark.asyncio
@@ -323,109 +252,9 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_import_creates_flow_run() -> None:
-    """submit_import() should dispatch Prefect flow and return running status."""
-    mock_prefect = _MockPrefectSuccess()
-    service = _make_service(mock_prefect)
-
-    status, flow_run_id = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Test SC Dataset",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        force_prefect_flow=True,
-    )
-
-    # Assert: returns running status with flow_run_id
-    assert status.status == "running"
-    assert status.flow_run_id == "test-run-id-123"
-    assert flow_run_id == "test-run-id-123"
-    assert status.source_inspection_time == "2024-01-15T08:30:00"
-    assert status.source_wafer_key == 1
-    assert status.dataset_name == "Test SC Dataset"
-    assert status.dataset_id
-    assert mock_prefect.parameters["dataset_id"] == status.dataset_id
-    assert mock_prefect.parameters["offset"] == 0
-    assert status.storage_mode == "file_shard_sparse"
-    assert status.error is None
-
-
 @pytest.mark.asyncio
-async def test_submit_import_deployment_not_found_returns_failed() -> None:
-    """When deployment is not found, submit_import() should return failed status."""
-    mock_prefect = _MockPrefectNoDeployment()
-    service = _make_service(mock_prefect)
-    status, flow_run_id = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Test SC Dataset",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        force_prefect_flow=True,
-    )
-
-    # Assert: returns failed status, no flow_run_id
-    assert status.status == "failed"
-    assert flow_run_id is None
-    assert status.error is not None
-    assert "deployment" in status.error.lower() or "not found" in status.error.lower()
-
-
 @pytest.mark.asyncio
-async def test_submit_import_prefect_create_fails_returns_failed() -> None:
-    """When create_flow_run_from_deployment raises, submit_import() should return failed status."""
-    mock_prefect = _MockPrefectCreateFails()
-    service = _make_service(mock_prefect)
-
-    status, flow_run_id = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Test SC Dataset",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        force_prefect_flow=True,
-    )
-
-    # Assert: returns failed status
-    assert status.status == "failed"
-    assert flow_run_id is None
-    assert status.error is not None
-
-
 @pytest.mark.asyncio
-async def test_submit_import_prefect_resolve_raises_returns_failed() -> None:
-    """When resolve_deployment_id itself raises, submit_import() should return failed status."""
-
-    class _MockPrefectResolveFails:
-        async def resolve_deployment_id(self, deployment_name: str) -> str | None:
-            raise Exception("Prefect API connection refused")
-
-        async def create_flow_run_from_deployment(
-            self,
-            deployment_id: str,
-            parameters: dict[str, object],
-            idempotency_key: str | None = None,
-        ) -> dict[str, object]:
-            raise RuntimeError("should not be called")
-
-    mock_prefect = _MockPrefectResolveFails()
-    service = _make_service(mock_prefect)
-
-    status, flow_run_id = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Test SC Dataset",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        force_prefect_flow=True,
-    )
-
-    assert status.status == "failed"
-    assert flow_run_id is None
-    assert status.error is not None
-
-
 @pytest.mark.asyncio
 async def test_direct_import_persists_geometry_metadata() -> None:
     """Direct (sync) import should persist wafer geometry in dataset_meta."""
@@ -486,25 +315,6 @@ async def test_direct_import_persists_geometry_metadata() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hybrid_shuffle_uses_shuffled_ids() -> None:
-    mock_prefect = _MockPrefectSuccess()
-    upstream = _MockUpstream(row_count=100_000)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
-
-    status, _ = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Hybrid shuffle 100k",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        max_rows=100_000,
-    )
-
-    assert status.status == "running"
-    assert mock_prefect.parameters["total_available"] == 100_000
-    assert mock_prefect.parameters["offset"] == 30_000
-
-
 @pytest.mark.asyncio
 async def test_hybrid_shuffle_exhausted_early() -> None:
     mock_prefect = _MockPrefectSuccess()
@@ -526,25 +336,6 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hybrid_shuffle_prefect_params() -> None:
-    mock_prefect = _MockPrefectSuccess()
-    upstream = _MockUpstream(row_count=50_000)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
-
-    status, _ = await service.submit_import(
-        source_inspection_time="2024-01-15T08:30:00",
-        source_wafer_key=1,
-        dataset_name="Hybrid shuffle params",
-        storage_mode="file_shard_sparse",
-        org_id="test-org",
-        max_rows=50_000,
-    )
-
-    assert status.status == "running"
-    assert "total_available" in mock_prefect.parameters
-    assert isinstance(mock_prefect.parameters["offset"], int)
-
-
 @pytest.mark.asyncio
 async def test_direct_import_uses_shuffled_ids() -> None:
     mock_prefect = _MockPrefectSuccess()

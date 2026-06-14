@@ -17,11 +17,13 @@ import {
 } from "naive-ui";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
+import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { usePreviewPage } from "@/features/sc/application/usePreviewPage";
 
 const page = usePreviewPage();
 const route = useRoute();
+const router = useRouter();
 const themeVars = useThemeVars();
 
 onMounted(async () => {
@@ -187,6 +189,13 @@ const activeComponentProps = computed((): Record<string, unknown> => {
             <button class="sc-preview-tab-add" @click="page.createSummaryTab()" title="New Summary tab">+</button>
           </div>
           <div class="sc-preview-toolbar">
+            <NButton
+              size="small"
+              quaternary
+              @click="router.push('/sc/handbook')"
+            >
+              Handbook
+            </NButton>
             <NButton
               v-if="page.activeTab.value?.type === 'inspection' && page.activeTab.value.inspectionItem"
               size="small"

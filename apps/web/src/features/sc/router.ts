@@ -16,6 +16,11 @@ export const scRoutes: RouteRecordRaw[] = [
     component: () => import("./presentation/pages/PreviewPage.vue"),
   },
   {
+    path: "/sc/handbook",
+    name: "sc-handbook",
+    component: () => import("./presentation/pages/HandbookPage.vue"),
+  },
+  {
     path: "/datasets/:id/sc/classify",
     name: "sc-reclassify",
     component: () => import("./presentation/pages/ReclassifyPage.vue"),

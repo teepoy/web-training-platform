@@ -15,6 +15,8 @@ class SampleRowImageRef:
     filename: str
     bytes_: bytes | None = None
     access_url: str = ""
+    image_type: str = ""
+    review_image_id: int | None = None
 
 
 @dataclass
@@ -66,6 +68,7 @@ class BulkImageRef:
     content_type: str = "image/png"
     filename: str = ""
     source_uri: str | None = None
+    review_image_id: int | None = None
 
 
 @dataclass

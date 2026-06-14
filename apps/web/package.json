@@ -28,6 +28,7 @@
     "@vueuse/core": "^14.3.0",
     "echarts": "^6.0.0",
     "kdbush": "^4.0.2",
+    "marked": "^18.0.5",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.1",
     "unplugin-vue-components": "^32.0.0",

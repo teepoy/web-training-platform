@@ -64,6 +64,7 @@ async def _build_image_structs(
                 content_type="image/png",
                 filename=review_image.image_name,
                 bytes_=None,
+                review_image_id=review_image.image_id,
                 source_uri=(
                     f"mock-sc://review/{insp_time_str}/{wafer_key}/{defect_id}/"
                     f"{review_image.image_id}"
@@ -128,6 +129,9 @@ def _patch_sample_to_parquet_row(ps: Any, images: list[Any]) -> Any:
     if ps.inspection_time is not None:
         inspection_time_str = ps.inspection_time.isoformat()
 
+    review_images = getattr(ps, "review_images", []) or []
+    has_review = 1 if review_images else 0
+
     return BulkSampleRow(
         sample_id=ps.sample_id,
         images=images,
@@ -142,6 +146,7 @@ def _patch_sample_to_parquet_row(ps: Any, images: list[Any]) -> Any:
             "rough_bin": ps.rough_bin,
             "class_number": ps.class_number,
             "lot_id": ps.lot_id,
+            "has_review": has_review,
         },
     )
 

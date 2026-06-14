@@ -35,7 +35,7 @@ from platform_runtime.sparse import (
 
 logger = logging.getLogger(__name__)
 
-DIRECT_IMPORT_MAX_ROWS = 30000
+logger = logging.getLogger(__name__)
 
 
 # ── SC-specific helpers ─────────────────────────────────────────────────────
@@ -47,6 +47,9 @@ def _patch_sample_to_parquet_row(
     inspection_time_str = ""
     if ps.inspection_time is not None:
         inspection_time_str = ps.inspection_time.isoformat()
+
+    review_images = getattr(ps, "review_images", []) or []
+    has_review = 1 if review_images else 0
 
     return {
         "sample_id": ps.sample_id,
@@ -60,6 +63,7 @@ def _patch_sample_to_parquet_row(
         "rough_bin": ps.rough_bin,
         "class_number": ps.class_number,
         "lot_id": ps.lot_id,
+        "has_review": has_review,
         "images": images,
     }
 
@@ -172,11 +176,11 @@ class ScImportPayloadStore(Protocol):
 class ScImportService:
     def __init__(
         self,
-        prefect_client: ScImportPrefectClient,
-        repository: ScImportRepository,
-        payload_store: ScImportPayloadStore,
-        upstream_reader: ScUpstreamReader,
-        image_fetcher: ScImageFetcher,
+        prefect_client: ScImportPrefectClient | None = None,
+        repository: ScImportRepository | None = None,
+        payload_store: ScImportPayloadStore | None = None,
+        upstream_reader: ScUpstreamReader | None = None,
+        image_fetcher: ScImageFetcher | None = None,
     ) -> None:
         self._prefect = prefect_client
         self._repo = repository
@@ -247,117 +251,36 @@ class ScImportService:
                 None,
             )
 
-        if (
-            not force_prefect_flow
-            and max_rows is not None
-            and 0 < max_rows <= DIRECT_IMPORT_MAX_ROWS
-        ):
-            try:
-                result = await self._run_direct_import(
-                    dataset_id=dataset.id,
-                    org_id=org_id,
-                    source_inspection_time=source_inspection_time,
-                    source_wafer_key=source_wafer_key,
-                    max_rows=max_rows,
-                    logger=logger,
-                )
-                imported_count_raw = result.get("imported_count", 0)
-                imported_count: int = (
-                    int(imported_count_raw)
-                    if isinstance(imported_count_raw, (int, float))
-                    else 0
-                )
-                completed_status = ScImportStatus(
-                    status="completed",
-                    dataset_id=dataset.id,
-                    dataset_name=dataset_name,
-                    source_inspection_time=source_inspection_time,
-                    source_wafer_key=source_wafer_key,
-                    storage_mode=storage_mode,
-                    imported_count=imported_count,
-                )
-                return completed_status, None
-            except Exception as e:
-                logger.exception("Direct import failed, dataset=%s", dataset.id)
-                return (
-                    await self._fail(
-                        f"Direct import failed: {e}",
-                        source_inspection_time,
-                        source_wafer_key,
-                        dataset_name,
-                        storage_mode,
-                    ),
-                    None,
-                )
-
-        prefect_offset = 0
-        prefect_max_rows = max_rows
-        hybrid_imported_count = 0
-        total_available: int | None = None
-
-        if (
-            not force_prefect_flow
-            and storage_mode == "file_shard_sparse"
-            and (max_rows is None or max_rows > DIRECT_IMPORT_MAX_ROWS)
-        ):
-            try:
-                result = await self._run_direct_import(
-                    dataset_id=dataset.id,
-                    org_id=org_id,
-                    source_inspection_time=source_inspection_time,
-                    source_wafer_key=source_wafer_key,
-                    max_rows=DIRECT_IMPORT_MAX_ROWS,
-                    logger=logger,
-                )
-                imported_count_raw = result.get("imported_count", 0)
-                hybrid_imported_count = (
-                    int(imported_count_raw)
-                    if isinstance(imported_count_raw, (int, float))
-                    else 0
-                )
-            except Exception as e:
-                logger.exception("Hybrid direct import failed, dataset=%s", dataset.id)
-                return (
-                    await self._fail(
-                        f"Hybrid direct import failed: {e}",
-                        source_inspection_time,
-                        source_wafer_key,
-                        dataset_name,
-                        storage_mode,
-                    ),
-                    None,
-                )
-
-            if hybrid_imported_count < DIRECT_IMPORT_MAX_ROWS:
-                completed_status = ScImportStatus(
-                    status="completed",
-                    dataset_id=dataset.id,
-                    dataset_name=dataset_name,
-                    source_inspection_time=source_inspection_time,
-                    source_wafer_key=source_wafer_key,
-                    storage_mode=storage_mode,
-                    imported_count=hybrid_imported_count,
-                )
-                return completed_status, None
-
-            total_available_raw = result.get("total_available")
-            total_available = (
-                int(total_available_raw)
-                if isinstance(total_available_raw, (int, float))
-                else None
-            )
-            prefect_offset = hybrid_imported_count
-            if max_rows is not None:
-                prefect_max_rows = max_rows - DIRECT_IMPORT_MAX_ROWS
-
         try:
-            deployment_id = await self._prefect.resolve_deployment_id(
-                "sc-import-deployment"
+            result = await self._run_direct_import(
+                dataset_id=dataset.id,
+                org_id=org_id,
+                source_inspection_time=source_inspection_time,
+                source_wafer_key=source_wafer_key,
+                max_rows=max_rows,
+                logger=logger,
             )
+            imported_count_raw = result.get("imported_count", 0)
+            imported_count: int = (
+                int(imported_count_raw)
+                if isinstance(imported_count_raw, (int, float))
+                else 0
+            )
+            completed_status = ScImportStatus(
+                status="completed",
+                dataset_id=dataset.id,
+                dataset_name=dataset_name,
+                source_inspection_time=source_inspection_time,
+                source_wafer_key=source_wafer_key,
+                storage_mode=storage_mode,
+                imported_count=imported_count,
+            )
+            return completed_status, None
         except Exception as e:
+            logger.exception("Direct import failed, dataset=%s", dataset.id)
             return (
                 await self._fail(
-                    f"Prefect API error: {e}",
+                    f"Direct import failed: {e}",
                     source_inspection_time,
                     source_wafer_key,
                     dataset_name,
@@ -365,60 +288,6 @@ class ScImportService:
                 ),
                 None,
             )
-
-        if deployment_id is None:
-            return (
-                await self._fail(
-                    "Deployment 'sc-import-deployment' not found",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
-            )
-
-        try:
-            run = await self._prefect.create_flow_run_from_deployment(
-                deployment_id=deployment_id,
-                parameters={
-                    "source_inspection_time": source_inspection_time,
-                    "source_wafer_key": source_wafer_key,
-                    "dataset_name": dataset_name,
-                    "storage_mode": storage_mode,
-                    "filters": filters,
-                    "label_space": label_space,
-                    "dataset_id": dataset.id,
-                    "org_id": org_id,
-                    "max_rows": prefect_max_rows,
-                    "offset": prefect_offset,
-                    "total_available": total_available,
-                },
-            )
-            flow_run_id = run["id"]
-        except Exception as e:
-            return (
-                await self._fail(
-                    f"Failed to submit flow run: {e}",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
-            )
-
-        running_status = ScImportStatus(
-            status="running",
-            flow_run_id=flow_run_id,
-            source_inspection_time=source_inspection_time,
-            source_wafer_key=source_wafer_key,
-            dataset_name=dataset_name,
-            dataset_id=dataset.id,
-            storage_mode=storage_mode,
-            imported_count=hybrid_imported_count,
-        )
-        return running_status, flow_run_id
 
     async def _run_direct_import(
         self,

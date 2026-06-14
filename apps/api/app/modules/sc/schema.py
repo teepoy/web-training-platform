@@ -107,6 +107,7 @@ SC_SPARSE_SHARD_SCHEMA_V2: list[dict[str, str]] = [
     {"name": "rough_bin", "type": "int32"},
     {"name": "class_number", "type": "int32"},
     {"name": "lot_id", "type": "string"},
+    {"name": "has_review", "type": "int32"},
     {"name": "images", "type": "list<struct>"},
 ]
 """SC v2 sparse shard schema as ColumnSchema-compatible dicts.
