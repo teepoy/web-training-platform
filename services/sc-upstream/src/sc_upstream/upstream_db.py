@@ -120,30 +120,21 @@ class UpstreamDB:
         )
         return lf
 
-    def get_review_image_filespec(
-        self, inspection_time: datetime, wafer_key: int, defect_id: int, image_id: int
-    ) -> str | None:
-        with Session(self._engine) as session:
-            image = session.get(
-                InspectImageORM, (wafer_key, inspection_time, defect_id, image_id)
-            )
-            if image is not None:
-                return image.image_filespec
-            return None
-
     def list_review_images(
-        self, inspection_time: datetime, wafer_key: int, defect_id: int | None = None
+        self, inspection_time: datetime, wafer_key: int
     ) -> list[dict[str, Any]]:
         with Session(self._engine) as session:
-            q = session.query(InspectImageORM).filter(
-                InspectImageORM.inspection_time == inspection_time,
-                InspectImageORM.wafer_key == wafer_key,
+            images = (
+                session.query(InspectImageORM)
+                .filter(
+                    InspectImageORM.inspection_time == inspection_time,
+                    InspectImageORM.wafer_key == wafer_key,
+                )
+                .order_by(
+                    InspectImageORM.defect_id.asc(), InspectImageORM.image_id.asc()
+                )
+                .all()
             )
-            if defect_id is not None:
-                q = q.filter(InspectImageORM.defect_id == defect_id)
-            images = q.order_by(
-                InspectImageORM.defect_id.asc(), InspectImageORM.image_id.asc()
-            ).all()
             return [
                 {
                     "defect_id": img.defect_id,

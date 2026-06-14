@@ -113,14 +113,35 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.GetReviewImageFileSpecResponse()
 
-        spec = self._db.get_review_image_filespec(
-            dt, request.wafer_key, request.defect_id, request.image_id
+        images = self._cache.get_list_review_images(
+            request.inspection_time, request.wafer_key
         )
-        if spec is None:
+        if images is not None:
+            for img in images:
+                if (
+                    img["defect_id"] == request.defect_id
+                    and img["image_id"] == request.image_id
+                ):
+                    return pb.GetReviewImageFileSpecResponse(
+                        image_filespec=img["image_filespec"]
+                    )
             context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
             return pb.GetReviewImageFileSpecResponse()
 
-        return pb.GetReviewImageFileSpecResponse(image_filespec=spec)
+        it = request.inspection_time
+        wk = request.wafer_key
+        images = self._db.list_review_images(dt, wk)
+        self._cache.set_list_review_images(it, wk, images)
+        for img in images:
+            if (
+                img["defect_id"] == request.defect_id
+                and img["image_id"] == request.image_id
+            ):
+                return pb.GetReviewImageFileSpecResponse(
+                    image_filespec=img["image_filespec"]
+                )
+        context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
+        return pb.GetReviewImageFileSpecResponse()
 
     def ListReviewImages(
         self, request: pb.ListReviewImagesRequest, context: grpc.ServicerContext
@@ -133,38 +154,25 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.ListReviewImagesResponse()
 
-        cached = self._cache.get_list_review_images(
-            request.inspection_time, request.wafer_key
-        )
-        if cached is not None:
-            return pb.ListReviewImagesResponse(
-                images=[
-                    pb.ReviewImageRef(
-                        image_filespec=r["image_filespec"],
-                        defect_id=r.get("defect_id", 0),
-                        image_id=r.get("image_id", 0),
-                        image_type=r.get("image_type", ""),
-                    )
-                    for r in cached
-                ]
-            )
+        it = request.inspection_time
+        wk = request.wafer_key
+        images = self._cache.get_list_review_images(it, wk)
+        if images is None:
+            images = self._db.list_review_images(dt, wk)
+            self._cache.set_list_review_images(it, wk, images)
 
-        defect_id = request.defect_id if request.defect_id else None
-        images = self._db.list_review_images(dt, request.wafer_key, defect_id)
-        self._cache.set_list_review_images(
-            request.inspection_time, request.wafer_key, images
-        )
-        return pb.ListReviewImagesResponse(
-            images=[
-                pb.ReviewImageRef(
-                    image_filespec=img["image_filespec"],
-                    defect_id=img.get("defect_id", 0),
-                    image_id=img.get("image_id", 0),
-                    image_type=img.get("image_type", ""),
-                )
-                for img in images
-            ]
-        )
+        defect_id = request.defect_id if request.defect_id else 0
+        refs = [
+            pb.ReviewImageRef(
+                image_filespec=img["image_filespec"],
+                defect_id=img["defect_id"],
+                image_id=img["image_id"],
+                image_type=img["image_type"],
+            )
+            for img in images
+            if defect_id == 0 or img["defect_id"] == defect_id
+        ]
+        return pb.ListReviewImagesResponse(images=refs)
 
 
 def _to_inspection_response(record: dict) -> pb.GetInspectionResponse:
