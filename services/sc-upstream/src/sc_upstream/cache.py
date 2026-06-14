@@ -71,3 +71,30 @@ class QueryCache:
         buf = io.BytesIO()
         lf.collect().write_ipc(buf)
         self._cache.set(key, buf.getvalue(), expire=CACHE_TTL)
+
+    def get_patch_zips(
+        self,
+        inspection_time: str,
+        lot_id: str,
+        wafer_id: str,
+        device: str,
+        layer_id: str,
+    ) -> list[dict] | None:
+        return self._cache.get(
+            self._key("zips", inspection_time, lot_id, wafer_id, device, layer_id)
+        )
+
+    def set_patch_zips(
+        self,
+        inspection_time: str,
+        lot_id: str,
+        wafer_id: str,
+        device: str,
+        layer_id: str,
+        items: list[dict],
+    ) -> None:
+        self._cache.set(
+            self._key("zips", inspection_time, lot_id, wafer_id, device, layer_id),
+            items,
+            expire=CACHE_TTL,
+        )

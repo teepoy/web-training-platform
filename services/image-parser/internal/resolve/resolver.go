@@ -120,6 +120,50 @@ func (r *Resolver) GetPatchImage(inspectionTime string, waferKey int, defectIDSt
 	return imgData, nil
 }
 
+func (r *Resolver) GetMetaAndZips(inspectionTime string, waferKey int) (lotID, waferID, device, layerID string, zips []CacheZipRef, err error) {
+	meta, err := r.upstream.GetInspection(context.Background(), inspectionTime, int32(waferKey))
+	if err != nil {
+		return "", "", "", "", nil, fmt.Errorf("resolve metadata: %w", err)
+	}
+	m := meta
+	zipsResp, err := r.upstream.GetInspectionPatchZips(context.Background(), inspectionTime, m.LotId, m.WaferId, m.Device, m.LayerId)
+	if err != nil {
+		return "", "", "", "", nil, fmt.Errorf("resolve zips: %w", err)
+	}
+	for _, z := range zipsResp.Zips {
+		zips = append(zips, CacheZipRef{Bucket: z.S3Bucket, Key: z.S3Key})
+	}
+	return m.LotId, m.WaferId, m.Device, m.LayerId, zips, nil
+}
+
+func (r *Resolver) GetPatchImageFromZips(zips []CacheZipRef, defectIDStr string, imageType string) ([]byte, error) {
+	did, err := ParseDefectID(defectIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid defect_id: %w", err)
+	}
+	ref, err := locateZipForDefect(zips, did)
+	if err != nil {
+		return nil, fmt.Errorf("locate zip: %w", err)
+	}
+	prefix := fmt.Sprintf("%06d", did)
+	ck := cache.CacheKey(ref.Bucket, ref.Key)
+	zipData, err := r.ZipCache.GetOrLoad(ck, func() ([]byte, error) {
+		return zipreader.DownloadFullZip(s3client.Get(), ref.Bucket, ref.Key)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("download zip: %w", err)
+	}
+	imgData, _, err := zipreader.GetImageFromBytes(zipData, prefix)
+	if err != nil {
+		newPrefix := fmt.Sprintf("Defect%06d_%s", did, imageType)
+		imgData, _, err = zipreader.GetImageFromBytes(zipData, newPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("image %s not found in zip", prefix)
+		}
+	}
+	return imgData, nil
+}
+
 func (r *Resolver) GetReviewImage(inspectionTime string, waferKey int, defectIDStr string, reviewImageID int) ([]byte, error) {
 	did, err := ParseDefectID(defectIDStr)
 	if err != nil {

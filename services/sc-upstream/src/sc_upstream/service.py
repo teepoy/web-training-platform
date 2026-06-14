@@ -81,9 +81,23 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.GetInspectionPatchZipsResponse()
 
-        zips = self._zips.get_inspection_patch_zips(
-            dt, request.lot_id, request.wafer_id, request.device, request.layer_id
-        )
+        it = request.inspection_time
+        lot = request.lot_id
+        wafer = request.wafer_id
+        dev = request.device
+        layer = request.layer_id
+
+        cached = self._cache.get_patch_zips(it, lot, wafer, dev, layer)
+        if cached is not None:
+            return pb.GetInspectionPatchZipsResponse(
+                zips=[
+                    pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"])
+                    for z in cached
+                ]
+            )
+
+        zips = self._zips.get_inspection_patch_zips(dt, lot, wafer, dev, layer)
+        self._cache.set_patch_zips(it, lot, wafer, dev, layer, zips)
         return pb.GetInspectionPatchZipsResponse(
             zips=[pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"]) for z in zips]
         )

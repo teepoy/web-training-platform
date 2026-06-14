@@ -90,11 +90,17 @@ func (s *SCRoutes) HandleSCPatchSprite(c *gin.Context) {
 		}
 	}
 
+	_, _, _, _, allZips, err := s.r.GetMetaAndZips(inspectionTime, waferKey)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
+		return
+	}
+
 	types := []string{"template", "defective", "difference"}
 	pngs := make([][]byte, 0, len(types))
 
 	for _, t := range types {
-		data, err := s.r.GetPatchImage(inspectionTime, waferKey, defectID, t)
+		data, err := s.r.GetPatchImageFromZips(allZips, defectID, t)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("%s: %v", t, err)})
 			return
@@ -217,12 +223,18 @@ func (s *SCRoutes) HandleSCPatchBatchSprite(c *gin.Context) {
 		defectIDs = defectIDs[:200]
 	}
 
+	_, _, _, _, allZips, err := s.r.GetMetaAndZips(inspectionTime, waferKey)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
+		return
+	}
+
 	types := []string{"template", "defective", "difference"}
 	pngs := make([][]byte, 0, len(defectIDs)*len(types))
 
 	for _, did := range defectIDs {
 		for _, t := range types {
-			data, err := s.r.GetPatchImage(inspectionTime, waferKey, did, t)
+			data, err := s.r.GetPatchImageFromZips(allZips, did, t)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("defect %s %s: %v", did, t, err)})
 				return
