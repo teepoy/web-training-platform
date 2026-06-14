@@ -1,6 +1,6 @@
 module image-parser
 
-go 1.25.0
+go 1.26.0
 
 require (
 	ft-platform/protos/gen/go v0.0.0

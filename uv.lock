@@ -1430,8 +1430,6 @@ dev = [
 ]
 gpu = [
     { name = "finetune-ml" },
-    { name = "torch" },
-    { name = "torchvision" },
     { name = "ultralytics" },
 ]
 
@@ -1482,8 +1480,6 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0" },
     { name = "seedmaker", marker = "extra == 'dev'", editable = "libs/seedmaker" },
     { name = "sqlalchemy", specifier = "==2.0.48" },
-    { name = "torch", marker = "extra == 'gpu'", specifier = ">=2.0" },
-    { name = "torchvision", marker = "extra == 'gpu'", specifier = ">=0.15" },
     { name = "ultralytics", marker = "extra == 'gpu'", specifier = ">=8.4.58" },
     { name = "uvicorn", specifier = "==0.42.0" },
 ]
