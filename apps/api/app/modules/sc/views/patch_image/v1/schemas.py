@@ -41,6 +41,7 @@ class ScPatchImageV1Row(BaseModel):
     rough_bin: int
     class_number: int | None = None
     images: list[ScImageRef] = Field(default_factory=list)
+    review_images: list[dict] = Field(default_factory=list)
     label: str = ""
     predicted_label: str = ""
     confidence: float | None = None

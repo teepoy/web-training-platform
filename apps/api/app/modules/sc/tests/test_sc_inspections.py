@@ -104,10 +104,12 @@ def test_list_inspections_empty_time_range(
 def test_list_inspections_range_exceeds_14_days_returns_400(
     mock_wafer_db_reader,
 ):
+    from app.modules.sc.port.http.router import MAX_INSPECTION_RANGE_DAYS
+
     app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
     try:
         with TestClient(app) as client:
-            over_start = (TODAY - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%S")
+            over_start = (TODAY - timedelta(days=MAX_INSPECTION_RANGE_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%S")
             over_end = TODAY.strftime("%Y-%m-%dT%H:%M:%S")
             resp = client.get(
                 "/api/v1/sc/inspections",
@@ -117,7 +119,7 @@ def test_list_inspections_range_exceeds_14_days_returns_400(
                 },
             )
             assert resp.status_code == 400
-            assert resp.json()["detail"] == "Time range must not exceed 14 days"
+            assert f"must not exceed {MAX_INSPECTION_RANGE_DAYS} days" in resp.json()["detail"]
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 

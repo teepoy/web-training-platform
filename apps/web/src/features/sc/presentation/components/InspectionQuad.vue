@@ -323,6 +323,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
           @selection-change="(ids: number[]) => (mapSelectionIds = ids)"
+          @select-points="(payload) => (mapSelectionIds = payload.ids)"
           @legend-group-change="
             (groupBy) => emit('legend-group-change', groupBy)
           "
@@ -381,6 +382,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
         :blink-interval-ms="800"
         :initial-blink-enabled="true"
         :selected-defect-ids="new Set()"
+        :inspection-time="inspectionTime"
       />
     </div>
   </div>

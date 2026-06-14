@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sc-upstream
+  namespace: finetune
+  labels:
+    app: sc-upstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sc-upstream
+  template:
+    metadata:
+      labels:
+        app: sc-upstream
+    spec:
+      containers:
+        - name: sc-upstream
+          image: ${SC_UPSTREAM_IMAGE}
+          ports:
+            - containerPort: 9091
+              name: grpc
+            - containerPort: 9093
+              name: flight
+          env:
+            - name: GRPC_PORT
+              value: "9091"
+            - name: FLIGHT_PORT
+              value: "9093"
+            - name: UPSTREAM_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: sc_upstream_db_url
+            - name: ZIPS_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: sc_upstream_zips_db_url
+            - name: CACHE_DIR
+              value: /data/cache
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sc-upstream
+  namespace: finetune
+  labels:
+    app: sc-upstream
+spec:
+  type: ClusterIP
+  selector:
+    app: sc-upstream
+  ports:
+    - name: grpc
+      port: 9091
+      targetPort: 9091
+    - name: flight
+      port: 9093
+      targetPort: 9093

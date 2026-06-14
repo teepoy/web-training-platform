@@ -13,6 +13,7 @@ import {
   useQueryClient,
 } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
+import { withAuthQueryParams } from "@/shared/api/client";
 import { buildBlinkTableData } from "@/shared/utils/blink-table-data";
 import type { BlinkSampleInput } from "@/shared/utils/blink-table-data";
 import type { AnnotationGridItem } from "@/shared/types/components";
@@ -25,6 +26,7 @@ import {
   useListTrainersRouteApiV1TrainersGet,
   createTrainingJobApiV1TrainingJobsPost,
   getJobApiV1TrainingJobsJobIdGet,
+  getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
 import { runPredictions, getPredictionJob } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
@@ -239,9 +241,16 @@ export interface ReclassifyPageState {
   isTrainPredictRunning: Ref<boolean>;
   trainPredictStatusMessage: Ref<string>;
   trainAndPredict: () => Promise<void>;
+
+  reviewSamples: Ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>;
+  reviewLoading: Ref<boolean>;
+  reviewError: Ref<string | null>;
 }
 
 function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
+  if (image.url) {
+    return withAuthQueryParams(image.url);
+  }
   const rawRole = (image.role || image.image_type || "").toLowerCase();
   if (rawRole === "review") {
     const imageId = Number(image.image_id);
@@ -506,7 +515,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   );
 
   const isMapLoading = computed(
-    () => plotPointsQuery.isLoading.value,
+    () => plotPointsQuery.isLoading.value || plotPointsQuery.isFetching.value,
   );
   const samplesError = computed<string | null>(
     () =>
@@ -866,21 +875,50 @@ export function useReclassifyPage(): ReclassifyPageState {
       mutation: {
         onSuccess: (
           data: ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
+          variables,
         ) => {
           const created = (data.data as { created: number }).created;
           message.success(`Created ${created} annotations`);
+
+          const submittedLabels: Record<string, string> = {};
+          for (const ann of variables.data.annotations) {
+            submittedLabels[ann.defect_id] = ann.label;
+          }
           annotationDraft.value = {};
           pendingLabels.value = [];
-          void queryClient.refetchQueries({
+
+          const sampleQueries = queryClient.getQueriesData({
+            queryKey: ["sc", "view-samples-paged", datasetId.value],
+            exact: false,
+          });
+          for (const [queryKey, oldData] of sampleQueries) {
+            if (!oldData) continue;
+            queryClient.setQueryData(queryKey, (cached: any) => {
+              if (!cached?.pages) return cached;
+              return {
+                ...cached,
+                pages: cached.pages.map((page: any) => ({
+                  ...page,
+                  items: page.items?.map((item: ScViewRow) => {
+                    const newLabel =
+                      submittedLabels[String(item.defect_id)];
+                    if (newLabel !== undefined) {
+                      return { ...item, label: newLabel };
+                    }
+                    return item;
+                  }),
+                })),
+              };
+            });
+          }
+
+          void queryClient.invalidateQueries({
             queryKey: ["sc", "plot-points", datasetId.value],
           });
-          void queryClient.refetchQueries({
+          void queryClient.invalidateQueries({
             queryKey: ["sc", "class-list", datasetId.value],
           });
-          void queryClient.refetchQueries({
-            queryKey: ["sc", "view-samples-paged", datasetId.value],
-          });
-          void queryClient.refetchQueries({
+          void queryClient.invalidateQueries({
             queryKey: ["api", "v1", "datasets", datasetId.value],
           });
         },
@@ -1130,6 +1168,66 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
   }
 
+  // ── Review images (fetched via /sc/inspections/.../review-images) ──
+
+  const reviewSamples = ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>([]);
+  const reviewLoading = ref(false);
+  const reviewError = ref<string | null>(null);
+
+  async function fetchReviewImages(): Promise<void> {
+    const ctx = inspectionContext.value;
+    if (!ctx || !ctx.inspectionTime || !ctx.waferKey) {
+      reviewSamples.value = [];
+      reviewLoading.value = false;
+      reviewError.value = null;
+      return;
+    }
+    reviewLoading.value = true;
+    reviewError.value = null;
+    try {
+      const data = await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
+        ctx.inspectionTime,
+        Number(ctx.waferKey),
+      );
+      const { create } = await import("@bufbuild/protobuf");
+      const { ScSampleItemSchema, ReviewImageSchema } = await import(
+        "@/features/sc/generated/proto/sc/v1/sample_pb"
+      );
+      const inspTimeBigInt = BigInt(Date.parse(ctx.inspectionTime)) * BigInt(1_000_000);
+      const resp = data.data;
+      if (!("items" in resp)) {
+        throw new Error("Failed to load review images");
+      }
+      reviewSamples.value = resp.items.map(
+        (item: { defect_id: string; review_images: Array<{ image_name: string; image_id: number; image_type: string }> }) =>
+          create(ScSampleItemSchema, {
+            defectId: Number(item.defect_id),
+            inspectionTime: inspTimeBigInt,
+            waferKey: Number(ctx.waferKey),
+            reviewImages: item.review_images.map(
+              (image: { image_name: string; image_id: number; image_type: string }) =>
+                create(ReviewImageSchema, {
+                  imageName: image.image_name,
+                  imageId: image.image_id,
+                  imageType: image.image_type,
+                })
+            ),
+          })
+      );
+    } catch (err: unknown) {
+      reviewError.value = (err as Error)?.message ?? "Failed to load review images";
+      reviewSamples.value = [];
+    } finally {
+      reviewLoading.value = false;
+    }
+  }
+
+  watch(
+    () => [inspectionContext.value?.inspectionTime, inspectionContext.value?.waferKey],
+    () => { fetchReviewImages(); },
+    { immediate: true },
+  );
+
   // ── Return ─────────────────────────────────────────────────────────
 
   return {
@@ -1218,5 +1316,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     isTrainPredictRunning,
     trainPredictStatusMessage,
     trainAndPredict,
+    reviewSamples,
+    reviewLoading,
+    reviewError,
   };
 }

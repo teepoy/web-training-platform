@@ -20,6 +20,10 @@ const props = withDefaults(
     hasNextPage?: boolean;
     isFetchingNextPage?: boolean;
     onLoadMore?: () => void;
+    inspectionTime?: string;
+    reviewSamples?: ScSampleItem[];
+    reviewLoading?: boolean;
+    reviewError?: string | null;
   }>(),
   {
     reviewCount: 3,
@@ -116,7 +120,11 @@ onBeforeUnmount(() => {
       :annotation-drafts="annotationDrafts"
       :show-prediction-badges="true"
       :show-mode-switch="true"
+      :review-samples="reviewSamples"
+      :review-loading="reviewLoading"
+      :review-error="reviewError"
       :overscan="overscan"
+      :inspection-time="inspectionTime"
       @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
     />
     <Teleport v-if="getScrollContainer()" :to="getScrollContainer()!">

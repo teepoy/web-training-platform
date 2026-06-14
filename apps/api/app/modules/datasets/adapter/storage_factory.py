@@ -74,6 +74,7 @@ class DatasetStorageFactory:
                 ls_client=self._ls_client,
                 session_factory=self._session_factory,
                 repo=self._repo,
+                dataset_type=dataset.dataset_type,
             )
 
         raise ValueError(f"Unknown storage_mode: {dataset.storage_mode}")

@@ -86,6 +86,7 @@ class SparseDatasetStorage:
         ls_client: LabelStudioClient | None = None,
         session_factory: async_sessionmaker | None = None,
         repo: Any = None,
+        dataset_type: str = "",
     ) -> None:
         self._dataset_id: str = dataset_id
         self._org_id: str = org_id or ""
@@ -96,6 +97,7 @@ class SparseDatasetStorage:
         self._repo: Any = repo
         self._reader: SparseManifestReader = SparseManifestReader()
         self._annotations: SparseAnnotationStore = SparseAnnotationStore(storage)
+        self._dataset_type: str = dataset_type
 
         # Lazy-loaded manifest cache.
         self._manifest: DatasetManifest | None = None
@@ -221,10 +223,16 @@ class SparseDatasetStorage:
         image_refs: list[SampleRowImageRef] = []
         for img in images_list:
             image_id = str(img.get("image_id", ""))
-            access_url = (
-                f"/api/v1/datasets/{self._dataset_id}/samples/"
-                f"{sample_id}/images/{image_id}"
-            )
+            if self._dataset_type == "image_sc":
+                access_url = (
+                    f"/api/v1/sc/datasets/{self._dataset_id}/samples/"
+                    f"{sample_id}/images/{image_id}"
+                )
+            else:
+                access_url = (
+                    f"/api/v1/datasets/{self._dataset_id}/samples/"
+                    f"{sample_id}/images/{image_id}"
+                )
             image_uris.append(access_url)
             image_refs.append(
                 SampleRowImageRef(
@@ -238,6 +246,12 @@ class SparseDatasetStorage:
                         else None
                     ),
                     access_url=access_url,
+                    image_type=str(img.get("image_type", "")),
+                    review_image_id=(
+                        rid
+                        if isinstance(rid := img.get("review_image_id"), int)
+                        else None
+                    ),
                 )
             )
 

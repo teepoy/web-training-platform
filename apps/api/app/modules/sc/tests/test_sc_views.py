@@ -10,7 +10,6 @@ Covers the SC-specific view routers:
 from __future__ import annotations
 
 import datetime
-import unittest.mock as mock
 
 from fastapi.testclient import TestClient
 
@@ -221,57 +220,3 @@ def test_image_input_v1_not_supported_for_sc():
             f"/api/v1/datasets/{dataset_id}/views/image_input_v1/samples?limit=10"
         )
         assert resp3.status_code == 422
-
-
-# ── Image serving endpoint tests ───────────────────────────────────────────────
-
-
-def test_serve_patch_image_review_type_requires_review_image_id():
-    """GET /api/v1/sc/images/.../review returns 400 when review_image_id is absent."""
-    with TestClient(app) as client:
-        resp = client.get(
-            "/api/v1/sc/images/2024-01-01T00%3A00%3A00/1/DEF-001/review"
-        )
-        assert resp.status_code == 400
-        assert "review_image_id" in resp.json()["detail"]
-
-
-def test_serve_patch_image_review_type_with_review_image_id_fetches_review_bucket():
-    """GET /api/v1/sc/images/.../review?review_image_id=5 uses the image fetcher."""
-    fake_image_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64  # minimal fake PNG
-
-    with TestClient(app) as client:
-        from app.modules.sc.port.http.deps import get_image_fetcher
-        from app.modules.sc.adapter._wafer_mock.image_service import ScImageService
-
-        mock_service = mock.AsyncMock(spec=ScImageService)
-        mock_service.get_image_bytes = mock.AsyncMock(return_value=fake_image_bytes)
-
-        app.dependency_overrides[get_image_fetcher] = lambda: mock_service
-        try:
-            resp = client.get(
-                "/api/v1/sc/images/2024-01-01T00%3A00%3A00/1/DEF-001/review"
-                "?review_image_id=5"
-            )
-            assert resp.status_code == 200
-            assert resp.content == fake_image_bytes
-            mock_service.get_image_bytes.assert_awaited_once_with(
-                inspection_time="2024-01-01T00:00:00+00:00",
-                wafer_key=1,
-                defect_id="DEF-001",
-                image_type="review",
-                s3_path=None,
-                review_image_id=5,
-            )
-        finally:
-            app.dependency_overrides.pop(get_image_fetcher, None)
-
-
-def test_serve_patch_image_invalid_image_type_returns_400():
-    """GET /api/v1/sc/images/.../bad_type returns 400 for unknown image_type."""
-    with TestClient(app) as client:
-        resp = client.get(
-            "/api/v1/sc/images/2024-01-01T00%3A00%3A00/1/DEF-001/bad_type"
-        )
-        assert resp.status_code == 400
-        assert "image_type" in resp.json()["detail"]

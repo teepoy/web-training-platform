@@ -13,7 +13,6 @@ import ParquetImporter from "@/features/datasets/presentation/components/Parquet
 import PersistExportPlugin from "@/features/datasets/presentation/components/PersistExportPlugin.vue";
 import ParquetExportPlugin from "@/features/datasets/presentation/components/ParquetExportPlugin.vue";
 import PreviewExportPlugin from "@/features/datasets/presentation/components/PreviewExportPlugin.vue";
-import DatasetFeatureOpsTab from "@/features/datasets/presentation/components/DatasetFeatureOpsTab.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
@@ -170,7 +169,6 @@ function openScClassify() {
           <n-text depth="3" style="font-size: 12px">Task: {{ dataset.task_spec?.task_type }} &nbsp;|&nbsp; ID: {{ dataset.id }}<template v-if="isSparse"> &nbsp;|&nbsp; <n-tag type="info" size="small">Sparse Storage</n-tag></template></n-text>
           <div v-if="dataset.ls_project_id" style="margin-top: 4px"><n-tag type="success" size="small"><a v-if="dataset.ls_project_url" :href="dataset.ls_project_url" target="_blank" rel="noreferrer" style="color: inherit; text-decoration: none">Label Studio Project #{{ dataset.ls_project_id }} ↗</a><span v-else>Label Studio Project #{{ dataset.ls_project_id }}</span></n-tag></div>
         </div>
-        <n-button v-if="labelSpace.length > 0" type="primary" size="small" @click="router.push(`/datasets/${dataset.id}/classify`)">Open Workflow</n-button>
         <n-button v-if="dataset.task_spec?.task_type === 'sc'" type="primary" size="small" @click="openScClassify">Classify</n-button>
       </div>
 
@@ -219,7 +217,6 @@ function openScClassify() {
             />
           </template>
         </n-tab-pane>
-        <n-tab-pane name="feature-ops" tab="Feature Ops"><DatasetFeatureOpsTab :dataset-id="id" :is-sparse="isSparse" /></n-tab-pane>
         <n-tab-pane v-if="!isSparse" name="annotate" tab="Annotate">
           <template v-if="dataset?.ls_project_url"><iframe :src="dataset.ls_project_url" style="width: 100%; height: calc(100vh - 200px); border: 1px solid #eee; border-radius: 8px;" allow="clipboard-read; clipboard-write" /><div style="margin-top: 8px; display: flex; align-items: center; gap: 8px"><n-text depth="3" style="font-size: 12px">Label Studio Project #{{ dataset.ls_project_id }}</n-text><n-button text size="small" tag="a" :href="dataset.ls_project_url" target="_blank">Open in new tab ↗</n-button></div></template>
           <n-result v-else status="info" title="Label Studio URL Not Configured" description="The server does not have a Label Studio URL configured. Contact your administrator." />

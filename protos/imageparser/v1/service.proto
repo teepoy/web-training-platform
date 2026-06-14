@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package imageparser.v1;
+
+option go_package = "ft-platform/protos/gen/go/imageparser/v1;imageparserv1";
+
+service ImageParser {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc GetImage(GetImageRequest) returns (GetImageResponse);
+  rpc Sprite(SpriteRequest) returns (SpriteResponse);
+  rpc V2Sprite(V2SpriteRequest) returns (V2SpriteResponse);
+  rpc GetScImage(GetScImageRequest) returns (GetScImageResponse);
+  rpc BatchGetScImage(BatchGetScImageRequest) returns (BatchGetScImageResponse);
+  rpc WarmScCache(WarmScCacheRequest) returns (WarmScCacheResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}
+
+message GetImageRequest {
+  string bucket = 1;
+  string key = 2;
+  string prefix = 3;
+  bool cache = 4;
+}
+
+message GetImageResponse {
+  bytes image_data = 1;
+  string filename = 2;
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message SpriteRequest {
+  string bucket = 1;
+  string key = 2;
+  repeated string prefixes = 3;
+  int32 size = 4;
+  bool cache = 5;
+}
+
+message SpriteResponse {
+  bytes image_data = 1;
+  int32 width = 2;
+  int32 height = 3;
+}
+
+message V2SpriteRequest {
+  string bucket = 1;
+  string record = 2;
+  repeated string items = 3;
+  int32 size = 4;
+}
+
+message V2SpriteResponse {
+  bytes image_data = 1;
+  int32 width = 2;
+  int32 height = 3;
+}
+
+message GetScImageRequest {
+  string inspection_time = 1;
+  int32 wafer_key = 2;
+  string defect_id = 3;
+  string image_type = 4;
+  int32 review_image_id = 5;
+}
+
+message GetScImageResponse {
+  bytes image_data = 1;
+  string content_type = 2;
+}
+
+message ScImageRef {
+  string defect_id = 1;
+  string image_type = 2;
+  int32 review_image_id = 3;
+}
+
+message BatchGetScImageRequest {
+  string inspection_time = 1;
+  int32 wafer_key = 2;
+  repeated ScImageRef images = 3;
+}
+
+message ScImageResult {
+  string defect_id = 1;
+  string image_type = 2;
+  bytes image_data = 3;
+  string content_type = 4;
+  string error = 5;
+}
+
+message BatchGetScImageResponse {
+  repeated ScImageResult results = 1;
+}
+
+message WarmScCacheRequest {
+  string inspection_time = 1;
+  int32 wafer_key = 2;
+  repeated int32 defect_ids = 3;
+}
+
+message WarmScCacheResponse {
+  string status = 1;
+  int32 zips_warmed = 2;
+}

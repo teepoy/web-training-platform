@@ -16,6 +16,7 @@ API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
+DATA_DIR     := infra/compose/data
 
 # ──────────────────────────────────────────────
 # Production split-stack (infra/compose/production/)
@@ -164,15 +165,33 @@ generate-sse-types: ## Generate SSE JSON schema and frontend TypeScript types
 generate-openapi-artifacts: generate-openapi-spec generate-api-models generate-orval generate-sse-types ## Generate backend/frontend transport artifacts
 
 .PHONY: generate-protos
-generate-protos: ## Generate SC protobuf Python and TypeScript stubs from protos/ (buf v1)
+generate-protos: ## Generate protobuf Python, TypeScript, and Go stubs from protos/
 	mkdir -p libs/protos/src/proto_stubs/sc/v1 $(WEB_DIR)/src/features/sc/generated/proto
-	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && npx buf generate
+	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && \
+		npx buf generate && \
+		npx buf generate --template buf.gen.web.yaml --path sc/v1/sample.proto
+	python -m grpc_tools.protoc \
+		--proto_path=$(PROTO_DIR) \
+		--python_out=libs/protos/src/proto_stubs \
+		--grpc_python_out=libs/protos/src/proto_stubs \
+		$(PROTO_DIR)/imageparser/v1/service.proto
+	sed -i '' 's/^from imageparser\.v1 import/from proto_stubs.imageparser.v1 import/' libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py
+	cd services/image-parser && mkdir -p gen/go && npx buf generate ../../protos --template buf.gen.yaml
+	cd services/image-parser && go mod tidy
 
 .PHONY: generate-protos-deps
-generate-protos-deps: ## Verify buf CLI, protoc, and protoc-gen-mypy are available
+generate-protos-deps: ## Verify buf CLI, protoc, protoc-gen-go, protoc-gen-go-grpc, protoc-gen-mypy are available
 	@echo "Checking protoc (>= 29.x for proto edition compatibility with buf)..."
 	@if ! command -v protoc >/dev/null 2>&1; then \
 		echo "protoc-29.3.0 not found. Install via: brew install protobuf@29"; \
+		exit 1; \
+	fi
+	@if ! command -v protoc-gen-go >/dev/null 2>&1; then \
+		echo "protoc-gen-go not found. Install via: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"; \
+		exit 1; \
+	fi
+	@if ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then \
+		echo "protoc-gen-go-grpc not found. Install via: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"; \
 		exit 1; \
 	fi
 	@echo "Proto dependencies ready protoc: $$(which protoc)"
@@ -221,14 +240,14 @@ seed-dev: seed-wafer-mock ## Seed dev demo data (wafer-demo + mock SQLite, dev-n
 
 .PHONY: seed-wafer-mock
 seed-wafer-mock: ## Seed mock wafer inspection SQLite database (100K defects)
-	cd apps/api && uv run python -m app.modules.sc.adapter._wafer_mock.seed mass \
-		--db-url "sqlite:///wafer_inspection.db" \
+	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
+		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--defects 1000000 --imaged 100 --images-per 5 --reset
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
-	cd apps/api && uv run python -m app.modules.sc.adapter._wafer_mock.seed mass \
-		--db-url "sqlite:///wafer_inspection_1m.db" \
+	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
+		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection_1m.db" \
 		--defects 1000000 --imaged 200 --images-per 5 \
 		--batch 50000 --reset
 
@@ -293,7 +312,7 @@ up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-comp
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
-	docker compose -f $(COMPOSE_DEV) build
+	docker compose -f $(COMPOSE_DEV) build image-parser
 
 .PHONY: build-prod
 build-prod: ## Build all prod-target Docker images (local validation stack)
@@ -473,6 +492,15 @@ up-prod-all: ## Start stateful + platform + observability (with 60s sleep betwee
 .PHONY: save-images
 save-images: ## Save all compose Docker images as .tar archives
 	bash scripts/save-compose-images.sh $(ARGS)
+
+.PHONY: image-parser-export
+image-parser-export: ## Build and export image-parser as offline loadable tar.gz
+	@echo "Building image-parser ..."
+	docker build --platform linux/amd64 -t image-parser:latest -f services/image-parser/Dockerfile .
+	@mkdir -p dist
+	@echo "Saving image-parser:latest -> dist/image-parser.tar.gz"
+	docker save image-parser:latest | gzip > dist/image-parser.tar.gz
+	@echo "Done: dist/image-parser.tar.gz ($(shell du -h dist/image-parser.tar.gz | cut -f1))"
 
 .PHONY: k8s-apply
 k8s-apply: ## Apply Kubernetes manifests

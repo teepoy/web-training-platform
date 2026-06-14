@@ -489,13 +489,14 @@ def _embedded_bytes_to_sc_image_refs(
     if row.images:
         for img in row.images:
             iid_q = quote(img.image_id, safe="")
+            url = img.access_url or f"/api/v1/samples/{sid_q}/images/{iid_q}{ds_param}"
             refs.append(
                 ScImageRef(
                     role=img.role or img.image_id,
                     image_id=img.image_id,
-                    image_type=img.content_type,
+                    image_type=img.image_type or img.content_type,
                     content_type=img.content_type,
-                    url=f"/api/v1/samples/{sid_q}/images/{iid_q}{ds_param}",
+                    url=url,
                     bytes=img.bytes_,
                 )
             )
@@ -562,11 +563,15 @@ def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchIma
         confidence = float(confidence)
     sc_fields = _sample_row_meta_to_sc_fields(row)
     images = _embedded_bytes_to_sc_image_refs(row, dataset_id=ds_id)
+    review_images: list[dict[str, Any]] = [
+        {"image_id": r.image_id} for r in images if r.role == "review"
+    ]
     return ScPatchImageV1Row(
         sample_id=row.sample_id,
         die_x=die_x,
         die_y=die_y,
         images=images,
+        review_images=review_images,
         label=label,
         predicted_label=predicted_label,
         confidence=confidence,

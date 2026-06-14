@@ -136,7 +136,6 @@ const activeRoute = computed(() => {
   if (p.startsWith("/datasets")) return "/datasets";
   if (p.startsWith("/sc")) return "/sc";
   if (p.startsWith("/sensors")) return "/sensors";
-  if (p.startsWith("/preview")) return "/preview";
   if (p.startsWith("/tasks")) return "/tasks";
   return p;
 });
@@ -151,7 +150,6 @@ const minioUrl = "http://localhost:9001";
 const pgAdminUrl = "http://localhost:5050";
 
 const menuOptions = [
-  { label: "Preview", key: "/preview" },
   { label: "Task Explorer", key: "/tasks" },
   { label: "Datasets", key: "/datasets" },
   { label: "Semiconductor", key: "/sc" },

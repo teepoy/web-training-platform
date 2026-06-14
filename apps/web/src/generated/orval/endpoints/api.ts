@@ -68,10 +68,6 @@ import type {
   GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams,
   GetInspectionsApiV1ScInspectionsGetParams,
   GetJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams,
-  GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams,
-  GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams,
-  GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams,
-  GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams,
   GetRunLogsApiV1RunsRunIdLogsGetParams,
   GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetParams,
   GetTrainerRouteApiV1TrainersTrainerIdGet200,
@@ -145,7 +141,6 @@ import type {
   SensorEventBatch,
   SensorEventIngestResponse,
   SensorSubscriptionResponse,
-  ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams,
   SetPanelRequest,
   SetPublicRequest,
   SetPublicResponse,
@@ -10799,491 +10794,6 @@ export const useGetInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWafe
     }
 
 /**
- * @summary Serve Patch Image
- */
-export type servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetResponse = {
-  data: void | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetUrl = (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    imageType: string,
-    params?: ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/images/${inspectionTime}/${waferKey}/${defectId}/${imageType}?${normalizedParams.toString()}` : `/api/v1/sc/images/${inspectionTime}/${waferKey}/${defectId}/${imageType}`
-}
-
-export const servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet = async (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    imageType: string,
-    params?: ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams, options?: RequestInit): Promise<servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetResponse> => {
-
-  return orvalFetcher<servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetResponse>(getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetUrl(inspectionTime,waferKey,defectId,imageType,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    imageType: MaybeRef<string>,
-    params?: MaybeRef<ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams>,) => {
-    return ['api','v1','sc','images',inspectionTime,waferKey,defectId,imageType, ...(params ? [params]: [])] as const;
-    }
-
-
-export const getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryOptions = <TData = Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    imageType: MaybeRef<string>,
-    params?: MaybeRef<ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryKey(inspectionTime,waferKey,defectId,imageType,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>> = ({ signal }) => servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet(unref(inspectionTime),unref(waferKey),unref(defectId),unref(imageType),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey) && unref(defectId) && unref(imageType))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>, TError, TData>
-}
-
-export type ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryResult = NonNullable<Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>>
-export type ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Serve Patch Image
- */
-
-export function useServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet<TData = Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    imageType: MaybeRef<string>,
-    params?: MaybeRef<ServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof servePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getServePatchImageApiV1ScImagesInspectionTimeWaferKeyDefectIdImageTypeGetQueryOptions(inspectionTime,waferKey,defectId,imageType,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Get Patch Sprite
- */
-export type getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetResponse = {
-  data: void | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetUrl = (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    params?: GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/sprites/patch/${inspectionTime}/${waferKey}/${defectId}?${normalizedParams.toString()}` : `/api/v1/sc/sprites/patch/${inspectionTime}/${waferKey}/${defectId}`
-}
-
-export const getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet = async (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    params?: GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams, options?: RequestInit): Promise<getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetResponse> => {
-
-  return orvalFetcher<getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetResponse>(getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetUrl(inspectionTime,waferKey,defectId,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams>,) => {
-    return ['api','v1','sc','sprites','patch',inspectionTime,waferKey,defectId, ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryKey(inspectionTime,waferKey,defectId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>> = ({ signal }) => getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet(unref(inspectionTime),unref(waferKey),unref(defectId),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey) && unref(defectId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>, TError, TData>
-}
-
-export type GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>>
-export type GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Patch Sprite
- */
-
-export function useGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet<TData = Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetPatchSpriteApiV1ScSpritesPatchInspectionTimeWaferKeyDefectIdGetQueryOptions(inspectionTime,waferKey,defectId,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Get Review Sprite
- */
-export type getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetResponse = {
-  data: void | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetUrl = (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    params?: GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/sprites/review/${inspectionTime}/${waferKey}/${defectId}?${normalizedParams.toString()}` : `/api/v1/sc/sprites/review/${inspectionTime}/${waferKey}/${defectId}`
-}
-
-export const getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet = async (inspectionTime: string,
-    waferKey: number,
-    defectId: string,
-    params?: GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams, options?: RequestInit): Promise<getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetResponse> => {
-
-  return orvalFetcher<getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetResponse>(getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetUrl(inspectionTime,waferKey,defectId,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams>,) => {
-    return ['api','v1','sc','sprites','review',inspectionTime,waferKey,defectId, ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryKey(inspectionTime,waferKey,defectId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>> = ({ signal }) => getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet(unref(inspectionTime),unref(waferKey),unref(defectId),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey) && unref(defectId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>, TError, TData>
-}
-
-export type GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>>
-export type GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Review Sprite
- */
-
-export function useGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet<TData = Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    defectId: MaybeRef<string>,
-    params?: MaybeRef<GetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetReviewSpriteApiV1ScSpritesReviewInspectionTimeWaferKeyDefectIdGetQueryOptions(inspectionTime,waferKey,defectId,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Get Patch Batch Sprite
- */
-export type getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetResponse = {
-  data: void | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetUrl = (inspectionTime: string,
-    waferKey: number,
-    params: GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/sprites/patch-batch/${inspectionTime}/${waferKey}?${normalizedParams.toString()}` : `/api/v1/sc/sprites/patch-batch/${inspectionTime}/${waferKey}`
-}
-
-export const getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet = async (inspectionTime: string,
-    waferKey: number,
-    params: GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams, options?: RequestInit): Promise<getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetResponse> => {
-
-  return orvalFetcher<getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetResponse>(getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetUrl(inspectionTime,waferKey,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams>,) => {
-    return ['api','v1','sc','sprites','patch-batch',inspectionTime,waferKey, ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryOptions = <TData = Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryKey(inspectionTime,waferKey,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>> = ({ signal }) => getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>, TError, TData>
-}
-
-export type GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>>
-export type GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Patch Batch Sprite
- */
-
-export function useGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet<TData = Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetPatchBatchSpriteApiV1ScSpritesPatchBatchInspectionTimeWaferKeyGetQueryOptions(inspectionTime,waferKey,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Get Review Batch Sprite
- */
-export type getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetResponse = {
-  data: void | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetUrl = (inspectionTime: string,
-    waferKey: number,
-    params: GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/sprites/review-batch/${inspectionTime}/${waferKey}?${normalizedParams.toString()}` : `/api/v1/sc/sprites/review-batch/${inspectionTime}/${waferKey}`
-}
-
-export const getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet = async (inspectionTime: string,
-    waferKey: number,
-    params: GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams, options?: RequestInit): Promise<getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetResponse> => {
-
-  return orvalFetcher<getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetResponse>(getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetUrl(inspectionTime,waferKey,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams>,) => {
-    return ['api','v1','sc','sprites','review-batch',inspectionTime,waferKey, ...(params ? [params]: [])] as const;
-    }
-
-
-export const getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryOptions = <TData = Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryKey(inspectionTime,waferKey,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>> = ({ signal }) => getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>, TError, TData>
-}
-
-export type GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryResult = NonNullable<Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>>
-export type GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Get Review Batch Sprite
- */
-
-export function useGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet<TData = Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(
- inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,
-    params: MaybeRef<GetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetReviewBatchSpriteApiV1ScSpritesReviewBatchInspectionTimeWaferKeyGetQueryOptions(inspectionTime,waferKey,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
  * @summary Stream Sc Import Progress
  */
 export type streamScImportProgressApiV1ScImportFlowRunIdStreamGetResponse = {
@@ -11446,6 +10956,92 @@ export const useStartScImportApiV1ScImportPost = <TError = HTTPValidationError,
 
       return useMutation(mutationOptions);
     }
+
+/**
+ * @summary Serve Sc Sample Image
+ */
+export type serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetResponse = {
+  data: void | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetUrl = (datasetId: string,
+    sampleId: string,
+    imageId: string,) => {
+
+
+  return `/api/v1/sc/datasets/${datasetId}/samples/${sampleId}/images/${imageId}`
+}
+
+export const serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet = async (datasetId: string,
+    sampleId: string,
+    imageId: string, options?: RequestInit): Promise<serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetResponse> => {
+
+  return orvalFetcher<serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetResponse>(getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetUrl(datasetId,sampleId,imageId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryKey = (datasetId: MaybeRef<string>,
+    sampleId: MaybeRef<string>,
+    imageId: MaybeRef<string>,) => {
+    return ['api','v1','sc','datasets',datasetId,'samples',sampleId,'images',imageId] as const;
+    }
+
+
+export const getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryOptions = <TData = Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>,
+    sampleId: MaybeRef<string>,
+    imageId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryKey(datasetId,sampleId,imageId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>> = ({ signal }) => serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet(unref(datasetId),unref(sampleId),unref(imageId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId) && unref(sampleId) && unref(imageId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>, TError, TData>
+}
+
+export type ServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>>
+export type ServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Serve Sc Sample Image
+ */
+
+export function useServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet<TData = Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>, TError = HTTPValidationError>(
+ datasetId: MaybeRef<string>,
+    sampleId: MaybeRef<string>,
+    imageId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getServeScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetQueryOptions(datasetId,sampleId,imageId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
 
 /**
  * @summary Sc Bulk Create Annotations

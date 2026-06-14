@@ -15,3 +15,6 @@ data:
   LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
   REDIS_HOST: "redis.finetune.svc.cluster.local"
   REDIS_PORT: "6379"
+  SC_UPSTREAM_ADDR: "sc-upstream.finetune.svc.cluster.local:9091"
+  IMAGE_PARSER_GRPC_ADDR: "image-parser.finetune.svc.cluster.local:9092"
+  S3_ENDPOINT: "minio.finetune.svc.cluster.local:9000"

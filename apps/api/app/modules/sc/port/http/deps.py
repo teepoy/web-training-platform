@@ -7,7 +7,6 @@ from fastapi import Depends, Request
 from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
 from app.modules.sc.app.services.sc_import_service import ScImportService
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
-from app.modules.sc.app.services.sprite_service import SpriteService
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.shared.infrastructure.prefect.client import PrefectClient
@@ -30,10 +29,6 @@ def get_upstream_reader(request: Request) -> ScUpstreamReader:
     return request.app.state.app_context.sc.upstream_reader
 
 
-def get_sprite_service(request: Request) -> SpriteService:
-    return request.app.state.app_context.sc.sprite_service
-
-
 def get_sc_plot_points_service(request: Request) -> ScPlotPointsService:
     return request.app.state.app_context.sc.plot_points_service
 
@@ -51,10 +46,8 @@ def get_sc_dataset_store(request: Request) -> ScDatasetStore:
 
 
 ScImportServiceDep = Annotated[ScImportService, Depends(get_sc_import_service)]
-ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]
 PrefectClientDep = Annotated[PrefectClient, Depends(get_prefect_client)]
 ScUpstreamReaderDep = Annotated[ScUpstreamReader, Depends(get_upstream_reader)]
-ScSpriteServiceDep = Annotated[SpriteService, Depends(get_sprite_service)]
 ScPlotPointsServiceDep = Annotated[
     ScPlotPointsService, Depends(get_sc_plot_points_service)
 ]
@@ -63,3 +56,4 @@ DatasetPayloadStoreDep = Annotated[
 ]
 ScDatasetReaderDep = Annotated[ScDatasetReader, Depends(get_sc_dataset_reader)]
 ScDatasetStoreDep = Annotated[ScDatasetStore, Depends(get_sc_dataset_store)]
+ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]

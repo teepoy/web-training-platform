@@ -212,8 +212,19 @@ async def run_training_pipeline(
     )
 
     logger.info("Calling trainer")
+    image_fetcher = None
+    if dataset_row.dataset_type == "image_sc":
+        import os as _os_tj
+        from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
+
+        image_fetcher = GrpcImageFetcher(
+            addr=_os_tj.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+        )
     result = trainer_callable(
-        ctx, artifact_storage=artifact_storage, lazyframe=lf
+        ctx,
+        artifact_storage=artifact_storage,
+        lazyframe=lf,
+        image_fetcher=image_fetcher,
     )
     if asyncio.iscoroutine(result):
         result = await result

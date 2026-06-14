@@ -4239,260 +4239,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}:
-    get:
-      tags:
-      - sc
-      summary: Serve Patch Image
-      operationId: serve_patch_image_api_v1_sc_images__inspection_time___wafer_key___defect_id___image_type__get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: defect_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Defect Id
-      - name: image_type
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Image Type
-      - name: s3_path
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: S3 Path
-      - name: review_image_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Review Image Id
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/sprites/patch/{inspection_time}/{wafer_key}/{defect_id}:
-    get:
-      tags:
-      - sc
-      summary: Get Patch Sprite
-      operationId: get_patch_sprite_api_v1_sc_sprites_patch__inspection_time___wafer_key___defect_id__get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: defect_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Defect Id
-      - name: cell_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 512
-          minimum: 16
-          default: 64
-          title: Cell Size
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/sprites/review/{inspection_time}/{wafer_key}/{defect_id}:
-    get:
-      tags:
-      - sc
-      summary: Get Review Sprite
-      operationId: get_review_sprite_api_v1_sc_sprites_review__inspection_time___wafer_key___defect_id__get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: defect_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Defect Id
-      - name: review_count
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 20
-          minimum: 1
-          default: 3
-          title: Review Count
-      - name: cell_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 512
-          minimum: 16
-          default: 224
-          title: Cell Size
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/sprites/patch-batch/{inspection_time}/{wafer_key}:
-    get:
-      tags:
-      - sc
-      summary: Get Patch Batch Sprite
-      operationId: get_patch_batch_sprite_api_v1_sc_sprites_patch_batch__inspection_time___wafer_key__get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: defect_ids
-        in: query
-        required: true
-        schema:
-          type: array
-          items:
-            type: string
-          minItems: 1
-          maxItems: 200
-          title: Defect Ids
-      - name: cell_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 512
-          minimum: 16
-          default: 64
-          title: Cell Size
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/sprites/review-batch/{inspection_time}/{wafer_key}:
-    get:
-      tags:
-      - sc
-      summary: Get Review Batch Sprite
-      operationId: get_review_batch_sprite_api_v1_sc_sprites_review_batch__inspection_time___wafer_key__get
-      parameters:
-      - name: inspection_time
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Inspection Time
-      - name: wafer_key
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Wafer Key
-      - name: defect_ids
-        in: query
-        required: true
-        schema:
-          type: array
-          items:
-            type: string
-          minItems: 1
-          maxItems: 200
-          title: Defect Ids
-      - name: review_count
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 20
-          minimum: 1
-          default: 3
-          title: Review Count
-      - name: cell_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 512
-          minimum: 16
-          default: 224
-          title: Cell Size
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/import/{flow_run_id}/stream:
     get:
       tags:
@@ -4545,6 +4291,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScImportResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}:
+    get:
+      tags:
+      - sc
+      summary: Serve Sc Sample Image
+      operationId: serve_sc_sample_image_api_v1_sc_datasets__dataset_id__samples__sample_id__images__image_id__get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: sample_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sample Id
+      - name: image_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Image Id
+      responses:
+        '200':
+          description: Successful Response
         '422':
           description: Validation Error
           content:
@@ -6896,7 +6676,9 @@ components:
           type: integer
           title: Adder
         cluster_id:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Cluster Id
         die_x:
           type: integer
@@ -6929,7 +6711,9 @@ components:
           type: integer
           title: Manual Bin
         kill_ratio:
-          type: number
+          anyOf:
+          - type: number
+          - type: 'null'
           title: Kill Ratio
       type: object
       required:
@@ -6942,7 +6726,6 @@ components:
       - index_x
       - index_y
       - adder
-      - cluster_id
       - die_x
       - die_y
       - reticle_x
@@ -6953,7 +6736,6 @@ components:
       - area
       - final_bin
       - manual_bin
-      - kill_ratio
       title: ScSampleTableRow
     ScSampleTableRowsRequest:
       properties:

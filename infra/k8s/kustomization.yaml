@@ -10,6 +10,8 @@ resources:
   - redis.yaml
   - prefect-server.yaml
   - label-studio.yaml
+  - sc-upstream-deployment.yaml
+  - image-parser-deployment.yaml
   - api-deployment.yaml
   - prefect-worker-cpu.yaml
   - prefect-worker-gpu.yaml

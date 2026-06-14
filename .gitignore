@@ -87,3 +87,5 @@ apps/web/tests/.auth/
 /graphify-out/
 /issues/
 /legacy/issues/
+infra/compose/data/
+/dist/

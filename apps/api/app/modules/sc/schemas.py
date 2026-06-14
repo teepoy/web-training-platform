@@ -83,7 +83,7 @@ class ScSampleTableRow(BaseModel):
     index_x: int
     index_y: int
     adder: int
-    cluster_id: int
+    cluster_id: int | None = None
     die_x: int
     die_y: int
     reticle_x: int
@@ -94,7 +94,7 @@ class ScSampleTableRow(BaseModel):
     area: int
     final_bin: int
     manual_bin: int
-    kill_ratio: float
+    kill_ratio: float | None = None
 
 
 class ScSampleTableRowsResponse(BaseModel):

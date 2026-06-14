@@ -14,6 +14,10 @@ MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=<access-key>
 MINIO_SECRET_KEY=<secret-key>
 MINIO_BUCKET=finetune-artifacts
+S3_ZIPS_ACCESS_KEY=<zips-access-key>
+S3_ZIPS_SECRET_KEY=<zips-secret-key>
+S3_REVIEW_ACCESS_KEY=<review-access-key>
+S3_REVIEW_SECRET_KEY=<review-secret-key>
 SC_PATCH_S3_ENDPOINT=minio:9000
 SC_PATCH_S3_ACCESS_KEY=<access-key>
 SC_PATCH_S3_SECRET_KEY=<secret-key>
@@ -37,6 +41,12 @@ FINETUNE_API_IMAGE=registry.example.com/finetune-api:<release>
 FINETUNE_WEB_IMAGE=registry.example.com/finetune-web:<release>
 FINETUNE_CPU_WORKER_IMAGE=registry.example.com/finetune-cpu-worker:<release>
 FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
+IMAGE_PARSER_IMAGE=registry.example.com/image-parser:<release>
+SC_UPSTREAM_IMAGE=registry.example.com/sc-upstream:<release>
+
+# Upstream DB (sc-upstream)
+UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
+ZIPS_DB_URL=sqlite:////data/inspection_zips.db
 
 # LLM (optional)
 LLM_BASE_URL=

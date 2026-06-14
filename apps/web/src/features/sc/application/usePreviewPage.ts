@@ -901,7 +901,12 @@ export function usePreviewPage(): PreviewPageState {
       } else {
         isImporting.value = false;
         showImportModal.value = false;
-        if (resp.status === "failed") {
+        if (resp.status === "completed" && resp.dataset_id) {
+          message.success(
+            `Import complete: ${resp.imported_count ?? 0} samples imported`,
+          );
+          window.open(`/datasets/${resp.dataset_id}/sc/classify`, "_blank");
+        } else if (resp.status === "failed") {
           message.error(resp.error || "Import failed");
         }
       }

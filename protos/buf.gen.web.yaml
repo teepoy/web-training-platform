@@ -1,0 +1,6 @@
+version: v1
+plugins:
+  - plugin: es
+    out: ../apps/web/src/features/sc/generated/proto
+    opt: target=ts
+    path: protoc-gen-es

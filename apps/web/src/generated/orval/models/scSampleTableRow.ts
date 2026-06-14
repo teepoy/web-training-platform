@@ -4,6 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScSampleTableRowClusterId } from './scSampleTableRowClusterId';
+import type { ScSampleTableRowKillRatio } from './scSampleTableRowKillRatio';
 
 export interface ScSampleTableRow {
   defect_id: string;
@@ -15,7 +17,7 @@ export interface ScSampleTableRow {
   index_x: number;
   index_y: number;
   adder: number;
-  cluster_id: number;
+  cluster_id?: ScSampleTableRowClusterId;
   die_x: number;
   die_y: number;
   reticle_x: number;
@@ -26,5 +28,5 @@ export interface ScSampleTableRow {
   area: number;
   final_bin: number;
   manual_bin: number;
-  kill_ratio: number;
+  kill_ratio?: ScSampleTableRowKillRatio;
 }

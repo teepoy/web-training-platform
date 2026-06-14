@@ -17,11 +17,13 @@ import {
 } from "naive-ui";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
+import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { usePreviewPage } from "@/features/sc/application/usePreviewPage";
 
 const page = usePreviewPage();
 const route = useRoute();
+const router = useRouter();
 const themeVars = useThemeVars();
 
 onMounted(async () => {
@@ -62,10 +64,6 @@ const containerStyle = computed(() => ({
   "--cv-divider": themeVars.value.dividerColor,
 }));
 
-function openClassify(url: string) {
-  window.open(url, '_blank');
-}
-
 const activeComponent = computed<Component>(() =>
   page.activeTab.value?.type === "inspection" ? InspectionQuad : ScSummaryTab,
 );
@@ -79,10 +77,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       summariesLoading: page.summariesLoading.value,
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns,
-      classifyDisabled: !page.datasetId.value.trim(),
       "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
       onSearch: () => page.searchInspections(),
-      onOpenClassify: () => openClassify(page.classifyHref.value),
       onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),
     };
   }
@@ -193,6 +189,13 @@ const activeComponentProps = computed((): Record<string, unknown> => {
             <button class="sc-preview-tab-add" @click="page.createSummaryTab()" title="New Summary tab">+</button>
           </div>
           <div class="sc-preview-toolbar">
+            <NButton
+              size="small"
+              quaternary
+              @click="router.push('/sc/handbook')"
+            >
+              Handbook
+            </NButton>
             <NButton
               v-if="page.activeTab.value?.type === 'inspection' && page.activeTab.value.inspectionItem"
               size="small"

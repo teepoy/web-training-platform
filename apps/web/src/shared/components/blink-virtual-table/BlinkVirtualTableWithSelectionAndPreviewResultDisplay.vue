@@ -41,6 +41,7 @@ const props = withDefaults(
     blinkIntervalMs?: number;
     initialBlinkEnabled?: boolean;
     showModeSwitch?: boolean;
+    inspectionTime?: string;
   }>(),
   {
     patchSamplesPerRow: 3,
@@ -188,9 +189,10 @@ function isSelected(defectId: number | string): boolean {
 function getSpriteUrl(sample: ScSampleItem): string {
   const isPatch = mode.value === "patch";
   const cs = isPatch ? props.patchCellSize : props.reviewCellSize;
+  const t = props.inspectionTime ?? String(sample.inspectionTime);
   return isPatch
-    ? `/api/v1/sc/sprites/patch/${sample.inspectionTime}/${sample.waferKey}/${sample.defectId}?cell_size=${cs}`
-    : `/api/v1/sc/sprites/review/${sample.inspectionTime}/${sample.waferKey}/${sample.defectId}?review_count=${props.reviewCount}&cell_size=${cs}`;
+    ? `/api/v1/sc/sprites/patch/${t}/${sample.waferKey}/${sample.defectId}?cell_size=${cs}`
+    : `/api/v1/sc/sprites/review/${t}/${sample.waferKey}/${sample.defectId}?review_count=${props.reviewCount}&cell_size=${cs}`;
 }
 
 function shouldRenderSprite(sample: ScSampleItem): boolean {

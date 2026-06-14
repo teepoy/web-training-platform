@@ -14,13 +14,11 @@ defineProps<{
   summariesLoading: boolean;
   summaries: InspectionSummaryItem[];
   inspectionColumns: DataTableColumns<InspectionSummaryItem>;
-  classifyDisabled: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:dateRange", value: [number, number] | null): void;
   (e: "search"): void;
-  (e: "openClassify"): void;
   (e: "rowClick", row: InspectionSummaryItem): void;
 }>();
 
@@ -56,13 +54,6 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           size="small"
         >
           Search
-        </NButton>
-        <NButton
-          size="small"
-          :disabled="classifyDisabled"
-          @click="emit('openClassify')"
-        >
-          Classify
         </NButton>
       </NSpace>
     </div>

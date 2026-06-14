@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
 
@@ -24,7 +23,6 @@ from app.modules.sc.port.http.deps import (
     ScImportServiceDep,
     PrefectClientDep,
     ScPlotPointsServiceDep,
-    ScSpriteServiceDep,
     ScUpstreamReaderDep,
 )
 from app.modules.sc.app.services.sc_plot_points_service import (
@@ -56,11 +54,6 @@ from app.modules.sc.schemas import (
 from app.shared.api.schemas import Annotation, Organization, User
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import DoneEvent, ScErrorEvent, ScProgressEvent, SSEEvent
-from app.modules.sc.domain.models import (
-    ScImageCacheError,
-    ScImageNotFoundError,
-    ScImageUpstreamError,
-)
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -596,239 +589,6 @@ async def get_inspection_sample_table_rows(
     return ScSampleTableRowsResponse(items=matched, total=total_matched)
 
 
-VALID_IMAGE_TYPES = {
-    "template",
-    "defective",
-    "review",
-    "difference",
-    "PATCH_TEMPLATE",
-    "PATCH_DEFECTIVE",
-    "PATCH_DIFFERENCE",
-    "REVIEW_HIGH_MAG",
-}
-REVIEW_IMAGE_TYPE = "review"
-
-
-def _sanitize_path_component(value: str) -> None:
-    import re
-
-    if re.search(r"[/\\\.\.]", value):
-        raise HTTPException(status_code=400, detail=f"Invalid path component: {value}")
-
-
-@router.get(
-    "/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}",
-    response_class=Response,
-)
-async def serve_patch_image(
-    inspection_time: str,
-    wafer_key: int,
-    defect_id: str,
-    image_type: str,
-    image_fetcher: ScImageFetcherDep,
-    s3_path: str | None = Query(None),
-    review_image_id: int | None = Query(None),
-):
-    _sanitize_path_component(inspection_time)
-    _sanitize_path_component(defect_id)
-    if image_type not in VALID_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image_type: {image_type}. "
-            f"Must be one of {sorted(VALID_IMAGE_TYPES)}",
-        )
-    if image_type == REVIEW_IMAGE_TYPE and review_image_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail="review_image_id is required when image_type is 'review'",
-        )
-
-    normalized_time = _normalize_inspection_time(inspection_time).isoformat()
-
-    try:
-        data = await image_fetcher.get_image_bytes(
-            inspection_time=normalized_time,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            image_type=image_type,
-            s3_path=s3_path,
-            review_image_id=review_image_id,
-        )
-    except ScImageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Image not found: {defect_id}/{image_type}"
-        )
-    except ScImageUpstreamError:
-        raise HTTPException(status_code=502, detail="image upstream unavailable")
-    except ScImageCacheError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
-
-    media_type, _ = mimetypes.guess_type(f"{defect_id}_{image_type}.png")
-    if media_type is None:
-        media_type = "image/png"
-
-    return Response(
-        content=data,
-        media_type=media_type,
-        headers={
-            "Cache-Control": "public, max-age=1200",
-        },
-    )
-
-
-# ── Sprite endpoints ──────────────────────────────────────────────────────
-
-
-@router.get(
-    "/sprites/patch/{inspection_time}/{wafer_key}/{defect_id}",
-    response_class=Response,
-)
-async def get_patch_sprite(
-    inspection_time: str,
-    wafer_key: int,
-    defect_id: str,
-    sprite_service: ScSpriteServiceDep,
-    cell_size: int = Query(default=64, ge=16, le=512),
-):
-    _sanitize_path_component(inspection_time)
-    _sanitize_path_component(defect_id)
-    normalized_time = _normalize_inspection_time(inspection_time).isoformat()
-
-    try:
-        png_bytes = await sprite_service.build_patch_sprite(
-            inspection_time=normalized_time,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            cell_size=cell_size,
-        )
-    except ScImageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Image not found for sprite: {defect_id}"
-        )
-    except ScImageUpstreamError:
-        raise HTTPException(status_code=502, detail="image upstream unavailable")
-    except ScImageCacheError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
-
-    return Response(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=1200"},
-    )
-
-
-@router.get(
-    "/sprites/review/{inspection_time}/{wafer_key}/{defect_id}",
-    response_class=Response,
-)
-async def get_review_sprite(
-    inspection_time: str,
-    wafer_key: int,
-    defect_id: str,
-    sprite_service: ScSpriteServiceDep,
-    review_count: int = Query(default=3, ge=1, le=20),
-    cell_size: int = Query(default=224, ge=16, le=512),
-):
-    _sanitize_path_component(inspection_time)
-    _sanitize_path_component(defect_id)
-    normalized_time = _normalize_inspection_time(inspection_time).isoformat()
-
-    try:
-        png_bytes = await sprite_service.build_review_sprite(
-            inspection_time=normalized_time,
-            wafer_key=wafer_key,
-            defect_id=defect_id,
-            review_count=review_count,
-            cell_size=cell_size,
-        )
-    except ScImageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail=f"Image not found for sprite: {defect_id}"
-        )
-    except ScImageUpstreamError:
-        raise HTTPException(status_code=502, detail="image upstream unavailable")
-    except ScImageCacheError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
-
-    return Response(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=1200"},
-    )
-
-
-@router.get(
-    "/sprites/patch-batch/{inspection_time}/{wafer_key}",
-    response_class=Response,
-)
-async def get_patch_batch_sprite(
-    inspection_time: str,
-    wafer_key: int,
-    sprite_service: ScSpriteServiceDep,
-    defect_ids: list[str] = Query(min_length=1, max_length=200),
-    cell_size: int = Query(default=64, ge=16, le=512),
-):
-    _sanitize_path_component(inspection_time)
-    normalized_time = _normalize_inspection_time(inspection_time).isoformat()
-
-    try:
-        png_bytes = await sprite_service.build_patch_batch_sprite(
-            inspection_time=normalized_time,
-            wafer_key=wafer_key,
-            defect_ids=defect_ids,
-            cell_size=cell_size,
-        )
-    except ScImageNotFoundError:
-        raise HTTPException(status_code=404, detail="Image not found for batch sprite")
-    except ScImageUpstreamError:
-        raise HTTPException(status_code=502, detail="image upstream unavailable")
-    except ScImageCacheError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
-
-    return Response(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=1200"},
-    )
-
-
-@router.get(
-    "/sprites/review-batch/{inspection_time}/{wafer_key}",
-    response_class=Response,
-)
-async def get_review_batch_sprite(
-    inspection_time: str,
-    wafer_key: int,
-    sprite_service: ScSpriteServiceDep,
-    defect_ids: list[str] = Query(min_length=1, max_length=200),
-    review_count: int = Query(default=3, ge=1, le=20),
-    cell_size: int = Query(default=224, ge=16, le=512),
-):
-    _sanitize_path_component(inspection_time)
-    normalized_time = _normalize_inspection_time(inspection_time).isoformat()
-
-    try:
-        png_bytes = await sprite_service.build_review_batch_sprite(
-            inspection_time=normalized_time,
-            wafer_key=wafer_key,
-            defect_ids=defect_ids,
-            review_count=review_count,
-            cell_size=cell_size,
-        )
-    except ScImageNotFoundError:
-        raise HTTPException(status_code=404, detail="Image not found for batch sprite")
-    except ScImageUpstreamError:
-        raise HTTPException(status_code=502, detail="image upstream unavailable")
-    except ScImageCacheError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
-
-    return Response(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=1200"},
-    )
-
-
 TERMINAL_FAILED_STATES = frozenset({"CRASHED", "FAILED", "CANCELLED"})
 
 
@@ -1061,3 +821,146 @@ async def sc_bulk_create_annotations(
         await dataset_service.merge_label_space(dataset_id, created_labels)
 
     return ScBulkAnnotationResponse(created=created)
+
+
+@router.get(
+    "/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}",
+    response_class=Response,
+)
+async def serve_sc_sample_image(
+    dataset_id: str,
+    sample_id: str,
+    image_id: str,
+    org: Annotated[Organization, Depends(get_current_org)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    image_fetcher: ScImageFetcherDep,
+    payload_store: DatasetPayloadStoreDep,
+) -> Response:
+    from typing import cast as _cast
+    from platform_runtime.sparse.reader import SparseManifestReader
+    from app.shared.domain.protocols import ArtifactStorage
+
+    store = payload_store
+    storage: ArtifactStorage = store._storage  # type: ignore[reportPrivateUsage]
+    reader = SparseManifestReader()
+
+    try:
+        manifest = await payload_store.get_manifest(dataset_id, org.id)
+    except (FileNotFoundError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset not found or has no manifest: {dataset_id}",
+        )
+
+    locator = manifest.sample_index.get(sample_id)
+    if locator is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample not found in dataset {dataset_id}: {sample_id}",
+        )
+
+    if locator.shard_index < 0 or locator.shard_index >= len(manifest.shards):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Shard index out of range for sample {sample_id}",
+        )
+
+    shard = manifest.shards[locator.shard_index]
+    if locator.row_index < 0 or locator.row_index >= shard.row_count:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Row index out of range for sample {sample_id}",
+        )
+
+    try:
+        rows = await reader.read_row_batch(
+            shard.uri,
+            locator.row_index,
+            1,
+            storage,
+            columns=["images", "inspection_time", "wafer_key", "defect_id"],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read shard row: {exc}",
+        )
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sample row not found in shard: {sample_id}",
+        )
+
+    row = rows[0]
+    images_raw = row.get("images")
+    if images_raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No images column for sample: {sample_id}",
+        )
+
+    images_list: list[dict[str, object]] = []
+    if isinstance(images_raw, list):
+        images_list = [dict(img) if isinstance(img, dict) else {} for img in images_raw]
+
+    matched: dict[str, object] | None = None
+    for img in images_list:
+        if str(img.get("image_id", "")) == image_id:
+            matched = img
+            break
+
+    if matched is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Image {image_id} not found in sample {sample_id}",
+        )
+
+    raw_bytes = matched.get("bytes")
+    if isinstance(raw_bytes, bytes):
+        content_type = str(matched.get("content_type", ""))
+        if not content_type or "/" not in content_type:
+            content_type = "application/octet-stream"
+        filename = str(matched.get("filename", f"{sample_id}_{image_id}"))
+        return Response(
+            content=raw_bytes,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=1200",
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
+        )
+
+    inspection_time = str(row.get("inspection_time", ""))
+    wafer_key_raw = row.get("wafer_key", 0)
+    wafer_key = int(_cast(int, wafer_key_raw)) if wafer_key_raw is not None else 0
+    defect_id = str(row.get("defect_id", ""))
+    image_type = str(matched.get("image_type", ""))
+    review_image_id_raw = matched.get("review_image_id")
+    review_image_id = (
+        int(_cast(int, review_image_id_raw))
+        if review_image_id_raw is not None
+        else None
+    )
+
+    fetched_bytes = await image_fetcher.get_image_bytes(
+        inspection_time=inspection_time,
+        wafer_key=wafer_key,
+        defect_id=defect_id,
+        image_type=image_type,
+        review_image_id=review_image_id,
+    )
+
+    content_type = str(matched.get("content_type", ""))
+    if not content_type or "/" not in content_type:
+        content_type = "application/octet-stream"
+    filename = str(matched.get("filename", f"{sample_id}_{image_id}"))
+
+    return Response(
+        content=fetched_bytes,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=1200",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )
