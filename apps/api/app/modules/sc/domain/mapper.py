@@ -168,13 +168,17 @@ def patch_sample_to_patch_image_v1(
         sid_q = quote(obj.sample_id, safe="")
         for ref in obj.shard_images:
             iid_q = quote(ref.image_id, safe="")
+            url = (
+                getattr(ref, "access_url", None)
+                or f"/api/v1/samples/{sid_q}/images/{iid_q}?dataset_id={ds_q}"
+            )
             images.append(
                 ScImageRef(
                     role=ref.role or ref.image_type or "image",
                     image_id=ref.image_id,
                     image_type=ref.image_type,
                     content_type=ref.content_type,
-                    url=f"/api/v1/samples/{sid_q}/images/{iid_q}?dataset_id={ds_q}",
+                    url=url,
                     bytes=ref.bytes,
                 )
             )
@@ -191,6 +195,7 @@ def patch_sample_to_patch_image_v1(
         rough_bin=obj.rough_bin,
         class_number=obj.class_number,
         images=images,
+        review_images=[{"image_id": r.image_id} for r in images if r.role == "review"],
         label=obj.label,
     )
 
