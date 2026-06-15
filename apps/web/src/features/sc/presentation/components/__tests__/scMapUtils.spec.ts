@@ -20,9 +20,9 @@ describe("STRIDE", () => {
 });
 
 describe("classColor", () => {
-  it("returns an hsl string", () => {
+  it("returns a hex color for native color input compatibility", () => {
     const color = classColor(1);
-    expect(color).toMatch(/^hsl\(/);
+    expect(color).toMatch(/^#[0-9a-f]{6}$/);
   });
 
   it("produces different hues for different class IDs", () => {
@@ -80,10 +80,38 @@ describe("parsePoints", () => {
 describe("groupByClass", () => {
   it("groups points by classNumber", () => {
     const points = [
-      { x: 1, y: 2, defectId: 101, classNumber: 1, roughBin: 0, hasReview: false },
-      { x: 3, y: 4, defectId: 102, classNumber: 2, roughBin: 0, hasReview: false },
-      { x: 5, y: 6, defectId: 103, classNumber: 1, roughBin: 0, hasReview: false },
-      { x: 7, y: 8, defectId: 104, classNumber: 3, roughBin: 0, hasReview: false },
+      {
+        x: 1,
+        y: 2,
+        defectId: 101,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 3,
+        y: 4,
+        defectId: 102,
+        classNumber: 2,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 5,
+        y: 6,
+        defectId: 103,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 7,
+        y: 8,
+        defectId: 104,
+        classNumber: 3,
+        roughBin: 0,
+        hasReview: false,
+      },
     ];
 
     const groups = groupByClass(points);
@@ -105,9 +133,30 @@ describe("groupByClass", () => {
 describe("getDefectIdsByClass", () => {
   it("returns defect IDs for a given class", () => {
     const points = [
-      { x: 0, y: 0, defectId: 201, classNumber: 1, roughBin: 0, hasReview: false },
-      { x: 1, y: 1, defectId: 202, classNumber: 2, roughBin: 0, hasReview: false },
-      { x: 2, y: 2, defectId: 203, classNumber: 1, roughBin: 0, hasReview: false },
+      {
+        x: 0,
+        y: 0,
+        defectId: 201,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 1,
+        y: 1,
+        defectId: 202,
+        classNumber: 2,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 2,
+        y: 2,
+        defectId: 203,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
     ];
 
     const ids = getDefectIdsByClass(points, 1);
@@ -116,7 +165,14 @@ describe("getDefectIdsByClass", () => {
 
   it("returns empty array when no points of that class exist", () => {
     const points = [
-      { x: 0, y: 0, defectId: 301, classNumber: 5, roughBin: 0, hasReview: false },
+      {
+        x: 0,
+        y: 0,
+        defectId: 301,
+        classNumber: 5,
+        roughBin: 0,
+        hasReview: false,
+      },
     ];
 
     expect(getDefectIdsByClass(points, 99)).toEqual([]);
@@ -158,9 +214,7 @@ describe("MAX_RENDERED_POINTS", () => {
 describe("getPackedPointIdsInRegion", () => {
   it("returns only points inside the inclusive box", () => {
     const points = [
-      10, 20, 101, 1, 0, 0,
-      30, 40, 102, 1, 0, 0,
-      50, 60, 103, 1, 0, 0,
+      10, 20, 101, 1, 0, 0, 30, 40, 102, 1, 0, 0, 50, 60, 103, 1, 0, 0,
     ];
     expect(
       getPackedPointIdsInRegion(points, { x: 10, y: 20, w: 20, h: 20 }),
@@ -185,10 +239,12 @@ describe("createRafThrottle", () => {
     const fn1 = vi.fn();
 
     const state: { queued: (() => void) | null } = { queued: null };
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      state.queued = cb as () => void;
-      return 1;
-    });
+    const rafSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb) => {
+        state.queued = cb as () => void;
+        return 1;
+      });
 
     try {
       const schedule = createRafThrottle();
@@ -215,9 +271,30 @@ describe("createRafThrottle", () => {
 describe("buildPointLookup", () => {
   it("returns a Map<defectId, ScatterPoint> for O(1) lookups", () => {
     const points = [
-      { x: 10, y: 20, defectId: 1001, classNumber: 1, roughBin: 0, hasReview: false },
-      { x: 30, y: 40, defectId: 1002, classNumber: 2, roughBin: 0, hasReview: true },
-      { x: 50, y: 60, defectId: 1003, classNumber: 1, roughBin: 1, hasReview: false },
+      {
+        x: 10,
+        y: 20,
+        defectId: 1001,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 30,
+        y: 40,
+        defectId: 1002,
+        classNumber: 2,
+        roughBin: 0,
+        hasReview: true,
+      },
+      {
+        x: 50,
+        y: 60,
+        defectId: 1003,
+        classNumber: 1,
+        roughBin: 1,
+        hasReview: false,
+      },
     ];
 
     const lookup = buildPointLookup(points);
@@ -236,8 +313,22 @@ describe("buildPointLookup", () => {
 
   it("last-write-wins for duplicate defectId", () => {
     const points = [
-      { x: 1, y: 1, defectId: 10, classNumber: 0, roughBin: 0, hasReview: false },
-      { x: 2, y: 2, defectId: 10, classNumber: 1, roughBin: 0, hasReview: false },
+      {
+        x: 1,
+        y: 1,
+        defectId: 10,
+        classNumber: 0,
+        roughBin: 0,
+        hasReview: false,
+      },
+      {
+        x: 2,
+        y: 2,
+        defectId: 10,
+        classNumber: 1,
+        roughBin: 0,
+        hasReview: false,
+      },
     ];
 
     const lookup = buildPointLookup(points);

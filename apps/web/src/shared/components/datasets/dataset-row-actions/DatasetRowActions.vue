@@ -7,11 +7,12 @@ const props = defineProps<{
   row: DatasetListItem;
   isSuperadmin: boolean;
   isOwnOrg: boolean;
+  canDelete: boolean;
 }>();
 
 const emit = defineEmits<{
   view: [id: string];
-  "toggle-public": [payload: { id: string; isPublic: boolean }];
+  rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
 }>();
 
@@ -20,9 +21,9 @@ function onView(e: MouseEvent): void {
   emit("view", props.row.id);
 }
 
-function onTogglePublic(e: MouseEvent): void {
+function onRename(e: MouseEvent): void {
   e.stopPropagation();
-  emit("toggle-public", { id: props.row.id, isPublic: !props.row.is_public });
+  emit("rename", props.row);
 }
 
 function onDelete(e: MouseEvent): void {
@@ -34,10 +35,8 @@ function onDelete(e: MouseEvent): void {
 <template>
   <span>
     <NButton size="small" @click="onView">View</NButton>
-    <template v-if="isSuperadmin && isOwnOrg">
-      <NButton size="small" style="margin-left: 6px" @click="onTogglePublic">
-        {{ row.is_public ? "Make Private" : "Make Public" }}
-      </NButton>
+    <NButton size="small" style="margin-left: 6px" @click="onRename">Rename</NButton>
+    <template v-if="canDelete">
       <NButton size="small" type="error" style="margin-left: 6px" @click="onDelete">
         Delete
       </NButton>

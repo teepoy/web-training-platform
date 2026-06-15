@@ -7,7 +7,7 @@ export class ReclassifyPagePom extends BasePage {
   }
 
   async waitForLoaded(): Promise<void> {
-    await this.page.getByTestId('reclassify-table-loadmore-sentinel').waitFor({ timeout: 15_000 })
+    await this.page.getByText(/\d+ samples/).first().waitFor({ timeout: 15_000 })
   }
 
   async gotoReclassify(datasetId: string): Promise<this> {
@@ -25,7 +25,7 @@ export class ReclassifyPagePom extends BasePage {
   }
 
   get blinkScrollContainer(): Locator {
-    return this.page.getByTestId('reclassify-table-loadmore-sentinel').locator('..')
+    return this.page.getByTestId('blink-table-scrollbar').locator('.sbt-scroll')
   }
 
   get loadMoreSentinel(): Locator {

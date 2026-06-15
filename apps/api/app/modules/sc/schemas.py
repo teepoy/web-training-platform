@@ -51,20 +51,23 @@ class ScSampleTableSort(BaseModel):
 
 
 class ScSampleTableSetFilter(BaseModel):
-    operator: Literal["in"]
+    filter_type: Literal["set"] = Field(alias="filterType")
     values: list[float | str] = Field(min_length=1)
 
 
 class ScSampleTableRangeFilter(BaseModel):
-    operator: Literal["between"]
-    min: float
-    max: float
+    filter_type: Literal["number"] = Field(alias="filterType")
+    type: Literal["inRange"]
+    filter: float
+    filter_to: float = Field(alias="filterTo")
 
 
 class ScSampleTableRowsRequest(BaseModel):
     defect_ids: list[str] = Field(default_factory=list)
     page: int = Field(default=0, ge=0)
-    page_size: int = Field(default=1000, ge=1, le=10000)
+    page_size: int = Field(default=100, ge=1, le=10000)
+    anchor: str | None = None
+    limit: int = Field(default=100, ge=1, le=50_000)
     filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
     sort: ScSampleTableSort | None = None
     reticle_x_die_count: int = Field(default=10, ge=1)
@@ -77,6 +80,7 @@ class ScSampleTableRow(BaseModel):
     defect_id: str
     rough_bin: int
     class_number: int
+    images: int
     test_id: int
     wafer_x: int
     wafer_y: int
@@ -97,9 +101,22 @@ class ScSampleTableRow(BaseModel):
     kill_ratio: float | None = None
 
 
+class ScReclassifySampleTableRow(ScSampleTableRow):
+    annotation_label: str | None = None
+    prediction_label: str | None = None
+    prediction_confidence: float | None = None
+
+
 class ScSampleTableRowsResponse(BaseModel):
     items: list[ScSampleTableRow]
     total: int
+    next_anchor: str | None = None
+
+
+class ScReclassifySampleTableRowsResponse(BaseModel):
+    items: list[ScReclassifySampleTableRow]
+    total: int
+    next_anchor: str | None = None
 
 
 class ScBoxFilterRequest(BaseModel):
@@ -112,6 +129,7 @@ class ScBoxFilterRequest(BaseModel):
     reticle_y_die_count: int = Field(default=5, ge=1)
     reticle_x_die_shift: int = 0
     reticle_y_die_shift: int = 0
+    filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
 
 
 class ScBoxFilterResponse(BaseModel):
@@ -127,7 +145,6 @@ class ScImportRequest(BaseModel):
     filters: dict | None = None
     label_space: list[str] = []
     max_rows: int | None = None
-    force_prefect_flow: bool = False
 
     @field_validator("storage_mode")
     @classmethod
@@ -138,7 +155,6 @@ class ScImportRequest(BaseModel):
 
 
 class ScImportResponse(BaseModel):
-    flow_run_id: str | None = None
     status: str
     dataset_id: str = ""
     imported_count: int = 0
@@ -174,3 +190,6 @@ class ScFilterParams(BaseModel):
     adders: list[int] | None = None
     cluster_ids: list[int] | None = None
     legend_group_by: str | None = None
+    sample_filter: (
+        dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None
+    ) = None

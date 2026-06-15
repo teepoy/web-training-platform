@@ -393,7 +393,7 @@ class TestMakeWaferMapResponsePb:
         assert msg.reticle_y_die_count == 8
 
     def test_point_packing_6_ints_per_point(self) -> None:
-        """Each point packs exactly 6 values: [x, y, defect_id, class_number, rough_bin, has_review]."""
+        """Each point packs exactly 6 values: [x, y, defect_id, legend_class_number, rough_bin, has_review]."""
         df = pl.DataFrame(
             {
                 "defect_id": [42],
@@ -422,6 +422,48 @@ class TestMakeWaferMapResponsePb:
         # Reticle points
         expected_reticle = [1000, 2000, 42, 3, 5, 1]
         assert list(msg.reticle_points) == expected_reticle
+
+    def test_bin_group_by_packs_bin_into_class_number_slot(self) -> None:
+        df = pl.DataFrame(
+            {
+                "defect_id": [42],
+                "wafer_x": [100],
+                "wafer_y": [200],
+                "die_x": [10],
+                "die_y": [20],
+                "reticle_x": [1000],
+                "reticle_y": [2000],
+                "class_number": [3],
+                "rough_bin": [5],
+                "has_review": [1],
+            }
+        )
+        body = make_wafer_map_response_pb(df, wafer_key=0, group_by="bin")
+        msg = _parse(body)
+
+        assert list(msg.wafer_points) == [100, 200, 42, 5, 5, 1]
+
+    def test_annotation_group_by_packs_sorted_label_index(self) -> None:
+        df = pl.DataFrame(
+            {
+                "defect_id": [1, 2, 3],
+                "wafer_x": [100, 200, 300],
+                "wafer_y": [100, 200, 300],
+                "die_x": [10, 20, 30],
+                "die_y": [10, 20, 30],
+                "reticle_x": [1000, 2000, 3000],
+                "reticle_y": [1000, 2000, 3000],
+                "class_number": [7, 7, 7],
+                "rough_bin": [5, 5, 5],
+                "has_review": [1, 1, 0],
+                "label": ["B", "A", None],
+            }
+        )
+        body = make_wafer_map_response_pb(df, wafer_key=0, group_by="annotation")
+        msg = _parse(body)
+
+        wafer_vals = list(msg.wafer_points)
+        assert wafer_vals[3::6] == [1, 0, -1]
 
     # ── Reticle formula tests (adapted to DataFrame) ──────────────────────
 

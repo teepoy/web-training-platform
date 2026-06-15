@@ -50,6 +50,11 @@ from app.shared.api.schemas import (
 from app.shared.api.schemas import DatasetStorageMode, JobStatus
 
 
+def _assert_not_none(value: str | None) -> str:
+    assert value is not None
+    return value
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -59,6 +64,15 @@ async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
         return ""
     org_row = await session.get(OrganizationORM, org_id)
     return "" if org_row is None else org_row.name
+
+
+async def _user_name_for(session: AsyncSession, user_id: str | None) -> str:
+    if not user_id or user_id == "system":
+        return "system"
+    user_row = await session.get(UserORM, user_id)
+    if user_row is None:
+        return user_id
+    return user_row.name or user_row.email or user_id
 
 
 class SqlRepository:
@@ -73,6 +87,7 @@ class SqlRepository:
             raise ValueError("org_id is required for create_dataset")
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
+            creator_name = await _user_name_for(session, dataset.created_by)
             row = DatasetORM(
                 id=dataset.id,
                 org_id=org_id,
@@ -80,6 +95,7 @@ class SqlRepository:
                 dataset_type=dataset.dataset_type,
                 dataset_meta=dataset.task_spec.model_dump(mode="json"),
                 view_types=dataset.view_types,
+                created_by=dataset.created_by,
                 is_public=dataset.is_public,
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
@@ -88,25 +104,38 @@ class SqlRepository:
             )
             session.add(row)
             await session.commit()
-        return dataset.model_copy(update={"org_id": org_id, "org_name": org_name})
+        return dataset.model_copy(
+            update={
+                "org_id": org_id,
+                "org_name": org_name,
+                "creator_name": creator_name,
+            }
+        )
 
     async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
         async with self.session_factory() as session:
-            stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
+            stmt = (
+                select(DatasetORM, OrganizationORM.name, UserORM.name, UserORM.email)
+                .join(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
+                .order_by(DatasetORM.created_at.desc())
+            )
             if org_id is not None:
                 stmt = stmt.where(
                     or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
                 )  # noqa: E712
-            rows = (await session.execute(stmt)).scalars().all()
+            rows = (await session.execute(stmt)).all()
             return [
                 Dataset(
                     id=r.id,
                     org_id=r.org_id,
-                    org_name=await _org_name_for(session, r.org_id),
+                    org_name=str(org_name or ""),
+                    creator_name=str(user_name or user_email or r.created_by),
                     name=r.name,
                     dataset_type=r.dataset_type,
                     task_spec=cast(TaskSpec, r.dataset_meta),
                     view_types=cast(list[str], r.view_types),
+                    created_by=r.created_by,
                     is_public=r.is_public,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
@@ -114,8 +143,21 @@ class SqlRepository:
                     storage_mode=cast(DatasetStorageMode, r.storage_mode),
                     dataset_meta=r.dataset_meta,
                 )
-                for r in rows
+                for r, org_name, user_name, user_email in rows
             ]
+
+    async def count_samples_by_dataset(self, dataset_ids: list[str]) -> dict[str, int]:
+        if not dataset_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(dataset_ids))
+        async with self.session_factory() as session:
+            stmt = (
+                select(SampleORM.dataset_id, func.count(SampleORM.id))
+                .where(SampleORM.dataset_id.in_(unique_ids))
+                .group_by(SampleORM.dataset_id)
+            )
+            rows = (await session.execute(stmt)).all()
+            return {str(dataset_id): int(count) for dataset_id, count in rows}
 
     async def get_dataset(
         self, dataset_id: str, org_id: str | None = None
@@ -130,10 +172,58 @@ class SqlRepository:
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
+                creator_name=await _user_name_for(session, row.created_by),
                 name=row.name,
                 dataset_type=row.dataset_type,
                 task_spec=cast(TaskSpec, row.dataset_meta),
                 view_types=cast(list[str], row.view_types),
+                created_by=row.created_by,
+                is_public=row.is_public,
+                created_at=row.created_at,
+                embed_config=row.embed_config or {},
+                ls_project_id=row.ls_project_id,
+                storage_mode=cast(DatasetStorageMode, row.storage_mode),
+                dataset_meta=row.dataset_meta,
+            )
+
+    async def list_dataset_names(
+        self, dataset_ids: list[str], org_id: str | None = None
+    ) -> dict[str, str]:
+        if not dataset_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(dataset_ids))
+        async with self.session_factory() as session:
+            stmt = select(DatasetORM.id, DatasetORM.name).where(
+                DatasetORM.id.in_(unique_ids)
+            )
+            if org_id is not None:
+                stmt = stmt.where(
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
+                )
+            rows = (await session.execute(stmt)).all()
+            return {str(dataset_id): str(name) for dataset_id, name in rows}
+
+    async def rename_dataset(
+        self, dataset_id: str, *, name: str, org_id: str | None = None
+    ) -> Dataset | None:
+        async with self.session_factory() as session:
+            row = await session.get(DatasetORM, dataset_id)
+            if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id and not row.is_public:
+                return None
+            row.name = name
+            await session.commit()
+            return Dataset(
+                id=row.id,
+                org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
+                creator_name=await _user_name_for(session, row.created_by),
+                name=row.name,
+                dataset_type=row.dataset_type,
+                task_spec=cast(TaskSpec, row.dataset_meta),
+                view_types=cast(list[str], row.view_types),
+                created_by=row.created_by,
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},
@@ -159,12 +249,6 @@ class SqlRepository:
             if org_id is not None and dataset.org_id != org_id:
                 return False
 
-            training_job_ids = select(TrainingJobORM.id).where(
-                TrainingJobORM.dataset_id == dataset_id
-            )
-            prediction_job_ids = select(PredictionJobORM.id).where(
-                PredictionJobORM.dataset_id == dataset_id
-            )
             sample_ids = select(SampleORM.id).where(SampleORM.dataset_id == dataset_id)
             annotation_ids = select(AnnotationORM.id).where(
                 AnnotationORM.sample_id.in_(sample_ids)
@@ -179,24 +263,6 @@ class SqlRepository:
                 PredictionReviewActionORM.dataset_id == dataset_id
             )
 
-            await session.execute(
-                delete(TrainingEventORM).where(
-                    TrainingEventORM.job_id.in_(training_job_ids)
-                )
-            )
-            await session.execute(
-                delete(JobUserStateORM).where(
-                    JobUserStateORM.job_id.in_(training_job_ids)
-                )
-            )
-            await session.execute(
-                delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids))
-            )
-            await session.execute(
-                delete(PredictionEventORM).where(
-                    PredictionEventORM.job_id.in_(prediction_job_ids)
-                )
-            )
             await session.execute(
                 delete(PredictionCollectionItemORM).where(
                     PredictionCollectionItemORM.collection_id.in_(collection_ids)
@@ -223,14 +289,6 @@ class SqlRepository:
                 )
             )
             await session.execute(
-                delete(PredictionJobORM).where(
-                    PredictionJobORM.dataset_id == dataset_id
-                )
-            )
-            await session.execute(
-                delete(TrainingJobORM).where(TrainingJobORM.dataset_id == dataset_id)
-            )
-            await session.execute(
                 delete(SampleFeatureORM).where(
                     SampleFeatureORM.sample_id.in_(sample_ids)
                 )
@@ -240,11 +298,6 @@ class SqlRepository:
             )
             await session.execute(
                 delete(SampleORM).where(SampleORM.dataset_id == dataset_id)
-            )
-            await session.execute(
-                delete(PredictionReviewActionORM).where(
-                    PredictionReviewActionORM.dataset_id == dataset_id
-                )
             )
             await session.delete(dataset)
             await session.commit()
@@ -743,13 +796,14 @@ class SqlRepository:
             rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
+                assert row.dataset_id is not None
                 arts = await self._list_artifacts_by_job_in_session(session, row.id)
                 jobs.append(
                     TrainingJob(
                         id=row.id,
                         org_id=row.org_id,
                         org_name=await _org_name_for(session, row.org_id),
-                        dataset_id=row.dataset_id,
+                        dataset_id=_assert_not_none(row.dataset_id),
                         trainer_id=row.trainer_id,
                         status=cast(JobStatus, row.status),
                         created_by=row.created_by,
@@ -771,12 +825,13 @@ class SqlRepository:
                 return None
             if org_id is not None and row.org_id != org_id and not row.is_public:
                 return None
+            assert row.dataset_id is not None
             arts = await self._list_artifacts_by_job_in_session(session, row.id)
             return TrainingJob(
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 trainer_id=row.trainer_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -919,11 +974,12 @@ class SqlRepository:
                 return None
             if org_id is not None and row.org_id != org_id:
                 return None
+            assert row.dataset_id is not None
             return PredictionJob(
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 model_id=row.model_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -937,19 +993,21 @@ class SqlRepository:
             )
 
     async def list_prediction_jobs(
-        self, org_id: str | None = None
+        self, org_id: str | None = None, dataset_id: str | None = None
     ) -> list[PredictionJob]:
         async with self.session_factory() as session:
             stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
             if org_id is not None:
                 stmt = stmt.where(PredictionJobORM.org_id == org_id)
+            if dataset_id is not None:
+                stmt = stmt.where(PredictionJobORM.dataset_id == dataset_id)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionJob(
                     id=row.id,
                     org_id=row.org_id,
                     org_name=await _org_name_for(session, row.org_id),
-                    dataset_id=row.dataset_id,
+                    dataset_id=_assert_not_none(row.dataset_id),
                     model_id=row.model_id,
                     status=cast(JobStatus, row.status),
                     created_by=row.created_by,

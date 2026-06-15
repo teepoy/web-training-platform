@@ -19,7 +19,7 @@ const props = withDefaults(
   {
     samples: () => [],
     reviewSamples: () => [],
-    patchSamplesPerRow: 3,
+    patchSamplesPerRow: 4,
     reviewSamplesPerRow: 1,
     overscan: 10,
   },
@@ -28,7 +28,12 @@ const props = withDefaults(
 const emit = defineEmits<{
   selectSamples: [
     defectIds: string[],
-    modifiers: { shift: boolean; ctrl: boolean; meta: boolean },
+    modifiers: {
+      shift: boolean;
+      ctrl: boolean;
+      meta: boolean;
+      selectionMode?: "replace" | "add" | "toggle";
+    },
   ];
 }>();
 </script>

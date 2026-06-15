@@ -16,5 +16,4 @@ export interface ScImportRequest {
   filters?: ScImportRequestFilters;
   label_space?: string[];
   max_rows?: ScImportRequestMaxRows;
-  force_prefect_flow?: boolean;
 }

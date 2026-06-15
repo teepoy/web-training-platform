@@ -205,8 +205,12 @@ async def list_prediction_jobs(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
+    dataset_id: str | None = Query(
+        default=None,
+        description="Filter prediction jobs to one dataset.",
+    ),
 ) -> list[PredictionJobResponse]:
-    jobs = await repo.list_prediction_jobs(org_id=org.id)
+    jobs = await repo.list_prediction_jobs(org_id=org.id, dataset_id=dataset_id)
     return [_prediction_job_to_response(job) for job in jobs]
 
 

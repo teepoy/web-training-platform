@@ -38,3 +38,10 @@ repos:
         entry: bash -c 'cd apps/web && pnpm vue-tsc -b --noEmit'
         language: system
         pass_filenames: false
+
+      - id: prettier-check
+        name: prettier-check
+        entry: pnpm exec prettier --check
+        language: system
+        files: ^apps/web/.*\.(vue|ts|tsx|js|jsx|css|scss|json|yaml|yml|md)$
+        pass_filenames: true

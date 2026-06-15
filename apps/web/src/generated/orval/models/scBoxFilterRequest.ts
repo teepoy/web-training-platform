@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScBoxFilterRequestMode } from './scBoxFilterRequestMode';
+import type { ScBoxFilterRequestFilter } from './scBoxFilterRequestFilter';
 
 export interface ScBoxFilterRequest {
   mode: ScBoxFilterRequestMode;
@@ -20,4 +21,5 @@ export interface ScBoxFilterRequest {
   reticle_y_die_count?: number;
   reticle_x_die_shift?: number;
   reticle_y_die_shift?: number;
+  filter?: ScBoxFilterRequestFilter;
 }

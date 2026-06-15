@@ -11,6 +11,7 @@ service ImageParser {
   rpc V2Sprite(V2SpriteRequest) returns (V2SpriteResponse);
   rpc GetScImage(GetScImageRequest) returns (GetScImageResponse);
   rpc BatchGetScImage(BatchGetScImageRequest) returns (BatchGetScImageResponse);
+  rpc StreamScInspectionImages(StreamScInspectionImagesRequest) returns (stream ScImageResult);
   rpc WarmScCache(WarmScCacheRequest) returns (WarmScCacheResponse);
 }
 
@@ -96,6 +97,13 @@ message ScImageResult {
 
 message BatchGetScImageResponse {
   repeated ScImageResult results = 1;
+}
+
+message StreamScInspectionImagesRequest {
+  string inspection_time = 1;
+  int32 wafer_key = 2;
+  repeated int32 defect_ids = 3;
+  repeated string image_types = 4;
 }
 
 message WarmScCacheRequest {

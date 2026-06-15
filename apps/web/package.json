@@ -16,7 +16,9 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "generate:proto": "PATH=\"./node_modules/.bin:$PATH\" protoc --plugin=protoc-gen-es=./node_modules/.bin/protoc-gen-es --es_out=src/features/sc/generated/proto --es_opt=target=ts -I src/features/sc/proto src/features/sc/proto/sc/v1/sample.proto"
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "generate:proto": "cd ../.. && make generate-protos"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.0",
@@ -53,6 +55,7 @@
     "msw": "^2.14.6",
     "orval": "7.5.0",
     "playwright": "^1.60.0",
+    "prettier": "^3.8.3",
     "storybook": "^8.6.18",
     "tsup": "^8.5.1",
     "typescript": "~5.7.3",

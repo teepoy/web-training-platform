@@ -15,6 +15,7 @@ Monorepo for an online finetune platform:
 | ML | `libs/ml` | Torch-first model implementations and training/prediction logic |
 | Platform runtime | `libs/platform-runtime` | Shared contracts, SDK/CLI, runtime clients |
 | SDK shim | `libs/python-sdk` | Compatibility re-exports; new code should prefer `platform_runtime` |
+| Services | `services` | Out-of-process runtime services such as SC upstream and image parsing |
 | Infra | `infra` | Compose and Kubernetes manifests |
 | Docs | `docs` | Architecture, guides, protocols |
 
@@ -29,6 +30,7 @@ apps/api -> libs/platform-runtime
 
 - Read `CORE_DESIGNS.md` before non-trivial architecture, runtime, storage, dataset, auth, widget, or API contract work.
 - Keep route handlers thin; push persistence and business logic into services/repositories.
+- Do not confuse root `services/` runtime services with `apps/api/app/modules/*/app/services` business service classes.
 - Do not add executable training/prediction logic to `apps/api`.
 - Do not import FastAPI/API internals from `libs/ml`.
 - Do not put module-private domain models in `libs/platform-runtime`; keep them in the owning module.
@@ -37,6 +39,7 @@ apps/api -> libs/platform-runtime
 - Do not couple platform `Sample.id` to upstream/domain IDs such as SC defect IDs.
 - Do not assume auth is enforced just because auth scaffolding exists.
 - Do not add hardcoded backend URLs; existing hardcodes are known debt.
+- Unless explicitly requested or required by `CORE_DESIGNS.md`, do not add fallback behavior, implicit limits, assumptions, or defaults; surface the missing decision/error so the underlying problem can be discovered.
 - Do not create new YAML preset mechanisms; use the registry/descriptor mechanisms described below.
 - Do not delete Alembic migrations unless the database state is intentionally reset too.
 
@@ -68,11 +71,13 @@ Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
 ## Verification
 
+- **After any code change, run `make lint` first.** It checks only git-diff files (ruff for Python, prettier for web) and is fast enough for every edit cycle.
 - After modifying code, run the narrowest relevant tests first, then the required broader checks before handing off.
 - For backend Python changes, run `ruff check apps/api`, `uv run --directory apps/api pyright .`, and `make test`.
 - For frontend changes, run `make test-web` and `make build-web`; run `make test-e2e` when route/user-flow behavior changes.
+- For root service changes, also run the narrow service-local checks described in `services/AGENTS.md`.
 - For API contract changes, update route/schema code, run `make generate` to re-export `openapi/openapi.yaml` and regenerate all artifacts, then let `make test` run the OpenAPI sync check.
-- For Docker-relevant backend/frontend changes, verify the relevant compose image build when feasible: `docker compose -f infra/compose/docker-compose.yaml build api` or `docker compose -f infra/compose/docker-compose.yaml build web`.
+- For Docker-relevant backend/frontend changes, verify the relevant compose image build when feasible: `docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml build api` or `docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml build web`.
 - If a required check cannot be run, state why and what remains unverified.
 
 ## Code Style

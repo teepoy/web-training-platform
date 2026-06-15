@@ -19,6 +19,15 @@ from app.modules.sc.schema import find_images_by_role
 from platform_runtime.contracts import TrainContext, TrainResult
 from app.core.registry import trainer
 
+IMAGE_FETCH_BATCH_SIZE = 512
+
+
+def _normalize_training_label(value: object) -> str | None:
+    if value is None:
+        return None
+    label = str(value)
+    return label or None
+
 
 def _collate_sc_tensor_batch(
     batch: list[dict[str, Any]],
@@ -127,21 +136,33 @@ async def resnet_sc_train(
     import torch.optim as optim
     from torch.utils.data import DataLoader
     from torchvision import transforms
+    import polars as pl
 
     torch: Any = importlib.import_module("torch")
 
     if artifact_storage is None:
         raise ValueError("artifact_storage is required for resnet50-sc-v1 training")
 
-    if image_fetcher is not None:
-        import asyncio as _asyncio_im
+    label_space: list[str] = list(ctx.dataset_ref.label_space)
+    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
 
+    if image_fetcher is not None:
         df = lazyframe.collect() if lazyframe is not None else None
         if df is not None:
-            _fetches: list[Any] = []
-            _targets: list[dict[str, Any]] = []
+            rows = [dict(row) for row in df.iter_rows(named=True)]
+            for row in rows:
+                row["label"] = _normalize_training_label(row.get("label"))
+                row["images"] = [dict(img) for img in row.get("images") or []]
 
-            for row in df.iter_rows(named=True):
+            grouped_fetches: dict[
+                tuple[str, int], list[tuple[dict[str, Any], dict[str, object]]]
+            ] = {}
+
+            for row in rows:
+                label: str | None = row.get("label")
+                if not label or label not in label_map:
+                    continue
+
                 images_list: list[dict[str, Any]] = row.get("images") or []
                 for img in images_list:
                     role = img.get("role", "")
@@ -149,34 +170,51 @@ async def resnet_sc_train(
                         continue
                     if img.get("bytes") is not None:
                         continue
-                    _fetches.append(
-                        image_fetcher.get_image_bytes(
-                            inspection_time=str(row.get("inspection_time", "")),
-                            wafer_key=int(row.get("wafer_key", 0) or 0),
-                            defect_id=str(row.get("defect_id", "")),
-                            image_type=str(img.get("image_type", "")),
-                            review_image_id=cast(
-                                int | None,
-                                img.get("review_image_id")
-                                if img.get("review_image_id") is not None
-                                else None,
-                            ),
+                    inspection_time = str(row.get("inspection_time", ""))
+                    wafer_key = int(row.get("wafer_key", 0) or 0)
+                    grouped_fetches.setdefault((inspection_time, wafer_key), []).append(
+                        (
+                            img,
+                            {
+                                "defect_id": str(row.get("defect_id", "")),
+                                "image_type": str(img.get("image_type", "")),
+                                "review_image_id": cast(
+                                    int | None,
+                                    img.get("review_image_id")
+                                    if img.get("review_image_id") is not None
+                                    else None,
+                                ),
+                            },
                         )
                     )
-                    _targets.append(img)
 
-            if _fetches:
-                _resolved = await _asyncio_im.gather(*_fetches)
-                for img, _bytes in zip(_targets, _resolved):
-                    img["bytes"] = _bytes
+            for (inspection_time, wafer_key), fetches in grouped_fetches.items():
+                for start in range(0, len(fetches), IMAGE_FETCH_BATCH_SIZE):
+                    chunk = fetches[start : start + IMAGE_FETCH_BATCH_SIZE]
+                    results = await image_fetcher.get_image_bytes_batch(
+                        inspection_time=inspection_time,
+                        wafer_key=wafer_key,
+                        images=[payload for _, payload in chunk],
+                    )
+                    if len(results) != len(chunk):
+                        raise RuntimeError(
+                            "Batch image fetch returned "
+                            f"{len(results)} results for {len(chunk)} requests"
+                        )
+                    for (img, payload), result in zip(chunk, results):
+                        error = str(result.get("error", "") or "")
+                        if error:
+                            raise RuntimeError(
+                                "Batch image fetch failed for "
+                                f"defect_id={payload.get('defect_id')} "
+                                f"image_type={payload.get('image_type')}: {error}"
+                            )
+                        img["bytes"] = bytes(result.get("image_data", b""))
 
-            lazyframe = df.lazy()
+            lazyframe = pl.DataFrame(rows, infer_schema_length=None).lazy()
 
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")
-
-    label_space: list[str] = list(ctx.dataset_ref.label_space)
-    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
 
     train_transform: Any = transforms.Compose(
         [
@@ -204,7 +242,6 @@ async def resnet_sc_train(
     num_classes: int = dataset.num_classes
 
     # ── Local materialization to parquet ──────────────────────────────
-    import polars as pl
     import datasets as hf_datasets
 
     materialized_rows: list[dict[str, Any]] = []

@@ -8,6 +8,7 @@ DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
 # Prefect
 PREFECT_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/prefect
 PREFECT_UI_URL=https://prefect.example.com
+PREFECT_SERVER_API_AUTH_STRING=<prefect-user>:<strong-prefect-password>
 
 # MinIO / S3 (all buckets)
 MINIO_ENDPOINT=minio:9000
@@ -47,6 +48,9 @@ SC_UPSTREAM_IMAGE=registry.example.com/sc-upstream:<release>
 # Upstream DB (sc-upstream)
 UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
 ZIPS_DB_URL=sqlite:////data/inspection_zips.db
+SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=10737418240
+SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=7200
+REDIS_URL=redis://redis:6379/0
 
 # LLM (optional)
 LLM_BASE_URL=

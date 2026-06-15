@@ -23,6 +23,9 @@ class DatasetORM(Base):
     dataset_type: Mapped[str] = mapped_column(String(64), nullable=False)
     view_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     dataset_meta: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="system", server_default="system"
+    )
     is_public: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="0"
     )

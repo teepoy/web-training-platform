@@ -1,8 +1,9 @@
 import { mount } from "@vue/test-utils";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import BlinkVirtualTableWithSelectionAndPreviewResultDisplay from "./BlinkVirtualTableWithSelectionAndPreviewResultDisplay.vue";
 import { nextTick, ref } from "vue";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import { NRadioGroup } from "naive-ui";
 
 vi.mock("@/features/sc/presentation/composables/useBlinkVirtualScroll", () => ({
   useBlinkVirtualScroll: () => ({
@@ -14,10 +15,16 @@ vi.mock("@/features/sc/presentation/composables/useBlinkVirtualScroll", () => ({
     shouldLoadImages: ref(true),
     queueViewportImageLoad: () => {},
     scrollRef: ref(null),
-    visibleSamples: ref([{ defectId: 10 }, { defectId: 11 }]),
+    visibleSamples: ref([
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
+    ]),
     reviewColumnIndices: ref([]),
     imageCellHeightPxStr: ref('60px'),
-    samplesForVirtualRow: (idx: number) => [{ defectId: 10 }, { defectId: 11 }],
+    samplesForVirtualRow: (_idx: number) => [
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
+    ],
     effectiveSamplesPerRow: ref(3),
   }),
   ROW_PADDING_Y: 2,
@@ -32,6 +39,10 @@ vi.mock("@/features/sc/presentation/composables/useBlinkRubberBand", () => ({
 }));
 
 describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
   const mockSamples = [
     { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [] },
     { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [] },
@@ -42,7 +53,8 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
       props: {
         samples: mockSamples,
         ...propsData
-      }
+      },
+      attachTo: document.body,
     });
   }
 
@@ -56,13 +68,19 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
 
   it("changes samples per row without rendering a text input", async () => {
     const wrapper = createWrapper({ patchSamplesPerRow: 3 });
-    const control = wrapper.get(".sbt-per-row");
+    await wrapper.get("button").trigger("click");
+    await nextTick();
+    const control = document.body.querySelector(".sbt-per-row");
+    expect(control).not.toBeNull();
 
-    expect(control.find("input").exists()).toBe(false);
-    expect(control.get(".sbt-per-row-value").text()).toBe("3");
+    expect(control!.querySelector("input")).toBeNull();
+    expect(control!.querySelector(".sbt-per-row-value")?.textContent).toBe("3");
 
-    await control.get('[aria-label="Increase samples per row"]').trigger("click");
-    expect(control.get(".sbt-per-row-value").text()).toBe("4");
+    const increase = control!.querySelector('[aria-label="Increase samples per row"]');
+    expect(increase).not.toBeNull();
+    (increase as HTMLButtonElement).click();
+    await nextTick();
+    expect(control!.querySelector(".sbt-per-row-value")?.textContent).toBe("4");
   });
 
   it("prediction badge visible when predictionLabels prop set", async () => {
@@ -91,5 +109,28 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
     const badges = wrapper.findAll('.sbt-prediction-badge');
     expect(badges.length).toBe(1);
     expect(badges[0].text()).toContain('DraftLabel');
+  });
+
+  it("renders review columns and explicitly requests selected sprite images", async () => {
+    const reviewSamples = [
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
+    ] as unknown as ScSampleItem[];
+    const wrapper = createWrapper({
+      showModeSwitch: true,
+      reviewSamples,
+    });
+
+    wrapper.findComponent(NRadioGroup).vm.$emit("update:value", "review");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Rev 100");
+    expect(wrapper.text()).toContain("Rev 105");
+    expect(wrapper.html()).not.toContain("review_count");
+    expect(wrapper.html()).toContain("image_types=patchDefective");
+    expect(wrapper.html()).toContain("image_types=patchReference");
+    expect(wrapper.html()).toContain("image_types=patchDifference");
+    expect(wrapper.html()).toContain("image_types=review100");
+    expect(wrapper.html()).toContain("image_types=review105");
   });
 });

@@ -56,6 +56,7 @@ export {
   mockScDataset,
   mockScViewSamples,
   mockScPlotPoints,
+  mockScDefectIds,
   mockScViewSamplesPaged,
   mockScSamplesWithLabels,
 } from './sc'

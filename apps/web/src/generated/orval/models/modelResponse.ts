@@ -25,4 +25,6 @@ export interface ModelResponse {
   dataset_id: string;
   dataset_name: string;
   trainer_name: string;
+  created_by?: string;
+  creator_name?: string;
 }

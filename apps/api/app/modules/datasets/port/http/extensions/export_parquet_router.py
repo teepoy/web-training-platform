@@ -5,7 +5,8 @@ import logging
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from app.shared.domain.protocols import ArtifactStorage
 from app.shared.api.schemas import Organization, User
@@ -20,9 +21,22 @@ from app.modules.datasets.port.http.deps import (
     get_repository,
 )
 from app.modules.datasets.domain.repository import DatasetRepository
+from app.shared.sse.emit import emit_sse
+from app.shared.sse.events import (
+    DoneEvent,
+    ScDataEvent,
+    ScErrorEvent,
+    ScProgressEvent,
+    SSEEvent,
+)
 
 router = APIRouter(prefix="/api/v1/plugins/export-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 def _build_image_struct(path: str, image_bytes: bytes | None = None) -> dict:
@@ -104,3 +118,85 @@ async def export_parquet(
     )
 
     return {"uri": uri, "rows": table.num_rows, "format": "parquet"}
+
+
+@router.post("/export/stream")
+async def export_parquet_stream(
+    request: Request,
+    dataset_id: str,
+    repo: DatasetRepository = Depends(get_repository),
+    storage: ArtifactStorage = Depends(get_artifact_storage),
+    factory: DatasetStorageFactory = Depends(get_dataset_storage_factory),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> StreamingResponse:
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="dataset.export.parquet",
+                    status="loading",
+                    message="Reading dataset rows",
+                )
+            )
+        )
+        try:
+            result = await export_parquet(
+                dataset_id,
+                repo,
+                storage,
+                factory,
+                current_user,
+                org,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        rows = int(result.get("rows", 0))
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="dataset.export.parquet",
+                    status="persisted",
+                    message="Parquet export persisted",
+                    loaded_count=rows,
+                    total_count=rows,
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="dataset.export.parquet",
+                    payload=result,
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                DoneEvent(
+                    event_type="done",
+                    uri=str(result.get("uri", "")),
+                    rows=rows,
+                )
+            )
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )

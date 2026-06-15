@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from omegaconf import OmegaConf
@@ -34,6 +34,14 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
     } in called
 
     assert {
+        "deployment_name": "train-and-predict-deployment",
+        "flow_name": "training-train-and-predict",
+        "work_pool_name": "default-gpu",
+        "entrypoint": "app.modules.training.flows.train_predict:train_and_predict_flow",
+        "path": "",
+    } in called
+
+    assert {
         "deployment_name": "predict-job-batch-deployment",
         "flow_name": "prediction-predict-job",
         "work_pool_name": "default-gpu",
@@ -46,15 +54,6 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
         "flow_name": "embedding-embed",
         "work_pool_name": "default-gpu",
         "entrypoint": "app.modules.embedding.flows.embed:embed_flow",
-        "path": "",
-    } in called
-
-    # ── CPU pool ──
-    assert {
-        "deployment_name": "sc-import-deployment",
-        "flow_name": "sc-import-upstream",
-        "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.sc.adapter.flows.sc_import:sc_import",
         "path": "",
     } in called
 

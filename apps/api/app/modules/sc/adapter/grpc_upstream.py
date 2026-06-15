@@ -1,18 +1,37 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+import pyarrow as pa
 import polars as pl
 import pyarrow.flight as flight  # pyright: ignore[reportPrivateImportUsage]
 from grpc import aio as grpc_aio
 
+from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
 
 if TYPE_CHECKING:
     from app.modules.sc.domain.models import ScInspectionRecord
+
+
+def _parse_upstream_datetime(value: str) -> datetime:
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return datetime(
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            dt.microsecond,
+            tzinfo=timezone.utc,
+        )
+    return dt.astimezone(timezone.utc)
 
 
 class GrpcScUpstream:
@@ -35,20 +54,56 @@ class GrpcScUpstream:
     def _ensure_flight_client(self) -> flight.FlightClient:  # pyright: ignore[reportPrivateImportUsage]
         return flight.FlightClient(self._flight_addr)  # pyright: ignore[reportPrivateImportUsage]
 
+    def _read_list_samples_table(
+        self,
+        ticket: flight.Ticket,  # pyright: ignore[reportPrivateImportUsage]
+        on_progress: ScSampleProgressCallback | None,
+    ) -> pa.Table:
+        fc = self._ensure_flight_client()
+        reader = fc.do_get(ticket)
+        batches: list[pa.RecordBatch] = []
+        loaded = 0
+        while True:
+            try:
+                chunk = reader.read_chunk()
+            except StopIteration:
+                break
+            data = chunk.data
+            if data is None or data.num_rows == 0:
+                continue
+            if isinstance(data, pa.Table):
+                batches.extend(data.to_batches())
+            else:
+                batches.append(data)
+            loaded += data.num_rows
+            if on_progress is not None:
+                on_progress(loaded)
+        if not batches:
+            return pa.table({})
+        return pa.Table.from_batches(batches)
+
     async def list_inspections(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str | None = None,
+        wafer_id: str | None = None,
+        layer_id: str | None = None,
+        device: str | None = None,
     ) -> pl.LazyFrame:
         stub = self._ensure_channel()
         req = pb.ListInspectionsRequest(
             start_time=start_time.isoformat(),
             end_time=end_time.isoformat(),
+            lot_id=lot_id or "",
+            wafer_id=wafer_id or "",
+            layer_id=layer_id or "",
+            device=device or "",
         )
         resp = await stub.ListInspections(req)
         rows = [
             {
-                "inspection_time": datetime.fromisoformat(i.inspection_time).replace(
-                    tzinfo=timezone.utc
-                ),
+                "inspection_time": _parse_upstream_datetime(i.inspection_time),
                 "wafer_key": i.wafer_key,
                 "lot_id": i.lot_id,
                 "wafer_id": i.wafer_id,
@@ -114,8 +169,8 @@ class GrpcScUpstream:
         reticle_size_y: int = 1,
         reticle_offset_x: int = 0,
         reticle_offset_y: int = 0,
+        on_progress: ScSampleProgressCallback | None = None,
     ) -> pl.LazyFrame:
-        fc = self._ensure_flight_client()
         ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
             json.dumps(
                 {
@@ -125,8 +180,11 @@ class GrpcScUpstream:
                 }
             ).encode()
         )
-        reader = fc.do_get(ticket)
-        table = reader.read_all()
+        table = await asyncio.to_thread(
+            self._read_list_samples_table,
+            ticket,
+            on_progress,
+        )
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
         if "die_x" not in df.columns:

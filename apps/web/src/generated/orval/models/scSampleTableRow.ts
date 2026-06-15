@@ -11,6 +11,7 @@ export interface ScSampleTableRow {
   defect_id: string;
   rough_bin: number;
   class_number: number;
+  images: number;
   test_id: number;
   wafer_x: number;
   wafer_y: number;

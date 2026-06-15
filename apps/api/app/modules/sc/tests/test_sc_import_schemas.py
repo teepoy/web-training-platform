@@ -71,11 +71,9 @@ class TestScImportResponse:
     def test_default_values(self) -> None:
         """ScImportResponse defaults should be correct when only required fields given."""
         resp = ScImportResponse(
-            flow_run_id="abc",
-            status="running",
+            status="completed",
         )
-        assert resp.flow_run_id == "abc"
-        assert resp.status == "running"
+        assert resp.status == "completed"
         assert resp.dataset_id == ""
         assert resp.imported_count == 0
         assert resp.error is None

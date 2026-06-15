@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pyarrow as pa
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from platform_runtime.sparse import (
@@ -34,13 +34,16 @@ from app.modules.datasets.domain.sample_row import (
     SampleRow,
     SampleRowImageRef,
 )
+from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.domain.storage_agg import (
     Capabilities,
     MaterializeResult,
 )
 from app.shared.api.schemas import Annotation, DatasetStorageMode
-from app.shared.db.registry import SampleFeatureORM
+from app.shared.db.registry import PredictionJobORM, SampleFeatureORM
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
+
+_SCAN_PARQUET_SCHEMES = ("s3://", "file://")
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +88,7 @@ class SparseDatasetStorage:
         payload_store: DatasetPayloadStore,
         ls_client: LabelStudioClient | None = None,
         session_factory: async_sessionmaker | None = None,
-        repo: Any = None,
+        repo: DatasetRepository | None = None,
         dataset_type: str = "",
     ) -> None:
         self._dataset_id: str = dataset_id
@@ -94,7 +97,7 @@ class SparseDatasetStorage:
         self._payload_store: DatasetPayloadStore = payload_store
         self._ls_client: LabelStudioClient | None = ls_client
         self._session_factory: async_sessionmaker | None = session_factory
-        self._repo: Any = repo
+        self._repo: DatasetRepository | None = repo
         self._reader: SparseManifestReader = SparseManifestReader()
         self._annotations: SparseAnnotationStore = SparseAnnotationStore(storage)
         self._dataset_type: str = dataset_type
@@ -163,6 +166,137 @@ class SparseDatasetStorage:
             return self._normalize_v2_row(row, sample_id)
 
         return self._normalize_v1_row(row, sample_id)
+
+    def _polars_storage_options(self) -> dict[str, str] | None:
+        provider = getattr(self._storage, "polars_storage_options", None)
+        if not callable(provider):
+            return None
+        options = provider()
+        if not isinstance(options, dict):
+            return None
+        return {str(key): str(value) for key, value in options.items()}
+
+    @staticmethod
+    def _can_scan_parquet_uri(uri: str) -> bool:
+        if uri.startswith(_SCAN_PARQUET_SCHEMES):
+            return True
+        return "://" not in uri
+
+    def _scan_parquet_uris(self, uris: list[str]) -> Any | None:
+        """Build a Polars LazyFrame directly over scan-capable parquet URIs."""
+        import polars as pl
+
+        parquet_uris = [uri for uri in uris if uri.endswith(".parquet")]
+        if not parquet_uris or not all(
+            self._can_scan_parquet_uri(uri) for uri in parquet_uris
+        ):
+            return None
+
+        storage_options = self._polars_storage_options()
+        if storage_options is None:
+            return pl.scan_parquet(parquet_uris)
+        return pl.scan_parquet(parquet_uris, storage_options=storage_options)
+
+    async def _read_parquet_uris_fallback(self, uris: list[str]) -> Any | None:
+        """Compatibility path for in-memory test storage that has no scan URI."""
+        import polars as pl
+
+        frames: list[pl.DataFrame] = []
+        for uri in uris:
+            if not uri.endswith(".parquet"):
+                continue
+            raw = await self._storage.get_bytes(uri)
+            frames.append(pl.read_parquet(_io.BytesIO(raw)))
+        if not frames:
+            return None
+        return pl.concat(frames, how="diagonal_relaxed").lazy()
+
+    async def _parquet_uris_to_lazyframe(
+        self, uris: list[str], *, allow_fallback: bool = True
+    ) -> Any | None:
+        lf = self._scan_parquet_uris(uris)
+        if lf is not None or not allow_fallback:
+            return lf
+        return await self._read_parquet_uris_fallback(uris)
+
+    async def _resolve_latest_prediction_job_id(self) -> str | None:
+        if self._session_factory is None:
+            return None
+        async with self._session_factory() as session:
+            stmt = (
+                select(PredictionJobORM.id)
+                .where(
+                    PredictionJobORM.dataset_id == self._dataset_id,
+                    PredictionJobORM.status == "completed",
+                )
+                .order_by(PredictionJobORM.created_at.desc())
+                .limit(1)
+            )
+            if self._org_id:
+                stmt = stmt.where(PredictionJobORM.org_id == self._org_id)
+            return (await session.execute(stmt)).scalars().first()
+
+    async def _prediction_lazyframe(
+        self, prediction_job_id: str | None = None
+    ) -> Any | None:
+        if prediction_job_id is None:
+            prediction_job_id = await self._resolve_latest_prediction_job_id()
+            if prediction_job_id is None:
+                return None
+        prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
+        prefix = f"{prefix}{prediction_job_id}/"
+        try:
+            uris = await self._storage.list_prefix(prefix)
+        except Exception:
+            return None
+        return await self._parquet_uris_to_lazyframe(uris)
+
+    async def _latest_annotation_lazyframe(self) -> Any | None:
+        import polars as pl
+
+        prefix = (
+            self._annotations.get_annotations_prefix(self._dataset_id, self._org_id)
+            + "/"
+        )
+        try:
+            uris = await self._storage.list_prefix(prefix)
+        except Exception:
+            return None
+        ann_lf = await self._parquet_uris_to_lazyframe(uris)
+        if ann_lf is None:
+            return None
+        return (
+            ann_lf.with_columns(
+                pl.col("sample_id").cast(pl.Utf8),
+                pl.col("created_at").cast(pl.Utf8),
+            )
+            .sort("created_at")
+            .group_by("sample_id")
+            .agg(
+                pl.col("label").last().cast(pl.Utf8).alias("label"),
+                pl.col("annotation_value")
+                .last()
+                .cast(pl.Utf8)
+                .alias("annotation_value"),
+            )
+        )
+
+    async def _latest_prediction_lazyframe(
+        self, prediction_job_id: str | None = None
+    ) -> Any | None:
+        import polars as pl
+
+        pred_lf = await self._prediction_lazyframe(prediction_job_id)
+        if pred_lf is None:
+            return None
+        return (
+            pred_lf.with_columns(pl.col("sample_id").cast(pl.Utf8))
+            .group_by("sample_id")
+            .agg(
+                pl.col("predicted_label").last().cast(pl.Utf8).alias("predicted_label"),
+                pl.col("confidence").last().cast(pl.Float64).alias("confidence"),
+            )
+        )
 
     def _normalize_v1_row(self, row: dict[str, object], sample_id: str) -> SampleRow:
         """Normalize a v1 shard row (image_uris + scalar metadata columns)."""
@@ -329,6 +463,7 @@ class SparseDatasetStorage:
                 with_labels=with_labels,
                 with_predictions=with_predictions,
                 prediction_job_id=prediction_job_id,
+                sample_ids=sample_ids,
             )
 
         manifest = await self._get_manifest()
@@ -435,83 +570,65 @@ class SparseDatasetStorage:
         with_labels: bool = False,
         with_predictions: bool = False,
         prediction_job_id: str | None = None,
+        sample_ids: list[str] | None = None,
     ) -> Any:
         """Return a ``pl.LazyFrame`` over all sample shards.
 
-        Downloads each shard from object storage, reads as a polars
-        DataFrame, concatenates, and returns ``.lazy()``.  This works
-        uniformly across S3 and in-memory storage backends.
+        For object storage backends, this constructs a native Polars
+        ``scan_parquet`` over all sample shard URIs and passes through
+        backend credentials via ``storage_options``.
 
         When *with_labels* is True, loads annotations from
-        ``SparseAnnotationStore`` and left-joins ``label`` and
-        ``annotation_value`` columns onto the result.
+        annotation parquet sidecars and resolves latest-per-sample with
+        Polars before joining. Prediction columns follow the same pattern.
         """
         import polars as pl
 
         manifest = await self._get_manifest()
         shards = sorted(manifest.shards, key=lambda s: s.shard_index)
+        shard_uris = [shard.uri for shard in shards if shard.row_count > 0]
 
-        frames: list[pl.DataFrame] = []
-        for shard in shards:
-            shard_bytes = await self._storage.get_bytes(shard.uri)
-            df = pl.read_parquet(_io.BytesIO(shard_bytes))
-            frames.append(df)
+        lf = await self._parquet_uris_to_lazyframe(shard_uris)
+        if lf is None:
+            lf = pl.DataFrame({"sample_id": []}, schema={"sample_id": pl.Utf8}).lazy()
 
-        if frames:
-            combined = pl.concat(frames, how="diagonal_relaxed")
-            lf = combined.lazy()
+        schema_names = set(lf.collect_schema().names())
+        if "sample_id" in schema_names:
+            lf = lf.with_columns(pl.col("sample_id").cast(pl.Utf8))
+        elif "id" in schema_names:
+            lf = lf.with_columns(pl.col("id").cast(pl.Utf8).alias("sample_id"))
         else:
-            lf = pl.DataFrame().lazy()
+            lf = lf.with_columns(pl.lit(None, dtype=pl.Utf8).alias("sample_id"))
+
+        sample_id_filter = (
+            [str(sid) for sid in sample_ids] if sample_ids is not None else None
+        )
 
         if with_labels:
-            latest = await self._annotations.latest_by_sample(
-                dataset_id=self._dataset_id, org_id=self._org_id
-            )
-            if latest:
-                ann_df = pl.DataFrame(
-                    [
-                        {
-                            "sample_id": sid,
-                            "label": rec.label,
-                            "annotation_value": rec.annotation_value,
-                        }
-                        for sid, rec in latest.items()
-                    ],
-                    schema={
-                        "sample_id": pl.Utf8,
-                        "label": pl.Utf8,
-                        "annotation_value": pl.Utf8,
-                    },
-                )
-                lf = lf.join(ann_df.lazy(), on="sample_id", how="left")
-            else:
+            ann_lf = await self._latest_annotation_lazyframe()
+            if ann_lf is None:
                 lf = lf.with_columns(
-                    pl.lit(None).alias("label"),
-                    pl.lit(None).alias("annotation_value"),
+                    pl.lit(None, dtype=pl.Utf8).alias("label"),
+                    pl.lit(None, dtype=pl.Utf8).alias("annotation_value"),
                 )
+            else:
+                lf = lf.join(ann_lf, on="sample_id", how="left")
 
         if with_predictions:
-            predictions = await self._load_predictions(
-                prediction_job_id=prediction_job_id,
-                manifest=manifest,
-            )
-            if predictions:
-                pred_df = pl.DataFrame(
-                    [
-                        {
-                            "sample_id": sid,
-                            "predicted_label": row.get("predicted_label"),
-                        }
-                        for sid, row in predictions.items()
-                    ],
-                    schema={
-                        "sample_id": pl.Utf8,
-                        "predicted_label": pl.Utf8,
-                    },
+            pred_lf = await self._latest_prediction_lazyframe(prediction_job_id)
+            if pred_lf is None:
+                lf = lf.with_columns(
+                    pl.lit(None, dtype=pl.Utf8).alias("predicted_label")
                 )
-                lf = lf.join(pred_df.lazy(), on="sample_id", how="left")
             else:
-                lf = lf.with_columns(pl.lit(None).alias("predicted_label"))
+                lf = lf.join(pred_lf, on="sample_id", how="left")
+
+        if sample_id_filter is not None:
+            lf = (
+                lf.filter(pl.col("sample_id").is_in(sample_id_filter))
+                if sample_id_filter
+                else lf.filter(pl.lit(False))
+            )
 
         return lf
 
@@ -533,9 +650,13 @@ class SparseDatasetStorage:
         """
         import pyarrow.parquet as pq
 
+        if prediction_job_id is None:
+            prediction_job_id = await self._resolve_latest_prediction_job_id()
+            if prediction_job_id is None:
+                return {}
+
         prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
-        if prediction_job_id is not None:
-            prefix = f"{prefix}{prediction_job_id}/"
+        prefix = f"{prefix}{prediction_job_id}/"
 
         try:
             uris = await self._storage.list_prefix(prefix)
@@ -918,40 +1039,30 @@ class SparseDatasetStorage:
         existing = await self._annotations.load_all(
             dataset_id=self._dataset_id, org_id=self._org_id
         )
-
-        # Filter out deleted annotation_ids
-        remaining = [r for r in existing if r.annotation_id not in doomed]
-        deleted_count = len(existing) - len(remaining)
+        deleted_records = [r for r in existing if r.annotation_id in doomed]
+        deleted_count = len(deleted_records)
         if deleted_count == 0:
             return 0
 
-        # Compute latest-per-sample from remaining records
-        latest: dict[str, SparseAnnotationRecord] = {}
-        for r in remaining:
-            cur = latest.get(r.sample_id)
-            if cur is None or r.created_at >= cur.created_at:
-                latest[r.sample_id] = r
-
-        # Rewrite with fresh timestamps so they supersede old parquet files
-        if latest:
-            fresh: list[SparseAnnotationRecord] = []
-            for r in latest.values():
-                fresh.append(
-                    SparseAnnotationRecord(
-                        annotation_id=r.annotation_id,
-                        sample_id=r.sample_id,
-                        label=r.label,
-                        annotation_value=r.annotation_value,
-                        created_by=r.created_by,
-                        created_at=datetime.now(timezone.utc).isoformat(),
-                        user_id=r.user_id,
-                    )
+        tombstones: list[SparseAnnotationRecord] = []
+        now = datetime.now(timezone.utc).isoformat()
+        for sample_id in {r.sample_id for r in deleted_records}:
+            tombstones.append(
+                SparseAnnotationRecord(
+                    annotation_id=f"deleted:{sample_id}:{now}",
+                    sample_id=sample_id,
+                    label="",
+                    annotation_value="",
+                    created_by="",
+                    created_at=now,
+                    user_id="",
                 )
-            await self._annotations.append(
-                dataset_id=self._dataset_id,
-                org_id=self._org_id,
-                items=fresh,
             )
+        await self._annotations.append(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            items=tombstones,
+        )
 
         return deleted_count
 
@@ -977,9 +1088,10 @@ class SparseDatasetStorage:
         dataset_id: str | None = None,
         limit: int | None = None,
     ) -> list[Annotation]:
-        items = await self._annotations.load_all(
+        latest_by_sample = await self._annotations.latest_by_sample(
             dataset_id=self._dataset_id, org_id=self._org_id
         )
+        items = list(latest_by_sample.values())
         if sample_id:
             items = [i for i in items if i.sample_id == sample_id]
         if limit is not None:
@@ -1106,11 +1218,41 @@ class SparseDatasetStorage:
 
     async def prediction_summary(self) -> dict:
         """Aggregate prediction parquet shards from object storage."""
-        import pyarrow.parquet as pq
+        import polars as pl
 
-        prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
+        pred_lf = await self._prediction_lazyframe()
+        if pred_lf is None:
+            return {
+                "total_predictions": 0,
+                "models": [],
+                "label_distribution": {},
+            }
+
+        total_lf = pred_lf.select(pl.len().alias("total_predictions"))
+        models_lf = (
+            pred_lf.group_by("model_id")
+            .len()
+            .rename({"len": "count"})
+            .select(
+                pl.col("model_id").cast(pl.Utf8),
+                pl.col("count"),
+            )
+        )
+        labels_lf = (
+            pred_lf.group_by("predicted_label")
+            .len()
+            .rename({"len": "count"})
+            .sort("count", descending=True)
+            .limit(50)
+            .select(
+                pl.col("predicted_label").cast(pl.Utf8),
+                pl.col("count"),
+            )
+        )
         try:
-            uris = await self._storage.list_prefix(prefix)
+            total_df, models_df, labels_df = pl.collect_all(
+                [total_lf, models_lf, labels_lf]
+            )
         except Exception:
             return {
                 "total_predictions": 0,
@@ -1118,32 +1260,13 @@ class SparseDatasetStorage:
                 "label_distribution": {},
             }
 
-        all_rows: list[dict[str, Any]] = []
-        for uri in uris:
-            if not uri.endswith(".parquet"):
-                continue
-            try:
-                raw = await self._storage.get_bytes(uri)
-                table = pq.read_table(_io.BytesIO(raw))
-                all_rows.extend(table.to_pylist())
-            except Exception:
-                continue
-
-        total = len(all_rows)
-        model_counts: dict[str, int] = {}
-        label_counts: dict[str, int] = {}
-        for row in all_rows:
-            mid = str(row.get("model_id", ""))
-            model_counts[mid] = model_counts.get(mid, 0) + 1
-            pl = str(row.get("predicted_label", ""))
-            label_counts[pl] = label_counts.get(pl, 0) + 1
-
-        sorted_labels = sorted(label_counts.items(), key=lambda kv: -kv[1])[:50]
-
         return {
-            "total_predictions": total,
-            "models": [{"model_id": k, "count": v} for k, v in model_counts.items()],
-            "label_distribution": dict(sorted_labels),
+            "total_predictions": int(total_df.item(0, "total_predictions")),
+            "models": models_df.to_dicts(),
+            "label_distribution": {
+                str(row["predicted_label"]): int(row["count"])
+                for row in labels_df.to_dicts()
+            },
         }
 
     # ── upsert_sample_feature ───────────────────────────────────────

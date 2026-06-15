@@ -20,6 +20,7 @@ from app.modules.sc.schema import (
     SC_SOURCE_SCHEMA_VERSION,
     find_images_by_role,
 )
+from platform_runtime.contracts import ArtifactStorage
 from platform_runtime.sparse import (
     DatasetManifest,
     DatasetPayloadStore,
@@ -139,7 +140,7 @@ class SparseTrainingRecordAssembler:
         dataset_id: str,
         org_id: str,
         annotations: list[Annotation],
-        storage: Any,
+        storage: ArtifactStorage,
     ) -> list[SparseTrainingRecord]:
         """Produce training records from sparse shards joined with annotations.
 
@@ -151,7 +152,7 @@ class SparseTrainingRecordAssembler:
             Organization UUID used to locate the manifest in object storage.
         annotations : list[Annotation]
             Platform annotation objects (already filtered to *dataset_id*).
-        storage : Any
+        storage : ArtifactStorage
             Must satisfy the :class:`~platform_runtime.contracts.ArtifactStorage`
             protocol — ``get_bytes(uri) -> bytes`` is sufficient.
 
@@ -260,7 +261,7 @@ class SparseTrainingRecordAssembler:
         self,
         manifest: DatasetManifest,
         shard_index: int,
-        storage: Any,
+        storage: ArtifactStorage,
     ) -> list[dict[str, object]]:
         """Read only the training-relevant columns for one shard.
 

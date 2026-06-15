@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
 
 const DEFAULT_DIE_COUNT = 10;
@@ -46,10 +46,7 @@ function canvasPixelRatio(): number {
   return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 }
 
-function prepareCanvas(
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-): void {
+function prepareCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
   const dpr = canvasPixelRatio();
   const width = Math.max(1, Math.round(canvasW * dpr));
   const height = Math.max(1, Math.round(canvasH * dpr));
@@ -87,7 +84,10 @@ function computeBounds(pts: SimpleMapPoint[]) {
 
   if (pts.length === 0) return;
 
-  let minX = boundsMinX, maxX = boundsMaxX, minY = boundsMinY, maxY = boundsMaxY;
+  let minX = boundsMinX,
+    maxX = boundsMaxX,
+    minY = boundsMinY,
+    maxY = boundsMaxY;
   for (const p of pts) {
     if (p.x < minX) minX = p.x;
     if (p.x > maxX) maxX = p.x;
@@ -168,7 +168,10 @@ function renderPoints() {
   }
 
   // Pass 1 — defect pixels: exactly (wx - 1, wy), (wx, wy), (wx - 1, wy + 1), (wx, wy + 1).
-  for (const [label, group] of groups) {
+  const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
+    left.localeCompare(right, undefined, { numeric: true }),
+  );
+  for (const [label, group] of sortedGroups) {
     ctx.fillStyle = props.colorMap[label] ?? "rgb(255, 0, 0)";
     ctx.beginPath();
     for (const p of group) {
@@ -186,7 +189,7 @@ function renderPoints() {
     if (!p.hasImageFlag) continue;
     const [sx, sy] = dataToScreen(p.x, p.y);
     const [cx, cy] = screenPixel(sx, sy);
-    ctx.strokeRect(cx - 1.5, cy - 2.5, 5, 5);
+    ctx.strokeRect(cx - 3, cy - 2, 5, 5);
   }
 
   // Pass 3 — selected crosshair above all point markers.
@@ -212,8 +215,10 @@ function draw() {
   if (!ctx) return;
   prepareCanvas(canvas, ctx);
   ctx.clearRect(0, 0, canvasW, canvasH);
-  if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
-  if (ptCanvas) ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
+  if (bgCanvas)
+    ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
+  if (ptCanvas)
+    ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
 }
 
 function fullRender() {
@@ -229,6 +234,13 @@ function onResize() {
   renderBackground();
   renderPoints();
   draw();
+}
+
+function scheduleFullRender() {
+  void nextTick(() => {
+    fullRender();
+    window.requestAnimationFrame(fullRender);
+  });
 }
 
 watch(
@@ -250,9 +262,7 @@ watch(
 
 watch(
   () => [props.zoom, props.xDieCount, props.yDieCount, props.dieSizeX, props.dieSizeY],
-  () => {
-    fullRender();
-  },
+  scheduleFullRender,
   { deep: true },
 );
 
@@ -287,7 +297,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.srm { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.srm {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .srm-empty {
   font-size: 12px;

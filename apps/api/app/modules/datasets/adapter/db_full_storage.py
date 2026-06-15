@@ -23,19 +23,14 @@ from app.shared.api.utils import make_ls_image_url
 from app.shared.db.registry import (
     AnnotationORM,
     AnnotationVersionORM,
-    ArtifactORM,
     DatasetORM,
-    JobUserStateORM,
     PlatformPredictionORM,
     PredictionCollectionItemORM,
     PredictionCollectionORM,
-    PredictionEventORM,
     PredictionJobORM,
     PredictionReviewActionORM,
     SampleFeatureORM,
     SampleORM,
-    TrainingEventORM,
-    TrainingJobORM,
 )
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
@@ -94,6 +89,21 @@ class DbFullDatasetStorage:
         """Return the Dataset domain object for this storage instance."""
         return await self._repo.get_dataset(self._dataset_id, self._org_id)
 
+    async def _resolve_latest_prediction_job_id(self) -> str | None:
+        async with self._session_factory() as session:
+            stmt = (
+                select(PredictionJobORM.id)
+                .where(
+                    PredictionJobORM.dataset_id == self._dataset_id,
+                    PredictionJobORM.status == "completed",
+                )
+                .order_by(PredictionJobORM.created_at.desc())
+                .limit(1)
+            )
+            if self._org_id:
+                stmt = stmt.where(PredictionJobORM.org_id == self._org_id)
+            return (await session.execute(stmt)).scalars().first()
+
     # ── list_samples (the meat) ─────────────────────────────────────
 
     async def list_samples(
@@ -133,6 +143,24 @@ class DbFullDatasetStorage:
         async with self._session_factory() as session:
             need_labels = with_labels or label_filter is not None or order_by == "label"
             need_predictions = with_predictions or prediction_job_id is not None
+            effective_prediction_job_id = prediction_job_id
+            if need_predictions and effective_prediction_job_id is None:
+                stmt = (
+                    select(PredictionJobORM.id)
+                    .where(
+                        PredictionJobORM.dataset_id == self._dataset_id,
+                        PredictionJobORM.status == "completed",
+                    )
+                    .order_by(PredictionJobORM.created_at.desc())
+                    .limit(1)
+                )
+                if self._org_id:
+                    stmt = stmt.where(PredictionJobORM.org_id == self._org_id)
+                effective_prediction_job_id = (
+                    (await session.execute(stmt)).scalars().first()
+                )
+                if effective_prediction_job_id is None:
+                    need_predictions = False
 
             cols: list[Any] = [
                 SampleORM.id,
@@ -177,36 +205,13 @@ class DbFullDatasetStorage:
                 )
 
             if need_predictions:
-                if prediction_job_id is not None:
-                    base = base.outerjoin(
-                        PredA,
-                        and_(
-                            PredA.c.sample_id == SampleORM.id,
-                            PredA.c.job_id == prediction_job_id,
-                        ),
-                    )
-                else:
-                    latest_pred_subq = (
-                        select(
-                            PlatformPredictionORM.sample_id.label("pred_sid"),
-                            func.max(PlatformPredictionORM.created_at).label(
-                                "max_pred_ca"
-                            ),
-                        )
-                        .where(PlatformPredictionORM.dataset_id == self._dataset_id)
-                        .group_by(PlatformPredictionORM.sample_id)
-                        .subquery("latest_pred_time")
-                    )
-                    base = base.outerjoin(
-                        latest_pred_subq,
-                        latest_pred_subq.c.pred_sid == SampleORM.id,
-                    ).outerjoin(
-                        PredA,
-                        and_(
-                            PredA.c.sample_id == SampleORM.id,
-                            PredA.c.created_at == latest_pred_subq.c.max_pred_ca,
-                        ),
-                    )
+                base = base.outerjoin(
+                    PredA,
+                    and_(
+                        PredA.c.sample_id == SampleORM.id,
+                        PredA.c.job_id == effective_prediction_job_id,
+                    ),
+                )
                 base = base.add_columns(
                     PredA.c.id.label("pred_id"),
                     PredA.c.predicted_label.label("pred_label"),
@@ -334,28 +339,18 @@ class DbFullDatasetStorage:
 
         pred_select = ""
         if with_predictions or prediction_job_id is not None:
-            pred_select = ", pp.predicted_label, pp.confidence, pp.all_scores_json, pp.model_id, pp.target, pp.model_version, pp.job_id, pp.error"
-            if prediction_job_id is not None:
+            effective_prediction_job_id = prediction_job_id
+            if effective_prediction_job_id is None:
+                effective_prediction_job_id = (
+                    await self._resolve_latest_prediction_job_id()
+                )
+            if effective_prediction_job_id is not None:
+                pred_select = ", pp.predicted_label, pp.confidence, pp.all_scores_json, pp.model_id, pp.target, pp.model_version, pp.job_id, pp.error"
                 joins += f"""
  LEFT JOIN platform_predictions pp
      ON pp.sample_id = s.id AND pp.job_id = {_ph}
 """
-                params.append(prediction_job_id)
-            else:
-                joins += (
-                    """
- LEFT JOIN (
-     SELECT sample_id, MAX(created_at) AS max_cp
-     FROM platform_predictions
-     WHERE dataset_id = %s
-     GROUP BY sample_id
-  """
-                    % _ph
-                    + ") latest_pred ON latest_pred.sample_id = s.id\n"
-                )
-                joins += """ LEFT JOIN platform_predictions pp
-     ON pp.sample_id = s.id AND pp.created_at = latest_pred.max_cp
-"""
+                params.append(effective_prediction_job_id)
 
         # Ordering
         order_clause = "s.id"
@@ -1084,13 +1079,6 @@ class DbFullDatasetStorage:
         async with self._session_factory() as session:
             did = self._dataset_id
 
-            # Subqueries for cascading
-            training_job_ids = select(TrainingJobORM.id).where(
-                TrainingJobORM.dataset_id == did
-            )
-            prediction_job_ids = select(PredictionJobORM.id).where(
-                PredictionJobORM.dataset_id == did
-            )
             sample_ids = select(SampleORM.id).where(SampleORM.dataset_id == did)
             annotation_ids = select(AnnotationORM.id).where(
                 AnnotationORM.sample_id.in_(sample_ids)
@@ -1099,81 +1087,41 @@ class DbFullDatasetStorage:
                 PredictionCollectionORM.dataset_id == did
             )
 
-            # 1. Training events
-            await session.execute(
-                delete(TrainingEventORM).where(
-                    TrainingEventORM.job_id.in_(training_job_ids)
-                )
-            )
-            # 2. Job user states
-            await session.execute(
-                delete(JobUserStateORM).where(
-                    JobUserStateORM.job_id.in_(training_job_ids)
-                )
-            )
-            # 3. Artifacts
-            await session.execute(
-                delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids))
-            )
-            # 4. Prediction events
-            await session.execute(
-                delete(PredictionEventORM).where(
-                    PredictionEventORM.job_id.in_(prediction_job_ids)
-                )
-            )
-            # 5. Prediction collection items
             await session.execute(
                 delete(PredictionCollectionItemORM).where(
                     PredictionCollectionItemORM.collection_id.in_(collection_ids)
                 )
             )
-            # 6. Annotation versions
             await session.execute(
                 delete(AnnotationVersionORM).where(
                     AnnotationVersionORM.annotation_id.in_(annotation_ids)
                 )
             )
-            # 7. Prediction collections
             await session.execute(
                 delete(PredictionCollectionORM).where(
                     PredictionCollectionORM.dataset_id == did
                 )
             )
-            # 8. Platform predictions
             await session.execute(
                 delete(PlatformPredictionORM).where(
                     PlatformPredictionORM.dataset_id == did
                 )
             )
-            # 9. Prediction jobs
-            await session.execute(
-                delete(PredictionJobORM).where(PredictionJobORM.dataset_id == did)
-            )
-            # 10. Training jobs
-            await session.execute(
-                delete(TrainingJobORM).where(TrainingJobORM.dataset_id == did)
-            )
-            # 11. Sample features
             await session.execute(
                 delete(SampleFeatureORM).where(
                     SampleFeatureORM.sample_id.in_(sample_ids)
                 )
             )
-            # 12. Annotations
             await session.execute(
                 delete(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids))
             )
-            # 13. Samples
             await session.execute(delete(SampleORM).where(SampleORM.dataset_id == did))
-            # 14. Prediction review actions (ONCE, not twice — bugfix)
             await session.execute(
                 delete(PredictionReviewActionORM).where(
                     PredictionReviewActionORM.dataset_id == did
                 )
             )
-            # 15. Dataset row
             dataset_orm = await session.get(DatasetORM, did)
             if dataset_orm is not None:
                 await session.delete(dataset_orm)
-            # 16. Commit
             await session.commit()

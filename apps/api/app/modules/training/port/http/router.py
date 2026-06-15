@@ -9,10 +9,10 @@ from app.shared.api.schemas import PaginatedResponse
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
-    require_superadmin,
 )
 from app.shared.api.schemas import (
     Organization,
+    JobStatus,
     TrainingEvent,
     TrainingJob,
     User,
@@ -23,12 +23,15 @@ from app.modules.models.port.http.schemas import (
     SetPublicResponse,
 )
 from app.modules.training.port.http.deps import (
+    PrefectClientDep,
     RepositoryDep,
     TrainingOrchestratorDep,
 )
 from app.modules.training.port.http.schemas import (
     CreateTrainingJobRequest,
     MarkLeftResponse,
+    TrainAndPredictRequest,
+    TrainAndPredictResponse,
 )
 from app.modules.datasets.port.local import validate_trainer_for_dataset
 from app.modules.types import catalog
@@ -37,6 +40,23 @@ from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import SSEEvent, TrainingStatusEvent
 
 router = APIRouter(prefix="/api/v1", tags=["training"])
+
+
+def _validate_training_dataset(dataset, trainer_id: str) -> None:
+    if (
+        dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
+        and dataset.dataset_type not in ("image_sc",)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Training is not supported for this dataset's storage mode",
+        )
+    validate_trainer_for_dataset(
+        trainer_id=trainer_id,
+        dataset_type=dataset.dataset_type,
+        view_types=dataset.view_types,
+        storage_mode=dataset.storage_mode.value,
+    )
 
 
 @router.get("/trainers")
@@ -91,19 +111,7 @@ async def create_training_job(
     dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
-    if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE and not dataset.dataset_type in (
-        "image_sc",
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Training is not supported for this dataset's storage mode",
-        )
-    validate_trainer_for_dataset(
-        trainer_id=payload.trainer_id,
-        dataset_type=dataset.dataset_type,
-        view_types=dataset.view_types,
-        storage_mode=dataset.storage_mode.value,
-    )
+    _validate_training_dataset(dataset, payload.trainer_id)
     job = TrainingJob(
         dataset_id=payload.dataset_id,
         trainer_id=payload.trainer_id,
@@ -118,6 +126,77 @@ async def create_training_job(
         raise HTTPException(
             status_code=502, detail=f"Failed to start training job: {exc}"
         )
+
+
+@router.post("/training-jobs/train-and-predict", response_model=TrainAndPredictResponse)
+async def create_train_and_predict_job(
+    payload: TrainAndPredictRequest,
+    repo: RepositoryDep,
+    prefect_client: PrefectClientDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> TrainAndPredictResponse:
+    dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    _validate_training_dataset(dataset, payload.trainer_id)
+
+    job = TrainingJob(
+        dataset_id=payload.dataset_id,
+        trainer_id=payload.trainer_id,
+        created_by=current_user.id,
+        org_id=org.id,
+    )
+    job = await repo.create_job(job, org_id=org.id, user_id=current_user.id)
+
+    deployment_id = await prefect_client.resolve_deployment_id(
+        "train-and-predict-deployment"
+    )
+    if deployment_id is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Deployment 'train-and-predict-deployment' is not registered",
+        )
+    try:
+        run = await prefect_client.create_flow_run_from_deployment(
+            deployment_id=deployment_id,
+            parameters={
+                "job_id": job.id,
+                "dataset_id": payload.dataset_id,
+                "trainer_id": payload.trainer_id,
+                "org_id": org.id,
+                "created_by": current_user.id,
+                "target": payload.target,
+                "model_version": payload.model_version,
+                "sample_ids": payload.sample_ids,
+                "prompt": payload.prompt,
+            },
+            idempotency_key=f"train-and-predict:{job.id}",
+        )
+    except Exception as exc:
+        await repo.update_job_status(job.id, JobStatus.FAILED)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to start train and predict workflow: {exc}",
+        ) from exc
+
+    workflow_run_id = str(run["id"])
+    await repo.set_job_external_id(job.id, workflow_run_id)
+    await repo.add_event(
+        TrainingEvent(
+            job_id=job.id,
+            message="train and predict workflow submitted",
+            payload={
+                "external_id": workflow_run_id,
+                "status": JobStatus.QUEUED.value,
+            },
+        )
+    )
+    job.external_job_id = workflow_run_id
+    return TrainAndPredictResponse(
+        train_job=job.model_dump(mode="json"),
+        workflow_run_id=workflow_run_id,
+    )
 
 
 @router.get("/training-jobs", response_model=list[TrainingJob])
@@ -229,12 +308,8 @@ async def mark_user_left(
 @router.patch("/training-jobs/{job_id}/public", response_model=SetPublicResponse)
 async def set_job_public(
     job_id: str,
-    payload: SetPublicRequest,
-    repo: RepositoryDep,
-    current_user: User = Depends(get_current_user),
+    _payload: SetPublicRequest,
+    _repo: RepositoryDep,
+    _current_user: User = Depends(get_current_user),
 ) -> SetPublicResponse:
-    await require_superadmin(current_user=current_user)
-    ok = await repo.set_job_public(job_id, payload.is_public)
-    if not ok:
-        raise HTTPException(status_code=404, detail="job not found")
-    return SetPublicResponse(ok=True)
+    raise HTTPException(status_code=410, detail="Make Public is disabled")

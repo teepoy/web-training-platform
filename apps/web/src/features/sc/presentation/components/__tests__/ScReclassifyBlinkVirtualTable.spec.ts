@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ref, defineComponent } from "vue";
+import { ref, defineComponent, onMounted } from "vue";
 import { mountWithProviders } from "@/testing";
 import ScReclassifyBlinkVirtualTable from "../ScReclassifyBlinkVirtualTable.vue";
 
 vi.mock("@/shared/components/blink-virtual-table", () => ({
   BlinkVirtualTableWithSelectionAndPreviewResultDisplay: defineComponent({
     name: "BlinkTableStub",
-    setup(_, { expose }) {
+    emits: ["scrollContainerChange"],
+    setup(_, { expose, emit }) {
       const scrollRef = ref<HTMLElement | null>(null);
       expose({ scrollRef });
+      onMounted(() => {
+        emit("scrollContainerChange", scrollRef.value);
+      });
       return { scrollRef };
     },
     template: '<div ref="scrollRef" class="sbt-scroll" style="height:100px;overflow:auto"><slot /></div>',

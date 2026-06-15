@@ -34,7 +34,7 @@ class PatchSample(_PatchSample):
 class ScDataset(BaseModel):
     dataset_id: str
     name: str
-    task_type: str = "semiconductor"
+    task_type: str = "patch"
     storage_mode: str = "file_shard_sparse"
     ls_project_id: str = ""
     samples: list[PatchSample] = []

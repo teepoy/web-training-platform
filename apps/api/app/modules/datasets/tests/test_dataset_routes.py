@@ -16,7 +16,6 @@ import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -47,21 +46,22 @@ def _create_sample(c: TestClient, dataset_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Set dataset public
+# Public visibility is disabled
 # ---------------------------------------------------------------------------
 
-def test_set_dataset_public() -> None:
+def test_set_dataset_public_disabled() -> None:
     with TestClient(app) as c:
         dataset_id = _create_dataset(c)
         resp = c.patch(f"/api/v1/datasets/{dataset_id}/public", json={"is_public": True})
-        assert resp.status_code == 200
-        assert resp.json()["ok"] is True
+        assert resp.status_code == 410
+        assert resp.json()["detail"] == "Make Public is disabled"
 
 
-def test_set_dataset_public_not_found() -> None:
+def test_set_dataset_public_disabled_for_missing_dataset() -> None:
     with TestClient(app) as c:
         resp = c.patch("/api/v1/datasets/nonexistent/public", json={"is_public": True})
-        assert resp.status_code == 404
+        assert resp.status_code == 410
+        assert resp.json()["detail"] == "Make Public is disabled"
 
 
 # ---------------------------------------------------------------------------

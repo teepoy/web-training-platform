@@ -31,7 +31,4 @@ export const widgetComponentMap: Record<string, Component> = {
   "sample-viewer": defineAsyncComponent(
     () => import("@/shared/components/sample-viewer/SampleViewerWidget.vue"),
   ),
-  "wafer-map": defineAsyncComponent(
-    () => import("@/shared/components/wafer-map/WaferMapWidget.vue"),
-  ),
 };

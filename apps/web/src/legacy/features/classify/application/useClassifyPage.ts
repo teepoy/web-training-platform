@@ -423,7 +423,7 @@ export function useClassifyPage() {
 
   const { data: predictionJobsData } = useQuery({
     queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId]),
-    queryFn: listPredictionJobs,
+    queryFn: () => listPredictionJobs(),
     enabled: computed(() => !!orgStore.currentOrgId),
     refetchInterval: 3000,
   });

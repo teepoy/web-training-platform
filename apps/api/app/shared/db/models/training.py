@@ -19,8 +19,8 @@ class TrainingJobORM(Base):
     org_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
     )
-    dataset_id: Mapped[str] = mapped_column(
-        ForeignKey("datasets.id", ondelete="RESTRICT"), nullable=False
+    dataset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True
     )
     trainer_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)

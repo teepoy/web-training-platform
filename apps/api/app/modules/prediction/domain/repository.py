@@ -73,6 +73,7 @@ class PredictionRepository(Protocol):
     async def list_prediction_jobs(
         self,
         org_id: str | None = None,
+        dataset_id: str | None = None,
     ) -> list[PredictionJob]: ...
 
     async def add_prediction_event(self, event: PredictionEvent) -> None: ...

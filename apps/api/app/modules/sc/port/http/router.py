@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import math
+import re
+import tempfile
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import polars as pl
@@ -10,18 +16,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
-from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
-    get_repository,
+    get_dataset_storage_factory,
 )
+from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.sc.port.http.deps import (
     DatasetPayloadStoreDep,
     ScDatasetReaderDep,
     ScDatasetStoreDep,
     ScImageFetcherDep,
     ScImportServiceDep,
-    PrefectClientDep,
     ScPlotPointsServiceDep,
     ScUpstreamReaderDep,
 )
@@ -29,8 +34,13 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     _apply_sample_filters,
+    apply_sample_table_filter,
+    encode_defect_ids_int32le,
     filter_box_defect_ids,
+    sorted_defect_ids_from_lazyframe,
 )
+from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
+from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.proto_adapter import (
     make_wafer_map_response_pb,
 )
@@ -45,6 +55,8 @@ from app.modules.sc.schemas import (
     ScImportResponse,
     ScInspectionListResponse,
     ScInspectionSummaryItem,
+    ScReclassifySampleTableRow,
+    ScReclassifySampleTableRowsResponse,
     ScReviewImageItem,
     ScReviewImagesByDefectItem,
     ScSampleTableRow,
@@ -53,7 +65,13 @@ from app.modules.sc.schemas import (
 )
 from app.shared.api.schemas import Annotation, Organization, User
 from app.shared.sse.emit import emit_sse
-from app.shared.sse.events import DoneEvent, ScErrorEvent, ScProgressEvent, SSEEvent
+from app.shared.sse.events import (
+    DoneEvent,
+    ScDataEvent,
+    ScErrorEvent,
+    ScProgressEvent,
+    SSEEvent,
+)
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -61,6 +79,7 @@ _SAMPLE_TABLE_COLUMNS = {
     "defect_id": "defect_id",
     "rough_bin": "rough_bin",
     "class_number": "class_number",
+    "images": "images",
     "test_id": "test_id",
     "wafer_x": "wafer_x",
     "wafer_y": "wafer_y",
@@ -77,6 +96,23 @@ _SAMPLE_TABLE_COLUMNS = {
     "adder": "adder",
     "cluster_id": "cluster",
     "kill_ratio": "kill_ratio",
+}
+
+_SAMPLE_TABLE_CACHE_DIR = (
+    Path(tempfile.gettempdir()) / "web-training-platform" / "sc-sample-table-cache"
+)
+
+_TOP_LEVEL_FILTER_COLUMNS = {
+    "lot_id": "lot_id",
+    "layer_id": "layer_id",
+    "device": "device",
+    "eqp_id": "inspect_equip_id",
+}
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
 }
 
 
@@ -98,7 +134,20 @@ def get_sc_filter_params(
         Literal["class", "bin", "annotation", "prediction"] | None,
         Query(),
     ] = None,
+    sample_filter: Annotated[str | None, Query()] = None,
 ) -> ScFilterParams:
+    parsed_sample_filter = None
+    if sample_filter:
+        try:
+            parsed = json.loads(sample_filter)
+            parsed_sample_filter = ScSampleTableRowsRequest.model_validate(
+                {"filter": parsed}
+            ).filter
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid sample_filter: {exc}",
+            ) from exc
     return ScFilterParams(
         class_numbers=class_numbers,
         rough_bins=rough_bins,
@@ -108,6 +157,7 @@ def get_sc_filter_params(
         adders=adders,
         cluster_ids=cluster_ids,
         legend_group_by=legend_group_by,
+        sample_filter=parsed_sample_filter,
     )
 
 
@@ -116,6 +166,10 @@ async def get_inspections(
     upstream_reader: ScUpstreamReaderDep,
     start_time: datetime = Query(),
     end_time: datetime = Query(),
+    lot_id: Annotated[str | None, Query()] = None,
+    layer_id: Annotated[str | None, Query()] = None,
+    device: Annotated[str | None, Query()] = None,
+    eqp_id: Annotated[str | None, Query()] = None,
 ) -> ScInspectionListResponse:
     if end_time - start_time > timedelta(days=MAX_INSPECTION_RANGE_DAYS):
         raise HTTPException(
@@ -123,8 +177,17 @@ async def get_inspections(
             detail=f"Time range must not exceed {MAX_INSPECTION_RANGE_DAYS} days",
         )
 
-    records_lf = await upstream_reader.list_inspections(start_time, end_time)
+    records_lf = await upstream_reader.list_inspections(
+        start_time, end_time, lot_id, None, layer_id, device
+    )
     records_df = await records_lf.collect_async()
+    eqp_values = _parse_top_level_condition(eqp_id)
+    if (
+        eqp_values
+        and not records_df.is_empty()
+        and "inspect_equip_id" in records_df.columns
+    ):
+        records_df = records_df.filter(_condition_expr("inspect_equip_id", eqp_values))
 
     items: list[ScInspectionSummaryItem] = []
     for row in records_df.to_dicts():
@@ -158,6 +221,51 @@ async def get_inspections(
     return resp
 
 
+def _parse_top_level_condition(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts or "*" in parts:
+        return None
+    return parts
+
+
+def _condition_expr(column: str, values: list[str]) -> pl.Expr:
+    exprs: list[pl.Expr] = []
+    for value in values:
+        if "*" in value:
+            regex = "^" + ".*".join(re.escape(part) for part in value.split("*")) + "$"
+            exprs.append(pl.col(column).cast(pl.Utf8).str.contains(regex))
+        else:
+            exprs.append(pl.col(column).cast(pl.Utf8) == value)
+    combined = exprs[0]
+    for expr in exprs[1:]:
+        combined = combined | expr
+    return combined
+
+
+def _apply_top_level_inspection_filters(
+    records_lf: pl.LazyFrame,
+    *,
+    lot_id: str | None,
+    layer_id: str | None,
+    device: str | None,
+    eqp_id: str | None,
+) -> pl.LazyFrame:
+    filters = {
+        "lot_id": lot_id,
+        "layer_id": layer_id,
+        "device": device,
+        "eqp_id": eqp_id,
+    }
+    for field, raw in filters.items():
+        values = _parse_top_level_condition(raw)
+        column = _TOP_LEVEL_FILTER_COLUMNS[field]
+        if values:
+            records_lf = records_lf.filter(_condition_expr(column, values))
+    return records_lf
+
+
 def _normalize_inspection_time(value: str) -> datetime:
     """Parse inspection_time as ISO string or epoch (seconds / milliseconds).
 
@@ -171,8 +279,17 @@ def _normalize_inspection_time(value: str) -> datetime:
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+            return datetime(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                tzinfo=timezone.utc,
+            )
+        return dt.astimezone(timezone.utc)
     except ValueError:
         pass
 
@@ -198,6 +315,48 @@ def _normalize_inspection_time(value: str) -> datetime:
 
 def _parse_inspection_time(value: str) -> datetime:
     return _normalize_inspection_time(value)
+
+
+@router.get(
+    "/inspections/{inspection_time}/{wafer_key}/defect-ids.bin",
+    responses={
+        200: {
+            "description": "Return sorted defect ids as little-endian Int32 bytes",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        }
+    },
+)
+async def get_inspection_defect_ids_binary(
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> Response:
+    insp_dt = _parse_inspection_time(inspection_time)
+    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
+    if inspection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
+        )
+
+    samples_lf = await upstream_reader.list_samples(
+        insp_dt,
+        wafer_key,
+        offset=0,
+        count=max(inspection.defects, 0),
+    )
+    try:
+        defect_ids = await sorted_defect_ids_from_lazyframe(samples_lf)
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=encode_defect_ids_int32le(defect_ids),
+        media_type="application/octet-stream",
+    )
 
 
 @router.get(
@@ -237,15 +396,50 @@ async def get_inspection_map_points(
     When *sampled* is true, each map type is grid-downsampled independently;
     *total* still reports the full defect count.
     """
-    insp_dt = _parse_inspection_time(inspection_time)
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    body = await _build_inspection_map_points_payload(
+        upstream_reader=upstream_reader,
+        inspection=inspection,
+        insp_dt=insp_dt,
+        wafer_key=wafer_key,
+        reticle_x_die_count=reticle_x_die_count,
+        reticle_y_die_count=reticle_y_die_count,
+        reticle_x_die_shift=reticle_x_die_shift,
+        reticle_y_die_shift=reticle_y_die_shift,
+        sampled=sampled,
+        grid_size_nm=grid_size_nm,
+        zoom_x=zoom_x,
+        zoom_y=zoom_y,
+        zoom_w=zoom_w,
+        zoom_h=zoom_h,
+        mode=mode,
+        filters=filters,
+    )
+    return Response(content=body, media_type="application/x-protobuf")
 
-    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
-    if inspection is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
-        )
 
+async def _build_inspection_map_points_payload(
+    *,
+    upstream_reader: Any,
+    inspection: Any,
+    insp_dt: datetime,
+    wafer_key: int,
+    reticle_x_die_count: int,
+    reticle_y_die_count: int,
+    reticle_x_die_shift: int,
+    reticle_y_die_shift: int,
+    sampled: bool,
+    grid_size_nm: int,
+    zoom_x: int | None,
+    zoom_y: int | None,
+    zoom_w: int | None,
+    zoom_h: int | None,
+    mode: Literal["wafer", "die", "reticle"] | None,
+    filters: ScFilterParams,
+    on_sample_progress: ScSampleProgressCallback | None = None,
+) -> bytes:
     samples_lf = await upstream_reader.list_samples(
         insp_dt,
         wafer_key,
@@ -255,6 +449,7 @@ async def get_inspection_map_points(
         reticle_size_y=reticle_y_die_count,
         reticle_offset_x=reticle_x_die_shift,
         reticle_offset_y=reticle_y_die_shift,
+        on_progress=on_sample_progress,
     )
     samples_lf = _apply_sample_filters(
         samples_lf,
@@ -266,9 +461,10 @@ async def get_inspection_map_points(
         adder=filters.adders,
         cluster_id=filters.cluster_ids,
     )
+    samples_lf = apply_sample_table_filter(samples_lf, filters.sample_filter)
     df = await samples_lf.collect_async()
     df = df.with_columns((pl.col("images") > 0).cast(pl.Int32).alias("has_review"))
-    body = make_wafer_map_response_pb(
+    return make_wafer_map_response_pb(
         df,
         wafer_key=wafer_key,
         wafer_radius_nm=150_000_000,
@@ -289,7 +485,177 @@ async def get_inspection_map_points(
         map_mode=mode,
         group_by=filters.legend_group_by,
     )
-    return Response(content=body, media_type="application/x-protobuf")
+
+
+@router.get("/inspections/{inspection_time}/{wafer_key}/map-points/stream")
+async def stream_inspection_map_points_progress(
+    request: Request,
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+    reticle_x_die_count: int = Query(default=10, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=10, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    sampled: bool = Query(default=False),
+    grid_size_nm: int = Query(default=600, ge=1, alias="gridSizeNm"),
+    zoom_x: int | None = Query(default=None, alias="zoomX"),
+    zoom_y: int | None = Query(default=None, alias="zoomY"),
+    zoom_w: int | None = Query(default=None, alias="zoomW"),
+    zoom_h: int | None = Query(default=None, alias="zoomH"),
+    mode: Literal["wafer", "die", "reticle"] | None = Query(default=None),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
+) -> StreamingResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.map-points",
+                    status="loading",
+                    message="Preparing map points",
+                    total_count=inspection.defects,
+                )
+            )
+        )
+        progress_queue: asyncio.Queue[int] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _on_sample_progress(loaded: int) -> None:
+            loop.call_soon_threadsafe(progress_queue.put_nowait, loaded)
+
+        build_task = asyncio.create_task(
+            _build_inspection_map_points_payload(
+                upstream_reader=upstream_reader,
+                inspection=inspection,
+                insp_dt=insp_dt,
+                wafer_key=wafer_key,
+                reticle_x_die_count=reticle_x_die_count,
+                reticle_y_die_count=reticle_y_die_count,
+                reticle_x_die_shift=reticle_x_die_shift,
+                reticle_y_die_shift=reticle_y_die_shift,
+                sampled=sampled,
+                grid_size_nm=grid_size_nm,
+                zoom_x=zoom_x,
+                zoom_y=zoom_y,
+                zoom_w=zoom_w,
+                zoom_h=zoom_h,
+                mode=mode,
+                filters=filters,
+                on_sample_progress=_on_sample_progress,
+            )
+        )
+        last_loaded = 0
+        try:
+            while not build_task.done():
+                if await request.is_disconnected():
+                    build_task.cancel()
+                    return
+                try:
+                    loaded = await asyncio.wait_for(progress_queue.get(), timeout=0.25)
+                except TimeoutError:
+                    continue
+                loaded = min(max(loaded, 0), max(inspection.defects, 0))
+                if loaded <= last_loaded:
+                    continue
+                last_loaded = loaded
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.map-points",
+                            status="loading",
+                            message="Preparing map points",
+                            loaded_count=loaded,
+                            total_count=inspection.defects,
+                        )
+                    )
+                )
+            await build_task
+            while not progress_queue.empty():
+                loaded = progress_queue.get_nowait()
+                loaded = min(max(loaded, 0), max(inspection.defects, 0))
+                if loaded <= last_loaded:
+                    continue
+                last_loaded = loaded
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.map-points",
+                            status="loading",
+                            message="Preparing map points",
+                            loaded_count=loaded,
+                            total_count=inspection.defects,
+                        )
+                    )
+                )
+        except Exception as exc:
+            if not build_task.done():
+                build_task.cancel()
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.map-points",
+                    status="cached",
+                    message="Map points are ready",
+                    loaded_count=inspection.defects,
+                    total_count=inspection.defects,
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done", rows=inspection.defects)))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.get(
+    "/datasets/{dataset_id}/defect-ids.bin",
+    responses={
+        200: {
+            "description": "Return sorted dataset defect ids as little-endian Int32 bytes",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        }
+    },
+)
+async def get_sc_dataset_defect_ids_binary(
+    dataset_id: str,
+    service: ScPlotPointsServiceDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    try:
+        body = await service.build_defect_ids_response(dataset_id, org.id)
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content=body, media_type="application/octet-stream")
 
 
 @router.post(
@@ -319,6 +685,7 @@ async def filter_inspection_box(
         reticle_offset_x=payload.reticle_x_die_shift,
         reticle_offset_y=payload.reticle_y_die_shift,
     )
+    samples_lf = apply_sample_table_filter(samples_lf, payload.filter)
     try:
         defect_ids = await filter_box_defect_ids(
             samples_lf,
@@ -349,6 +716,7 @@ async def filter_inspection_box(
 async def get_sc_dataset_plot_points(
     dataset_id: str,
     service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
     request: Request,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -359,11 +727,12 @@ async def get_sc_dataset_plot_points(
     reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
     reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
     filters: ScFilterParams = Depends(get_sc_filter_params),
-) -> Response:
-    try:
-        body = await service.build_plot_points_response(
+) -> StreamingResponse:
+    async def stream_body():
+        yield await service.build_plot_points_response(
             dataset_id,
             org.id,
+            upstream_reader=upstream_reader,
             sampled=sampled,
             target_resolution=target_resolution,
             reticle_x_die_count=reticle_x_die_count,
@@ -378,12 +747,106 @@ async def get_sc_dataset_plot_points(
             test_ids=filters.test_ids,
             adders=filters.adders,
             cluster_ids=filters.cluster_ids,
+            filter_params=filters.sample_filter,
         )
+
+    try:
+        await service.ensure_plot_points_allowed(dataset_id, org.id)
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ScPlotPointsRejectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=body, media_type="application/x-protobuf")
+    return StreamingResponse(stream_body(), media_type="application/x-protobuf")
+
+
+@router.get("/datasets/{dataset_id}/plot-points/stream")
+async def stream_sc_dataset_plot_points_progress(
+    dataset_id: str,
+    service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    sampled: bool = Query(default=True),
+    target_resolution: int = Query(default=600, alias="targetResolution", ge=1),
+    reticle_x_die_count: int = Query(default=3, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
+) -> StreamingResponse:
+    try:
+        await service.ensure_plot_points_allowed(dataset_id, org.id)
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.plot-points",
+                    status="loading",
+                    dataset_id=dataset_id,
+                    message="Preparing plot points",
+                )
+            )
+        )
+        try:
+            payload = await service.build_plot_points_response(
+                dataset_id,
+                org.id,
+                upstream_reader=upstream_reader,
+                sampled=sampled,
+                target_resolution=target_resolution,
+                reticle_x_die_count=reticle_x_die_count,
+                reticle_y_die_count=reticle_y_die_count,
+                reticle_x_die_shift=reticle_x_die_shift,
+                reticle_y_die_shift=reticle_y_die_shift,
+                legend_group_by=filters.legend_group_by,
+                class_numbers=filters.class_numbers,
+                rough_bins=filters.rough_bins,
+                predictions=filters.predictions,
+                annotations=filters.annotations,
+                test_ids=filters.test_ids,
+                adders=filters.adders,
+                cluster_ids=filters.cluster_ids,
+                filter_params=filters.sample_filter,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.plot-points",
+                    status="ready",
+                    dataset_id=dataset_id,
+                    message="Plot points are ready",
+                    loaded_count=len(payload),
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done")))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.post(
@@ -410,12 +873,53 @@ async def filter_sc_dataset_box(
             reticle_y_die_count=payload.reticle_y_die_count,
             reticle_x_die_shift=payload.reticle_x_die_shift,
             reticle_y_die_shift=payload.reticle_y_die_shift,
+            filter_params=payload.filter,
         )
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ScPlotPointsRejectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ScBoxFilterResponse(defect_ids=defect_ids, total=len(defect_ids))
+
+
+@router.post(
+    "/datasets/{dataset_id}/sample-table-rows",
+    response_model=ScReclassifySampleTableRowsResponse,
+)
+async def get_sc_dataset_sample_table_rows(
+    dataset_id: str,
+    payload: ScSampleTableRowsRequest,
+    service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ScReclassifySampleTableRowsResponse:
+    try:
+        rows, total, next_anchor = await service.build_dataset_sample_table_rows(
+            dataset_id,
+            org.id,
+            upstream_reader=upstream_reader,
+            defect_ids=payload.defect_ids,
+            anchor=payload.anchor,
+            page=payload.page,
+            page_size=payload.page_size,
+            limit=payload.limit,
+            filter_params=payload.filter,
+            sort_params=payload.sort,
+            reticle_x_die_count=payload.reticle_x_die_count,
+            reticle_y_die_count=payload.reticle_y_die_count,
+            reticle_x_die_shift=payload.reticle_x_die_shift,
+            reticle_y_die_shift=payload.reticle_y_die_shift,
+        )
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ScReclassifySampleTableRowsResponse(
+        items=[ScReclassifySampleTableRow.model_validate(row) for row in rows],
+        total=total,
+        next_anchor=next_anchor,
+    )
 
 
 @router.get(
@@ -426,6 +930,12 @@ async def get_inspection_review_images(
     upstream_reader: ScUpstreamReaderDep,
     inspection_time: str,
     wafer_key: int,
+    defect_ids: Annotated[list[str] | None, Query()] = None,
+    sample_filter: Annotated[str | None, Query()] = None,
+    reticle_x_die_count: Annotated[int, Query(ge=1)] = 10,
+    reticle_y_die_count: Annotated[int, Query(ge=1)] = 10,
+    reticle_x_die_shift: int = 0,
+    reticle_y_die_shift: int = 0,
 ) -> ScInspectionReviewImagesResponse:
     insp_dt = _parse_inspection_time(inspection_time)
     inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
@@ -435,7 +945,39 @@ async def get_inspection_review_images(
             detail=f"Inspection not found: {inspection_time}/{wafer_key}",
         )
 
+    requested = {str(defect_id) for defect_id in defect_ids or []}
+    if sample_filter:
+        try:
+            parsed = json.loads(sample_filter)
+            parsed_sample_filter = ScSampleTableRowsRequest.model_validate(
+                {"filter": parsed}
+            ).filter
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid sample_filter: {exc}",
+            ) from exc
+        samples_df = await _load_or_build_sample_table_df(
+            upstream_reader=upstream_reader,
+            inspection_time=insp_dt,
+            wafer_key=wafer_key,
+            row_count=inspection.defects,
+            reticle_size_x=reticle_x_die_count,
+            reticle_size_y=reticle_y_die_count,
+            reticle_offset_x=reticle_x_die_shift,
+            reticle_offset_y=reticle_y_die_shift,
+        )
+        samples_df = _apply_sample_table_filter(samples_df, parsed_sample_filter)
+        filtered_ids = {
+            str(defect_id) for defect_id in samples_df["defect_id"].to_list()
+        }
+        requested = requested & filtered_ids if requested else filtered_ids
+
     review_lf = await upstream_reader.list_review_images(insp_dt, wafer_key)
+    if requested:
+        review_lf = review_lf.filter(pl.col("defect_id").cast(pl.Utf8).is_in(requested))
+    elif defect_ids or sample_filter:
+        review_lf = review_lf.filter(pl.lit(False))
     review_df = await review_lf.collect_async()
     items: list[ScReviewImagesByDefectItem] = []
     if len(review_df) > 0:
@@ -457,27 +999,182 @@ async def get_inspection_review_images(
     return ScInspectionReviewImagesResponse(items=items, total=len(items))
 
 
-@router.post(
-    "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
-    response_model=ScSampleTableRowsResponse,
-)
-async def get_inspection_sample_table_rows(
+def _sample_table_cache_path(
+    *,
+    inspection_time: datetime,
+    wafer_key: int,
+    reticle_size_x: int,
+    reticle_size_y: int,
+    reticle_offset_x: int,
+    reticle_offset_y: int,
+) -> Path:
+    payload = {
+        "inspection_time": inspection_time.isoformat(),
+        "wafer_key": wafer_key,
+        "reticle_size_x": reticle_size_x,
+        "reticle_size_y": reticle_size_y,
+        "reticle_offset_x": reticle_offset_x,
+        "reticle_offset_y": reticle_offset_y,
+        "version": 1,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return _SAMPLE_TABLE_CACHE_DIR / f"{digest}.parquet"
+
+
+async def _load_or_build_sample_table_df(
+    *,
+    upstream_reader: Any,
+    inspection_time: datetime,
+    wafer_key: int,
+    row_count: int,
+    reticle_size_x: int,
+    reticle_size_y: int,
+    reticle_offset_x: int,
+    reticle_offset_y: int,
+) -> pl.DataFrame:
+    cache_path = _sample_table_cache_path(
+        inspection_time=inspection_time,
+        wafer_key=wafer_key,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+    if cache_path.exists():
+        return pl.read_parquet(cache_path)
+
+    samples_lf = await upstream_reader.list_samples(
+        inspection_time,
+        wafer_key,
+        offset=0,
+        count=row_count,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+    samples_df = await samples_lf.collect_async()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_path.with_suffix(f".{__import__('uuid').uuid4().hex}.tmp")
+    samples_df.write_parquet(tmp_path)
+    tmp_path.replace(cache_path)
+    return samples_df
+
+
+def _apply_sample_table_filter(
+    samples_df: pl.DataFrame,
+    filter_params: dict[str, Any] | None,
+) -> pl.DataFrame:
+    if not filter_params:
+        return samples_df
+    for field, filter_value in filter_params.items():
+        col = _SAMPLE_TABLE_COLUMNS.get(field)
+        if col is None or col not in samples_df.columns:
+            continue
+        if filter_value.filter_type == "set":
+            values = [
+                str(value) if field == "defect_id" else value
+                for value in filter_value.values
+            ]
+            predicate = (
+                pl.col(col).cast(pl.Utf8).is_in(values)
+                if field == "defect_id"
+                else pl.col(col).is_in(values)
+            )
+            samples_df = samples_df.filter(predicate)
+        elif filter_value.filter_type == "number" and filter_value.type == "inRange":
+            samples_df = samples_df.filter(
+                (pl.col(col) >= filter_value.filter)
+                & (pl.col(col) <= filter_value.filter_to)
+            )
+    return samples_df
+
+
+def _apply_sample_table_sort(
+    samples_df: pl.DataFrame,
+    sort_params: Any | None,
+    requested: list[str] | None,
+) -> pl.DataFrame:
+    if sort_params:
+        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
+        if sort_field is not None and sort_field in samples_df.columns:
+            if sort_params.field == "defect_id":
+                return samples_df.sort(
+                    pl.col(sort_field).cast(pl.Int64),
+                    descending=(sort_params.direction == "desc"),
+                )
+            return samples_df.sort(
+                sort_field, descending=(sort_params.direction == "desc")
+            )
+    if requested is not None:
+        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
+        return (
+            samples_df.with_columns(
+                pl.col("defect_id")
+                .cast(pl.Utf8)
+                .replace_strict(request_order, default=len(request_order))
+                .alias("_request_order")
+            )
+            .sort("_request_order")
+            .drop("_request_order")
+        )
+    return (
+        samples_df.sort(pl.col("defect_id").cast(pl.Int64))
+        if "defect_id" in samples_df.columns
+        else samples_df
+    )
+
+
+def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
+    def int_or_zero(value: Any) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, float) and math.isnan(value):
+            return 0
+        return int(value)
+
+    return ScSampleTableRow(
+        defect_id=str(row["defect_id"]),
+        rough_bin=int_or_zero(row["rough_bin"]),
+        class_number=int_or_zero(row["class_number"]),
+        images=int_or_zero(row["images"]),
+        test_id=int_or_zero(row["test_id"]),
+        wafer_x=int_or_zero(row["wafer_x"]),
+        wafer_y=int_or_zero(row["wafer_y"]),
+        index_x=int_or_zero(row["index_x"]),
+        index_y=int_or_zero(row["index_y"]),
+        adder=int_or_zero(row["adder"]),
+        cluster_id=None if row["cluster"] is None else int_or_zero(row["cluster"]),
+        die_x=int_or_zero(row["index_x"]),
+        die_y=int_or_zero(row["index_y"]),
+        reticle_x=int_or_zero(row.get("reticle_x", 0)),
+        reticle_y=int_or_zero(row.get("reticle_y", 0)),
+        size_x=int_or_zero(row["size_x"]),
+        size_y=int_or_zero(row["size_y"]),
+        size_d=int_or_zero(row["size_d"]),
+        area=int_or_zero(row["area"]),
+        final_bin=int_or_zero(row["final_bin"]),
+        manual_bin=int_or_zero(row["manual_bin"]),
+        kill_ratio=row["kill_ratio"],
+    )
+
+
+async def _build_sample_table_rows_response(
+    *,
     payload: ScSampleTableRowsRequest,
-    upstream_reader: ScUpstreamReaderDep,
-    inspection_time: str,
+    upstream_reader: Any,
+    insp_dt: datetime,
+    inspection: Any,
     wafer_key: int,
 ) -> ScSampleTableRowsResponse:
-    insp_dt = _parse_inspection_time(inspection_time)
-    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
-    if inspection is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
-        )
-
     defect_ids = payload.defect_ids
-    page = payload.page
-    page_size = payload.page_size
+    anchor = (
+        int(payload.anchor) if payload.anchor and payload.anchor.isdigit() else None
+    )
+    limit = payload.limit if payload.anchor is not None else payload.page_size
+    offset = anchor if anchor is not None else payload.page * payload.page_size
     filter_params = payload.filter
     sort_params = payload.sort
     reticle_size_x = payload.reticle_x_die_count
@@ -488,242 +1185,152 @@ async def get_inspection_sample_table_rows(
     requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
     requested_set = set(requested) if requested else None
 
+    row_count = (
+        max(inspection.defects, len(requested), 100_000)
+        if requested is not None
+        else inspection.defects
+    )
+    samples_df = await _load_or_build_sample_table_df(
+        upstream_reader=upstream_reader,
+        inspection_time=insp_dt,
+        wafer_key=wafer_key,
+        row_count=row_count,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+
     if requested_set is not None:
-        max_defects = max(inspection.defects, 100_000)
-        samples_lf = await upstream_reader.list_samples(
-            insp_dt,
-            wafer_key,
-            offset=0,
-            count=max_defects,
-            reticle_size_x=reticle_size_x,
-            reticle_size_y=reticle_size_y,
-            reticle_offset_x=reticle_offset_x,
-            reticle_offset_y=reticle_offset_y,
-        )
-        samples_df = await samples_lf.collect_async()
         samples_df = samples_df.filter(
             pl.col("defect_id").cast(pl.Utf8).is_in(requested_set)
         )
-    else:
-        samples_lf = await upstream_reader.list_samples(
-            insp_dt,
-            wafer_key,
-            offset=0,
-            count=inspection.defects,
-            reticle_size_x=reticle_size_x,
-            reticle_size_y=reticle_size_y,
-            reticle_offset_x=reticle_offset_x,
-            reticle_offset_y=reticle_offset_y,
-        )
-        samples_df = await samples_lf.collect_async()
 
-    if filter_params:
-        for field, filter_value in filter_params.items():
-            col = _SAMPLE_TABLE_COLUMNS.get(field)
-            if col is None or col not in samples_df.columns:
-                continue
-            if filter_value.operator == "in":
-                values = [
-                    str(value) if field == "defect_id" else value
-                    for value in filter_value.values
-                ]
-                samples_df = samples_df.filter(
-                    pl.col(col).cast(pl.Utf8).is_in(values)
-                    if field == "defect_id"
-                    else pl.col(col).is_in(values)
-                )
-            else:
-                samples_df = samples_df.filter(
-                    (pl.col(col) >= filter_value.min)
-                    & (pl.col(col) <= filter_value.max)
-                )
-
-    if sort_params:
-        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
-        if sort_field is not None and sort_field in samples_df.columns:
-            samples_df = samples_df.sort(
-                sort_field, descending=(sort_params.direction == "desc")
-            )
-    elif requested is not None:
-        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
-        samples_df = (
-            samples_df.with_columns(
-                pl.col("defect_id")
-                .cast(pl.Utf8)
-                .replace_strict(request_order, default=len(request_order))
-                .alias("_request_order")
-            )
-            .sort("_request_order")
-            .drop("_request_order")
-        )
+    samples_df = _apply_sample_table_filter(samples_df, filter_params)
+    samples_df = _apply_sample_table_sort(samples_df, sort_params, requested)
 
     total_matched = len(samples_df)
-    page_df = samples_df.slice(page * page_size, page_size)
-    matched: list[ScSampleTableRow] = [
-        ScSampleTableRow(
-            defect_id=str(row["defect_id"]),
-            rough_bin=row["rough_bin"],
-            class_number=row["class_number"],
-            test_id=row["test_id"],
-            wafer_x=row["wafer_x"],
-            wafer_y=row["wafer_y"],
-            index_x=row["index_x"],
-            index_y=row["index_y"],
-            adder=row["adder"],
-            cluster_id=row["cluster"],
-            die_x=row["index_x"],
-            die_y=row["index_y"],
-            reticle_x=row.get("reticle_x", 0),
-            reticle_y=row.get("reticle_y", 0),
-            size_x=row["size_x"],
-            size_y=row["size_y"],
-            size_d=row["size_d"],
-            area=row["area"],
-            final_bin=row["final_bin"],
-            manual_bin=row["manual_bin"],
-            kill_ratio=row["kill_ratio"],
+    page_df = samples_df.slice(offset, limit)
+    matched = [_sample_table_row_from_dict(row) for row in page_df.to_dicts()]
+    next_offset = offset + len(matched)
+    next_anchor = str(next_offset) if next_offset < total_matched else None
+
+    return ScSampleTableRowsResponse(
+        items=matched,
+        total=total_matched,
+        next_anchor=next_anchor,
+    )
+
+
+async def _resolve_inspection_or_404(
+    upstream_reader: Any,
+    inspection_time: str,
+    wafer_key: int,
+) -> tuple[datetime, Any]:
+    insp_dt = _parse_inspection_time(inspection_time)
+    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
+    if inspection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
         )
-        for row in page_df.to_dicts()
-    ]
-
-    return ScSampleTableRowsResponse(items=matched, total=total_matched)
+    return insp_dt, inspection
 
 
-TERMINAL_FAILED_STATES = frozenset({"CRASHED", "FAILED", "CANCELLED"})
+@router.post(
+    "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
+    response_model=ScSampleTableRowsResponse,
+)
+async def get_inspection_sample_table_rows(
+    payload: ScSampleTableRowsRequest,
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> ScSampleTableRowsResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    return await _build_sample_table_rows_response(
+        payload=payload,
+        upstream_reader=upstream_reader,
+        insp_dt=insp_dt,
+        inspection=inspection,
+        wafer_key=wafer_key,
+    )
 
 
-def _prefect_state_type(flow_run: Any) -> str:
-    if isinstance(flow_run, dict):
-        return str(flow_run.get("state_type", ""))
-    return getattr(flow_run, "state_type", "")
-
-
-def _prefect_state_message(flow_run: Any) -> str | None:
-    if isinstance(flow_run, dict):
-        return flow_run.get("state_message")
-    return getattr(flow_run, "state_message", None)
-
-
-def _prefect_state_data(flow_run: Any, key: str) -> object:
-    if isinstance(flow_run, dict):
-        data = flow_run.get("state", {}).get("data", {})
-        if isinstance(data, dict):
-            return data.get(key)
-        return None
-    state = getattr(flow_run, "state", {})
-    if isinstance(state, dict):
-        data_obj = state.get("data", {})
-    else:
-        data_obj = getattr(state, "data", {}) if state else {}
-    if isinstance(data_obj, dict):
-        return data_obj.get(key)
-    return None
-
-
-def _prefect_parameter(flow_run: Any, key: str) -> object:
-    if isinstance(flow_run, dict):
-        parameters = flow_run.get("parameters", {})
-        if isinstance(parameters, dict):
-            return parameters.get(key)
-        return None
-    parameters = getattr(flow_run, "parameters", {})
-    if isinstance(parameters, dict):
-        return parameters.get(key)
-    return None
-
-
-@router.get("/import/{flow_run_id}/stream")
-async def stream_sc_import_progress(
-    flow_run_id: str,
+@router.post("/inspections/{inspection_time}/{wafer_key}/sample-table-rows/stream")
+async def stream_inspection_sample_table_rows(
+    payload: ScSampleTableRowsRequest,
     request: Request,
-    prefect_client: PrefectClientDep,
-    payload_store: DatasetPayloadStoreDep,
-    requested_dataset_id: str | None = Query(None, alias="dataset_id"),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-):
-    async def event_generator():
-        dataset_open_emitted = False
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                flow_run = await prefect_client.get_flow_run(flow_run_id)
-            except HTTPException as e:
-                detail = str(e.detail)
-                if e.status_code == 404:
-                    detail = "import flow run not found"
-                yield emit_sse(SSEEvent(ScErrorEvent(event_type="error", error=detail)))
-                return
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> StreamingResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
 
-            state_type = _prefect_state_type(flow_run)
-            state_message = _prefect_state_message(flow_run)
-            dataset_id = requested_dataset_id or _prefect_parameter(
-                flow_run, "dataset_id"
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.sample-table",
+                    status="loading",
+                    message="Loading sample rows",
+                    total_count=inspection.defects,
+                )
             )
-            imported_count = 0
-            if isinstance(dataset_id, str):
-                try:
-                    payload_store.invalidate_manifest(dataset_id, org.id)
-                    manifest = await payload_store.get_manifest(dataset_id, org.id)
-                    imported_count = manifest.total_rows
-                except (FileNotFoundError, KeyError):
-                    imported_count = 0
-            if state_type == "COMPLETED":
-                state_dataset_id = _prefect_state_data(flow_run, "dataset_id")
-                if isinstance(state_dataset_id, str):
-                    dataset_id = state_dataset_id
-                yield emit_sse(
-                    SSEEvent(
-                        DoneEvent(
-                            event_type="done",
-                            dataset_id=dataset_id
-                            if isinstance(dataset_id, str)
-                            else None,
-                        )
-                    )
-                )
-                return
-            if state_type in TERMINAL_FAILED_STATES:
-                error = state_message or f"import flow run {state_type.lower()}"
-                yield emit_sse(
-                    SSEEvent(
-                        ScErrorEvent(
-                            event_type="error",
-                            flow_run_id=flow_run_id,
-                            status=state_type.lower(),
-                            error=error,
-                        )
-                    )
-                )
-                return
+        )
+        try:
+            response = await _build_sample_table_rows_response(
+                payload=payload,
+                upstream_reader=upstream_reader,
+                insp_dt=insp_dt,
+                inspection=inspection,
+                wafer_key=wafer_key,
+            )
+        except Exception as exc:
             yield emit_sse(
                 SSEEvent(
-                    ScProgressEvent(
-                        event_type="progress",
-                        flow_run_id=flow_run_id,
-                        status=state_type.lower(),
-                        dataset_id=dataset_id
-                        if isinstance(dataset_id, str)
-                        and imported_count > 0
-                        and not dataset_open_emitted
-                        else None,
-                        imported_count=imported_count,
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
                     )
                 )
             )
-            if imported_count > 0:
-                dataset_open_emitted = True
-            await asyncio.sleep(3)
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.sample-table",
+                    status="serializing",
+                    message="Serializing sample rows",
+                    loaded_count=len(response.items),
+                    total_count=response.total,
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="sc.sample-table",
+                    payload=response.model_dump(mode="json"),
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done")))
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_SSE_HEADERS,
     )
 
 
@@ -738,32 +1345,151 @@ async def start_sc_import(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
 ) -> ScImportResponse | JSONResponse:
-    status, flow_run_id = await sc_import_service.submit_import(
+    status = await sc_import_service.submit_import(
         source_inspection_time=payload.source_inspection_time,
         source_wafer_key=payload.source_wafer_key,
         dataset_name=payload.dataset_name,
         storage_mode=payload.storage_mode,
         org_id=org.id,
+        created_by=current_user.id,
         filters=payload.filters,
         label_space=payload.label_space,
         max_rows=payload.max_rows,
-        force_prefect_flow=payload.force_prefect_flow,
     )
     if status.status == "failed":
         return JSONResponse(
             content=ScImportResponse(
-                flow_run_id=None,
                 status="failed",
                 error=status.error,
             ).model_dump(mode="json"),
             status_code=200,
         )
     return ScImportResponse(
-        flow_run_id=flow_run_id,
         status=status.status,
         dataset_id=status.dataset_id,
         imported_count=status.imported_count,
         error=status.error,
+    )
+
+
+@router.post("/import/stream")
+async def stream_sc_import(
+    payload: ScImportRequest,
+    request: Request,
+    sc_import_service: ScImportServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+) -> StreamingResponse:
+    progress_queue: asyncio.Queue[ScImportStatus] = asyncio.Queue()
+
+    async def on_progress(status: ScImportStatus) -> None:
+        await progress_queue.put(status)
+
+    async def event_generator():
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.import",
+                    status="running",
+                    message="Starting import",
+                    imported_count=0,
+                )
+            )
+        )
+        import_task = asyncio.create_task(
+            sc_import_service.submit_import(
+                source_inspection_time=payload.source_inspection_time,
+                source_wafer_key=payload.source_wafer_key,
+                dataset_name=payload.dataset_name,
+                storage_mode=payload.storage_mode,
+                org_id=org.id,
+                created_by=current_user.id,
+                filters=payload.filters,
+                label_space=payload.label_space,
+                max_rows=payload.max_rows,
+                on_progress=on_progress,
+            )
+        )
+        try:
+            while not import_task.done():
+                if await request.is_disconnected():
+                    import_task.cancel()
+                    return
+                try:
+                    status = await asyncio.wait_for(
+                        progress_queue.get(),
+                        timeout=0.25,
+                    )
+                except TimeoutError:
+                    continue
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.import",
+                            status=status.status,
+                            dataset_id=status.dataset_id or None,
+                            imported_count=status.imported_count,
+                            total_count=status.imported_count + status.remaining_count,
+                        )
+                    )
+                )
+            status = await import_task
+        except Exception as exc:
+            if not import_task.done():
+                import_task.cancel()
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+
+        if status.status == "failed":
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=status.error or "Import failed",
+                    )
+                )
+            )
+            return
+
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="sc.import",
+                    payload=ScImportResponse(
+                        status=status.status,
+                        dataset_id=status.dataset_id,
+                        imported_count=status.imported_count,
+                        error=status.error,
+                    ).model_dump(mode="json"),
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                DoneEvent(
+                    event_type="done",
+                    dataset_id=status.dataset_id,
+                    rows=status.imported_count,
+                )
+            )
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
     )
 
 
@@ -786,7 +1512,9 @@ async def sc_bulk_create_annotations(
     dataset_reader: ScDatasetReaderDep,
     dataset_store: ScDatasetStoreDep,
     dataset_service: DatasetServiceDep,
-    repo: Annotated[DatasetRepository, Depends(get_repository)],
+    storage_factory: Annotated[
+        DatasetStorageFactory, Depends(get_dataset_storage_factory)
+    ],
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
 ) -> ScBulkAnnotationResponse:
@@ -803,19 +1531,31 @@ async def sc_bulk_create_annotations(
 
     created = 0
     created_labels: set[str] = set()
+    annotations_to_create: list[Annotation] = []
+    annotation_ids_to_delete: list[str] = []
+    storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
         if sample_id is None:
             continue
-        ann = Annotation(
-            id=__import__("uuid").uuid4().hex,
-            sample_id=sample_id,
-            label=item.label,
-            created_by=current_user.id,
+        existing = await storage.list_annotations(sample_id=sample_id)
+        if existing:
+            annotation_ids_to_delete.extend(ann.id for ann in existing if ann.id)
+        if item.label == "0":
+            continue
+        annotations_to_create.append(
+            Annotation(
+                sample_id=sample_id,
+                label=item.label,
+                created_by=current_user.id,
+            )
         )
-        await dataset_reader.create_annotation(ann, dataset_id=dataset_id)
-        created += 1
         created_labels.add(item.label)
+
+    if annotation_ids_to_delete:
+        await storage.delete_annotations(annotation_ids_to_delete)
+    if annotations_to_create:
+        created = await storage.create_annotations(annotations_to_create)
 
     if created_labels:
         await dataset_service.merge_label_space(dataset_id, created_labels)

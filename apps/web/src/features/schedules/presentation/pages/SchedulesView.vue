@@ -8,7 +8,7 @@
     <template v-else>
     <n-page-header title="Schedules">
       <template #extra>
-        <n-button style="margin-right: 8px" @click="router.push('/tasks')">Open Task Explorer</n-button>
+        <n-button style="margin-right: 8px" @click="openTaskExplorer">Open Task Explorer</n-button>
         <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
       </template>
     </n-page-header>
@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref, computed, h } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
@@ -98,6 +98,7 @@ import { useOrgStore } from '@/features/auth/application/org';
 import type { ScheduleResponse as Schedule } from "@/generated/orval/models";
 
 const router = useRouter();
+const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
@@ -159,6 +160,10 @@ const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
     onError: (err: Error) => message.error(err.message ?? "Failed to resume schedule"),
   },
 });
+
+function openTaskExplorer() {
+  router.push({ path: "/tasks", query: { from: route.fullPath } });
+}
 
 // ---------------------------------------------------------------------------
 // Table columns

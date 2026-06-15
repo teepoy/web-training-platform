@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watchEffect, nextTick } from "vue";
+import { ref, onBeforeUnmount, watch, nextTick } from "vue";
 import { NSpin } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { BlinkVirtualTableWithSelectionAndPreviewResultDisplay } from "@/shared/components/blink-virtual-table";
@@ -13,7 +13,6 @@ const props = withDefaults(
     predictionConfidences?: Record<string, number | null>;
     annotationLabels?: Record<string, string>;
     annotationDrafts?: Record<string, string>;
-    reviewCount?: number;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
     overscan?: number;
@@ -26,8 +25,7 @@ const props = withDefaults(
     reviewError?: string | null;
   }>(),
   {
-    reviewCount: 3,
-    patchSamplesPerRow: 5,
+    patchSamplesPerRow: 3,
     reviewSamplesPerRow: 1,
     predictionLabels: () => ({}),
     predictionConfidences: () => ({}),
@@ -36,30 +34,31 @@ const props = withDefaults(
     overscan: 10,
     hasNextPage: false,
     isFetchingNextPage: false,
-  }
+  },
 );
 
 const emit = defineEmits<{
   selectSamples: [
     defectIds: string[],
-    modifiers: { shift: boolean; ctrl: boolean; meta: boolean },
+    modifiers: {
+      shift: boolean;
+      ctrl: boolean;
+      meta: boolean;
+      selectionMode?: "replace" | "add" | "toggle";
+    },
   ];
 }>();
 
-const blinkTableRef = ref<InstanceType<typeof BlinkVirtualTableWithSelectionAndPreviewResultDisplay> | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
 let observer: IntersectionObserver | null = null;
 let lastIntersecting = false;
 
-function getScrollContainer(): HTMLElement | null {
-  return blinkTableRef.value?.scrollRef ?? null;
-}
-
 function setupIntersectionObserver() {
   if (observer) observer.disconnect();
 
-  const root = getScrollContainer();
+  const root = scrollContainer.value;
   if (!root) return;
 
   observer = new IntersectionObserver(
@@ -74,7 +73,7 @@ function setupIntersectionObserver() {
       }
       lastIntersecting = isIntersecting;
     },
-    { root, rootMargin: '200px' }
+    { root, rootMargin: "200px" },
   );
 
   if (sentinelRef.value) {
@@ -82,22 +81,18 @@ function setupIntersectionObserver() {
   }
 }
 
-onMounted(() => {
-  nextTick(() => {
-    setupIntersectionObserver();
-  });
-});
+function handleScrollContainerChange(element: HTMLElement | null): void {
+  scrollContainer.value = element;
+}
 
-watchEffect((onCleanup) => {
-  if (sentinelRef.value && observer) {
-    observer.observe(sentinelRef.value);
-    onCleanup(() => {
-      if (sentinelRef.value && observer) {
-        observer.unobserve(sentinelRef.value);
-      }
-    });
-  }
-});
+watch(
+  [scrollContainer, sentinelRef],
+  async () => {
+    await nextTick();
+    setupIntersectionObserver();
+  },
+  { flush: "post" },
+);
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect();
@@ -107,12 +102,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="sc-reclassify-table-wrapper">
     <BlinkVirtualTableWithSelectionAndPreviewResultDisplay
-      ref="blinkTableRef"
       class="sc-reclassify-table"
       :samples="samples"
       :patch-samples-per-row="patchSamplesPerRow"
       :review-samples-per-row="reviewSamplesPerRow"
-      :review-count="reviewCount"
       :selected-defect-ids="selectedDefectIds"
       :prediction-labels="predictionLabels"
       :prediction-confidences="predictionConfidences"
@@ -126,8 +119,9 @@ onBeforeUnmount(() => {
       :overscan="overscan"
       :inspection-time="inspectionTime"
       @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
+      @scroll-container-change="handleScrollContainerChange"
     />
-    <Teleport v-if="getScrollContainer()" :to="getScrollContainer()!">
+    <Teleport v-if="scrollContainer" :to="scrollContainer">
       <div
         ref="sentinelRef"
         class="sc-reclassify-sentinel"

@@ -5,9 +5,7 @@ import { mountWithProviders, createTestQueryClient } from "@/testing";
 import { server } from "@/testing/msw/server";
 import { http, HttpResponse } from "msw";
 import { create, toBinary } from "@bufbuild/protobuf";
-import {
-  WaferMapResponseSchema,
-} from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import { WaferMapResponseSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScDatasetInfo } from "@/features/sc/domain/models";
 
 // ── Mock Orval bulk annotate hook (missing export in generated code) ──
@@ -130,7 +128,7 @@ describe("useReclassifyPage - predictionLabels", () => {
               class_number: 1,
               images: [],
               predicted_label: "Clean",
-              confidence: 0.80,
+              confidence: 0.8,
             },
           ],
           total: 2,
@@ -194,9 +192,8 @@ describe("useReclassifyPage - dieDisplay", () => {
   it("exposes wafer geometry from plot-points and uses it for reticle die size", async () => {
     const diePoints = [10, 20, 99, 1, 2, 0];
     const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
+    const { WaferMapResponseSchema: Schema } =
+      await import("@/features/sc/generated/proto/sc/v1/sample_pb");
     const msg = createMsg(Schema, {
       total: 1,
       waferPoints: [150000100, 150000200, 99, 1, 2, 0],
@@ -235,9 +232,8 @@ describe("useReclassifyPage - dieDisplay", () => {
     const diePoints = [5, 7, 1, 0, 1, 0];
     const { fromBinary } = await import("@bufbuild/protobuf");
     const { toBinary, create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
+    const { WaferMapResponseSchema: Schema } =
+      await import("@/features/sc/generated/proto/sc/v1/sample_pb");
     const msg = createMsg(Schema, {
       total: 1,
       waferPoints: diePoints,
@@ -263,9 +259,8 @@ describe("useReclassifyPage - dieDisplay", () => {
   it("preserves class, rough, and review fields in STRIDE=6 dieDisplay", async () => {
     const diePoints = [10, 20, 99, 1, 2, 3, 30, 40, 88, 4, 5, 6];
     const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
+    const { WaferMapResponseSchema: Schema } =
+      await import("@/features/sc/generated/proto/sc/v1/sample_pb");
     const msg = createMsg(Schema, {
       total: 2,
       waferPoints: diePoints,
@@ -295,9 +290,8 @@ describe("useReclassifyPage - reticleDisplay", () => {
   it("derives STRIDE=6 reticle coordinates from reticlePoints plot data", async () => {
     const reticlePoints = [5, 7, 1, 0, 1, 0];
     const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
+    const { WaferMapResponseSchema: Schema } =
+      await import("@/features/sc/generated/proto/sc/v1/sample_pb");
     const msg = createMsg(Schema, {
       total: 1,
       waferPoints: reticlePoints,
@@ -319,63 +313,13 @@ describe("useReclassifyPage - reticleDisplay", () => {
     expect(retArr[4]).toBe(1);
     expect(retArr[5]).toBe(0);
   });
-
-  it("caps reticleDisplay at 10000 points", async () => {
-    const totalPoints = 15000;
-    const pts = Array.from({ length: totalPoints * 6 }, (_, i) => i % 100);
-    const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
-    const msg = createMsg(Schema, {
-      total: totalPoints,
-      waferPoints: pts,
-      diePoints: pts,
-      reticlePoints: pts,
-    });
-
-    const { state } = await mountPage("ds-test-cap", DEFAULT_DATASET, [
-      { key: ["sc", "plot-points", "ds-test-cap"], data: msg },
-    ]);
-
-    await new Promise((r) => setTimeout(r, 10));
-    expect(state.reticleDisplay.value.length).toBe(10000 * 6);
-  });
-});
-
-describe("useReclassifyPage - map zoom", () => {
-  it("filters each map with its own coordinate viewport", async () => {
-    const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
-    const msg = createMsg(Schema, {
-      total: 2,
-      waferPoints: [10, 10, 1, 0, 0, 0, 100, 100, 2, 0, 0, 0],
-      diePoints: [5, 5, 1, 0, 0, 0, 50, 50, 2, 0, 0, 0],
-      reticlePoints: [20, 20, 1, 0, 0, 0, 200, 200, 2, 0, 0, 0],
-    });
-
-    const { state } = await mountPage("ds-test-zoom", DEFAULT_DATASET, [
-      { key: ["sc", "plot-points", "ds-test-zoom"], data: msg },
-    ]);
-
-    state.setMapZoom({ x: 0, y: 0, w: 20, h: 20 });
-    expect(state.waferDisplay.value).toEqual([10, 10, 1, 0, 0, 0]);
-    expect(state.dieDisplay.value).toHaveLength(12);
-
-    state.setActiveMapTab("die");
-    state.setMapZoom({ x: 40, y: 40, w: 20, h: 20 });
-    expect(state.dieDisplay.value).toEqual([50, 50, 2, 0, 0, 0]);
-    expect(state.waferDisplay.value).toEqual([10, 10, 1, 0, 0, 0]);
-
-    state.setActiveMapTab("reticle");
-    state.setMapZoom({ x: 150, y: 150, w: 100, h: 100 });
-    expect(state.reticleDisplay.value).toEqual([200, 200, 2, 0, 0, 0]);
-  });
 });
 
 describe("useReclassifyPage - addLabel", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("rejects duplicate label", async () => {
     const datasetWithLabels: ScDatasetInfo = {
       ...DEFAULT_DATASET,
@@ -395,6 +339,72 @@ describe("useReclassifyPage - addLabel", () => {
     expect(errMsg).toBeTruthy();
     expect(errMsg.toLowerCase()).toContain("already exists");
   });
+
+  it("keeps code/name combos in frontend state and exposes code annotations", async () => {
+    const datasetWithoutLabels: ScDatasetInfo = {
+      ...DEFAULT_DATASET,
+      label_space: [],
+      task_spec: {
+        ...DEFAULT_DATASET.task_spec,
+        label_space: [],
+      },
+    };
+    const { state } = await mountPage("ds-test-1", datasetWithoutLabels);
+
+    expect(state.codeLabels.value).toHaveLength(61);
+    expect(state.codeLabels.value[0]).toMatchObject({
+      code: "0",
+      name: "Unclassified",
+      shortcut: "1",
+    });
+    expect(state.effectiveLabels.value.slice(0, 3)).toEqual(["0", "1", "2"]);
+
+    state.addLabel("Scratch extra");
+    await new Promise((r) => setTimeout(r, 10));
+
+    const added = state.codeLabels.value.find(
+      (label) => label.name === "Scratch extra",
+    );
+    expect(added).toBeTruthy();
+    expect(added?.code).toBe("61");
+    expect(state.effectiveLabels.value).toContain("61");
+  });
+
+  it("lets users remap single-key shortcuts", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
+
+    state.setLabelShortcut("10", "q");
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(state.shortcutCodeByKey.value.q).toBe("10");
+  });
+
+  it("keeps annotation shortcuts exclusive across default and custom keys", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
+
+    expect(state.shortcutCodeByKey.value["1"]).toBe("0");
+
+    state.setLabelShortcut("10", "1");
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(state.shortcutCodeByKey.value["1"]).toBe("10");
+    expect(
+      state.codeLabels.value.find((label) => label.code === "0")?.shortcut,
+    ).toBe("");
+    expect(
+      state.codeLabels.value.find((label) => label.code === "10")?.shortcut,
+    ).toBe("1");
+  });
+
+  it("treats code 0 as clearing a draft annotation", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
+
+    state.setAnnotationDraft("D001", "5");
+    expect(state.annotationDraft.value.D001).toBe("5");
+
+    state.setAnnotationDraft("D001", "0");
+    expect(state.annotationDraft.value.D001).toBeUndefined();
+  });
 });
 
 function makeFakePlotPointsBytes(sampleCount: number): Uint8Array {
@@ -405,6 +415,13 @@ function makeFakePlotPointsBytes(sampleCount: number): Uint8Array {
     diePoints: pts,
   });
   return toBinary(WaferMapResponseSchema, msg);
+}
+
+function makeInt32Bytes(values: number[]): ArrayBuffer {
+  const buffer = new ArrayBuffer(values.length * 4);
+  const view = new DataView(buffer);
+  values.forEach((value, index) => view.setInt32(index * 4, value, true));
+  return buffer;
 }
 
 function makeViewSampleRows(count: number, offset = 0) {
@@ -424,11 +441,33 @@ function makeViewSampleRows(count: number, offset = 0) {
   }));
 }
 
+async function waitForCondition(condition: () => boolean, timeoutMs = 1000) {
+  const startedAt = Date.now();
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
 describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", () => {
   const DATASET_ID = "ds-split-1";
 
   beforeEach(() => {
     server.use(
+      http.get("/api/v1/sc/datasets/:id/plot-points/stream", () => {
+        return new HttpResponse(
+          [
+            'event: progress\ndata: {"event_type":"progress","operation":"sc.plot-points","status":"loading","message":"Preparing plot points"}\n\n',
+            'event: done\ndata: {"event_type":"done"}\n\n',
+          ].join(""),
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        );
+      }),
       http.get("/api/v1/sc/datasets/:id/plot-points", () => {
         return new HttpResponse(makeFakePlotPointsBytes(1000), {
           status: 200,
@@ -538,11 +577,87 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
     expect(secondPageOffsets[0]).toBe(200);
   });
 
+  it("waits for real defect ids before loading samples to avoid an offset duplicate", async () => {
+    const sampleRequests: Array<{
+      offset: string | null;
+      sampleIds: string | null;
+    }> = [];
+    server.use(
+      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", async () => {
+        await new Promise((r) => setTimeout(r, 30));
+        return new HttpResponse(makeInt32Bytes([1, 2, 3]), {
+          status: 200,
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      }),
+      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
+        const url = new URL(request.url);
+        sampleRequests.push({
+          offset: url.searchParams.get("offset"),
+          sampleIds: url.searchParams.get("sampleIds"),
+        });
+        return HttpResponse.json({
+          items: makeViewSampleRows(3),
+          total: 3,
+        });
+      }),
+    );
+
+    await mountPage("ds-real-ids", DEFAULT_DATASET, []);
+
+    await waitForCondition(() => sampleRequests.length > 0);
+
+    expect(sampleRequests.every((req) => req.offset === null)).toBe(true);
+    expect(sampleRequests[0]?.sampleIds).toBe("1,2,3");
+  });
+
+  it("loads additional real-id pages with sample_ids instead of stopping at the first 200", async () => {
+    const requestSampleIds: string[] = [];
+    server.use(
+      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", () => {
+        return new HttpResponse(
+          makeInt32Bytes(Array.from({ length: 450 }, (_, i) => i + 1)),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/octet-stream" },
+          },
+        );
+      }),
+      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
+        const url = new URL(request.url);
+        const sampleIds = url.searchParams.get("sampleIds") ?? "";
+        requestSampleIds.push(sampleIds);
+        const ids = sampleIds.split(",").filter(Boolean).map(Number);
+        return HttpResponse.json({
+          items: ids.map((id) => ({
+            ...makeViewSampleRows(1, id - 1)[0],
+            sample_id: `s${id}`,
+            defect_id: String(id),
+          })),
+          total: 450,
+        });
+      }),
+    );
+
+    const { state } = await mountPage("ds-real-ids-paged", DEFAULT_DATASET, []);
+
+    await waitForCondition(() => state.hasMoreSamples.value);
+    await state.fetchMoreSamples();
+    await waitForCondition(() => requestSampleIds.length >= 2);
+
+    expect(requestSampleIds[0]?.split(",")[0]).toBe("1");
+    expect(requestSampleIds[0]?.split(",")).toHaveLength(200);
+    expect(requestSampleIds[1]?.split(",")[0]).toBe("201");
+    expect(requestSampleIds[1]?.split(",")).toHaveLength(200);
+  });
+
   it("uses map box-selection IDs as BlinkTable data source filter", async () => {
     const { state } = await mountPage("ds-filter-query", DEFAULT_DATASET);
     state.handleBoxSelectionChange([274, 103]);
 
-    expect([...state.mapFilteredIds.value].sort()).toEqual(["274", "103"].sort());
+    expect([...state.mapFilteredIds.value].sort()).toEqual(
+      ["274", "103"].sort(),
+    );
   });
 
   it("clears the BlinkTable data source filter when the map emits an empty selection", async () => {

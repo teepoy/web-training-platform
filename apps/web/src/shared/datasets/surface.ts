@@ -12,15 +12,11 @@ import type {
 } from "./types";
 import type { FlowCard } from "../flow";
 
-export function resolveDefaultDatasetTaskType(
-  taskType: string | null | undefined,
-): string {
+export function resolveDefaultDatasetTaskType(taskType: string | null | undefined): string {
   return taskType === "vqa" ? "vqa" : "classification";
 }
 
-function normalizeDataset<TDataset extends DatasetListItem>(
-  dataset: TDataset,
-): TDataset {
+function normalizeDataset<TDataset extends DatasetListItem>(dataset: TDataset): TDataset {
   return {
     ...dataset,
     ls_project_id: dataset.ls_project_id ?? undefined,
@@ -41,10 +37,7 @@ function toFlowCard(plugin: DatasetFlow): FlowCard {
   };
 }
 
-function getDatasetOrgLabel(
-  dataset: DatasetListItem,
-  currentOrgId: string | null,
-): string | null {
+function getDatasetOrgLabel(dataset: DatasetListItem, currentOrgId: string | null): string | null {
   if (!dataset.is_public || dataset.org_id === currentOrgId) {
     return null;
   }
@@ -52,11 +45,17 @@ function getDatasetOrgLabel(
   return dataset.org_name?.trim() || "Other Org";
 }
 
+function isDatasetCreator(
+  dataset: DatasetListItem,
+  currentUserId: string | null | undefined,
+): boolean {
+  return Boolean(currentUserId && dataset.created_by === currentUserId);
+}
+
 export function buildDatasetColumns<TDataset extends DatasetListItem>(
   options: BuildDatasetColumnsOptions<TDataset>,
 ): DataTableColumns<TDataset> {
-  const resolveTaskType =
-    options.resolveTaskType ?? resolveDefaultDatasetTaskType;
+  const resolveTaskType = options.resolveTaskType ?? resolveDefaultDatasetTaskType;
 
   return [
     {
@@ -77,11 +76,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
         const orgLabel = getDatasetOrgLabel(row, options.currentOrgId);
         if (orgLabel) {
           nodes.push(
-            h(
-              "span",
-              { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
-              `(${orgLabel})`,
-            ),
+            h("span", { style: "margin-left: 4px; font-size: 12px; color: #aaa" }, `(${orgLabel})`),
           );
         }
 
@@ -92,11 +87,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
       title: "Dataset Type",
       key: "dataset_type",
       render: (row: TDataset) =>
-        h(
-          NTag,
-          { type: "default", size: "small" },
-          { default: () => row.dataset_type },
-        ),
+        h(NTag, { type: "default", size: "small" }, { default: () => row.dataset_type }),
     },
     {
       title: "Task Type",
@@ -111,8 +102,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Created At",
       key: "created_at",
-      render: (row: TDataset) =>
-        h("span", {}, new Date(row.created_at).toLocaleString()),
+      render: (row: TDataset) => h("span", {}, new Date(row.created_at).toLocaleString()),
     },
     {
       title: "Actions",
@@ -122,18 +112,15 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
           row,
           isSuperadmin: options.isSuperadmin,
           isOwnOrg: row.org_id === options.currentOrgId,
+          canDelete: isDatasetCreator(row, options.currentUserId),
           onView: (id: string) => {
             options.onViewDataset(id);
           },
-          onTogglePublic: (payload: { id: string; isPublic: boolean }) => {
-            if (!options.isSuperadmin) {
-              return;
-            }
-
-            options.onTogglePublic(payload);
+          onRename: (dataset: DatasetListItem) => {
+            options.onRenameDataset?.(dataset.id, dataset.name);
           },
           onDelete: (dataset: DatasetListItem) => {
-            if (!options.isSuperadmin) {
+            if (!isDatasetCreator(dataset, options.currentUserId)) {
               return;
             }
 
@@ -147,9 +134,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
 export function useDatasetListSurface<
   TDataset extends DatasetListItem,
   TUser extends DatasetListUser = DatasetListUser,
->(
-  options: UseDatasetListSurfaceOptions<TDataset, TUser>,
-): UseDatasetListSurfaceResult<TDataset> {
+>(options: UseDatasetListSurfaceOptions<TDataset, TUser>): UseDatasetListSurfaceResult<TDataset> {
   const resolvedDatasets = computed<TDataset[]>(() => {
     const input = unref(options.datasets) ?? [];
     return input.map((dataset) => normalizeDataset(dataset));
@@ -159,14 +144,13 @@ export function useDatasetListSurface<
   const resolvedUser = computed(() => unref(options.user));
 
   const permissions = computed(() => {
-    const isSuperadmin = resolvedUser.value?.is_superadmin === true;
     const hasOrg = resolvedCurrentOrgId.value !== null;
 
     return {
-      isSuperadmin,
+      isSuperadmin: resolvedUser.value?.is_superadmin === true,
       hasOrg,
-      canTogglePublic: isSuperadmin && hasOrg,
-      canDelete: isSuperadmin && hasOrg,
+      canTogglePublic: false,
+      canDelete: hasOrg,
     };
   });
 
@@ -177,11 +161,9 @@ export function useDatasetListSurface<
   }));
 
   const toolbarProps = computed(() => ({
-    importerFlows: (unref(options.importerFlows) ?? []).map((plugin) =>
+    importerFlows: (unref(options.importerFlows) ?? []).map((plugin) => toFlowCard(plugin)),
+    previewLauncherFlows: (unref(options.previewLauncherFlows) ?? []).map((plugin) =>
       toFlowCard(plugin),
-    ),
-    previewLauncherFlows: (unref(options.previewLauncherFlows) ?? []).map(
-      (plugin) => toFlowCard(plugin),
     ),
   }));
 
@@ -198,6 +180,7 @@ export function useDatasetListSurface<
       row,
       isSuperadmin: permissions.value.isSuperadmin,
       isOwnOrg: row.org_id === resolvedCurrentOrgId.value,
+      canDelete: isDatasetCreator(row, resolvedUser.value?.id),
     };
   }
 
@@ -205,6 +188,7 @@ export function useDatasetListSurface<
     buildDatasetColumns<TDataset>({
       currentOrgId: resolvedCurrentOrgId.value,
       isSuperadmin: permissions.value.isSuperadmin,
+      currentUserId: resolvedUser.value?.id ?? null,
       taskTagType: unref(options.taskTagType) ?? "info",
       resolveTaskType: options.resolveTaskType,
       onViewDataset: options.onViewDataset,
@@ -216,12 +200,13 @@ export function useDatasetListSurface<
         options.onTogglePublic(payload);
       },
       onDeleteDataset: (dataset) => {
-        if (!permissions.value.canDelete) {
+        if (!isDatasetCreator(dataset, resolvedUser.value?.id)) {
           return;
         }
 
         options.onDeleteDataset(dataset);
       },
+      onRenameDataset: options.onRenameDataset,
     }),
   );
 

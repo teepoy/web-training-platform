@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.shared.api.schemas import TrainingEvent
+from app.shared.api.schemas import JobStatus
 from app.modules.task_tracker.app.services.task_tracker import TaskTrackerService
 from tests.conftest import TRAINER_ID
 
@@ -167,3 +167,66 @@ def test_prefect_run_url_prefers_explicit_ui_url() -> None:
     )
 
     assert service._prefect_ui_base_url() == "http://localhost:4200"
+
+
+def test_task_tracker_displays_queued_platform_jobs_as_pending() -> None:
+    service = TaskTrackerService(
+        repository=SimpleNamespace(),
+        prefect_client=SimpleNamespace(),
+        config=SimpleNamespace(prefect=SimpleNamespace(api_url="")),
+    )
+
+    assert service._display_status(SimpleNamespace(status=JobStatus.QUEUED), None) == "pending"
+    assert service._display_status_from_prefect("PENDING") == "pending"
+    assert service._display_status_from_prefect("SCHEDULED") == "pending"
+
+
+@pytest.mark.asyncio
+async def test_queue_depth_counts_runs_ahead_with_deployment_queue_fallback() -> None:
+    prefect = SimpleNamespace(
+        filter_flow_runs=AsyncMock(
+            return_value=[
+                {
+                    "id": "older-run",
+                    "expected_start_time": "2026-04-11T09:59:00Z",
+                    "created": "2026-04-11T09:50:00Z",
+                },
+                {
+                    "id": "current-run",
+                    "expected_start_time": "2026-04-11T10:00:00Z",
+                    "created": "2026-04-11T09:55:00Z",
+                },
+                {
+                    "id": "later-run",
+                    "expected_start_time": "2026-04-11T10:05:00Z",
+                    "created": "2026-04-11T09:56:00Z",
+                },
+            ]
+        )
+    )
+    service = TaskTrackerService(
+        repository=SimpleNamespace(),
+        prefect_client=prefect,
+        config=SimpleNamespace(prefect=SimpleNamespace(api_url="")),
+    )
+
+    depth = await service._queue_depth(
+        {
+            "id": "current-run",
+            "state": {"type": "SCHEDULED"},
+            "expected_start_time": "2026-04-11T10:00:00Z",
+            "created": "2026-04-11T09:55:00Z",
+        },
+        deployment={
+            "work_pool_name": "default-cpu",
+            "work_queue_name": "default",
+        },
+    )
+
+    assert depth == 1
+    prefect.filter_flow_runs.assert_awaited_once_with(
+        work_pool_name="default-cpu",
+        work_queue_name="default",
+        state_types=["PENDING", "SCHEDULED"],
+        limit=200,
+    )

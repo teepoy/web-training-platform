@@ -333,7 +333,6 @@ const sidebarContext = computed(() => ({ totalLoaded: items.value.length, filter
 | `metric-cards` | `MetricCardsWidget.vue` | — | — |
 | `sample-viewer` | `SampleViewerWidget.vue` | `classify-dashboard` | — |
 | `prediction-summary` | `PredictionSummaryWidget.vue` | `prediction-grid-items` | — |
-| `wafer-map` | `WaferMapWidget.vue` | `interaction-state` | `select-samples`, `select-predictions`, `apply-filter`, `clear-selection` |
 | `interactive-scatter` | `InteractiveScatterWidget.vue` | `interaction-state` | `select-samples`, `apply-filter`, `clear-selection` |
 | `browser-summary` | `BrowserSummaryWidget.vue` | `browser-dashboard` | — |
 

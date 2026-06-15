@@ -9,12 +9,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	scv1 "image-parser/gen/go/sc/v1"
+	imageloader "image-parser/internal/image_loader"
 )
 
 type UpstreamClient struct {
 	conn *grpc.ClientConn
 	stub scv1.ScUpstreamClient
 }
+
+var _ imageloader.UpstreamSource = (*UpstreamClient)(nil)
 
 func NewUpstreamClient() (*UpstreamClient, error) {
 	addr := os.Getenv("SC_UPSTREAM_ADDR")
@@ -72,15 +75,5 @@ func (c *UpstreamClient) GetReviewImageFileSpec(ctx context.Context, inspectionT
 		WaferKey:       waferKey,
 		DefectId:       defectID,
 		ImageId:        imageID,
-	})
-}
-
-func (c *UpstreamClient) ListReviewImages(ctx context.Context, inspectionTime string, waferKey, defectID int32) (*scv1.ListReviewImagesResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	return c.stub.ListReviewImages(ctx, &scv1.ListReviewImagesRequest{
-		InspectionTime: inspectionTime,
-		WaferKey:       waferKey,
-		DefectId:       defectID,
 	})
 }

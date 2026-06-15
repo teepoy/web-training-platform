@@ -18,12 +18,15 @@ import {
   listAnnotationVersionsApiV1PredictionReviewsActionIdAnnotationVersionsGet,
   exportReviewVersionApiV1PredictionReviewsActionIdExportGet,
   persistReviewExportApiV1PredictionReviewsActionIdExportPersistPost,
+  createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost,
 } from "@/generated/orval/endpoints/api";
 import type {
   RunPredictionRequest,
   PredictSingleRequest,
   SaveReviewAnnotationItem,
   SaveReviewAnnotationsResponse,
+  TrainAndPredictRequest,
+  TrainAndPredictResponse,
 } from "@/generated/orval/models";
 import type { PredictionJobResponse as PredictionJob, PredictionResultResponse as PredictionResult, PredictionEventResponse as PredictionEvent, ReviewActionResponse as ReviewAction, AnnotationVersionResponse as AnnotationVersion, PredictionCollectionResponse as PredictionCollection, SyncPredictionCollectionResponse } from "@/generated/orval/models";
 import type { CreatePredictionCollectionRequest, VersionExportResponse } from "./types";
@@ -37,8 +40,20 @@ export async function runPredictions(
     )).data as PredictionJob;
 }
 
-export async function listPredictionJobs(): Promise<PredictionJob[]> {
-  return (await listPredictionJobsApiV1PredictionJobsGet()).data as PredictionJob[];
+export async function startTrainAndPredict(
+  request: TrainAndPredictRequest,
+): Promise<TrainAndPredictResponse> {
+  return (
+    await createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost(request)
+  ).data as TrainAndPredictResponse;
+}
+
+export async function listPredictionJobs(
+  datasetId?: string | null,
+): Promise<PredictionJob[]> {
+  return (await listPredictionJobsApiV1PredictionJobsGet(
+    datasetId ? { dataset_id: datasetId } : undefined,
+  )).data as PredictionJob[];
 }
 
 export async function getPredictionJob(id: string): Promise<PredictionJob> {

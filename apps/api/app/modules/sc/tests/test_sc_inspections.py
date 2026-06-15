@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+import polars as pl
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
-from app.modules.sc.tests.conftest import (  # noqa: F401 — fixtures via conftest
-    mock_sc_db_path,
-    mock_wafer_db_reader,
-)
+from app.modules.sc.port.http.router import _apply_sample_table_sort
 from proto_stubs.sc.v1 import sample_pb2
 
 PB_CONTENT_TYPE = "application/x-protobuf"
@@ -34,6 +34,18 @@ def _parse_map_points_resp(body: bytes) -> sample_pb2.WaferMapResponse:
 TODAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 SAFE_START = (TODAY - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
 SAFE_END = (TODAY + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def test_sample_table_sort_orders_defect_id_numerically():
+    df = pl.DataFrame({"defect_id": ["1", "10", "2"]})
+
+    sorted_df = _apply_sample_table_sort(
+        df,
+        SimpleNamespace(field="defect_id", direction="asc"),
+        requested=None,
+    )
+
+    assert sorted_df["defect_id"].to_list() == ["1", "2", "10"]
 
 
 def test_list_inspections_returns_items_and_total(
@@ -91,6 +103,28 @@ def test_list_inspections_empty_time_range(
                 params={
                     "start_time": "1970-01-01T00:00:00",
                     "end_time": "1970-01-02T00:00:00",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            msg = _parse_summary_resp(resp.content)
+            assert msg["total"] == 0
+            assert len(msg["items"]) == 0
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
+def test_list_inspections_empty_time_range_with_eqp_filter(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections",
+                params={
+                    "start_time": "1970-01-01T00:00:00",
+                    "end_time": "1970-01-02T00:00:00",
+                    "eqp_id": "EQP01",
                 },
             )
             assert resp.status_code == 200, resp.text
@@ -160,6 +194,41 @@ def test_inspection_samples_success(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_sample_table_rows_stream_emits_progress_data_done(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections",
+                params={
+                    "start_time": SAFE_START,
+                    "end_time": SAFE_END,
+                },
+            )
+            first = _parse_summary_resp(resp.content)["items"][0]
+            stream_resp = client.post(
+                (
+                    f"/api/v1/sc/inspections/{first['inspection_time']}/"
+                    f"{first['wafer_key']}/sample-table-rows/stream"
+                ),
+                json={"defect_ids": ["3", "1", "2"], "page": 0, "page_size": 10},
+            )
+            assert stream_resp.status_code == 200, stream_resp.text
+            assert stream_resp.headers.get("content-type", "").startswith(
+                "text/event-stream"
+            )
+            body = stream_resp.text
+            assert "event: progress" in body
+            assert "event: data" in body
+            assert "event: done" in body
+            assert '"operation":"sc.sample-table"' in body
+            assert '"items":' in body
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_sample_table_rows_filters_sorts_then_paginates(
     mock_wafer_db_reader,
 ):
@@ -183,13 +252,14 @@ def test_sample_table_rows_filters_sorts_then_paginates(
                     "page_size": 5,
                     "filter": {
                         "rough_bin": {
-                            "operator": "in",
+                            "filterType": "set",
                             "values": [1, 2, 3],
                         },
                         "wafer_x": {
-                            "operator": "between",
-                            "min": -1_000_000,
-                            "max": 1_000_000,
+                            "filterType": "number",
+                            "type": "inRange",
+                            "filter": -1_000_000,
+                            "filterTo": 1_000_000,
                         },
                     },
                     "sort": {"field": "defect_id", "direction": "desc"},
@@ -206,6 +276,65 @@ def test_sample_table_rows_filters_sorts_then_paginates(
                 -1_000_000 <= row["wafer_x"] <= 1_000_000
                 for row in body["items"]
             )
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
+def test_inspection_defect_ids_binary_returns_sorted_int32(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            summary = client.get(
+                "/api/v1/sc/inspections",
+                params={"start_time": SAFE_START, "end_time": SAFE_END},
+            )
+            first = _parse_summary_resp(summary.content)["items"][0]
+            response = client.get(
+                f"/api/v1/sc/inspections/{first['inspection_time']}/"
+                f"{first['wafer_key']}/defect-ids.bin"
+            )
+
+            assert response.status_code == 200, response.text
+            assert response.headers.get("content-type", "").startswith(
+                "application/octet-stream"
+            )
+            assert len(response.content) % 4 == 0
+            defect_ids = [
+                int.from_bytes(response.content[i : i + 4], "little", signed=True)
+                for i in range(0, len(response.content), 4)
+            ]
+            assert defect_ids == [1, 2, 3]
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
+def test_inspection_map_points_stream_reports_sample_progress(
+    mock_wafer_db_reader,
+):
+    original_samples = mock_wafer_db_reader.list_samples.return_value
+
+    async def _list_samples_with_progress(*args, **kwargs):
+        on_progress = kwargs.get("on_progress")
+        if on_progress is not None:
+            on_progress(1)
+            on_progress(2)
+            on_progress(3)
+        return original_samples
+
+    mock_wafer_db_reader.list_samples.side_effect = _list_samples_with_progress
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections/2026-01-01T00:00:00+00:00/1/map-points/stream"
+            )
+            assert resp.status_code == 200, resp.text
+            assert '"loaded_count":1' in resp.text
+            assert '"loaded_count":2' in resp.text
+            assert '"loaded_count":3' in resp.text
+            assert "event: done" in resp.text
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 
@@ -307,6 +436,32 @@ def test_inspection_split_preview_endpoints_success(
                 "image_id",
                 "image_type",
             }
+            first_review_defect_id = review_body["items"][0]["defect_id"]
+            filtered_review_resp = client.get(
+                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/review-images",
+                params={"defect_ids": first_review_defect_id},
+            )
+            assert filtered_review_resp.status_code == 200, filtered_review_resp.text
+            filtered_review_body = filtered_review_resp.json()
+            assert filtered_review_body["total"] == 1
+            assert filtered_review_body["items"][0]["defect_id"] == first_review_defect_id
+            filter_only_review_resp = client.get(
+                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/review-images",
+                params={
+                    "sample_filter": json.dumps(
+                        {
+                            "defect_id": {
+                                "filterType": "set",
+                                "values": [first_review_defect_id],
+                            }
+                        }
+                    )
+                },
+            )
+            assert filter_only_review_resp.status_code == 200, filter_only_review_resp.text
+            filter_only_review_body = filter_only_review_resp.json()
+            assert filter_only_review_body["total"] == 1
+            assert filter_only_review_body["items"][0]["defect_id"] == first_review_defect_id
 
             table_resp = client.post(
                 f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/sample-table-rows",
@@ -315,11 +470,13 @@ def test_inspection_split_preview_endpoints_success(
             assert table_resp.status_code == 200, table_resp.text
             table_body = table_resp.json()
             assert table_body["total"] == 3
+            assert table_body["next_anchor"] is None
             assert [row["defect_id"] for row in table_body["items"]] == ["3", "1", "2"]
             assert set(table_body["items"][0]) == {
                 "defect_id",
                 "rough_bin",
                 "class_number",
+                "images",
                 "test_id",
                 "wafer_x",
                 "wafer_y",
@@ -329,6 +486,8 @@ def test_inspection_split_preview_endpoints_success(
                 "cluster_id",
                 "die_x",
                 "die_y",
+                "reticle_x",
+                "reticle_y",
                 "size_x",
                 "size_y",
                 "size_d",

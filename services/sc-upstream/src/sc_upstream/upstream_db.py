@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 import polars as pl
-
+from sqlalchemy import create_engine
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -22,17 +23,64 @@ _SQLITE_PREFIX = "sqlite:///"
 _ASYNC_SQLITE_PREFIX = "sqlite+aiosqlite:///"
 
 
-class UpstreamDB:
+class UpstreamDB(Protocol):
+    async def get_inspection(
+        self, inspection_time: datetime, wafer_key: int
+    ) -> dict[str, Any] | None: ...
+
+    async def list_inspections(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str = "",
+        wafer_id: str = "",
+        layer_id: str = "",
+        device: str = "",
+    ) -> pl.LazyFrame: ...
+
+    async def list_samples(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+    ) -> pl.LazyFrame: ...
+
+    def iter_list_samples_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        batch_size: int = 65536,
+    ) -> Iterator[pl.DataFrame]: ...
+
+    async def list_review_images(
+        self, inspection_time: datetime, wafer_key: int
+    ) -> list[dict[str, Any]]: ...
+
+
+class InspectionZipsDB(Protocol):
+    async def get_inspection_patch_zips(
+        self,
+        inspection_time: datetime,
+        lot_id: str,
+        wafer_id: str,
+        device: str,
+        layer_id: str,
+    ) -> list[dict[str, str]]: ...
+
+
+class _MockUpstreamDB:
     def __init__(self, db_url: str) -> None:
+        sync_db_url = db_url
         if db_url.startswith(_SQLITE_PREFIX):
             db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
         self._engine = create_async_engine(db_url, echo=False)
+        self._sync_engine = create_engine(sync_db_url, echo=False)
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
-        Base.metadata.create_all(self._engine.sync_engine)
+        Base.metadata.create_all(self._sync_engine)
 
     async def _read(self, query: str) -> pl.LazyFrame:
         def _sync() -> pl.LazyFrame:
-            conn = self._engine.sync_engine.connect()
+            conn = self._sync_engine.connect()
             try:
                 df = pl.read_database(query, connection=conn)
                 return df.lazy()
@@ -40,6 +88,20 @@ class UpstreamDB:
                 conn.close()
 
         return await asyncio.to_thread(_sync)
+
+    def _read_batches(
+        self, query: str, *, batch_size: int = 65536
+    ) -> Iterator[pl.DataFrame]:
+        conn = self._sync_engine.connect()
+        try:
+            yield from pl.read_database(
+                query,
+                connection=conn,
+                iter_batches=True,
+                batch_size=batch_size,
+            )
+        finally:
+            conn.close()
 
     async def get_inspection(
         self, inspection_time: datetime, wafer_key: int
@@ -82,7 +144,13 @@ class UpstreamDB:
             }
 
     async def list_inspections(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str = "",
+        wafer_id: str = "",
+        layer_id: str = "",
+        device: str = "",
     ) -> pl.LazyFrame:
         query = f"""
         SELECT s.wafer_key, s.inspection_time, s.lot_id, s.wafer_id, s.device,
@@ -93,9 +161,32 @@ class UpstreamDB:
         FROM insp_wafer_summary s
         JOIN insp_recipe r ON s.recipe_key = r.recipe_key
         WHERE s.inspection_time >= '{start_time}' AND s.inspection_time < '{end_time}'
+        {self._filter_clause("s.lot_id", lot_id)}
+        {self._filter_clause("s.wafer_id", wafer_id)}
+        {self._filter_clause("s.layer_id", layer_id)}
+        {self._filter_clause("s.device", device)}
         ORDER BY s.inspection_time DESC, s.wafer_key DESC
         """
         return await self._read(query)
+
+    @staticmethod
+    def _filter_clause(column: str, raw: str) -> str:
+        if not raw or not raw.strip():
+            return ""
+        conditions: list[str] = []
+        for item in raw.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            if item.endswith("*"):
+                pattern = item[:-1].replace("'", "''") + "%"
+                conditions.append(f"{column} LIKE '{pattern}'")
+            else:
+                value = item.replace("'", "''")
+                conditions.append(f"{column} = '{value}'")
+        if not conditions:
+            return ""
+        return f"AND ({' OR '.join(conditions)})"
 
     async def list_samples(
         self,
@@ -129,6 +220,42 @@ class UpstreamDB:
         )
         return lf
 
+    def iter_list_samples_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        batch_size: int = 65536,
+    ) -> Iterator[pl.DataFrame]:
+        insp_str = inspection_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+        query = f"""
+        SELECT d.*,
+               s.lot_id, s.wafer_id, s.layer_id, s.inspect_equip_id,
+               s.device, s.origin_x, s.origin_y,
+               s.die_size_x, s.die_size_y,
+               r.recipe_id
+        FROM inspect_defect d
+        JOIN insp_wafer_summary s ON d.wafer_key = s.wafer_key
+            AND d.inspection_time = s.inspection_time
+        JOIN insp_recipe r ON s.recipe_key = r.recipe_key
+        WHERE d.inspection_time = '{insp_str}' AND d.wafer_key = {wafer_key}
+        ORDER BY d.defect_id
+        """
+        for df in self._read_batches(query, batch_size=batch_size):
+            import time
+
+            time.sleep(0.3)
+            yield df.with_columns(
+                [
+                    (
+                        (pl.col("wafer_x") - pl.col("origin_x")) % pl.col("die_size_x")
+                    ).alias("die_x"),
+                    (
+                        (pl.col("wafer_y") - pl.col("origin_y")) % pl.col("die_size_y")
+                    ).alias("die_y"),
+                ]
+            )
+
     async def list_review_images(
         self, inspection_time: datetime, wafer_key: int
     ) -> list[dict[str, Any]]:
@@ -156,13 +283,15 @@ class UpstreamDB:
             ]
 
 
-class InspectionZipsDB:
+class _MockInspectionZipsDB:
     def __init__(self, db_url: str) -> None:
+        sync_db_url = db_url
         if db_url.startswith(_SQLITE_PREFIX):
             db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
         self._engine = create_async_engine(db_url, echo=False)
+        self._sync_engine = create_engine(sync_db_url, echo=False)
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
-        BaseZips.metadata.create_all(self._engine.sync_engine)
+        BaseZips.metadata.create_all(self._sync_engine)
 
     async def get_inspection_patch_zips(
         self,
@@ -186,3 +315,11 @@ class InspectionZipsDB:
             )
             zips = result.scalars().all()
             return [{"s3_bucket": z.s3_bucket, "s3_key": z.s3_key} for z in zips]
+
+
+def create_mock_upstream_db(db_url: str) -> UpstreamDB:
+    return _MockUpstreamDB(db_url)
+
+
+def create_mock_inspection_zips_db(db_url: str) -> InspectionZipsDB:
+    return _MockInspectionZipsDB(db_url)

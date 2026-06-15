@@ -10,7 +10,7 @@ Steps:
    2. Auth as seed user.
    3. Resolve organisation context.
    4. Query /sc/inspections for a mock inspection_time + wafer_key.
-   5. POST /sc/import (file_shard_sparse) and wait for completion via SSE.
+   5. POST /sc/import (file_shard_sparse) and use the completed direct response.
    6. List samples; random-annotate ~1k into 5 classes via /sc/.../annotations/bulk.
    7. POST /training-jobs to train on the annotated subset (5 epochs).
    8. Wait for training completion; log accuracy, F1 etc from training events.
@@ -132,7 +132,7 @@ def _start_sc_import(
     dataset_name: str,
     label_space: list[str] | None = None,
     max_rows: int | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, int]:
     payload: dict = {
         "source_inspection_time": inspection_time,
         "source_wafer_key": wafer_key,
@@ -143,7 +143,6 @@ def _start_sc_import(
         payload["label_space"] = label_space
     if max_rows is not None:
         payload["max_rows"] = max_rows
-        payload["force_prefect_flow"] = True
 
     r = client.post(
         f"{api_url}/api/v1/sc/import",
@@ -157,74 +156,12 @@ def _start_sc_import(
     if status == "failed":
         raise RuntimeError(f"sc_import failed: {body.get('error', 'unknown')}")
 
-    flow_run_id = body.get("flow_run_id")
     dataset_id = body.get("dataset_id", "")
-    if not flow_run_id:
-        raise RuntimeError(f"sc_import returned no flow_run_id: {body}")
+    imported_count = int(body.get("imported_count") or 0)
+    if not dataset_id:
+        raise RuntimeError(f"sc_import returned no dataset_id: {body}")
 
-    return str(flow_run_id), str(dataset_id)
-
-
-def _wait_sc_import_sse(
-    client: httpx.Client,
-    api_url: str,
-    flow_run_id: str,
-    timeout: int,
-    headers: dict[str, str] | None = None,
-) -> None:
-    """Consume the SSE stream until 'done' or 'error'."""
-    deadline = time.time() + timeout
-    with client.stream(
-        "GET",
-        f"{api_url}/api/v1/sc/import/{flow_run_id}/stream",
-        headers=headers,
-    ) as resp:
-        resp.raise_for_status()
-        for line in resp.iter_lines():
-            if time.time() > deadline:
-                raise RuntimeError(f"SC import SSE timed out after {timeout}s")
-            if not line.startswith("data:"):
-                continue
-            try:
-                data = json.loads(line[len("data:") :].strip())
-            except json.JSONDecodeError:
-                continue
-            event_type = data.get("event_type", "")
-            if event_type == "done":
-                return
-            if event_type == "error":
-                raise RuntimeError(f"SC import failed: {data.get('error', data)}")
-
-
-def _wait_sc_import_rest(
-    client: httpx.Client,
-    headers: dict[str, str],
-    api_url: str,
-    flow_run_id: str,
-    timeout: int,
-) -> None:
-    """Fallback: retry SSE connection on transient failures.
-
-    The SSE endpoint (``/api/v1/sc/import/{flow_run_id}/stream``) is the
-    canonical way to wait for SC import completion.  This fallback
-    reconnects on transient network errors instead of polling an unrelated
-    task-tracker endpoint with an unmapped Prefect flow run ID.
-    """
-    deadline = time.time() + timeout
-    last_error: Exception | None = None
-    while time.time() < deadline:
-        try:
-            remaining = max(1, int(deadline - time.time()))
-            _wait_sc_import_sse(
-                client, api_url, flow_run_id, remaining, headers=headers
-            )
-            return
-        except Exception as exc:
-            last_error = exc
-            time.sleep(2)
-    raise RuntimeError(
-        f"SC import timed out after {timeout}s (flow_run_id={flow_run_id})"
-    ) from last_error
+    return str(dataset_id), imported_count
 
 
 def _resolve_dataset_after_import(
@@ -760,7 +697,7 @@ def main() -> int:
             dataset_name = f"Wafer E2E Smoke {uuid.uuid4().hex[:8]}"
             print(f"[5/12] Starting SC import → {dataset_name} ...")
             t0 = time.time()
-            flow_run_id, dataset_id = _start_sc_import(
+            dataset_id, imported_count = _start_sc_import(
                 client,
                 headers,
                 args.api_url,
@@ -771,42 +708,31 @@ def main() -> int:
                 max_rows=args.import_max_rows,
             )
             _step(
-                "sc_import_started",
-                flow_run_id=flow_run_id,
+                "sc_import_completed",
                 dataset_id=dataset_id,
+                imported_count=imported_count,
             )
-            results["flow_run_id"] = flow_run_id
             results["dataset_id"] = dataset_id
             results["dataset_name"] = dataset_name
 
-            print(f"  flow_run_id={flow_run_id}  dataset_id={dataset_id}")
-
-            # Wait via SSE (auth headers required); fall back to reconnecting SSE
-            try:
-                _wait_sc_import_sse(
-                    client,
-                    args.api_url,
-                    flow_run_id,
-                    args.import_timeout,
-                    headers=headers,
-                )
-            except Exception:
-                _wait_sc_import_rest(
-                    client, headers, args.api_url, flow_run_id, args.import_timeout
-                )
+            print(f"  dataset_id={dataset_id}  imported_count={imported_count}")
 
             # Resolve real dataset_id and imported_count from completed import
-            dataset_id, imported_count = _resolve_dataset_after_import(
-                client,
-                headers,
-                args.api_url,
-                dataset_name,
+            resolved_dataset_id, resolved_imported_count = (
+                _resolve_dataset_after_import(
+                    client,
+                    headers,
+                    args.api_url,
+                    dataset_name,
+                )
             )
-            if not dataset_id:
+            if not resolved_dataset_id:
                 raise RuntimeError(
                     "SC import completed but dataset_id is empty "
-                    f"(flow_run_id={flow_run_id})"
+                    f"(dataset_name={dataset_name})"
                 )
+            dataset_id = resolved_dataset_id
+            imported_count = resolved_imported_count
 
             import_elapsed = time.time() - t0
             _step(

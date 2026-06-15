@@ -7,7 +7,7 @@
 import type { ScSampleTableSetFilterValuesItem } from './scSampleTableSetFilterValuesItem';
 
 export interface ScSampleTableSetFilter {
-  operator: 'in';
+  filterType: 'set';
   /** @minItems 1 */
   values: ScSampleTableSetFilterValuesItem[];
 }

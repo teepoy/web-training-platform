@@ -37,6 +37,7 @@ export interface ScDatasetInfo {
   name: string;
   label_space: string[];
   task_spec: Record<string, unknown>;
+  dataset_meta?: Record<string, unknown>;
 }
 
 /** Construct a patch image proxy URL from inference fields (raw, no auth params). */

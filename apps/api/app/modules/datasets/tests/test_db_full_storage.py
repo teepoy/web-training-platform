@@ -18,6 +18,7 @@ import pytest_asyncio  # type: ignore[import-untyped]
 from app.modules.datasets.adapter.db_full_storage import DbFullDatasetStorage
 from app.modules.datasets.domain.sample_row import PredictionResult, SampleRow
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode, TaskSpec
+from app.shared.db.registry import PredictionJobORM
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 
@@ -50,6 +51,34 @@ async def _prediction_stream(
 ) -> AsyncIterator[PredictionResult]:
     for item in items:
         yield item
+
+
+async def _create_prediction_job(
+    _test_infra: dict,
+    *,
+    job_id: str,
+    dataset_id: str,
+    org_id: str,
+    created_at: datetime,
+) -> None:
+    async with _test_infra["session_factory"]() as session:
+        session.add(
+            PredictionJobORM(
+                id=job_id,
+                org_id=org_id,
+                dataset_id=dataset_id,
+                model_id="test-model",
+                status="completed",
+                target="classification",
+                model_version="v1",
+                sample_ids=None,
+                summary_json={},
+                created_by="test-user",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+        await session.commit()
 
 
 # ── helper: create a fresh db_full dataset + storage ──────────────────────
@@ -174,8 +203,14 @@ class TestDbFullDatasetStorage:
     # ── 5. list_samples with predictions ─────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_list_samples_with_predictions(self, storage: DbFullDatasetStorage) -> None:
+    async def test_list_samples_with_predictions(
+        self,
+        storage: DbFullDatasetStorage,
+        _test_infra: dict,
+        db_full_fixture: tuple[str, str],
+    ) -> None:
         """Write 2 predictions, list(with_predictions=True) includes latest_prediction."""
+        dataset_id, org_id = db_full_fixture
         rows, _ = await storage.list_samples(limit=2)
         sample_ids = [r.sample_id for r in rows]
 
@@ -209,6 +244,13 @@ class TestDbFullDatasetStorage:
             model_version="v1",
         )
         assert count == 2
+        await _create_prediction_job(
+            _test_infra,
+            job_id="j1",
+            dataset_id=dataset_id,
+            org_id=org_id,
+            created_at=_utcnow(),
+        )
 
         rows2, _ = await storage.list_samples(
             limit=5, with_predictions=True, sample_ids=sample_ids,
@@ -278,9 +320,6 @@ class TestDbFullDatasetStorage:
         """Create 3 annotations in batch, verify stats updated."""
         rows, _ = await storage.list_samples(limit=3)
         sample_ids = [r.sample_id for r in rows]
-
-        # Stats before
-        stats_before = await storage.get_annotation_stats()
 
         annotations = [
             Annotation(
@@ -355,8 +394,14 @@ class TestDbFullDatasetStorage:
     # ── 13. write_predictions ────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_write_predictions(self, storage: DbFullDatasetStorage) -> None:
+    async def test_write_predictions(
+        self,
+        storage: DbFullDatasetStorage,
+        _test_infra: dict,
+        db_full_fixture: tuple[str, str],
+    ) -> None:
         """Stream 3 predictions, verify persisted and visible via listing."""
+        dataset_id, org_id = db_full_fixture
         rows, _ = await storage.list_samples(limit=3)
         sample_ids = [r.sample_id for r in rows]
 
@@ -381,6 +426,13 @@ class TestDbFullDatasetStorage:
             model_version="v1",
         )
         assert count == 3
+        await _create_prediction_job(
+            _test_infra,
+            job_id="test-job",
+            dataset_id=dataset_id,
+            org_id=org_id,
+            created_at=_utcnow(),
+        )
 
         # Verify via list_samples with predictions
         rows2, _ = await storage.list_samples(

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, toRef } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import type { CSSProperties } from "vue";
 import {
   NSwitch,
   NText,
@@ -7,6 +8,10 @@ import {
   NRadioButton,
   NButton,
   NTag,
+  NSelect,
+  NInput,
+  NModal,
+  NImage,
 } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { withAuthQueryParams } from "@/shared/api/client";
@@ -17,6 +22,7 @@ import {
   MINI_HEADER_HEIGHT,
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
+import { scReviewUrl } from "@/features/sc/domain/models";
 
 const props = withDefaults(
   defineProps<{
@@ -26,7 +32,6 @@ const props = withDefaults(
     reviewError?: string | null;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
-    reviewCount?: number;
     patchCellSize?: number;
     reviewCellSize?: number;
     cellGap?: number;
@@ -44,9 +49,8 @@ const props = withDefaults(
     inspectionTime?: string;
   }>(),
   {
-    patchSamplesPerRow: 3,
+    patchSamplesPerRow: 4,
     reviewSamplesPerRow: 1,
-    reviewCount: 3,
     patchCellSize: 64,
     reviewCellSize: 128,
     cellGap: 4,
@@ -61,24 +65,85 @@ const props = withDefaults(
     blinkIntervalMs: 1000,
     initialBlinkEnabled: true,
     showModeSwitch: false,
-  }
+  },
 );
 
 const emit = defineEmits<{
   selectSamples: [
     defectIds: string[],
-    modifiers: { shift: boolean; ctrl: boolean; meta: boolean }
+    modifiers: {
+      shift: boolean;
+      ctrl: boolean;
+      meta: boolean;
+      selectionMode?: "replace" | "add" | "toggle";
+    },
   ];
+  scrollContainerChange: [element: HTMLElement | null];
 }>();
 
 const mode = ref<"patch" | "review">("patch");
-const MAX_SAMPLES_PER_ROW = 6;
+const settingsOpen = ref(false);
+const MAX_SAMPLES_PER_ROW = 30;
 const clampSamplesPerRow = (value: number): number =>
   Math.min(MAX_SAMPLES_PER_ROW, Math.max(1, value));
 const patchPerRow = ref(clampSamplesPerRow(props.patchSamplesPerRow));
 const reviewPerRow = ref(clampSamplesPerRow(props.reviewSamplesPerRow));
+const IMAGE_SIZE_OPTIONS = [32, 64, 128, 256, 512] as const;
+const IMAGE_SIZE_SELECT_OPTIONS = IMAGE_SIZE_OPTIONS.map((size) => ({
+  label: `${size}`,
+  value: size,
+}));
+type ImageSizeOption = (typeof IMAGE_SIZE_OPTIONS)[number];
+type PatchImageType = "Defective" | "Reference" | "Difference";
+const PATCH_IMAGE_LABELS: Record<PatchImageType, string> = {
+  Defective: "Defective",
+  Reference: "Reference",
+  Difference: "Difference",
+};
+const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
+  Defective: "patchDefective",
+  Reference: "patchReference",
+  Difference: "patchDifference",
+};
+const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
+const patchImageTypeByInput: Record<string, PatchImageType> = {
+  defective: "Defective",
+  reference: "Reference",
+  template: "Reference",
+  difference: "Difference",
+};
+const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
+  IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption) ? (value as ImageSizeOption) : 64;
+const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
+const reviewImageSize = ref<ImageSizeOption>(normalizeImageSize(props.reviewCellSize));
+const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
+const patchDefectiveEnabled = ref(true);
+const patchReferenceEnabled = ref(true);
+const patchDifferenceEnabled = ref(true);
+
+function rebuildPatchImagesInput() {
+  const parts: string[] = [];
+  if (patchDefectiveEnabled.value) parts.push("Defective");
+  if (patchReferenceEnabled.value) parts.push("Reference");
+  if (patchDifferenceEnabled.value) parts.push("Difference");
+  patchImagesInput.value = parts.join(",");
+}
+
+const reviewImagesInput = ref("");
+const reviewImagesInputEdited = ref(false);
+const imageSize = computed({
+  get: () => (mode.value === "patch" ? patchImageSize.value : reviewImageSize.value),
+  set: (value: number) => {
+    const normalized = normalizeImageSize(value);
+    if (mode.value === "patch") {
+      patchImageSize.value = normalized;
+    } else {
+      reviewImageSize.value = normalized;
+    }
+  },
+});
 const samplesPerRow = computed({
-  get: () => mode.value === "patch" ? patchPerRow.value : reviewPerRow.value,
+  get: () => (mode.value === "patch" ? patchPerRow.value : reviewPerRow.value),
   set: (value: number) => {
     if (mode.value === "patch") {
       patchPerRow.value = clampSamplesPerRow(value);
@@ -92,26 +157,42 @@ function adjustSamplesPerRow(delta: number): void {
   samplesPerRow.value += delta;
 }
 
-const reviewDisabled = computed(
-  () => props.reviewLoading || !!props.reviewError || (props.reviewSamples ?? []).length === 0,
+const reviewDisabled = computed(() => !!props.reviewError);
+
+watch(
+  () => props.patchSamplesPerRow,
+  (v) => {
+    const next = clampSamplesPerRow(v);
+    if (patchPerRow.value !== next) patchPerRow.value = next;
+  },
 );
-
-watch(() => props.patchSamplesPerRow, (v) => {
-  patchPerRow.value = clampSamplesPerRow(v);
-});
-watch(() => props.reviewSamplesPerRow, (v) => {
-  reviewPerRow.value = clampSamplesPerRow(v);
-});
-watch(reviewDisabled, (disabled) => {
-  if (disabled && mode.value === "review") mode.value = "patch";
-});
-
+watch(
+  () => props.reviewSamplesPerRow,
+  (v) => {
+    const next = clampSamplesPerRow(v);
+    if (reviewPerRow.value !== next) reviewPerRow.value = next;
+  },
+);
+watch(
+  () => props.patchCellSize,
+  (v) => {
+    const next = normalizeImageSize(v);
+    if (patchImageSize.value !== next) patchImageSize.value = next;
+  },
+);
+watch(
+  () => props.reviewCellSize,
+  (v) => {
+    const next = normalizeImageSize(v);
+    if (reviewImageSize.value !== next) reviewImageSize.value = next;
+  },
+);
 const samplesRef = computed(() =>
-  mode.value === "review" ? props.reviewSamples ?? [] : props.samples,
+  mode.value === "review" ? (props.reviewSamples ?? []) : props.samples,
 );
-const patchCellSizeRef = toRef(props, "patchCellSize");
-const reviewCellSizeRef = toRef(props, "reviewCellSize");
-const overscanRef = toRef(props, "overscan");
+const patchCellSizeRef = patchImageSize;
+const reviewCellSizeRef = reviewImageSize;
+const overscanRef = computed(() => props.overscan);
 const PREDICTION_BADGE_ROW_HEIGHT = 26;
 const extraRowHeight = computed(() =>
   props.showPredictionBadges ? PREDICTION_BADGE_ROW_HEIGHT : 0,
@@ -137,62 +218,246 @@ const {
   overscan: overscanRef,
 });
 
-const cellSize = computed(() =>
-  mode.value === "patch" ? props.patchCellSize : props.reviewCellSize
-);
-const reviewColumns = computed(() =>
-  Array.from({ length: props.reviewCount }, (_, i) => i)
-);
-const cellsPerSample = computed(() =>
-  (mode.value === "patch" ? 4 : 4 + props.reviewCount) - (blinkEnabled.value ? 0 : 1)
-);
-const SAMPLE_BLOCK_PADDING_X = 4;
-const sampleBlockWidthPx = computed(
-  () =>
-    cellsPerSample.value * cellSize.value +
-    (cellsPerSample.value - 1) * props.cellGap +
-    SAMPLE_BLOCK_PADDING_X,
-);
-const rowMinWidthPx = computed(
-  () =>
-    effectiveSamplesPerRow.value * sampleBlockWidthPx.value +
-    (effectiveSamplesPerRow.value - 1) * props.rowGap +
-    24 /* left+right row padding */
-);
-const cellSizePx = computed(() => `${cellSize.value}px`);
-const sampleBlockWidthStr = computed(() => `${sampleBlockWidthPx.value}px`);
-const rowMinWidthStr = computed(() => `${rowMinWidthPx.value}px`);
-
-const {
-  rubberBandStyle,
-  onMouseDown,
-} = useBlinkRubberBand({
-  scrollRef,
-  onSelect: (ids, mods) => emit("selectSamples", ids, mods),
+watch(scrollRef, (element) => emit("scrollContainerChange", element), {
+  immediate: true,
+  flush: "post",
 });
 
-const { enabled: blinkEnabled, phase: blinkPhase, toggle: toggleBlink } = useBlinkController({
+const cellSize = computed(() =>
+  mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
+);
+
+const {
+  enabled: blinkEnabled,
+  phase: blinkPhase,
+  toggle: toggleBlink,
+} = useBlinkController({
   intervalMs: props.blinkIntervalMs,
   initialEnabled: props.initialBlinkEnabled,
+});
+
+const selectedPatchImageTypes = computed<PatchImageType[]>(() => {
+  const seen = new Set<PatchImageType>();
+  const parsed = patchImagesInput.value
+    .split(",")
+    .map((part) => patchImageTypeByInput[part.trim().toLowerCase()])
+    .filter((type): type is PatchImageType => !!type)
+    .filter((type) => {
+      if (seen.has(type)) return false;
+      seen.add(type);
+      return true;
+    });
+  return parsed;
+});
+
+function syncPatchSwitchesFromInput() {
+  const types = selectedPatchImageTypes.value;
+  patchDefectiveEnabled.value = types.includes("Defective");
+  patchReferenceEnabled.value = types.includes("Reference");
+  patchDifferenceEnabled.value = types.includes("Difference");
+}
+
+syncPatchSwitchesFromInput();
+
+const inferredReviewImageIds = computed<number[]>(() => {
+  const seen = new Set<number>();
+  const samples = props.reviewSamples?.length ? props.reviewSamples : props.samples;
+  for (const sample of samples) {
+    for (const image of sample.reviewImages ?? []) {
+      const imageId = Number(image.imageId);
+      if (Number.isInteger(imageId) && imageId > 0) {
+        seen.add(imageId);
+      }
+    }
+  }
+  return [...seen].sort((a, b) => a - b);
+});
+
+watch(
+  inferredReviewImageIds,
+  (ids) => {
+    if (!reviewImagesInputEdited.value) {
+      reviewImagesInput.value = ids.join(",");
+    }
+  },
+  { immediate: true },
+);
+
+const selectedReviewImageIds = computed<number[]>(() => {
+  const seen = new Set<number>();
+  const parsed = reviewImagesInput.value
+    .split(",")
+    .map((part) => Number(part.trim()))
+    .filter((imageId) => Number.isInteger(imageId) && imageId > 0)
+    .filter((imageId) => {
+      if (seen.has(imageId)) return false;
+      seen.add(imageId);
+      return true;
+    });
+  return parsed;
+});
+
+const patchImageTypesForSprite = computed<PatchImageType[]>(() => {
+  const requested = [...selectedPatchImageTypes.value];
+  if (blinkEnabled.value) {
+    for (const required of ["Reference", "Defective"] as PatchImageType[]) {
+      if (!requested.includes(required)) requested.unshift(required);
+    }
+  }
+  return requested;
+});
+
+const basePatchColumns = computed(() =>
+  selectedPatchImageTypes.value
+    .map((type) => ({
+      label: PATCH_IMAGE_LABELS[type],
+      spriteIndex: patchImageTypesForSprite.value.indexOf(type),
+      type,
+    }))
+    .filter((column) => column.spriteIndex >= 0),
+);
+
+function reviewColumnsForSample(sample: ScSampleItem): number[] {
+  const available = new Set(
+    (sample.reviewImages ?? [])
+      .map((image) => Number(image.imageId))
+      .filter((imageId) => Number.isInteger(imageId) && imageId > 0),
+  );
+  return selectedReviewImageIds.value.filter((imageId) => available.has(imageId));
+}
+
+function spriteImageTypesForSample(sample: ScSampleItem): string[] {
+  const imageTypes = patchImageTypesForSprite.value.map((type) => PATCH_IMAGE_SPRITE_TOKENS[type]);
+  if (mode.value === "review") {
+    for (const imageId of reviewColumnsForSample(sample)) {
+      imageTypes.push(`review${imageId}`);
+    }
+  }
+  return imageTypes;
+}
+
+function cellsForSample(sample: ScSampleItem): number {
+  const imageCells =
+    basePatchColumns.value.length +
+    (mode.value === "review" ? reviewColumnsForSample(sample).length : 0);
+  return imageCells + (blinkEnabled.value ? 1 : 0);
+}
+
+const maxCellsPerSample = computed(
+  () =>
+    basePatchColumns.value.length +
+    (mode.value === "review" ? selectedReviewImageIds.value.length : 0) +
+    (blinkEnabled.value ? 1 : 0),
+);
+
+const SAMPLE_BLOCK_PADDING_X = 4;
+
+function sampleBlockWidthPx(sample: ScSampleItem): number {
+  const cells = cellsForSample(sample);
+  return cells * cellSize.value + Math.max(0, cells - 1) * props.cellGap + SAMPLE_BLOCK_PADDING_X;
+}
+
+const maxSampleBlockWidthPx = computed(
+  () =>
+    maxCellsPerSample.value * cellSize.value +
+    Math.max(0, maxCellsPerSample.value - 1) * props.cellGap +
+    SAMPLE_BLOCK_PADDING_X,
+);
+
+const rowMinWidthPx = computed(
+  () =>
+    effectiveSamplesPerRow.value * maxSampleBlockWidthPx.value +
+    (effectiveSamplesPerRow.value - 1) * props.rowGap +
+    24 /* left+right row padding */,
+);
+const cellSizePx = computed(() => `${cellSize.value}px`);
+function sampleBlockWidthStr(sample: ScSampleItem): string {
+  return `${sampleBlockWidthPx(sample)}px`;
+}
+const rowMinWidthStr = computed(() => `${rowMinWidthPx.value}px`);
+
+const { rubberBandStyle, onMouseDown } = useBlinkRubberBand({
+  scrollRef,
+  onSelect: (ids, mods) => emit("selectSamples", ids, mods),
 });
 
 const requestedSpriteUrls = ref<Set<string>>(new Set());
 
 function isSelected(defectId: number | string): boolean {
-  const idStr = defectId.toString();
+  const idStr = defectIdKey(defectId);
   if (props.selectedDefectIds instanceof Set) {
     return props.selectedDefectIds.has(idStr);
   }
   return props.selectedDefectIds.includes(idStr);
 }
 
+function defectIdKey(defectId: number | string): string {
+  return String(defectId);
+}
+
+const selectionAnchorId = ref<string | null>(null);
+const orderedVisibleDefectIds = computed(() =>
+  visibleSamples.value.map((sample) => defectIdKey(sample.defectId)),
+);
+
+function rangeBetween(anchorId: string, targetId: string): string[] {
+  const ids = orderedVisibleDefectIds.value;
+  const anchorIndex = ids.indexOf(anchorId);
+  const targetIndex = ids.indexOf(targetId);
+  if (anchorIndex < 0 || targetIndex < 0) return [targetId];
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  return ids.slice(start, end + 1);
+}
+
+function handleSampleClick(sample: ScSampleItem, event: MouseEvent): void {
+  const targetId = defectIdKey(sample.defectId);
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if (event.shiftKey) {
+    const anchor = selectionAnchorId.value ?? targetId;
+    emit("selectSamples", rangeBetween(anchor, targetId), {
+      shift: true,
+      ctrl: event.ctrlKey,
+      meta: event.metaKey,
+      selectionMode: ctrlOrMeta ? "add" : "replace",
+    });
+    return;
+  }
+
+  selectionAnchorId.value = targetId;
+  emit("selectSamples", [targetId], {
+    shift: false,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    selectionMode: ctrlOrMeta ? "toggle" : "replace",
+  });
+}
+
+const previewImageSrc = ref<string | null>(null);
+const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
+
+function handleReviewPreview(sample: ScSampleItem, imageId: number) {
+  const t = props.inspectionTime ?? String(sample.inspectionTime);
+  previewImageSrc.value = scReviewUrl(t, sample.waferKey, sample.defectId, imageId);
+  void nextTick(() => {
+    const el = hiddenImageRef.value?.$el;
+    if (el instanceof HTMLElement) {
+      el.click();
+    }
+  });
+}
+
 function getSpriteUrl(sample: ScSampleItem): string {
   const isPatch = mode.value === "patch";
-  const cs = isPatch ? props.patchCellSize : props.reviewCellSize;
+  const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
   const t = props.inspectionTime ?? String(sample.inspectionTime);
-  return isPatch
-    ? `/api/v1/sc/sprites/patch/${t}/${sample.waferKey}/${sample.defectId}?cell_size=${cs}`
-    : `/api/v1/sc/sprites/review/${t}/${sample.waferKey}/${sample.defectId}?review_count=${props.reviewCount}&cell_size=${cs}`;
+  const params = new URLSearchParams();
+  params.set("cell_size", String(cs));
+  for (const type of spriteImageTypesForSample(sample)) {
+    params.append("image_types", type);
+  }
+  const spriteMode = isPatch ? "patch" : "review";
+  return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
 }
 
 function shouldRenderSprite(sample: ScSampleItem): boolean {
@@ -205,24 +470,300 @@ function shouldRenderSprite(sample: ScSampleItem): boolean {
 }
 
 function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
-  const isPatch = mode.value === "patch";
-  const cols = isPatch ? 3 : 3 + props.reviewCount;
+  const cols = spriteImageTypesForSample(sample).length;
   const url = getSpriteUrl(sample);
 
-  const bgSize = `${cols * 100}% 100%`;
-  const bgPos = cols > 1 ? `${(colIndex / (cols - 1)) * 100}% 0` : '0 0';
+  const bgSize = `${cols * cellSize.value}px ${cellSize.value}px`;
+  const bgPos = `${-colIndex * cellSize.value}px 0`;
 
   return {
     backgroundImage: `url(${withAuthQueryParams(url)})`,
     backgroundSize: bgSize,
     backgroundPosition: bgPos,
-    backgroundRepeat: 'no-repeat',
+    backgroundRepeat: "no-repeat",
   };
 }
 
-function handleScroll() {
-  queueViewportImageLoad();
+function blinkBaseSpriteIndex(): number {
+  const referenceIndex = patchImageTypesForSprite.value.indexOf("Reference");
+  return referenceIndex >= 0 ? referenceIndex : 0;
 }
+
+function blinkOverlaySpriteIndex(): number {
+  const defectiveIndex = patchImageTypesForSprite.value.indexOf("Defective");
+  return defectiveIndex >= 0 ? defectiveIndex : 0;
+}
+
+function reviewSpriteIndex(sample: ScSampleItem, imageId: number): number {
+  const selectedIndex = reviewColumnsForSample(sample).indexOf(imageId);
+  return patchImageTypesForSprite.value.length + Math.max(0, selectedIndex);
+}
+
+interface ScrollMetrics {
+  clientWidth: number;
+  clientHeight: number;
+  scrollWidth: number;
+  scrollHeight: number;
+  scrollLeft: number;
+  scrollTop: number;
+}
+
+const MIN_SCROLL_THUMB_SIZE = 24;
+const scrollMetrics = ref<ScrollMetrics>({
+  clientWidth: 0,
+  clientHeight: 0,
+  scrollWidth: 0,
+  scrollHeight: 0,
+  scrollLeft: 0,
+  scrollTop: 0,
+});
+let resizeObserver: ResizeObserver | null = null;
+let dragState: {
+  axis: "x" | "y";
+  startPointer: number;
+  startScroll: number;
+  scrollableDistance: number;
+  trackDistance: number;
+} | null = null;
+
+const showYScrollbar = computed(
+  () => scrollMetrics.value.scrollHeight > scrollMetrics.value.clientHeight + 1,
+);
+const showXScrollbar = computed(
+  () => scrollMetrics.value.scrollWidth > scrollMetrics.value.clientWidth + 1,
+);
+
+const yThumbSize = computed(() => {
+  const { clientHeight, scrollHeight } = scrollMetrics.value;
+  if (clientHeight <= 0 || scrollHeight <= 0) return 0;
+  return Math.min(
+    clientHeight,
+    Math.max(MIN_SCROLL_THUMB_SIZE, (clientHeight / scrollHeight) * clientHeight),
+  );
+});
+
+const xThumbSize = computed(() => {
+  const { clientWidth, scrollWidth } = scrollMetrics.value;
+  if (clientWidth <= 0 || scrollWidth <= 0) return 0;
+  return Math.min(
+    clientWidth,
+    Math.max(MIN_SCROLL_THUMB_SIZE, (clientWidth / scrollWidth) * clientWidth),
+  );
+});
+
+const yThumbOffset = computed(() => {
+  const { clientHeight, scrollHeight, scrollTop } = scrollMetrics.value;
+  const scrollableDistance = scrollHeight - clientHeight;
+  const trackDistance = clientHeight - yThumbSize.value;
+  if (scrollableDistance <= 0 || trackDistance <= 0) return 0;
+  return (scrollTop / scrollableDistance) * trackDistance;
+});
+
+const xThumbOffset = computed(() => {
+  const { clientWidth, scrollWidth, scrollLeft } = scrollMetrics.value;
+  const scrollableDistance = scrollWidth - clientWidth;
+  const trackDistance = clientWidth - xThumbSize.value;
+  if (scrollableDistance <= 0 || trackDistance <= 0) return 0;
+  return (scrollLeft / scrollableDistance) * trackDistance;
+});
+
+const yThumbStyle = computed<CSSProperties>(() => ({
+  height: `${yThumbSize.value}px`,
+  transform: `translateY(${yThumbOffset.value}px)`,
+}));
+
+const xThumbStyle = computed<CSSProperties>(() => ({
+  width: `${xThumbSize.value}px`,
+  transform: `translateX(${xThumbOffset.value}px)`,
+}));
+
+function syncScrollMetrics(): void {
+  const element = scrollRef.value;
+  if (!element) return;
+  scrollMetrics.value = {
+    clientWidth: element.clientWidth,
+    clientHeight: element.clientHeight,
+    scrollWidth: element.scrollWidth,
+    scrollHeight: element.scrollHeight,
+    scrollLeft: element.scrollLeft,
+    scrollTop: element.scrollTop,
+  };
+}
+
+function attachResizeObserver(element: HTMLElement | null): void {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (!element || typeof ResizeObserver === "undefined") return;
+  resizeObserver = new ResizeObserver(() => syncScrollMetrics());
+  resizeObserver.observe(element);
+  const content = element.firstElementChild;
+  if (content instanceof HTMLElement) {
+    resizeObserver.observe(content);
+  }
+}
+
+watch(
+  scrollRef,
+  (element) => {
+    attachResizeObserver(element);
+    void nextTick(syncScrollMetrics);
+  },
+  { flush: "post" },
+);
+
+watch(
+  [
+    () => visibleSamples.value.length,
+    rowMinWidthPx,
+    virtualRowHeightStr,
+    imageSize,
+    selectedPatchImageTypes,
+    selectedReviewImageIds,
+    blinkEnabled,
+  ],
+  () => {
+    void nextTick(syncScrollMetrics);
+  },
+  { flush: "post" },
+);
+
+function handleScroll(): void {
+  queueViewportImageLoad();
+  syncScrollMetrics();
+}
+
+function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
+  const element = scrollRef.value;
+  if (!element) return;
+  const metrics = scrollMetrics.value;
+  const scrollableDistance =
+    axis === "y"
+      ? metrics.scrollHeight - metrics.clientHeight
+      : metrics.scrollWidth - metrics.clientWidth;
+  const trackDistance =
+    axis === "y" ? metrics.clientHeight - yThumbSize.value : metrics.clientWidth - xThumbSize.value;
+  if (scrollableDistance <= 0 || trackDistance <= 0) return;
+  dragState = {
+    axis,
+    startPointer: axis === "y" ? event.clientY : event.clientX,
+    startScroll: axis === "y" ? element.scrollTop : element.scrollLeft,
+    scrollableDistance,
+    trackDistance,
+  };
+  document.addEventListener("mousemove", handleScrollbarDrag);
+  document.addEventListener("mouseup", endScrollbarDrag, { once: true });
+}
+
+function handleScrollbarDrag(event: MouseEvent): void {
+  const element = scrollRef.value;
+  if (!element || !dragState) return;
+  const pointer = dragState.axis === "y" ? event.clientY : event.clientX;
+  const delta = pointer - dragState.startPointer;
+  const scrollDelta = (delta / dragState.trackDistance) * dragState.scrollableDistance;
+  if (dragState.axis === "y") {
+    element.scrollTop = dragState.startScroll + scrollDelta;
+  } else {
+    element.scrollLeft = dragState.startScroll + scrollDelta;
+  }
+  syncScrollMetrics();
+}
+
+function endScrollbarDrag(): void {
+  dragState = null;
+  document.removeEventListener("mousemove", handleScrollbarDrag);
+}
+
+function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
+  const element = scrollRef.value;
+  if (!element) return;
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) return;
+  const rect = target.getBoundingClientRect();
+  if (axis === "y") {
+    const offset = event.clientY - rect.top - yThumbSize.value / 2;
+    const trackDistance = scrollMetrics.value.clientHeight - yThumbSize.value;
+    if (trackDistance > 0) {
+      element.scrollTop =
+        (offset / trackDistance) *
+        (scrollMetrics.value.scrollHeight - scrollMetrics.value.clientHeight);
+    }
+  } else {
+    const offset = event.clientX - rect.left - xThumbSize.value / 2;
+    const trackDistance = scrollMetrics.value.clientWidth - xThumbSize.value;
+    if (trackDistance > 0) {
+      element.scrollLeft =
+        (offset / trackDistance) *
+        (scrollMetrics.value.scrollWidth - scrollMetrics.value.clientWidth);
+    }
+  }
+  syncScrollMetrics();
+}
+
+const SETTINGS_STORAGE_KEY = "blink-table-settings";
+
+interface PersistedSettings {
+  blinkEnabled?: boolean;
+  patchPerRow?: number;
+  reviewPerRow?: number;
+  patchImageSize?: number;
+  reviewImageSize?: number;
+  patchImagesInput?: string;
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+    const saved: PersistedSettings = JSON.parse(raw);
+    if (typeof saved.blinkEnabled === "boolean" && blinkEnabled.value !== saved.blinkEnabled) {
+      toggleBlink();
+    }
+    if (typeof saved.patchPerRow === "number")
+      patchPerRow.value = clampSamplesPerRow(saved.patchPerRow);
+    if (typeof saved.reviewPerRow === "number")
+      reviewPerRow.value = clampSamplesPerRow(saved.reviewPerRow);
+    if (typeof saved.patchImageSize === "number")
+      patchImageSize.value = normalizeImageSize(saved.patchImageSize);
+    if (typeof saved.reviewImageSize === "number")
+      reviewImageSize.value = normalizeImageSize(saved.reviewImageSize);
+    if (typeof saved.patchImagesInput === "string") patchImagesInput.value = saved.patchImagesInput;
+    syncPatchSwitchesFromInput();
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveSettings() {
+  const data: PersistedSettings = {
+    blinkEnabled: blinkEnabled.value,
+    patchPerRow: patchPerRow.value,
+    reviewPerRow: reviewPerRow.value,
+    patchImageSize: patchImageSize.value,
+    reviewImageSize: reviewImageSize.value,
+    patchImagesInput: patchImagesInput.value,
+  };
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+onMounted(() => {
+  loadSettings();
+  window.addEventListener("resize", syncScrollMetrics);
+  void nextTick(syncScrollMetrics);
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  document.removeEventListener("mousemove", handleScrollbarDrag);
+  window.removeEventListener("resize", syncScrollMetrics);
+});
+
+watch(settingsOpen, (open) => {
+  if (!open) saveSettings();
+});
 
 defineExpose({ scrollRef });
 </script>
@@ -232,13 +773,6 @@ defineExpose({ scrollRef });
     <!-- Toolbar -->
     <div class="sbt-toolbar">
       <div class="sbt-toolbar-left">
-        <n-switch
-          :value="blinkEnabled"
-          size="small"
-          @update:value="toggleBlink"
-        />
-        <n-text class="sbt-blink-label">Blink</n-text>
-
         <n-radio-group
           v-if="showModeSwitch"
           v-model:value="mode"
@@ -256,39 +790,119 @@ defineExpose({ scrollRef });
           Review unavailable
         </n-text>
 
-        <div class="sbt-per-row">
-          <n-text class="sbt-per-row-label">PerRow:</n-text>
-          <n-button
-            size="tiny"
-            quaternary
-            class="sbt-per-row-button"
-            aria-label="Decrease samples per row"
-            :disabled="samplesPerRow <= 1"
-            @click="adjustSamplesPerRow(-1)"
-          >
-            &minus;
-          </n-button>
-          <n-text class="sbt-per-row-value" aria-live="polite">
-            {{ samplesPerRow }}
-          </n-text>
-          <n-button
-            size="tiny"
-            quaternary
-            class="sbt-per-row-button"
-            aria-label="Increase samples per row"
-            :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
-            @click="adjustSamplesPerRow(1)"
-          >
-            +
-          </n-button>
-        </div>
+        <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
       </div>
       <div class="sbt-toolbar-right">
-        <n-text class="sbt-row-count" depth="3">
-          {{ visibleSamples.length }} samples
-        </n-text>
+        <n-text class="sbt-row-count" depth="3"> {{ visibleSamples.length }} samples </n-text>
       </div>
     </div>
+
+    <n-modal
+      v-model:show="settingsOpen"
+      preset="card"
+      title="Table Settings"
+      class="sbt-settings-modal"
+      :style="{ width: '380px' }"
+    >
+      <div class="sbt-settings">
+        <div class="sbt-setting-row">
+          <n-text class="sbt-control-label">Per Row</n-text>
+          <div class="sbt-per-row">
+            <n-button
+              size="tiny"
+              quaternary
+              class="sbt-per-row-button"
+              aria-label="Decrease samples per row"
+              :disabled="samplesPerRow <= 1"
+              @click="adjustSamplesPerRow(-1)"
+            >
+              &minus;
+            </n-button>
+            <n-text class="sbt-per-row-value" aria-live="polite">
+              {{ samplesPerRow }}
+            </n-text>
+            <n-button
+              size="tiny"
+              quaternary
+              class="sbt-per-row-button"
+              aria-label="Increase samples per row"
+              :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
+              @click="adjustSamplesPerRow(1)"
+            >
+              +
+            </n-button>
+          </div>
+        </div>
+
+        <div class="sbt-setting-row">
+          <n-text class="sbt-control-label">Size</n-text>
+          <n-select
+            v-model:value="imageSize"
+            size="small"
+            class="sbt-size-select"
+            :options="IMAGE_SIZE_SELECT_OPTIONS"
+            :consistent-menu-width="false"
+          />
+        </div>
+
+        <div class="sbt-setting-block">
+          <n-text class="sbt-control-label">Patch Image</n-text>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Blink</n-text>
+            <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Defective</n-text>
+            <n-switch
+              :value="patchDefectiveEnabled"
+              size="small"
+              @update:value="
+                patchDefectiveEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Reference</n-text>
+            <n-switch
+              :value="patchReferenceEnabled"
+              size="small"
+              @update:value="
+                patchReferenceEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Difference</n-text>
+            <n-switch
+              :value="patchDifferenceEnabled"
+              size="small"
+              @update:value="
+                patchDifferenceEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
+        </div>
+
+        <div class="sbt-setting-block">
+          <n-text class="sbt-control-label">Review Images</n-text>
+          <n-input
+            v-model:value="reviewImagesInput"
+            size="small"
+            placeholder="Inferred from review images"
+            @update:value="reviewImagesInputEdited = true"
+          />
+        </div>
+      </div>
+    </n-modal>
+
+    <NImage
+      ref="hiddenImageRef"
+      :src="previewImageSrc || ''"
+      :style="{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px' }"
+    />
 
     <!-- Empty state -->
     <div v-if="visibleSamples.length === 0" class="sbt-empty">
@@ -298,126 +912,174 @@ defineExpose({ scrollRef });
     </div>
 
     <!-- Scroll body -->
-    <div
-      v-else
-      ref="scrollRef"
-      class="sbt-scroll"
-      @scroll="handleScroll"
-      @mousedown="onMouseDown"
-    >
-      <div class="sbt-vrow" :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }">
-        <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
+    <div v-else class="sbt-scroll-shell" data-testid="blink-table-scrollbar">
+      <div ref="scrollRef" class="sbt-scroll" @scroll="handleScroll" @mousedown="onMouseDown">
         <div
-          v-for="virtualRow in virtualizer.getVirtualItems()"
-          :key="virtualRow.index"
-          class="sbt-row-wrapper"
-          :class="{ 'sbt-vrow--odd': virtualRow.index % 2 === 1 }"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: virtualRowHeightStr,
-            transform: `translateY(${virtualRow.start}px)`,
-          }"
+          class="sbt-vrow"
+          :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
         >
-          <div class="sbt-row" :style="{ minWidth: rowMinWidthStr }">
-            <div
-              v-for="sample in samplesForVirtualRow(virtualRow.index)"
-              :key="sample.defectId"
-              class="sbt-sample-block"
-              :class="{ 'sbt-sample-block--selected': isSelected(sample.defectId) }"
-              :data-defect-id="sample.defectId"
-              :style="{ width: sampleBlockWidthStr }"
-            >
-              <!-- Mini Header -->
-              <div class="sbt-sample-mini-header">
-                <div v-if="blinkEnabled" class="sbt-sample-header-label">Blink</div>
-                <div class="sbt-sample-header-label">Template</div>
-                <div class="sbt-sample-header-label">Defective</div>
-                <div class="sbt-sample-header-label">Difference</div>
-                <template v-if="mode === 'review'">
+          <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
+          <div
+            v-for="virtualRow in virtualizer.getVirtualItems()"
+            :key="virtualRow.index"
+            class="sbt-row-wrapper"
+            :class="{ 'sbt-vrow--odd': virtualRow.index % 2 === 1 }"
+            :style="{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: virtualRowHeightStr,
+              transform: `translateY(${virtualRow.start}px)`,
+            }"
+          >
+            <div class="sbt-row" :style="{ minWidth: rowMinWidthStr }">
+              <div
+                v-for="sample in samplesForVirtualRow(virtualRow.index)"
+                :key="sample.defectId"
+                class="sbt-sample-block"
+                :class="{ 'sbt-sample-block--selected': isSelected(sample.defectId) }"
+                :data-defect-id="sample.defectId"
+                :style="{ width: sampleBlockWidthStr(sample) }"
+                @click.stop="handleSampleClick(sample, $event)"
+              >
+                <!-- Mini Header -->
+                <div class="sbt-sample-mini-header">
+                  <div v-if="blinkEnabled" class="sbt-sample-header-label">Blink</div>
                   <div
-                    v-for="n in reviewColumns"
-                    :key="'rev_header_' + n"
+                    v-for="col in basePatchColumns"
+                    :key="'base_header_' + col.spriteIndex"
                     class="sbt-sample-header-label"
                   >
-                    Rev {{ n + 1 }}
+                    {{ col.label }}
                   </div>
-                </template>
-              </div>
-
-              <!-- Images Row -->
-              <div class="sbt-sample-images-row" :style="{ height: imageCellHeightPxStr }">
-                <!-- Blink Cell -->
-                <div v-if="blinkEnabled" class="sbt-img-cell">
-                  <template v-if="shouldRenderSprite(sample)">
-                    <!-- Base Template layer -->
-                    <div class="sbt-sprite-layer" :style="getSpriteStyle(sample, 0)"></div>
-                    <!-- Defective Overlay layer -->
+                  <template v-if="mode === 'review'">
                     <div
-                      class="sbt-sprite-layer sbt-overlay"
-                      :class="{ 'is-active': blinkPhase === 'B' }"
-                      :style="getSpriteStyle(sample, 1)"
-                    ></div>
+                      v-for="imageId in reviewColumnsForSample(sample)"
+                      :key="'rev_header_' + imageId"
+                      class="sbt-sample-header-label"
+                    >
+                      Rev {{ imageId }}
+                    </div>
                   </template>
-                  <div v-else class="sbt-img-placeholder"></div>
-                  <div class="sbt-defect-id">{{ sample.defectId }}</div>
                 </div>
 
-                <!-- Template, Defective, Difference Cells -->
-                <div v-for="col in [0, 1, 2]" :key="'base_' + col" class="sbt-img-cell">
-                  <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, col)"></div>
-                  <div v-else class="sbt-img-placeholder"></div>
-                </div>
+                <!-- Images Row -->
+                <div class="sbt-sample-images-row" :style="{ height: imageCellHeightPxStr }">
+                  <!-- Blink Cell -->
+                  <div v-if="blinkEnabled" class="sbt-img-cell">
+                    <template v-if="shouldRenderSprite(sample)">
+                      <!-- Base reference layer -->
+                      <div
+                        class="sbt-sprite-layer"
+                        :style="getSpriteStyle(sample, blinkBaseSpriteIndex())"
+                      ></div>
+                      <!-- Defective overlay layer -->
+                      <div
+                        class="sbt-sprite-layer sbt-overlay"
+                        :class="{ 'is-active': blinkPhase === 'B' }"
+                        :style="getSpriteStyle(sample, blinkOverlaySpriteIndex())"
+                      ></div>
+                    </template>
+                    <div v-else class="sbt-img-placeholder"></div>
+                    <div class="sbt-defect-id">{{ sample.defectId }}</div>
+                  </div>
 
-                <!-- Review Cells -->
-                <template v-if="mode === 'review'">
+                  <!-- Base patch cells -->
                   <div
-                    v-for="n in reviewColumns"
-                    :key="'rev_' + n"
+                    v-for="col in basePatchColumns"
+                    :key="'base_' + col.spriteIndex"
                     class="sbt-img-cell"
                   >
-                    <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, 3 + n)"></div>
+                    <div
+                      v-if="shouldRenderSprite(sample)"
+                      class="sbt-sprite-layer"
+                      :style="getSpriteStyle(sample, col.spriteIndex)"
+                    ></div>
                     <div v-else class="sbt-img-placeholder"></div>
                   </div>
-                </template>
-              </div>
 
-              <!-- Prediction / Annotation / Draft Badges -->
-              <div v-if="showPredictionBadges" class="sbt-prediction-row">
-                <n-tag
-                  v-if="annotationDrafts[sample.defectId]"
-                  type="warning"
-                  size="small"
-                  class="sbt-prediction-badge"
-                  title="Draft (unsubmitted)"
-                >
-                  D: {{ annotationDrafts[sample.defectId] }}
-                </n-tag>
-                <n-tag
-                  v-if="annotationLabels[sample.defectId]"
-                  type="success"
-                  size="small"
-                  class="sbt-prediction-badge"
-                  title="Annotation (saved)"
-                >
-                  A: {{ annotationLabels[sample.defectId] }}
-                </n-tag>
-                <n-tag
-                  v-if="predictionLabels[sample.defectId]"
-                  type="info"
-                  size="small"
-                  class="sbt-prediction-badge"
-                  title="Latest prediction"
-                >
-                  P: {{ predictionLabels[sample.defectId] }}{{ predictionConfidences[sample.defectId] != null ? ` (${(predictionConfidences[sample.defectId]! * 100).toFixed(0)}%)` : '' }}
-                </n-tag>
-                <div v-else></div>
+                  <!-- Review Cells -->
+                  <template v-if="mode === 'review'">
+                    <div
+                      v-for="imageId in reviewColumnsForSample(sample)"
+                      :key="'rev_' + imageId"
+                      class="sbt-img-cell sbt-img-cell--preview"
+                      @click.stop="handleReviewPreview(sample, imageId)"
+                    >
+                      <div
+                        v-if="shouldRenderSprite(sample)"
+                        class="sbt-sprite-layer"
+                        :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"
+                      ></div>
+                      <div v-else class="sbt-img-placeholder"></div>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Prediction / Annotation / Draft Badges -->
+                <div v-if="showPredictionBadges" class="sbt-prediction-row">
+                  <n-tag
+                    v-if="annotationDrafts[defectIdKey(sample.defectId)]"
+                    type="warning"
+                    size="small"
+                    class="sbt-prediction-badge"
+                    title="Draft (unsubmitted)"
+                  >
+                    D: {{ annotationDrafts[defectIdKey(sample.defectId)] }}
+                  </n-tag>
+                  <n-tag
+                    v-if="annotationLabels[defectIdKey(sample.defectId)]"
+                    type="success"
+                    size="small"
+                    class="sbt-prediction-badge"
+                    title="Annotation (saved)"
+                  >
+                    A: {{ annotationLabels[defectIdKey(sample.defectId)] }}
+                  </n-tag>
+                  <n-tag
+                    v-if="predictionLabels[defectIdKey(sample.defectId)]"
+                    type="info"
+                    size="small"
+                    class="sbt-prediction-badge"
+                    title="Latest prediction"
+                  >
+                    P: {{ predictionLabels[defectIdKey(sample.defectId)]
+                    }}{{
+                      predictionConfidences[defectIdKey(sample.defectId)] != null
+                        ? ` (${(predictionConfidences[defectIdKey(sample.defectId)]! * 100).toFixed(0)}%)`
+                        : ""
+                    }}
+                  </n-tag>
+                  <div v-else></div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div
+        v-if="showYScrollbar"
+        class="sbt-scrollbar-rail sbt-scrollbar-rail--y"
+        @mousedown.prevent="jumpScrollbar('y', $event)"
+      >
+        <div
+          class="sbt-scrollbar-thumb"
+          :style="yThumbStyle"
+          @mousedown.stop.prevent="beginScrollbarDrag('y', $event)"
+        ></div>
+      </div>
+      <div
+        v-if="showXScrollbar"
+        class="sbt-scrollbar-rail sbt-scrollbar-rail--x"
+        @mousedown.prevent="jumpScrollbar('x', $event)"
+      >
+        <div
+          class="sbt-scrollbar-thumb"
+          :style="xThumbStyle"
+          @mousedown.stop.prevent="beginScrollbarDrag('x', $event)"
+        ></div>
       </div>
     </div>
   </div>
@@ -442,11 +1104,7 @@ defineExpose({ scrollRef });
   justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
-  background: color-mix(
-    in srgb,
-    var(--cv-card-bg, #1e1e2e) 50%,
-    var(--cv-bg, #16162a)
-  );
+  background: color-mix(in srgb, var(--cv-card-bg, #1e1e2e) 50%, var(--cv-bg, #16162a));
   flex-shrink: 0;
 }
 
@@ -454,6 +1112,7 @@ defineExpose({ scrollRef });
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .sbt-toolbar-right {
@@ -478,7 +1137,6 @@ defineExpose({ scrollRef });
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 4px;
 }
 
 .sbt-per-row-label {
@@ -493,7 +1151,7 @@ defineExpose({ scrollRef });
 }
 
 .sbt-per-row-value {
-  width: 14px;
+  min-width: 24px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -503,31 +1161,95 @@ defineExpose({ scrollRef });
   font-size: 12px;
 }
 
+.sbt-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sbt-control-label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sbt-size-select {
+  width: 72px;
+}
+
+.sbt-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sbt-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sbt-setting-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* Scroll body */
-.sbt-scroll {
+.sbt-scroll-shell {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  min-height: 0;
   position: relative;
   user-select: none;
+  overflow: hidden;
+}
+
+.sbt-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .sbt-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 0;
+  height: 0;
 }
 
-.sbt-scroll::-webkit-scrollbar-track {
-  background: transparent;
+.sbt-scrollbar-rail {
+  position: absolute;
+  z-index: 20;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  user-select: none;
 }
 
-.sbt-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+.sbt-scrollbar-rail--y {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
 }
 
-.sbt-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.sbt-scrollbar-rail--x {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 10px;
+}
+
+.sbt-scrollbar-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(142, 160, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+}
+
+.sbt-scrollbar-thumb:hover {
+  background: rgba(142, 160, 255, 0.9);
 }
 
 /* Virtual row wrapper */
@@ -536,11 +1258,7 @@ defineExpose({ scrollRef });
 }
 
 .sbt-vrow--odd .sbt-row {
-  background: color-mix(
-    in srgb,
-    var(--cv-card-bg, #1e1e2e) 60%,
-    var(--cv-bg, #16162a)
-  );
+  background: color-mix(in srgb, var(--cv-card-bg, #1e1e2e) 60%, var(--cv-bg, #16162a));
 }
 
 /* Row (horizontal flex of sample blocks) */
@@ -562,15 +1280,13 @@ defineExpose({ scrollRef });
   border-radius: 4px;
   padding: 2px;
   box-sizing: border-box;
-  transition: background-color 0.15s, box-shadow 0.15s;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .sbt-sample-block--selected {
-  background: color-mix(
-    in srgb,
-    var(--cv-primary, #4098fc) 12%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--cv-primary, #4098fc) 12%, transparent);
   box-shadow: inset 0 0 0 2px var(--cv-primary, #4098fc);
 }
 
@@ -614,6 +1330,20 @@ defineExpose({ scrollRef });
   flex-shrink: 0;
 }
 
+.sbt-img-cell--preview {
+  cursor: zoom-in;
+}
+
+.sbt-review-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sbt-review-image :deep(img) {
+  display: block;
+}
+
 .sbt-sprite-layer {
   width: 100%;
   height: 100%;
@@ -629,11 +1359,7 @@ defineExpose({ scrollRef });
 .sbt-rubber-band {
   position: absolute;
   border: 2px dashed var(--cv-primary, #4098fc);
-  background: color-mix(
-    in srgb,
-    var(--cv-primary, #4098fc) 15%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--cv-primary, #4098fc) 15%, transparent);
   pointer-events: none;
   z-index: 10;
 }

@@ -1,11 +1,11 @@
-import type { Locator, Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { BasePage } from '../BasePage'
 
 /**
  * Page Object Model for the `/datasets` list route.
  *
  * Covers the dataset toolbar (Import Dataset, Preview Dataset buttons)
- * and row-level actions (View, Make Public/Make Private, Delete)
+ * and row-level actions (View, Delete)
  * rendered by the {@link DatasetToolbar} and {@link DatasetTable}
  * + {@link DatasetRowActions} components.
  */
@@ -72,21 +72,6 @@ export class DatasetListPage extends BasePage {
   }
 
   /**
-   * Click "Make Public" button on a dataset row (only visible for superadmins
-   * on own-org datasets).
-   */
-  async clickMakePublic(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Make Public' }).click()
-  }
-
-  /**
-   * Click "Make Private" button on a dataset row.
-   */
-  async clickMakePrivate(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Make Private' }).click()
-  }
-
-  /**
    * Click "Delete" button on a dataset row (only visible for superadmins
    * on own-org datasets).
    */
@@ -95,10 +80,11 @@ export class DatasetListPage extends BasePage {
   }
 
   /**
-   * Assert the "Make Public" button is visible (superadmin + own-org check).
+   * Assert public visibility controls are disabled.
    */
-  async expectMakePublicVisible(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Make Public' }).waitFor()
+  async expectPublicControlsHidden(): Promise<void> {
+    await expect(this.page.getByRole('button', { name: 'Make Public' })).toHaveCount(0)
+    await expect(this.page.getByRole('button', { name: 'Make Private' })).toHaveCount(0)
   }
 
   /**

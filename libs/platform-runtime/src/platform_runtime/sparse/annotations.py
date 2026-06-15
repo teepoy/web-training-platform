@@ -111,7 +111,9 @@ class SparseAnnotationStore:
             existing = latest.get(record.sample_id)
             if existing is None or record.created_at >= existing.created_at:
                 latest[record.sample_id] = record
-        return latest
+        return {
+            sample_id: record for sample_id, record in latest.items() if record.label
+        }
 
     async def stats(self, *, dataset_id: str, org_id: str) -> dict[str, int]:
         latest = await self.latest_by_sample(dataset_id=dataset_id, org_id=org_id)

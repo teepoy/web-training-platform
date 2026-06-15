@@ -1,4 +1,4 @@
-"""Tests for image_sc (semiconductor) dataset type."""
+"""Tests for image_sc (patch) dataset type."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient

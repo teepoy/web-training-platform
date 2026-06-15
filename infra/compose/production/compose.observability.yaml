@@ -115,6 +115,7 @@ services:
     image: prefecthq/prefect:3.6.25-python3.12
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
       EXPORTER_PORT: "8000"
     command: ["python", "/exporter/exporter.py"]
     volumes:

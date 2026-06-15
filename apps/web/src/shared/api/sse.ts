@@ -5,7 +5,7 @@
 // Also includes EventSource-based helpers for job/task streaming.
 // ---------------------------------------------------------------------------
 
-import { getApiBase, getAuthToken, ApiError } from "./client";
+import { getApiBase, getAuthToken, getOrgId, ApiError } from "./client";
 import type { GlobalChatRequest } from "@/generated/orval/models";
 
 /** Parsed SSE frame from a POST-based SSE response stream. */
@@ -57,7 +57,7 @@ export function buildSSEHeaders(): Record<string, string> {
   };
   const token = getAuthToken();
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
   return headers;
 }
@@ -95,4 +95,74 @@ export function buildTrackedTaskEventSource(taskId: string): EventSource {
   return new EventSource(
     `${getApiBase()}/task-tracker/tasks/${taskId}/stream?${params.toString()}`,
   );
+}
+
+export interface ApiSseEvent {
+  event_type: string;
+  status?: string;
+  message?: string;
+  operation?: string;
+  error?: string;
+  dataset_id?: string;
+  imported_count?: number;
+  loaded_count?: number;
+  total_count?: number;
+  payload?: Record<string, unknown>;
+  uri?: string;
+  rows?: number;
+}
+
+export interface StreamApiSseOptions {
+  method?: "GET" | "POST";
+  body?: unknown;
+  onEvent?: (event: ApiSseEvent) => void;
+}
+
+function parseApiSseData(data: string): ApiSseEvent {
+  return JSON.parse(data) as ApiSseEvent;
+}
+
+export async function streamApiSse(
+  path: string,
+  options: StreamApiSseOptions = {},
+): Promise<ApiSseEvent | null> {
+  const headers = buildSSEHeaders();
+  headers.Accept = "text/event-stream";
+  const orgId = getOrgId();
+  if (orgId) headers["X-Organization-ID"] = orgId;
+  let body: BodyInit | undefined;
+  if (options.body !== undefined) {
+    body = JSON.stringify(options.body);
+  }
+
+  const response = await fetch(`${getApiBase()}${path}`, {
+    method: options.method ?? (body ? "POST" : "GET"),
+    headers,
+    body,
+  });
+  if (!response.ok) {
+    let detail = `request failed: ${response.status}`;
+    try {
+      const parsed = await response.json();
+      detail =
+        typeof parsed?.detail === "string" ? parsed.detail : JSON.stringify(parsed);
+    } catch {}
+    throw new ApiError(detail, response.status);
+  }
+  if (!response.body) {
+    throw new Error("SSE response body is not readable");
+  }
+
+  let dataEvent: ApiSseEvent | null = null;
+  for await (const frame of parseSSEStream(response.body.getReader())) {
+    const event = parseApiSseData(frame.data);
+    options.onEvent?.(event);
+    if (event.event_type === "error") {
+      throw new Error(event.error || "stream failed");
+    }
+    if (event.event_type === "data") {
+      dataEvent = event;
+    }
+  }
+  return dataEvent;
 }

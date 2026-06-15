@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import polars as pl
 import pyarrow as pa
@@ -22,34 +21,6 @@ INSP_DT = datetime(2026, 5, 26, 8, 0, 0, tzinfo=timezone.utc)
 MOCK_REVIEW_URI_TPL = (
     "mock-sc://review/2026-05-26T08:00:00+00:00/1/{defect_id}"
 )
-MOCK_TEMPLATE_URI_TPL = (
-    "mock-sc://patch/2026-05-26T08:00:00+00:00/1/{defect_id}/template.png"
-)
-MOCK_DEFECTIVE_URI_TPL = (
-    "mock-sc://patch/2026-05-26T08:00:00+00:00/1/{defect_id}/defective.png"
-)
-MOCK_DIFFERENCE_URI_TPL = (
-    "mock-sc://patch/2026-05-26T08:00:00+00:00/1/{defect_id}/difference.png"
-)
-
-
-class FakeImageStore:
-    """In-memory store mapping URI→bytes; only registered URIs are resolvable."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, bytes] = {}
-
-    def put(self, uri: str, data: bytes) -> None:
-        self._store[uri] = data
-
-    def get(self, uri: str) -> bytes | None:
-        return self._store.get(uri)
-
-    def exists(self, uri: str) -> bool:
-        return uri in self._store
-
-    def is_storage_uri(self, uri: str) -> bool:
-        return uri.startswith(("s3://", "http://", "https://"))
 
 
 def _make_review_image(
@@ -77,105 +48,6 @@ def _sample_with_review(sample_id: str = "1") -> PatchSample:
         inspection_time=INSP_DT,
         review_images=[_make_review_image(uri)],
     )
-
-
-class _MockFlowContext:
-    """Minimal mock AppContext for flow testing — provides sc / shared / datasets."""
-
-    def __init__(self) -> None:
-        self.sc: Any = MagicMock()
-        self.shared: Any = MagicMock()
-        self.datasets: Any = MagicMock()
-        self._closed = False
-
-    async def close(self) -> None:
-        self._closed = True
-
-
-def _install_mock_context(mock_ctx: _MockFlowContext) -> None:
-    import app.modules.sc.adapter.flows.sc_import as flow_mod
-
-    if not hasattr(flow_mod, "_test_original_with_flow_app_context"):
-        setattr(
-            flow_mod,
-            "_test_original_with_flow_app_context",
-            flow_mod._with_flow_app_context,
-        )
-    flow_mod._with_flow_app_context = AsyncMock(return_value=(mock_ctx, False))
-
-
-def _remove_mock_context() -> None:
-    import app.modules.sc.adapter.flows.sc_import as flow_mod
-
-    original = getattr(flow_mod, "_test_original_with_flow_app_context", None)
-    if original is not None:
-        flow_mod._with_flow_app_context = original
-        delattr(flow_mod, "_test_original_with_flow_app_context")
-
-
-def _add_sc_config(ctx: _MockFlowContext) -> None:
-    """Add artifact storage config to a mock flow context."""
-    if ctx.shared.config is None:
-        ctx.shared.config = MagicMock()
-    cfg = ctx.shared.config
-    cfg.storage.minio.endpoint = "localhost:9000"
-    cfg.storage.minio.access_key = "minioadmin"
-    cfg.storage.minio.secret_key = "minioadmin"
-    cfg.storage.minio.secure = False
-    ctx.shared.artifact_storage = MagicMock()
-
-
-async def _mock_image_structs(
-    *, patch_sample: Any = None, **kwargs: object
-) -> list[dict[str, object]]:
-    """Return known image struct dicts for tests that mock ``_build_image_structs``."""
-    defect_id = getattr(patch_sample, "defect_id", "0") if patch_sample else "0"
-    return [
-        {
-            "image_id": str(defect_id),
-            "image_type": "review",
-            "role": "review",
-            "content_type": "image/png",
-            "filename": f"{defect_id}_review_1.png",
-            "bytes": f"review-bytes-{defect_id}".encode(),
-            "review_image_id": 1,
-            "source_uri": f"mock-sc://review/"
-            f"2026-05-26T08:00:00+00:00/1/{defect_id}",
-        },
-        {
-            "image_id": f"{defect_id}_template",
-            "image_type": "template",
-            "role": "patch_template",
-            "content_type": "image/png",
-            "filename": "template.png",
-            "bytes": b"template-bytes",
-            "review_image_id": None,
-            "source_uri": f"mock-sc://patch/"
-            f"2026-05-26T08:00:00+00:00/1/{defect_id}/template.png",
-        },
-        {
-            "image_id": f"{defect_id}_defective",
-            "image_type": "defective",
-            "role": "patch_defective",
-            "content_type": "image/png",
-            "filename": "defective.png",
-            "bytes": b"defective-bytes",
-            "review_image_id": None,
-            "source_uri": f"mock-sc://patch/"
-            f"2026-05-26T08:00:00+00:00/1/{defect_id}/defective.png",
-        },
-        {
-            "image_id": f"{defect_id}_difference",
-            "image_type": "difference",
-            "role": "patch_difference",
-            "content_type": "image/png",
-            "filename": "difference.png",
-            "bytes": b"difference-bytes",
-            "review_image_id": None,
-            "source_uri": f"mock-sc://patch/"
-            f"2026-05-26T08:00:00+00:00/1/{defect_id}/difference.png",
-        },
-    ]
 
 
 class TestV2SparseImportBytes:
@@ -311,6 +183,7 @@ class TestV2SparseImportBytes:
                 reticle_size_y: int = 1,
                 reticle_offset_x: int = 0,
                 reticle_offset_y: int = 0,
+                on_progress=None,
             ) -> pl.LazyFrame:
                 if offset < 0:
                     raise ValueError(
@@ -387,8 +260,8 @@ class TestV2SparseImportBytes:
         ]
         pyarrow_schema = _build_v2_pyarrow_schema()
         insp_dt = datetime.fromisoformat("2026-05-26T08:00:00+00:00")
-        if insp_dt.tzinfo is None:
-            insp_dt = insp_dt.replace(tzinfo=timezone.utc)
+        if insp_dt.tzinfo is not None:
+            insp_dt = insp_dt.astimezone(timezone.utc)
 
         payload_store: Any = CapturePayloadStore()
         operator = SparseImportOperator(
@@ -485,133 +358,6 @@ class TestV2SparseImportBytes:
         assert result["sample_index"]["2"].row_index == 1
         assert result["sample_index"]["3"].shard_index == 1
         assert result["sample_index"]["3"].row_index == 0
-
-    # -- full flow: embedded byte integrity in v2 parquet shards -----------
-
-    @pytest.mark.skip(
-        reason="Requires Prefect server infra (temporary server alembic migration issue)"
-    )
-    def test_sparse_shard_embedded_bytes_in_parquet(self) -> None:
-        """Full flow: v2 parquet shard ``images`` column carries per-sample embedded bytes."""
-        container = _MockFlowContext()
-        _add_sc_config(container)
-
-        from app.shared.api.schemas import Dataset, SPARSE_NO_LS, TaskSpec
-
-        created_dataset = Dataset(
-            id="ds-embedded-bytes",
-            name="SC Embedded Bytes",
-            dataset_type="image_sc",
-            task_spec=TaskSpec(task_type="sc"),
-            ls_project_id=SPARSE_NO_LS,
-        )
-        container.sc.repository.create_dataset = AsyncMock(
-            return_value=created_dataset
-        )
-
-        captured_shards: list[bytes] = []
-
-        from platform_runtime.sparse import ShardEntry
-
-        async def capture_put_shard(
-            dataset_id, org_id, shard_index, data, row_count, format
-        ):
-            captured_shards.append(data)
-            return ShardEntry(
-                shard_index=shard_index,
-                uri=f"s3://bucket/shard_{shard_index}.parquet",
-                row_count=row_count,
-                format=format,
-                checksum_sha256="abc",
-                byte_size=len(data),
-            )
-
-        container.datasets.dataset_payload_store.put_shard = capture_put_shard
-        container.datasets.dataset_payload_store.put_manifest = AsyncMock(
-            return_value="s3://bucket/manifest.json"
-        )
-
-        _install_mock_context(container)
-
-        try:
-            from app.modules.sc.adapter.flows.sc_import import sc_import
-
-            async def mock_stream(self, source_inspection_time, source_wafer_key, offset=0):
-                for i in range(1, 4):
-                    yield _sample_with_review(str(i))
-
-            with pytest.MonkeyPatch.context() as mp:
-                mp.setattr(
-                    "app.modules.sc.adapter.flows.sc_import._build_image_structs",
-                    _mock_image_structs,
-                )
-
-                asyncio.run(
-                    sc_import(
-                        source_inspection_time="2026-05-26T08:00:00",
-                        source_wafer_key=1,
-                        dataset_name="SC Embedded Bytes",
-                        storage_mode="file_shard_sparse",
-                    )
-                )
-        finally:
-            _remove_mock_context()
-
-        assert len(captured_shards) == 1, "Expected exactly 1 parquet shard"
-        import io
-
-        import pyarrow.parquet as pq
-
-        table = pq.read_table(io.BytesIO(captured_shards[0]))
-
-        # Verify v2 schema: no legacy columns
-        col_names = table.column_names
-        assert "images" in col_names, "Missing 'images' column in v2 parquet"
-        assert "image_uris" not in col_names, (
-            "Legacy 'image_uris' column found in v2 parquet"
-        )
-        assert "metadata" not in col_names, (
-            "Legacy 'metadata' column found in v2 parquet"
-        )
-
-        # Verify each row has images with embedded bytes
-        images_list = table.column("images").to_pylist()
-        assert len(images_list) == 3, "Expected 3 image rows"
-
-        for row_idx, row_images in enumerate(images_list):
-            assert isinstance(row_images, list), (
-                f"images column should be a list, got {type(row_images)}"
-            )
-            assert len(row_images) == 4, (
-                f"Expected 4 images per row, got {len(row_images)} in row {row_idx}"
-            )
-
-            # Check roles
-            roles = {img["role"] for img in row_images}
-            assert roles == {
-                "review",
-                "patch_template",
-                "patch_defective",
-                "patch_difference",
-            }, (
-                f"Row {row_idx}: missing expected roles, got {roles}"
-            )
-
-            # Check each image has required fields
-            for img in row_images:
-                assert isinstance(img["bytes"], bytes), (
-                    f"Row {row_idx}, role {img['role']}: bytes not embedded"
-                )
-                assert len(img["bytes"]) > 0, (
-                    f"Row {row_idx}, role {img['role']}: empty bytes"
-                )
-                assert img["image_id"], (
-                    f"Row {row_idx}, role {img['role']}: missing image_id"
-                )
-                assert img["content_type"], (
-                    f"Row {row_idx}, role {img['role']}: missing content_type"
-                )
-
 
 # ── v2 schema contract tests ───────────────────────────────────────────────
 

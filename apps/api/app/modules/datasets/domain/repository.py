@@ -14,6 +14,11 @@ class DatasetRepository(Protocol):
 
     async def list_datasets(self, org_id: str | None = None) -> list[Dataset]: ...
 
+    async def count_samples_by_dataset(
+        self,
+        dataset_ids: list[str],
+    ) -> dict[str, int]: ...
+
     async def get_dataset(
         self,
         dataset_id: str,
@@ -30,6 +35,14 @@ class DatasetRepository(Protocol):
         self,
         dataset_id: str,
         meta_update: dict,
+    ) -> Dataset | None: ...
+
+    async def rename_dataset(
+        self,
+        dataset_id: str,
+        *,
+        name: str,
+        org_id: str | None = None,
     ) -> Dataset | None: ...
 
     async def set_dataset_public(

@@ -154,7 +154,9 @@ def mock_wafer_db_reader() -> ScUpstreamReader:
         defects: int = 3
         images: int = 3
 
-    async def _list_inspections(start_time, end_time):
+    async def _list_inspections(
+        start_time, end_time, lot_id=None, wafer_id=None, layer_id=None, device=None
+    ):
         if isinstance(start_time, datetime) and start_time.year < 2000:
             return _empty_df.lazy()
         return _insp_df.lazy()

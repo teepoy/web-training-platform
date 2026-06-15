@@ -4,6 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { TaskTrackerSummaryResponseDatasetName } from './taskTrackerSummaryResponseDatasetName';
 import type { TaskTrackerSummaryResponseModelId } from './taskTrackerSummaryResponseModelId';
 import type { TaskTrackerSummaryResponseTrainerId } from './taskTrackerSummaryResponseTrainerId';
 import type { TaskTrackerSummaryResponsePrefectState } from './taskTrackerSummaryResponsePrefectState';
@@ -22,6 +23,7 @@ export interface TaskTrackerSummaryResponse {
   display_status: string;
   stage: string;
   dataset_id: string;
+  dataset_name?: TaskTrackerSummaryResponseDatasetName;
   model_id?: TaskTrackerSummaryResponseModelId;
   trainer_id?: TaskTrackerSummaryResponseTrainerId;
   created_by: string;

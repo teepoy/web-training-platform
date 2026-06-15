@@ -6,7 +6,8 @@
  */
 
 export interface ScSampleTableRangeFilter {
-  operator: 'between';
-  min: number;
-  max: number;
+  filterType: 'number';
+  type: 'inRange';
+  filter: number;
+  filterTo: number;
 }

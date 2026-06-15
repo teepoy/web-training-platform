@@ -94,6 +94,10 @@ message ListReviewImagesResponse {
 message ListInspectionsRequest {
   string start_time = 1;
   string end_time = 2;
+  string lot_id = 3;
+  string wafer_id = 4;
+  string layer_id = 5;
+  string device = 6;
 }
 
 message InspectionSummary {

@@ -1,10 +1,10 @@
 # SC Inspection Guide
 
-This guide covers the Semiconductor (SC) inspection preview and reclassify workflows.
+This guide covers the Patch (SC) inspection preview and reclassify workflows.
 
 ## SC Preview
 
-The SC Preview page (`/sc/preview`) is the entry point for exploring raw semiconductor inspection data before importing it into the platform.
+The SC Preview page (`/sc/preview`) is the entry point for exploring raw patch inspection data before importing it into the platform.
 
 ### Searching Inspections
 

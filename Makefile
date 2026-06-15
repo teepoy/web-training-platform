@@ -17,6 +17,10 @@ WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
 DATA_DIR     := infra/compose/data
+IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
+SC_PATCH_ZIP_DEFECTS ?= 200000
+SC_PATCH_ZIP_BUCKET ?= sc-patch-images
+SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
 
 # ──────────────────────────────────────────────
 # Production split-stack (infra/compose/production/)
@@ -32,6 +36,10 @@ COMPOSE_PROD_OBSERVABILITY  := infra/compose/production/compose.observability.ya
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 LITELLM_LOCAL_MODEL_COST_MAP="True"
+MYPY_PROTOBUF_VERSION ?= 5.1.0
+GRPCIO_TOOLS_VERSION ?= 1.80.0
+PROTOC_GEN_GO_VERSION ?= v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.0
 
 # ──────────────────────────────────────────────
 # Setup
@@ -72,6 +80,7 @@ prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run con
 	uvx prefect init --profile local --no-prompt && \
 	PREFECT_API_URL=http://localhost:4200/api \
 	PLATFORM_API_URL=http://localhost:8000 \
+	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
@@ -116,12 +125,23 @@ check-duplicate-types: ## Check for duplicate types between shared/api and gener
 	python3 scripts/check-duplicate-types.py
 
 .PHONY: lint
-lint: ## Run static checks (ruff, pyright, tsc)
-	ruff check apps/api && \
-	uv run --directory apps/api pyright . && \
-	python3 scripts/check-duplicate-types.py && \
-	cd $(WEB_DIR) && pnpm vue-tsc -b
-	sg scan
+lint: ## Run fast lint on git diff files (ruff + prettier)
+	@CHANGED=$$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || true); \
+	if [ -z "$$CHANGED" ]; then \
+		echo "No changed files found."; \
+		exit 0; \
+	fi; \
+	PY_FILES=$$(echo "$$CHANGED" | grep '\.py$$' || true); \
+	if [ -n "$$PY_FILES" ]; then \
+		echo "--- ruff check (Python) ---"; \
+		echo "$$PY_FILES" | xargs ruff check; \
+	fi; \
+	WEB_FILES=$$(echo "$$CHANGED" | grep -E '\.(vue|ts|tsx|js|jsx|css|scss|json|yaml|yml|md)$$' | grep -v /node_modules/ | grep -v /dist/ | grep -v /generated/ || true); \
+	if [ -n "$$WEB_FILES" ]; then \
+		echo "--- prettier check (Web) ---"; \
+		echo "$$WEB_FILES" | xargs pnpm exec prettier --check; \
+	fi; \
+	echo "--- lint done ---"
 
 .PHONY: full-test
 full-test: ## Run all tests and checks (API + web unit + e2e + build + lint)
@@ -135,6 +155,10 @@ full-test: ## Run all tests and checks (API + web unit + e2e + build + lint)
 .PHONY: build-web
 build-web: ## Build frontend for production
 	cd $(WEB_DIR) && pnpm build
+
+.PHONY: build-image-parser-vendor
+build-image-parser-vendor: ## Build amd64 Debian vendor/tooling image for image-parser offline builds
+	docker build --platform linux/amd64 -f services/image-parser/Dockerfile.vendor -t image-parser-vendor:local .
 
 .PHONY: generate
 generate: generate-openapi-spec generate-openapi-artifacts generate-protos ## Regenerate all schema artifacts (OpenAPI, SSE, Orval, proto)
@@ -165,36 +189,33 @@ generate-sse-types: ## Generate SSE JSON schema and frontend TypeScript types
 generate-openapi-artifacts: generate-openapi-spec generate-api-models generate-orval generate-sse-types ## Generate backend/frontend transport artifacts
 
 .PHONY: generate-protos
-generate-protos: ## Generate protobuf Python, TypeScript, and Go stubs from protos/
+generate-protos: generate-protos-deps ## Generate protobuf Python, TypeScript, and Go stubs from protos/
 	mkdir -p libs/protos/src/proto_stubs/sc/v1 $(WEB_DIR)/src/features/sc/generated/proto
-	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && \
-		npx buf generate && \
-		npx buf generate --template buf.gen.web.yaml --path sc/v1/sample.proto
-	python -m grpc_tools.protoc \
+	export PATH="$(CURDIR)/node_modules/.bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$HOME/.local/bin:$$PATH" && \
+		cd $(PROTO_DIR) && npx buf generate . --template buf.gen.yaml
+	export PATH="$$HOME/.local/bin:$$PATH" && \
+		python-grpc-tools-protoc \
 		--proto_path=$(PROTO_DIR) \
-		--python_out=libs/protos/src/proto_stubs \
 		--grpc_python_out=libs/protos/src/proto_stubs \
-		$(PROTO_DIR)/imageparser/v1/service.proto
-	sed -i '' 's/^from imageparser\.v1 import/from proto_stubs.imageparser.v1 import/' libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py
-	cd services/image-parser && mkdir -p gen/go && npx buf generate ../../protos --template buf.gen.yaml
+		$(PROTO_DIR)/imageparser/v1/service.proto \
+		$(PROTO_DIR)/sc/v1/upstream.proto
+	uv run python scripts/fix_python_grpc_imports.py libs/protos/src/proto_stubs
 	cd services/image-parser && go mod tidy
 
 .PHONY: generate-protos-deps
-generate-protos-deps: ## Verify buf CLI, protoc, protoc-gen-go, protoc-gen-go-grpc, protoc-gen-mypy are available
-	@echo "Checking protoc (>= 29.x for proto edition compatibility with buf)..."
-	@if ! command -v protoc >/dev/null 2>&1; then \
-		echo "protoc-29.3.0 not found. Install via: brew install protobuf@29"; \
-		exit 1; \
-	fi
-	@if ! command -v protoc-gen-go >/dev/null 2>&1; then \
-		echo "protoc-gen-go not found. Install via: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"; \
-		exit 1; \
-	fi
-	@if ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then \
-		echo "protoc-gen-go-grpc not found. Install via: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"; \
-		exit 1; \
-	fi
-	@echo "Proto dependencies ready protoc: $$(which protoc)"
+generate-protos-deps: ## Install fixed-version proto generators used by generate-protos
+	uv tool install mypy-protobuf==$(MYPY_PROTOBUF_VERSION) --force
+	uv tool install grpcio-tools==$(GRPCIO_TOOLS_VERSION) --force
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
+	@export PATH="$(CURDIR)/node_modules/.bin:$$HOME/.local/bin:$$PATH"; \
+		command -v npx >/dev/null; \
+		npx buf --version >/dev/null; \
+		command -v protoc-gen-mypy >/dev/null; \
+		command -v python-grpc-tools-protoc >/dev/null; \
+		command -v protoc-gen-go >/dev/null; \
+		command -v protoc-gen-go-grpc >/dev/null; \
+		echo "Proto generators ready: buf=$$(npx buf --version), mypy-protobuf=$(MYPY_PROTOBUF_VERSION), grpcio-tools=$(GRPCIO_TOOLS_VERSION), protoc-gen-go=$(PROTOC_GEN_GO_VERSION), protoc-gen-go-grpc=$(PROTOC_GEN_GO_GRPC_VERSION)"
 
 .PHONY: check-openapi-sync
 check-openapi-sync: ## Check FastAPI route schema against openapi/openapi.yaml
@@ -235,14 +256,22 @@ seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-sam
 	uv run scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-dev
-seed-dev: seed-wafer-mock ## Seed dev demo data (wafer-demo + mock SQLite, dev-no-auth org)
+seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed dev demo data (wafer-demo + mock SQLite/S3, dev-no-auth org)
 	$(MAKE) seed ARGS="wafer-demo --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth'"
 
 .PHONY: seed-wafer-mock
-seed-wafer-mock: ## Seed mock wafer inspection SQLite database (100K defects)
+seed-wafer-mock: ## Seed mock wafer inspection SQLite database (300k defects)
 	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
-		--defects 1000000 --imaged 100 --images-per 5 --reset
+		--defects 300000 --imaged 100 --images-per 5 --reset
+
+.PHONY: seed-wafer-patch-zips
+seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
+	uv run python infra/compose/seed_patch_zips.py \
+		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" \
+		--bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
+		--total-defects "$(SC_PATCH_ZIP_DEFECTS)"
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
@@ -304,19 +333,19 @@ e2e-live-report: ## Open Playwright HTML report
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d
+	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
 
 .PHONY: up-prod
 up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-compose.prod.yaml)
-	docker compose -f $(COMPOSE_PROD) up -d
+	docker compose -f $(COMPOSE_PROD) up -d $(ARGS)
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
-	docker compose -f $(COMPOSE_DEV) build image-parser
+	docker compose -f $(COMPOSE_DEV) build $(ARGS)
 
 .PHONY: build-prod
 build-prod: ## Build all prod-target Docker images (local validation stack)
-	docker compose -f $(COMPOSE_PROD) build
+	docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
 
 .PHONY: logs-dev
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
@@ -496,10 +525,10 @@ save-images: ## Save all compose Docker images as .tar archives
 .PHONY: image-parser-export
 image-parser-export: ## Build and export image-parser as offline loadable tar.gz
 	@echo "Building image-parser ..."
-	docker build --platform linux/amd64 -t image-parser:latest -f services/image-parser/Dockerfile .
+	docker build --platform linux/amd64 -t image-parser:local -f services/image-parser/Dockerfile .
 	@mkdir -p dist
-	@echo "Saving image-parser:latest -> dist/image-parser.tar.gz"
-	docker save image-parser:latest | gzip > dist/image-parser.tar.gz
+	@echo "Saving image-parser:local -> dist/image-parser.tar.gz"
+	docker save image-parser:local | gzip > dist/image-parser.tar.gz
 	@echo "Done: dist/image-parser.tar.gz ($(shell du -h dist/image-parser.tar.gz | cut -f1))"
 
 .PHONY: k8s-apply

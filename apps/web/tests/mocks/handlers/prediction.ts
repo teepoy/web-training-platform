@@ -11,15 +11,20 @@ export async function mockListPredictionJobs(
   jobs?: PredictionJobResponse[],
 ): Promise<void> {
   const body = jobs ?? []
-  await page.route('**/api/v1/prediction-jobs', async (route) => {
+  await page.route('**/api/v1/prediction-jobs**', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue()
       return
     }
+    const url = new URL(route.request().url())
+    const datasetId = url.searchParams.get('dataset_id')
+    const filteredBody = datasetId
+      ? body.filter((job) => job.dataset_id === datasetId)
+      : body
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(body),
+      body: JSON.stringify(filteredBody),
     })
   })
 }

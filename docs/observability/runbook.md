@@ -9,13 +9,13 @@ The observability stack is profile-gated and must be explicitly enabled.
 
 ```bash
 # Start base platform + observability (Prometheus, Grafana, Loki, Alertmanager, etc.)
-docker compose -f infra/compose/docker-compose.yaml --profile observability up -d
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile observability up -d
 
 # Enable GPU metrics (Linux/NVIDIA only)
-docker compose -f infra/compose/docker-compose.yaml --profile gpu up -d dcgm-exporter
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile gpu up -d dcgm-exporter
 
 # Combined startup
-docker compose -f infra/compose/docker-compose.yaml --profile observability --profile gpu up -d
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile observability --profile gpu up -d
 ```
 
 ### Kubernetes

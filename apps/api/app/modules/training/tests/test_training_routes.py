@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.training.port.http.deps import get_training_orchestrator
-from tests.conftest import TRAINER_ID, create_dataset, create_job
 
 
 # ---------------------------------------------------------------------------
@@ -39,13 +38,14 @@ def test_mark_user_left_not_found() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Set public
+# Public visibility is disabled
 # ---------------------------------------------------------------------------
 
-def test_set_job_public_not_found() -> None:
+def test_set_job_public_disabled() -> None:
     with TestClient(app) as c:
         resp = c.patch("/api/v1/training-jobs/nonexistent/public", json={"is_public": True})
-        assert resp.status_code == 404
+        assert resp.status_code == 410
+        assert resp.json()["detail"] == "Make Public is disabled"
 
 
 # ---------------------------------------------------------------------------

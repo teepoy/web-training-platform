@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import gc
 import logging
+import os
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any, Protocol, cast
 
+import polars as pl
 
 from app.modules.datasets.app.services.sparse_import_operator import (
     SparseImportOperator,
@@ -35,10 +41,27 @@ from platform_runtime.sparse import (
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+SC_IMPORT_BATCH_SIZE = int(os.getenv("SC_IMPORT_BATCH_SIZE", "25_000"))
+ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
 
 # ── SC-specific helpers ─────────────────────────────────────────────────────
+
+
+def _parse_source_inspection_time(value: str) -> datetime:
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return datetime(
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            dt.microsecond,
+            tzinfo=timezone.utc,
+        )
+    return dt.astimezone(timezone.utc)
 
 
 def _patch_sample_to_parquet_row(
@@ -66,6 +89,26 @@ def _patch_sample_to_parquet_row(
         "has_review": has_review,
         "images": images,
     }
+
+
+def _process_memory_summary() -> str:
+    """Return Linux process RSS/HWM details for import diagnostics."""
+    try:
+        with open("/proc/self/status") as status_file:
+            values: dict[str, str] = {}
+            for line in status_file:
+                key, _, value = line.partition(":")
+                if key in {"VmRSS", "VmHWM", "VmSize"}:
+                    values[key] = value.strip()
+        if values:
+            return (
+                f"rss={values.get('VmRSS', 'unknown')} "
+                f"hwm={values.get('VmHWM', 'unknown')} "
+                f"vmsize={values.get('VmSize', 'unknown')}"
+            )
+    except OSError:
+        pass
+    return "rss=unknown hwm=unknown vmsize=unknown"
 
 
 async def _build_image_structs(
@@ -148,17 +191,6 @@ async def _build_image_structs(
     return images
 
 
-class ScImportPrefectClient(Protocol):
-    async def resolve_deployment_id(self, deployment_name: str) -> str | None: ...
-
-    async def create_flow_run_from_deployment(
-        self,
-        deployment_id: str,
-        parameters: dict[str, Any],
-        idempotency_key: str | None = None,
-    ) -> dict[str, Any]: ...
-
-
 class ScImportRepository(Protocol):
     async def create_dataset(
         self, dataset: Dataset, org_id: str | None = None
@@ -176,13 +208,11 @@ class ScImportPayloadStore(Protocol):
 class ScImportService:
     def __init__(
         self,
-        prefect_client: ScImportPrefectClient | None = None,
         repository: ScImportRepository | None = None,
         payload_store: ScImportPayloadStore | None = None,
         upstream_reader: ScUpstreamReader | None = None,
         image_fetcher: ScImageFetcher | None = None,
     ) -> None:
-        self._prefect = prefect_client
         self._repo = repository
         self._payload_store = payload_store
         self._upstream = upstream_reader
@@ -195,17 +225,18 @@ class ScImportService:
         dataset_name: str,
         storage_mode: str,
         org_id: str,
+        created_by: str = "system",
         filters: dict | None = None,
         label_space: list[str] | None = None,
         max_rows: int | None = None,
-        force_prefect_flow: bool = False,
-    ) -> tuple[ScImportStatus, str | None]:
+        on_progress: ScImportProgressCallback | None = None,
+    ) -> ScImportStatus:
         assert self._upstream is not None
         assert self._repo is not None
         assert self._payload_store is not None
         # ── Pre-check: skip dataset creation when upstream has no data ──
         try:
-            insp_dt = datetime.fromisoformat(source_inspection_time)
+            insp_dt = _parse_source_inspection_time(source_inspection_time)
             samples_lf = await self._upstream.list_samples(
                 insp_dt, source_wafer_key, offset=0, count=1
             )
@@ -217,16 +248,13 @@ class ScImportService:
                     source_inspection_time,
                     source_wafer_key,
                 )
-                return (
-                    ScImportStatus(
-                        status="completed",
-                        source_inspection_time=source_inspection_time,
-                        source_wafer_key=source_wafer_key,
-                        dataset_name=dataset_name,
-                        storage_mode=storage_mode,
-                        imported_count=0,
-                    ),
-                    None,
+                return ScImportStatus(
+                    status="completed",
+                    source_inspection_time=source_inspection_time,
+                    source_wafer_key=source_wafer_key,
+                    dataset_name=dataset_name,
+                    storage_mode=storage_mode,
+                    imported_count=0,
                 )
         except Exception:
             logger.warning(
@@ -240,18 +268,16 @@ class ScImportService:
             dataset_name=dataset_name,
             storage_mode=storage_mode,
             org_id=org_id,
+            created_by=created_by,
             label_space=label_space,
         )
         if dataset is None:
-            return (
-                await self._fail(
-                    "Failed to create dataset",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
+            return await self._fail(
+                "Failed to create dataset",
+                source_inspection_time,
+                source_wafer_key,
+                dataset_name,
+                storage_mode,
             )
 
         try:
@@ -262,6 +288,7 @@ class ScImportService:
                 source_wafer_key=source_wafer_key,
                 max_rows=max_rows,
                 logger=logger,
+                on_progress=on_progress,
             )
             imported_count_raw = result.get("imported_count", 0)
             imported_count: int = (
@@ -278,18 +305,15 @@ class ScImportService:
                 storage_mode=storage_mode,
                 imported_count=imported_count,
             )
-            return completed_status, None
+            return completed_status
         except Exception as e:
             logger.exception("Direct import failed, dataset=%s", dataset.id)
-            return (
-                await self._fail(
-                    f"Direct import failed: {e}",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
+            return await self._fail(
+                f"Direct import failed: {e}",
+                source_inspection_time,
+                source_wafer_key,
+                dataset_name,
+                storage_mode,
             )
 
     async def _run_direct_import(
@@ -301,8 +325,9 @@ class ScImportService:
         source_wafer_key: int,
         max_rows: int | None = None,
         logger: logging.Logger | logging.LoggerAdapter | None = None,
+        on_progress: ScImportProgressCallback | None = None,
     ) -> dict[str, object]:
-        """Direct sparse import for small datasets (≤30k rows)."""
+        """Direct sparse import that keeps request handling cooperative."""
         assert self._upstream is not None
         assert self._payload_store is not None
         _payload_store = self._payload_store
@@ -313,9 +338,7 @@ class ScImportService:
         ]
         pyarrow_schema = _build_v2_pyarrow_schema()
 
-        insp_dt = datetime.fromisoformat(source_inspection_time)
-        if insp_dt.tzinfo is None:
-            insp_dt = insp_dt.replace(tzinfo=timezone.utc)
+        insp_dt = _parse_source_inspection_time(source_inspection_time)
 
         operator = SparseImportOperator(
             dataset_id=dataset_id,
@@ -326,7 +349,10 @@ class ScImportService:
         sample_index: dict[str, SampleLocator] = {}
         total_rows = 0
         shard_count = 0
-        batch_size = 1000
+        batch_size = SC_IMPORT_BATCH_SIZE
+        if batch_size <= 0:
+            raise ValueError("SC_IMPORT_BATCH_SIZE must be greater than zero")
+        log = logger if logger is not None else logging.getLogger(__name__)
 
         async def publish_manifest() -> None:
             manifest = DatasetManifest(
@@ -341,44 +367,155 @@ class ScImportService:
             )
             await _payload_store.put_manifest(manifest, org_id=org_id)
 
+        async def publish_progress(imported_count: int) -> None:
+            if on_progress is None:
+                return
+            await on_progress(
+                ScImportStatus(
+                    status="running",
+                    dataset_id=dataset_id,
+                    source_inspection_time=source_inspection_time,
+                    source_wafer_key=source_wafer_key,
+                    storage_mode="file_shard_sparse",
+                    imported_count=imported_count,
+                    remaining_count=max(target_rows - imported_count, 0),
+                    dataset_name="",
+                    error=None,
+                )
+            )
+
         batch: list[dict[str, Any]] = []
 
+        start_time = perf_counter()
+        log.info(
+            "SC direct import starting: dataset_id=%s org_id=%s inspection_time=%s "
+            "wafer_key=%s max_rows=%s batch_size=%s memory=%s",
+            dataset_id,
+            org_id,
+            source_inspection_time,
+            source_wafer_key,
+            max_rows,
+            batch_size,
+            _process_memory_summary(),
+        )
         lf = await _upstream.list_samples(insp_dt, source_wafer_key, count=None)
-        df = await lf.collect_async()
-        total_rows_available = len(df)
+        log.debug(
+            "SC direct import upstream LazyFrame received: dataset_id=%s elapsed=%.3fs",
+            dataset_id,
+            perf_counter() - start_time,
+        )
+        count_df = await lf.select(pl.len().alias("row_count")).collect_async()
+        total_rows_available = int(count_df["row_count"][0])
+        target_rows = (
+            min(total_rows_available, max_rows)
+            if max_rows is not None
+            else total_rows_available
+        )
+        log.info(
+            "SC direct import row count resolved: dataset_id=%s total_available=%d "
+            "target_rows=%d elapsed=%.3fs memory=%s",
+            dataset_id,
+            total_rows_available,
+            target_rows,
+            perf_counter() - start_time,
+            _process_memory_summary(),
+        )
 
         if total_rows_available == 0:
+            log.info(
+                "SC direct import has no rows: dataset_id=%s elapsed=%.3fs",
+                dataset_id,
+                perf_counter() - start_time,
+            )
             return {"dataset_id": dataset_id, "imported_count": 0, "total_available": 0}
 
-        indices = (
-            list(range(total_rows_available))[:max_rows]
-            if max_rows is not None
-            else list(range(total_rows_available))
-        )
-        filtered_df = df[indices]
-
-        for patch_sample in iter_patch_samples_from_upstream_chunk(filtered_df):
-            images = await _build_image_structs(
-                patch_sample=patch_sample,
-                inspection_time=insp_dt,
-                wafer_key=source_wafer_key,
+        if target_rows == 0:
+            await publish_manifest()
+            await publish_progress(0)
+            log.info(
+                "SC direct import target row count is zero: dataset_id=%s "
+                "total_available=%d elapsed=%.3fs",
+                dataset_id,
+                total_rows_available,
+                perf_counter() - start_time,
             )
-            batch.append(_patch_sample_to_parquet_row(patch_sample, images))
-            if len(batch) >= batch_size:
-                shard_entry, locators = await operator.flush_shard(
-                    shard_index=shard_count,
-                    rows=batch,
-                    pyarrow_schema=pyarrow_schema,
-                    row_id_key="defect_id",
+            return {
+                "dataset_id": dataset_id,
+                "imported_count": 0,
+                "total_available": total_rows_available,
+            }
+
+        await publish_progress(0)
+
+        import_lf = lf.slice(0, target_rows)
+        batch_iterator = import_lf.collect_batches(
+            chunk_size=batch_size,
+            maintain_order=True,
+        )
+
+        row_offset = 0
+        collect_batch_index = 0
+        while True:
+            chunk_df = await asyncio.to_thread(next, batch_iterator, None)
+            if chunk_df is None:
+                break
+            collect_batch_index += 1
+            chunk_len = len(chunk_df)
+            log.debug(
+                "SC direct import collected batch: dataset_id=%s batch=%d rows=%d "
+                "imported=%d/%d elapsed=%.3fs memory=%s",
+                dataset_id,
+                collect_batch_index,
+                chunk_len,
+                total_rows,
+                target_rows,
+                perf_counter() - start_time,
+                _process_memory_summary(),
+            )
+
+            for patch_sample in iter_patch_samples_from_upstream_chunk(chunk_df):
+                row_offset += 1
+                images = await _build_image_structs(
+                    patch_sample=patch_sample,
+                    inspection_time=insp_dt,
+                    wafer_key=source_wafer_key,
                 )
-                shard_entries.append(shard_entry)
-                sample_index.update(locators)
-                total_rows += len(batch)
-                shard_count += 1
-                await publish_manifest()
-                batch = []
+                batch.append(_patch_sample_to_parquet_row(patch_sample, images))
+                if len(batch) >= batch_size:
+                    rows_to_flush = batch
+                    flush_start = perf_counter()
+                    shard_entry, locators = await operator.flush_shard(
+                        shard_index=shard_count,
+                        rows=rows_to_flush,
+                        pyarrow_schema=pyarrow_schema,
+                        row_id_key="defect_id",
+                    )
+                    shard_entries.append(shard_entry)
+                    sample_index.update(locators)
+                    total_rows += len(rows_to_flush)
+                    shard_count += 1
+                    await publish_progress(total_rows)
+                    log.info(
+                        "SC direct import flushed shard: dataset_id=%s shard=%d "
+                        "rows=%d imported=%d/%d flush_elapsed=%.3fs "
+                        "total_elapsed=%.3fs memory=%s",
+                        dataset_id,
+                        shard_count - 1,
+                        len(rows_to_flush),
+                        total_rows,
+                        target_rows,
+                        perf_counter() - flush_start,
+                        perf_counter() - start_time,
+                        _process_memory_summary(),
+                    )
+                    batch = []
+                    del rows_to_flush, locators
+                    gc.collect()
+                if row_offset % 5000 == 0:
+                    await asyncio.sleep(0)
 
         if batch:
+            flush_start = perf_counter()
             shard_entry, locators = await operator.flush_shard(
                 shard_index=shard_count,
                 rows=batch,
@@ -389,17 +526,35 @@ class ScImportService:
             sample_index.update(locators)
             total_rows += len(batch)
             shard_count += 1
-            await publish_manifest()
-
-        if shard_count == 0:
-            await publish_manifest()
-
-        if logger is not None:
-            logger.info(
-                "Sparse import complete: %d rows across %d shards",
+            await publish_progress(total_rows)
+            log.info(
+                "SC direct import flushed final shard: dataset_id=%s shard=%d "
+                "rows=%d imported=%d/%d flush_elapsed=%.3fs total_elapsed=%.3fs "
+                "memory=%s",
+                dataset_id,
+                shard_count - 1,
+                len(batch),
                 total_rows,
-                shard_count,
+                target_rows,
+                perf_counter() - flush_start,
+                perf_counter() - start_time,
+                _process_memory_summary(),
             )
+            del locators
+            gc.collect()
+
+        await publish_manifest()
+
+        log.info(
+            "SC direct import complete: dataset_id=%s imported=%d total_available=%d "
+            "shards=%d elapsed=%.3fs memory=%s",
+            dataset_id,
+            total_rows,
+            total_rows_available,
+            shard_count,
+            perf_counter() - start_time,
+            _process_memory_summary(),
+        )
 
         return {
             "dataset_id": dataset_id,
@@ -415,6 +570,7 @@ class ScImportService:
         dataset_name: str,
         storage_mode: str,
         org_id: str,
+        created_by: str,
         label_space: list[str] | None,
     ) -> Dataset | None:
         assert self._repo is not None
@@ -431,6 +587,7 @@ class ScImportService:
                     "review_image_v1",
                 ],
                 org_id=org_id,
+                created_by=created_by,
                 ls_project_id=SPARSE_NO_LS,
                 storage_mode=DatasetStorageMode(storage_mode),
             )
@@ -446,17 +603,17 @@ class ScImportService:
             )
 
             if storage_mode == "file_shard_sparse":
-                insp_dt_geo = datetime.fromisoformat(source_inspection_time)
-                if insp_dt_geo.tzinfo is None:
-                    insp_dt_geo = insp_dt_geo.replace(tzinfo=timezone.utc)
+                dataset_meta: dict[str, Any] = {
+                    "source_inspection_time": source_inspection_time,
+                    "source_wafer_key": source_wafer_key,
+                }
+                insp_dt_geo = _parse_source_inspection_time(source_inspection_time)
                 inspection = await self._upstream.get_inspection(
                     insp_dt_geo, source_wafer_key
                 )
                 if inspection is not None:
-                    geometry = _geometry_from_inspection(inspection)
-                    await self._repo.update_dataset_meta(
-                        dataset.id, {"geometry": geometry}
-                    )
+                    dataset_meta["geometry"] = _geometry_from_inspection(inspection)
+                await self._repo.update_dataset_meta(dataset.id, dataset_meta)
 
             return dataset
         except Exception:

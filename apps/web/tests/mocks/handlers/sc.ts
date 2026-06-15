@@ -177,11 +177,45 @@ export async function mockScPlotPoints(
 ): Promise<void> {
   const body = makeFakePlotPointsBuffer(sampleCount)
   await page.route(
+    `**/api/v1/sc/datasets/${datasetId}/plot-points/stream**`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: [
+          'event: progress\ndata: {"event_type":"progress","operation":"sc.plot-points","status":"loading","message":"Preparing plot points"}\n\n',
+          'event: done\ndata: {"event_type":"done"}\n\n',
+        ].join(''),
+      })
+    },
+  )
+  await page.route(
     `**/api/v1/sc/datasets/${datasetId}/plot-points**`,
     async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/x-protobuf',
+        body,
+      })
+    },
+  )
+}
+
+export async function mockScDefectIds(
+  page: Page,
+  datasetId: string,
+  total = 1000,
+): Promise<void> {
+  const body = Buffer.alloc(total * 4)
+  for (let index = 0; index < total; index += 1) {
+    body.writeInt32LE(index + 1, index * 4)
+  }
+  await page.route(
+    `**/api/v1/sc/datasets/${datasetId}/defect-ids.bin**`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/octet-stream',
         body,
       })
     },

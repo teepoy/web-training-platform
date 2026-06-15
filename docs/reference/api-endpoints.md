@@ -30,7 +30,6 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `POST /api/v1/sc/datasets/{dataset_id}/box-filter`
 - `GET /api/v1/sc/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}` — SC upstream/mock image compatibility endpoint. Supported frontend aliases include `template`, `defective`, `difference`, and review variants. For imported dataset rendering, prefer dataset-owned image refs served by `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=`.
 - `POST /api/v1/sc/import`
-- `GET /api/v1/sc/import/{flow_run_id}/events` (SSE)
 
 ## Authentication and org context
 

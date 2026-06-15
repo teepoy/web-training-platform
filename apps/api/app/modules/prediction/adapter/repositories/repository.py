@@ -32,6 +32,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _assert_not_none(value: str | None) -> str:
+    assert value is not None
+    return value
+
+
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
     if not org_id:
         return ""
@@ -108,7 +113,7 @@ class PredictionRepository:
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 model_id=row.model_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -122,19 +127,21 @@ class PredictionRepository:
             )
 
     async def list_prediction_jobs(
-        self, org_id: str | None = None
+        self, org_id: str | None = None, dataset_id: str | None = None
     ) -> list[PredictionJob]:
         async with self.session_factory() as session:
             stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
             if org_id is not None:
                 stmt = stmt.where(PredictionJobORM.org_id == org_id)
+            if dataset_id is not None:
+                stmt = stmt.where(PredictionJobORM.dataset_id == dataset_id)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionJob(
                     id=row.id,
                     org_id=row.org_id,
                     org_name=await _org_name_for(session, row.org_id),
-                    dataset_id=row.dataset_id,
+                    dataset_id=_assert_not_none(row.dataset_id),
                     model_id=row.model_id,
                     status=cast(JobStatus, row.status),
                     created_by=row.created_by,

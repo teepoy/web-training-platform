@@ -52,6 +52,10 @@ class UpdateLabelSpaceRequest(BaseModel):
     label_space: list[str]
 
 
+class UpdateDatasetRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
 class CreateSampleRequest(BaseModel):
     image_uris: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+import json
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock
 
 import polars as pl
 import pytest
@@ -13,6 +15,7 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     ScPlotPointsService,
+    _apply_sample_table_sort,
 )
 from app.modules.sc.port.http.deps import get_sc_plot_points_service
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
@@ -21,6 +24,7 @@ from proto_stubs.sc.v1.sample_pb2 import WaferMapResponse
 PB_CONTENT_TYPE = "application/x-protobuf"
 _DATASET_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 _ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/plot-points"
+_DEFECT_IDS_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/defect-ids.bin"
 _BOX_FILTER_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/box-filter"
 
 
@@ -28,8 +32,29 @@ _BOX_FILTER_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/box-filter"
 
 def _make_service_mock(return_bytes: bytes) -> AsyncMock:
     svc = AsyncMock(spec=ScPlotPointsService)
+    svc.ensure_plot_points_allowed = AsyncMock(return_value=None)
     svc.build_plot_points_response = AsyncMock(return_value=return_bytes)
     return svc
+
+
+def _decode_int32le(body: bytes) -> list[int]:
+    return [
+        int.from_bytes(body[i : i + 4], "little", signed=True)
+        for i in range(0, len(body), 4)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dataset_sample_table_sort_orders_defect_id_numerically() -> None:
+    lf = pl.DataFrame({"defect_id": ["1", "10", "2"]}).lazy()
+
+    sorted_df = await _apply_sample_table_sort(
+        lf,
+        SimpleNamespace(field="defect_id", direction="asc"),
+        requested=None,
+    ).collect_async()
+
+    assert sorted_df["defect_id"].to_list() == ["1", "2", "10"]
 
 
 def test_plot_points_happy_path_100_samples() -> None:
@@ -70,6 +95,28 @@ def test_plot_points_happy_path_100_samples() -> None:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
 
+def test_plot_points_stream_warms_then_keeps_protobuf_transport() -> None:
+    mock_svc = _make_service_mock(b"\x08\x01")
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            stream_resp = client.get(f"{_ENDPOINT}/stream")
+            pb_resp = client.get(_ENDPOINT)
+
+        assert stream_resp.status_code == 200, stream_resp.text
+        assert stream_resp.headers.get("content-type", "").startswith(
+            "text/event-stream"
+        )
+        assert "event: progress" in stream_resp.text
+        assert "event: done" in stream_resp.text
+
+        assert pb_resp.status_code == 200, pb_resp.text
+        assert pb_resp.headers.get("content-type", "").startswith(PB_CONTENT_TYPE)
+        assert mock_svc.build_plot_points_response.await_count == 2
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
 def test_plot_points_forwards_reticle_options() -> None:
     mock_svc = _make_service_mock(b"")
     app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
@@ -82,27 +129,46 @@ def test_plot_points_forwards_reticle_options() -> None:
                     "reticleYDieCount": 6,
                     "reticleXDieShift": 1,
                     "reticleYDieShift": -2,
+                    "sample_filter": json.dumps(
+                        {
+                            "wafer_x": {
+                                "filterType": "number",
+                                "type": "inRange",
+                                "filter": 10,
+                                "filterTo": 20,
+                            }
+                        }
+                    ),
                 },
             )
         assert resp.status_code == 200
         mock_svc.build_plot_points_response.assert_awaited_once_with(
-                _DATASET_ID,
-                "00000000-0000-0000-0000-000000000001",
-                sampled=True,
-                target_resolution=600,
-                reticle_x_die_count=4,
-                reticle_y_die_count=6,
-                reticle_x_die_shift=1,
-                reticle_y_die_shift=-2,
-                legend_group_by=None,
-                class_numbers=None,
-                rough_bins=None,
-                predictions=None,
-                annotations=None,
-                test_ids=None,
-                adders=None,
-                cluster_ids=None,
-            )
+            _DATASET_ID,
+            "00000000-0000-0000-0000-000000000001",
+            upstream_reader=ANY,
+            sampled=True,
+            target_resolution=600,
+            reticle_x_die_count=4,
+            reticle_y_die_count=6,
+            reticle_x_die_shift=1,
+            reticle_y_die_shift=-2,
+            legend_group_by=None,
+            class_numbers=None,
+            rough_bins=None,
+            predictions=None,
+            annotations=None,
+            test_ids=None,
+            adders=None,
+            cluster_ids=None,
+            filter_params=ANY,
+        )
+        filter_params = mock_svc.build_plot_points_response.await_args.kwargs[
+            "filter_params"
+        ]
+        assert filter_params["wafer_x"].filter_type == "number"
+        assert filter_params["wafer_x"].type == "inRange"
+        assert filter_params["wafer_x"].filter == 10
+        assert filter_params["wafer_x"].filter_to == 20
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
@@ -190,7 +256,63 @@ def test_box_filter_forwards_region_and_reticle_options() -> None:
             reticle_y_die_count=6,
             reticle_x_die_shift=1,
             reticle_y_die_shift=-2,
+            filter_params=None,
         )
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
+def test_dataset_defect_ids_binary_forwards_to_service() -> None:
+    mock_svc = AsyncMock(spec=ScPlotPointsService)
+    mock_svc.build_defect_ids_response = AsyncMock(
+        return_value=(1).to_bytes(4, "little", signed=True)
+        + (7).to_bytes(4, "little", signed=True)
+    )
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            resp = client.get(_DEFECT_IDS_ENDPOINT)
+
+        assert resp.status_code == 200, resp.text
+        assert resp.headers.get("content-type", "").startswith(
+            "application/octet-stream"
+        )
+        assert _decode_int32le(resp.content) == [1, 7]
+        mock_svc.build_defect_ids_response.assert_awaited_once_with(
+            _DATASET_ID,
+            "00000000-0000-0000-0000-000000000001",
+        )
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
+def test_dataset_defect_ids_binary_empty_response() -> None:
+    mock_svc = AsyncMock(spec=ScPlotPointsService)
+    mock_svc.build_defect_ids_response = AsyncMock(return_value=b"")
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            resp = client.get(_DEFECT_IDS_ENDPOINT)
+
+        assert resp.status_code == 200, resp.text
+        assert resp.headers.get("content-type", "").startswith(
+            "application/octet-stream"
+        )
+        assert resp.content == b""
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
+def test_dataset_defect_ids_nonexistent_dataset_returns_404() -> None:
+    mock_svc = AsyncMock(spec=ScPlotPointsService)
+    mock_svc.build_defect_ids_response = AsyncMock(
+        side_effect=ScPlotPointsNotFoundError(_DATASET_ID)
+    )
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            resp = client.get(_DEFECT_IDS_ENDPOINT)
+        assert resp.status_code == 404
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
@@ -198,7 +320,7 @@ def test_box_filter_forwards_region_and_reticle_options() -> None:
 def test_plot_points_nonexistent_dataset_returns_404() -> None:
     """Non-existent dataset id → 404."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsNotFoundError(_DATASET_ID)
     )
     app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
@@ -213,7 +335,7 @@ def test_plot_points_nonexistent_dataset_returns_404() -> None:
 def test_plot_points_non_sc_dataset_returns_400() -> None:
     """Non-SC dataset (e.g., classification) → 400 with explanatory detail."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsRejectedError("plot-points requires an image_sc dataset")
     )
     app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
@@ -229,7 +351,7 @@ def test_plot_points_non_sc_dataset_returns_400() -> None:
 def test_plot_points_non_sparse_dataset_returns_400() -> None:
     """Non-sparse SC dataset (db_full) → 400 with explanatory detail."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsRejectedError(
             "plot-points requires a file_shard_sparse dataset"
         )
@@ -267,6 +389,43 @@ def test_plot_columns_uses_images_not_review_images() -> None:
     `review_images` triggers `pyarrow: No match for FieldRef.Name(review_images)`."""
     assert "review_images" not in ScPlotPointsService._PLOT_COLUMNS
     assert "images" in ScPlotPointsService._PLOT_COLUMNS
+
+
+@pytest.mark.asyncio
+async def test_build_defect_ids_response_sorts_numeric_ids() -> None:
+    from unittest.mock import AsyncMock
+
+    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+    from app.shared.api.schemas import Dataset, DatasetStorageMode
+    from app.shared.db.sql_repository import SqlRepository
+
+    df = pl.DataFrame({"defect_id": [10, 2, 1]})
+
+    mock_storage = AsyncMock()
+    mock_storage.list_samples = AsyncMock(return_value=df.lazy())
+
+    mock_storage_factory = AsyncMock(spec=DatasetStorageFactory)
+    mock_storage_factory.open = AsyncMock(return_value=mock_storage)
+
+    dataset = Dataset(
+        id=_DATASET_ID,
+        name="test-defect-ids",
+        dataset_type="image_sc",
+        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={"task_type": "sc", "label_space": []},
+    )
+
+    mock_repo = AsyncMock(spec=SqlRepository)
+    mock_repo.get_dataset = AsyncMock(return_value=dataset)
+
+    svc = ScPlotPointsService(
+        repository=mock_repo,  # type: ignore
+        storage_factory=mock_storage_factory,  # type: ignore
+    )
+
+    body = await svc.build_defect_ids_response(_DATASET_ID, "org")
+
+    assert _decode_int32le(body) == [1, 2, 10]
 
 
 @pytest.mark.asyncio
@@ -309,6 +468,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
         dataset_meta={
             "task_type": "sc",
             "label_space": [],
+            "source_inspection_time": "2026-01-01T00:00:00+00:00",
+            "source_wafer_key": 1,
             "geometry": {
                 "center_x": 5000,
                 "center_y": 3000,
@@ -325,6 +486,15 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
 
     mock_repo = AsyncMock(spec=SqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
+    mock_upstream = AsyncMock()
+    mock_upstream.list_review_images = AsyncMock(
+        return_value=pl.DataFrame(
+            {
+                "defect_id": ["1", "1", "5"],
+                "image_id": [10, 11, 12],
+            }
+        ).lazy()
+    )
 
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
@@ -334,6 +504,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     pb_bytes = await svc.build_plot_points_response(
         dataset_id=_DATASET_ID,
         org_id="org",
+        upstream_reader=mock_upstream,
+        sampled=False,
     )
     msg = WaferMapResponse()
     msg.ParseFromString(pb_bytes)
@@ -345,6 +517,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     assert msg.geometry.die_size_x == 8000
     assert msg.geometry.die_size_y == 6000
     assert msg.geometry.wafer_radius_nm == 200_000_000
+    assert list(msg.wafer_points)[5] == 0
+    assert list(msg.wafer_points)[11] == 1
 
 
 @pytest.mark.asyncio
@@ -400,6 +574,7 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
+            upstream_reader=AsyncMock(),
         )
 
 
@@ -463,4 +638,5 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
+            upstream_reader=AsyncMock(),
         )

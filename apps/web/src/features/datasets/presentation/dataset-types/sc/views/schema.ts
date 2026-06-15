@@ -3,14 +3,12 @@ import { registerDatasetSchema } from "@/features/datasets/presentation/pages/sc
 
 export const imageScSchema = {
   datasetType: "image_sc",
-  // NOTE: "semiconductor" will be added to TaskType union in Task 6.
+  // NOTE: "patch" will be added to TaskType union in Task 6.
   // Expected temporary type error:
-  taskType: "semiconductor" as "semiconductor",
+  taskType: "patch" as "patch",
   viewTypes: ["patch_image_v1", "review_image_v1"],
   annotationType: "none" as const,
   shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
-  viewComponent: defineAsyncComponent(() => import("./ScPatchImageView.vue")),
-  selfLoading: true,
   mockSampleFactory: (index: number, _labelSpace?: string[]) => ({
     id: `sc-sample-${index}`,
     template_url: `https://picsum.photos/seed/sc-tpl${index}/400/300`,

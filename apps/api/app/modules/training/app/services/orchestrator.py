@@ -27,10 +27,10 @@ class TrainingOrchestrator:
         await self.repository.create_job(job)
         external_id = await self.engine.submit(job)
         await self.repository.set_job_external_id(job.id, external_id)
-        job.status = JobStatus.RUNNING
-        await self.repository.update_job_status(job.id, JobStatus.RUNNING)
         queued_event = TrainingEvent(
-            job_id=job.id, message="job started", payload={"external_id": external_id}
+            job_id=job.id,
+            message="job submitted",
+            payload={"external_id": external_id, "status": JobStatus.QUEUED.value},
         )
         await self.repository.add_event(queued_event)
         self.notification_sink.notify_job_update(queued_event)
@@ -45,6 +45,11 @@ class TrainingOrchestrator:
         async for event in self.engine.stream_events(external_id):
             await self.repository.add_event(event)
             self.notification_sink.notify_job_update(event)
+            prefect_state = event.payload.get("prefect_state")
+            if prefect_state == "RUNNING":
+                await self.repository.update_job_status(job_id, JobStatus.RUNNING)
+            elif prefect_state in ("SCHEDULED", "PENDING"):
+                await self.repository.update_job_status(job_id, JobStatus.QUEUED)
             status_val = event.payload.get("status")
             if status_val in ("completed", "failed", "cancelled"):
                 terminal_status = status_val

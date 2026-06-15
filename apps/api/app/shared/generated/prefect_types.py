@@ -2953,11 +2953,6 @@ class StateWaitDetails(BaseModel):
         description="The type of state transition detail. Used to ensure pydantic does not coerce into a different type.",
         title="Type",
     )
-    delay_seconds: int = Field(
-        ...,
-        description="The length of time in seconds the client should wait before transitioning states.",
-        title="Delay Seconds",
-    )
     reason: Optional[str] = Field(
         None,
         description="The reason why the state transition should wait.",

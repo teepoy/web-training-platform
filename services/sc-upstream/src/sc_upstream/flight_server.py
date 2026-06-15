@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import json
+import os
 from datetime import datetime
+from typing import Iterator
 
 import pyarrow.flight as flight
-from polars import LazyFrame
+import pyarrow as pa
 
 from .cache import QueryCache
 from .upstream_db import UpstreamDB
@@ -29,14 +30,63 @@ class UpstreamFlightServer(flight.FlightServerBase):
         inspection_time = datetime.fromisoformat(req["inspection_time"])
         wafer_key: int = req["wafer_key"]
 
-        cached = asyncio.run(
-            self._cache.get_list_samples(req["inspection_time"], wafer_key)
-        )
+        cached = self._cache.sync_get_list_samples(req["inspection_time"], wafer_key)
         if cached is not None:
-            table = cached.collect().to_arrow()
-            return flight.RecordBatchStream(table)
+            return flight.RecordBatchStream(cached.collect().to_arrow())
 
-        lf: LazyFrame = asyncio.run(self._db.list_samples(inspection_time, wafer_key))
-        asyncio.run(self._cache.set_list_samples(req["inspection_time"], wafer_key, lf))
-        table = lf.collect().to_arrow()
-        return flight.RecordBatchStream(table)
+        lock_ctx = self._cache.sync_fill_lock(
+            "samples", req["inspection_time"], str(wafer_key)
+        )
+        acquired = lock_ctx.__enter__()
+        if not acquired:
+            try:
+                waited = self._cache.sync_wait_for_fill(
+                    lambda: self._cache.sync_get_list_samples(
+                        req["inspection_time"], wafer_key
+                    )
+                )
+                if waited is not None:
+                    return flight.RecordBatchStream(waited.collect().to_arrow())
+            finally:
+                lock_ctx.__exit__(None, None, None)
+            lock_ctx = self._cache.sync_fill_lock(
+                "samples", req["inspection_time"], str(wafer_key)
+            )
+            acquired = lock_ctx.__enter__()
+
+        cached = self._cache.sync_get_list_samples(req["inspection_time"], wafer_key)
+        if cached is not None:
+            lock_ctx.__exit__(None, None, None)
+            return flight.RecordBatchStream(cached.collect().to_arrow())
+
+        batch_iter = self._db.iter_list_samples_batches(
+            inspection_time,
+            wafer_key,
+            batch_size=int(os.environ.get("SC_FLIGHT_BATCH_SIZE", "65536")),
+        )
+        try:
+            first_df = next(batch_iter)
+        except StopIteration:
+            lock_ctx.__exit__(None, None, None)
+            return flight.RecordBatchStream(pa.table({}))
+
+        def _stream_batches() -> Iterator[pa.Table]:
+            writer = self._cache.sync_start_list_samples_writer(
+                req["inspection_time"],
+                wafer_key,
+                first_df.to_arrow().schema,
+            )
+            try:
+                writer.write_frame(first_df)
+                yield first_df.to_arrow()
+                for df in batch_iter:
+                    writer.write_frame(df)
+                    yield df.to_arrow()
+                writer.finish()
+            except Exception:
+                writer.abort()
+                raise
+            finally:
+                lock_ctx.__exit__(None, None, None)
+
+        return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())

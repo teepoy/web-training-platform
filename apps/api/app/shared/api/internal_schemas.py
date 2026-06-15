@@ -368,6 +368,7 @@ class TaskTrackerSummaryResponse(BaseModel):
     display_status: str
     stage: str
     dataset_id: str
+    dataset_name: str | None = None
     model_id: str | None = None
     trainer_id: str | None = None
     created_by: str

@@ -61,12 +61,61 @@
           "const": "done",
           "title": "Event Type",
           "type": "string"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rows"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
         }
       },
       "required": [
         "event_type"
       ],
       "title": "DoneEvent",
+      "type": "object"
+    },
+    "ScDataEvent": {
+      "properties": {
+        "event_type": {
+          "const": "data",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "event_type",
+        "operation",
+        "payload"
+      ],
+      "title": "ScDataEvent",
       "type": "object"
     },
     "ScErrorEvent": {
@@ -132,8 +181,16 @@
           "type": "string"
         },
         "flow_run_id": {
-          "title": "Flow Run Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow Run Id"
         },
         "imported_count": {
           "anyOf": [
@@ -147,14 +204,61 @@
           "default": null,
           "title": "Imported Count"
         },
+        "loaded_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Loaded Count"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation"
+        },
         "status": {
           "title": "Status",
           "type": "string"
+        },
+        "total_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Count"
         }
       },
       "required": [
         "event_type",
-        "flow_run_id",
         "status"
       ],
       "title": "ScProgressEvent",
@@ -863,6 +967,7 @@
     "mapping": {
       "agent-action": "#/$defs/AgentActionEvent",
       "agent-message": "#/$defs/AgentMessageEvent",
+      "data": "#/$defs/ScDataEvent",
       "done": "#/$defs/DoneEvent",
       "epoch": "#/$defs/TrainingEpochEvent",
       "error": "#/$defs/ScErrorEvent",
@@ -889,6 +994,9 @@
     },
     {
       "$ref": "#/$defs/ScProgressEvent"
+    },
+    {
+      "$ref": "#/$defs/ScDataEvent"
     },
     {
       "$ref": "#/$defs/ScErrorEvent"

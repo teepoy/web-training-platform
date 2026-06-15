@@ -40,6 +40,23 @@ spec:
                   key: sc_upstream_zips_db_url
             - name: CACHE_DIR
               value: /data/cache
+            - name: SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: sc_upstream_cache_size_limit_bytes
+                  optional: true
+            - name: SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: sc_upstream_raw_cache_cleanup_interval_seconds
+                  optional: true
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: finetune-config
+                  key: REDIS_URL
           volumeMounts:
             - name: data
               mountPath: /data

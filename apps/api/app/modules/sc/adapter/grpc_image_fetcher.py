@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingModuleSource=false
 
 from typing import cast
 
@@ -73,6 +74,30 @@ class GrpcImageFetcher:
             }
             for r in resp.results
         ]
+
+    async def stream_inspection_images(
+        self,
+        *,
+        inspection_time: str,
+        wafer_key: int,
+        defect_ids: list[int],
+        image_types: list[str],
+    ):
+        stub = self._ensure_channel()
+        req = pb.StreamScInspectionImagesRequest(
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            defect_ids=defect_ids,
+            image_types=image_types,
+        )
+        async for r in stub.StreamScInspectionImages(req):
+            yield {
+                "defect_id": r.defect_id,
+                "image_type": r.image_type,
+                "image_data": r.image_data,
+                "content_type": r.content_type,
+                "error": r.error,
+            }
 
     async def warm_cache(
         self,

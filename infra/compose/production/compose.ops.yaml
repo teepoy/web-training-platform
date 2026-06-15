@@ -11,6 +11,7 @@ services:
       MNT: /mnt
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
       PREFECT_UI_URL: ${PREFECT_UI_URL:?Set PREFECT_UI_URL}
       LABEL_STUDIO_URL: http://label-studio:8080
       LABEL_STUDIO_EXTERNAL_URL: ${LABEL_STUDIO_EXTERNAL_URL:?Set LABEL_STUDIO_EXTERNAL_URL}
@@ -54,6 +55,7 @@ services:
       MNT: /mnt
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
       PREFECT_UI_URL: ${PREFECT_UI_URL:?Set PREFECT_UI_URL}
       LABEL_STUDIO_URL: http://label-studio:8080
       LABEL_STUDIO_EXTERNAL_URL: ${LABEL_STUDIO_EXTERNAL_URL:?Set LABEL_STUDIO_EXTERNAL_URL}
@@ -80,9 +82,9 @@ services:
       - /bin/sh
       - -lc
       - >-
-        uv run --no-dev prefect work-pool create default-cpu --type process || true;
-        uv run --no-dev prefect work-pool create default-gpu --type process || true;
-        uv run --no-dev ftapi deployments apply
+        /app/.venv/bin/prefect work-pool create default-cpu --type process || true;
+        /app/.venv/bin/prefect work-pool create default-gpu --type process || true;
+        /app/.venv/bin/ftapi deployments apply
     networks:
       finetune-prod:
     restart: "no"

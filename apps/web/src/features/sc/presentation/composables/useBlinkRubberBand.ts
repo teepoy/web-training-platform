@@ -4,16 +4,28 @@ export interface UseBlinkRubberBandParams {
   scrollRef: Ref<HTMLElement | null>;
   onSelect: (
     defectIds: string[],
-    modifiers: { shift: boolean; ctrl: boolean; meta: boolean },
+    modifiers: {
+      shift: boolean;
+      ctrl: boolean;
+      meta: boolean;
+      selectionMode?: "replace" | "add" | "toggle";
+    },
   ) => void;
 }
 
 export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
   const { scrollRef, onSelect } = params;
 
+  interface DragPoint {
+    clientX: number;
+    clientY: number;
+    contentX: number;
+    contentY: number;
+  }
+
   const isDragging = ref(false);
-  const dragStart = ref<{ x: number; y: number } | null>(null);
-  const dragCurrent = ref<{ x: number; y: number } | null>(null);
+  const dragStart = ref<DragPoint | null>(null);
+  const dragCurrent = ref<DragPoint | null>(null);
   const dragModifiers = ref<{ shift: boolean; ctrl: boolean; meta: boolean }>({
     shift: false,
     ctrl: false,
@@ -22,19 +34,32 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
   const DRAG_THRESHOLD = 5;
   let autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 
-  const rubberRect = computed(() => {
-    if (!dragStart.value || !dragCurrent.value || !scrollRef.value) return null;
+  function toDragPoint(clientX: number, clientY: number): DragPoint | null {
+    if (!scrollRef.value) return null;
     const rect = scrollRef.value.getBoundingClientRect();
-    const x1 = Math.min(dragStart.value.x, dragCurrent.value.x) - rect.left;
-    const y1 =
-      Math.min(dragStart.value.y, dragCurrent.value.y) -
-      rect.top +
-      scrollRef.value.scrollTop;
-    const x2 = Math.max(dragStart.value.x, dragCurrent.value.x) - rect.left;
-    const y2 =
-      Math.max(dragStart.value.y, dragCurrent.value.y) -
-      rect.top +
-      scrollRef.value.scrollTop;
+    return {
+      clientX,
+      clientY,
+      contentX: clientX - rect.left + scrollRef.value.scrollLeft,
+      contentY: clientY - rect.top + scrollRef.value.scrollTop,
+    };
+  }
+
+  function refreshCurrentContentPoint(): void {
+    if (!dragCurrent.value) return;
+    const updated = toDragPoint(
+      dragCurrent.value.clientX,
+      dragCurrent.value.clientY,
+    );
+    if (updated) dragCurrent.value = updated;
+  }
+
+  const rubberRect = computed(() => {
+    if (!dragStart.value || !dragCurrent.value) return null;
+    const x1 = Math.min(dragStart.value.contentX, dragCurrent.value.contentX);
+    const y1 = Math.min(dragStart.value.contentY, dragCurrent.value.contentY);
+    const x2 = Math.max(dragStart.value.contentX, dragCurrent.value.contentX);
+    const y2 = Math.max(dragStart.value.contentY, dragCurrent.value.contentY);
     return { left: x1, top: y1, width: x2 - x1, height: y2 - y1 };
   });
 
@@ -60,13 +85,14 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
     );
     const intersecting: string[] = [];
     const containerRect = scrollRef.value.getBoundingClientRect();
+    const scrollLeft = scrollRef.value.scrollLeft;
     const scrollTop = scrollRef.value.scrollTop;
 
     for (const row of rows) {
       const rowRect = row.getBoundingClientRect();
       const rowTop = rowRect.top - containerRect.top + scrollTop;
       const rowBottom = rowTop + rowRect.height;
-      const rowLeft = rowRect.left - containerRect.left;
+      const rowLeft = rowRect.left - containerRect.left + scrollLeft;
       const rowRight = rowLeft + rowRect.width;
 
       if (
@@ -86,14 +112,36 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
     if (autoScrollTimer) return;
     autoScrollTimer = setInterval(() => {
       if (!isDragging.value || !dragCurrent.value || !scrollRef.value) return;
+      const element = scrollRef.value;
       const rect = scrollRef.value.getBoundingClientRect();
       const edgeZone = 40;
       const speed = 12;
-      if (dragCurrent.value.y < rect.top + edgeZone) {
-        scrollRef.value.scrollTop -= speed;
-      } else if (dragCurrent.value.y > rect.bottom - edgeZone) {
-        scrollRef.value.scrollTop += speed;
+      let nextScrollTop = element.scrollTop;
+      let nextScrollLeft = element.scrollLeft;
+      if (dragCurrent.value.clientY < rect.top + edgeZone) {
+        nextScrollTop -= speed;
+      } else if (dragCurrent.value.clientY > rect.bottom - edgeZone) {
+        nextScrollTop += speed;
       }
+      if (dragCurrent.value.clientX < rect.left + edgeZone) {
+        nextScrollLeft -= speed;
+      } else if (dragCurrent.value.clientX > rect.right - edgeZone) {
+        nextScrollLeft += speed;
+      }
+      nextScrollTop = Math.min(
+        element.scrollHeight - element.clientHeight,
+        Math.max(0, nextScrollTop),
+      );
+      nextScrollLeft = Math.min(
+        element.scrollWidth - element.clientWidth,
+        Math.max(0, nextScrollLeft),
+      );
+      const didScroll =
+        nextScrollTop !== element.scrollTop || nextScrollLeft !== element.scrollLeft;
+      if (!didScroll) return;
+      element.scrollTop = nextScrollTop;
+      element.scrollLeft = nextScrollLeft;
+      refreshCurrentContentPoint();
     }, 16);
   }
 
@@ -113,8 +161,10 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
     )
       return;
     e.preventDefault();
-    dragStart.value = { x: e.clientX, y: e.clientY };
-    dragCurrent.value = { x: e.clientX, y: e.clientY };
+    const point = toDragPoint(e.clientX, e.clientY);
+    if (!point) return;
+    dragStart.value = point;
+    dragCurrent.value = point;
     dragModifiers.value = {
       shift: e.shiftKey,
       ctrl: e.ctrlKey,
@@ -126,9 +176,11 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
 
   function onDocMouseMove(e: MouseEvent): void {
     if (!dragStart.value) return;
-    dragCurrent.value = { x: e.clientX, y: e.clientY };
-    const dx = e.clientX - dragStart.value.x;
-    const dy = e.clientY - dragStart.value.y;
+    const point = toDragPoint(e.clientX, e.clientY);
+    if (!point) return;
+    dragCurrent.value = point;
+    const dx = e.clientX - dragStart.value.clientX;
+    const dy = e.clientY - dragStart.value.clientY;
     if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
       isDragging.value = true;
       startAutoScroll();
@@ -143,7 +195,14 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
     if (isDragging.value) {
       const ids = computeSelectedDefectIds();
       if (ids.length > 0) {
-        onSelect(ids, { ...dragModifiers.value });
+        const shouldAdd =
+          dragModifiers.value.shift ||
+          dragModifiers.value.ctrl ||
+          dragModifiers.value.meta;
+        onSelect(ids, {
+          ...dragModifiers.value,
+          selectionMode: shouldAdd ? "add" : "replace",
+        });
       }
     }
 

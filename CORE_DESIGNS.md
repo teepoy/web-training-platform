@@ -4,6 +4,12 @@
 
 本文可以在同一未提交变更中被修订；这不算偷偷修改。提交前必须让用户看到 `CORE_DESIGNS.md` 的完整 diff，并说明哪些旧决议被覆盖、收窄或废弃。未经用户明确要求，不允许提交本文修改。
 
+## 0. 失败语义与隐式行为
+
+除非用户明确要求，或本文已有设计决议明确要求，否则不允许新增 fallback、隐式 limit、assumption 或 default。缺少配置、能力、参数、数据或设计决议时，应显式报错、暴露冲突或要求新的设计决议，而不是用兜底行为掩盖问题。
+
+确实需要限流、超时、批量大小、并发上限或兼容 fallback 时，必须把它作为显式产品/运行时设计写清楚，并说明触发条件、可观测信号和不满足条件时的失败方式。
+
 ## 1. 系统边界
 
 平台分为四个主要运行层：
@@ -98,7 +104,7 @@ Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet sha
 
 `DatasetAgg` 是 domain-specific 聚合层：它包装一个 `DatasetStorageAgg`，承载 SC 等业务语义（如 wafer point 计算、`defect_id` 批量标注、domain 预测编排），但不拥有物理存储、manifest、Parquet shard 或通用 annotation/prediction persistence 细节。新的 domain 能力应优先放在对应 `DatasetAgg`，不是塞进通用 storage Protocol，也不是在 route/service 中新增 hardcoded switch。
 
-SC import 的标准 worker 路径是 `upstream.stream(...)` → domain row normalization → `DatasetStorageAgg.write_samples(...)`。小批量 direct import 是显式低延迟能力，可以保留，但只能作为受限 import 优化；它不能成为训练/预测/导出读取 fallback，也不能重新引入旧 SampleAccess/RuntimeMaterializer 层。Smoke 若要验证 worker path，应显式强制 Prefect flow。
+SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径：`upstream.list_samples(...)` → domain row normalization → sparse shard writer / manifest update。SC import 不再注册或依赖 Prefect flow；Prefect CPU worker 仍保留给 sensors、dataset drain 等后台任务。该 direct import 路径不能成为训练/预测/导出读取 fallback，也不能重新引入旧 SampleAccess/RuntimeMaterializer 层。
 
 平台 sample storage identity 与 module domain identity 必须解耦。`Sample.id` 是平台存储身份；SC `defect_id`、`sample_id`、`inspection_time`、`wafer_key` 等是 domain/upstream identity，不应默认写入全局主键。
 
@@ -141,14 +147,14 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 ## 7. OpenAPI 与代码生成
 
-前后端 transport contract 以 `openapi/openapi.yaml` 为单一真源。
+前后端 transport contract 由后端 API route/schema DTO 代码导出到 `openapi/openapi.yaml`。`openapi/openapi.yaml` 是生成产物和跨语言消费的 transport contract 快照，不手写维护。
 
 修改 API 请求/响应结构时：
 
-1. 先修改 `openapi/openapi.yaml`。
-2. 再生成后端 transport model、前端类型、Orval/SSE/proto 等相关 artifact。
-3. 再修改后端实现和前端 UI-only 类型。
-4. 最后运行 OpenAPI sync check。
+1. 先修改后端 route/schema DTO 代码与实现。
+2. 运行 `make generate` 或相关窄生成目标，重新导出 `openapi/openapi.yaml` 并生成后端 transport model、前端类型、Orval/SSE/proto 等 artifact。
+3. 再更新前端调用点与 UI-only 类型。
+4. 最后运行后端测试与 OpenAPI sync check。
 
 不允许在后端 schema 文件或前端 types 文件中重复手写已经存在于 OpenAPI 的 DTO/type。内部 helper model 或纯 UI model 可以手写。
 

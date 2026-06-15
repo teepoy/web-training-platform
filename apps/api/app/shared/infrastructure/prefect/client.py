@@ -585,10 +585,19 @@ class PrefectClient:
     ) -> list[dict]:
         """Filter flow runs by work pool and/or state.
 
+        Prefect accepts deployment and work-queue filters on this endpoint, but
+        those filters have produced false-empty results in the local Prefect 3
+        stack.  The public method keeps the parameters for protocol/backward
+        compatibility, while intentionally not sending them to Prefect.
+
         Parameters
         ----------
         work_pool_name:
             Optional work pool name to restrict results to.
+        work_queue_name:
+            Accepted for compatibility; not sent to Prefect.
+        deployment_id:
+            Accepted for compatibility; not sent to Prefect.
         state_types:
             Optional list of Prefect state type strings, e.g.
             ``["RUNNING", "SCHEDULED"]``.
@@ -601,10 +610,6 @@ class PrefectClient:
             Flow-run objects ordered by expected start time descending.
         """
         flow_runs_filter: dict[str, object] = {}
-        if work_queue_name is not None:
-            flow_runs_filter["work_queue_name"] = {"any_": [work_queue_name]}
-        if deployment_id is not None:
-            flow_runs_filter["deployment_id"] = {"any_": [deployment_id]}
         if state_types is not None:
             flow_runs_filter["state"] = {"type": {"any_": state_types}}
 
