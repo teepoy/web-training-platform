@@ -1,10 +1,14 @@
 services:
   redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-1536mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    mem_limit: ${REDIS_MEMORY:-2g}
+    shm_size: ${REDIS_SHM_SIZE:-256m}
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
+      - ${REDIS_LOG_DIR:-./logs/redis}:/var/log/redis
     restart: unless-stopped
 
   api:
@@ -51,8 +55,11 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    mem_limit: ${API_MEMORY:-8g}
+    shm_size: ${API_SHM_SIZE:-1g}
     volumes:
-      - ./data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     ports:
       - "8000:8000"
     healthcheck:
@@ -78,6 +85,7 @@ services:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
     depends_on:
       - api
+    mem_limit: ${WEB_MEMORY:-1g}
     ports:
       - "5173:80"
     restart: unless-stopped
@@ -112,8 +120,11 @@ services:
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    mem_limit: ${CPU_WORKER_MEMORY:-8g}
+    shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     volumes:
-      - ./data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     restart: unless-stopped
 
   prefect-worker-gpu:
@@ -155,8 +166,11 @@ services:
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    mem_limit: ${GPU_WORKER_MEMORY:-16g}
+    shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     volumes:
-      - ./data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     restart: unless-stopped
 
   sc-upstream:
@@ -173,11 +187,14 @@ services:
       - ZIPS_DB_URL=${ZIPS_DB_URL:-sqlite:////data/inspection_zips.db}
       - CACHE_DIR=/data/cache
       - REDIS_URL=redis://redis:6379/0
+    mem_limit: ${SC_UPSTREAM_MEMORY:-8g}
+    shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
       - "9091"
       - "9093"
     volumes:
-      - ./data:/data
+      - ${SC_UPSTREAM_DATA_DIR:-./data/sc-upstream}:/data
+      - ${SC_UPSTREAM_LOG_DIR:-./logs/sc-upstream}:/var/log/finetune
     restart: unless-stopped
 
   image-parser:
@@ -201,9 +218,14 @@ services:
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_PATH_STYLE=true
       - SC_UPSTREAM_ADDR=sc-upstream:9091
+    mem_limit: ${IMAGE_PARSER_MEMORY:-32g}
+    shm_size: ${IMAGE_PARSER_SHM_SIZE:-2g}
     ports:
       - "8090:8090"
       - "9092:9092"
+    volumes:
+      - ${IMAGE_PARSER_DATA_DIR:-./data/image-parser}:/data
+      - ${IMAGE_PARSER_LOG_DIR:-./logs/image-parser}:/var/log/finetune
     restart: unless-stopped
 
   # ═══════════════════════════════════════════════════════════════════
@@ -334,7 +356,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  redis-data:
   prometheus_data:
   grafana_data:
   loki_data:

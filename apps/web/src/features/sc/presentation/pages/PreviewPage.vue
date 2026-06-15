@@ -76,7 +76,7 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       dateRange: page.dateRange.value,
       summariesLoading: page.summariesLoading.value,
       summaries: page.summaries.value,
-      inspectionColumns: page.inspectionColumns,
+      inspectionColumns: page.inspectionColumns.value,
       "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
       onSearch: () => page.searchInspections(),
       onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),

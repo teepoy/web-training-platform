@@ -57,6 +57,33 @@ def _apply_sample_filters(
     return lf
 
 
+def encode_defect_ids_int32le(defect_ids: list[int]) -> bytes:
+    return b"".join(
+        int(defect_id).to_bytes(4, byteorder="little", signed=True)
+        for defect_id in defect_ids
+    )
+
+
+async def sorted_defect_ids_from_lazyframe(lf: pl.LazyFrame) -> list[int]:
+    if "defect_id" not in lf.collect_schema().names():
+        raise ScPlotPointsRejectedError("defect ids require a defect_id column")
+
+    df = await (
+        lf.select(pl.col("defect_id").cast(pl.Int64).alias("defect_id"))
+        .drop_nulls()
+        .unique()
+        .sort("defect_id")
+        .collect_async()
+    )
+    defect_ids = [int(value) for value in df["defect_id"].to_list()]
+    for defect_id in defect_ids:
+        if defect_id < -(2**31) or defect_id > 2**31 - 1:
+            raise ScPlotPointsRejectedError(
+                f"defect_id out of Int32 range: {defect_id}"
+            )
+    return defect_ids
+
+
 def _require_int(mapping: dict, key: str) -> int:
     value = mapping[key]
     if isinstance(value, bool):
@@ -334,3 +361,19 @@ class ScPlotPointsService:
             width=width,
             height=height,
         )
+
+    async def build_defect_ids_response(self, dataset_id: str, org_id: str) -> bytes:
+        dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
+        if dataset is None:
+            raise ScPlotPointsNotFoundError(dataset_id)
+        if dataset.dataset_type != self._SC_DATASET_TYPE:
+            raise ScPlotPointsRejectedError("defect ids require an image_sc dataset")
+        if dataset.storage_mode != DatasetStorageMode.FILE_SHARD_SPARSE:
+            raise ScPlotPointsRejectedError(
+                "defect ids require a file_shard_sparse dataset"
+            )
+
+        storage = await self._storage_factory.open(dataset_id, org_id)
+        lf = cast(pl.LazyFrame, await storage.list_samples(return_lazyframe=True))
+        defect_ids = await sorted_defect_ids_from_lazyframe(lf)
+        return encode_defect_ids_int32le(defect_ids)

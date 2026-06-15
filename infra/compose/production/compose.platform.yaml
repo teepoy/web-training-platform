@@ -60,13 +60,16 @@ services:
   api:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     environment: *platform-environment
+    mem_limit: ${API_MEMORY:-8g}
+    shm_size: ${API_SHM_SIZE:-1g}
     depends_on:
       prefect-server:
         condition: service_healthy
     expose:
       - "8000"
     volumes:
-      - platform-data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:
@@ -87,6 +90,7 @@ services:
 
   web:
     image: ${FINETUNE_WEB_IMAGE:?Set FINETUNE_WEB_IMAGE to an immutable tag}
+    mem_limit: ${WEB_MEMORY:-1g}
     depends_on:
       api:
         condition: service_healthy
@@ -101,11 +105,14 @@ services:
   prefect-worker-cpu:
     image: ${FINETUNE_CPU_WORKER_IMAGE:?Set FINETUNE_CPU_WORKER_IMAGE to an immutable tag}
     environment: *platform-environment
+    mem_limit: ${CPU_WORKER_MEMORY:-8g}
+    shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     depends_on:
       prefect-server:
         condition: service_healthy
     volumes:
-      - platform-data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
     restart: unless-stopped
@@ -114,6 +121,8 @@ services:
     image: ${FINETUNE_GPU_WORKER_IMAGE:?Set FINETUNE_GPU_WORKER_IMAGE to an immutable tag}
     profiles: ["gpu"]
     environment: *platform-environment
+    mem_limit: ${GPU_WORKER_MEMORY:-16g}
+    shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -125,7 +134,8 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - platform-data:/mnt
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
     restart: unless-stopped
@@ -138,11 +148,14 @@ services:
       UPSTREAM_DB_URL: ${UPSTREAM_DB_URL:?Set UPSTREAM_DB_URL}
       ZIPS_DB_URL: ${ZIPS_DB_URL:-}
       CACHE_DIR: /data/cache
+    mem_limit: ${SC_UPSTREAM_MEMORY:-8g}
+    shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
       - "9091"
       - "9093"
     volumes:
-      - platform-data:/data
+      - ${SC_UPSTREAM_DATA_DIR:-./data/sc-upstream}:/data
+      - ${SC_UPSTREAM_LOG_DIR:-./logs/sc-upstream}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:
@@ -168,9 +181,14 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_USE_PATH_STYLE: "true"
       SC_UPSTREAM_ADDR: sc-upstream:9091
+    mem_limit: ${IMAGE_PARSER_MEMORY:-32g}
+    shm_size: ${IMAGE_PARSER_SHM_SIZE:-2g}
     expose:
       - "8090"
       - "9092"
+    volumes:
+      - ${IMAGE_PARSER_DATA_DIR:-./data/image-parser}:/data
+      - ${IMAGE_PARSER_LOG_DIR:-./logs/image-parser}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:
@@ -181,7 +199,3 @@ networks:
   finetune-prod:
     external: true
     name: finetune-prod
-
-volumes:
-  platform-data:
-    name: finetune-platform-data

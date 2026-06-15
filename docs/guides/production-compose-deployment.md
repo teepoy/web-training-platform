@@ -117,6 +117,47 @@ FINETUNE_API_IMAGE=registry.example.com/finetune-api:<release>
 FINETUNE_WEB_IMAGE=registry.example.com/finetune-web:<release>
 FINETUNE_CPU_WORKER_IMAGE=registry.example.com/finetune-cpu-worker:<release>
 FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
+PLATFORM_DATA_DIR=/srv/finetune/platform/data
+PLATFORM_LOG_DIR=/srv/finetune/platform/logs
+SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
+SC_UPSTREAM_LOG_DIR=/srv/finetune/platform/logs/sc-upstream
+IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
+IMAGE_PARSER_LOG_DIR=/srv/finetune/platform/logs/image-parser
+API_MEMORY=8g
+API_SHM_SIZE=1g
+WEB_MEMORY=1g
+CPU_WORKER_MEMORY=8g
+CPU_WORKER_SHM_SIZE=1g
+GPU_WORKER_MEMORY=16g
+GPU_WORKER_SHM_SIZE=2g
+SC_UPSTREAM_MEMORY=8g
+SC_UPSTREAM_SHM_SIZE=1g
+IMAGE_PARSER_MEMORY=32g
+IMAGE_PARSER_SHM_SIZE=2g
+```
+
+Stateful data paths and resource limits can also be set in the data
+environment file:
+
+```dotenv
+POSTGRES_DATA_DIR=/srv/finetune/data/postgres
+POSTGRES_LOG_DIR=/srv/finetune/data/logs/postgres
+POSTGRES_MEMORY=8g
+POSTGRES_SHM_SIZE=1g
+MINIO_DATA_DIR=/srv/finetune/data/minio
+MINIO_LOG_DIR=/srv/finetune/data/logs/minio
+MINIO_MEMORY=4g
+MINIO_SHM_SIZE=512m
+REDIS_DATA_DIR=/srv/finetune/data/redis
+REDIS_LOG_DIR=/srv/finetune/data/logs/redis
+REDIS_MEMORY=2g
+REDIS_SHM_SIZE=256m
+REDIS_MAXMEMORY=1536mb
+REDIS_MAXMEMORY_POLICY=allkeys-lru
+LABEL_STUDIO_DATA_DIR=/srv/finetune/data/label-studio
+LABEL_STUDIO_LOG_DIR=/srv/finetune/data/logs/label-studio
+LABEL_STUDIO_MEMORY=4g
+LABEL_STUDIO_SHM_SIZE=512m
 ```
 
 Observability environment:

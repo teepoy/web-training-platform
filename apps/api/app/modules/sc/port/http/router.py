@@ -29,7 +29,9 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     _apply_sample_filters,
+    encode_defect_ids_int32le,
     filter_box_defect_ids,
+    sorted_defect_ids_from_lazyframe,
 )
 from app.modules.sc.proto_adapter import (
     make_wafer_map_response_pb,
@@ -201,6 +203,48 @@ def _parse_inspection_time(value: str) -> datetime:
 
 
 @router.get(
+    "/inspections/{inspection_time}/{wafer_key}/defect-ids.bin",
+    responses={
+        200: {
+            "description": "Return sorted defect ids as little-endian Int32 bytes",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        }
+    },
+)
+async def get_inspection_defect_ids_binary(
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> Response:
+    insp_dt = _parse_inspection_time(inspection_time)
+    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
+    if inspection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
+        )
+
+    samples_lf = await upstream_reader.list_samples(
+        insp_dt,
+        wafer_key,
+        offset=0,
+        count=max(inspection.defects, 0),
+    )
+    try:
+        defect_ids = await sorted_defect_ids_from_lazyframe(samples_lf)
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=encode_defect_ids_int32le(defect_ids),
+        media_type="application/octet-stream",
+    )
+
+
+@router.get(
     "/inspections/{inspection_time}/{wafer_key}/map-points",
     responses={
         200: {
@@ -290,6 +334,34 @@ async def get_inspection_map_points(
         group_by=filters.legend_group_by,
     )
     return Response(content=body, media_type="application/x-protobuf")
+
+
+@router.get(
+    "/datasets/{dataset_id}/defect-ids.bin",
+    responses={
+        200: {
+            "description": "Return sorted dataset defect ids as little-endian Int32 bytes",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        }
+    },
+)
+async def get_sc_dataset_defect_ids_binary(
+    dataset_id: str,
+    service: ScPlotPointsServiceDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    try:
+        body = await service.build_defect_ids_response(dataset_id, org.id)
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content=body, media_type="application/octet-stream")
 
 
 @router.post(

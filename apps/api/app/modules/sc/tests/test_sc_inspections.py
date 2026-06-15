@@ -210,6 +210,36 @@ def test_sample_table_rows_filters_sorts_then_paginates(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_inspection_defect_ids_binary_returns_sorted_int32(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            summary = client.get(
+                "/api/v1/sc/inspections",
+                params={"start_time": SAFE_START, "end_time": SAFE_END},
+            )
+            first = _parse_summary_resp(summary.content)["items"][0]
+            response = client.get(
+                f"/api/v1/sc/inspections/{first['inspection_time']}/"
+                f"{first['wafer_key']}/defect-ids.bin"
+            )
+
+            assert response.status_code == 200, response.text
+            assert response.headers.get("content-type", "").startswith(
+                "application/octet-stream"
+            )
+            assert len(response.content) % 4 == 0
+            defect_ids = [
+                int.from_bytes(response.content[i : i + 4], "little", signed=True)
+                for i in range(0, len(response.content), 4)
+            ]
+            assert defect_ids == [1, 2, 3]
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_inspection_split_preview_endpoints_success(
     mock_wafer_db_reader,
 ):

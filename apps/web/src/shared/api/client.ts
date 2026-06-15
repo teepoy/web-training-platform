@@ -92,7 +92,10 @@ export async function req<T>(
       return undefined as T;
     }
     const acceptHeader = (initHeaders as Record<string, string> | undefined)?.Accept;
-    if (acceptHeader?.includes("application/x-protobuf")) {
+    if (
+      acceptHeader?.includes("application/x-protobuf") ||
+      acceptHeader?.includes("application/octet-stream")
+    ) {
       return r as T;
     }
     return (await r.json()) as T;

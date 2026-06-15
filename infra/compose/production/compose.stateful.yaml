@@ -5,12 +5,15 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    mem_limit: ${POSTGRES_MEMORY:-8g}
+    shm_size: ${POSTGRES_SHM_SIZE:-1g}
     environment:
       POSTGRES_DB: finetune
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+      - ${POSTGRES_LOG_DIR:-./logs/postgres}:/var/log/postgresql
       - ${INIT_SCRIPTS_DIR:-./init-scripts}:/docker-entrypoint-initdb.d:ro
     networks:
       finetune-prod:
@@ -31,11 +34,14 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
     command: server /data --console-address ":9001"
+    mem_limit: ${MINIO_MEMORY:-4g}
+    shm_size: ${MINIO_SHM_SIZE:-512m}
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
     volumes:
-      - minio-data:/data
+      - ${MINIO_DATA_DIR:-./data/minio}:/data
+      - ${MINIO_LOG_DIR:-./logs/minio}:/var/log/minio
     networks:
       finetune-prod:
         aliases:
@@ -49,9 +55,12 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-1536mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    mem_limit: ${REDIS_MEMORY:-2g}
+    shm_size: ${REDIS_SHM_SIZE:-256m}
     volumes:
-      - redis-data:/data
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
+      - ${REDIS_LOG_DIR:-./logs/redis}:/var/log/redis
     networks:
       finetune-prod:
         aliases:
@@ -65,6 +74,8 @@ services:
 
   label-studio:
     image: ${LABEL_STUDIO_IMAGE:?Set LABEL_STUDIO_IMAGE to an immutable tag}
+    mem_limit: ${LABEL_STUDIO_MEMORY:-4g}
+    shm_size: ${LABEL_STUDIO_SHM_SIZE:-512m}
     environment:
       DJANGO_DB: default
       POSTGRE_NAME: labelstudio
@@ -79,7 +90,8 @@ services:
     expose:
       - "8080"
     volumes:
-      - label-studio-data:/label-studio/data
+      - ${LABEL_STUDIO_DATA_DIR:-./data/label-studio}:/label-studio/data
+      - ${LABEL_STUDIO_LOG_DIR:-./logs/label-studio}:/var/log/label-studio
     networks:
       finetune-prod:
         aliases:
@@ -96,13 +108,3 @@ networks:
   finetune-prod:
     external: true
     name: finetune-prod
-
-volumes:
-  postgres-data:
-    name: finetune-postgres-data
-  minio-data:
-    name: finetune-minio-data
-  redis-data:
-    name: finetune-redis-data
-  label-studio-data:
-    name: finetune-label-studio-data

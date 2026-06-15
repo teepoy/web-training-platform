@@ -20,6 +20,7 @@ import type { AnnotationGridItem } from "@/shared/types/components";
 
 import {
   useGetDatasetApiV1DatasetsDatasetIdGet,
+  useGetDatasetStatusApiV1DatasetsDatasetIdStatusGet,
   useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost,
   type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
@@ -30,8 +31,9 @@ import {
 } from "@/generated/orval/endpoints/api";
 import { runPredictions, getPredictionJob } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
-import type { TrainingJob } from "@/generated/orval/models";
+import type { DatasetStatusResponse, TrainingJob } from "@/generated/orval/models";
 import { fetchScPlotPoints } from "../api/plotPoints";
+import { defaultDefectIds, fetchDatasetDefectIds } from "../api/defectIds";
 import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
@@ -149,6 +151,8 @@ export interface ReclassifySample {
 
 export type SelectionMode = "replace" | "add" | "toggle";
 
+type DefectIdSourceMode = "offset" | "fallback" | "real" | "map" | "sampled";
+
 export interface ReclassifyPageState {
   datasetId: ComputedRef<string>;
   dataset: ComputedRef<ScDatasetInfo | undefined>;
@@ -163,6 +167,7 @@ export interface ReclassifyPageState {
   hasMoreSamples: ComputedRef<boolean>;
   isFetchingMoreSamples: ComputedRef<boolean>;
   plotPointTotal: ComputedRef<number>;
+  samplingAvailableCount: ComputedRef<number>;
   annotatedCount: ComputedRef<number>;
   labelSpace: ComputedRef<string[]>;
   effectiveLabels: ComputedRef<string[]>;
@@ -307,6 +312,25 @@ export function useReclassifyPage(): ReclassifyPageState {
     () => datasetQuery.data.value,
   );
 
+  const datasetStatusQuery =
+    useGetDatasetStatusApiV1DatasetsDatasetIdStatusGet<DatasetStatusResponse>(
+      computed(() => datasetId.value),
+      {
+        query: {
+          select: (res) => res.data as DatasetStatusResponse,
+          enabled: computed(() => !!selectedDataset.value),
+          retry: false,
+        },
+      },
+    );
+
+  const datasetDefectIdsQuery = useQuery({
+    queryKey: computed(() => ["sc", "defect-ids", datasetId.value]),
+    queryFn: () => fetchDatasetDefectIds(datasetId.value),
+    enabled: computed(() => !!selectedDataset.value),
+    retry: false,
+  });
+
   const isLoading = computed(() => datasetQuery.isLoading.value);
   const isError = computed(() => datasetQuery.isError.value);
   const errorMessage = computed(
@@ -325,6 +349,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const pageSize = 200;
 
   const mapFilter = ref<Record<string, (number|string)[]>>({});
+  const mapFilterVersion = ref(0);
   const legendGroupBy = ref<string | null>(null);
   const activeFilterCount = computed(
     () => Object.values(mapFilter.value).filter((v) => v && v.length > 0).length,
@@ -356,6 +381,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   function handleBoxSelectionChange(ids: number[]): void {
     mapFilteredIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
+    mapFilterVersion.value += 1;
   }
 
   const selectedDefectIds = computed(
@@ -404,10 +430,51 @@ export function useReclassifyPage(): ReclassifyPageState {
   const mapFilteredIds = ref<Set<string>>(new Set());
   const sampledIds = ref<Set<string>>(new Set());
 
+  const datasetMetaSampleCount = computed<number | null>(() => {
+    const raw = selectedDataset.value?.dataset_meta?.sample_count;
+    const count = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(count) && count >= 0 ? count : null;
+  });
+
+  const datasetSampleTotal = computed<number>(() => {
+    const statusTotal = datasetStatusQuery.data.value?.total_samples;
+    if (typeof statusTotal === "number" && Number.isFinite(statusTotal)) {
+      return Math.max(0, statusTotal);
+    }
+    if (datasetMetaSampleCount.value !== null) return datasetMetaSampleCount.value;
+    return 0;
+  });
+
+  const allDefectIds = computed<string[]>(() => {
+    const realIds = datasetDefectIdsQuery.data.value;
+    if (realIds) return realIds.map(String);
+    return defaultDefectIds(datasetSampleTotal.value).map(String);
+  });
+
   const blinkSourceDefectIds = computed<string[] | null>(() => {
     if (sampledIds.value.size > 0) return [...sampledIds.value];
     if (mapFilteredIds.value.size > 0) return [...mapFilteredIds.value];
-    return null;
+    return allDefectIds.value.length > 0 ? allDefectIds.value : null;
+  });
+
+  const blinkSourceMode = computed<DefectIdSourceMode>(() => {
+    if (sampledIds.value.size > 0) return "sampled";
+    if (mapFilteredIds.value.size > 0) return "map";
+    if (datasetDefectIdsQuery.data.value) return "real";
+    if (allDefectIds.value.length > 0) return "fallback";
+    return "offset";
+  });
+
+  const blinkSourceKey = computed(() => {
+    const ids = blinkSourceDefectIds.value;
+    if (!ids) return null;
+    return [
+      blinkSourceMode.value,
+      ids.length,
+      ids[0] ?? "",
+      ids.at(-1) ?? "",
+      mapFilterVersion.value,
+    ].join(":");
   });
 
   const sampleRowsInfiniteQuery = useInfiniteQuery({
@@ -415,9 +482,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       "sc",
       "view-samples-paged",
       datasetId.value,
-      blinkSourceDefectIds.value
-        ? blinkSourceDefectIds.value.join(",")
-        : null,
+      blinkSourceKey.value,
     ]),
     initialPageParam: 0,
     queryFn: async ({ pageParam }: { pageParam: number }) => {
@@ -533,17 +598,22 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const plotPointTotal = computed<number>(
     () =>
-      sampleRowsInfiniteQuery.data.value?.pages?.[0]?.total ??
-      scSamples.value.length,
+      datasetSampleTotal.value ||
+      (sampleRowsInfiniteQuery.data.value?.pages?.[0]?.total ??
+        scSamples.value.length),
   );
 
   const annotatedCount = computed<number>(() => {
-    if (legendGroupBy.value === "annotation") {
-      return Object.values(classList.value ?? {}).reduce(
-        (count, group) => count + group.count, 0,
-      );
+    const statusAnnotated = datasetStatusQuery.data.value?.annotated_samples;
+    if (typeof statusAnnotated === "number" && Number.isFinite(statusAnnotated)) {
+      return Math.max(0, statusAnnotated);
     }
-    return scSamples.value.filter((s) => s.currentLabel).length;
+    return 0;
+  });
+
+  const samplingAvailableCount = computed<number>(() => {
+    if (mapFilteredIds.value.size > 0) return mapFilteredIds.value.size;
+    return plotPointTotal.value;
   });
 
   async function fetchMoreSamples(): Promise<unknown> {
@@ -759,6 +829,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     mapFilter.value = {};
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
+    mapFilterVersion.value += 1;
     void plotPointsQuery.refetch();
   }
 
@@ -921,6 +992,9 @@ export function useReclassifyPage(): ReclassifyPageState {
           void queryClient.invalidateQueries({
             queryKey: ["api", "v1", "datasets", datasetId.value],
           });
+          void queryClient.invalidateQueries({
+            queryKey: ["api", "v1", "datasets", datasetId.value, "status"],
+          });
         },
         onError: (err: Error) => {
           message.error(err.message ?? "Failed to create annotations");
@@ -994,7 +1068,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (mapFilteredIds.value.size > 0) {
       const pool = [...mapFilteredIds.value];
       const shuffled = pool.sort(() => Math.random() - 0.5);
-      const picked = shuffled.slice(0, count);
+      const picked = shuffled.slice(0, Math.min(count, pool.length));
       resp =
         await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
           datasetId.value,
@@ -1244,6 +1318,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     hasMoreSamples,
     isFetchingMoreSamples,
     plotPointTotal,
+    samplingAvailableCount,
     annotatedCount,
     labelSpace,
     effectiveLabels,

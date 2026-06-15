@@ -26,6 +26,10 @@ import {
   fetchScInspectionMapPoints,
   type ScMapFilter,
 } from "../api/plotPoints";
+import {
+  defaultDefectIds,
+  fetchInspectionDefectIds,
+} from "../api/defectIds";
 import type { ScSampleItem } from "../generated/proto/sc/v1/sample_pb";
 import type {
   InspectionSummaryItem,
@@ -111,7 +115,7 @@ export interface PreviewPageState {
   summariesLoading: Ref<boolean>;
   summariesError: Ref<string | null>;
   summariesEmpty: Ref<boolean>;
-  inspectionColumns: DataTableColumns<InspectionSummaryItem>;
+  inspectionColumns: ComputedRef<DataTableColumns<InspectionSummaryItem>>;
 
   tabs: Ref<PreviewTab[]>;
   activeTabId: Ref<string | null>;
@@ -226,21 +230,96 @@ export function usePreviewPage(): PreviewPageState {
     },
   );
 
-  const inspectionColumns: DataTableColumns<InspectionSummaryItem> = [
+  type SummaryFilterKey =
+    | "inspection_time"
+    | "lot_id"
+    | "wafer_id"
+    | "layer_id"
+    | "device";
+
+  function summaryFilterOptions(key: SummaryFilterKey) {
+    const values = new Set<string>();
+    for (const row of summaries.value) {
+      const value = row[key];
+      if (value !== undefined && value !== null && String(value).length > 0) {
+        values.add(String(value));
+      }
+    }
+    return [...values]
+      .sort((left, right) =>
+        left.localeCompare(right, undefined, { numeric: true }),
+      )
+      .map((value) => ({ label: value, value }));
+  }
+
+  function summaryStringSorter(
+    key: SummaryFilterKey,
+  ): (left: InspectionSummaryItem, right: InspectionSummaryItem) => number {
+    return (left, right) =>
+      String(left[key] ?? "").localeCompare(String(right[key] ?? ""), undefined, {
+        numeric: true,
+      });
+  }
+
+  function summaryStringFilter(
+    key: SummaryFilterKey,
+  ): (value: string | number, row: InspectionSummaryItem) => boolean {
+    return (value, row) => String(row[key] ?? "") === String(value);
+  }
+
+  const inspectionColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
     {
       key: "inspection_time",
       title: "Inspection Time",
       width: 200,
       ellipsis: { tooltip: true },
+      sorter: (left, right) =>
+        Date.parse(left.inspection_time) - Date.parse(right.inspection_time),
+      filter: summaryStringFilter("inspection_time"),
+      filterOptions: summaryFilterOptions("inspection_time"),
+      filterMultiple: true,
     },
-    { key: "lot_id", title: "Lot ID", width: 100 },
-    { key: "wafer_id", title: "Wafer ID", width: 80 },
-    { key: "layer_id", title: "Layer ID", width: 80 },
+    {
+      key: "lot_id",
+      title: "Lot ID",
+      width: 100,
+      sorter: summaryStringSorter("lot_id"),
+      filter: summaryStringFilter("lot_id"),
+      filterOptions: summaryFilterOptions("lot_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "wafer_id",
+      title: "Wafer ID",
+      width: 80,
+      sorter: summaryStringSorter("wafer_id"),
+      filter: summaryStringFilter("wafer_id"),
+      filterOptions: summaryFilterOptions("wafer_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "layer_id",
+      title: "Layer ID",
+      width: 80,
+      sorter: summaryStringSorter("layer_id"),
+      filter: summaryStringFilter("layer_id"),
+      filterOptions: summaryFilterOptions("layer_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "device",
+      title: "Device",
+      width: 90,
+      sorter: summaryStringSorter("device"),
+      filter: summaryStringFilter("device"),
+      filterOptions: summaryFilterOptions("device"),
+      filterMultiple: true,
+    },
     { key: "defects", title: "Defects", width: 80 },
     { key: "images", title: "Images", width: 120, ellipsis: { tooltip: true } },
     { key: "eqp_id", title: "Equipment ID", width: 80 },
     { key: "recipe_id", title: "Recipe ID", width: 80 },
-  ];
+  ]);
 
   // ── Tab system ───────────────────────────────────
 
@@ -310,7 +389,7 @@ export function usePreviewPage(): PreviewPageState {
       samplesTotal: row.defects,
       samplesLoading: false,
       samplesError: null,
-      patchSamples: makePatchSamples(row),
+    patchSamples: makePatchSamples(row),
       reviewSamples: [],
       reviewLoading: true,
       reviewError: null,
@@ -356,11 +435,18 @@ export function usePreviewPage(): PreviewPageState {
   }
 
   function makePatchSamples(row: InspectionSummaryItem): ScSampleItem[] {
-    const total = Math.max(0, row.defects ?? 0);
+    const defectIds = defaultDefectIds(row.defects ?? 0);
+    return makePatchSamplesForDefectIds(row, defectIds);
+  }
+
+  function makePatchSamplesForDefectIds(
+    row: InspectionSummaryItem,
+    defectIds: number[],
+  ): ScSampleItem[] {
     const inspectionTime = inspectionTimeEpochSeconds(row.inspection_time);
-    return Array.from({ length: total }, (_, i) =>
+    return defectIds.map((defectId) =>
       create(ScSampleItemSchema, {
-        defectId: i + 1,
+        defectId,
         inspectionTime,
         waferKey: row.wafer_key,
         reviewImages: [],
@@ -370,9 +456,34 @@ export function usePreviewPage(): PreviewPageState {
 
   async function fetchPreviewDataForTab(tab: PreviewTab): Promise<void> {
     await Promise.allSettled([
+      fetchDefectIdsForTab(tab),
       fetchMapPointsForTab(tab),
       fetchReviewImagesForTab(tab),
     ]);
+  }
+
+  async function fetchDefectIdsForTab(tab: PreviewTab): Promise<void> {
+    const tabId = tab.id;
+    if (!tab.inspectionTime || tab.waferKey === undefined || !tab.inspectionItem)
+      return;
+    try {
+      const defectIds = await fetchInspectionDefectIds(
+        tab.inspectionTime,
+        tab.waferKey,
+      );
+      const idx = tabs.value.findIndex((t) => t.id === tabId);
+      if (idx === -1 || tabs.value[idx].type !== "inspection") return;
+      tabs.value[idx] = {
+        ...tabs.value[idx],
+        samplesTotal: defectIds.length,
+        patchSamples: makePatchSamplesForDefectIds(
+          tab.inspectionItem,
+          defectIds,
+        ),
+      };
+    } catch {
+      // Keep the immediate 1..summary.defects fallback if the optional id list fails.
+    }
   }
 
   async function fetchMapPointsForTab(

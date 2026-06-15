@@ -3725,6 +3725,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/inspections/{inspection_time}/{wafer_key}/defect-ids.bin:
+    get:
+      tags:
+      - sc
+      summary: Get Inspection Defect Ids Binary
+      operationId: get_inspection_defect_ids_binary_api_v1_sc_inspections__inspection_time___wafer_key__defect_ids_bin_get
+      parameters:
+      - name: inspection_time
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Inspection Time
+      - name: wafer_key
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Wafer Key
+      responses:
+        '200':
+          description: Return sorted defect ids as little-endian Int32 bytes
+          content:
+            application/json:
+              schema: {}
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/inspections/{inspection_time}/{wafer_key}/map-points:
     get:
       tags:
@@ -3933,6 +3968,35 @@ paths:
             application/json:
               schema: {}
             application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/datasets/{dataset_id}/defect-ids.bin:
+    get:
+      tags:
+      - sc
+      summary: Get Sc Dataset Defect Ids Binary
+      operationId: get_sc_dataset_defect_ids_binary_api_v1_sc_datasets__dataset_id__defect_ids_bin_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Return sorted dataset defect ids as little-endian Int32 bytes
+          content:
+            application/json:
+              schema: {}
+            application/octet-stream:
               schema:
                 type: string
                 format: binary

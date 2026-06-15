@@ -526,11 +526,11 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
           <NInputNumber
             v-model:value="page.samplingCount.value"
             :min="1"
-            :max="page.plotPointTotal.value"
+            :max="page.samplingAvailableCount.value"
             style="width: 100%;"
           />
           <NText depth="3" style="font-size: 11px; margin-top: 4px;">
-            Total available: {{ page.plotPointTotal.value }} samples
+            Total available: {{ page.samplingAvailableCount.value }} samples
           </NText>
         </div>
         <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px;">
