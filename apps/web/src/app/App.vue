@@ -150,10 +150,8 @@ const minioUrl = "http://localhost:9001";
 const pgAdminUrl = "http://localhost:5050";
 
 const menuOptions = [
-  { label: "Task Explorer", key: "/tasks" },
+  { label: "Patch", key: "/sc" },
   { label: "Datasets", key: "/datasets" },
-  { label: "Semiconductor", key: "/sc" },
-  { label: "Automations", key: "/sensors" },
 ];
 
 const userInitials = computed(() =>

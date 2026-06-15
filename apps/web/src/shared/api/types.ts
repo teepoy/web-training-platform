@@ -195,7 +195,7 @@ export interface UpdateScheduleBody {
   is_schedule_active?: boolean;
 }
 
-export type TaskType = "classification" | "vqa" | "detection" | "semiconductor";
+export type TaskType = "classification" | "vqa" | "detection" | "patch";
 export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_sc";
 export type ModelFramework = "pytorch" | "dspy";
 export type ModelFormat = "pytorch" | "onnx" | "safetensors" | "keras";

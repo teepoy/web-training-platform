@@ -3712,6 +3712,38 @@ paths:
           type: string
           format: date-time
           title: End Time
+      - name: lot_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Id
+      - name: wafer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Wafer Id
+      - name: layer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Layer Id
+      - name: device
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device
       responses:
         '200':
           description: Successful Response

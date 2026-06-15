@@ -91,18 +91,36 @@ class QueryCache:
         )
 
     async def get_list_inspections(
-        self, start_time: str, end_time: str
+        self,
+        start_time: str,
+        end_time: str,
+        lot_id: str = "",
+        wafer_id: str = "",
+        layer_id: str = "",
+        device: str = "",
     ) -> list[dict] | None:
         return await asyncio.to_thread(
-            self._cache.get, self._key("insps", start_time, end_time)
+            self._cache.get,
+            self._key(
+                "insps", start_time, end_time, lot_id, wafer_id, layer_id, device
+            ),
         )
 
     async def set_list_inspections(
-        self, start_time: str, end_time: str, items: list[dict]
+        self,
+        start_time: str,
+        end_time: str,
+        items: list[dict],
+        lot_id: str = "",
+        wafer_id: str = "",
+        layer_id: str = "",
+        device: str = "",
     ) -> None:
         await asyncio.to_thread(
             self._cache.set,
-            self._key("insps", start_time, end_time),
+            self._key(
+                "insps", start_time, end_time, lot_id, wafer_id, layer_id, device
+            ),
             items,
             expire=CACHE_TTL,
         )

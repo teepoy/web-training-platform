@@ -1,4 +1,4 @@
-"""Integration tests for SC (semiconductor) view-type endpoints.
+"""Integration tests for SC (patch) view-type endpoints.
 
 Covers the SC-specific view routers:
 - GET /api/v1/datasets/{id}/views/patch_image_v1/samples

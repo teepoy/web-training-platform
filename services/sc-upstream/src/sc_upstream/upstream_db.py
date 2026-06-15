@@ -82,7 +82,13 @@ class UpstreamDB:
             }
 
     async def list_inspections(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str = "",
+        wafer_id: str = "",
+        layer_id: str = "",
+        device: str = "",
     ) -> pl.LazyFrame:
         query = f"""
         SELECT s.wafer_key, s.inspection_time, s.lot_id, s.wafer_id, s.device,
@@ -93,9 +99,32 @@ class UpstreamDB:
         FROM insp_wafer_summary s
         JOIN insp_recipe r ON s.recipe_key = r.recipe_key
         WHERE s.inspection_time >= '{start_time}' AND s.inspection_time < '{end_time}'
+        {self._filter_clause("s.lot_id", lot_id)}
+        {self._filter_clause("s.wafer_id", wafer_id)}
+        {self._filter_clause("s.layer_id", layer_id)}
+        {self._filter_clause("s.device", device)}
         ORDER BY s.inspection_time DESC, s.wafer_key DESC
         """
         return await self._read(query)
+
+    @staticmethod
+    def _filter_clause(column: str, raw: str) -> str:
+        if not raw or not raw.strip():
+            return ""
+        conditions: list[str] = []
+        for item in raw.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            if item.endswith("*"):
+                pattern = item[:-1].replace("'", "''") + "%"
+                conditions.append(f"{column} LIKE '{pattern}'")
+            else:
+                value = item.replace("'", "''")
+                conditions.append(f"{column} = '{value}'")
+        if not conditions:
+            return ""
+        return f"AND ({' OR '.join(conditions)})"
 
     async def list_samples(
         self,

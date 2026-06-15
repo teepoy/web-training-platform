@@ -291,15 +291,27 @@ class ListInspectionsRequest(google.protobuf.message.Message):
 
     START_TIME_FIELD_NUMBER: builtins.int
     END_TIME_FIELD_NUMBER: builtins.int
+    LOT_ID_FIELD_NUMBER: builtins.int
+    WAFER_ID_FIELD_NUMBER: builtins.int
+    LAYER_ID_FIELD_NUMBER: builtins.int
+    DEVICE_FIELD_NUMBER: builtins.int
     start_time: builtins.str
     end_time: builtins.str
+    lot_id: builtins.str
+    wafer_id: builtins.str
+    layer_id: builtins.str
+    device: builtins.str
     def __init__(
         self,
         *,
         start_time: builtins.str = ...,
         end_time: builtins.str = ...,
+        lot_id: builtins.str = ...,
+        wafer_id: builtins.str = ...,
+        layer_id: builtins.str = ...,
+        device: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["end_time", b"end_time", "start_time", b"start_time"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["device", b"device", "end_time", b"end_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "start_time", b"start_time", "wafer_id", b"wafer_id"]) -> None: ...
 
 global___ListInspectionsRequest = ListInspectionsRequest
 

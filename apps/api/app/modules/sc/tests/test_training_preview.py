@@ -1,4 +1,4 @@
-"""E2E test: SC (semiconductor) dataset training and preview flow.
+"""E2E test: SC (patch) dataset training and preview flow.
 
 Covers:
 - Create image_sc dataset with samples (dual-view: patch_image_v1 + review_image_v1)

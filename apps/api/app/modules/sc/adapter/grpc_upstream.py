@@ -36,12 +36,22 @@ class GrpcScUpstream:
         return flight.FlightClient(self._flight_addr)  # pyright: ignore[reportPrivateImportUsage]
 
     async def list_inspections(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str | None = None,
+        wafer_id: str | None = None,
+        layer_id: str | None = None,
+        device: str | None = None,
     ) -> pl.LazyFrame:
         stub = self._ensure_channel()
         req = pb.ListInspectionsRequest(
             start_time=start_time.isoformat(),
             end_time=end_time.isoformat(),
+            lot_id=lot_id or "",
+            wafer_id=wafer_id or "",
+            layer_id=layer_id or "",
+            device=device or "",
         )
         resp = await stub.ListInspections(req)
         rows = [

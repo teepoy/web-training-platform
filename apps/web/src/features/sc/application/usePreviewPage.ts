@@ -109,6 +109,10 @@ type MapMode = "wafer" | "die" | "reticle";
 export interface PreviewPageState {
   datasetId: Ref<string>;
   dateRange: Ref<[number, number] | null>;
+  lotIdFilter: Ref<string>;
+  waferIdFilter: Ref<string>;
+  layerIdFilter: Ref<string>;
+  deviceFilter: Ref<string>;
   classifyHref: ComputedRef<string>;
 
   summaries: Ref<InspectionSummaryItem[]>;
@@ -196,6 +200,11 @@ export function usePreviewPage(): PreviewPageState {
 
   const dateRange = ref<[number, number] | null>(getDefaultDateRange());
 
+  const lotIdFilter = ref("");
+  const waferIdFilter = ref("");
+  const layerIdFilter = ref("");
+  const deviceFilter = ref("");
+
   // ── Inspection summaries (JSON, snake_case) ─────
 
   const summaries = ref<InspectionSummaryItem[]>([]);
@@ -203,9 +212,14 @@ export function usePreviewPage(): PreviewPageState {
   const summariesError = ref<string | null>(null);
   const summariesEmpty = ref(false);
 
-  const searchParams = ref<{ start_time: string; end_time: string } | null>(
-    null,
-  );
+  const searchParams = ref<{
+    start_time: string;
+    end_time: string;
+    lot_id?: string | null;
+    wafer_id?: string | null;
+    layer_id?: string | null;
+    device?: string | null;
+  } | null>(null);
 
   const searchNonce = ref(0);
 
@@ -830,7 +844,14 @@ export function usePreviewPage(): PreviewPageState {
     summariesLoading.value = true;
     summariesError.value = null;
 
-    searchParams.value = { start_time: start, end_time: end };
+    searchParams.value = {
+      start_time: start,
+      end_time: end,
+      lot_id: lotIdFilter.value || null,
+      wafer_id: waferIdFilter.value || null,
+      layer_id: layerIdFilter.value || null,
+      device: deviceFilter.value || null,
+    };
     searchNonce.value += 1;
 
     try {
@@ -1040,6 +1061,10 @@ export function usePreviewPage(): PreviewPageState {
   return {
     datasetId,
     dateRange,
+    lotIdFilter,
+    waferIdFilter,
+    layerIdFilter,
+    deviceFilter,
     classifyHref,
 
     summaries,

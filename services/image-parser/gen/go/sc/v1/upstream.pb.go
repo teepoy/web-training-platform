@@ -801,6 +801,10 @@ type ListInspectionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StartTime     string                 `protobuf:"bytes,1,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime       string                 `protobuf:"bytes,2,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	LotId         string                 `protobuf:"bytes,3,opt,name=lot_id,json=lotId,proto3" json:"lot_id,omitempty"`
+	WaferId       string                 `protobuf:"bytes,4,opt,name=wafer_id,json=waferId,proto3" json:"wafer_id,omitempty"`
+	LayerId       string                 `protobuf:"bytes,5,opt,name=layer_id,json=layerId,proto3" json:"layer_id,omitempty"`
+	Device        string                 `protobuf:"bytes,6,opt,name=device,proto3" json:"device,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -845,6 +849,34 @@ func (x *ListInspectionsRequest) GetStartTime() string {
 func (x *ListInspectionsRequest) GetEndTime() string {
 	if x != nil {
 		return x.EndTime
+	}
+	return ""
+}
+
+func (x *ListInspectionsRequest) GetLotId() string {
+	if x != nil {
+		return x.LotId
+	}
+	return ""
+}
+
+func (x *ListInspectionsRequest) GetWaferId() string {
+	if x != nil {
+		return x.WaferId
+	}
+	return ""
+}
+
+func (x *ListInspectionsRequest) GetLayerId() string {
+	if x != nil {
+		return x.LayerId
+	}
+	return ""
+}
+
+func (x *ListInspectionsRequest) GetDevice() string {
+	if x != nil {
+		return x.Device
 	}
 	return ""
 }
@@ -1136,11 +1168,15 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\n" +
 	"image_type\x18\x04 \x01(\tR\timageType\"I\n" +
 	"\x18ListReviewImagesResponse\x12-\n" +
-	"\x06images\x18\x01 \x03(\v2\x15.sc.v1.ReviewImageRefR\x06images\"R\n" +
+	"\x06images\x18\x01 \x03(\v2\x15.sc.v1.ReviewImageRefR\x06images\"\xb7\x01\n" +
 	"\x16ListInspectionsRequest\x12\x1d\n" +
 	"\n" +
 	"start_time\x18\x01 \x01(\tR\tstartTime\x12\x19\n" +
-	"\bend_time\x18\x02 \x01(\tR\aendTime\"\x98\x04\n" +
+	"\bend_time\x18\x02 \x01(\tR\aendTime\x12\x15\n" +
+	"\x06lot_id\x18\x03 \x01(\tR\x05lotId\x12\x19\n" +
+	"\bwafer_id\x18\x04 \x01(\tR\awaferId\x12\x19\n" +
+	"\blayer_id\x18\x05 \x01(\tR\alayerId\x12\x16\n" +
+	"\x06device\x18\x06 \x01(\tR\x06device\"\x98\x04\n" +
 	"\x11InspectionSummary\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x15\n" +

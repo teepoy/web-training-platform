@@ -301,7 +301,7 @@ def seed_single_summary_mass(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Seed semiconductor wafer inspection mock data for sc-upstream"
+        description="Seed patch wafer inspection mock data for sc-upstream"
     )
     sub = parser.add_subparsers(dest="command", help="Seed scenario")
 

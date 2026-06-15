@@ -34,7 +34,7 @@ class SeedConfig:
     description: str = ""
     label_space: list[str] = field(default_factory=list)
     dataset_type: str = "image_sc"
-    task_type: str = "semiconductor"
+    task_type: str = "patch"
     metadata_schema: dict = field(default_factory=dict)
     defer_dataset: bool = False
     storage_mode: str = "db_full"

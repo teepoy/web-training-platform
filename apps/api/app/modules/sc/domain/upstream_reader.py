@@ -18,7 +18,13 @@ class ScUpstreamReader(Protocol):
     """
 
     async def list_inspections(
-        self, start_time: datetime, end_time: datetime
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        lot_id: str | None = None,
+        wafer_id: str | None = None,
+        layer_id: str | None = None,
+        device: str | None = None,
     ) -> pl.LazyFrame: ...
 
     async def get_inspection(

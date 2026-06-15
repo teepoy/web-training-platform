@@ -10291,6 +10291,87 @@ export function useGetInspectionsApiV1ScInspectionsGet<TData = Awaited<ReturnTyp
 
 
 /**
+ * @summary Get Inspection Defect Ids Binary
+ */
+export type getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetResponse = {
+  data: unknown | Blob | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetUrl = (inspectionTime: string,
+    waferKey: number,) => {
+
+
+  return `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/defect-ids.bin`
+}
+
+export const getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet = async (inspectionTime: string,
+    waferKey: number, options?: RequestInit): Promise<getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetResponse> => {
+
+  return orvalFetcher<getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetResponse>(getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetUrl(inspectionTime,waferKey),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryKey = (inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>,) => {
+    return ['api','v1','sc','inspections',inspectionTime,waferKey,'defect-ids.bin'] as const;
+    }
+
+
+export const getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryOptions = <TData = Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryKey(inspectionTime,waferKey);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>> = ({ signal }) => getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet(unref(inspectionTime),unref(waferKey), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>, TError, TData>
+}
+
+export type GetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryResult = NonNullable<Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>>
+export type GetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Get Inspection Defect Ids Binary
+ */
+
+export function useGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet<TData = Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>, TError = HTTPValidationError>(
+ inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetInspectionDefectIdsBinaryApiV1ScInspectionsInspectionTimeWaferKeyDefectIdsBinGetQueryOptions(inspectionTime,waferKey,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
  * Unified aggregated map endpoint for Preview mode.
 
 With *mode*, returns only the requested map point array. Omitting it keeps
@@ -10378,6 +10459,82 @@ export function useGetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKe
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetQueryOptions(inspectionTime,waferKey,params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Get Sc Dataset Defect Ids Binary
+ */
+export type getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetResponse = {
+  data: unknown | Blob | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/sc/datasets/${datasetId}/defect-ids.bin`
+}
+
+export const getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet = async (datasetId: string, options?: RequestInit): Promise<getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetResponse> => {
+
+  return orvalFetcher<getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetResponse>(getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetUrl(datasetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryKey = (datasetId: MaybeRef<string>,) => {
+    return ['api','v1','sc','datasets',datasetId,'defect-ids.bin'] as const;
+    }
+
+
+export const getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryOptions = <TData = Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryKey(datasetId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>> = ({ signal }) => getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet(unref(datasetId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>, TError, TData>
+}
+
+export type GetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryResult = NonNullable<Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>>
+export type GetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Get Sc Dataset Defect Ids Binary
+ */
+
+export function useGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet<TData = Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>, TError = HTTPValidationError>(
+ datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetQueryOptions(datasetId,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

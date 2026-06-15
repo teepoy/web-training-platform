@@ -1,9 +1,9 @@
 <template>
   <div data-testid="datasets-shim-sc">
-    <DatasetToolbar title="Semiconductor Datasets" />
+    <DatasetToolbar title="Patch Datasets" />
 
     <n-alert type="info" style="margin-bottom: 16px">
-      Semiconductor inspection workspace — wafer defect classification and review.
+      Patch inspection workspace — wafer defect classification and review.
     </n-alert>
 
     <n-data-table
@@ -71,7 +71,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(
         return h(
           NTag,
           { type: "info", size: "small", bordered: false },
-          { default: () => "Semiconductor" },
+          { default: () => "Patch" },
         );
       },
     },

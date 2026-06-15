@@ -118,6 +118,10 @@ async def get_inspections(
     upstream_reader: ScUpstreamReaderDep,
     start_time: datetime = Query(),
     end_time: datetime = Query(),
+    lot_id: Annotated[str | None, Query()] = None,
+    wafer_id: Annotated[str | None, Query()] = None,
+    layer_id: Annotated[str | None, Query()] = None,
+    device: Annotated[str | None, Query()] = None,
 ) -> ScInspectionListResponse:
     if end_time - start_time > timedelta(days=MAX_INSPECTION_RANGE_DAYS):
         raise HTTPException(
@@ -125,7 +129,9 @@ async def get_inspections(
             detail=f"Time range must not exceed {MAX_INSPECTION_RANGE_DAYS} days",
         )
 
-    records_lf = await upstream_reader.list_inspections(start_time, end_time)
+    records_lf = await upstream_reader.list_inspections(
+        start_time, end_time, lot_id, wafer_id, layer_id, device
+    )
     records_df = await records_lf.collect_async()
 
     items: list[ScInspectionSummaryItem] = []

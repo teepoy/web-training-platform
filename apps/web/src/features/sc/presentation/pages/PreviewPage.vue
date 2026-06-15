@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, type Component } from "vue";
+import { ref, computed, onMounted, type Component } from "vue";
 import { useRoute } from "vue-router";
 import {
   NInput,
@@ -25,6 +25,7 @@ const page = usePreviewPage();
 const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
+const filtersExpanded = ref(false);
 
 onMounted(async () => {
   const { inspectionTime, waferKey } = route.params;
@@ -77,7 +78,15 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       summariesLoading: page.summariesLoading.value,
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns.value,
+      lotIdFilter: page.lotIdFilter.value,
+      waferIdFilter: page.waferIdFilter.value,
+      layerIdFilter: page.layerIdFilter.value,
+      deviceFilter: page.deviceFilter.value,
       "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
+      "onUpdate:lotIdFilter": (v: string) => { page.lotIdFilter.value = v; },
+      "onUpdate:waferIdFilter": (v: string) => { page.waferIdFilter.value = v; },
+      "onUpdate:layerIdFilter": (v: string) => { page.layerIdFilter.value = v; },
+      "onUpdate:deviceFilter": (v: string) => { page.deviceFilter.value = v; },
       onSearch: () => page.searchInspections(),
       onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),
     };
@@ -132,9 +141,18 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       <!-- State views (no tabs) -->
       <template v-if="page.tabs.value.length === 0">
         <div class="sc-preview-search-bar">
-          <NSpace align="center" :wrap="false">
-            <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
-            <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
+          <NSpace vertical :size="8">
+            <NSpace align="center" :wrap="false">
+              <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
+              <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
+              <NButton text size="small" @click="filtersExpanded = !filtersExpanded">{{ filtersExpanded ? 'Filters ▴' : 'Filters ▾' }}</NButton>
+            </NSpace>
+            <NSpace v-if="filtersExpanded" align="center" :wrap="false">
+              <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID" size="small" style="width: 120px" clearable />
+              <NInput v-model:value="page.waferIdFilter.value" placeholder="Wafer ID" size="small" style="width: 120px" clearable />
+              <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID" size="small" style="width: 120px" clearable />
+              <NInput v-model:value="page.deviceFilter.value" placeholder="Device" size="small" style="width: 120px" clearable />
+            </NSpace>
           </NSpace>
         </div>
         <div v-if="page.summariesLoading.value && page.summaries.value.length === 0" class="sc-preview-state">

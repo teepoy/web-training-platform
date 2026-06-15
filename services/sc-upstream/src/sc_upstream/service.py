@@ -70,20 +70,36 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid time format")
             return pb.ListInspectionsResponse()
 
+        lot_id = request.lot_id if hasattr(request, "lot_id") else ""
+        wafer_id = request.wafer_id if hasattr(request, "wafer_id") else ""
+        layer_id = request.layer_id if hasattr(request, "layer_id") else ""
+        device = request.device if hasattr(request, "device") else ""
+
         cached = await self._cache.get_list_inspections(
-            request.start_time, request.end_time
+            request.start_time, request.end_time, lot_id, wafer_id, layer_id, device
         )
         if cached is not None:
             items = [_to_summary_item(r) for r in cached]
             return pb.ListInspectionsResponse(items=items)
 
         async with self._cache.fill_lock(
-            "insps", request.start_time, request.end_time
+            "insps",
+            request.start_time,
+            request.end_time,
+            lot_id,
+            wafer_id,
+            layer_id,
+            device,
         ) as acquired:
             if not acquired:
                 rows = await self._cache.wait_for_fill(
                     lambda: self._cache.get_list_inspections(
-                        request.start_time, request.end_time
+                        request.start_time,
+                        request.end_time,
+                        lot_id,
+                        wafer_id,
+                        layer_id,
+                        device,
                     )
                 )
                 if rows is not None:
@@ -91,15 +107,28 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                     return pb.ListInspectionsResponse(items=items)
             else:
                 cached = await self._cache.get_list_inspections(
-                    request.start_time, request.end_time
+                    request.start_time,
+                    request.end_time,
+                    lot_id,
+                    wafer_id,
+                    layer_id,
+                    device,
                 )
                 if cached is not None:
                     items = [_to_summary_item(r) for r in cached]
                     return pb.ListInspectionsResponse(items=items)
-            lf = await self._db.list_inspections(start, end)
+            lf = await self._db.list_inspections(
+                start, end, lot_id, wafer_id, layer_id, device
+            )
             rows = lf.collect().to_dicts()
         await self._cache.set_list_inspections(
-            request.start_time, request.end_time, rows
+            request.start_time,
+            request.end_time,
+            rows,
+            lot_id,
+            wafer_id,
+            layer_id,
+            device,
         )
         items = [_to_summary_item(r) for r in rows]
         return pb.ListInspectionsResponse(items=items)

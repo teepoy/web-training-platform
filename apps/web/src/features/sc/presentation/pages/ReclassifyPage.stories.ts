@@ -16,7 +16,7 @@ const MOCK_DATASET = {
   id: DATASET_ID,
   name: "Patch_LOT-2026-001_WAF-001_2026-05-26-08-00-00.000000",
   label_space: ["Normal", "Scratch", "Particle", "Crack", "Void"],
-  task_spec: { task_type: "semiconductor" },
+  task_spec: { task_type: "patch" },
 };
 
 

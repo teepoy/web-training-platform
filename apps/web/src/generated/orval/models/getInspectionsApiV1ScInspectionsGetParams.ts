@@ -8,4 +8,8 @@
 export type GetInspectionsApiV1ScInspectionsGetParams = {
 start_time: string;
 end_time: string;
+lot_id?: string | null;
+wafer_id?: string | null;
+layer_id?: string | null;
+device?: string | null;
 };

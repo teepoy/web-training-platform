@@ -108,7 +108,10 @@ class _MockUpstream:
         self._row_count = row_count
         self.list_samples_calls: list[tuple] = []
 
-    async def list_inspections(self, start_time, end_time):
+    async def list_inspections(
+        self, start_time, end_time,
+        lot_id=None, wafer_id=None, layer_id=None, device=None,
+    ):
 
         return pl.LazyFrame([])
 
