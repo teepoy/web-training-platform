@@ -6,8 +6,8 @@ from typing import Any
 
 import polars as pl
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from .models import (
     Base,
@@ -18,14 +18,21 @@ from .models import (
 )
 
 
+_SQLITE_PREFIX = "sqlite:///"
+_ASYNC_SQLITE_PREFIX = "sqlite+aiosqlite:///"
+
+
 class UpstreamDB:
     def __init__(self, db_url: str) -> None:
-        self._engine = create_engine(db_url, echo=False)
-        Base.metadata.create_all(self._engine)
+        if db_url.startswith(_SQLITE_PREFIX):
+            db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
+        self._engine = create_async_engine(db_url, echo=False)
+        self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
+        Base.metadata.create_all(self._engine.sync_engine)
 
     async def _read(self, query: str) -> pl.LazyFrame:
         def _sync() -> pl.LazyFrame:
-            conn = self._engine.connect()
+            conn = self._engine.sync_engine.connect()
             try:
                 df = pl.read_database(query, connection=conn)
                 return df.lazy()
@@ -37,8 +44,10 @@ class UpstreamDB:
     async def get_inspection(
         self, inspection_time: datetime, wafer_key: int
     ) -> dict[str, Any] | None:
-        with Session(self._engine) as session:
-            summary = session.get(InspWaferSummaryORM, (wafer_key, inspection_time))
+        async with self._session_factory() as session:
+            summary = await session.get(
+                InspWaferSummaryORM, (wafer_key, inspection_time)
+            )
             if summary is None:
                 return None
             recipe_id = ""
@@ -120,21 +129,22 @@ class UpstreamDB:
         )
         return lf
 
-    def list_review_images(
+    async def list_review_images(
         self, inspection_time: datetime, wafer_key: int
     ) -> list[dict[str, Any]]:
-        with Session(self._engine) as session:
-            images = (
-                session.query(InspectImageORM)
-                .filter(
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(InspectImageORM)
+                .where(
                     InspectImageORM.inspection_time == inspection_time,
                     InspectImageORM.wafer_key == wafer_key,
                 )
                 .order_by(
-                    InspectImageORM.defect_id.asc(), InspectImageORM.image_id.asc()
+                    InspectImageORM.defect_id.asc(),
+                    InspectImageORM.image_id.asc(),
                 )
-                .all()
             )
+            images = result.scalars().all()
             return [
                 {
                     "defect_id": img.defect_id,
@@ -148,10 +158,13 @@ class UpstreamDB:
 
 class InspectionZipsDB:
     def __init__(self, db_url: str) -> None:
-        self._engine = create_engine(db_url, echo=False)
-        BaseZips.metadata.create_all(self._engine)
+        if db_url.startswith(_SQLITE_PREFIX):
+            db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
+        self._engine = create_async_engine(db_url, echo=False)
+        self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
+        BaseZips.metadata.create_all(self._engine.sync_engine)
 
-    def get_inspection_patch_zips(
+    async def get_inspection_patch_zips(
         self,
         inspection_time: datetime,
         lot_id: str,
@@ -159,10 +172,10 @@ class InspectionZipsDB:
         device: str,
         layer_id: str,
     ) -> list[dict[str, str]]:
-        with Session(self._engine) as session:
-            zips = (
-                session.query(InspectionPatchImagesZipORM)
-                .filter(
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(InspectionPatchImagesZipORM)
+                .where(
                     InspectionPatchImagesZipORM.inspection_time == inspection_time,
                     InspectionPatchImagesZipORM.lot_id == lot_id,
                     InspectionPatchImagesZipORM.wafer_id == wafer_id,
@@ -170,6 +183,6 @@ class InspectionZipsDB:
                     InspectionPatchImagesZipORM.layer_id == layer_id,
                 )
                 .order_by(InspectionPatchImagesZipORM.s3_key)
-                .all()
             )
+            zips = result.scalars().all()
             return [{"s3_bucket": z.s3_bucket, "s3_key": z.s3_key} for z in zips]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 
@@ -17,62 +18,79 @@ class QueryCache:
     def _key(self, *parts: str) -> str:
         return ":".join(parts)
 
-    def get_inspection(self, inspection_time: str, wafer_key: int) -> dict | None:
-        return self._cache.get(self._key("inspect", inspection_time, str(wafer_key)))
+    async def get_inspection(self, inspection_time: str, wafer_key: int) -> dict | None:
+        return await asyncio.to_thread(
+            self._cache.get, self._key("inspect", inspection_time, str(wafer_key))
+        )
 
-    def set_inspection(self, inspection_time: str, wafer_key: int, data: dict) -> None:
-        self._cache.set(
+    async def set_inspection(
+        self, inspection_time: str, wafer_key: int, data: dict
+    ) -> None:
+        await asyncio.to_thread(
+            self._cache.set,
             self._key("inspect", inspection_time, str(wafer_key)),
             data,
             expire=CACHE_TTL,
         )
 
-    def get_list_inspections(self, start_time: str, end_time: str) -> list[dict] | None:
-        return self._cache.get(self._key("insps", start_time, end_time))
+    async def get_list_inspections(
+        self, start_time: str, end_time: str
+    ) -> list[dict] | None:
+        return await asyncio.to_thread(
+            self._cache.get, self._key("insps", start_time, end_time)
+        )
 
-    def set_list_inspections(
+    async def set_list_inspections(
         self, start_time: str, end_time: str, items: list[dict]
     ) -> None:
-        self._cache.set(
+        await asyncio.to_thread(
+            self._cache.set,
             self._key("insps", start_time, end_time),
             items,
             expire=CACHE_TTL,
         )
 
-    def get_list_review_images(
+    async def get_list_review_images(
         self, inspection_time: str, wafer_key: int
     ) -> list[dict] | None:
-        return self._cache.get(self._key("review", inspection_time, str(wafer_key)))
+        return await asyncio.to_thread(
+            self._cache.get, self._key("review", inspection_time, str(wafer_key))
+        )
 
-    def set_list_review_images(
+    async def set_list_review_images(
         self, inspection_time: str, wafer_key: int, items: list[dict]
     ) -> None:
-        self._cache.set(
+        await asyncio.to_thread(
+            self._cache.set,
             self._key("review", inspection_time, str(wafer_key)),
             items,
             expire=CACHE_TTL,
         )
 
-    def get_list_samples(
+    async def get_list_samples(
         self, inspection_time: str, wafer_key: int
     ) -> LazyFrame | None:
         key = self._key("samples", inspection_time, str(wafer_key))
-        ipc_bytes = self._cache.get(key)
+        ipc_bytes = await asyncio.to_thread(self._cache.get, key)
         if ipc_bytes is not None:
             from polars import read_ipc
 
             return read_ipc(io.BytesIO(ipc_bytes)).lazy()
         return None
 
-    def set_list_samples(
+    async def set_list_samples(
         self, inspection_time: str, wafer_key: int, lf: LazyFrame
     ) -> None:
         key = self._key("samples", inspection_time, str(wafer_key))
         buf = io.BytesIO()
         lf.collect().write_ipc(buf)
-        self._cache.set(key, buf.getvalue(), expire=CACHE_TTL)
 
-    def get_patch_zips(
+        def _set() -> None:
+            self._cache.set(key, buf.getvalue(), expire=CACHE_TTL)
+
+        await asyncio.to_thread(_set)
+
+    async def get_patch_zips(
         self,
         inspection_time: str,
         lot_id: str,
@@ -80,11 +98,12 @@ class QueryCache:
         device: str,
         layer_id: str,
     ) -> list[dict] | None:
-        return self._cache.get(
-            self._key("zips", inspection_time, lot_id, wafer_id, device, layer_id)
+        return await asyncio.to_thread(
+            self._cache.get,
+            self._key("zips", inspection_time, lot_id, wafer_id, device, layer_id),
         )
 
-    def set_patch_zips(
+    async def set_patch_zips(
         self,
         inspection_time: str,
         lot_id: str,
@@ -93,7 +112,8 @@ class QueryCache:
         layer_id: str,
         items: list[dict],
     ) -> None:
-        self._cache.set(
+        await asyncio.to_thread(
+            self._cache.set,
             self._key("zips", inspection_time, lot_id, wafer_id, device, layer_id),
             items,
             expire=CACHE_TTL,

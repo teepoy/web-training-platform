@@ -37,7 +37,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
 
         it = request.inspection_time
         wk = request.wafer_key
-        cached = self._cache.get_inspection(it, wk)
+        cached = await self._cache.get_inspection(it, wk)
         if cached is not None:
             return _to_inspection_response(cached)
 
@@ -46,7 +46,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
             return pb.GetInspectionResponse()
 
-        self._cache.set_inspection(it, wk, record)
+        await self._cache.set_inspection(it, wk, record)
         return _to_inspection_response(record)
 
     async def ListInspections(
@@ -59,18 +59,22 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid time format")
             return pb.ListInspectionsResponse()
 
-        cached = self._cache.get_list_inspections(request.start_time, request.end_time)
+        cached = await self._cache.get_list_inspections(
+            request.start_time, request.end_time
+        )
         if cached is not None:
             items = [_to_summary_item(r) for r in cached]
             return pb.ListInspectionsResponse(items=items)
 
         lf = await self._db.list_inspections(start, end)
         rows = lf.collect().to_dicts()
-        self._cache.set_list_inspections(request.start_time, request.end_time, rows)
+        await self._cache.set_list_inspections(
+            request.start_time, request.end_time, rows
+        )
         items = [_to_summary_item(r) for r in rows]
         return pb.ListInspectionsResponse(items=items)
 
-    def GetInspectionPatchZips(
+    async def GetInspectionPatchZips(
         self, request: pb.GetInspectionPatchZipsRequest, context: grpc.ServicerContext
     ) -> pb.GetInspectionPatchZipsResponse:
         try:
@@ -87,7 +91,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         dev = request.device
         layer = request.layer_id
 
-        cached = self._cache.get_patch_zips(it, lot, wafer, dev, layer)
+        cached = await self._cache.get_patch_zips(it, lot, wafer, dev, layer)
         if cached is not None:
             return pb.GetInspectionPatchZipsResponse(
                 zips=[
@@ -96,13 +100,13 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                 ]
             )
 
-        zips = self._zips.get_inspection_patch_zips(dt, lot, wafer, dev, layer)
-        self._cache.set_patch_zips(it, lot, wafer, dev, layer, zips)
+        zips = await self._zips.get_inspection_patch_zips(dt, lot, wafer, dev, layer)
+        await self._cache.set_patch_zips(it, lot, wafer, dev, layer, zips)
         return pb.GetInspectionPatchZipsResponse(
             zips=[pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"]) for z in zips]
         )
 
-    def GetReviewImageFileSpec(
+    async def GetReviewImageFileSpec(
         self, request: pb.GetReviewImageFileSpecRequest, context: grpc.ServicerContext
     ) -> pb.GetReviewImageFileSpecResponse:
         try:
@@ -113,7 +117,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.GetReviewImageFileSpecResponse()
 
-        images = self._cache.get_list_review_images(
+        images = await self._cache.get_list_review_images(
             request.inspection_time, request.wafer_key
         )
         if images is not None:
@@ -130,8 +134,8 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
 
         it = request.inspection_time
         wk = request.wafer_key
-        images = self._db.list_review_images(dt, wk)
-        self._cache.set_list_review_images(it, wk, images)
+        images = await self._db.list_review_images(dt, wk)
+        await self._cache.set_list_review_images(it, wk, images)
         for img in images:
             if (
                 img["defect_id"] == request.defect_id
@@ -143,7 +147,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
         return pb.GetReviewImageFileSpecResponse()
 
-    def ListReviewImages(
+    async def ListReviewImages(
         self, request: pb.ListReviewImagesRequest, context: grpc.ServicerContext
     ) -> pb.ListReviewImagesResponse:
         try:
@@ -156,10 +160,10 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
 
         it = request.inspection_time
         wk = request.wafer_key
-        images = self._cache.get_list_review_images(it, wk)
+        images = await self._cache.get_list_review_images(it, wk)
         if images is None:
-            images = self._db.list_review_images(dt, wk)
-            self._cache.set_list_review_images(it, wk, images)
+            images = await self._db.list_review_images(dt, wk)
+            await self._cache.set_list_review_images(it, wk, images)
 
         defect_id = request.defect_id if request.defect_id else 0
         refs = [
