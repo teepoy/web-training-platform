@@ -44,6 +44,11 @@ class ImageParserStub(object):
                 request_serializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.SerializeToString,
                 response_deserializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.FromString,
                 )
+        self.StreamScInspectionImages = channel.unary_stream(
+                '/imageparser.v1.ImageParser/StreamScInspectionImages',
+                request_serializer=imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.SerializeToString,
+                response_deserializer=imageparser_dot_v1_dot_service__pb2.ScImageResult.FromString,
+                )
         self.WarmScCache = channel.unary_unary(
                 '/imageparser.v1.ImageParser/WarmScCache',
                 request_serializer=imageparser_dot_v1_dot_service__pb2.WarmScCacheRequest.SerializeToString,
@@ -90,6 +95,12 @@ class ImageParserServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StreamScInspectionImages(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def WarmScCache(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -128,6 +139,11 @@ def add_ImageParserServicer_to_server(servicer, server):
                     servicer.BatchGetScImage,
                     request_deserializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.FromString,
                     response_serializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.SerializeToString,
+            ),
+            'StreamScInspectionImages': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamScInspectionImages,
+                    request_deserializer=imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.FromString,
+                    response_serializer=imageparser_dot_v1_dot_service__pb2.ScImageResult.SerializeToString,
             ),
             'WarmScCache': grpc.unary_unary_rpc_method_handler(
                     servicer.WarmScCache,
@@ -243,6 +259,23 @@ class ImageParser(object):
         return grpc.experimental.unary_unary(request, target, '/imageparser.v1.ImageParser/BatchGetScImage',
             imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.SerializeToString,
             imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def StreamScInspectionImages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(request, target, '/imageparser.v1.ImageParser/StreamScInspectionImages',
+            imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.SerializeToString,
+            imageparser_dot_v1_dot_service__pb2.ScImageResult.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

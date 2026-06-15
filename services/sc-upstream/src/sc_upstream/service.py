@@ -41,7 +41,18 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         if cached is not None:
             return _to_inspection_response(cached)
 
-        record = await self._db.get_inspection(dt, wk)
+        async with self._cache.fill_lock("inspect", it, str(wk)) as acquired:
+            if not acquired:
+                record = await self._cache.wait_for_fill(
+                    lambda: self._cache.get_inspection(it, wk)
+                )
+                if record is not None:
+                    return _to_inspection_response(record)
+            else:
+                cached = await self._cache.get_inspection(it, wk)
+                if cached is not None:
+                    return _to_inspection_response(cached)
+            record = await self._db.get_inspection(dt, wk)
         if record is None:
             context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
             return pb.GetInspectionResponse()
@@ -66,8 +77,27 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             items = [_to_summary_item(r) for r in cached]
             return pb.ListInspectionsResponse(items=items)
 
-        lf = await self._db.list_inspections(start, end)
-        rows = lf.collect().to_dicts()
+        async with self._cache.fill_lock(
+            "insps", request.start_time, request.end_time
+        ) as acquired:
+            if not acquired:
+                rows = await self._cache.wait_for_fill(
+                    lambda: self._cache.get_list_inspections(
+                        request.start_time, request.end_time
+                    )
+                )
+                if rows is not None:
+                    items = [_to_summary_item(r) for r in rows]
+                    return pb.ListInspectionsResponse(items=items)
+            else:
+                cached = await self._cache.get_list_inspections(
+                    request.start_time, request.end_time
+                )
+                if cached is not None:
+                    items = [_to_summary_item(r) for r in cached]
+                    return pb.ListInspectionsResponse(items=items)
+            lf = await self._db.list_inspections(start, end)
+            rows = lf.collect().to_dicts()
         await self._cache.set_list_inspections(
             request.start_time, request.end_time, rows
         )
@@ -100,7 +130,32 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                 ]
             )
 
-        zips = await self._zips.get_inspection_patch_zips(dt, lot, wafer, dev, layer)
+        async with self._cache.fill_lock(
+            "zips", it, lot, wafer, dev, layer
+        ) as acquired:
+            if not acquired:
+                zips = await self._cache.wait_for_fill(
+                    lambda: self._cache.get_patch_zips(it, lot, wafer, dev, layer)
+                )
+                if zips is not None:
+                    return pb.GetInspectionPatchZipsResponse(
+                        zips=[
+                            pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"])
+                            for z in zips
+                        ]
+                    )
+            else:
+                cached = await self._cache.get_patch_zips(it, lot, wafer, dev, layer)
+                if cached is not None:
+                    return pb.GetInspectionPatchZipsResponse(
+                        zips=[
+                            pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"])
+                            for z in cached
+                        ]
+                    )
+            zips = await self._zips.get_inspection_patch_zips(
+                dt, lot, wafer, dev, layer
+            )
         await self._cache.set_patch_zips(it, lot, wafer, dev, layer, zips)
         return pb.GetInspectionPatchZipsResponse(
             zips=[pb.ZipRef(s3_bucket=z["s3_bucket"], s3_key=z["s3_key"]) for z in zips]
@@ -134,7 +189,15 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
 
         it = request.inspection_time
         wk = request.wafer_key
-        images = await self._db.list_review_images(dt, wk)
+        async with self._cache.fill_lock("review", it, str(wk)) as acquired:
+            if not acquired:
+                images = await self._cache.wait_for_fill(
+                    lambda: self._cache.get_list_review_images(it, wk)
+                )
+            else:
+                images = await self._cache.get_list_review_images(it, wk)
+            if images is None:
+                images = await self._db.list_review_images(dt, wk)
         await self._cache.set_list_review_images(it, wk, images)
         for img in images:
             if (
@@ -162,7 +225,15 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         wk = request.wafer_key
         images = await self._cache.get_list_review_images(it, wk)
         if images is None:
-            images = await self._db.list_review_images(dt, wk)
+            async with self._cache.fill_lock("review", it, str(wk)) as acquired:
+                if not acquired:
+                    images = await self._cache.wait_for_fill(
+                        lambda: self._cache.get_list_review_images(it, wk)
+                    )
+                else:
+                    images = await self._cache.get_list_review_images(it, wk)
+                if images is None:
+                    images = await self._db.list_review_images(dt, wk)
             await self._cache.set_list_review_images(it, wk, images)
 
         defect_id = request.defect_id if request.defect_id else 0

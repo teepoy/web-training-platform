@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/resolve"
 )
+
+const streamLookupBatchSize = 2048
 
 type ScImageService struct {
 	imageparserv1.UnimplementedImageParserServer
@@ -44,8 +47,18 @@ func (s *ScImageService) GetScImage(ctx context.Context, req *imageparserv1.GetS
 
 func (s *ScImageService) BatchGetScImage(ctx context.Context, req *imageparserv1.BatchGetScImageRequest) (*imageparserv1.BatchGetScImageResponse, error) {
 	results := make([]*imageparserv1.ScImageResult, len(req.Images))
+	var patchZips []resolve.CacheZipRef
+	var patchZipsErr error
+	var patchZipsOnce sync.Once
 	var wg sync.WaitGroup
 	wg.Add(len(req.Images))
+
+	getPatchZips := func() ([]resolve.CacheZipRef, error) {
+		patchZipsOnce.Do(func() {
+			_, _, _, _, patchZips, patchZipsErr = s.resolver.GetMetaAndZips(req.InspectionTime, int(req.WaferKey))
+		})
+		return patchZips, patchZipsErr
+	}
 
 	for i, img := range req.Images {
 		go func(idx int, ref *imageparserv1.ScImageRef) {
@@ -67,7 +80,12 @@ func (s *ScImageService) BatchGetScImage(ctx context.Context, req *imageparserv1
 				contentType = "image/jpeg"
 				data, err = s.resolver.GetReviewImage(req.InspectionTime, int(req.WaferKey), ref.DefectId, reviewImageID)
 			} else {
-				data, err = s.resolver.GetPatchImage(req.InspectionTime, int(req.WaferKey), ref.DefectId, imageType)
+				zips, zipsErr := getPatchZips()
+				if zipsErr != nil {
+					err = zipsErr
+				} else {
+					data, err = s.resolver.GetPatchImageFromZips(zips, ref.DefectId, imageType)
+				}
 			}
 
 			if err != nil {
@@ -86,6 +104,89 @@ func (s *ScImageService) BatchGetScImage(ctx context.Context, req *imageparserv1
 
 	wg.Wait()
 	return &imageparserv1.BatchGetScImageResponse{Results: results}, nil
+}
+
+func (s *ScImageService) StreamScInspectionImages(req *imageparserv1.StreamScInspectionImagesRequest, stream imageparserv1.ImageParser_StreamScInspectionImagesServer) error {
+	defectIDs := append([]int32(nil), req.DefectIds...)
+	sort.Slice(defectIDs, func(i, j int) bool { return defectIDs[i] < defectIDs[j] })
+
+	imageTypes := append([]string(nil), req.ImageTypes...)
+	if len(imageTypes) == 0 {
+		imageTypes = []string{"patch_template", "patch_defective", "patch_difference"}
+	}
+
+	_, _, _, _, zips, err := s.resolver.GetMetaAndZips(req.InspectionTime, int(req.WaferKey))
+	if err != nil {
+		return fmt.Errorf("resolve inspection zips: %w", err)
+	}
+
+	warmPatchZips(s.resolver, req.InspectionTime, int(req.WaferKey), zips, defectIDs)
+
+	lookups := make([]resolve.PatchImageLookup, 0, len(defectIDs)*len(imageTypes))
+	requestedTypeByIndex := make(map[int]string, len(defectIDs)*len(imageTypes))
+	idx := 0
+	for _, defectID := range defectIDs {
+		defectIDStr := fmt.Sprintf("%d", defectID)
+		for _, requestedType := range imageTypes {
+			requestedTypeByIndex[idx] = requestedType
+			lookups = append(lookups, resolve.PatchImageLookup{
+				Index:     idx,
+				DefectID:  defectIDStr,
+				ImageType: normalizeImageType(requestedType),
+			})
+			idx++
+		}
+	}
+
+	for start := 0; start < len(lookups); start += streamLookupBatchSize {
+		end := start + streamLookupBatchSize
+		if end > len(lookups) {
+			end = len(lookups)
+		}
+		results := s.resolver.GetPatchImagesFromZips(zips, lookups[start:end])
+		sort.Slice(results, func(i, j int) bool { return results[i].Index < results[j].Index })
+		for _, resolved := range results {
+			result := &imageparserv1.ScImageResult{
+				DefectId:    resolved.DefectID,
+				ImageType:   requestedTypeByIndex[resolved.Index],
+				ContentType: "image/png",
+			}
+			if resolved.Err != nil {
+				result.Error = resolved.Err.Error()
+			} else {
+				result.ImageData = resolved.Data
+			}
+			if err := stream.Context().Err(); err != nil {
+				return err
+			}
+			if err := stream.Send(result); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func warmPatchZips(resolver *resolve.Resolver, inspectionTime string, waferKey int, zips []resolve.CacheZipRef, defectIDs []int32) {
+	if resolver.Warmer == nil || len(defectIDs) == 0 {
+		return
+	}
+	numericIDs := make([]int, 0, len(defectIDs))
+	for _, defectID := range defectIDs {
+		numericIDs = append(numericIDs, int(defectID))
+	}
+	zipsToWarm := resolve.FilterZipsByDefectIDs(zips, numericIDs)
+	keysByBucket := map[string][]string{}
+	for _, ref := range zipsToWarm {
+		keysByBucket[ref.Bucket] = append(keysByBucket[ref.Bucket], ref.Key)
+	}
+	for bucket, keys := range keysByBucket {
+		resolver.Warmer.WarmAsync(
+			fmt.Sprintf("stream:%s:%d:%s", inspectionTime, waferKey, bucket),
+			bucket,
+			keys,
+		)
+	}
 }
 
 func (s *ScImageService) WarmScCache(ctx context.Context, req *imageparserv1.WarmScCacheRequest) (*imageparserv1.WarmScCacheResponse, error) {

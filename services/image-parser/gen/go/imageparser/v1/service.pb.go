@@ -869,6 +869,74 @@ func (x *BatchGetScImageResponse) GetResults() []*ScImageResult {
 	return nil
 }
 
+type StreamScInspectionImagesRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
+	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
+	DefectIds      []int32                `protobuf:"varint,3,rep,packed,name=defect_ids,json=defectIds,proto3" json:"defect_ids,omitempty"`
+	ImageTypes     []string               `protobuf:"bytes,4,rep,name=image_types,json=imageTypes,proto3" json:"image_types,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StreamScInspectionImagesRequest) Reset() {
+	*x = StreamScInspectionImagesRequest{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamScInspectionImagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamScInspectionImagesRequest) ProtoMessage() {}
+
+func (x *StreamScInspectionImagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamScInspectionImagesRequest.ProtoReflect.Descriptor instead.
+func (*StreamScInspectionImagesRequest) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *StreamScInspectionImagesRequest) GetInspectionTime() string {
+	if x != nil {
+		return x.InspectionTime
+	}
+	return ""
+}
+
+func (x *StreamScInspectionImagesRequest) GetWaferKey() int32 {
+	if x != nil {
+		return x.WaferKey
+	}
+	return 0
+}
+
+func (x *StreamScInspectionImagesRequest) GetDefectIds() []int32 {
+	if x != nil {
+		return x.DefectIds
+	}
+	return nil
+}
+
+func (x *StreamScInspectionImagesRequest) GetImageTypes() []string {
+	if x != nil {
+		return x.ImageTypes
+	}
+	return nil
+}
+
 type WarmScCacheRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
@@ -880,7 +948,7 @@ type WarmScCacheRequest struct {
 
 func (x *WarmScCacheRequest) Reset() {
 	*x = WarmScCacheRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	mi := &file_imageparser_v1_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +960,7 @@ func (x *WarmScCacheRequest) String() string {
 func (*WarmScCacheRequest) ProtoMessage() {}
 
 func (x *WarmScCacheRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	mi := &file_imageparser_v1_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +973,7 @@ func (x *WarmScCacheRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WarmScCacheRequest.ProtoReflect.Descriptor instead.
 func (*WarmScCacheRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{14}
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *WarmScCacheRequest) GetInspectionTime() string {
@@ -939,7 +1007,7 @@ type WarmScCacheResponse struct {
 
 func (x *WarmScCacheResponse) Reset() {
 	*x = WarmScCacheResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[15]
+	mi := &file_imageparser_v1_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -951,7 +1019,7 @@ func (x *WarmScCacheResponse) String() string {
 func (*WarmScCacheResponse) ProtoMessage() {}
 
 func (x *WarmScCacheResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[15]
+	mi := &file_imageparser_v1_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -964,7 +1032,7 @@ func (x *WarmScCacheResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WarmScCacheResponse.ProtoReflect.Descriptor instead.
 func (*WarmScCacheResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{15}
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WarmScCacheResponse) GetStatus() string {
@@ -1051,7 +1119,14 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\"R\n" +
 	"\x17BatchGetScImageResponse\x127\n" +
-	"\aresults\x18\x01 \x03(\v2\x1d.imageparser.v1.ScImageResultR\aresults\"y\n" +
+	"\aresults\x18\x01 \x03(\v2\x1d.imageparser.v1.ScImageResultR\aresults\"\xa7\x01\n" +
+	"\x1fStreamScInspectionImagesRequest\x12'\n" +
+	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
+	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x1d\n" +
+	"\n" +
+	"defect_ids\x18\x03 \x03(\x05R\tdefectIds\x12\x1f\n" +
+	"\vimage_types\x18\x04 \x03(\tR\n" +
+	"imageTypes\"y\n" +
 	"\x12WarmScCacheRequest\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x1d\n" +
@@ -1060,7 +1135,7 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\x13WarmScCacheResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1f\n" +
 	"\vzips_warmed\x18\x02 \x01(\x05R\n" +
-	"zipsWarmed2\xce\x04\n" +
+	"zipsWarmed2\xbc\x05\n" +
 	"\vImageParser\x12G\n" +
 	"\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12M\n" +
 	"\bGetImage\x12\x1f.imageparser.v1.GetImageRequest\x1a .imageparser.v1.GetImageResponse\x12G\n" +
@@ -1068,7 +1143,8 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\bV2Sprite\x12\x1f.imageparser.v1.V2SpriteRequest\x1a .imageparser.v1.V2SpriteResponse\x12S\n" +
 	"\n" +
 	"GetScImage\x12!.imageparser.v1.GetScImageRequest\x1a\".imageparser.v1.GetScImageResponse\x12b\n" +
-	"\x0fBatchGetScImage\x12&.imageparser.v1.BatchGetScImageRequest\x1a'.imageparser.v1.BatchGetScImageResponse\x12V\n" +
+	"\x0fBatchGetScImage\x12&.imageparser.v1.BatchGetScImageRequest\x1a'.imageparser.v1.BatchGetScImageResponse\x12l\n" +
+	"\x18StreamScInspectionImages\x12/.imageparser.v1.StreamScInspectionImagesRequest\x1a\x1d.imageparser.v1.ScImageResult0\x01\x12V\n" +
 	"\vWarmScCache\x12\".imageparser.v1.WarmScCacheRequest\x1a#.imageparser.v1.WarmScCacheResponseB8Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3"
 
 var (
@@ -1083,24 +1159,25 @@ func file_imageparser_v1_service_proto_rawDescGZIP() []byte {
 	return file_imageparser_v1_service_proto_rawDescData
 }
 
-var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_imageparser_v1_service_proto_goTypes = []any{
-	(*HealthRequest)(nil),           // 0: imageparser.v1.HealthRequest
-	(*HealthResponse)(nil),          // 1: imageparser.v1.HealthResponse
-	(*GetImageRequest)(nil),         // 2: imageparser.v1.GetImageRequest
-	(*GetImageResponse)(nil),        // 3: imageparser.v1.GetImageResponse
-	(*SpriteRequest)(nil),           // 4: imageparser.v1.SpriteRequest
-	(*SpriteResponse)(nil),          // 5: imageparser.v1.SpriteResponse
-	(*V2SpriteRequest)(nil),         // 6: imageparser.v1.V2SpriteRequest
-	(*V2SpriteResponse)(nil),        // 7: imageparser.v1.V2SpriteResponse
-	(*GetScImageRequest)(nil),       // 8: imageparser.v1.GetScImageRequest
-	(*GetScImageResponse)(nil),      // 9: imageparser.v1.GetScImageResponse
-	(*ScImageRef)(nil),              // 10: imageparser.v1.ScImageRef
-	(*BatchGetScImageRequest)(nil),  // 11: imageparser.v1.BatchGetScImageRequest
-	(*ScImageResult)(nil),           // 12: imageparser.v1.ScImageResult
-	(*BatchGetScImageResponse)(nil), // 13: imageparser.v1.BatchGetScImageResponse
-	(*WarmScCacheRequest)(nil),      // 14: imageparser.v1.WarmScCacheRequest
-	(*WarmScCacheResponse)(nil),     // 15: imageparser.v1.WarmScCacheResponse
+	(*HealthRequest)(nil),                   // 0: imageparser.v1.HealthRequest
+	(*HealthResponse)(nil),                  // 1: imageparser.v1.HealthResponse
+	(*GetImageRequest)(nil),                 // 2: imageparser.v1.GetImageRequest
+	(*GetImageResponse)(nil),                // 3: imageparser.v1.GetImageResponse
+	(*SpriteRequest)(nil),                   // 4: imageparser.v1.SpriteRequest
+	(*SpriteResponse)(nil),                  // 5: imageparser.v1.SpriteResponse
+	(*V2SpriteRequest)(nil),                 // 6: imageparser.v1.V2SpriteRequest
+	(*V2SpriteResponse)(nil),                // 7: imageparser.v1.V2SpriteResponse
+	(*GetScImageRequest)(nil),               // 8: imageparser.v1.GetScImageRequest
+	(*GetScImageResponse)(nil),              // 9: imageparser.v1.GetScImageResponse
+	(*ScImageRef)(nil),                      // 10: imageparser.v1.ScImageRef
+	(*BatchGetScImageRequest)(nil),          // 11: imageparser.v1.BatchGetScImageRequest
+	(*ScImageResult)(nil),                   // 12: imageparser.v1.ScImageResult
+	(*BatchGetScImageResponse)(nil),         // 13: imageparser.v1.BatchGetScImageResponse
+	(*StreamScInspectionImagesRequest)(nil), // 14: imageparser.v1.StreamScInspectionImagesRequest
+	(*WarmScCacheRequest)(nil),              // 15: imageparser.v1.WarmScCacheRequest
+	(*WarmScCacheResponse)(nil),             // 16: imageparser.v1.WarmScCacheResponse
 }
 var file_imageparser_v1_service_proto_depIdxs = []int32{
 	10, // 0: imageparser.v1.BatchGetScImageRequest.images:type_name -> imageparser.v1.ScImageRef
@@ -1111,16 +1188,18 @@ var file_imageparser_v1_service_proto_depIdxs = []int32{
 	6,  // 5: imageparser.v1.ImageParser.V2Sprite:input_type -> imageparser.v1.V2SpriteRequest
 	8,  // 6: imageparser.v1.ImageParser.GetScImage:input_type -> imageparser.v1.GetScImageRequest
 	11, // 7: imageparser.v1.ImageParser.BatchGetScImage:input_type -> imageparser.v1.BatchGetScImageRequest
-	14, // 8: imageparser.v1.ImageParser.WarmScCache:input_type -> imageparser.v1.WarmScCacheRequest
-	1,  // 9: imageparser.v1.ImageParser.Health:output_type -> imageparser.v1.HealthResponse
-	3,  // 10: imageparser.v1.ImageParser.GetImage:output_type -> imageparser.v1.GetImageResponse
-	5,  // 11: imageparser.v1.ImageParser.Sprite:output_type -> imageparser.v1.SpriteResponse
-	7,  // 12: imageparser.v1.ImageParser.V2Sprite:output_type -> imageparser.v1.V2SpriteResponse
-	9,  // 13: imageparser.v1.ImageParser.GetScImage:output_type -> imageparser.v1.GetScImageResponse
-	13, // 14: imageparser.v1.ImageParser.BatchGetScImage:output_type -> imageparser.v1.BatchGetScImageResponse
-	15, // 15: imageparser.v1.ImageParser.WarmScCache:output_type -> imageparser.v1.WarmScCacheResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
+	14, // 8: imageparser.v1.ImageParser.StreamScInspectionImages:input_type -> imageparser.v1.StreamScInspectionImagesRequest
+	15, // 9: imageparser.v1.ImageParser.WarmScCache:input_type -> imageparser.v1.WarmScCacheRequest
+	1,  // 10: imageparser.v1.ImageParser.Health:output_type -> imageparser.v1.HealthResponse
+	3,  // 11: imageparser.v1.ImageParser.GetImage:output_type -> imageparser.v1.GetImageResponse
+	5,  // 12: imageparser.v1.ImageParser.Sprite:output_type -> imageparser.v1.SpriteResponse
+	7,  // 13: imageparser.v1.ImageParser.V2Sprite:output_type -> imageparser.v1.V2SpriteResponse
+	9,  // 14: imageparser.v1.ImageParser.GetScImage:output_type -> imageparser.v1.GetScImageResponse
+	13, // 15: imageparser.v1.ImageParser.BatchGetScImage:output_type -> imageparser.v1.BatchGetScImageResponse
+	12, // 16: imageparser.v1.ImageParser.StreamScInspectionImages:output_type -> imageparser.v1.ScImageResult
+	16, // 17: imageparser.v1.ImageParser.WarmScCache:output_type -> imageparser.v1.WarmScCacheResponse
+	10, // [10:18] is the sub-list for method output_type
+	2,  // [2:10] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -1137,7 +1216,7 @@ func file_imageparser_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_imageparser_v1_service_proto_rawDesc), len(file_imageparser_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

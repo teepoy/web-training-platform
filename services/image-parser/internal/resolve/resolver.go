@@ -3,16 +3,19 @@ package resolve
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
-	"image-parser/internal/client"
 	"image-parser/internal/cache"
+	"image-parser/internal/client"
 	"image-parser/internal/s3client"
 	"image-parser/internal/zipreader"
 )
 
 const defectsPerZip = 500
+const patchZipWorkerLimit = 8
 
 type Resolver struct {
 	upstream *client.UpstreamClient
@@ -64,6 +67,20 @@ type CacheZipRef struct {
 	Key    string
 }
 
+type PatchImageLookup struct {
+	Index     int
+	DefectID  string
+	ImageType string
+}
+
+type PatchImageLookupResult struct {
+	Index     int
+	DefectID  string
+	ImageType string
+	Data      []byte
+	Err       error
+}
+
 func locateZipForDefect(zips []CacheZipRef, defectID int) (*CacheZipRef, error) {
 	zipIdx := defectID / defectsPerZip
 	if zipIdx >= len(zips) {
@@ -98,8 +115,6 @@ func (r *Resolver) GetPatchImage(inspectionTime string, waferKey int, defectIDSt
 		return nil, fmt.Errorf("locate zip: %w", err)
 	}
 
-	prefix := fmt.Sprintf("%06d", did)
-
 	ck := cache.CacheKey(ref.Bucket, ref.Key)
 	zipData, err := r.ZipCache.GetOrLoad(ck, func() ([]byte, error) {
 		return zipreader.DownloadFullZip(s3client.GetZips(), ref.Bucket, ref.Key)
@@ -108,16 +123,49 @@ func (r *Resolver) GetPatchImage(inspectionTime string, waferKey int, defectIDSt
 		return nil, fmt.Errorf("download zip: %w", err)
 	}
 
-	imgData, _, err := zipreader.GetImageFromBytes(zipData, prefix)
-	if err != nil {
-		newPrefix := fmt.Sprintf("Defect%06d_%s", did, imageType)
-		imgData, _, err = zipreader.GetImageFromBytes(zipData, newPrefix)
-		if err != nil {
-			return nil, fmt.Errorf("image %s not found in zip", prefix)
+	prefix, ok := PatchImagePrefix(did, imageType)
+	if ok {
+		imgData, _, err := zipreader.GetImageFromBytes(zipData, prefix)
+		if err == nil {
+			return imgData, nil
 		}
+		return nil, fmt.Errorf("image %s not found in zip: %w", prefix, err)
 	}
-
+	legacyPrefix := fmt.Sprintf("%06d", did)
+	imgData, matchedName, err := zipreader.GetImageFromBytes(zipData, legacyPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("image %s not found in zip", legacyPrefix)
+	}
+	if matchedImageType(matchedName) != "" {
+		return nil, fmt.Errorf("unknown image type %q for typed zip entry %s", imageType, matchedName)
+	}
 	return imgData, nil
+}
+
+func PatchImagePrefix(defectID int, imageType string) (string, bool) {
+	switch normalizePatchImageType(imageType) {
+	case "template":
+		return fmt.Sprintf("%06d_PatchTemplate", defectID), true
+	case "defective":
+		return fmt.Sprintf("%06d_PatchDefective", defectID), true
+	case "difference":
+		return fmt.Sprintf("%06d_PatchDifference", defectID), true
+	default:
+		return "", false
+	}
+}
+
+func normalizePatchImageType(imageType string) string {
+	switch strings.ToLower(strings.TrimSpace(imageType)) {
+	case "patch_template", "template", "patchtemplate":
+		return "template"
+	case "patch_defective", "defective", "patchdefective":
+		return "defective"
+	case "patch_difference", "difference", "patchdifference":
+		return "difference"
+	default:
+		return strings.ToLower(strings.TrimSpace(imageType))
+	}
 }
 
 func (r *Resolver) GetMetaAndZips(inspectionTime string, waferKey int) (lotID, waferID, device, layerID string, zips []CacheZipRef, err error) {
@@ -145,7 +193,6 @@ func (r *Resolver) GetPatchImageFromZips(zips []CacheZipRef, defectIDStr string,
 	if err != nil {
 		return nil, fmt.Errorf("locate zip: %w", err)
 	}
-	prefix := fmt.Sprintf("%06d", did)
 	ck := cache.CacheKey(ref.Bucket, ref.Key)
 	zipData, err := r.ZipCache.GetOrLoad(ck, func() ([]byte, error) {
 		return zipreader.DownloadFullZip(s3client.GetZips(), ref.Bucket, ref.Key)
@@ -153,15 +200,116 @@ func (r *Resolver) GetPatchImageFromZips(zips []CacheZipRef, defectIDStr string,
 	if err != nil {
 		return nil, fmt.Errorf("download zip: %w", err)
 	}
-	imgData, _, err := zipreader.GetImageFromBytes(zipData, prefix)
-	if err != nil {
-		newPrefix := fmt.Sprintf("Defect%06d_%s", did, imageType)
-		imgData, _, err = zipreader.GetImageFromBytes(zipData, newPrefix)
-		if err != nil {
-			return nil, fmt.Errorf("image %s not found in zip", prefix)
+	prefix, ok := PatchImagePrefix(did, imageType)
+	if ok {
+		imgData, _, err := zipreader.GetImageFromBytes(zipData, prefix)
+		if err == nil {
+			return imgData, nil
 		}
+		return nil, fmt.Errorf("image %s not found in zip: %w", prefix, err)
+	}
+	legacyPrefix := fmt.Sprintf("%06d", did)
+	imgData, matchedName, err := zipreader.GetImageFromBytes(zipData, legacyPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("image %s not found in zip", legacyPrefix)
+	}
+	if matchedImageType(matchedName) != "" {
+		return nil, fmt.Errorf("unknown image type %q for typed zip entry %s", imageType, matchedName)
 	}
 	return imgData, nil
+}
+
+func (r *Resolver) GetPatchImagesFromZips(zips []CacheZipRef, lookups []PatchImageLookup) []PatchImageLookupResult {
+	results := make([]PatchImageLookupResult, len(lookups))
+	type zipLookup struct {
+		resultIdx int
+		prefix    string
+		legacy    bool
+	}
+	grouped := map[string][]zipLookup{}
+	refs := map[string]CacheZipRef{}
+
+	for i, lookup := range lookups {
+		results[i] = PatchImageLookupResult{
+			Index:     lookup.Index,
+			DefectID:  lookup.DefectID,
+			ImageType: lookup.ImageType,
+		}
+		did, err := ParseDefectID(lookup.DefectID)
+		if err != nil {
+			results[i].Err = fmt.Errorf("invalid defect_id: %w", err)
+			continue
+		}
+		ref, err := locateZipForDefect(zips, did)
+		if err != nil {
+			results[i].Err = fmt.Errorf("locate zip: %w", err)
+			continue
+		}
+		key := cache.CacheKey(ref.Bucket, ref.Key)
+		refs[key] = *ref
+		prefix, ok := PatchImagePrefix(did, lookup.ImageType)
+		legacy := false
+		if !ok {
+			prefix = fmt.Sprintf("%06d", did)
+			legacy = true
+		}
+		grouped[key] = append(grouped[key], zipLookup{
+			resultIdx: i,
+			prefix:    prefix,
+			legacy:    legacy,
+		})
+	}
+
+	sem := make(chan struct{}, patchZipWorkerLimit)
+	var wg sync.WaitGroup
+	for key, items := range grouped {
+		wg.Add(1)
+		go func(key string, items []zipLookup) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			ref := refs[key]
+			zipData, err := r.ZipCache.GetOrLoad(key, func() ([]byte, error) {
+				return zipreader.DownloadFullZip(s3client.GetZips(), ref.Bucket, ref.Key)
+			})
+			if err != nil {
+				for _, item := range items {
+					results[item.resultIdx].Err = fmt.Errorf("download zip: %w", err)
+				}
+				return
+			}
+			prefixes := make([]string, 0, len(items))
+			for _, item := range items {
+				prefixes = append(prefixes, item.prefix)
+			}
+			matches := zipreader.GetImagesFromBytes(zipData, prefixes)
+			for _, item := range items {
+				match := matches[item.prefix]
+				if match.Err != nil {
+					results[item.resultIdx].Err = fmt.Errorf("image %s not found in zip: %w", item.prefix, match.Err)
+					continue
+				}
+				if item.legacy && matchedImageType(match.Name) != "" {
+					results[item.resultIdx].Err = fmt.Errorf("unknown image type %q for typed zip entry %s", results[item.resultIdx].ImageType, match.Name)
+					continue
+				}
+				results[item.resultIdx].Data = match.Data
+			}
+		}(key, items)
+	}
+	wg.Wait()
+	return results
+}
+
+func matchedImageType(name string) string {
+	base := filepath.Base(name)
+	parts := strings.SplitN(base, "_", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	stem := strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
+	return normalizePatchImageType(stem)
 }
 
 func (r *Resolver) GetReviewImage(inspectionTime string, waferKey int, defectIDStr string, reviewImageID int) ([]byte, error) {

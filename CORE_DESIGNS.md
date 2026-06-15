@@ -141,14 +141,14 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 ## 7. OpenAPI 与代码生成
 
-前后端 transport contract 以 `openapi/openapi.yaml` 为单一真源。
+前后端 transport contract 由后端 API route/schema DTO 代码导出到 `openapi/openapi.yaml`。`openapi/openapi.yaml` 是生成产物和跨语言消费的 transport contract 快照，不手写维护。
 
 修改 API 请求/响应结构时：
 
-1. 先修改 `openapi/openapi.yaml`。
-2. 再生成后端 transport model、前端类型、Orval/SSE/proto 等相关 artifact。
-3. 再修改后端实现和前端 UI-only 类型。
-4. 最后运行 OpenAPI sync check。
+1. 先修改后端 route/schema DTO 代码与实现。
+2. 运行 `make generate` 或相关窄生成目标，重新导出 `openapi/openapi.yaml` 并生成后端 transport model、前端类型、Orval/SSE/proto 等 artifact。
+3. 再更新前端调用点与 UI-only 类型。
+4. 最后运行后端测试与 OpenAPI sync check。
 
 不允许在后端 schema 文件或前端 types 文件中重复手写已经存在于 OpenAPI 的 DTO/type。内部 helper model 或纯 UI model 可以手写。
 

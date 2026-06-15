@@ -3,20 +3,77 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import time
+import uuid
+from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, TypeVar
 
 from diskcache import Cache
 from polars import LazyFrame
 
 CACHE_TTL = 3600
+LOCK_TTL_SECONDS = 60
+LOCK_WAIT_SECONDS = 30
+LOCK_POLL_SECONDS = 0.1
+_T = TypeVar("_T")
+
+_RELEASE_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
 
 
 class QueryCache:
     def __init__(self, cache_dir: str | None = None) -> None:
         self._dir = cache_dir or os.environ.get("CACHE_DIR", "/tmp/sc-upstream")
         self._cache = Cache(self._dir)
+        self._redis = None
+        redis_url = os.environ.get("REDIS_URL", "").strip()
+        if redis_url:
+            try:
+                from redis import asyncio as redis_asyncio
+
+                self._redis = redis_asyncio.from_url(redis_url, decode_responses=True)
+            except Exception:
+                self._redis = None
 
     def _key(self, *parts: str) -> str:
         return ":".join(parts)
+
+    @asynccontextmanager
+    async def fill_lock(self, *parts: str) -> AsyncIterator[bool]:
+        if self._redis is None:
+            yield True
+            return
+
+        key = self._key("lock", *parts)
+        token = uuid.uuid4().hex
+        acquired = bool(await self._redis.set(key, token, nx=True, ex=LOCK_TTL_SECONDS))
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                try:
+                    await self._redis.eval(_RELEASE_SCRIPT, 1, key, token)
+                except Exception:
+                    pass
+
+    async def wait_for_fill(
+        self,
+        getter: Callable[[], Awaitable[_T | None]],
+        *,
+        timeout_seconds: float = LOCK_WAIT_SECONDS,
+    ) -> _T | None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            cached = await getter()
+            if cached is not None:
+                return cached
+            await asyncio.sleep(LOCK_POLL_SECONDS)
+        return None
 
     async def get_inspection(self, inspection_time: str, wafer_key: int) -> dict | None:
         return await asyncio.to_thread(

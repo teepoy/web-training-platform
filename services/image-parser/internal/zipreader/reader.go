@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -111,6 +112,78 @@ func GetImageFromBytes(zipData []byte, prefix string) ([]byte, string, error) {
 	}
 
 	return FindImageInZipReader(zipReader, prefix)
+}
+
+type ImageMatch struct {
+	Data []byte
+	Name string
+	Err  error
+}
+
+func GetImagesFromBytes(zipData []byte, prefixes []string) map[string]ImageMatch {
+	results := make(map[string]ImageMatch, len(prefixes))
+	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		for _, prefix := range prefixes {
+			results[prefix] = ImageMatch{Err: fmt.Errorf("open zip from bytes: %w", err)}
+		}
+		return results
+	}
+
+	for _, prefix := range prefixes {
+		results[prefix] = ImageMatch{Err: fmt.Errorf("image with prefix %q not found in zip", prefix)}
+	}
+	wanted := make(map[string]string, len(prefixes))
+	for _, prefix := range prefixes {
+		wanted[prefix] = prefix
+	}
+	for _, f := range zipReader.File {
+		stem := strings.TrimSuffix(filepath.Base(f.Name), filepath.Ext(f.Name))
+		prefix, ok := wanted[stem]
+		if !ok {
+			continue
+		}
+		if results[prefix].Data != nil {
+			continue
+		}
+		data, err := readZipFile(f)
+		if err != nil {
+			results[prefix] = ImageMatch{Err: err}
+		} else {
+			results[prefix] = ImageMatch{Data: data, Name: f.Name}
+		}
+	}
+	for _, f := range zipReader.File {
+		for _, prefix := range prefixes {
+			if results[prefix].Data != nil {
+				continue
+			}
+			if !strings.HasPrefix(f.Name, prefix) {
+				continue
+			}
+			data, err := readZipFile(f)
+			if err != nil {
+				results[prefix] = ImageMatch{Err: err}
+			} else {
+				results[prefix] = ImageMatch{Data: data, Name: f.Name}
+			}
+		}
+	}
+	return results
+}
+
+func readZipFile(f *zip.File) ([]byte, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	buf := new(bytes.Buffer)
+	if _, err := io.Copy(buf, rc); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func DownloadFullZip(client *s3.Client, bucket, key string) ([]byte, error) {

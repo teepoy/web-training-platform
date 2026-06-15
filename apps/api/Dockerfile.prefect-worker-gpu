@@ -36,5 +36,5 @@ ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "work
 
 FROM deps AS prod
 
-WORKDIR /app/apps/api
+WORKDIR /app
 ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-gpu"]

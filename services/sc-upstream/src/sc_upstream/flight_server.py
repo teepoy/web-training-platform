@@ -36,7 +36,30 @@ class UpstreamFlightServer(flight.FlightServerBase):
             table = cached.collect().to_arrow()
             return flight.RecordBatchStream(table)
 
-        lf: LazyFrame = asyncio.run(self._db.list_samples(inspection_time, wafer_key))
-        asyncio.run(self._cache.set_list_samples(req["inspection_time"], wafer_key, lf))
+        async def _load_samples() -> LazyFrame:
+            async with self._cache.fill_lock(
+                "samples", req["inspection_time"], str(wafer_key)
+            ) as acquired:
+                if not acquired:
+                    waited = await self._cache.wait_for_fill(
+                        lambda: self._cache.get_list_samples(
+                            req["inspection_time"], wafer_key
+                        )
+                    )
+                    if waited is not None:
+                        return waited
+                else:
+                    cached = await self._cache.get_list_samples(
+                        req["inspection_time"], wafer_key
+                    )
+                    if cached is not None:
+                        return cached
+                lf = await self._db.list_samples(inspection_time, wafer_key)
+                await self._cache.set_list_samples(
+                    req["inspection_time"], wafer_key, lf
+                )
+                return lf
+
+        lf = asyncio.run(_load_samples())
         table = lf.collect().to_arrow()
         return flight.RecordBatchStream(table)

@@ -1,0 +1,32 @@
+FROM --platform=linux/amd64 golang:1.26-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    protobuf-compiler \
+    libvips-dev \
+    libglib2.0-0 \
+    libexpat1 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libwebp7 \
+    libtiff6 \
+    libheif1 \
+    liblcms2-2 \
+    libimagequant0 \
+    libcgif0 \
+    libexif12 \
+    libspng0 \
+    libopenjp2-7 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV GOBIN=/opt/proto-tools/bin
+ENV PATH=/opt/proto-tools/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
+
+RUN mkdir -p /opt/proto-tools/bin /vendor/go
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11 && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+
+WORKDIR /vendor/image-parser
+COPY services/image-parser/go.mod services/image-parser/go.sum ./
+RUN GOMODCACHE=/vendor/go/pkg/mod go mod download

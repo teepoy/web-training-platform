@@ -163,12 +163,16 @@ services:
     build:
       context: ../..
       dockerfile: services/sc-upstream/Dockerfile
+    depends_on:
+      redis:
+        condition: service_started
     environment:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
       - UPSTREAM_DB_URL=${UPSTREAM_DB_URL:-sqlite:////data/wafer_inspection.db}
       - ZIPS_DB_URL=${ZIPS_DB_URL:-sqlite:////data/inspection_zips.db}
       - CACHE_DIR=/data/cache
+      - REDIS_URL=redis://redis:6379/0
     expose:
       - "9091"
       - "9093"

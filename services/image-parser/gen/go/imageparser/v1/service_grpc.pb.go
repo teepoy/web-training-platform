@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ImageParser_Health_FullMethodName          = "/imageparser.v1.ImageParser/Health"
-	ImageParser_GetImage_FullMethodName        = "/imageparser.v1.ImageParser/GetImage"
-	ImageParser_Sprite_FullMethodName          = "/imageparser.v1.ImageParser/Sprite"
-	ImageParser_V2Sprite_FullMethodName        = "/imageparser.v1.ImageParser/V2Sprite"
-	ImageParser_GetScImage_FullMethodName      = "/imageparser.v1.ImageParser/GetScImage"
-	ImageParser_BatchGetScImage_FullMethodName = "/imageparser.v1.ImageParser/BatchGetScImage"
-	ImageParser_WarmScCache_FullMethodName     = "/imageparser.v1.ImageParser/WarmScCache"
+	ImageParser_Health_FullMethodName                   = "/imageparser.v1.ImageParser/Health"
+	ImageParser_GetImage_FullMethodName                 = "/imageparser.v1.ImageParser/GetImage"
+	ImageParser_Sprite_FullMethodName                   = "/imageparser.v1.ImageParser/Sprite"
+	ImageParser_V2Sprite_FullMethodName                 = "/imageparser.v1.ImageParser/V2Sprite"
+	ImageParser_GetScImage_FullMethodName               = "/imageparser.v1.ImageParser/GetScImage"
+	ImageParser_BatchGetScImage_FullMethodName          = "/imageparser.v1.ImageParser/BatchGetScImage"
+	ImageParser_StreamScInspectionImages_FullMethodName = "/imageparser.v1.ImageParser/StreamScInspectionImages"
+	ImageParser_WarmScCache_FullMethodName              = "/imageparser.v1.ImageParser/WarmScCache"
 )
 
 // ImageParserClient is the client API for ImageParser service.
@@ -38,6 +39,7 @@ type ImageParserClient interface {
 	V2Sprite(ctx context.Context, in *V2SpriteRequest, opts ...grpc.CallOption) (*V2SpriteResponse, error)
 	GetScImage(ctx context.Context, in *GetScImageRequest, opts ...grpc.CallOption) (*GetScImageResponse, error)
 	BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error)
+	StreamScInspectionImages(ctx context.Context, in *StreamScInspectionImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScImageResult], error)
 	WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error)
 }
 
@@ -109,6 +111,25 @@ func (c *imageParserClient) BatchGetScImage(ctx context.Context, in *BatchGetScI
 	return out, nil
 }
 
+func (c *imageParserClient) StreamScInspectionImages(ctx context.Context, in *StreamScInspectionImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScImageResult], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[0], ImageParser_StreamScInspectionImages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamScInspectionImagesRequest, ScImageResult]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamScInspectionImagesClient = grpc.ServerStreamingClient[ScImageResult]
+
 func (c *imageParserClient) WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WarmScCacheResponse)
@@ -129,6 +150,7 @@ type ImageParserServer interface {
 	V2Sprite(context.Context, *V2SpriteRequest) (*V2SpriteResponse, error)
 	GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error)
 	BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error)
+	StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error
 	WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error)
 	mustEmbedUnimplementedImageParserServer()
 }
@@ -157,6 +179,9 @@ func (UnimplementedImageParserServer) GetScImage(context.Context, *GetScImageReq
 }
 func (UnimplementedImageParserServer) BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BatchGetScImage not implemented")
+}
+func (UnimplementedImageParserServer) StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error {
+	return status.Error(codes.Unimplemented, "method StreamScInspectionImages not implemented")
 }
 func (UnimplementedImageParserServer) WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WarmScCache not implemented")
@@ -290,6 +315,17 @@ func _ImageParser_BatchGetScImage_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ImageParser_StreamScInspectionImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamScInspectionImagesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ImageParserServer).StreamScInspectionImages(m, &grpc.GenericServerStream[StreamScInspectionImagesRequest, ScImageResult]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamScInspectionImagesServer = grpc.ServerStreamingServer[ScImageResult]
+
 func _ImageParser_WarmScCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WarmScCacheRequest)
 	if err := dec(in); err != nil {
@@ -344,6 +380,12 @@ var ImageParser_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ImageParser_WarmScCache_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamScInspectionImages",
+			Handler:       _ImageParser_StreamScInspectionImages_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "imageparser/v1/service.proto",
 }

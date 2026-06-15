@@ -10,6 +10,7 @@ from __future__ import annotations
 # pyright: reportMissingImports=false
 
 import base64
+import inspect
 from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
@@ -663,63 +664,91 @@ async def _run_prediction_job_with_container(
 
     async def prediction_results():
         image_fetcher = None
+        materialization = None
+        supports_materialized_dataset = (
+            "materialized_dataset" in inspect.signature(predictor_fn).parameters
+        )
         if dataset.dataset_type == "image_sc":
             import os as _os_pj
             from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
+            from app.modules.sc.app.services.inspection_materializer import (
+                ScInspectionMaterializer,
+            )
 
             image_fetcher = GrpcImageFetcher(
                 addr=_os_pj.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
             )
-        for pred in predictor_fn(
-            artifact_storage=container.artifact_storage,
-            ctx=ctx,
-            lazyframe=lf,
-            model_ref=model_ref,
-            image_fetcher=image_fetcher,
-        ):
-            sample_id = str(pred.get("sample_id", ""))
-            confidence_raw = pred.get("confidence")
-            confidence = (
-                float(confidence_raw)
-                if isinstance(confidence_raw, int | float)
-                else None
-            )
-            scores = pred.get("scores")
-            all_scores = (
-                {str(k): float(v) for k, v in scores.items()}
-                if isinstance(scores, dict)
-                else None
-            )
-            result = StoragePredictionResult(
-                sample_id=sample_id,
-                predicted_label=str(pred.get("label", "")),
-                confidence=confidence,
-                all_scores=all_scores,
-                model_id=model.id,
-                target=target,
-                model_version=summary["model_version"],
-                job_id=job_id,
-                error=pred.get("error"),
-            )
-            if result.error:
-                summary["failed"] += 1
-                logger.warning(
-                    "prediction failed for sample %s: %s",
-                    sample_id,
-                    result.error,
+            if supports_materialized_dataset:
+                materializer = ScInspectionMaterializer(image_fetcher)
+                materialization = await materializer.materialize(
+                    rows_lazyframe=lf,
+                    image_types=["patch_template", "patch_defective"],
                 )
-            else:
-                summary["successful"] += 1
-            summary["processed"] += 1
-            if summary["processed"] % 50 == 0:
-                logger.info(
-                    "prediction progress: %d/%d (ok=%d fail=%d)",
-                    summary["processed"],
-                    summary["total_samples"],
-                    summary["successful"],
-                    summary["failed"],
+                if materialization.errors:
+                    logger.warning(
+                        "SC materialization completed with %d image errors",
+                        len(materialization.errors),
+                    )
+        try:
+            predictor_kwargs: dict[str, Any] = {
+                "artifact_storage": container.artifact_storage,
+                "ctx": ctx,
+                "lazyframe": lf,
+                "model_ref": model_ref,
+            }
+            if "image_fetcher" in inspect.signature(predictor_fn).parameters:
+                predictor_kwargs["image_fetcher"] = image_fetcher
+            if materialization is not None and supports_materialized_dataset:
+                predictor_kwargs["materialized_dataset"] = materialization.dataset
+            for pred in predictor_fn(**predictor_kwargs):
+                sample_id = str(pred.get("sample_id", ""))
+                confidence_raw = pred.get("confidence")
+                confidence = (
+                    float(confidence_raw)
+                    if isinstance(confidence_raw, int | float)
+                    else None
                 )
-            yield result
+                scores = pred.get("scores")
+                all_scores = (
+                    {str(k): float(v) for k, v in scores.items()}
+                    if isinstance(scores, dict)
+                    else None
+                )
+                result = StoragePredictionResult(
+                    sample_id=sample_id,
+                    predicted_label=str(pred.get("label", "")),
+                    confidence=confidence,
+                    all_scores=all_scores,
+                    model_id=model.id,
+                    target=target,
+                    model_version=summary["model_version"],
+                    job_id=job_id,
+                    error=pred.get("error"),
+                )
+                if result.error:
+                    summary["failed"] += 1
+                    logger.warning(
+                        "prediction failed for sample %s: %s",
+                        sample_id,
+                        result.error,
+                    )
+                else:
+                    summary["successful"] += 1
+                summary["processed"] += 1
+                if summary["processed"] % 50 == 0:
+                    logger.info(
+                        "prediction progress: %d/%d (ok=%d fail=%d)",
+                        summary["processed"],
+                        summary["total_samples"],
+                        summary["successful"],
+                        summary["failed"],
+                    )
+                yield result
+        finally:
+            if materialization is not None:
+                materialization.cleanup()
+            if image_fetcher is not None:
+                await image_fetcher.close()
 
     await storage_agg.write_predictions(
         prediction_results(),

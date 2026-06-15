@@ -312,6 +312,32 @@ class BatchGetScImageResponse(google.protobuf.message.Message):
 global___BatchGetScImageResponse = BatchGetScImageResponse
 
 @typing.final
+class StreamScInspectionImagesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INSPECTION_TIME_FIELD_NUMBER: builtins.int
+    WAFER_KEY_FIELD_NUMBER: builtins.int
+    DEFECT_IDS_FIELD_NUMBER: builtins.int
+    IMAGE_TYPES_FIELD_NUMBER: builtins.int
+    inspection_time: builtins.str
+    wafer_key: builtins.int
+    @property
+    def defect_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    @property
+    def image_types(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        inspection_time: builtins.str = ...,
+        wafer_key: builtins.int = ...,
+        defect_ids: collections.abc.Iterable[builtins.int] | None = ...,
+        image_types: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["defect_ids", b"defect_ids", "image_types", b"image_types", "inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]) -> None: ...
+
+global___StreamScInspectionImagesRequest = StreamScInspectionImagesRequest
+
+@typing.final
 class WarmScCacheRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

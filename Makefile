@@ -136,6 +136,10 @@ full-test: ## Run all tests and checks (API + web unit + e2e + build + lint)
 build-web: ## Build frontend for production
 	cd $(WEB_DIR) && pnpm build
 
+.PHONY: build-image-parser-vendor
+build-image-parser-vendor: ## Build amd64 Debian vendor/tooling image for image-parser offline builds
+	docker build --platform linux/amd64 -f services/image-parser/Dockerfile.vendor -t image-parser-vendor:local .
+
 .PHONY: generate
 generate: generate-openapi-spec generate-openapi-artifacts generate-protos ## Regenerate all schema artifacts (OpenAPI, SSE, Orval, proto)
 
