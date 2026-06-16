@@ -37,6 +37,7 @@ apps/api -> libs/platform-runtime
 - Do not couple platform `Sample.id` to upstream/domain IDs such as SC defect IDs.
 - Do not assume auth is enforced just because auth scaffolding exists.
 - Do not add hardcoded backend URLs; existing hardcodes are known debt.
+- Unless explicitly requested or required by `CORE_DESIGNS.md`, do not add fallback behavior, implicit limits, assumptions, or defaults; surface the missing decision/error so the underlying problem can be discovered.
 - Do not create new YAML preset mechanisms; use the registry/descriptor mechanisms described below.
 - Do not delete Alembic migrations unless the database state is intentionally reset too.
 
@@ -72,7 +73,7 @@ Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 - For backend Python changes, run `ruff check apps/api`, `uv run --directory apps/api pyright .`, and `make test`.
 - For frontend changes, run `make test-web` and `make build-web`; run `make test-e2e` when route/user-flow behavior changes.
 - For API contract changes, update route/schema code, run `make generate` to re-export `openapi/openapi.yaml` and regenerate all artifacts, then let `make test` run the OpenAPI sync check.
-- For Docker-relevant backend/frontend changes, verify the relevant compose image build when feasible: `docker compose -f infra/compose/docker-compose.yaml build api` or `docker compose -f infra/compose/docker-compose.yaml build web`.
+- For Docker-relevant backend/frontend changes, verify the relevant compose image build when feasible: `docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml build api` or `docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml build web`.
 - If a required check cannot be run, state why and what remains unverified.
 
 ## Code Style

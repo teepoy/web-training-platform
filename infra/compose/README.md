@@ -23,8 +23,12 @@ The compose stack now supports two modes via override files:
 `docker-compose.yaml` contains always-on infrastructure:
 - **postgres** (`:5432`): PostgreSQL with pgvector
 - **minio** (`:9000`, `:9001`): S3-compatible storage
+- **redis** (`:6379`): Redis cache/coordination dependency
 - **prefect-server** (`:4200`): Prefect 3 control plane
 - **label-studio** (`:8080`): Annotation UI
+- **sc-upstream** / **image-parser**: local SC upstream and parser services
+- Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
+- Profile `--profile gpu`: DCGM exporter
 
 > **Production note:** The split-stack manifests separate stateful services
 > (`postgres`, `minio`, `redis`, `label-studio`) into `compose.stateful.yaml`.
@@ -38,16 +42,14 @@ Adds via `docker-compose.dev.yaml`:
 - **prefect-worker-cpu** with bind mounts for flow code changes
 - **deployments-bootstrap**: one-shot pool creation + flow deployment registration
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
-- Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
-- Profile `--profile gpu`: GPU Prefect worker + DCGM exporter (Linux/NVIDIA only)
+- Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
 ### Prod Mode (`make up-prod`)
 Adds via `docker-compose.prod.yaml`:
 - **api** with `uvicorn --workers 4` (no hot reload, no bind mounts)
 - **web** served via nginx (built into image)
 - **prefect-worker-cpu** with baked image (no bind mounts)
-- Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
-- Profile `--profile gpu`: GPU Prefect worker + DCGM exporter (Linux/NVIDIA only)
+- Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
 Prod mode does **not** include: pgadmin, deployments-bootstrap, automatic alembic migrations.
 
@@ -78,8 +80,9 @@ ignored across separate Compose projects.
 - Alembic migrations in prod: run `make db-migrate-prod` (split-stack) or `make db-migrate-compose` (dev)
 
 `docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
-infrastructure (postgres, minio, prefect-server, label-studio). Dev and prod overrides
-add API, web, and workers — see [Dev vs Prod Modes](#dev-vs-prod-modes) above.
+local infrastructure (postgres, minio, redis, prefect-server, label-studio,
+sc-upstream, image-parser). Dev and prod overrides add API, web, and workers —
+see [Dev vs Prod Modes](#dev-vs-prod-modes) above.
 
 Quick start:
 
@@ -103,7 +106,7 @@ hot reload and stable `/api` proxying to `localhost:8000`.
 
 The stack is split across multiple Compose files:
 
-- **Base infrastructure** (`docker-compose.yaml`): postgres, minio, prefect-server, label-studio
+- **Base infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, sc-upstream, image-parser, profile-gated observability, profile-gated dcgm-exporter
 - **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
 - **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
@@ -142,7 +145,7 @@ Stack monitoring is profile-gated behind the `observability` Compose profile:
 
 ```bash
 # Start the full platform + observability stack
-docker compose -f infra/compose/docker-compose.yaml --profile observability up -d
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile observability up -d
 ```
 
 This brings up everything in the base stack plus:
@@ -163,13 +166,13 @@ Prometheus scrape targets: `api`, `gpu-worker`, `prefect-exporter`, `alertmanage
 ### GPU Monitoring (Linux / NVIDIA only)
 
 ```bash
-docker compose -f infra/compose/docker-compose.yaml --profile gpu up -d dcgm-exporter
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile gpu up -d dcgm-exporter
 ```
 
 Or combine both profiles:
 
 ```bash
-docker compose -f infra/compose/docker-compose.yaml --profile observability --profile gpu up -d
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml --profile observability --profile gpu up -d
 ```
 
 The DCGM exporter (`nvidia/dcgm-exporter`) requires an NVIDIA GPU and the NVIDIA Container Toolkit on the host. On macOS / non-NVIDIA hosts the `gpu` profile is unavailable and the stack operates normally without GPU metrics.

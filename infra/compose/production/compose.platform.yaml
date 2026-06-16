@@ -69,7 +69,6 @@ services:
       - "8000"
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
-      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:
@@ -112,7 +111,6 @@ services:
         condition: service_healthy
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
-      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
     restart: unless-stopped
@@ -135,7 +133,6 @@ services:
               capabilities: [gpu]
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
-      - ${PLATFORM_LOG_DIR:-./logs/platform}:/var/log/finetune
     networks:
       finetune-prod:
     restart: unless-stopped
@@ -155,7 +152,6 @@ services:
       - "9093"
     volumes:
       - ${SC_UPSTREAM_DATA_DIR:-./data/sc-upstream}:/data
-      - ${SC_UPSTREAM_LOG_DIR:-./logs/sc-upstream}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:
@@ -188,7 +184,6 @@ services:
       - "9092"
     volumes:
       - ${IMAGE_PARSER_DATA_DIR:-./data/image-parser}:/data
-      - ${IMAGE_PARSER_LOG_DIR:-./logs/image-parser}:/var/log/finetune
     networks:
       finetune-prod:
         aliases:

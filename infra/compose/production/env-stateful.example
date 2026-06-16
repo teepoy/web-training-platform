@@ -15,3 +15,6 @@ INIT_SCRIPTS_DIR=./init-scripts
 
 # Label Studio image (immutable tag required)
 LABEL_STUDIO_IMAGE=heartexlabs/label-studio:<immutable-tag>
+LABEL_STUDIO_USERNAME=<admin-email>
+LABEL_STUDIO_PASSWORD=<strong-password>
+LABEL_STUDIO_API_KEY=<token>

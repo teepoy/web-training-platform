@@ -13,7 +13,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
       - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
-      - ${POSTGRES_LOG_DIR:-./logs/postgres}:/var/log/postgresql
       - ${INIT_SCRIPTS_DIR:-./init-scripts}:/docker-entrypoint-initdb.d:ro
     networks:
       finetune-prod:
@@ -41,7 +40,6 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
     volumes:
       - ${MINIO_DATA_DIR:-./data/minio}:/data
-      - ${MINIO_LOG_DIR:-./logs/minio}:/var/log/minio
     networks:
       finetune-prod:
         aliases:
@@ -60,7 +58,6 @@ services:
     shm_size: ${REDIS_SHM_SIZE:-256m}
     volumes:
       - ${REDIS_DATA_DIR:-./data/redis}:/data
-      - ${REDIS_LOG_DIR:-./logs/redis}:/var/log/redis
     networks:
       finetune-prod:
         aliases:
@@ -91,7 +88,6 @@ services:
       - "8080"
     volumes:
       - ${LABEL_STUDIO_DATA_DIR:-./data/label-studio}:/label-studio/data
-      - ${LABEL_STUDIO_LOG_DIR:-./logs/label-studio}:/var/log/label-studio
     networks:
       finetune-prod:
         aliases:

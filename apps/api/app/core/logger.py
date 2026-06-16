@@ -1,9 +1,36 @@
 from __future__ import annotations
 
+import json
+import logging
 import logging.config
 import os
+from datetime import UTC, datetime
+from typing import Any
 
 from omegaconf import DictConfig
+
+
+class JsonLogFormatter(logging.Formatter):
+    def __init__(self, *, env: str, service: str) -> None:
+        super().__init__()
+        self._env = env
+        self._service = service
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
+            "level": record.levelname.lower(),
+            "service": self._service,
+            "env": self._env,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            error_type = record.exc_info[0]
+            if error_type is not None:
+                payload["error_type"] = error_type.__name__
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 def init_logging(cfg: DictConfig) -> None:
@@ -31,33 +58,25 @@ def init_logging(cfg: DictConfig) -> None:
             "brief": {
                 "format": "%(asctime)s [%(levelname)s] %(message)s",
             },
+            "json": {
+                "()": JsonLogFormatter,
+                "env": env,
+                "service": "api",
+            },
         },
         "handlers": {},
         "root": {"level": level, "handlers": []},
     }
 
     if env == "prod":
-        log_dir = str(log_cfg.get("file_dir", "logs"))
-        filename = str(log_cfg.get("filename", "app.log"))
-        max_bytes = int(log_cfg.get("max_bytes", 10 * 1024 * 1024))
-        backup_count = int(log_cfg.get("backup_count", 5))
-
         config["handlers"] = {
-            "file": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "level": level,
-                "formatter": "detailed",
-                "filename": f"{log_dir}/{filename}",
-                "maxBytes": max_bytes,
-                "backupCount": backup_count,
-            },
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "WARNING",
-                "formatter": "brief",
+                "level": level,
+                "formatter": "json",
             },
         }
-        config["root"]["handlers"] = ["file", "console"]
+        config["root"]["handlers"] = ["console"]
     else:
         config["handlers"] = {
             "console": {
