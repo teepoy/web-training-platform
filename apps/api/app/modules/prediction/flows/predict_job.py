@@ -626,8 +626,9 @@ async def _run_prediction_job_with_container(
     )
     storage_agg = await factory.open(dataset_id, org_id=org_id)
     lf = await storage_agg.list_samples(return_lazyframe=True, sample_ids=sample_ids)
-    df_count = cast(Any, lf).collect()
-    total_samples = df_count.height
+    import polars as pl
+
+    total_samples = int(cast(Any, lf).select(pl.len()).collect().item())
     logger.info(
         "Dataset loaded: %d rows for prediction, view=%s", total_samples, view_id
     )

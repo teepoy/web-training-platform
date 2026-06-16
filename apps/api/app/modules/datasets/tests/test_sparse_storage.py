@@ -196,6 +196,28 @@ class TestSparseDatasetStorage:
         df = lf.collect()
         assert df.height == 5
 
+    @pytest.mark.asyncio
+    async def test_list_samples_lazyframe_honors_sample_ids(
+        self, storage: SparseDatasetStorage
+    ) -> None:
+        """return_lazyframe=True applies sample_ids before prediction consumers."""
+        try:
+            import polars as pl  # noqa: F401
+        except ImportError:
+            pytest.skip("polars library not installed")
+
+        rows, _ = await storage.list_samples(limit=3)
+        sample_ids = [r.sample_id for r in rows[:2]]
+
+        lf: Any = await storage.list_samples(
+            return_lazyframe=True,
+            sample_ids=sample_ids,
+        )
+        df = lf.collect()
+
+        assert df.height == 2
+        assert set(df["sample_id"].to_list()) == set(sample_ids)
+
     # ── 5. list_samples lazyframe with labels ──────────────────────────
 
     @pytest.mark.asyncio

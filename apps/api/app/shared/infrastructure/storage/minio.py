@@ -26,6 +26,9 @@ class MinioArtifactStorage:
         bucket: str,
         secure: bool = False,
     ) -> None:
+        self.endpoint = endpoint
+        self.access_key = access_key
+        self.secret_key = secret_key
         self.client = Minio(
             endpoint=endpoint,
             access_key=access_key,
@@ -33,6 +36,20 @@ class MinioArtifactStorage:
             secure=secure,
         )
         self.bucket = bucket
+        self.secure = secure
+
+    def polars_storage_options(self) -> dict[str, str]:
+        """Return cloud options accepted by Polars' native object-store reader."""
+        scheme = "https" if self.secure else "http"
+        options = {
+            "aws_access_key_id": self.access_key,
+            "aws_secret_access_key": self.secret_key,
+            "aws_endpoint_url": f"{scheme}://{self.endpoint}",
+            "aws_region": "us-east-1",
+        }
+        if not self.secure:
+            options["aws_allow_http"] = "true"
+        return options
 
     async def put_bytes(
         self,
