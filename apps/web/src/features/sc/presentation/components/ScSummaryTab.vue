@@ -17,7 +17,7 @@ const props = defineProps<{
   summaries: InspectionSummaryItem[];
   inspectionColumns: DataTableColumns<InspectionSummaryItem>;
   lotIdFilter: string;
-  waferIdFilter: string;
+  eqpIdFilter: string;
   layerIdFilter: string;
   deviceFilter: string;
 }>();
@@ -25,7 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:dateRange", value: [number, number] | null): void;
   (e: "update:lotIdFilter", value: string): void;
-  (e: "update:waferIdFilter", value: string): void;
+  (e: "update:eqpIdFilter", value: string): void;
   (e: "update:layerIdFilter", value: string): void;
   (e: "update:deviceFilter", value: string): void;
   (e: "search"): void;
@@ -78,36 +78,36 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         </NSpace>
         <NSpace v-if="filtersExpanded" align="center" :wrap="false">
           <NInput
-            :value="lotIdFilter"
-            placeholder="Lot ID"
+            :value="deviceFilter"
+            placeholder="Device (*, a,b)"
             size="small"
-            style="width: 120px"
+            style="width: 140px"
             clearable
-            @update:value="emit('update:lotIdFilter', $event)"
-          />
-          <NInput
-            :value="waferIdFilter"
-            placeholder="Wafer ID"
-            size="small"
-            style="width: 120px"
-            clearable
-            @update:value="emit('update:waferIdFilter', $event)"
+            @update:value="emit('update:deviceFilter', $event)"
           />
           <NInput
             :value="layerIdFilter"
-            placeholder="Layer ID"
+            placeholder="Layer ID (*, a,b)"
             size="small"
-            style="width: 120px"
+            style="width: 140px"
             clearable
             @update:value="emit('update:layerIdFilter', $event)"
           />
           <NInput
-            :value="deviceFilter"
-            placeholder="Device"
+            :value="lotIdFilter"
+            placeholder="Lot ID (*, a,b)"
             size="small"
-            style="width: 120px"
+            style="width: 140px"
             clearable
-            @update:value="emit('update:deviceFilter', $event)"
+            @update:value="emit('update:lotIdFilter', $event)"
+          />
+          <NInput
+            :value="eqpIdFilter"
+            placeholder="Equipment ID (*, a,b)"
+            size="small"
+            style="width: 160px"
+            clearable
+            @update:value="emit('update:eqpIdFilter', $event)"
           />
         </NSpace>
       </NSpace>

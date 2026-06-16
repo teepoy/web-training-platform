@@ -37,8 +37,8 @@ export const scSampleTableRowsHandler = http.post(
   async ({ request }) => {
     const body = (await request.json()) as {
       defect_ids?: string[];
-      page?: number;
-      page_size?: number;
+      anchor?: string | null;
+      limit?: number;
       filter?: Record<
         string,
         | { operator: "in"; values: Array<string | number> }
@@ -107,10 +107,18 @@ export const scSampleTableRowsHandler = http.post(
     }
 
     const total = items.length;
-    const pageSize = body.page_size ?? 1000;
-    const page = body.page ?? 0;
-    items = items.slice(page * pageSize, (page + 1) * pageSize);
-    return HttpResponse.json({ items, total }, { status: 200 });
+    const limit = body.limit ?? 100;
+    const offset = body.anchor ? Number(body.anchor) : 0;
+    const pageItems = items.slice(offset, offset + limit);
+    const nextOffset = offset + pageItems.length;
+    return HttpResponse.json(
+      {
+        items: pageItems,
+        total,
+        next_anchor: nextOffset < total ? String(nextOffset) : null,
+      },
+      { status: 200 },
+    );
   },
 );
 

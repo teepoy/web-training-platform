@@ -37,7 +37,11 @@ describe("ScSampleTable", () => {
         "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows",
         async ({ request }) => {
           requestBody(await request.json());
-          return HttpResponse.json({ items: [makeRow(9)], total: 1 });
+          return HttpResponse.json({
+            items: [makeRow(9)],
+            total: 1,
+            next_anchor: null,
+          });
         },
       ),
     );
@@ -60,7 +64,8 @@ describe("ScSampleTable", () => {
     expect(requestBody).toHaveBeenCalledWith(
       expect.objectContaining({
         defect_ids: [],
-        page: 0,
+        anchor: "0",
+        limit: 100,
         filter: {
           rough_bin: { operator: "in", values: [1, 5] },
           wafer_x: { operator: "between", min: -100, max: 100 },
@@ -74,7 +79,12 @@ describe("ScSampleTable", () => {
     server.use(
       http.post(
         "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows",
-        () => HttpResponse.json({ items: [makeRow(1), makeRow(2)], total: 2 }),
+        () =>
+          HttpResponse.json({
+            items: [makeRow(1), makeRow(2)],
+            total: 2,
+            next_anchor: null,
+          }),
       ),
     );
     const { wrapper } = await mountWithProviders(ScSampleTable, {

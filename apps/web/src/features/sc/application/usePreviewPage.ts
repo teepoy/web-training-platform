@@ -110,7 +110,7 @@ export interface PreviewPageState {
   datasetId: Ref<string>;
   dateRange: Ref<[number, number] | null>;
   lotIdFilter: Ref<string>;
-  waferIdFilter: Ref<string>;
+  eqpIdFilter: Ref<string>;
   layerIdFilter: Ref<string>;
   deviceFilter: Ref<string>;
   classifyHref: ComputedRef<string>;
@@ -193,15 +193,15 @@ export function usePreviewPage(): PreviewPageState {
       now.getUTCMonth(),
       now.getUTCDate(),
     );
-    const yesterday = today - 24 * 60 * 60 * 1000;
+    const lastWeek = today - 7 * 24 * 60 * 60 * 1000;
     const tomorrow = today + 24 * 60 * 60 * 1000;
-    return [yesterday, tomorrow];
+    return [lastWeek, tomorrow];
   }
 
   const dateRange = ref<[number, number] | null>(getDefaultDateRange());
 
   const lotIdFilter = ref("");
-  const waferIdFilter = ref("");
+  const eqpIdFilter = ref("");
   const layerIdFilter = ref("");
   const deviceFilter = ref("");
 
@@ -216,7 +216,7 @@ export function usePreviewPage(): PreviewPageState {
     start_time: string;
     end_time: string;
     lot_id?: string | null;
-    wafer_id?: string | null;
+    eqp_id?: string | null;
     layer_id?: string | null;
     device?: string | null;
   } | null>(null);
@@ -847,10 +847,10 @@ export function usePreviewPage(): PreviewPageState {
     searchParams.value = {
       start_time: start,
       end_time: end,
-      lot_id: lotIdFilter.value || null,
-      wafer_id: waferIdFilter.value || null,
-      layer_id: layerIdFilter.value || null,
-      device: deviceFilter.value || null,
+      lot_id: lotIdFilter.value.trim() || null,
+      eqp_id: eqpIdFilter.value.trim() || null,
+      layer_id: layerIdFilter.value.trim() || null,
+      device: deviceFilter.value.trim() || null,
     };
     searchNonce.value += 1;
 
@@ -1062,7 +1062,7 @@ export function usePreviewPage(): PreviewPageState {
     datasetId,
     dateRange,
     lotIdFilter,
-    waferIdFilter,
+    eqpIdFilter,
     layerIdFilter,
     deviceFilter,
     classifyHref,

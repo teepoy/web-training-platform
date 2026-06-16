@@ -19,6 +19,7 @@ import type {
 } from "@/features/sc/domain/sampleTable";
 import { getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost } from "@/generated/orval/endpoints/api";
 import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
+import type { ScSampleTableRowsResponse } from "@/generated/orval/models/scSampleTableRowsResponse";
 
 const props = defineProps<{
   /** @deprecated Use defectIds plus inspection identity. */
@@ -82,7 +83,7 @@ const columnDefinitions: ColumnDefinition[] = [
   },
 ];
 
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 100;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
 const SCROLL_X = 1590;
 
@@ -113,7 +114,7 @@ const filterOptionsScopeKey = computed(() =>
 
 const rows = ref<ScSampleTableRow[]>([]);
 const serverTotal = ref(props.total);
-const nextPage = ref(0);
+const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
 const pageError = ref<string | null>(null);
 const selectedIds = ref<Set<number>>(new Set());
@@ -125,7 +126,7 @@ const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>(
 );
 let requestVersion = 0;
 
-const hasMore = computed(() => rows.value.length < serverTotal.value);
+const hasMore = computed(() => nextAnchor.value !== null);
 const checkedRowKeys = computed<DataTableRowKey[]>(() =>
   Array.from(selectedIds.value),
 );
@@ -371,7 +372,8 @@ function rowProps(row: ScSampleTableRow): Record<string, unknown> {
 async function fetchNextPage(): Promise<void> {
   if (!queryEnabled.value || isFetching.value || !hasMore.value) return;
 
-  const page = nextPage.value;
+  const anchor = nextAnchor.value;
+  if (anchor === null) return;
   const version = requestVersion;
   isFetching.value = true;
   pageError.value = null;
@@ -382,8 +384,8 @@ async function fetchNextPage(): Promise<void> {
         props.waferKey!,
         {
           defect_ids: resolvedDefectIds.value,
-          page,
-          page_size: PAGE_SIZE,
+          anchor,
+          limit: PAGE_SIZE,
           filter: props.filter,
           sort: props.sort ?? undefined,
           reticle_x_die_count: props.reticleXDieCount ?? 10,
@@ -397,7 +399,10 @@ async function fetchNextPage(): Promise<void> {
     }
     if (version !== requestVersion) return;
 
-    rows.value = page === 0 ? data.items : [...rows.value, ...data.items];
+    const response = data as ScSampleTableRowsResponse & {
+      next_anchor?: string | null;
+    };
+    rows.value = anchor === "0" ? response.items : [...rows.value, ...response.items];
     for (const definition of columnDefinitions) {
       if (definition.filter !== "set") continue;
       const field = String(definition.key);
@@ -407,7 +412,7 @@ async function fetchNextPage(): Promise<void> {
           value,
         ]),
       );
-      for (const row of data.items) {
+      for (const row of response.items) {
         const value = row[definition.key];
         if (typeof value === "string" || typeof value === "number") {
           values.set(String(value), value);
@@ -415,8 +420,8 @@ async function fetchNextPage(): Promise<void> {
       }
       discoveredSetFilterValues.value[field] = Array.from(values.values());
     }
-    serverTotal.value = data.total;
-    nextPage.value = page + 1;
+    serverTotal.value = response.total;
+    nextAnchor.value = response.next_anchor ?? null;
   } catch (error) {
     if (version === requestVersion) {
       pageError.value =
@@ -460,7 +465,7 @@ watch(
     requestVersion += 1;
     rows.value = [];
     serverTotal.value = resolvedDefectIds.value.length || props.total;
-    nextPage.value = 0;
+    nextAnchor.value = "0";
     isFetching.value = false;
     pageError.value = null;
     if (queryEnabled.value) void fetchNextPage();

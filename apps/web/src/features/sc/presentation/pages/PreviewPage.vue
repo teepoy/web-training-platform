@@ -79,12 +79,12 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns.value,
       lotIdFilter: page.lotIdFilter.value,
-      waferIdFilter: page.waferIdFilter.value,
+      eqpIdFilter: page.eqpIdFilter.value,
       layerIdFilter: page.layerIdFilter.value,
       deviceFilter: page.deviceFilter.value,
       "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
       "onUpdate:lotIdFilter": (v: string) => { page.lotIdFilter.value = v; },
-      "onUpdate:waferIdFilter": (v: string) => { page.waferIdFilter.value = v; },
+      "onUpdate:eqpIdFilter": (v: string) => { page.eqpIdFilter.value = v; },
       "onUpdate:layerIdFilter": (v: string) => { page.layerIdFilter.value = v; },
       "onUpdate:deviceFilter": (v: string) => { page.deviceFilter.value = v; },
       onSearch: () => page.searchInspections(),
@@ -148,10 +148,10 @@ const activeComponentProps = computed((): Record<string, unknown> => {
               <NButton text size="small" @click="filtersExpanded = !filtersExpanded">{{ filtersExpanded ? 'Filters ▴' : 'Filters ▾' }}</NButton>
             </NSpace>
             <NSpace v-if="filtersExpanded" align="center" :wrap="false">
-              <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID" size="small" style="width: 120px" clearable />
-              <NInput v-model:value="page.waferIdFilter.value" placeholder="Wafer ID" size="small" style="width: 120px" clearable />
-              <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID" size="small" style="width: 120px" clearable />
-              <NInput v-model:value="page.deviceFilter.value" placeholder="Device" size="small" style="width: 120px" clearable />
+              <NInput v-model:value="page.deviceFilter.value" placeholder="Device (*, a,b)" size="small" style="width: 140px" clearable />
+              <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID (*, a,b)" size="small" style="width: 140px" clearable />
+              <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID (*, a,b)" size="small" style="width: 140px" clearable />
+              <NInput v-model:value="page.eqpIdFilter.value" placeholder="Equipment ID (*, a,b)" size="small" style="width: 160px" clearable />
             </NSpace>
           </NSpace>
         </div>

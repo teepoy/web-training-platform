@@ -5,8 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScSampleTableRow } from './scSampleTableRow';
+import type { ScSampleTableRowsResponseNextAnchor } from './scSampleTableRowsResponseNextAnchor';
 
 export interface ScSampleTableRowsResponse {
   items: ScSampleTableRow[];
   total: number;
+  next_anchor?: ScSampleTableRowsResponseNextAnchor;
 }

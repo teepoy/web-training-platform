@@ -3720,14 +3720,6 @@ paths:
           - type: string
           - type: 'null'
           title: Lot Id
-      - name: wafer_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Wafer Id
       - name: layer_id
         in: query
         required: false
@@ -3744,6 +3736,14 @@ paths:
           - type: string
           - type: 'null'
           title: Device
+      - name: eqp_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Eqp Id
       responses:
         '200':
           description: Successful Response
@@ -6850,7 +6850,18 @@ components:
           maximum: 10000.0
           minimum: 1.0
           title: Page Size
-          default: 1000
+          default: 100
+        anchor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Anchor
+        limit:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Limit
+          default: 100
         filter:
           anyOf:
           - additionalProperties:
@@ -6894,6 +6905,11 @@ components:
         total:
           type: integer
           title: Total
+        next_anchor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Anchor
       type: object
       required:
       - items

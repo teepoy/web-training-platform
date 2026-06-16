@@ -8,10 +8,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
-from app.modules.sc.tests.conftest import (  # noqa: F401 — fixtures via conftest
-    mock_sc_db_path,
-    mock_wafer_db_reader,
-)
 from proto_stubs.sc.v1 import sample_pb2
 
 PB_CONTENT_TYPE = "application/x-protobuf"
@@ -345,6 +341,7 @@ def test_inspection_split_preview_endpoints_success(
             assert table_resp.status_code == 200, table_resp.text
             table_body = table_resp.json()
             assert table_body["total"] == 3
+            assert table_body["next_anchor"] is None
             assert [row["defect_id"] for row in table_body["items"]] == ["3", "1", "2"]
             assert set(table_body["items"][0]) == {
                 "defect_id",
@@ -359,6 +356,8 @@ def test_inspection_split_preview_endpoints_success(
                 "cluster_id",
                 "die_x",
                 "die_y",
+                "reticle_x",
+                "reticle_y",
                 "size_x",
                 "size_y",
                 "size_d",

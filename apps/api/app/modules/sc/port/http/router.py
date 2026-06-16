@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import re
+import tempfile
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import polars as pl
@@ -81,6 +86,17 @@ _SAMPLE_TABLE_COLUMNS = {
     "kill_ratio": "kill_ratio",
 }
 
+_SAMPLE_TABLE_CACHE_DIR = (
+    Path(tempfile.gettempdir()) / "web-training-platform" / "sc-sample-table-cache"
+)
+
+_TOP_LEVEL_FILTER_COLUMNS = {
+    "lot_id": "lot_id",
+    "layer_id": "layer_id",
+    "device": "device",
+    "eqp_id": "inspect_equip_id",
+}
+
 
 # Inspection API — reads through the SC upstream reader Protocol
 
@@ -119,9 +135,9 @@ async def get_inspections(
     start_time: datetime = Query(),
     end_time: datetime = Query(),
     lot_id: Annotated[str | None, Query()] = None,
-    wafer_id: Annotated[str | None, Query()] = None,
     layer_id: Annotated[str | None, Query()] = None,
     device: Annotated[str | None, Query()] = None,
+    eqp_id: Annotated[str | None, Query()] = None,
 ) -> ScInspectionListResponse:
     if end_time - start_time > timedelta(days=MAX_INSPECTION_RANGE_DAYS):
         raise HTTPException(
@@ -130,7 +146,14 @@ async def get_inspections(
         )
 
     records_lf = await upstream_reader.list_inspections(
-        start_time, end_time, lot_id, wafer_id, layer_id, device
+        start_time, end_time, lot_id, None, layer_id, device
+    )
+    records_lf = _apply_top_level_inspection_filters(
+        records_lf,
+        lot_id=lot_id,
+        layer_id=layer_id,
+        device=device,
+        eqp_id=eqp_id,
     )
     records_df = await records_lf.collect_async()
 
@@ -164,6 +187,51 @@ async def get_inspections(
 
     resp = ScInspectionListResponse(items=items, total=len(items))
     return resp
+
+
+def _parse_top_level_condition(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts or "*" in parts:
+        return None
+    return parts
+
+
+def _condition_expr(column: str, values: list[str]) -> pl.Expr:
+    exprs: list[pl.Expr] = []
+    for value in values:
+        if "*" in value:
+            regex = "^" + ".*".join(re.escape(part) for part in value.split("*")) + "$"
+            exprs.append(pl.col(column).cast(pl.Utf8).str.contains(regex))
+        else:
+            exprs.append(pl.col(column).cast(pl.Utf8) == value)
+    combined = exprs[0]
+    for expr in exprs[1:]:
+        combined = combined | expr
+    return combined
+
+
+def _apply_top_level_inspection_filters(
+    records_lf: pl.LazyFrame,
+    *,
+    lot_id: str | None,
+    layer_id: str | None,
+    device: str | None,
+    eqp_id: str | None,
+) -> pl.LazyFrame:
+    filters = {
+        "lot_id": lot_id,
+        "layer_id": layer_id,
+        "device": device,
+        "eqp_id": eqp_id,
+    }
+    for field, raw in filters.items():
+        values = _parse_top_level_condition(raw)
+        column = _TOP_LEVEL_FILTER_COLUMNS[field]
+        if values:
+            records_lf = records_lf.filter(_condition_expr(column, values))
+    return records_lf
 
 
 def _normalize_inspection_time(value: str) -> datetime:
@@ -535,6 +603,153 @@ async def get_inspection_review_images(
     return ScInspectionReviewImagesResponse(items=items, total=len(items))
 
 
+def _sample_table_cache_path(
+    *,
+    inspection_time: datetime,
+    wafer_key: int,
+    reticle_size_x: int,
+    reticle_size_y: int,
+    reticle_offset_x: int,
+    reticle_offset_y: int,
+) -> Path:
+    payload = {
+        "inspection_time": inspection_time.isoformat(),
+        "wafer_key": wafer_key,
+        "reticle_size_x": reticle_size_x,
+        "reticle_size_y": reticle_size_y,
+        "reticle_offset_x": reticle_offset_x,
+        "reticle_offset_y": reticle_offset_y,
+        "version": 1,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return _SAMPLE_TABLE_CACHE_DIR / f"{digest}.parquet"
+
+
+async def _load_or_build_sample_table_df(
+    *,
+    upstream_reader: Any,
+    inspection_time: datetime,
+    wafer_key: int,
+    row_count: int,
+    reticle_size_x: int,
+    reticle_size_y: int,
+    reticle_offset_x: int,
+    reticle_offset_y: int,
+) -> pl.DataFrame:
+    cache_path = _sample_table_cache_path(
+        inspection_time=inspection_time,
+        wafer_key=wafer_key,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+    if cache_path.exists():
+        return pl.read_parquet(cache_path)
+
+    samples_lf = await upstream_reader.list_samples(
+        inspection_time,
+        wafer_key,
+        offset=0,
+        count=row_count,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+    samples_df = await samples_lf.collect_async()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_path.with_suffix(f".{__import__('uuid').uuid4().hex}.tmp")
+    samples_df.write_parquet(tmp_path)
+    tmp_path.replace(cache_path)
+    return samples_df
+
+
+def _apply_sample_table_filter(
+    samples_df: pl.DataFrame,
+    filter_params: dict[str, Any] | None,
+) -> pl.DataFrame:
+    if not filter_params:
+        return samples_df
+    for field, filter_value in filter_params.items():
+        col = _SAMPLE_TABLE_COLUMNS.get(field)
+        if col is None or col not in samples_df.columns:
+            continue
+        if filter_value.operator == "in":
+            values = [
+                str(value) if field == "defect_id" else value
+                for value in filter_value.values
+            ]
+            samples_df = samples_df.filter(
+                pl.col(col).cast(pl.Utf8).is_in(values)
+                if field == "defect_id"
+                else pl.col(col).is_in(values)
+            )
+        else:
+            samples_df = samples_df.filter(
+                (pl.col(col) >= filter_value.min) & (pl.col(col) <= filter_value.max)
+            )
+    return samples_df
+
+
+def _apply_sample_table_sort(
+    samples_df: pl.DataFrame,
+    sort_params: Any | None,
+    requested: list[str] | None,
+) -> pl.DataFrame:
+    if sort_params:
+        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
+        if sort_field is not None and sort_field in samples_df.columns:
+            return samples_df.sort(
+                sort_field, descending=(sort_params.direction == "desc")
+            )
+    if requested is not None:
+        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
+        return (
+            samples_df.with_columns(
+                pl.col("defect_id")
+                .cast(pl.Utf8)
+                .replace_strict(request_order, default=len(request_order))
+                .alias("_request_order")
+            )
+            .sort("_request_order")
+            .drop("_request_order")
+        )
+    return (
+        samples_df.sort("defect_id")
+        if "defect_id" in samples_df.columns
+        else samples_df
+    )
+
+
+def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
+    return ScSampleTableRow(
+        defect_id=str(row["defect_id"]),
+        rough_bin=row["rough_bin"],
+        class_number=row["class_number"],
+        test_id=row["test_id"],
+        wafer_x=row["wafer_x"],
+        wafer_y=row["wafer_y"],
+        index_x=row["index_x"],
+        index_y=row["index_y"],
+        adder=row["adder"],
+        cluster_id=row["cluster"],
+        die_x=row["index_x"],
+        die_y=row["index_y"],
+        reticle_x=row.get("reticle_x", 0),
+        reticle_y=row.get("reticle_y", 0),
+        size_x=row["size_x"],
+        size_y=row["size_y"],
+        size_d=row["size_d"],
+        area=row["area"],
+        final_bin=row["final_bin"],
+        manual_bin=row["manual_bin"],
+        kill_ratio=row["kill_ratio"],
+    )
+
+
 @router.post(
     "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
     response_model=ScSampleTableRowsResponse,
@@ -554,8 +769,11 @@ async def get_inspection_sample_table_rows(
         )
 
     defect_ids = payload.defect_ids
-    page = payload.page
-    page_size = payload.page_size
+    anchor = (
+        int(payload.anchor) if payload.anchor and payload.anchor.isdigit() else None
+    )
+    limit = payload.limit if payload.anchor is not None else payload.page_size
+    offset = anchor if anchor is not None else payload.page * payload.page_size
     filter_params = payload.filter
     sort_params = payload.sort
     reticle_size_x = payload.reticle_x_die_count
@@ -566,105 +784,41 @@ async def get_inspection_sample_table_rows(
     requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
     requested_set = set(requested) if requested else None
 
+    row_count = (
+        max(inspection.defects, len(requested), 100_000)
+        if requested is not None
+        else inspection.defects
+    )
+    samples_df = await _load_or_build_sample_table_df(
+        upstream_reader=upstream_reader,
+        inspection_time=insp_dt,
+        wafer_key=wafer_key,
+        row_count=row_count,
+        reticle_size_x=reticle_size_x,
+        reticle_size_y=reticle_size_y,
+        reticle_offset_x=reticle_offset_x,
+        reticle_offset_y=reticle_offset_y,
+    )
+
     if requested_set is not None:
-        max_defects = max(inspection.defects, 100_000)
-        samples_lf = await upstream_reader.list_samples(
-            insp_dt,
-            wafer_key,
-            offset=0,
-            count=max_defects,
-            reticle_size_x=reticle_size_x,
-            reticle_size_y=reticle_size_y,
-            reticle_offset_x=reticle_offset_x,
-            reticle_offset_y=reticle_offset_y,
-        )
-        samples_df = await samples_lf.collect_async()
         samples_df = samples_df.filter(
             pl.col("defect_id").cast(pl.Utf8).is_in(requested_set)
         )
-    else:
-        samples_lf = await upstream_reader.list_samples(
-            insp_dt,
-            wafer_key,
-            offset=0,
-            count=inspection.defects,
-            reticle_size_x=reticle_size_x,
-            reticle_size_y=reticle_size_y,
-            reticle_offset_x=reticle_offset_x,
-            reticle_offset_y=reticle_offset_y,
-        )
-        samples_df = await samples_lf.collect_async()
 
-    if filter_params:
-        for field, filter_value in filter_params.items():
-            col = _SAMPLE_TABLE_COLUMNS.get(field)
-            if col is None or col not in samples_df.columns:
-                continue
-            if filter_value.operator == "in":
-                values = [
-                    str(value) if field == "defect_id" else value
-                    for value in filter_value.values
-                ]
-                samples_df = samples_df.filter(
-                    pl.col(col).cast(pl.Utf8).is_in(values)
-                    if field == "defect_id"
-                    else pl.col(col).is_in(values)
-                )
-            else:
-                samples_df = samples_df.filter(
-                    (pl.col(col) >= filter_value.min)
-                    & (pl.col(col) <= filter_value.max)
-                )
-
-    if sort_params:
-        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
-        if sort_field is not None and sort_field in samples_df.columns:
-            samples_df = samples_df.sort(
-                sort_field, descending=(sort_params.direction == "desc")
-            )
-    elif requested is not None:
-        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
-        samples_df = (
-            samples_df.with_columns(
-                pl.col("defect_id")
-                .cast(pl.Utf8)
-                .replace_strict(request_order, default=len(request_order))
-                .alias("_request_order")
-            )
-            .sort("_request_order")
-            .drop("_request_order")
-        )
+    samples_df = _apply_sample_table_filter(samples_df, filter_params)
+    samples_df = _apply_sample_table_sort(samples_df, sort_params, requested)
 
     total_matched = len(samples_df)
-    page_df = samples_df.slice(page * page_size, page_size)
-    matched: list[ScSampleTableRow] = [
-        ScSampleTableRow(
-            defect_id=str(row["defect_id"]),
-            rough_bin=row["rough_bin"],
-            class_number=row["class_number"],
-            test_id=row["test_id"],
-            wafer_x=row["wafer_x"],
-            wafer_y=row["wafer_y"],
-            index_x=row["index_x"],
-            index_y=row["index_y"],
-            adder=row["adder"],
-            cluster_id=row["cluster"],
-            die_x=row["index_x"],
-            die_y=row["index_y"],
-            reticle_x=row.get("reticle_x", 0),
-            reticle_y=row.get("reticle_y", 0),
-            size_x=row["size_x"],
-            size_y=row["size_y"],
-            size_d=row["size_d"],
-            area=row["area"],
-            final_bin=row["final_bin"],
-            manual_bin=row["manual_bin"],
-            kill_ratio=row["kill_ratio"],
-        )
-        for row in page_df.to_dicts()
-    ]
+    page_df = samples_df.slice(offset, limit)
+    matched = [_sample_table_row_from_dict(row) for row in page_df.to_dicts()]
+    next_offset = offset + len(matched)
+    next_anchor = str(next_offset) if next_offset < total_matched else None
 
-    return ScSampleTableRowsResponse(items=matched, total=total_matched)
+    return ScSampleTableRowsResponse(
+        items=matched,
+        total=total_matched,
+        next_anchor=next_anchor,
+    )
 
 
 TERMINAL_FAILED_STATES = frozenset({"CRASHED", "FAILED", "CANCELLED"})

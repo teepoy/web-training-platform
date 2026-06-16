@@ -64,7 +64,9 @@ class ScSampleTableRangeFilter(BaseModel):
 class ScSampleTableRowsRequest(BaseModel):
     defect_ids: list[str] = Field(default_factory=list)
     page: int = Field(default=0, ge=0)
-    page_size: int = Field(default=1000, ge=1, le=10000)
+    page_size: int = Field(default=100, ge=1, le=10000)
+    anchor: str | None = None
+    limit: int = Field(default=100, ge=1, le=500)
     filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
     sort: ScSampleTableSort | None = None
     reticle_x_die_count: int = Field(default=10, ge=1)
@@ -100,6 +102,7 @@ class ScSampleTableRow(BaseModel):
 class ScSampleTableRowsResponse(BaseModel):
     items: list[ScSampleTableRow]
     total: int
+    next_anchor: str | None = None
 
 
 class ScBoxFilterRequest(BaseModel):

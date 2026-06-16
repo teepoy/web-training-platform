@@ -32,6 +32,10 @@ COMPOSE_PROD_OBSERVABILITY  := infra/compose/production/compose.observability.ya
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 LITELLM_LOCAL_MODEL_COST_MAP="True"
+MYPY_PROTOBUF_VERSION ?= 5.1.0
+GRPCIO_TOOLS_VERSION ?= 1.80.0
+PROTOC_GEN_GO_VERSION ?= v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.0
 
 # ──────────────────────────────────────────────
 # Setup
@@ -169,36 +173,33 @@ generate-sse-types: ## Generate SSE JSON schema and frontend TypeScript types
 generate-openapi-artifacts: generate-openapi-spec generate-api-models generate-orval generate-sse-types ## Generate backend/frontend transport artifacts
 
 .PHONY: generate-protos
-generate-protos: ## Generate protobuf Python, TypeScript, and Go stubs from protos/
+generate-protos: generate-protos-deps ## Generate protobuf Python, TypeScript, and Go stubs from protos/
 	mkdir -p libs/protos/src/proto_stubs/sc/v1 $(WEB_DIR)/src/features/sc/generated/proto
-	export PATH="$(CURDIR)/.venv/bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$PATH" && cd $(PROTO_DIR) && \
-		npx buf generate && \
-		npx buf generate --template buf.gen.web.yaml --path sc/v1/sample.proto
-	python -m grpc_tools.protoc \
+	export PATH="$(CURDIR)/node_modules/.bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$HOME/.local/bin:$$PATH" && \
+		npx buf generate $(PROTO_DIR) --template $(PROTO_DIR)/buf.gen.yaml
+	export PATH="$$HOME/.local/bin:$$PATH" && \
+		python-grpc-tools-protoc \
 		--proto_path=$(PROTO_DIR) \
-		--python_out=libs/protos/src/proto_stubs \
 		--grpc_python_out=libs/protos/src/proto_stubs \
-		$(PROTO_DIR)/imageparser/v1/service.proto
-	sed -i '' 's/^from imageparser\.v1 import/from proto_stubs.imageparser.v1 import/' libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py
-	cd services/image-parser && mkdir -p gen/go && npx buf generate ../../protos --template buf.gen.yaml
+		$(PROTO_DIR)/imageparser/v1/service.proto \
+		$(PROTO_DIR)/sc/v1/upstream.proto
+	uv run python scripts/fix_python_grpc_imports.py libs/protos/src/proto_stubs
 	cd services/image-parser && go mod tidy
 
 .PHONY: generate-protos-deps
-generate-protos-deps: ## Verify buf CLI, protoc, protoc-gen-go, protoc-gen-go-grpc, protoc-gen-mypy are available
-	@echo "Checking protoc (>= 29.x for proto edition compatibility with buf)..."
-	@if ! command -v protoc >/dev/null 2>&1; then \
-		echo "protoc-29.3.0 not found. Install via: brew install protobuf@29"; \
-		exit 1; \
-	fi
-	@if ! command -v protoc-gen-go >/dev/null 2>&1; then \
-		echo "protoc-gen-go not found. Install via: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"; \
-		exit 1; \
-	fi
-	@if ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then \
-		echo "protoc-gen-go-grpc not found. Install via: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"; \
-		exit 1; \
-	fi
-	@echo "Proto dependencies ready protoc: $$(which protoc)"
+generate-protos-deps: ## Install fixed-version proto generators used by generate-protos
+	uv tool install mypy-protobuf==$(MYPY_PROTOBUF_VERSION) --force
+	uv tool install grpcio-tools==$(GRPCIO_TOOLS_VERSION) --force
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
+	@export PATH="$(CURDIR)/node_modules/.bin:$$HOME/.local/bin:$$PATH"; \
+		command -v npx >/dev/null; \
+		npx buf --version >/dev/null; \
+		command -v protoc-gen-mypy >/dev/null; \
+		command -v python-grpc-tools-protoc >/dev/null; \
+		command -v protoc-gen-go >/dev/null; \
+		command -v protoc-gen-go-grpc >/dev/null; \
+		echo "Proto generators ready: buf=$$(npx buf --version), mypy-protobuf=$(MYPY_PROTOBUF_VERSION), grpcio-tools=$(GRPCIO_TOOLS_VERSION), protoc-gen-go=$(PROTOC_GEN_GO_VERSION), protoc-gen-go-grpc=$(PROTOC_GEN_GO_GRPC_VERSION)"
 
 .PHONY: check-openapi-sync
 check-openapi-sync: ## Check FastAPI route schema against openapi/openapi.yaml
