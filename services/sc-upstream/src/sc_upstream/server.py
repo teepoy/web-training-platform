@@ -28,9 +28,9 @@ async def serve() -> None:
     flight_port = os.environ.get("FLIGHT_PORT", "9093")
     cache_dir = os.environ.get("CACHE_DIR", "/tmp/sc-upstream")
 
-    logger.info("connecting to upstream db: %s", upstream_db_url)
+    logger.info("connecting to upstream db")
     upstream = UpstreamDB(db_url=upstream_db_url)
-    logger.info("connecting to zips db: %s", zips_db_url)
+    logger.info("connecting to zips db")
     zips = InspectionZipsDB(db_url=zips_db_url)
     logger.info("cache dir: %s", cache_dir)
     cache = QueryCache(cache_dir=cache_dir)

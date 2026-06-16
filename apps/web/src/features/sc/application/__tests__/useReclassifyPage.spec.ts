@@ -320,60 +320,10 @@ describe("useReclassifyPage - reticleDisplay", () => {
     expect(retArr[5]).toBe(0);
   });
 
-  it("caps reticleDisplay at 10000 points", async () => {
-    const totalPoints = 15000;
-    const pts = Array.from({ length: totalPoints * 6 }, (_, i) => i % 100);
-    const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
-    const msg = createMsg(Schema, {
-      total: totalPoints,
-      waferPoints: pts,
-      diePoints: pts,
-      reticlePoints: pts,
-    });
 
-    const { state } = await mountPage("ds-test-cap", DEFAULT_DATASET, [
-      { key: ["sc", "plot-points", "ds-test-cap"], data: msg },
-    ]);
-
-    await new Promise((r) => setTimeout(r, 10));
-    expect(state.reticleDisplay.value.length).toBe(10000 * 6);
-  });
 });
 
-describe("useReclassifyPage - map zoom", () => {
-  it("filters each map with its own coordinate viewport", async () => {
-    const { create: createMsg } = await import("@bufbuild/protobuf");
-    const { WaferMapResponseSchema: Schema } = await import(
-      "@/features/sc/generated/proto/sc/v1/sample_pb"
-    );
-    const msg = createMsg(Schema, {
-      total: 2,
-      waferPoints: [10, 10, 1, 0, 0, 0, 100, 100, 2, 0, 0, 0],
-      diePoints: [5, 5, 1, 0, 0, 0, 50, 50, 2, 0, 0, 0],
-      reticlePoints: [20, 20, 1, 0, 0, 0, 200, 200, 2, 0, 0, 0],
-    });
 
-    const { state } = await mountPage("ds-test-zoom", DEFAULT_DATASET, [
-      { key: ["sc", "plot-points", "ds-test-zoom"], data: msg },
-    ]);
-
-    state.setMapZoom({ x: 0, y: 0, w: 20, h: 20 });
-    expect(state.waferDisplay.value).toEqual([10, 10, 1, 0, 0, 0]);
-    expect(state.dieDisplay.value).toHaveLength(12);
-
-    state.setActiveMapTab("die");
-    state.setMapZoom({ x: 40, y: 40, w: 20, h: 20 });
-    expect(state.dieDisplay.value).toEqual([50, 50, 2, 0, 0, 0]);
-    expect(state.waferDisplay.value).toEqual([10, 10, 1, 0, 0, 0]);
-
-    state.setActiveMapTab("reticle");
-    state.setMapZoom({ x: 150, y: 150, w: 100, h: 100 });
-    expect(state.reticleDisplay.value).toEqual([200, 200, 2, 0, 0, 0]);
-  });
-});
 
 describe("useReclassifyPage - addLabel", () => {
   it("rejects duplicate label", async () => {

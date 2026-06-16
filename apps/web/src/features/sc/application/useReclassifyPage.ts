@@ -62,37 +62,6 @@ interface WaferGeometryView {
 type MapMode = "wafer" | "die" | "reticle";
 type MapViewport = { x: number; y: number; w: number; h: number };
 
-function filterPackedPoints(
-  points: number[],
-  viewport: MapViewport | null,
-  limit = 10000,
-): number[] {
-  const result: number[] = [];
-  const maxX = viewport ? viewport.x + viewport.w : 0;
-  const maxY = viewport ? viewport.y + viewport.h : 0;
-  const count = packedPointCount(points);
-
-  for (let i = 0; i < count && result.length < limit * 6; i += 1) {
-    const offset = i * 6;
-    const x = points[offset];
-    const y = points[offset + 1];
-    if (
-      viewport &&
-      (x < viewport.x || x > maxX || y < viewport.y || y > maxY)
-    ) {
-      continue;
-    }
-    result.push(
-      x,
-      y,
-      points[offset + 2],
-      points[offset + 3],
-      points[offset + 4],
-      points[offset + 5],
-    );
-  }
-  return result;
-}
 
 interface ScViewImage {
   role: string;
@@ -727,22 +696,16 @@ export function useReclassifyPage(): ReclassifyPageState {
     };
   }
 
-  const waferDisplay = computed(() =>
-    filterPackedPoints(
-      plotPointsQuery.data.value?.waferPoints ?? [],
-      mapZoomByMode.value.wafer,
-    ),
+  const waferDisplay = computed(
+    () => plotPointsQuery.data.value?.waferPoints ?? [],
   );
 
-  const dieDisplay = computed(() =>
-    filterPackedPoints(
-      plotPointsQuery.data.value?.diePoints ?? [],
-      mapZoomByMode.value.die,
-    ),
+  const dieDisplay = computed(
+    () => plotPointsQuery.data.value?.diePoints ?? [],
   );
 
   const dieFullPoints = computed<Array<[number, number, number]>>(() => {
-    const src = dieDisplay.value;
+    const src = plotPointsQuery.data.value?.diePoints ?? [];
     const out: Array<[number, number, number]> = [];
     for (let i = 0; i + 5 < src.length; i += 6) {
       out.push([src[i], src[i + 1], src[i + 2]]);
@@ -803,11 +766,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     void plotPointsQuery.refetch();
   }
 
-  const reticleDisplay = computed(() =>
-    filterPackedPoints(
-      plotPointsQuery.data.value?.reticlePoints ?? [],
-      mapZoomByMode.value.reticle,
-    ),
+  const reticleDisplay = computed(
+    () => plotPointsQuery.data.value?.reticlePoints ?? [],
   );
   const reticleMapError = computed<string | null>(() => null);
 
