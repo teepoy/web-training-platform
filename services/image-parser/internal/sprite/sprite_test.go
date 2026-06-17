@@ -42,6 +42,11 @@ func TestCreateSprite_Single(t *testing.T) {
 	if bounds.Dy() != 64 {
 		t.Errorf("height = %d, want 64", bounds.Dy())
 	}
+
+	got := color.RGBAModel.Convert(img.At(63, 63)).(color.RGBA)
+	if got != (color.RGBA{255, 0, 0, 255}) {
+		t.Errorf("bottom-right pixel = %#v, want solid red", got)
+	}
 }
 
 func TestCreateSprite_Multi(t *testing.T) {

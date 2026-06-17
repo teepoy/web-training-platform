@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/h2non/bimg"
 	"image-parser/internal/resolve"
 	"image-parser/internal/sprite"
 )
@@ -106,7 +105,7 @@ func (s *SCRoutes) HandleSCPatchSprite(c *gin.Context) {
 			return
 		}
 		acquireBimg()
-		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		resized, err := sprite.ResizeSquarePNG(data, cellSize)
 		releaseBimg()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -179,7 +178,7 @@ func (s *SCRoutes) HandleSCReviewSprite(c *gin.Context) {
 			return
 		}
 		acquireBimg()
-		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
+		resized, err := sprite.ResizeSquarePNG(data, cellSize)
 		releaseBimg()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -244,8 +243,8 @@ func (s *SCRoutes) HandleSCPatchBatchSprite(c *gin.Context) {
 				return
 			}
 			acquireBimg()
-		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
-		releaseBimg()
+			resized, err := sprite.ResizeSquarePNG(data, cellSize)
+			releaseBimg()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -325,8 +324,8 @@ func (s *SCRoutes) HandleSCReviewBatchSprite(c *gin.Context) {
 				continue
 			}
 			acquireBimg()
-		resized, err := bimg.Resize(data, bimg.Options{Width: cellSize, Height: cellSize, Force: true, Type: bimg.PNG})
-		releaseBimg()
+			resized, err := sprite.ResizeSquarePNG(data, cellSize)
+			releaseBimg()
 			if err != nil {
 				continue
 			}

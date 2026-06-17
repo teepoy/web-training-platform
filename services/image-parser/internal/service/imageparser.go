@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/h2non/bimg"
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/cache"
 	"image-parser/internal/s3client"
@@ -64,7 +63,7 @@ func (s *ImageParserService) Sprite(ctx context.Context, req *imageparserv1.Spri
 		if err != nil {
 			return nil, err
 		}
-		resized, err := bimg.Resize(raw, bimg.Options{Width: sz, Height: sz, Force: true})
+		resized, err := sprite.ResizeSquarePNG(raw, sz)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +121,7 @@ func (s *ImageParserService) V2Sprite(ctx context.Context, req *imageparserv1.V2
 			return nil, err
 		}
 
-		resized, err := bimg.Resize(imgData, bimg.Options{Width: sz, Height: sz, Force: true})
+		resized, err := sprite.ResizeSquarePNG(imgData, sz)
 		if err != nil {
 			return nil, err
 		}

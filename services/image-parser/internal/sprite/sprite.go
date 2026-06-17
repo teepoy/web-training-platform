@@ -20,11 +20,7 @@ func CreateSprite(pngs [][]byte, size int) ([]byte, error) {
 	canvas := image.NewRGBA(image.Rect(0, 0, size*count, size))
 
 	for i, raw := range pngs {
-		resized, err := bimg.Resize(raw, bimg.Options{
-			Width:  size,
-			Height: size,
-			Force:  true,
-		})
+		resized, err := ResizeSquarePNG(raw, size)
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +43,25 @@ func CreateSprite(pngs [][]byte, size int) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func ResizeSquarePNG(raw []byte, size int) ([]byte, error) {
+	opts := bimg.Options{
+		Width:  size,
+		Height: size,
+		Force:  true,
+		Type:   bimg.PNG,
+	}
+
+	metadata, err := bimg.Metadata(raw)
+	if err != nil {
+		return nil, err
+	}
+	if metadata.Size.Width < size || metadata.Size.Height < size {
+		opts.Interpolator = bimg.Nearest
+	}
+
+	return bimg.Resize(raw, opts)
 }
 
 func ParseSize(raw string) (int, error) {
