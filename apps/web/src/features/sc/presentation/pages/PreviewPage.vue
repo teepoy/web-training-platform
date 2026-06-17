@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, type Component } from "vue";
+import { computed, onMounted, type Component } from "vue";
 import { useRoute } from "vue-router";
 import {
   NInput,
@@ -25,7 +25,6 @@ const page = usePreviewPage();
 const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
-const filtersExpanded = ref(false);
 
 onMounted(async () => {
   const { inspectionTime, waferKey } = route.params;
@@ -141,18 +140,13 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       <!-- State views (no tabs) -->
       <template v-if="page.tabs.value.length === 0">
         <div class="sc-preview-search-bar">
-          <NSpace vertical :size="8">
-            <NSpace align="center" :wrap="false">
-              <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
-              <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
-              <NButton text size="small" @click="filtersExpanded = !filtersExpanded">{{ filtersExpanded ? 'Filters ▴' : 'Filters ▾' }}</NButton>
-            </NSpace>
-            <NSpace v-if="filtersExpanded" align="center" :wrap="false">
-              <NInput v-model:value="page.deviceFilter.value" placeholder="Device (*, a,b)" size="small" style="width: 140px" clearable />
-              <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID (*, a,b)" size="small" style="width: 140px" clearable />
-              <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID (*, a,b)" size="small" style="width: 140px" clearable />
-              <NInput v-model:value="page.eqpIdFilter.value" placeholder="Equipment ID (*, a,b)" size="small" style="width: 160px" clearable />
-            </NSpace>
+          <NSpace align="center" :wrap="true" :size="8">
+            <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
+            <NInput v-model:value="page.deviceFilter.value" placeholder="Device (*, a,b)" size="small" style="width: 140px" clearable />
+            <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID (*, a,b)" size="small" style="width: 140px" clearable />
+            <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID (*, a,b)" size="small" style="width: 140px" clearable />
+            <NInput v-model:value="page.eqpIdFilter.value" placeholder="Equipment ID (*, a,b)" size="small" style="width: 160px" clearable />
+            <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
           </NSpace>
         </div>
         <div v-if="page.summariesLoading.value && page.summaries.value.length === 0" class="sc-preview-state">

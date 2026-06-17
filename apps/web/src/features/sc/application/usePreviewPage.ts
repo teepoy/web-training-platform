@@ -37,6 +37,7 @@ import type {
   ScImportPayload,
   ScImportResponse,
 } from "../domain/models";
+import type { GetInspectionsApiV1ScInspectionsGetParams } from "@/generated/orval/models/getInspectionsApiV1ScInspectionsGetParams";
 import type {
   ScSampleTableFilter,
   ScSampleTableSort,
@@ -212,14 +213,8 @@ export function usePreviewPage(): PreviewPageState {
   const summariesError = ref<string | null>(null);
   const summariesEmpty = ref(false);
 
-  const searchParams = ref<{
-    start_time: string;
-    end_time: string;
-    lot_id?: string | null;
-    eqp_id?: string | null;
-    layer_id?: string | null;
-    device?: string | null;
-  } | null>(null);
+  const searchParams =
+    ref<GetInspectionsApiV1ScInspectionsGetParams | null>(null);
 
   const searchNonce = ref(0);
 
@@ -844,14 +839,20 @@ export function usePreviewPage(): PreviewPageState {
     summariesLoading.value = true;
     summariesError.value = null;
 
-    searchParams.value = {
+    const nextSearchParams: GetInspectionsApiV1ScInspectionsGetParams = {
       start_time: start,
       end_time: end,
-      lot_id: lotIdFilter.value.trim() || null,
-      eqp_id: eqpIdFilter.value.trim() || null,
-      layer_id: layerIdFilter.value.trim() || null,
-      device: deviceFilter.value.trim() || null,
     };
+    const lotId = lotIdFilter.value.trim();
+    const eqpId = eqpIdFilter.value.trim();
+    const layerId = layerIdFilter.value.trim();
+    const device = deviceFilter.value.trim();
+    if (lotId) nextSearchParams.lot_id = lotId;
+    if (eqpId) nextSearchParams.eqp_id = eqpId;
+    if (layerId) nextSearchParams.layer_id = layerId;
+    if (device) nextSearchParams.device = device;
+
+    searchParams.value = nextSearchParams;
     searchNonce.value += 1;
 
     try {

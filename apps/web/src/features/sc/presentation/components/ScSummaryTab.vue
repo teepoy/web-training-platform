@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import {
   NButton,
   NDataTable,
@@ -32,8 +31,6 @@ const emit = defineEmits<{
   (e: "rowClick", row: InspectionSummaryItem): void;
 }>();
 
-const filtersExpanded = ref(false);
-
 function rowKey(row: InspectionSummaryItem): string {
   return `${row.inspection_time}_${row.wafer_key}`;
 }
@@ -49,67 +46,56 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
 <template>
   <div class="sc-preview-tabsummary">
     <div class="sc-preview-search-bar">
-      <NSpace vertical :size="8">
-        <NSpace align="center" :wrap="false">
-          <NDatePicker
-            :value="dateRange"
-            type="daterange"
-            clearable
-            style="width: 280px"
-            size="small"
-            @update:value="emit('update:dateRange', $event)"
-          />
-          <NButton
-            type="primary"
-            :disabled="dateRange === null"
-            :loading="summariesLoading"
-            @click="emit('search')"
-            size="small"
-          >
-            Search
-          </NButton>
-          <NButton
-            text
-            size="small"
-            @click="filtersExpanded = !filtersExpanded"
-          >
-            {{ filtersExpanded ? 'Filters ▴' : 'Filters ▾' }}
-          </NButton>
-        </NSpace>
-        <NSpace v-if="filtersExpanded" align="center" :wrap="false">
-          <NInput
-            :value="deviceFilter"
-            placeholder="Device (*, a,b)"
-            size="small"
-            style="width: 140px"
-            clearable
-            @update:value="emit('update:deviceFilter', $event)"
-          />
-          <NInput
-            :value="layerIdFilter"
-            placeholder="Layer ID (*, a,b)"
-            size="small"
-            style="width: 140px"
-            clearable
-            @update:value="emit('update:layerIdFilter', $event)"
-          />
-          <NInput
-            :value="lotIdFilter"
-            placeholder="Lot ID (*, a,b)"
-            size="small"
-            style="width: 140px"
-            clearable
-            @update:value="emit('update:lotIdFilter', $event)"
-          />
-          <NInput
-            :value="eqpIdFilter"
-            placeholder="Equipment ID (*, a,b)"
-            size="small"
-            style="width: 160px"
-            clearable
-            @update:value="emit('update:eqpIdFilter', $event)"
-          />
-        </NSpace>
+      <NSpace align="center" :wrap="true" :size="8">
+        <NDatePicker
+          :value="dateRange"
+          type="daterange"
+          clearable
+          style="width: 280px"
+          size="small"
+          @update:value="emit('update:dateRange', $event)"
+        />
+        <NInput
+          :value="deviceFilter"
+          placeholder="Device (*, a,b)"
+          size="small"
+          style="width: 140px"
+          clearable
+          @update:value="emit('update:deviceFilter', $event)"
+        />
+        <NInput
+          :value="layerIdFilter"
+          placeholder="Layer ID (*, a,b)"
+          size="small"
+          style="width: 140px"
+          clearable
+          @update:value="emit('update:layerIdFilter', $event)"
+        />
+        <NInput
+          :value="lotIdFilter"
+          placeholder="Lot ID (*, a,b)"
+          size="small"
+          style="width: 140px"
+          clearable
+          @update:value="emit('update:lotIdFilter', $event)"
+        />
+        <NInput
+          :value="eqpIdFilter"
+          placeholder="Equipment ID (*, a,b)"
+          size="small"
+          style="width: 160px"
+          clearable
+          @update:value="emit('update:eqpIdFilter', $event)"
+        />
+        <NButton
+          type="primary"
+          :disabled="dateRange === null"
+          :loading="summariesLoading"
+          @click="emit('search')"
+          size="small"
+        >
+          Search
+        </NButton>
       </NSpace>
     </div>
     <div class="sc-preview-table-wrapper">

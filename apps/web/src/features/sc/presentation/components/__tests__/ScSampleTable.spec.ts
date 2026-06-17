@@ -61,9 +61,13 @@ describe("ScSampleTable", () => {
     });
     await flushPromises();
 
+    expect(requestBody).toHaveBeenCalledTimes(1);
+    expect(requestBody.mock.calls[0][0]).not.toHaveProperty("defect_ids");
+    expect(requestBody.mock.calls[0][0]).not.toHaveProperty(
+      "reticle_x_die_count",
+    );
     expect(requestBody).toHaveBeenCalledWith(
       expect.objectContaining({
-        defect_ids: [],
         anchor: "0",
         limit: 100,
         filter: {

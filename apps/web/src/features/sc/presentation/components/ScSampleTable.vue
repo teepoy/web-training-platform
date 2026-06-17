@@ -19,6 +19,7 @@ import type {
 } from "@/features/sc/domain/sampleTable";
 import { getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost } from "@/generated/orval/endpoints/api";
 import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
+import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSampleTableRowsRequest";
 import type { ScSampleTableRowsResponse } from "@/generated/orval/models/scSampleTableRowsResponse";
 
 const props = defineProps<{
@@ -378,21 +379,36 @@ async function fetchNextPage(): Promise<void> {
   isFetching.value = true;
   pageError.value = null;
   try {
+    const payload: ScSampleTableRowsRequest = {
+      anchor,
+      limit: PAGE_SIZE,
+    };
+    if (resolvedDefectIds.value.length > 0) {
+      payload.defect_ids = resolvedDefectIds.value;
+    }
+    if (props.filter && Object.keys(props.filter).length > 0) {
+      payload.filter = props.filter;
+    }
+    if (props.sort?.direction) {
+      payload.sort = props.sort;
+    }
+    if (
+      props.reticleXDieCount !== undefined &&
+      props.reticleYDieCount !== undefined &&
+      props.reticleXDieShift !== undefined &&
+      props.reticleYDieShift !== undefined
+    ) {
+      payload.reticle_x_die_count = props.reticleXDieCount;
+      payload.reticle_y_die_count = props.reticleYDieCount;
+      payload.reticle_x_die_shift = props.reticleXDieShift;
+      payload.reticle_y_die_shift = props.reticleYDieShift;
+    }
+
     const { data } =
       await getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost(
         props.inspectionTime!,
         props.waferKey!,
-        {
-          defect_ids: resolvedDefectIds.value,
-          anchor,
-          limit: PAGE_SIZE,
-          filter: props.filter,
-          sort: props.sort ?? undefined,
-          reticle_x_die_count: props.reticleXDieCount ?? 10,
-          reticle_y_die_count: props.reticleYDieCount ?? 10,
-          reticle_x_die_shift: props.reticleXDieShift ?? 0,
-          reticle_y_die_shift: props.reticleYDieShift ?? 0,
-        },
+        payload,
       );
     if (!data || !("items" in data)) {
       throw new Error("Invalid sample table response");
