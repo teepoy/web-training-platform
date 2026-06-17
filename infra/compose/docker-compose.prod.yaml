@@ -16,6 +16,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      sc-upstream:
+        condition: service_healthy
+      image-parser:
+        condition: service_healthy
     environment:
       APP_CONFIG_PROFILE: prod
       MNT: /mnt
@@ -186,7 +190,8 @@ services:
       context: ../..
       dockerfile: services/image-parser/Dockerfile
     depends_on:
-      - sc-upstream
+      sc-upstream:
+        condition: service_healthy
     environment:
       - PORT=8090
       - GRPC_PORT=9092

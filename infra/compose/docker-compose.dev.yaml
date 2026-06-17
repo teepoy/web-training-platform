@@ -71,6 +71,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      sc-upstream:
+        condition: service_healthy
+      image-parser:
+        condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:

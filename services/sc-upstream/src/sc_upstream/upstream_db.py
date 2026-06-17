@@ -7,6 +7,7 @@ from typing import Any
 import polars as pl
 
 from sqlalchemy import select
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from .models import (
@@ -24,15 +25,17 @@ _ASYNC_SQLITE_PREFIX = "sqlite+aiosqlite:///"
 
 class UpstreamDB:
     def __init__(self, db_url: str) -> None:
+        sync_db_url = db_url
         if db_url.startswith(_SQLITE_PREFIX):
             db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
         self._engine = create_async_engine(db_url, echo=False)
+        self._sync_engine = create_engine(sync_db_url, echo=False)
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
-        Base.metadata.create_all(self._engine.sync_engine)
+        Base.metadata.create_all(self._sync_engine)
 
     async def _read(self, query: str) -> pl.LazyFrame:
         def _sync() -> pl.LazyFrame:
-            conn = self._engine.sync_engine.connect()
+            conn = self._sync_engine.connect()
             try:
                 df = pl.read_database(query, connection=conn)
                 return df.lazy()
@@ -187,11 +190,13 @@ class UpstreamDB:
 
 class InspectionZipsDB:
     def __init__(self, db_url: str) -> None:
+        sync_db_url = db_url
         if db_url.startswith(_SQLITE_PREFIX):
             db_url = _ASYNC_SQLITE_PREFIX + db_url[len(_SQLITE_PREFIX) :]
         self._engine = create_async_engine(db_url, echo=False)
+        self._sync_engine = create_engine(sync_db_url, echo=False)
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
-        BaseZips.metadata.create_all(self._engine.sync_engine)
+        BaseZips.metadata.create_all(self._sync_engine)
 
     async def get_inspection_patch_zips(
         self,
