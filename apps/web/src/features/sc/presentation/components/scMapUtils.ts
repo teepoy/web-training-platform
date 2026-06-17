@@ -19,6 +19,19 @@ export interface ScatterPoint {
   hasReview: boolean;
 }
 
+export type LegendColorSource = "class" | "bin" | "annotation" | "prediction";
+
+const STRING_COLOR_MULTIPLIER = 31;
+const MISSING_LEGEND_COLORS = new Set(["__unlabeled__", "__no_prediction__"]);
+
+export function stringColor(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * STRING_COLOR_MULTIPLIER + value.charCodeAt(i)) >>> 0;
+  }
+  return classColor(hash);
+}
+
 /**
  * Map a numeric class ID to a deterministic HSL color string.
  */
@@ -123,6 +136,15 @@ export function getPackedPointIdsInRegion(
  */
 export function binColor(bin: number): string {
   return classColor(bin);
+}
+
+export function legendColor(source: LegendColorSource, rawKey: string): string {
+  if (MISSING_LEGEND_COLORS.has(rawKey)) return "#9ca3af";
+  const numericKey = Number(rawKey);
+  if ((source === "class" || source === "bin") && Number.isFinite(numericKey)) {
+    return source === "bin" ? binColor(numericKey) : classColor(numericKey);
+  }
+  return stringColor(rawKey);
 }
 
 /**

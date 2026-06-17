@@ -355,6 +355,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               :reticle-die-size-x="page.reticleDieSizeX.value"
               :reticle-die-size-y="page.reticleDieSizeY.value"
               :reticle-options="page.reticleOptions.value"
+              :legend-group-by="page.legendGroupBy.value ?? 'class'"
               :legend-groups="page.classList.value"
               :legend-sources="['class', 'bin', 'annotation', 'prediction']"
               :selected-ids="page.mapSelectedDefectIds.value"
@@ -367,7 +368,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               @zoom-in="page.setMapZoom"
               @filter-change="page.handleMapFilterChange"
               @selection-change="page.handleBoxSelectionChange"
-              @legend-group-change="page.handleLegendGroupByChange"
+              @update:legend-group-by="page.handleLegendGroupByChange"
               @retry="() => {}"
             />
           </NSpin>

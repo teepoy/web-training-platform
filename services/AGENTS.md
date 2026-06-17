@@ -1,0 +1,28 @@
+# Services Agent Guide
+
+This directory contains standalone runtime services used by the platform. These are deployable processes wired by `infra/compose` and `infra/k8s`, not the API module service layer.
+
+If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_DESIGNS.md` as authoritative and surface the conflict.
+
+## Service Map
+
+| Service | Path | Role |
+| --- | --- | --- |
+| SC upstream | `services/sc-upstream` | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata |
+| Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and S3-backed image reads |
+
+## Boundaries
+
+- Keep these services out-of-process. Do not move FastAPI entrypoints, API route handlers, or API module business services here.
+- API code should depend on these services through explicit adapter/protocol boundaries such as SC upstream readers and image fetchers.
+- Do not make platform sample identity depend on upstream SC identities. Preserve upstream IDs as provenance only.
+- Keep image access aligned with `CORE_DESIGNS.md`: imported dataset images should prefer dataset-owned sample image endpoints; SC upstream image routes remain compatibility/preview paths.
+- Shared wire contracts belong in the proto/runtime contract locations already used by the repo, not duplicated ad hoc inside a service.
+- Service configuration should come from environment/config passed by compose or k8s; do not hardcode deployment URLs.
+
+## Verification
+
+- For `services/sc-upstream`, run service-local Python checks from `services/sc-upstream` when changing Python code. At minimum run targeted tests if they exist and an import/type smoke for touched modules.
+- For `services/image-parser`, run Go checks from `services/image-parser`: `go test ./...` for code changes, and `go test ./... -run TestName` for a narrow test while iterating.
+- For Docker-relevant service changes, verify the relevant compose image build when feasible, for example `docker compose -f infra/compose/docker-compose.yaml build sc-upstream image-parser`.
+- If a required service check cannot be run, state why and what remains unverified.

@@ -2,10 +2,10 @@
   ScReticleMap — Wrapper around SimpleReticleMap with selection / zoom-in mode.
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import SimpleReticleMap from "./SimpleReticleMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
-import type { HighlightDefect } from "./types";
+import type { HighlightDefect, MapPointVisual } from "./types";
 import { classColor, getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
 
 const props = defineProps<{
@@ -16,6 +16,7 @@ const props = defineProps<{
   points?: number[];
   selectedIds?: Set<number>;
   highlightDefects?: HighlightDefect[];
+  pointVisualsByDefectId?: Record<string, MapPointVisual>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
@@ -41,6 +42,9 @@ const colorMap = computed<Record<string, string>>(() => {
   for (let i = 0; i < pts.length; i += STRIDE) classes.add(pts[i + 3]);
   const map: Record<string, string> = {};
   for (const cn of classes) map[String(cn)] = classColor(cn);
+  for (const visual of Object.values(props.pointVisualsByDefectId ?? {})) {
+    map[visual.label] = visual.color;
+  }
   return map;
 });
 
@@ -50,7 +54,9 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   const count = Math.floor(pts.length / STRIDE);
   const result: SimpleMapPoint[] = new Array(count);
   for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
-    result[pi] = { x: pts[i], y: pts[i + 1], id: pts[i + 2], label: String(pts[i + 3]), hasImageFlag: pts[i + 5] !== 0, isSelectedFlag: selectionState.value.has(pts[i + 2]) };
+    const defectId = pts[i + 2];
+    const visual = props.pointVisualsByDefectId?.[String(defectId)];
+    result[pi] = { x: pts[i], y: pts[i + 1], id: defectId, label: visual?.label ?? String(pts[i + 3]), hasImageFlag: pts[i + 5] !== 0, isSelectedFlag: selectionState.value.has(defectId) };
   }
   return result;
 });
@@ -94,7 +100,7 @@ const dStart = ref({ x: 0, y: 0 });
 const dEnd = ref({ x: 0, y: 0 });
 const dragRect = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 
-function onPointerDown(e: PointerEvent) { if (e.button !== 0) return; const [sx, sy] = getPos(e); dStart.value = dEnd.value = { x: sx, y: sy }; dragging.value = true; }
+function onPointerDown(e: PointerEvent) { if (e.button !== 0) return; recalcTransform(); drawOverlay(); const [sx, sy] = getPos(e); dStart.value = dEnd.value = { x: sx, y: sy }; dragging.value = true; }
 function onPointerMove(e: PointerEvent) { if (!dragging.value) return; const [sx, sy] = getPos(e); let ax = sx, ay = sy; const rw = Math.abs(sx - dStart.value.x); const rh = Math.abs(sy - dStart.value.y); if (mode.value === "zoomin" && rw > 0 && rh > 0 && _cw > 0 && _ch > 0) { const ar = _cw / _ch; const rar = rw / rh; if (rar > ar) { const ah = rw / ar; const s = Math.sign(sy - dStart.value.y) || 1; ay = dStart.value.y + s * ah; } else if (rar < ar) { const aw = rh * ar; const s = Math.sign(sx - dStart.value.x) || 1; ax = dStart.value.x + s * aw; } } dEnd.value = { x: ax, y: ay }; dragRect.value = { x: Math.min(dStart.value.x, ax), y: Math.min(dStart.value.y, ay), w: Math.abs(ax - dStart.value.x), h: Math.abs(ay - dStart.value.y) }; drawOverlay(); }
 async function onPointerUp() {
   if (!dragging.value) return;
@@ -169,6 +175,20 @@ function onDblClick() {
 
 let _ro: ResizeObserver | null = null;
 watch(containerRef, (el) => { _ro?.disconnect(); if (el) { _ro = new ResizeObserver(() => { recalcTransform(); drawOverlay(); }); _ro.observe(el); } }, { immediate: true });
+
+function scheduleOverlayRefresh(): void {
+  void nextTick(() => {
+    recalcTransform();
+    drawOverlay();
+    window.requestAnimationFrame(() => {
+      recalcTransform();
+      drawOverlay();
+    });
+  });
+}
+
+watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
+
 watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 
 watch(() => props.selectedIds, (incoming) => {

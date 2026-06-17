@@ -357,6 +357,13 @@ function makeFakePlotPointsBytes(sampleCount: number): Uint8Array {
   return toBinary(WaferMapResponseSchema, msg);
 }
 
+function makeInt32Bytes(values: number[]): ArrayBuffer {
+  const buffer = new ArrayBuffer(values.length * 4);
+  const view = new DataView(buffer);
+  values.forEach((value, index) => view.setInt32(index * 4, value, true));
+  return buffer;
+}
+
 function makeViewSampleRows(count: number, offset = 0) {
   return Array.from({ length: count }, (_, i) => ({
     sample_id: `s${offset + i}`,
@@ -372,6 +379,16 @@ function makeViewSampleRows(count: number, offset = 0) {
     review_images: [],
     images: [],
   }));
+}
+
+async function waitForCondition(condition: () => boolean, timeoutMs = 1000) {
+  const startedAt = Date.now();
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
 describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", () => {
@@ -486,6 +503,74 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
     const secondPageOffsets = requestOffsets.filter((o) => o > 0);
     expect(secondPageOffsets.length).toBeGreaterThan(0);
     expect(secondPageOffsets[0]).toBe(200);
+  });
+
+  it("waits for real defect ids before loading samples to avoid an offset duplicate", async () => {
+    const sampleRequests: Array<{ offset: string | null; sampleIds: string | null }> = [];
+    server.use(
+      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", async () => {
+        await new Promise((r) => setTimeout(r, 30));
+        return new HttpResponse(makeInt32Bytes([1, 2, 3]), {
+          status: 200,
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      }),
+      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
+        const url = new URL(request.url);
+        sampleRequests.push({
+          offset: url.searchParams.get("offset"),
+          sampleIds: url.searchParams.get("sampleIds"),
+        });
+        return HttpResponse.json({
+          items: makeViewSampleRows(3),
+          total: 3,
+        });
+      }),
+    );
+
+    await mountPage("ds-real-ids", DEFAULT_DATASET, []);
+
+    await waitForCondition(() => sampleRequests.length > 0);
+
+    expect(sampleRequests.every((req) => req.offset === null)).toBe(true);
+    expect(sampleRequests[0]?.sampleIds).toBe("1,2,3");
+  });
+
+  it("loads additional real-id pages with sample_ids instead of stopping at the first 200", async () => {
+    const requestSampleIds: string[] = [];
+    server.use(
+      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", () => {
+        return new HttpResponse(makeInt32Bytes(Array.from({ length: 450 }, (_, i) => i + 1)), {
+          status: 200,
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      }),
+      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
+        const url = new URL(request.url);
+        const sampleIds = url.searchParams.get("sampleIds") ?? "";
+        requestSampleIds.push(sampleIds);
+        const ids = sampleIds.split(",").filter(Boolean).map(Number);
+        return HttpResponse.json({
+          items: ids.map((id) => ({
+            ...makeViewSampleRows(1, id - 1)[0],
+            sample_id: `s${id}`,
+            defect_id: String(id),
+          })),
+          total: 450,
+        });
+      }),
+    );
+
+    const { state } = await mountPage("ds-real-ids-paged", DEFAULT_DATASET, []);
+
+    await waitForCondition(() => state.hasMoreSamples.value);
+    await state.fetchMoreSamples();
+    await waitForCondition(() => requestSampleIds.length >= 2);
+
+    expect(requestSampleIds[0]?.split(",")[0]).toBe("1");
+    expect(requestSampleIds[0]?.split(",")).toHaveLength(200);
+    expect(requestSampleIds[1]?.split(",")[0]).toBe("201");
+    expect(requestSampleIds[1]?.split(",")).toHaveLength(200);
   });
 
   it("uses map box-selection IDs as BlinkTable data source filter", async () => {

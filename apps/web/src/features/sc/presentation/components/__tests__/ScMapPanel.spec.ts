@@ -18,6 +18,10 @@ vi.mock("../ScWaferMap.vue", () => ({
         type: Function,
         default: undefined,
       },
+      pointVisualsByDefectId: {
+        type: Object,
+        default: undefined,
+      },
     },
     template: "<div />",
   })
@@ -33,6 +37,7 @@ vi.mock("../ScReticleMap.vue", () => ({
 
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import { MIXED_CLASS_POINTS } from "./scMapFixtures";
+import { legendColor } from "../scMapUtils";
 
 describe("ScMapPanel", () => {
   beforeEach(() => {
@@ -352,6 +357,35 @@ describe("ScMapPanel", () => {
     expect(wrapper.emitted("select-points")?.[0]).toEqual([
       { ids: [501, 502], region: { x: 0, y: 0, w: 0, h: 0 } },
     ]);
+  });
+
+  it("passes current legend group colors to the map", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanel, {
+      props: {
+        waferPoints: MIXED_CLASS_POINTS,
+        legendSources: ["class", "bin", "annotation", "prediction"],
+        legendGroups: {
+          Scratch: {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [101, 103],
+          },
+        },
+      },
+    });
+
+    wrapper.findComponent({ name: "Select" }).vm.$emit("update:value", "annotation");
+    await nextTick();
+
+    const visuals = wrapper
+      .findComponent({ name: "ScWaferMap" })
+      .props("pointVisualsByDefectId") as Record<string, { label: string; color: string }>;
+
+    expect(visuals["101"]).toEqual({
+      label: "annotation:Scratch",
+      color: legendColor("annotation", "Scratch"),
+    });
+    expect(visuals["103"]).toEqual(visuals["101"]);
   });
 
   it("groups and selects defects without annotations", async () => {

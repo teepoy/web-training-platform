@@ -26,7 +26,6 @@ const props = withDefaults(
     reviewError?: string | null;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
-    reviewCount?: number;
     patchCellSize?: number;
     reviewCellSize?: number;
     cellGap?: number;
@@ -46,7 +45,6 @@ const props = withDefaults(
   {
     patchSamplesPerRow: 3,
     reviewSamplesPerRow: 1,
-    reviewCount: 3,
     patchCellSize: 64,
     reviewCellSize: 128,
     cellGap: 4,
@@ -140,27 +138,57 @@ const {
 const cellSize = computed(() =>
   mode.value === "patch" ? props.patchCellSize : props.reviewCellSize
 );
-const reviewColumns = computed(() =>
-  Array.from({ length: props.reviewCount }, (_, i) => i)
+
+function reviewImageCount(sample: ScSampleItem): number {
+  return Array.isArray(sample.reviewImages) ? sample.reviewImages.length : 0;
+}
+
+function reviewColumnsForSample(sample: ScSampleItem): number[] {
+  return Array.from({ length: reviewImageCount(sample) }, (_, i) => i);
+}
+
+const maxReviewImageCount = computed(() => {
+  if (mode.value !== "review") return 0;
+  return visibleSamples.value.reduce(
+    (max, sample) => Math.max(max, reviewImageCount(sample)),
+    0,
+  );
+});
+
+function cellsForSample(sample: ScSampleItem): number {
+  const imageCells = mode.value === "patch" ? 3 : 3 + reviewImageCount(sample);
+  return imageCells + (blinkEnabled.value ? 1 : 0);
+}
+
+const maxCellsPerSample = computed(() =>
+  mode.value === "patch"
+    ? 3 + (blinkEnabled.value ? 1 : 0)
+    : 3 + maxReviewImageCount.value + (blinkEnabled.value ? 1 : 0),
 );
-const cellsPerSample = computed(() =>
-  (mode.value === "patch" ? 4 : 4 + props.reviewCount) - (blinkEnabled.value ? 0 : 1)
-);
+
 const SAMPLE_BLOCK_PADDING_X = 4;
-const sampleBlockWidthPx = computed(
-  () =>
-    cellsPerSample.value * cellSize.value +
-    (cellsPerSample.value - 1) * props.cellGap +
-    SAMPLE_BLOCK_PADDING_X,
+
+function sampleBlockWidthPx(sample: ScSampleItem): number {
+  const cells = cellsForSample(sample);
+  return cells * cellSize.value + Math.max(0, cells - 1) * props.cellGap + SAMPLE_BLOCK_PADDING_X;
+}
+
+const maxSampleBlockWidthPx = computed(() =>
+  maxCellsPerSample.value * cellSize.value +
+  Math.max(0, maxCellsPerSample.value - 1) * props.cellGap +
+  SAMPLE_BLOCK_PADDING_X,
 );
+
 const rowMinWidthPx = computed(
   () =>
-    effectiveSamplesPerRow.value * sampleBlockWidthPx.value +
+    effectiveSamplesPerRow.value * maxSampleBlockWidthPx.value +
     (effectiveSamplesPerRow.value - 1) * props.rowGap +
     24 /* left+right row padding */
 );
 const cellSizePx = computed(() => `${cellSize.value}px`);
-const sampleBlockWidthStr = computed(() => `${sampleBlockWidthPx.value}px`);
+function sampleBlockWidthStr(sample: ScSampleItem): string {
+  return `${sampleBlockWidthPx(sample)}px`;
+}
 const rowMinWidthStr = computed(() => `${rowMinWidthPx.value}px`);
 
 const {
@@ -192,7 +220,7 @@ function getSpriteUrl(sample: ScSampleItem): string {
   const t = props.inspectionTime ?? String(sample.inspectionTime);
   return isPatch
     ? `/api/v1/sc/sprites/patch/${t}/${sample.waferKey}/${sample.defectId}?cell_size=${cs}`
-    : `/api/v1/sc/sprites/review/${t}/${sample.waferKey}/${sample.defectId}?review_count=${props.reviewCount}&cell_size=${cs}`;
+    : `/api/v1/sc/sprites/review/${t}/${sample.waferKey}/${sample.defectId}?review_count=${reviewImageCount(sample)}&cell_size=${cs}`;
 }
 
 function shouldRenderSprite(sample: ScSampleItem): boolean {
@@ -206,7 +234,7 @@ function shouldRenderSprite(sample: ScSampleItem): boolean {
 
 function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
   const isPatch = mode.value === "patch";
-  const cols = isPatch ? 3 : 3 + props.reviewCount;
+  const cols = isPatch ? 3 : 3 + reviewImageCount(sample);
   const url = getSpriteUrl(sample);
 
   const bgSize = `${cols * 100}% 100%`;
@@ -328,7 +356,7 @@ defineExpose({ scrollRef });
               class="sbt-sample-block"
               :class="{ 'sbt-sample-block--selected': isSelected(sample.defectId) }"
               :data-defect-id="sample.defectId"
-              :style="{ width: sampleBlockWidthStr }"
+              :style="{ width: sampleBlockWidthStr(sample) }"
             >
               <!-- Mini Header -->
               <div class="sbt-sample-mini-header">
@@ -338,7 +366,7 @@ defineExpose({ scrollRef });
                 <div class="sbt-sample-header-label">Difference</div>
                 <template v-if="mode === 'review'">
                   <div
-                    v-for="n in reviewColumns"
+                    v-for="n in reviewColumnsForSample(sample)"
                     :key="'rev_header_' + n"
                     class="sbt-sample-header-label"
                   >
@@ -374,7 +402,7 @@ defineExpose({ scrollRef });
                 <!-- Review Cells -->
                 <template v-if="mode === 'review'">
                   <div
-                    v-for="n in reviewColumns"
+                    v-for="n in reviewColumnsForSample(sample)"
                     :key="'rev_' + n"
                     class="sbt-img-cell"
                   >

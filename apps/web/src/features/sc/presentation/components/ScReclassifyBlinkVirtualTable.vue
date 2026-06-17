@@ -13,7 +13,6 @@ const props = withDefaults(
     predictionConfidences?: Record<string, number | null>;
     annotationLabels?: Record<string, string>;
     annotationDrafts?: Record<string, string>;
-    reviewCount?: number;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
     overscan?: number;
@@ -26,7 +25,6 @@ const props = withDefaults(
     reviewError?: string | null;
   }>(),
   {
-    reviewCount: 3,
     patchSamplesPerRow: 5,
     reviewSamplesPerRow: 1,
     predictionLabels: () => ({}),
@@ -112,7 +110,6 @@ onBeforeUnmount(() => {
       :samples="samples"
       :patch-samples-per-row="patchSamplesPerRow"
       :review-samples-per-row="reviewSamplesPerRow"
-      :review-count="reviewCount"
       :selected-defect-ids="selectedDefectIds"
       :prediction-labels="predictionLabels"
       :prediction-confidences="predictionConfidences"

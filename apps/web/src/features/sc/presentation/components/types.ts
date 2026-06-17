@@ -16,3 +16,8 @@ export interface HighlightDefect {
   reticleX: number;
   reticleY: number;
 }
+
+export interface MapPointVisual {
+  label: string;
+  color: string;
+}

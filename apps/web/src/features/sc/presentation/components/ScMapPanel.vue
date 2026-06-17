@@ -9,8 +9,8 @@ import ScDieStackMap from "./ScDieStackMap.vue";
 import ScReticleMap from "./ScReticleMap.vue";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
-import { parsePoints } from "./scMapUtils";
-import type { HighlightDefect } from "./types";
+import { legendColor, parsePoints } from "./scMapUtils";
+import type { HighlightDefect, MapPointVisual } from "./types";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction";
@@ -45,6 +45,7 @@ const props = defineProps<{
 
   // Legend control (optional)
   legendPoints?: number[];
+  legendGroupBy?: LegendSource | null;
   legendSources?: LegendSource[];
   legendGroups?: Record<string, DefectList> | null;
   selectedIds?: ReadonlySet<number>;
@@ -67,6 +68,7 @@ const emit = defineEmits<{
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
   (e: "selection-change", ids: number[]): void;
+  (e: "update:legendGroupBy", groupBy: LegendSource | null): void;
   (e: "legend-group-change", groupBy: string | null): void;
 }>();
 
@@ -90,7 +92,7 @@ const handleTabChange = (value: string | number) => {
 
 const selectedClassNumber = ref<LegendKey | null>(null);
 const selectedIds = ref<Set<number>>(new Set(props.selectedIds ?? []));
-const legendSource = ref<LegendSource>("class");
+const legendSource = ref<LegendSource>(props.legendGroupBy ?? "class");
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
@@ -109,6 +111,13 @@ watch(
   },
   { deep: true },
 );
+
+watch(() => props.legendGroupBy, (newSource) => {
+  const nextSource = newSource ?? "class";
+  if (nextSource !== legendSource.value) {
+    legendSource.value = nextSource;
+  }
+});
 
 const toolbarVisible = ref<boolean>(!loadPersistedState("sc_map_panel.toolbar_collapsed", false));
 const drawerVisible = ref<boolean>(!loadPersistedState("sc_map_panel.drawer_collapsed", false));
@@ -152,6 +161,7 @@ function savePersistedState(key: string, value: boolean): void {
 }
 
 watch(legendSource, (newSource) => {
+  emit("update:legendGroupBy", newSource);
   emit("legend-group-change", newSource || null);
   selectedClassNumber.value = null;
   selectedIds.value = new Set();
@@ -229,6 +239,23 @@ const predictionGroups = computed(() =>
   legendSource.value === "prediction" ? (props.legendGroups ?? undefined) : undefined,
 );
 
+const pointVisualsByDefectId = computed<Record<string, MapPointVisual>>(() => {
+  const groups = props.legendGroups;
+  if (!groups || Object.keys(groups).length === 0) return {};
+  const source = legendSource.value;
+  const visuals: Record<string, MapPointVisual> = {};
+  for (const [rawKey, group] of Object.entries(groups)) {
+    const visual = {
+      label: `${source}:${rawKey}`,
+      color: legendColor(source, rawKey),
+    };
+    for (const defectId of group.defectIds ?? []) {
+      visuals[String(defectId)] = visual;
+    }
+  }
+  return visuals;
+});
+
 const showWaferLoading = computed(
   () => Boolean(props.mapLoading) && (props.waferPoints?.length ?? 0) === 0,
 );
@@ -301,6 +328,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :waferRadiusNm="waferRadiusNm"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
+                :point-visuals-by-defect-id="pointVisualsByDefectId"
                 :query-box-selection="waferBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.wafer"
@@ -318,6 +346,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :die-size-y="waferGeometry?.dieSizeY"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
+                :point-visuals-by-defect-id="pointVisualsByDefectId"
                 :query-box-selection="dieBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.die"
@@ -338,6 +367,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :dieSizeY="reticleDieSizeY"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
+                :point-visuals-by-defect-id="pointVisualsByDefectId"
                 :query-box-selection="reticleBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.reticle"

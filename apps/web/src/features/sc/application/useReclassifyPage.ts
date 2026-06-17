@@ -33,7 +33,7 @@ import { runPredictions, getPredictionJob } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type { DatasetStatusResponse, TrainingJob } from "@/generated/orval/models";
 import { fetchScPlotPoints } from "../api/plotPoints";
-import { defaultDefectIds, fetchDatasetDefectIds } from "../api/defectIds";
+import { fetchDatasetDefectIds } from "../api/defectIds";
 import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
@@ -43,6 +43,7 @@ import {
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
 import type { HighlightDefect } from "../presentation/components/types";
+import type { LegendColorSource } from "../presentation/components/scMapUtils";
 import {
   scPatchUrl,
   scReviewUrl,
@@ -120,7 +121,7 @@ export interface ReclassifySample {
 
 export type SelectionMode = "replace" | "add" | "toggle";
 
-type DefectIdSourceMode = "offset" | "fallback" | "real" | "map" | "sampled";
+type DefectIdSourceMode = "offset" | "real" | "map" | "sampled";
 
 export interface ReclassifyPageState {
   datasetId: ComputedRef<string>;
@@ -150,10 +151,10 @@ export interface ReclassifyPageState {
   setMapZoom: (viewport: MapViewport | null) => void;
   waferDisplay: ComputedRef<number[]>;
   mapFilter: Ref<Record<string, (number|string)[]>>;
-  legendGroupBy: Ref<string | null>;
+  legendGroupBy: Ref<LegendColorSource | null>;
   activeFilterCount: ComputedRef<number>;
   handleMapFilterChange: (filter: Record<string, (number|string)[]>) => void;
-  handleLegendGroupByChange: (source: string | null) => void;
+  handleLegendGroupByChange: (source: LegendColorSource | null) => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
@@ -319,7 +320,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const mapFilter = ref<Record<string, (number|string)[]>>({});
   const mapFilterVersion = ref(0);
-  const legendGroupBy = ref<string | null>(null);
+  const legendGroupBy = ref<LegendColorSource | null>(null);
   const activeFilterCount = computed(
     () => Object.values(mapFilter.value).filter((v) => v && v.length > 0).length,
   );
@@ -343,7 +344,13 @@ export function useReclassifyPage(): ReclassifyPageState {
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
   });
-  const classList = computed(() => plotPointsQuery.data.value?.legendGroups ?? null);
+  const classList = computed(() => {
+    const data = plotPointsQuery.data.value;
+    if (!data) return null;
+    const responseGroupBy = data.legendGroupBy || "class";
+    const requestedGroupBy = legendGroupBy.value ?? "class";
+    return responseGroupBy === requestedGroupBy ? data.legendGroups : null;
+  });
 
   // ── Selection state (Blink table box-selection, separate from filter) ─
 
@@ -414,23 +421,32 @@ export function useReclassifyPage(): ReclassifyPageState {
     return 0;
   });
 
-  const allDefectIds = computed<string[]>(() => {
-    const realIds = datasetDefectIdsQuery.data.value;
-    if (realIds) return realIds.map(String);
-    return defaultDefectIds(datasetSampleTotal.value).map(String);
-  });
-
-  const blinkSourceDefectIds = computed<string[] | null>(() => {
+  const explicitBlinkSourceDefectIds = computed<string[] | null>(() => {
     if (sampledIds.value.size > 0) return [...sampledIds.value];
     if (mapFilteredIds.value.size > 0) return [...mapFilteredIds.value];
-    return allDefectIds.value.length > 0 ? allDefectIds.value : null;
+    return null;
+  });
+
+  const realDefectIds = computed<string[]>(() =>
+    (datasetDefectIdsQuery.data.value ?? []).map(String),
+  );
+
+  const blinkSourceDefectIds = computed<string[] | null>(() => {
+    const explicitIds = explicitBlinkSourceDefectIds.value;
+    if (explicitIds) return explicitIds;
+    return realDefectIds.value.length > 0 ? realDefectIds.value : null;
+  });
+
+  const shouldUseOffsetSamples = computed<boolean>(() => {
+    if (explicitBlinkSourceDefectIds.value) return false;
+    if (realDefectIds.value.length > 0) return false;
+    return datasetDefectIdsQuery.isFetched.value;
   });
 
   const blinkSourceMode = computed<DefectIdSourceMode>(() => {
     if (sampledIds.value.size > 0) return "sampled";
     if (mapFilteredIds.value.size > 0) return "map";
-    if (datasetDefectIdsQuery.data.value) return "real";
-    if (allDefectIds.value.length > 0) return "fallback";
+    if (realDefectIds.value.length > 0) return "real";
     return "offset";
   });
 
@@ -480,7 +496,11 @@ export function useReclassifyPage(): ReclassifyPageState {
       if (sourceIds) return loaded < sourceIds.length ? loaded : undefined;
       return loaded < lastPage.total ? loaded : undefined;
     },
-    enabled: computed(() => !!selectedDataset.value),
+    enabled: computed(
+      () =>
+        !!selectedDataset.value &&
+        (blinkSourceDefectIds.value !== null || shouldUseOffsetSamples.value),
+    ),
     retry: false,
   });
 
@@ -780,7 +800,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     void plotPointsQuery.refetch();
   }
 
-  function handleLegendGroupByChange(source: string | null): void {
+  function handleLegendGroupByChange(source: LegendColorSource | null): void {
+    if (legendGroupBy.value === source) return;
     legendGroupBy.value = source;
     void plotPointsQuery.refetch();
   }

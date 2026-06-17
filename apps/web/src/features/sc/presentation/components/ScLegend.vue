@@ -5,8 +5,9 @@ import {
   parsePoints,
   groupByClass,
   groupByBin,
-  classColor,
   binColor,
+  classColor,
+  legendColor,
 } from './scMapUtils'
 import type { DefectList } from '../../generated/proto/sc/v1/sample_pb'
 
@@ -30,14 +31,6 @@ const emit = defineEmits<{
   (e: 'select-class', key: LegendKey | null): void
 }>()
 
-function stringColor(value: string): string {
-  let hash = 0
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0
-  }
-  return classColor(hash)
-}
-
 const legendData = computed(() => {
   const source = props.legendSource ?? 'class'
   const compactGroups = {
@@ -60,11 +53,7 @@ const legendData = computed(() => {
         return {
           key,
           count: group.count,
-          color: rawKey in missingLabels
-            ? '#9ca3af'
-            : typeof key === 'number'
-              ? colorFn(key)
-              : stringColor(key),
+          color: legendColor(source, rawKey),
           label: missingLabels[rawKey] ?? (labelPrefix + rawKey),
         }
       })

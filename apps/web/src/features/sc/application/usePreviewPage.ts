@@ -568,7 +568,10 @@ export function usePreviewPage(): PreviewPageState {
           xDieShift: opts.xDieShift,
           yDieShift: opts.yDieShift,
         },
-        legendGroups: firstResult?.legendGroups ?? null,
+        legendGroups:
+          (firstResult?.legendGroupBy || "class") === (tab.legendGroupBy ?? "class")
+            ? (firstResult?.legendGroups ?? null)
+            : null,
       };
       for (const { mode, result } of results) {
         if (mode === "wafer") baseUpdate.waferDisplay = result.waferPoints;
@@ -799,6 +802,7 @@ export function usePreviewPage(): PreviewPageState {
     tabs.value[idx] = {
       ...tabs.value[idx],
       legendGroupBy: groupBy,
+      legendGroups: null,
       zoom: null,
       waferDisplay: tabs.value[idx].unzoomedWaferDisplay,
       dieDisplay: tabs.value[idx].unzoomedDieDisplay,

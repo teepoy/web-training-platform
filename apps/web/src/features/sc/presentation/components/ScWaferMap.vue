@@ -4,10 +4,10 @@
     [x, y, defect_id, class_number, rough_bin, has_review, x, y, ...]
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import SimpleWaferMap from "./SimpleWaferMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
-import type { HighlightDefect } from "./types";
+import type { HighlightDefect, MapPointVisual } from "./types";
 import { classColor, getPackedPointIdsInRegion } from "./scMapUtils";
 
 const STRIDE = 6;
@@ -28,6 +28,7 @@ const props = defineProps<{
   geometry?: WaferGeometry | null;
   selectedIds?: Set<number>;
   highlightDefects?: HighlightDefect[];
+  pointVisualsByDefectId?: Record<string, MapPointVisual>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
@@ -57,6 +58,9 @@ const colorMap = computed<Record<string, string>>(() => {
   for (let i = 0; i < pts.length; i += STRIDE) classes.add(pts[i + 3]);
   const map: Record<string, string> = {};
   for (const cn of classes) map[String(cn)] = classColor(cn);
+  for (const visual of Object.values(props.pointVisualsByDefectId ?? {})) {
+    map[visual.label] = visual.color;
+  }
   return map;
 });
 
@@ -67,11 +71,13 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   const count = Math.floor(pts.length / STRIDE);
   const result: SimpleMapPoint[] = new Array(count);
   for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+    const defectId = pts[i + 2];
+    const visual = props.pointVisualsByDefectId?.[String(defectId)];
     result[pi] = {
-      x: pts[i], y: pts[i + 1], id: pts[i + 2],
-      label: String(pts[i + 3]),
+      x: pts[i], y: pts[i + 1], id: defectId,
+      label: visual?.label ?? String(pts[i + 3]),
       hasImageFlag: pts[i + 5] !== 0,
-      isSelectedFlag: selected.has(pts[i + 2]),
+      isSelectedFlag: selected.has(defectId),
     };
   }
   return result;
@@ -121,6 +127,8 @@ const dragRect = ref<{ x: number; y: number; w: number; h: number } | null>(null
 
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
+  recalcTransform();
+  drawOverlay();
   const [sx, sy] = getPos(e);
   dragStart.value = { x: sx, y: sy };
   dragEnd.value = { x: sx, y: sy };
@@ -255,6 +263,19 @@ watch(containerRef, (el) => {
   _ro?.disconnect();
   if (el) { _ro = new ResizeObserver(onResize); _ro.observe(el); }
 }, { immediate: true });
+
+function scheduleOverlayRefresh(): void {
+  void nextTick(() => {
+    recalcTransform();
+    drawOverlay();
+    window.requestAnimationFrame(() => {
+      recalcTransform();
+      drawOverlay();
+    });
+  });
+}
+
+watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
 
 watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
 

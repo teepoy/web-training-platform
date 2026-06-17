@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import BlinkVirtualTableWithSelectionAndPreviewResultDisplay from "./BlinkVirtualTableWithSelectionAndPreviewResultDisplay.vue";
 import { nextTick, ref } from "vue";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import { NRadioGroup } from "naive-ui";
 
 vi.mock("@/features/sc/presentation/composables/useBlinkVirtualScroll", () => ({
   useBlinkVirtualScroll: () => ({
@@ -14,10 +15,16 @@ vi.mock("@/features/sc/presentation/composables/useBlinkVirtualScroll", () => ({
     shouldLoadImages: ref(true),
     queueViewportImageLoad: () => {},
     scrollRef: ref(null),
-    visibleSamples: ref([{ defectId: 10 }, { defectId: 11 }]),
+    visibleSamples: ref([
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }, { imageId: 2 }, { imageId: 3 }] },
+    ]),
     reviewColumnIndices: ref([]),
     imageCellHeightPxStr: ref('60px'),
-    samplesForVirtualRow: (idx: number) => [{ defectId: 10 }, { defectId: 11 }],
+    samplesForVirtualRow: (_idx: number) => [
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }, { imageId: 2 }, { imageId: 3 }] },
+    ],
     effectiveSamplesPerRow: ref(3),
   }),
   ROW_PADDING_Y: 2,
@@ -91,5 +98,20 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
     const badges = wrapper.findAll('.sbt-prediction-badge');
     expect(badges.length).toBe(1);
     expect(badges[0].text()).toContain('DraftLabel');
+  });
+
+  it("renders review columns and sprite counts from each sample", async () => {
+    const wrapper = createWrapper({
+      showModeSwitch: true,
+      reviewSamples: mockSamples,
+    });
+
+    wrapper.findComponent(NRadioGroup).vm.$emit("update:value", "review");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Rev 1");
+    expect(wrapper.text()).toContain("Rev 3");
+    expect(wrapper.html()).toContain("review_count=1");
+    expect(wrapper.html()).toContain("review_count=3");
   });
 });

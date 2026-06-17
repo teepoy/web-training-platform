@@ -94,6 +94,28 @@ describe("ScWaferMap", () => {
     expect(wrapper.find(".swm-canvas").exists()).toBe(true);
   });
 
+  it("supports box selection after points arrive asynchronously", async () => {
+    const points = makeFixedPoints([{ id: 101, classNumber: 1 }]);
+    const { wrapper } = await mountWithProviders(ScWaferMap, {
+      props: {
+        points: EMPTY_POINTS,
+        geometry: smallGeometry,
+        waferRadiusNm: smallRadius,
+        selectedIds: new Set(),
+      },
+    });
+
+    expect(wrapper.find(".swm-ol").exists()).toBe(false);
+
+    await wrapper.setProps({ points });
+    await nextTick();
+
+    expect(wrapper.find(".swm-ol").exists()).toBe(true);
+    await simulateBoxDrag(wrapper, 300, 288, 312, 300);
+
+    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toContain(101);
+  });
+
   it("shows correct point count in footer", async () => {
     const points = makeStride6Points(3);
     const { wrapper } = await mountWithProviders(ScWaferMap, {
