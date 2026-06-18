@@ -9,8 +9,8 @@ import ScDieStackMap from "./ScDieStackMap.vue";
 import ScReticleMap from "./ScReticleMap.vue";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
-import { legendColor, parsePoints } from "./scMapUtils";
-import type { HighlightDefect, MapPointVisual } from "./types";
+import { legendColor, parsePoints, STRIDE } from "./scMapUtils";
+import type { HighlightDefect } from "./types";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction";
@@ -93,6 +93,8 @@ const handleTabChange = (value: string | number) => {
 const selectedClassNumber = ref<LegendKey | null>(null);
 const selectedIds = ref<Set<number>>(new Set(props.selectedIds ?? []));
 const legendSource = ref<LegendSource>(props.legendGroupBy ?? "class");
+const colorMap = ref<Record<string, string>>({});
+const previousDefaultColorMap = ref<Record<string, string>>({});
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
@@ -232,29 +234,66 @@ const currentLegendPoints = computed(() => {
 
 const parsedCache = computed(() => parsePoints(currentLegendPoints.value));
 
+function sortLegendKeys(keys: string[]): string[] {
+  return [...keys].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true }),
+  );
+}
+
+function colorMapKeyForLegendKey(source: LegendSource, rawKey: string, compactGroups?: Record<string, DefectList>): string {
+  if (source === "class" || source === "bin" || !compactGroups) {
+    return rawKey;
+  }
+  if (rawKey === "__unlabeled__" || rawKey === "__no_prediction__") {
+    return "-1";
+  }
+  return String(
+    sortLegendKeys(Object.keys(compactGroups).filter(
+      (key) => key !== "__unlabeled__" && key !== "__no_prediction__",
+    )).indexOf(rawKey),
+  );
+}
+
+const defaultColorMap = computed<Record<string, string>>(() => {
+  const source = legendSource.value;
+  const compactGroups = props.legendGroups ?? undefined;
+  const map: Record<string, string> = {};
+  if (compactGroups && Object.keys(compactGroups).length > 0) {
+    for (const rawKey of Object.keys(compactGroups)) {
+      map[colorMapKeyForLegendKey(source, rawKey, compactGroups)] = legendColor(source, rawKey);
+    }
+    return map;
+  }
+
+  const points = currentLegendPoints.value;
+  for (let i = 0; i + STRIDE - 1 < points.length; i += STRIDE) {
+    const key = String(points[i + 3]);
+    map[key] = legendColor(source, key);
+  }
+  return map;
+});
+
+watch(
+  defaultColorMap,
+  (defaults) => {
+    const previous = previousDefaultColorMap.value;
+    const next: Record<string, string> = {};
+    for (const [key, defaultColor] of Object.entries(defaults)) {
+      const currentColor = colorMap.value[key];
+      next[key] = currentColor && currentColor !== previous[key] ? currentColor : defaultColor;
+    }
+    colorMap.value = next;
+    previousDefaultColorMap.value = { ...defaults };
+  },
+  { immediate: true },
+);
+
 const annotationGroups = computed(() =>
   legendSource.value === "annotation" ? (props.legendGroups ?? undefined) : undefined,
 );
 const predictionGroups = computed(() =>
   legendSource.value === "prediction" ? (props.legendGroups ?? undefined) : undefined,
 );
-
-const pointVisualsByDefectId = computed<Record<string, MapPointVisual>>(() => {
-  const groups = props.legendGroups;
-  if (!groups || Object.keys(groups).length === 0) return {};
-  const source = legendSource.value;
-  const visuals: Record<string, MapPointVisual> = {};
-  for (const [rawKey, group] of Object.entries(groups)) {
-    const visual = {
-      label: `${source}:${rawKey}`,
-      color: legendColor(source, rawKey),
-    };
-    for (const defectId of group.defectIds ?? []) {
-      visuals[String(defectId)] = visual;
-    }
-  }
-  return visuals;
-});
 
 const showWaferLoading = computed(
   () => Boolean(props.mapLoading) && (props.waferPoints?.length ?? 0) === 0,
@@ -279,11 +318,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
     const ids = compactGroup?.defectIds ?? (
       typeof key === "number"
         ? parsedCache.value
-            .filter((point) =>
-              legendSource.value === "bin"
-                ? point.roughBin === key
-                : point.classNumber === key,
-            )
+            .filter((point) => point.classNumber === key)
             .map((point) => point.defectId)
         : []
     );
@@ -328,7 +363,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :waferRadiusNm="waferRadiusNm"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
-                :point-visuals-by-defect-id="pointVisualsByDefectId"
+                :color-map="colorMap"
                 :query-box-selection="waferBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.wafer"
@@ -346,7 +381,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :die-size-y="waferGeometry?.dieSizeY"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
-                :point-visuals-by-defect-id="pointVisualsByDefectId"
+                :color-map="colorMap"
                 :query-box-selection="dieBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.die"
@@ -367,7 +402,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :dieSizeY="reticleDieSizeY"
                 :selectedIds="selectedIds"
                 :highlightDefects="highlightDefects"
-                :point-visuals-by-defect-id="pointVisualsByDefectId"
+                :color-map="colorMap"
                 :query-box-selection="reticleBoxQuery"
                 :zoom="zoom"
                 :mode="mapMode.reticle"
@@ -481,9 +516,11 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 :rough-bins="legendSource === 'bin' ? (legendGroups ?? undefined) : undefined"
                 :annotations="annotationGroups"
                 :predictions="predictionGroups"
+                :color-map="colorMap"
                 :selectedClassNumber="selectedClassNumber"
                 :legendSource="legendSource"
                 @select-class="handleLegendSelect"
+                @update:color-map="colorMap = $event"
               />
             </div>
           </NTabPane>

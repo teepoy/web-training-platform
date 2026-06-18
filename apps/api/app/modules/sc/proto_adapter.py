@@ -70,6 +70,49 @@ def _downsample_grouped(
     )
 
 
+def _legend_class_number_df(df: pl.DataFrame, group_by: str | None) -> pl.DataFrame:
+    group_col = LEGEND_COLUMN_MAP.get(group_by) if group_by else "class_number"
+    if group_col is None:
+        raise ValueError(
+            f"make_wafer_map_response_pb: unknown group_by value "
+            f"'{group_by}'; must be one of {sorted(LEGEND_COLUMN_MAP)}"
+        )
+    if group_col not in df.columns:
+        raise ValueError(
+            f"make_wafer_map_response_pb: group_by '{group_by}' requires column '{group_col}'"
+        )
+    if group_col == "class_number":
+        return df.with_columns(
+            pl.col("class_number")
+            .fill_null(-1)
+            .cast(pl.Int32)
+            .alias("_legend_class_number")
+        )
+    if group_col == "rough_bin":
+        return df.with_columns(
+            pl.col("rough_bin")
+            .fill_null(-1)
+            .cast(pl.Int32)
+            .alias("_legend_class_number")
+        )
+
+    values = (
+        df.filter(pl.col(group_col).is_not_null())
+        .select(pl.col(group_col).cast(pl.Utf8))
+        .unique(maintain_order=False)
+        .sort(group_col)
+        .to_series()
+        .to_list()
+    )
+    mapping = {value: index for index, value in enumerate(values)}
+    return df.with_columns(
+        pl.col(group_col)
+        .cast(pl.Utf8)
+        .replace_strict(mapping, default=-1, return_dtype=pl.Int32)
+        .alias("_legend_class_number")
+    )
+
+
 def _pack_points(df: pl.DataFrame, x_col: str, y_col: str) -> list[int]:
     if len(df) == 0:
         return []
@@ -78,7 +121,7 @@ def _pack_points(df: pl.DataFrame, x_col: str, y_col: str) -> list[int]:
             pl.col(x_col).cast(pl.Int32),
             pl.col(y_col).cast(pl.Int32),
             pl.col("defect_id").cast(pl.Int32),
-            pl.col("class_number").fill_null(-1).cast(pl.Int32),
+            pl.col("_legend_class_number").cast(pl.Int32),
             pl.col("rough_bin").cast(pl.Int32),
             pl.col("has_review").cast(pl.Int32),
         )
@@ -148,7 +191,7 @@ def make_wafer_map_response_pb(
 
     Accepts a polars ``DataFrame`` with pre-computed coordinate columns
     (die_x, die_y, reticle_x, reticle_y).  Each point packs 6 int32 values:
-    ``[x, y, defect_id, class_number, rough_bin, has_review]``.
+    ``[x, y, defect_id, legend_class_number, rough_bin, has_review]``.
 
     When *sampled* is True, each map type is independently grid-downsampled
     before packing.  *total* always reports the full defect count so the
@@ -162,6 +205,7 @@ def make_wafer_map_response_pb(
 
     original_total = len(df)
     full_df = df
+    df = _legend_class_number_df(df, group_by)
 
     # ── Zoom filtering ─────────────────────────────────────────────────
     if zoom_x is not None and zoom_w is not None:

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mountWithProviders } from '@/testing'
+import { NColorPicker } from 'naive-ui'
 import ScLegend from '../ScLegend.vue'
 import { MIXED_CLASS_POINTS, EMPTY_POINTS } from './scMapFixtures'
 
@@ -122,5 +123,20 @@ describe('ScLegend', () => {
 
     expect(wrapper.text()).toContain('Unlabeled')
     expect(wrapper.text()).not.toContain('__unlabeled__')
+  })
+
+  it('emits color map updates from the color picker', async () => {
+    const { wrapper } = await mountWithProviders(ScLegend, {
+      props: {
+        points: MIXED_CLASS_POINTS,
+        colorMap: { '1': '#ff0000' },
+      },
+    })
+
+    wrapper.findAllComponents(NColorPicker)[1].vm.$emit('update:value', '#00ff00')
+
+    expect(wrapper.emitted('update:colorMap')?.[0]).toEqual([
+      { '1': '#00ff00' },
+    ])
   })
 })

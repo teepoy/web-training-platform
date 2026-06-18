@@ -5,8 +5,8 @@
 import { computed, nextTick, ref, watch } from "vue";
 import SimpleDieStackMap from "./SimpleDieStackMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
-import type { HighlightDefect, MapPointVisual } from "./types";
-import { classColor, getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
+import type { HighlightDefect } from "./types";
+import { getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
 import type { ScBoxRegion } from "@/features/sc/api/boxFilter";
 
 const props = defineProps<{
@@ -15,7 +15,7 @@ const props = defineProps<{
   dieSizeY?: number;
   selectedIds?: Set<number>;
   highlightDefects?: HighlightDefect[];
-  pointVisualsByDefectId?: Record<string, MapPointVisual>;
+  colorMap?: Record<string, string>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: ScBoxRegion) => Promise<number[]>;
@@ -33,19 +33,6 @@ const selectionState = ref<Set<number>>(new Set());
 const isBoxSelecting = ref(false);
 let selectionSeq = 0;
 
-const colorMap = computed<Record<string, string>>(() => {
-  const pts = props.points;
-  if (!pts || pts.length === 0) return {};
-  const classes = new Set<number>();
-  for (let i = 0; i < pts.length; i += STRIDE) classes.add(pts[i + 3]);
-  const map: Record<string, string> = {};
-  for (const cn of classes) map[String(cn)] = classColor(cn);
-  for (const visual of Object.values(props.pointVisualsByDefectId ?? {})) {
-    map[visual.label] = visual.color;
-  }
-  return map;
-});
-
 const simplePoints = computed<SimpleMapPoint[]>(() => {
   const pts = props.points;
   if (!pts || pts.length === 0) return [];
@@ -54,8 +41,7 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   const result: SimpleMapPoint[] = new Array(count);
   for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
     const defectId = pts[i + 2];
-    const visual = props.pointVisualsByDefectId?.[String(defectId)];
-    result[pi] = { x: pts[i], y: pts[i + 1], id: defectId, label: visual?.label ?? String(pts[i + 3]), hasImageFlag: pts[i + 5] !== 0, isSelectedFlag: sel.has(defectId) };
+    result[pi] = { x: pts[i], y: pts[i + 1], id: defectId, label: String(pts[i + 3]), hasImageFlag: pts[i + 5] !== 0, isSelectedFlag: sel.has(defectId) };
   }
   return result;
 });
@@ -169,7 +155,7 @@ watch(() => props.highlightDefects, () => { drawOverlay(); });
     <template v-else>
       <SimpleDieStackMap
         :points="simplePoints"
-        :colorMap="colorMap"
+        :colorMap="props.colorMap ?? {}"
         :die-size-x="dieSizeX"
         :die-size-y="dieSizeY"
         :zoom="props.zoom ?? undefined"
