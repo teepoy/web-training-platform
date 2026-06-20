@@ -21,5 +21,8 @@ dependencies = [
     "redis>=7.0",
 ]
 
+[dependency-groups]
+dev = ["pytest>=8.0", "watchfiles>=1.2.0"]
+
 [tool.uv.sources]
-proto-stubs = { path = "../../libs/protos" }
+proto-stubs = { workspace = true }

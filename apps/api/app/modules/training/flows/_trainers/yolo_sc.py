@@ -16,6 +16,8 @@ from app.modules.sc.schema import find_images_by_role
 from platform_runtime.contracts import TrainContext, TrainResult
 from app.core.registry import trainer
 
+IMAGE_FETCH_BATCH_SIZE = 512
+
 
 @trainer(
     id="yolo-sc-v1",
@@ -38,6 +40,7 @@ async def yolo_sc_train(
 
     logger = get_run_logger()
 
+    import polars as pl
     import torch
     from PIL import Image
     from ultralytics import YOLO
@@ -48,15 +51,25 @@ async def yolo_sc_train(
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")
 
-    # ── Pre-resolve image bytes concurrently ─────────────────────────
-    if image_fetcher is not None and lazyframe is not None:
-        import asyncio as _asyncio_yolo
+    label_space: list[str] = list(ctx.dataset_ref.label_space)
+    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
 
+    if image_fetcher is not None:
         _lf: Any = lazyframe
         df = _lf.collect()
-        _fetches: list[Any] = []
-        _targets: list[dict[str, Any]] = []
-        for row in df.iter_rows(named=True):
+        rows = [dict(row) for row in df.iter_rows(named=True)]
+        for row in rows:
+            row["images"] = [dict(img) for img in row.get("images") or []]
+
+        grouped_fetches: dict[
+            tuple[str, int], list[tuple[dict[str, Any], dict[str, object]]]
+        ] = {}
+
+        for row in rows:
+            label: str | None = row.get("label")
+            if not label or label not in label_map:
+                continue
+
             images_list: list[dict[str, Any]] = row.get("images") or []
             for img in images_list:
                 role = img.get("role", "")
@@ -64,29 +77,48 @@ async def yolo_sc_train(
                     continue
                 if img.get("bytes") is not None:
                     continue
-                _fetches.append(
-                    image_fetcher.get_image_bytes(
-                        inspection_time=str(row.get("inspection_time", "")),
-                        wafer_key=int(row.get("wafer_key", 0) or 0),
-                        defect_id=str(row.get("defect_id", "")),
-                        image_type=str(img.get("image_type", "")),
-                        review_image_id=cast(
-                            int | None,
-                            img.get("review_image_id")
-                            if img.get("review_image_id") is not None
-                            else None,
-                        ),
+                inspection_time = str(row.get("inspection_time", ""))
+                wafer_key = int(row.get("wafer_key", 0) or 0)
+                grouped_fetches.setdefault((inspection_time, wafer_key), []).append(
+                    (
+                        img,
+                        {
+                            "defect_id": str(row.get("defect_id", "")),
+                            "image_type": str(img.get("image_type", "")),
+                            "review_image_id": cast(
+                                int | None,
+                                img.get("review_image_id")
+                                if img.get("review_image_id") is not None
+                                else None,
+                            ),
+                        },
                     )
                 )
-                _targets.append(img)
-        if _fetches:
-            _resolved = await _asyncio_yolo.gather(*_fetches)
-            for img, _bytes in zip(_targets, _resolved):
-                img["bytes"] = _bytes
-        lazyframe = df.lazy()
 
-    label_space: list[str] = list(ctx.dataset_ref.label_space)
-    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
+        for (inspection_time, wafer_key), fetches in grouped_fetches.items():
+            for start in range(0, len(fetches), IMAGE_FETCH_BATCH_SIZE):
+                chunk = fetches[start : start + IMAGE_FETCH_BATCH_SIZE]
+                results = await image_fetcher.get_image_bytes_batch(
+                    inspection_time=inspection_time,
+                    wafer_key=wafer_key,
+                    images=[payload for _, payload in chunk],
+                )
+                if len(results) != len(chunk):
+                    raise RuntimeError(
+                        "Batch image fetch returned "
+                        f"{len(results)} results for {len(chunk)} requests"
+                    )
+                for (img, payload), result in zip(chunk, results):
+                    error = str(result.get("error", "") or "")
+                    if error:
+                        raise RuntimeError(
+                            "Batch image fetch failed for "
+                            f"defect_id={payload.get('defect_id')} "
+                            f"image_type={payload.get('image_type')}: {error}"
+                        )
+                    img["bytes"] = bytes(result.get("image_data", b""))
+
+        lazyframe = pl.DataFrame(rows).lazy()
 
     # ── Device selection ──────────────────────────────────────────────
     if torch.cuda.is_available():

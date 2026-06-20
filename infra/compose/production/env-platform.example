@@ -8,6 +8,7 @@ DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
 # Prefect
 PREFECT_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/prefect
 PREFECT_UI_URL=https://prefect.example.com
+PREFECT_SERVER_API_AUTH_STRING=<prefect-user>:<strong-prefect-password>
 
 # MinIO / S3 (all buckets)
 MINIO_ENDPOINT=minio:9000

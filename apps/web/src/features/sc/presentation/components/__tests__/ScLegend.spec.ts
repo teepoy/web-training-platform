@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { mountWithProviders } from '@/testing'
-import { NColorPicker } from 'naive-ui'
 import ScLegend from '../ScLegend.vue'
 import { MIXED_CLASS_POINTS, EMPTY_POINTS } from './scMapFixtures'
 
@@ -133,7 +132,8 @@ describe('ScLegend', () => {
       },
     })
 
-    wrapper.findAllComponents(NColorPicker)[1].vm.$emit('update:value', '#00ff00')
+    const input = wrapper.findAll<HTMLInputElement>('.sc-legend-color-input')[1]
+    await input.setValue('#00ff00')
 
     expect(wrapper.emitted('update:colorMap')?.[0]).toEqual([
       { '1': '#00ff00' },

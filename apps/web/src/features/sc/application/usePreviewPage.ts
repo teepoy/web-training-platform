@@ -24,6 +24,7 @@ import {
 } from "../generated/proto/sc/v1/sample_pb";
 import {
   fetchScInspectionMapPoints,
+  warmupScInspectionMapPoints,
   type ScMapFilter,
 } from "../api/plotPoints";
 import {
@@ -54,6 +55,7 @@ export interface PreviewTab {
   id: string;
   type: "summary" | "inspection";
   label: string;
+  pinned?: boolean;
   inspectionTime?: string;
   waferKey?: number;
   inspectionItem?: InspectionSummaryItem;
@@ -341,11 +343,18 @@ export function usePreviewPage(): PreviewPageState {
   let nextTabId = 1;
 
   function createSummaryTab(): void {
+    const existing = tabs.value.find((tab) => tab.type === "summary");
+    if (existing) {
+      activeTabId.value = existing.id;
+      return;
+    }
+
     const id = `tab-${nextTabId++}`;
-    tabs.value.push({
+    tabs.value.unshift({
       id,
       type: "summary",
       label: "Summary",
+      pinned: true,
       samples: [],
       samplesTotal: 0,
       samplesLoading: false,
@@ -617,6 +626,14 @@ export function usePreviewPage(): PreviewPageState {
     if (!inspectionTime || waferKey === undefined) {
       throw new Error("Missing inspectionTime or waferKey on tab");
     }
+    await warmupScInspectionMapPoints(
+      inspectionTime,
+      waferKey,
+      opts,
+      filter,
+      legendGroupBy,
+      mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
+    );
     return fetchScInspectionMapPoints(
       inspectionTime,
       waferKey,
@@ -692,6 +709,10 @@ export function usePreviewPage(): PreviewPageState {
   function closeTab(id: string): void {
     const idx = tabs.value.findIndex((t) => t.id === id);
     if (idx === -1) return;
+    if (tabs.value[idx].pinned) {
+      activeTabId.value = id;
+      return;
+    }
     tabs.value.splice(idx, 1);
     if (activeTabId.value === id) {
       activeTabId.value =
@@ -866,9 +887,6 @@ export function usePreviewPage(): PreviewPageState {
         const items = payload.items;
         summaries.value = items;
         summariesEmpty.value = items.length === 0;
-        if (tabs.value.length === 0) {
-          createSummaryTab();
-        }
       } else {
         summaries.value = [];
         summariesEmpty.value = true;
@@ -909,6 +927,8 @@ export function usePreviewPage(): PreviewPageState {
   const importError = ref("");
   const importEventSource = ref<EventSource | null>(null);
   const openedImportDatasetId = ref("");
+
+  createSummaryTab();
 
   const importMutation = useStartScImportApiV1ScImportPost();
 

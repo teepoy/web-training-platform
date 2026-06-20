@@ -50,7 +50,7 @@ test('row view button navigates to dataset detail @mock', async ({
   await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}`))
 })
 
-test('superadmin sees make-public and delete buttons for own-org datasets @mock', async ({
+test('superadmin sees delete but no make-public button for own-org datasets @mock', async ({
   authedPage,
   apiMocks,
 }) => {
@@ -60,7 +60,7 @@ test('superadmin sees make-public and delete buttons for own-org datasets @mock'
   await listPage.goto('/datasets')
   await listPage.waitForLoaded()
 
-  await listPage.expectMakePublicVisible()
+  await listPage.expectPublicControlsHidden()
   await listPage.expectDeleteVisible()
 })
 

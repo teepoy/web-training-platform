@@ -72,7 +72,7 @@ services:
       start_period: 15s
 
   label-studio:
-    image: heartexlabs/label-studio:latest
+    image: heartexlabs/label-studio:1.23.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,16 +111,8 @@ services:
       - GRPC_PORT=9092
       - CACHE_SIZE_MB=${IMAGE_PARSER_CACHE_SIZE_MB:-1024}
       - S3_MAX_CONNS=1000
-      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
-      - S3_ZIPS_ACCESS_KEY=${S3_ZIPS_ACCESS_KEY:-${S3_ACCESS_KEY:-minioadmin}}
-      - S3_ZIPS_SECRET_KEY=${S3_ZIPS_SECRET_KEY:-${S3_SECRET_KEY:-minioadmin}}
-      - S3_REVIEW_ACCESS_KEY=${S3_REVIEW_ACCESS_KEY:-${S3_ACCESS_KEY:-minioadmin}}
-      - S3_REVIEW_SECRET_KEY=${S3_REVIEW_SECRET_KEY:-${S3_SECRET_KEY:-minioadmin}}
-      - S3_REGION=${S3_REGION:-us-east-1}
-      - S3_USE_PATH_STYLE=true
       - SC_UPSTREAM_ADDR=sc-upstream:9091
+      # Mock S3 endpoint/credentials use image-parser service defaults.
     ports:
       - "8090:8090"
       - "9092:9092"
@@ -140,10 +132,9 @@ services:
     environment:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
-      - UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
-      - ZIPS_DB_URL=sqlite:////data/inspection_zips.db
       - CACHE_DIR=/data/cache
       - REDIS_URL=redis://redis:6379/0
+      # Mock SQLite DB paths use sc-upstream service defaults.
     expose:
       - "9091"
       - "9093"

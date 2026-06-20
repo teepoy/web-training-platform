@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.shared.api.schemas import TrainingEvent
+from app.shared.api.schemas import JobStatus
 from app.modules.task_tracker.app.services.task_tracker import TaskTrackerService
 from tests.conftest import TRAINER_ID
 
@@ -167,3 +167,15 @@ def test_prefect_run_url_prefers_explicit_ui_url() -> None:
     )
 
     assert service._prefect_ui_base_url() == "http://localhost:4200"
+
+
+def test_task_tracker_displays_queued_platform_jobs_as_pending() -> None:
+    service = TaskTrackerService(
+        repository=SimpleNamespace(),
+        prefect_client=SimpleNamespace(),
+        config=SimpleNamespace(prefect=SimpleNamespace(api_url="")),
+    )
+
+    assert service._display_status(SimpleNamespace(status=JobStatus.QUEUED), None) == "pending"
+    assert service._display_status_from_prefect("PENDING") == "pending"
+    assert service._display_status_from_prefect("SCHEDULED") == "pending"

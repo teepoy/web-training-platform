@@ -29,18 +29,32 @@ function makeRow(defectId: number) {
   };
 }
 
+function sampleTableStream(rows: ReturnType<typeof makeRow>[]) {
+  return [
+    'event: progress\ndata: {"event_type":"progress","status":"loading","operation":"sc.sample-table"}\n\n',
+    `event: data\ndata: ${JSON.stringify({
+      event_type: "data",
+      operation: "sc.sample-table",
+      payload: {
+        items: rows,
+        total: rows.length,
+        next_anchor: null,
+      },
+    })}\n\n`,
+    'event: done\ndata: {"event_type":"done"}\n\n',
+  ].join("");
+}
+
 describe("ScSampleTable", () => {
   it("sends controlled filter and sort parameters to the rows API", async () => {
     const requestBody = vi.fn();
     server.use(
       http.post(
-        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows",
+        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows/stream",
         async ({ request }) => {
           requestBody(await request.json());
-          return HttpResponse.json({
-            items: [makeRow(9)],
-            total: 1,
-            next_anchor: null,
+          return new HttpResponse(sampleTableStream([makeRow(9)]), {
+            headers: { "Content-Type": "text/event-stream" },
           });
         },
       ),
@@ -82,12 +96,10 @@ describe("ScSampleTable", () => {
   it("uses controlled sort, set filters, range filters, and selection", async () => {
     server.use(
       http.post(
-        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows",
+        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows/stream",
         () =>
-          HttpResponse.json({
-            items: [makeRow(1), makeRow(2)],
-            total: 2,
-            next_anchor: null,
+          new HttpResponse(sampleTableStream([makeRow(1), makeRow(2)]), {
+            headers: { "Content-Type": "text/event-stream" },
           }),
       ),
     );

@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file sc/v1/upstream.proto.
  */
 export const file_sc_v1_upstream: GenFile = /*@__PURE__*/
-  fileDesc("ChRzYy92MS91cHN0cmVhbS5wcm90bxIFc2MudjEiDwoNSGVhbHRoUmVxdWVzdCIgCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkiQgoUR2V0SW5zcGVjdGlvblJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBSKCAwoVR2V0SW5zcGVjdGlvblJlc3BvbnNlEhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSDgoGbG90X2lkGAMgASgJEhAKCHdhZmVyX2lkGAQgASgJEg4KBmRldmljZRgFIAEoCRIQCghsYXllcl9pZBgGIAEoCRIQCghjZW50ZXJfeBgHIAEoBRIQCghjZW50ZXJfeRgIIAEoBRIQCghvcmlnaW5feBgJIAEoBRIQCghvcmlnaW5feRgKIAEoBRISCgpkaWVfc2l6ZV94GAsgASgFEhIKCmRpZV9zaXplX3kYDCABKAUSDgoGZXFwX2lkGA0gASgJEhEKCXJlY2lwZV9pZBgOIAEoCRIPCgdkZWZlY3RzGA8gASgFEg4KBmltYWdlcxgQIAEoBRIWCg5vcmlnaW5faW5kZXhfeBgRIAEoBRIWCg5vcmlnaW5faW5kZXhfeRgSIAEoBRIVCg1sYXRlc3RfdXBkYXRlGBMgASgFInwKHUdldEluc3BlY3Rpb25QYXRjaFppcHNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIOCgZsb3RfaWQYAiABKAkSEAoId2FmZXJfaWQYAyABKAkSDgoGZGV2aWNlGAQgASgJEhAKCGxheWVyX2lkGAUgASgJIisKBlppcFJlZhIRCglzM19idWNrZXQYASABKAkSDgoGczNfa2V5GAIgASgJIj0KHkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRIbCgR6aXBzGAEgAygLMg0uc2MudjEuWmlwUmVmInAKHUdldFJldmlld0ltYWdlRmlsZVNwZWNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEQoJZGVmZWN0X2lkGAMgASgFEhAKCGltYWdlX2lkGAQgASgFIjgKHkdldFJldmlld0ltYWdlRmlsZVNwZWNSZXNwb25zZRIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCSJYChdMaXN0UmV2aWV3SW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhEKCWRlZmVjdF9pZBgDIAEoBSIoCg5SZXZpZXdJbWFnZVJlZhIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCSJBChhMaXN0UmV2aWV3SW1hZ2VzUmVzcG9uc2USJQoGaW1hZ2VzGAEgAygLMhUuc2MudjEuUmV2aWV3SW1hZ2VSZWYysgMKClNjVXBzdHJlYW0SNQoGSGVhbHRoEhQuc2MudjEuSGVhbHRoUmVxdWVzdBoVLnNjLnYxLkhlYWx0aFJlc3BvbnNlEkoKDUdldEluc3BlY3Rpb24SGy5zYy52MS5HZXRJbnNwZWN0aW9uUmVxdWVzdBocLnNjLnYxLkdldEluc3BlY3Rpb25SZXNwb25zZRJlChZHZXRJbnNwZWN0aW9uUGF0Y2haaXBzEiQuc2MudjEuR2V0SW5zcGVjdGlvblBhdGNoWmlwc1JlcXVlc3QaJS5zYy52MS5HZXRJbnNwZWN0aW9uUGF0Y2haaXBzUmVzcG9uc2USZQoWR2V0UmV2aWV3SW1hZ2VGaWxlU3BlYxIkLnNjLnYxLkdldFJldmlld0ltYWdlRmlsZVNwZWNSZXF1ZXN0GiUuc2MudjEuR2V0UmV2aWV3SW1hZ2VGaWxlU3BlY1Jlc3BvbnNlElMKEExpc3RSZXZpZXdJbWFnZXMSHi5zYy52MS5MaXN0UmV2aWV3SW1hZ2VzUmVxdWVzdBofLnNjLnYxLkxpc3RSZXZpZXdJbWFnZXNSZXNwb25zZUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw");
+  fileDesc("ChRzYy92MS91cHN0cmVhbS5wcm90bxIFc2MudjEiDwoNSGVhbHRoUmVxdWVzdCIgCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkiQgoUR2V0SW5zcGVjdGlvblJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBSKCAwoVR2V0SW5zcGVjdGlvblJlc3BvbnNlEhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSDgoGbG90X2lkGAMgASgJEhAKCHdhZmVyX2lkGAQgASgJEg4KBmRldmljZRgFIAEoCRIQCghsYXllcl9pZBgGIAEoCRIQCghjZW50ZXJfeBgHIAEoBRIQCghjZW50ZXJfeRgIIAEoBRIQCghvcmlnaW5feBgJIAEoBRIQCghvcmlnaW5feRgKIAEoBRISCgpkaWVfc2l6ZV94GAsgASgFEhIKCmRpZV9zaXplX3kYDCABKAUSDgoGZXFwX2lkGA0gASgJEhEKCXJlY2lwZV9pZBgOIAEoCRIPCgdkZWZlY3RzGA8gASgFEg4KBmltYWdlcxgQIAEoBRIWCg5vcmlnaW5faW5kZXhfeBgRIAEoBRIWCg5vcmlnaW5faW5kZXhfeRgSIAEoBRIVCg1sYXRlc3RfdXBkYXRlGBMgASgFInwKHUdldEluc3BlY3Rpb25QYXRjaFppcHNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIOCgZsb3RfaWQYAiABKAkSEAoId2FmZXJfaWQYAyABKAkSDgoGZGV2aWNlGAQgASgJEhAKCGxheWVyX2lkGAUgASgJIisKBlppcFJlZhIRCglzM19idWNrZXQYASABKAkSDgoGczNfa2V5GAIgASgJIj0KHkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRIbCgR6aXBzGAEgAygLMg0uc2MudjEuWmlwUmVmInAKHUdldFJldmlld0ltYWdlRmlsZVNwZWNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEQoJZGVmZWN0X2lkGAMgASgFEhAKCGltYWdlX2lkGAQgASgFIjgKHkdldFJldmlld0ltYWdlRmlsZVNwZWNSZXNwb25zZRIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCSJYChdMaXN0UmV2aWV3SW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhEKCWRlZmVjdF9pZBgDIAEoBSJhCg5SZXZpZXdJbWFnZVJlZhIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCRIRCglkZWZlY3RfaWQYAiABKAUSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCSJBChhMaXN0UmV2aWV3SW1hZ2VzUmVzcG9uc2USJQoGaW1hZ2VzGAEgAygLMhUuc2MudjEuUmV2aWV3SW1hZ2VSZWYiggEKFkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QSEgoKc3RhcnRfdGltZRgBIAEoCRIQCghlbmRfdGltZRgCIAEoCRIOCgZsb3RfaWQYAyABKAkSEAoId2FmZXJfaWQYBCABKAkSEAoIbGF5ZXJfaWQYBSABKAkSDgoGZGV2aWNlGAYgASgJIucCChFJbnNwZWN0aW9uU3VtbWFyeRIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEg4KBmxvdF9pZBgDIAEoCRIQCgh3YWZlcl9pZBgEIAEoCRIOCgZkZXZpY2UYBSABKAkSEAoIbGF5ZXJfaWQYBiABKAkSDgoGZXFwX2lkGAcgASgJEhEKCXJlY2lwZV9pZBgIIAEoCRIPCgdkZWZlY3RzGAkgASgFEg4KBmltYWdlcxgKIAEoBRIQCghjZW50ZXJfeBgLIAEoBRIQCghjZW50ZXJfeRgMIAEoBRIQCghvcmlnaW5feBgNIAEoBRIQCghvcmlnaW5feRgOIAEoBRISCgpkaWVfc2l6ZV94GA8gASgFEhIKCmRpZV9zaXplX3kYECABKAUSFgoOb3JpZ2luX2luZGV4X3gYESABKAUSFgoOb3JpZ2luX2luZGV4X3kYEiABKAUiQgoXTGlzdEluc3BlY3Rpb25zUmVzcG9uc2USJwoFaXRlbXMYASADKAsyGC5zYy52MS5JbnNwZWN0aW9uU3VtbWFyeTKEBAoKU2NVcHN0cmVhbRI1CgZIZWFsdGgSFC5zYy52MS5IZWFsdGhSZXF1ZXN0GhUuc2MudjEuSGVhbHRoUmVzcG9uc2USSgoNR2V0SW5zcGVjdGlvbhIbLnNjLnYxLkdldEluc3BlY3Rpb25SZXF1ZXN0Ghwuc2MudjEuR2V0SW5zcGVjdGlvblJlc3BvbnNlEmUKFkdldEluc3BlY3Rpb25QYXRjaFppcHMSJC5zYy52MS5HZXRJbnNwZWN0aW9uUGF0Y2haaXBzUmVxdWVzdBolLnNjLnYxLkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRJlChZHZXRSZXZpZXdJbWFnZUZpbGVTcGVjEiQuc2MudjEuR2V0UmV2aWV3SW1hZ2VGaWxlU3BlY1JlcXVlc3QaJS5zYy52MS5HZXRSZXZpZXdJbWFnZUZpbGVTcGVjUmVzcG9uc2USUwoQTGlzdFJldmlld0ltYWdlcxIeLnNjLnYxLkxpc3RSZXZpZXdJbWFnZXNSZXF1ZXN0Gh8uc2MudjEuTGlzdFJldmlld0ltYWdlc1Jlc3BvbnNlElAKD0xpc3RJbnNwZWN0aW9ucxIdLnNjLnYxLkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QaHi5zYy52MS5MaXN0SW5zcGVjdGlvbnNSZXNwb25zZUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw");
 
 /**
  * @generated from message sc.v1.HealthRequest
@@ -331,6 +331,21 @@ export type ReviewImageRef = Message<"sc.v1.ReviewImageRef"> & {
    * @generated from field: string image_filespec = 1;
    */
   imageFilespec: string;
+
+  /**
+   * @generated from field: int32 defect_id = 2;
+   */
+  defectId: number;
+
+  /**
+   * @generated from field: int32 image_id = 3;
+   */
+  imageId: number;
+
+  /**
+   * @generated from field: string image_type = 4;
+   */
+  imageType: string;
 };
 
 /**
@@ -356,6 +371,167 @@ export type ListReviewImagesResponse = Message<"sc.v1.ListReviewImagesResponse">
  */
 export const ListReviewImagesResponseSchema: GenMessage<ListReviewImagesResponse> = /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 11);
+
+/**
+ * @generated from message sc.v1.ListInspectionsRequest
+ */
+export type ListInspectionsRequest = Message<"sc.v1.ListInspectionsRequest"> & {
+  /**
+   * @generated from field: string start_time = 1;
+   */
+  startTime: string;
+
+  /**
+   * @generated from field: string end_time = 2;
+   */
+  endTime: string;
+
+  /**
+   * @generated from field: string lot_id = 3;
+   */
+  lotId: string;
+
+  /**
+   * @generated from field: string wafer_id = 4;
+   */
+  waferId: string;
+
+  /**
+   * @generated from field: string layer_id = 5;
+   */
+  layerId: string;
+
+  /**
+   * @generated from field: string device = 6;
+   */
+  device: string;
+};
+
+/**
+ * Describes the message sc.v1.ListInspectionsRequest.
+ * Use `create(ListInspectionsRequestSchema)` to create a new message.
+ */
+export const ListInspectionsRequestSchema: GenMessage<ListInspectionsRequest> = /*@__PURE__*/
+  messageDesc(file_sc_v1_upstream, 12);
+
+/**
+ * @generated from message sc.v1.InspectionSummary
+ */
+export type InspectionSummary = Message<"sc.v1.InspectionSummary"> & {
+  /**
+   * @generated from field: string inspection_time = 1;
+   */
+  inspectionTime: string;
+
+  /**
+   * @generated from field: int32 wafer_key = 2;
+   */
+  waferKey: number;
+
+  /**
+   * @generated from field: string lot_id = 3;
+   */
+  lotId: string;
+
+  /**
+   * @generated from field: string wafer_id = 4;
+   */
+  waferId: string;
+
+  /**
+   * @generated from field: string device = 5;
+   */
+  device: string;
+
+  /**
+   * @generated from field: string layer_id = 6;
+   */
+  layerId: string;
+
+  /**
+   * @generated from field: string eqp_id = 7;
+   */
+  eqpId: string;
+
+  /**
+   * @generated from field: string recipe_id = 8;
+   */
+  recipeId: string;
+
+  /**
+   * @generated from field: int32 defects = 9;
+   */
+  defects: number;
+
+  /**
+   * @generated from field: int32 images = 10;
+   */
+  images: number;
+
+  /**
+   * @generated from field: int32 center_x = 11;
+   */
+  centerX: number;
+
+  /**
+   * @generated from field: int32 center_y = 12;
+   */
+  centerY: number;
+
+  /**
+   * @generated from field: int32 origin_x = 13;
+   */
+  originX: number;
+
+  /**
+   * @generated from field: int32 origin_y = 14;
+   */
+  originY: number;
+
+  /**
+   * @generated from field: int32 die_size_x = 15;
+   */
+  dieSizeX: number;
+
+  /**
+   * @generated from field: int32 die_size_y = 16;
+   */
+  dieSizeY: number;
+
+  /**
+   * @generated from field: int32 origin_index_x = 17;
+   */
+  originIndexX: number;
+
+  /**
+   * @generated from field: int32 origin_index_y = 18;
+   */
+  originIndexY: number;
+};
+
+/**
+ * Describes the message sc.v1.InspectionSummary.
+ * Use `create(InspectionSummarySchema)` to create a new message.
+ */
+export const InspectionSummarySchema: GenMessage<InspectionSummary> = /*@__PURE__*/
+  messageDesc(file_sc_v1_upstream, 13);
+
+/**
+ * @generated from message sc.v1.ListInspectionsResponse
+ */
+export type ListInspectionsResponse = Message<"sc.v1.ListInspectionsResponse"> & {
+  /**
+   * @generated from field: repeated sc.v1.InspectionSummary items = 1;
+   */
+  items: InspectionSummary[];
+};
+
+/**
+ * Describes the message sc.v1.ListInspectionsResponse.
+ * Use `create(ListInspectionsResponseSchema)` to create a new message.
+ */
+export const ListInspectionsResponseSchema: GenMessage<ListInspectionsResponse> = /*@__PURE__*/
+  messageDesc(file_sc_v1_upstream, 14);
 
 /**
  * @generated from service sc.v1.ScUpstream
@@ -400,6 +576,14 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof ListReviewImagesRequestSchema;
     output: typeof ListReviewImagesResponseSchema;
+  },
+  /**
+   * @generated from rpc sc.v1.ScUpstream.ListInspections
+   */
+  listInspections: {
+    methodKind: "unary";
+    input: typeof ListInspectionsRequestSchema;
+    output: typeof ListInspectionsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_sc_v1_upstream, 0);

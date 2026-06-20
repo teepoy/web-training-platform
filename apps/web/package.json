@@ -16,7 +16,7 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "generate:proto": "PATH=\"./node_modules/.bin:$PATH\" protoc --plugin=protoc-gen-es=./node_modules/.bin/protoc-gen-es --es_out=src/features/sc/generated/proto --es_opt=target=ts -I src/features/sc/proto src/features/sc/proto/sc/v1/sample.proto"
+    "generate:proto": "cd ../.. && make generate-protos"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.0",

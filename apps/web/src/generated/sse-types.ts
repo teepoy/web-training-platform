@@ -11,6 +11,7 @@ export type SSEEvent =
   | SidebarUpdateEvent
   | DoneEvent
   | ScProgressEvent
+  | ScDataEvent
   | ScErrorEvent
   | TrainingEpochEvent
   | TrainingMetricEvent
@@ -24,31 +25,39 @@ export type Tool = string;
 export type EventType2 = "sidebar-update";
 export type DatasetId = string | null;
 export type EventType3 = "done";
+export type Rows = number | null;
+export type Uri = string | null;
 export type DatasetId1 = string | null;
 export type EventType4 = "progress";
-export type FlowRunId = string;
+export type FlowRunId = string | null;
 export type ImportedCount = number | null;
+export type LoadedCount = number | null;
+export type Message = string | null;
+export type Operation = string | null;
 export type Status = string;
+export type TotalCount = number | null;
+export type EventType5 = "data";
+export type Operation1 = string;
 export type Error = string;
-export type EventType5 = "error";
+export type EventType6 = "error";
 export type FlowRunId1 = string | null;
 export type Status1 = string | null;
-export type EventType6 = "epoch";
+export type EventType7 = "epoch";
 export type JobId = string;
 export type Level = string;
-export type Message = string;
+export type Message1 = string;
 export type Ts = string;
-export type EventType7 = "metric";
+export type EventType8 = "metric";
 export type JobId1 = string;
 export type Level1 = string;
-export type Message1 = string;
+export type Message2 = string;
 export type Ts1 = string;
-export type EventType8 = "status";
+export type EventType9 = "status";
 export type JobId2 = string;
 export type Level2 = string;
-export type Message2 = string;
+export type Message3 = string;
 export type Ts2 = string;
-export type EventType9 = "state-change";
+export type EventType10 = "state-change";
 export type ActiveNode = string | null;
 export type Artifacts = {
   [k: string]: unknown;
@@ -68,7 +77,7 @@ export type QueuePriority = number | null;
 export type QueuePriorityLabel = string;
 export type Key = string;
 export type Label = string;
-export type Message3 = string;
+export type Message4 = string;
 export type Status2 = string;
 export type Value = string | null;
 export type Checks = TaskTrackerCheckResult[];
@@ -136,61 +145,76 @@ export interface Data {
 export interface DoneEvent {
   dataset_id?: DatasetId;
   event_type: EventType3;
+  rows?: Rows;
+  uri?: Uri;
   [k: string]: unknown;
 }
 export interface ScProgressEvent {
   dataset_id?: DatasetId1;
   event_type: EventType4;
-  flow_run_id: FlowRunId;
+  flow_run_id?: FlowRunId;
   imported_count?: ImportedCount;
+  loaded_count?: LoadedCount;
+  message?: Message;
+  operation?: Operation;
   status: Status;
+  total_count?: TotalCount;
   [k: string]: unknown;
 }
-export interface ScErrorEvent {
-  error: Error;
+export interface ScDataEvent {
   event_type: EventType5;
-  flow_run_id?: FlowRunId1;
-  status?: Status1;
-  [k: string]: unknown;
-}
-export interface TrainingEpochEvent {
-  event_type: EventType6;
-  job_id: JobId;
-  level?: Level;
-  message: Message;
-  payload?: Payload;
-  ts: Ts;
+  operation: Operation1;
+  payload: Payload;
   [k: string]: unknown;
 }
 export interface Payload {
   [k: string]: unknown;
 }
-export interface TrainingMetricEvent {
+export interface ScErrorEvent {
+  error: Error;
+  event_type: EventType6;
+  flow_run_id?: FlowRunId1;
+  status?: Status1;
+  [k: string]: unknown;
+}
+export interface TrainingEpochEvent {
   event_type: EventType7;
-  job_id: JobId1;
-  level?: Level1;
+  job_id: JobId;
+  level?: Level;
   message: Message1;
   payload?: Payload1;
-  ts: Ts1;
+  ts: Ts;
   [k: string]: unknown;
 }
 export interface Payload1 {
   [k: string]: unknown;
 }
-export interface TrainingStatusEvent {
+export interface TrainingMetricEvent {
   event_type: EventType8;
-  job_id: JobId2;
-  level?: Level2;
+  job_id: JobId1;
+  level?: Level1;
   message: Message2;
   payload?: Payload2;
-  ts: Ts2;
+  ts: Ts1;
   [k: string]: unknown;
 }
 export interface Payload2 {
   [k: string]: unknown;
 }
-export interface TaskTrackerStateChangeEvent {
+export interface TrainingStatusEvent {
   event_type: EventType9;
+  job_id: JobId2;
+  level?: Level2;
+  message: Message3;
+  payload?: Payload3;
+  ts: Ts2;
+  [k: string]: unknown;
+}
+export interface Payload3 {
+  [k: string]: unknown;
+}
+export interface TaskTrackerStateChangeEvent {
+  event_type: EventType10;
   task: TaskTrackerDetailResponse;
   [k: string]: unknown;
 }
@@ -238,7 +262,7 @@ export interface TaskTrackerScorecard {
 export interface TaskTrackerCheckResult {
   key: Key;
   label: Label;
-  message?: Message3;
+  message?: Message4;
   status: Status2;
   value?: Value;
   [k: string]: unknown;

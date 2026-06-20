@@ -156,6 +156,41 @@ def test_inspection_samples_success(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_sample_table_rows_stream_emits_progress_data_done(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections",
+                params={
+                    "start_time": SAFE_START,
+                    "end_time": SAFE_END,
+                },
+            )
+            first = _parse_summary_resp(resp.content)["items"][0]
+            stream_resp = client.post(
+                (
+                    f"/api/v1/sc/inspections/{first['inspection_time']}/"
+                    f"{first['wafer_key']}/sample-table-rows/stream"
+                ),
+                json={"defect_ids": ["3", "1", "2"], "page": 0, "page_size": 10},
+            )
+            assert stream_resp.status_code == 200, stream_resp.text
+            assert stream_resp.headers.get("content-type", "").startswith(
+                "text/event-stream"
+            )
+            body = stream_resp.text
+            assert "event: progress" in body
+            assert "event: data" in body
+            assert "event: done" in body
+            assert '"operation":"sc.sample-table"' in body
+            assert '"items":' in body
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_sample_table_rows_filters_sorts_then_paginates(
     mock_wafer_db_reader,
 ):

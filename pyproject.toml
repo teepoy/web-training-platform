@@ -13,6 +13,7 @@ antlr4-python3-runtime = ["setuptools"]
 [tool.uv.workspace]
 members = [
   "apps/api",
+  "services/sc-upstream",
   "libs/ml",
   "libs/platform-runtime",
   "libs/python-sdk",
@@ -21,9 +22,9 @@ members = [
 ]
 
 [tool.uv.sources]
-seedmaker = { workspace = true }
 finetune-ml = { workspace = true }
 finetune-api = { workspace = true }
+seedmaker = { workspace = true }
 
 [dependency-groups]
 dev = [

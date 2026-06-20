@@ -146,6 +146,17 @@ class ScPlotPointsService:
         self._repository = repository
         self._storage_factory = storage_factory
 
+    async def ensure_plot_points_allowed(self, dataset_id: str, org_id: str) -> None:
+        dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
+        if dataset is None:
+            raise ScPlotPointsNotFoundError(dataset_id)
+        if dataset.dataset_type != self._SC_DATASET_TYPE:
+            raise ScPlotPointsRejectedError("plot-points requires an image_sc dataset")
+        if dataset.storage_mode != DatasetStorageMode.FILE_SHARD_SPARSE:
+            raise ScPlotPointsRejectedError(
+                "plot-points requires a file_shard_sparse dataset"
+            )
+
     async def build_plot_points_response(
         self,
         dataset_id: str,

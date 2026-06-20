@@ -109,3 +109,12 @@ func CreateSpriteFromResized(pngs [][]byte, size int) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+func BlankSquarePNG(size int) ([]byte, error) {
+	canvas := image.NewRGBA(image.Rect(0, 0, size, size))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, canvas); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

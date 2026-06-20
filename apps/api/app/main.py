@@ -63,6 +63,13 @@ async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
             "path": "",
         },
         {
+            "deployment_name": "train-and-predict-deployment",
+            "flow_name": "training-train-and-predict",
+            "work_pool_name": "default-gpu",
+            "entrypoint": "app.modules.training.flows.train_predict:train_and_predict_flow",
+            "path": "",
+        },
+        {
             "deployment_name": "predict-job-batch-deployment",
             "flow_name": "prediction-predict-job",
             "work_pool_name": "default-gpu",

@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import BlinkVirtualTableWithSelectionAndPreviewResultDisplay from "./BlinkVirtualTableWithSelectionAndPreviewResultDisplay.vue";
 import { nextTick, ref } from "vue";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
@@ -39,6 +39,10 @@ vi.mock("@/features/sc/presentation/composables/useBlinkRubberBand", () => ({
 }));
 
 describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
   const mockSamples = [
     { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [] },
     { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [] },
@@ -49,7 +53,8 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
       props: {
         samples: mockSamples,
         ...propsData
-      }
+      },
+      attachTo: document.body,
     });
   }
 
@@ -63,13 +68,19 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
 
   it("changes samples per row without rendering a text input", async () => {
     const wrapper = createWrapper({ patchSamplesPerRow: 3 });
-    const control = wrapper.get(".sbt-per-row");
+    await wrapper.get("button").trigger("click");
+    await nextTick();
+    const control = document.body.querySelector(".sbt-per-row");
+    expect(control).not.toBeNull();
 
-    expect(control.find("input").exists()).toBe(false);
-    expect(control.get(".sbt-per-row-value").text()).toBe("3");
+    expect(control!.querySelector("input")).toBeNull();
+    expect(control!.querySelector(".sbt-per-row-value")?.textContent).toBe("3");
 
-    await control.get('[aria-label="Increase samples per row"]').trigger("click");
-    expect(control.get(".sbt-per-row-value").text()).toBe("4");
+    const increase = control!.querySelector('[aria-label="Increase samples per row"]');
+    expect(increase).not.toBeNull();
+    (increase as HTMLButtonElement).click();
+    await nextTick();
+    expect(control!.querySelector(".sbt-per-row-value")?.textContent).toBe("4");
   });
 
   it("prediction badge visible when predictionLabels prop set", async () => {

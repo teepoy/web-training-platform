@@ -1,6 +1,6 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header :title="job ? job.id : 'Loading…'" @back="router.push('/jobs')">
+    <n-page-header :title="job ? job.id : 'Loading…'" @back="goBack">
       <template #subtitle>
         <n-space align="center" :size="8">
           <n-tag v-if="job" :type="statusType(job.status!)" size="small" round>
@@ -117,6 +117,23 @@ const {
     refetchInterval: 5000,
   },
 });
+
+const returnPath = computed(() => {
+  const raw = route.query.from;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (isUsableReturnPath(value)) return value;
+  const historyBack = window.history.state?.back;
+  if (isUsableReturnPath(historyBack)) return historyBack;
+  return "/jobs";
+});
+
+function goBack() {
+  router.push(returnPath.value);
+}
+
+function isUsableReturnPath(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith(route.path);
+}
 
 const metricsArtifactRef = computed(() =>
   job.value?.artifact_refs?.find((artifact: { kind: string }) => artifact.kind === "metrics") ?? null,

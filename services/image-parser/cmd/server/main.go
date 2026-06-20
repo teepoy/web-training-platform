@@ -55,9 +55,11 @@ func main() {
 	h := handler.New(svc)
 
 	resolver := resolve.New(upstream, zipCache, warmer)
-	scRoutes := handler.NewSCRoutes(resolver)
+	imageSource := resolve.ImageBytesSource(resolver)
 
-	scSvc := service.NewScImageService(resolver)
+	scRoutes := handler.NewSCRoutes(imageSource)
+
+	scSvc := service.NewScImageService(imageSource)
 
 	grpcPort := os.Getenv("GRPC_PORT")
 	if grpcPort == "" {

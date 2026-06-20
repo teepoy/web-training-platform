@@ -9,12 +9,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	scv1 "image-parser/gen/go/sc/v1"
+	"image-parser/internal/resolve"
 )
 
 type UpstreamClient struct {
 	conn *grpc.ClientConn
 	stub scv1.ScUpstreamClient
 }
+
+var _ resolve.UpstreamSource = (*UpstreamClient)(nil)
 
 func NewUpstreamClient() (*UpstreamClient, error) {
 	addr := os.Getenv("SC_UPSTREAM_ADDR")

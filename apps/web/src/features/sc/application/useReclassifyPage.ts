@@ -25,14 +25,14 @@ import {
   type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   useListTrainersRouteApiV1TrainersGet,
-  createTrainingJobApiV1TrainingJobsPost,
   getJobApiV1TrainingJobsJobIdGet,
   getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
-import { runPredictions, getPredictionJob } from "@/shared/api/predictions";
+import { startTrainAndPredict } from "@/shared/api/predictions";
+import { useTaskHandoffState } from "@/shared/composables/taskHandoffState";
 import type { Trainer } from "@/shared/api/types";
 import type { DatasetStatusResponse, TrainingJob } from "@/generated/orval/models";
-import { fetchScPlotPoints } from "../api/plotPoints";
+import { fetchScPlotPoints, warmupScPlotPoints } from "../api/plotPoints";
 import { fetchDatasetDefectIds } from "../api/defectIds";
 import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import {
@@ -123,6 +123,12 @@ export type SelectionMode = "replace" | "add" | "toggle";
 
 type DefectIdSourceMode = "offset" | "real" | "map" | "sampled";
 
+export interface ReclassifyCodeLabel {
+  code: string;
+  name: string;
+  shortcut: string;
+}
+
 export interface ReclassifyPageState {
   datasetId: ComputedRef<string>;
   dataset: ComputedRef<ScDatasetInfo | undefined>;
@@ -132,6 +138,7 @@ export interface ReclassifyPageState {
   scSamples: ComputedRef<ReclassifySample[]>;
   isBlinkLoading: ComputedRef<boolean>;
   isMapLoading: ComputedRef<boolean>;
+  mapStreamMessage: Ref<string>;
   samplesError: ComputedRef<string | null>;
   fetchMoreSamples: () => Promise<unknown>;
   hasMoreSamples: ComputedRef<boolean>;
@@ -142,6 +149,9 @@ export interface ReclassifyPageState {
   labelSpace: ComputedRef<string[]>;
   effectiveLabels: ComputedRef<string[]>;
   labelOptions: ComputedRef<string[]>;
+  codeLabels: ComputedRef<ReclassifyCodeLabel[]>;
+  shortcutCodeByKey: ComputedRef<Record<string, string>>;
+  setLabelShortcut: (code: string, shortcut: string) => void;
   classNumberOptions: ComputedRef<string[]>;
   classList: ComputedRef<Record<string, DefectList> | null>;
 
@@ -215,6 +225,7 @@ export interface ReclassifyPageState {
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
   isTrainPredictRunning: Ref<boolean>;
   trainPredictStatusMessage: Ref<string>;
+  trainPredictTaskId: Ref<string | null>;
   trainAndPredict: () => Promise<void>;
 
   reviewSamples: Ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>;
@@ -265,6 +276,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const message = useMessage();
   const queryClient = useQueryClient();
   const reclassifyStore = useScReclassifyStore();
+  const { addTaskId } = useTaskHandoffState();
 
   // ── Dataset ────────────────────────────────────────────────────────
 
@@ -293,13 +305,6 @@ export function useReclassifyPage(): ReclassifyPageState {
         },
       },
     );
-
-  const datasetDefectIdsQuery = useQuery({
-    queryKey: computed(() => ["sc", "defect-ids", datasetId.value]),
-    queryFn: () => fetchDatasetDefectIds(datasetId.value),
-    enabled: computed(() => !!selectedDataset.value),
-    retry: false,
-  });
 
   const isLoading = computed(() => datasetQuery.isLoading.value);
   const isError = computed(() => datasetQuery.isError.value);
@@ -332,16 +337,72 @@ export function useReclassifyPage(): ReclassifyPageState {
     normalizeReticleMapOptions(reticleOptionsState.value),
   );
 
+  const mapStreamMessage = ref("");
+  const plotPointsWarmupQuery = useQuery({
+    queryKey: computed(() => [
+      "sc",
+      "plot-points-warmup",
+      datasetId.value,
+      reticleOptions.value,
+      mapFilter.value,
+      legendGroupBy.value,
+    ]),
+    queryFn: async () => {
+      mapStreamMessage.value = "Preparing map data...";
+      try {
+        await warmupScPlotPoints(
+          datasetId.value,
+          reticleOptions.value,
+          mapFilter.value,
+          legendGroupBy.value ?? undefined,
+          (status, loaded, message) => {
+            mapStreamMessage.value =
+              status === "warmup"
+                ? (message ?? "Preparing map data...")
+                : `Prepared ${Math.ceil(loaded / 1024)} KB map data...`;
+          },
+        );
+        return true;
+      } finally {
+        mapStreamMessage.value = "";
+      }
+    },
+    enabled: computed(() => !!selectedDataset.value),
+    retry: false,
+  });
+  const isMapWarm = computed(() => plotPointsWarmupQuery.isSuccess.value);
+
+  const datasetDefectIdsQuery = useQuery({
+    queryKey: computed(() => ["sc", "defect-ids", datasetId.value]),
+    queryFn: () => fetchDatasetDefectIds(datasetId.value),
+    enabled: computed(() => !!selectedDataset.value && isMapWarm.value),
+    retry: false,
+  });
+
   const plotPointsQuery = useQuery({
     queryKey: computed(() => ["sc", "plot-points", datasetId.value]),
-    queryFn: () =>
-      fetchScPlotPoints(
-        datasetId.value,
-        reticleOptions.value,
-        mapFilter.value,
-        legendGroupBy.value ?? undefined,
-      ),
-    enabled: computed(() => !!selectedDataset.value),
+    queryFn: async () => {
+      mapStreamMessage.value = "Opening map stream...";
+      try {
+        return await fetchScPlotPoints(
+          datasetId.value,
+          reticleOptions.value,
+          mapFilter.value,
+          legendGroupBy.value ?? undefined,
+          (status, loaded, message) => {
+            mapStreamMessage.value =
+              status === "headers"
+                ? "Map stream connected..."
+                : status === "decode"
+                  ? (message ?? "Processing map data...")
+                  : `Received ${Math.ceil(loaded / 1024)} KB map data...`;
+          },
+        );
+      } finally {
+        mapStreamMessage.value = "";
+      }
+    },
+    enabled: computed(() => !!selectedDataset.value && isMapWarm.value),
     retry: false,
   });
   const classList = computed(() => {
@@ -499,6 +560,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     enabled: computed(
       () =>
         !!selectedDataset.value &&
+        isMapWarm.value &&
         (blinkSourceDefectIds.value !== null || shouldUseOffsetSamples.value),
     ),
     retry: false,
@@ -569,10 +631,15 @@ export function useReclassifyPage(): ReclassifyPageState {
   );
 
   const isMapLoading = computed(
-    () => plotPointsQuery.isLoading.value || plotPointsQuery.isFetching.value,
+    () =>
+      plotPointsWarmupQuery.isLoading.value ||
+      plotPointsWarmupQuery.isFetching.value ||
+      plotPointsQuery.isLoading.value ||
+      plotPointsQuery.isFetching.value,
   );
   const samplesError = computed<string | null>(
     () =>
+      (plotPointsWarmupQuery.error.value as Error)?.message ??
       (plotPointsQuery.error.value as Error)?.message ??
       (sampleRowsInfiniteQuery.error.value as Error)?.message ??
       null,
@@ -817,7 +884,152 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Annotation draft state (keyed by defectId) ──────────────────────
 
   const annotationDraft = ref<Record<string, string>>({});
-  const pendingLabels = ref<string[]>([]);
+  const pendingLabelNames = ref<string[]>([]);
+  const customLabelNames = ref<Record<string, string>>({});
+  const customShortcuts = ref<Record<string, string>>({});
+
+  function localStorageKey(kind: "names" | "shortcuts"): string {
+    return `sc.reclassify.${kind}.${datasetId.value}`;
+  }
+
+  function readLocalRecord(key: string): Record<string, string> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const out: Record<string, string> = {};
+      for (const [rawKey, rawValue] of Object.entries(parsed)) {
+        if (typeof rawValue === "string") out[String(rawKey)] = rawValue;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  function writeLocalRecord(key: string, value: Record<string, string>): void {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  }
+
+  watch(
+    datasetId,
+    () => {
+      customLabelNames.value = readLocalRecord(localStorageKey("names"));
+      customShortcuts.value = readLocalRecord(localStorageKey("shortcuts"));
+      pendingLabelNames.value = [];
+    },
+    { immediate: true },
+  );
+
+  function defaultShortcutForCode(code: string): string {
+    const numeric = Number(code);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 8
+      ? String(numeric + 1)
+      : "";
+  }
+
+  function nameForCode(code: string): string {
+    return customLabelNames.value[code] || `Code ${code}`;
+  }
+
+  const codeLabels = computed<ReclassifyCodeLabel[]>(() => {
+    const labels: ReclassifyCodeLabel[] = Array.from({ length: 61 }, (_, code) => {
+      const codeText = String(code);
+      return {
+        code: codeText,
+        name: nameForCode(codeText),
+        shortcut: customShortcuts.value[codeText] ?? defaultShortcutForCode(codeText),
+      };
+    });
+    const usedCodes = new Set(labels.map((label) => label.code));
+    const existingNames = new Set(labels.map((label) => label.name.toLowerCase()));
+    for (const rawLabel of labelSpace.value) {
+      const label = String(rawLabel).trim();
+      if (!label) continue;
+      if (/^\d+$/.test(label) && Number(label) >= 0 && Number(label) <= 60) {
+        continue;
+      }
+      if (existingNames.has(label.toLowerCase())) continue;
+      let nextCode = labels.length;
+      while (usedCodes.has(String(nextCode))) nextCode += 1;
+      const code = String(nextCode);
+      usedCodes.add(code);
+      existingNames.add(label.toLowerCase());
+      labels.push({
+        code,
+        name: customLabelNames.value[code] || label,
+        shortcut: customShortcuts.value[code] ?? "",
+      });
+    }
+    for (const pendingName of pendingLabelNames.value) {
+      const name = pendingName.trim();
+      if (!name || existingNames.has(name.toLowerCase())) continue;
+      let nextCode = labels.length;
+      while (usedCodes.has(String(nextCode))) nextCode += 1;
+      const code = String(nextCode);
+      usedCodes.add(code);
+      existingNames.add(name.toLowerCase());
+      labels.push({
+        code,
+        name,
+        shortcut: customShortcuts.value[code] ?? "",
+      });
+    }
+    for (const [code, rawName] of Object.entries(customLabelNames.value)) {
+      const name = rawName.trim();
+      if (!name || usedCodes.has(code) || existingNames.has(name.toLowerCase())) {
+        continue;
+      }
+      usedCodes.add(code);
+      existingNames.add(name.toLowerCase());
+      labels.push({
+        code,
+        name,
+        shortcut: customShortcuts.value[code] ?? "",
+      });
+    }
+    labels.sort((left, right) => {
+      const leftNumber = Number(left.code);
+      const rightNumber = Number(right.code);
+      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+        return leftNumber - rightNumber;
+      }
+      return left.code.localeCompare(right.code);
+    });
+    return labels;
+  });
+
+  const shortcutCodeByKey = computed<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const label of codeLabels.value) {
+      const shortcut = label.shortcut.trim();
+      if (shortcut.length === 1) {
+        out[shortcut.toLowerCase()] = label.code;
+      }
+    }
+    return out;
+  });
+
+  function setLabelShortcut(code: string, shortcut: string): void {
+    const normalized = shortcut.trim().slice(0, 1);
+    const next = { ...customShortcuts.value };
+    for (const [candidateCode, candidateShortcut] of Object.entries(next)) {
+      if (
+        candidateCode !== code &&
+        candidateShortcut.toLowerCase() === normalized.toLowerCase()
+      ) {
+        delete next[candidateCode];
+      }
+    }
+    if (!normalized) {
+      delete next[code];
+    } else {
+      next[code] = normalized;
+    }
+    customShortcuts.value = next;
+    writeLocalRecord(localStorageKey("shortcuts"), next);
+  }
 
   function setAnnotationDraft(defectId: string, label: string): void {
     annotationDraft.value = { ...annotationDraft.value, [defectId]: label };
@@ -937,7 +1149,7 @@ export function useReclassifyPage(): ReclassifyPageState {
             submittedLabels[ann.defect_id] = ann.label;
           }
           annotationDraft.value = {};
-          pendingLabels.value = [];
+          pendingLabelNames.value = [];
 
           const sampleQueries = queryClient.getQueriesData({
             queryKey: ["sc", "view-samples-paged", datasetId.value],
@@ -964,6 +1176,9 @@ export function useReclassifyPage(): ReclassifyPageState {
             });
           }
 
+          void queryClient.invalidateQueries({
+            queryKey: ["sc", "plot-points-warmup", datasetId.value],
+          });
           void queryClient.invalidateQueries({
             queryKey: ["sc", "plot-points", datasetId.value],
           });
@@ -1005,35 +1220,33 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   // ── Add label ──────────────────────────────────────────────────────
 
-  const effectiveLabels = computed<string[]>(() => {
-    const combined = new Set<string>(labelSpace.value);
-    for (const label of pendingLabels.value) {
-      combined.add(label);
-    }
-    return [...combined];
-  });
-
-  watch(
-    [effectiveLabels, () => !!selectedDataset.value] as const,
-    ([labels, hasDataset]) => {
-      if (hasDataset && labels.length === 0) {
-        pendingLabels.value = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-      }
-    },
+  const effectiveLabels = computed<string[]>(() =>
+    codeLabels.value.map((label) => label.code),
   );
 
   const addLabelError = ref<string | null>(null);
   const isAddingLabel = computed(() => false);
 
   function addLabel(newLabel: string) {
-    if (!newLabel) return;
-    if (labelSpace.value.includes(newLabel)) {
-      addLabelError.value = "Label already exists";
+    const name = newLabel.trim();
+    if (!name) return;
+    if (
+      codeLabels.value.some(
+        (label) => label.name.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      addLabelError.value = "Name already exists";
       return;
     }
-    if (pendingLabels.value.includes(newLabel)) return;
+    const usedCodes = new Set(codeLabels.value.map((label) => label.code));
+    let nextCodeNumber = codeLabels.value.length;
+    while (usedCodes.has(String(nextCodeNumber))) nextCodeNumber += 1;
+    const nextCode = String(nextCodeNumber);
+    const nextNames = { ...customLabelNames.value, [nextCode]: name };
+    customLabelNames.value = nextNames;
+    writeLocalRecord(localStorageKey("names"), nextNames);
     addLabelError.value = null;
-    pendingLabels.value = [...pendingLabels.value, newLabel];
+    pendingLabelNames.value = [...pendingLabelNames.value, name];
   }
 
   // ── Sampling ───────────────────────────────────────────────────────
@@ -1110,6 +1323,36 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const isTrainPredictRunning = ref(false);
   const trainPredictStatusMessage = ref("");
+  const trainPredictTaskId = ref<string | null>(null);
+
+  const trainPredictStatusQuery = useQuery({
+    queryKey: computed(() => ["sc", "train-predict-task", trainPredictTaskId.value]),
+    queryFn: async () => {
+      if (!trainPredictTaskId.value) return null;
+      const response = await getJobApiV1TrainingJobsJobIdGet(trainPredictTaskId.value);
+      return response.data as TrainingJob;
+    },
+    enabled: computed(() => !!trainPredictTaskId.value),
+    refetchInterval: computed(() => (isTrainPredictRunning.value ? 2500 : false)),
+  });
+
+  watch(trainPredictStatusQuery.data, (job) => {
+    if (!job || !trainPredictTaskId.value) return;
+    const status = String(job.status ?? "").toLowerCase();
+    const shortId = trainPredictTaskId.value.slice(0, 8);
+    if (status === "completed") {
+      trainPredictStatusMessage.value =
+        `Training ${shortId} completed; prediction is running in workflow.`;
+      isTrainPredictRunning.value = false;
+      return;
+    }
+    if (status === "failed" || status === "cancelled") {
+      trainPredictStatusMessage.value = `Training ${shortId} ${status}`;
+      isTrainPredictRunning.value = false;
+      return;
+    }
+    trainPredictStatusMessage.value = `Training ${shortId} ${status || "queued"}...`;
+  });
 
   const mounted = ref(true);
   onBeforeUnmount(() => {
@@ -1125,101 +1368,33 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (isTrainPredictRunning.value) return;
 
     isTrainPredictRunning.value = true;
-    trainPredictStatusMessage.value = "Starting training...";
+    trainPredictStatusMessage.value = "Starting train and predict workflow...";
 
     try {
-      const trainResp = await createTrainingJobApiV1TrainingJobsPost({
+      const workflow = await startTrainAndPredict({
         dataset_id: datasetId.value,
         trainer_id: trainerId,
+        target: "image_classification",
       });
-      const trainJob = trainResp.data as TrainingJob;
-      trainPredictStatusMessage.value = `Training ${trainJob.id?.slice(0, 8)}...`;
-
-      for (let attempt = 0; attempt < 180; attempt += 1) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const jobResp = await getJobApiV1TrainingJobsJobIdGet(trainJob.id!);
-        const job = (jobResp.data ?? {}) as Record<string, unknown>;
-        const status = String(job.status ?? "").toLowerCase();
-
-        if (status === "completed") {
-          trainPredictStatusMessage.value = "Running predictions...";
-          const artifactRefs = job.artifact_refs as
-            | Array<{ kind: string; id?: string }>
-            | undefined;
-          const modelArtifact = (artifactRefs ?? []).find(
-            (a) => a.kind === "model",
-          );
-          if (!modelArtifact?.id) {
-            trainPredictStatusMessage.value = "";
-            message.error("Training completed but no model artifact found");
-            return;
-          }
-
-          const predJob = await runPredictions({
-            model_id: modelArtifact.id,
-            dataset_id: datasetId.value,
-          });
-          trainPredictStatusMessage.value = `Predicting ${predJob.id?.slice(0, 8)}...`;
-
-          for (let pAttempt = 0; pAttempt < 120; pAttempt += 1) {
-            await new Promise((r) => setTimeout(r, 1500));
-            const pJob = await getPredictionJob(predJob.id!);
-            const pStatus = String(pJob.status ?? "").toLowerCase();
-
-            if (pStatus === "completed") {
-              trainPredictStatusMessage.value = "";
-              await Promise.all([
-                queryClient.refetchQueries({
-                  queryKey: [
-                    "api",
-                    "v1",
-                    "datasets",
-                    datasetId.value,
-                    "latest-predictions",
-                  ],
-                }),
-                queryClient.refetchQueries({
-                  queryKey: ["sc", "class-list", datasetId.value],
-                }),
-                queryClient.refetchQueries({
-                  queryKey: [
-                    "sc",
-                    "view-annotations-paged",
-                    datasetId.value,
-                  ],
-                }),
-              ]);
-              if (mounted.value) {
-                message.success("Prediction done");
-              }
-              return;
-            }
-            if (pStatus === "failed" || pStatus === "cancelled") {
-              trainPredictStatusMessage.value = "";
-              message.error(`Prediction ${pStatus}`);
-              return;
-            }
-          }
-          trainPredictStatusMessage.value = "";
-          message.warning(
-            "Prediction is still running. Refresh later for results.",
-          );
-          return;
-        }
-
-        if (status === "failed" || status === "cancelled") {
-          trainPredictStatusMessage.value = "";
-          message.error(`Training ${status}`);
-          return;
-        }
+      const trainJobId =
+        typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
+      if (!trainJobId) {
+        throw new Error("Train & Predict workflow did not return a training job id");
       }
-      trainPredictStatusMessage.value = "";
-      message.warning("Training is still running. Check back later.");
+      trainPredictTaskId.value = trainJobId;
+      addTaskId(trainJobId);
+      await queryClient.invalidateQueries({ queryKey: ["jobs", datasetId.value] });
+      trainPredictStatusMessage.value =
+        `Workflow submitted: ${trainJobId.slice(0, 8)}`;
+      if (mounted.value) {
+        message.success(
+          `Workflow submitted: ${trainJobId.slice(0, 8)}`,
+        );
+      }
     } catch (err: unknown) {
       trainPredictStatusMessage.value = "";
-      message.error((err as Error)?.message ?? "Train & Predict failed");
-    } finally {
       isTrainPredictRunning.value = false;
+      message.error((err as Error)?.message ?? "Train & Predict failed");
     }
   }
 
@@ -1294,6 +1469,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     scSamples,
     isBlinkLoading,
     isMapLoading,
+    mapStreamMessage,
     samplesError,
     fetchMoreSamples,
     hasMoreSamples,
@@ -1304,6 +1480,9 @@ export function useReclassifyPage(): ReclassifyPageState {
     labelSpace,
     effectiveLabels,
     labelOptions,
+    codeLabels,
+    shortcutCodeByKey,
+    setLabelShortcut,
     classNumberOptions,
     classList,
 
@@ -1371,6 +1550,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     trainerOptions,
     isTrainPredictRunning,
     trainPredictStatusMessage,
+    trainPredictTaskId,
     trainAndPredict,
     reviewSamples,
     reviewLoading,

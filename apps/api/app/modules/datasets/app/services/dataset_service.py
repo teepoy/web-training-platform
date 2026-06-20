@@ -5,14 +5,19 @@ from typing import Any
 
 from fastapi import HTTPException
 from omegaconf import DictConfig
+from platform_runtime.sparse import DatasetPayloadStore
 
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-from platform_runtime.sparse import DatasetPayloadStore
 from app.modules.datasets.domain.repository import DatasetRepository
-from app.shared.api.schemas import Annotation, Dataset, SPARSE_NO_LS
+from app.shared.api.schemas import (
+    Annotation,
+    Dataset,
+    DatasetStorageMode,
+    SPARSE_NO_LS,
+)
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
-from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 from app.shared.infrastructure.label_studio.client import ls_annotation_to_platform
+from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 
 
 class DatasetService:
@@ -47,6 +52,32 @@ class DatasetService:
                 update={"ls_project_url": f"{ls_url}/projects/{dataset.ls_project_id}"}
             )
         return dataset
+
+    async def to_list_response(self, dataset: Dataset) -> Dataset:
+        """Compute lightweight fields used by the dataset index."""
+        sample_count = await self._resolve_sample_count(dataset)
+        dataset_meta = dict(dataset.dataset_meta or {})
+        dataset_meta.update(
+            {"sample_count": sample_count, "total_samples": sample_count}
+        )
+        return self.to_response(
+            dataset.model_copy(update={"dataset_meta": dataset_meta})
+        )
+
+    async def _resolve_sample_count(self, dataset: Dataset) -> int:
+        if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+            try:
+                manifest = await self._payload_store.get_manifest(
+                    dataset.id,
+                    dataset.org_id or "",
+                )
+            except (FileNotFoundError, KeyError):
+                return 0
+            return int(manifest.total_rows)
+
+        storage = await self._storage_factory.open(dataset.id, dataset.org_id)
+        stats = await storage.get_annotation_stats()
+        return int(stats.get("total_samples", 0))
 
     async def build_export_data(
         self,

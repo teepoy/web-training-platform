@@ -27,14 +27,26 @@ class SidebarUpdateEvent(BaseModel):
 class DoneEvent(BaseModel):
     event_type: Literal["done"]
     dataset_id: str | None = None
+    uri: str | None = None
+    rows: int | None = None
 
 
 class ScProgressEvent(BaseModel):
     event_type: Literal["progress"]
-    flow_run_id: str
+    flow_run_id: str | None = None
     status: str
+    operation: str | None = None
+    message: str | None = None
     dataset_id: str | None = None
     imported_count: int | None = None
+    loaded_count: int | None = None
+    total_count: int | None = None
+
+
+class ScDataEvent(BaseModel):
+    event_type: Literal["data"]
+    operation: str
+    payload: dict[str, Any]
 
 
 class ScErrorEvent(BaseModel):
@@ -83,6 +95,7 @@ SSEEventPayload = Annotated[
         SidebarUpdateEvent,
         DoneEvent,
         ScProgressEvent,
+        ScDataEvent,
         ScErrorEvent,
         TrainingEpochEvent,
         TrainingMetricEvent,

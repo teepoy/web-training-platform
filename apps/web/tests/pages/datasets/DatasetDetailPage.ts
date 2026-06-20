@@ -87,27 +87,27 @@ export class DatasetDetailPage extends BasePage {
 
   /** Click the Train tab. */
   async gotoTrainTab(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Train' }).click()
+    await this.page.locator('.n-tabs .n-tabs-tab').filter({ hasText: 'Train' }).click()
   }
 
   /** Click the Predict tab. */
   async gotoPredictTab(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Predict' }).click()
+    await this.page.locator('.n-tabs .n-tabs-tab').filter({ hasText: 'Predict' }).click()
   }
 
   /** Click the Export tab. */
   async gotoExportTab(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Export' }).click()
+    await this.page.locator('.n-tabs .n-tabs-tab').filter({ hasText: 'Export' }).click()
   }
 
   /** Wait for the training jobs view to render after switching to Train tab. */
   async waitForTrainTabLoaded(): Promise<void> {
-    await this.page.getByRole('heading', { name: 'Training Jobs' }).waitFor()
+    await this.page.getByText('Training Jobs').waitFor()
   }
 
   /** Wait for the prediction jobs view to render after switching to Predict tab. */
   async waitForPredictTabLoaded(): Promise<void> {
-    await this.page.getByRole('heading', { name: 'Prediction Jobs' }).waitFor()
+    await this.page.getByText('Prediction Jobs').waitFor()
   }
 
   // ── Train tab actions ─────────────────────────────────────────

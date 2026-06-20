@@ -89,3 +89,5 @@ apps/web/tests/.auth/
 /legacy/issues/
 infra/compose/data/
 /dist/
+.go-cache
+tmp

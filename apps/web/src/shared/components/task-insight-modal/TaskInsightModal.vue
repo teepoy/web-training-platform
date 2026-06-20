@@ -220,7 +220,7 @@ const defaultExpanded = computed(() => {
 
 const canCancel = computed(() => {
   const status = activeDetail.value?.derived.display_status
-  return status === 'queued' || status === 'running'
+  return status === 'pending' || status === 'queued' || status === 'running'
 })
 
 const consoleText = computed(() => {
@@ -241,6 +241,7 @@ function statusType(status?: string) {
   if (status === 'failed') return 'error'
   if (status === 'cancelled') return 'warning'
   if (status === 'running') return 'info'
+  if (status === 'pending') return 'default'
   return 'default'
 }
 

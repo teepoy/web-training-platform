@@ -561,13 +561,14 @@ class TaskTrackerService:
             return self._display_status_from_prefect(str(platform_job.state_type))
         if prefect_state is None:
             status = getattr(platform_job, "status", "queued")
-            return status.value if isinstance(status, JobStatus) else str(status)
+            value = status.value if isinstance(status, JobStatus) else str(status)
+            return "pending" if value == "queued" else value
         return self._display_status_from_prefect(prefect_state)
 
     def _display_status_from_prefect(self, prefect_state: str) -> str:
         mapping = {
-            "SCHEDULED": "queued",
-            "PENDING": "queued",
+            "SCHEDULED": "pending",
+            "PENDING": "pending",
             "RUNNING": "running",
             "CANCELLING": "running",
             "PAUSED": "running",

@@ -60,7 +60,13 @@ from app.modules.sc.schemas import (
 )
 from app.shared.api.schemas import Annotation, Organization, User
 from app.shared.sse.emit import emit_sse
-from app.shared.sse.events import DoneEvent, ScErrorEvent, ScProgressEvent, SSEEvent
+from app.shared.sse.events import (
+    DoneEvent,
+    ScDataEvent,
+    ScErrorEvent,
+    ScProgressEvent,
+    SSEEvent,
+)
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -95,6 +101,12 @@ _TOP_LEVEL_FILTER_COLUMNS = {
     "layer_id": "layer_id",
     "device": "device",
     "eqp_id": "inspect_equip_id",
+}
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
 }
 
 
@@ -355,15 +367,49 @@ async def get_inspection_map_points(
     When *sampled* is true, each map type is grid-downsampled independently;
     *total* still reports the full defect count.
     """
-    insp_dt = _parse_inspection_time(inspection_time)
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    body = await _build_inspection_map_points_payload(
+        upstream_reader=upstream_reader,
+        inspection=inspection,
+        insp_dt=insp_dt,
+        wafer_key=wafer_key,
+        reticle_x_die_count=reticle_x_die_count,
+        reticle_y_die_count=reticle_y_die_count,
+        reticle_x_die_shift=reticle_x_die_shift,
+        reticle_y_die_shift=reticle_y_die_shift,
+        sampled=sampled,
+        grid_size_nm=grid_size_nm,
+        zoom_x=zoom_x,
+        zoom_y=zoom_y,
+        zoom_w=zoom_w,
+        zoom_h=zoom_h,
+        mode=mode,
+        filters=filters,
+    )
+    return Response(content=body, media_type="application/x-protobuf")
 
-    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
-    if inspection is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
-        )
 
+async def _build_inspection_map_points_payload(
+    *,
+    upstream_reader: Any,
+    inspection: Any,
+    insp_dt: datetime,
+    wafer_key: int,
+    reticle_x_die_count: int,
+    reticle_y_die_count: int,
+    reticle_x_die_shift: int,
+    reticle_y_die_shift: int,
+    sampled: bool,
+    grid_size_nm: int,
+    zoom_x: int | None,
+    zoom_y: int | None,
+    zoom_w: int | None,
+    zoom_h: int | None,
+    mode: Literal["wafer", "die", "reticle"] | None,
+    filters: ScFilterParams,
+) -> bytes:
     samples_lf = await upstream_reader.list_samples(
         insp_dt,
         wafer_key,
@@ -386,7 +432,7 @@ async def get_inspection_map_points(
     )
     df = await samples_lf.collect_async()
     df = df.with_columns((pl.col("images") > 0).cast(pl.Int32).alias("has_review"))
-    body = make_wafer_map_response_pb(
+    return make_wafer_map_response_pb(
         df,
         wafer_key=wafer_key,
         wafer_radius_nm=150_000_000,
@@ -407,7 +453,94 @@ async def get_inspection_map_points(
         map_mode=mode,
         group_by=filters.legend_group_by,
     )
-    return Response(content=body, media_type="application/x-protobuf")
+
+
+@router.get("/inspections/{inspection_time}/{wafer_key}/map-points/stream")
+async def stream_inspection_map_points_progress(
+    request: Request,
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+    reticle_x_die_count: int = Query(default=10, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=10, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    sampled: bool = Query(default=False),
+    grid_size_nm: int = Query(default=600, ge=1, alias="gridSizeNm"),
+    zoom_x: int | None = Query(default=None, alias="zoomX"),
+    zoom_y: int | None = Query(default=None, alias="zoomY"),
+    zoom_w: int | None = Query(default=None, alias="zoomW"),
+    zoom_h: int | None = Query(default=None, alias="zoomH"),
+    mode: Literal["wafer", "die", "reticle"] | None = Query(default=None),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
+) -> StreamingResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.map-points",
+                    status="loading",
+                    message="Preparing map points",
+                    total_count=inspection.defects,
+                )
+            )
+        )
+        try:
+            payload = await _build_inspection_map_points_payload(
+                upstream_reader=upstream_reader,
+                inspection=inspection,
+                insp_dt=insp_dt,
+                wafer_key=wafer_key,
+                reticle_x_die_count=reticle_x_die_count,
+                reticle_y_die_count=reticle_y_die_count,
+                reticle_x_die_shift=reticle_x_die_shift,
+                reticle_y_die_shift=reticle_y_die_shift,
+                sampled=sampled,
+                grid_size_nm=grid_size_nm,
+                zoom_x=zoom_x,
+                zoom_y=zoom_y,
+                zoom_w=zoom_w,
+                zoom_h=zoom_h,
+                mode=mode,
+                filters=filters,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.map-points",
+                    status="cached",
+                    message="Map points are ready",
+                    loaded_count=len(payload),
+                    total_count=inspection.defects,
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done", rows=inspection.defects)))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.get(
@@ -505,9 +638,9 @@ async def get_sc_dataset_plot_points(
     reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
     reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
     filters: ScFilterParams = Depends(get_sc_filter_params),
-) -> Response:
-    try:
-        body = await service.build_plot_points_response(
+) -> StreamingResponse:
+    async def stream_body():
+        yield await service.build_plot_points_response(
             dataset_id,
             org.id,
             sampled=sampled,
@@ -525,11 +658,101 @@ async def get_sc_dataset_plot_points(
             adders=filters.adders,
             cluster_ids=filters.cluster_ids,
         )
+
+    try:
+        await service.ensure_plot_points_allowed(dataset_id, org.id)
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ScPlotPointsRejectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=body, media_type="application/x-protobuf")
+    return StreamingResponse(stream_body(), media_type="application/x-protobuf")
+
+
+@router.get("/datasets/{dataset_id}/plot-points/stream")
+async def stream_sc_dataset_plot_points_progress(
+    dataset_id: str,
+    service: ScPlotPointsServiceDep,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    sampled: bool = Query(default=True),
+    target_resolution: int = Query(default=600, alias="targetResolution", ge=1),
+    reticle_x_die_count: int = Query(default=3, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    filters: ScFilterParams = Depends(get_sc_filter_params),
+) -> StreamingResponse:
+    try:
+        await service.ensure_plot_points_allowed(dataset_id, org.id)
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.plot-points",
+                    status="loading",
+                    dataset_id=dataset_id,
+                    message="Preparing plot points",
+                )
+            )
+        )
+        try:
+            payload = await service.build_plot_points_response(
+                dataset_id,
+                org.id,
+                sampled=sampled,
+                target_resolution=target_resolution,
+                reticle_x_die_count=reticle_x_die_count,
+                reticle_y_die_count=reticle_y_die_count,
+                reticle_x_die_shift=reticle_x_die_shift,
+                reticle_y_die_shift=reticle_y_die_shift,
+                legend_group_by=filters.legend_group_by,
+                class_numbers=filters.class_numbers,
+                rough_bins=filters.rough_bins,
+                predictions=filters.predictions,
+                annotations=filters.annotations,
+                test_ids=filters.test_ids,
+                adders=filters.adders,
+                cluster_ids=filters.cluster_ids,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.plot-points",
+                    status="ready",
+                    dataset_id=dataset_id,
+                    message="Plot points are ready",
+                    loaded_count=len(payload),
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done")))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.post(
@@ -750,24 +973,14 @@ def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
     )
 
 
-@router.post(
-    "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
-    response_model=ScSampleTableRowsResponse,
-)
-async def get_inspection_sample_table_rows(
+async def _build_sample_table_rows_response(
+    *,
     payload: ScSampleTableRowsRequest,
-    upstream_reader: ScUpstreamReaderDep,
-    inspection_time: str,
+    upstream_reader: Any,
+    insp_dt: datetime,
+    inspection: Any,
     wafer_key: int,
 ) -> ScSampleTableRowsResponse:
-    insp_dt = _parse_inspection_time(inspection_time)
-    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
-    if inspection is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
-        )
-
     defect_ids = payload.defect_ids
     anchor = (
         int(payload.anchor) if payload.anchor and payload.anchor.isdigit() else None
@@ -818,6 +1031,118 @@ async def get_inspection_sample_table_rows(
         items=matched,
         total=total_matched,
         next_anchor=next_anchor,
+    )
+
+
+async def _resolve_inspection_or_404(
+    upstream_reader: Any,
+    inspection_time: str,
+    wafer_key: int,
+) -> tuple[datetime, Any]:
+    insp_dt = _parse_inspection_time(inspection_time)
+    inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
+    if inspection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Inspection not found: {inspection_time}/{wafer_key}",
+        )
+    return insp_dt, inspection
+
+
+@router.post(
+    "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
+    response_model=ScSampleTableRowsResponse,
+)
+async def get_inspection_sample_table_rows(
+    payload: ScSampleTableRowsRequest,
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> ScSampleTableRowsResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    return await _build_sample_table_rows_response(
+        payload=payload,
+        upstream_reader=upstream_reader,
+        insp_dt=insp_dt,
+        inspection=inspection,
+        wafer_key=wafer_key,
+    )
+
+
+@router.post("/inspections/{inspection_time}/{wafer_key}/sample-table-rows/stream")
+async def stream_inspection_sample_table_rows(
+    payload: ScSampleTableRowsRequest,
+    request: Request,
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> StreamingResponse:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.sample-table",
+                    status="loading",
+                    message="Loading sample rows",
+                    total_count=inspection.defects,
+                )
+            )
+        )
+        try:
+            response = await _build_sample_table_rows_response(
+                payload=payload,
+                upstream_reader=upstream_reader,
+                insp_dt=insp_dt,
+                inspection=inspection,
+                wafer_key=wafer_key,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.sample-table",
+                    status="serializing",
+                    message="Serializing sample rows",
+                    loaded_count=len(response.items),
+                    total_count=response.total,
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="sc.sample-table",
+                    payload=response.model_dump(mode="json"),
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done")))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
     )
 
 
@@ -951,11 +1276,7 @@ async def stream_sc_import_progress(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_SSE_HEADERS,
     )
 
 

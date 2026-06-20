@@ -326,6 +326,10 @@ describe("useReclassifyPage - reticleDisplay", () => {
 
 
 describe("useReclassifyPage - addLabel", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("rejects duplicate label", async () => {
     const datasetWithLabels: ScDatasetInfo = {
       ...DEFAULT_DATASET,
@@ -344,6 +348,43 @@ describe("useReclassifyPage - addLabel", () => {
     const errMsg = state.addLabelError.value;
     expect(errMsg).toBeTruthy();
     expect(errMsg.toLowerCase()).toContain("already exists");
+  });
+
+  it("keeps code/name combos in frontend state and exposes code annotations", async () => {
+    const datasetWithoutLabels: ScDatasetInfo = {
+      ...DEFAULT_DATASET,
+      label_space: [],
+      task_spec: {
+        ...DEFAULT_DATASET.task_spec,
+        label_space: [],
+      },
+    };
+    const { state } = await mountPage("ds-test-1", datasetWithoutLabels);
+
+    expect(state.codeLabels.value).toHaveLength(61);
+    expect(state.codeLabels.value[0]).toMatchObject({
+      code: "0",
+      name: "Code 0",
+      shortcut: "1",
+    });
+    expect(state.effectiveLabels.value.slice(0, 3)).toEqual(["0", "1", "2"]);
+
+    state.addLabel("Scratch extra");
+    await new Promise((r) => setTimeout(r, 10));
+
+    const added = state.codeLabels.value.find((label) => label.name === "Scratch extra");
+    expect(added).toBeTruthy();
+    expect(added?.code).toBe("61");
+    expect(state.effectiveLabels.value).toContain("61");
+  });
+
+  it("lets users remap single-key shortcuts", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
+
+    state.setLabelShortcut("10", "q");
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(state.shortcutCodeByKey.value.q).toBe("10");
   });
 });
 
@@ -396,6 +437,18 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
 
   beforeEach(() => {
     server.use(
+      http.get("/api/v1/sc/datasets/:id/plot-points/stream", () => {
+        return new HttpResponse(
+          [
+            'event: progress\ndata: {"event_type":"progress","operation":"sc.plot-points","status":"loading","message":"Preparing plot points"}\n\n',
+            'event: done\ndata: {"event_type":"done"}\n\n',
+          ].join(""),
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        );
+      }),
       http.get("/api/v1/sc/datasets/:id/plot-points", () => {
         return new HttpResponse(makeFakePlotPointsBytes(1000), {
           status: 200,

@@ -140,15 +140,14 @@ describe("useDatasetListSurface", () => {
       expect(onTogglePublic).not.toHaveBeenCalled();
     });
 
-    it("forwards toggle-public for a superadmin", () => {
+    it("does not forward toggle-public for a superadmin", () => {
       const { surface, onTogglePublic } = buildSurface({ user: makeUser({ is_superadmin: true }) });
 
       const row = makeDataset();
       const payload = { id: row.id, isPublic: true };
       extractActionsHandler(surface, row, "onTogglePublic")?.(payload);
 
-      expect(onTogglePublic).toHaveBeenCalledOnce();
-      expect(onTogglePublic).toHaveBeenCalledWith(payload);
+      expect(onTogglePublic).not.toHaveBeenCalled();
     });
   });
 

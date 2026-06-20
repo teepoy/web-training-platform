@@ -14,6 +14,7 @@ export interface DatasetListItem {
   name: string;
   dataset_type: string;
   task_spec?: DatasetListTaskSpec | null;
+  dataset_meta?: Record<string, unknown> | null;
   created_at: string;
   ls_project_id?: string | null;
   ls_project_url?: string | null;

@@ -62,6 +62,7 @@ import type {
   ExportFormatResponse,
   ExportParquetApiV1PluginsExportParquetExportPost200,
   ExportParquetApiV1PluginsExportParquetExportPostParams,
+  ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams,
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGet200,
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGetParams,
   ExtractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams,
@@ -80,6 +81,7 @@ import type {
   ListModelsApiV1ModelsGetParams,
   ListPredictionCollectionsApiV1PredictionCollectionsGetParams,
   ListPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGetParams,
+  ListPredictionJobsApiV1PredictionJobsGetParams,
   ListPreviewItemsApiV1PreviewSessionsSessionIdItemsGetParams,
   ListReviewActionsApiV1PredictionReviewsGetParams,
   ListRunsApiV1SchedulesScheduleIdRunsGetParams,
@@ -150,6 +152,8 @@ import type {
   SimilaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGetParams,
   SparseSummaryResponse,
   StartPersistRequest,
+  StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams,
+  StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams,
   StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams,
   SurfaceStateDocumentInput,
   SurfaceStateDocumentOutput,
@@ -160,6 +164,8 @@ import type {
   TaskTrackerSummaryResponse,
   TokenCreatedResponse,
   TokenResponse,
+  TrainAndPredictRequest,
+  TrainAndPredictResponse,
   TrainingJob,
   UncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet200,
   UpdateAnnotationRequest,
@@ -344,6 +350,88 @@ export const useExportParquetApiV1PluginsExportParquetExportPost = <TError = HTT
       > => {
 
       const mutationOptions = getExportParquetApiV1PluginsExportParquetExportPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Export Parquet Stream
+ */
+export type exportParquetStreamApiV1PluginsExportParquetExportStreamPostResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getExportParquetStreamApiV1PluginsExportParquetExportStreamPostUrl = (params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/plugins/export-parquet/export/stream?${normalizedParams.toString()}` : `/api/v1/plugins/export-parquet/export/stream`
+}
+
+export const exportParquetStreamApiV1PluginsExportParquetExportStreamPost = async (params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams, options?: RequestInit): Promise<exportParquetStreamApiV1PluginsExportParquetExportStreamPostResponse> => {
+
+  return orvalFetcher<exportParquetStreamApiV1PluginsExportParquetExportStreamPostResponse>(getExportParquetStreamApiV1PluginsExportParquetExportStreamPostUrl(params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getExportParquetStreamApiV1PluginsExportParquetExportStreamPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>, TError,{params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>, TError,{params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams}, TContext> => {
+
+const mutationKey = ['exportParquetStreamApiV1PluginsExportParquetExportStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>, {params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  exportParquetStreamApiV1PluginsExportParquetExportStreamPost(params,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportParquetStreamApiV1PluginsExportParquetExportStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>>
+
+    export type ExportParquetStreamApiV1PluginsExportParquetExportStreamPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Export Parquet Stream
+ */
+export const useExportParquetStreamApiV1PluginsExportParquetExportStreamPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>, TError,{params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof exportParquetStreamApiV1PluginsExportParquetExportStreamPost>>,
+        TError,
+        {params: ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams},
+        TContext
+      > => {
+
+      const mutationOptions = getExportParquetStreamApiV1PluginsExportParquetExportStreamPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }
@@ -2566,6 +2654,81 @@ export const useExportDatasetPersistApiV1ExportsDatasetIdPersistPost = <TError =
       > => {
 
       const mutationOptions = getExportDatasetPersistApiV1ExportsDatasetIdPersistPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Export Dataset Persist Stream
+ */
+export type exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/exports/${datasetId}/persist/stream`
+}
+
+export const exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost = async (datasetId: string, options?: RequestInit): Promise<exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostResponse> => {
+
+  return orvalFetcher<exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostResponse>(getExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostUrl(datasetId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>, TError,{datasetId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>, TError,{datasetId: string}, TContext> => {
+
+const mutationKey = ['exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>, {datasetId: string}> = (props) => {
+          const {datasetId} = props ?? {};
+
+          return  exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost(datasetId,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>>
+
+    export type ExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Export Dataset Persist Stream
+ */
+export const useExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>, TError,{datasetId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof exportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost>>,
+        TError,
+        {datasetId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }
@@ -6006,20 +6169,27 @@ export const useRunPredictionsApiV1PredictionsRunPost = <TError = HTTPValidation
  * @summary List Prediction Jobs
  */
 export type listPredictionJobsApiV1PredictionJobsGetResponse = {
-  data: PredictionJobResponse[];
+  data: PredictionJobResponse[] | HTTPValidationError;
   status: number;
   headers: Headers;
 }
 
-export const getListPredictionJobsApiV1PredictionJobsGetUrl = () => {
+export const getListPredictionJobsApiV1PredictionJobsGetUrl = (params?: ListPredictionJobsApiV1PredictionJobsGetParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
-  return `/api/v1/prediction-jobs`
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/prediction-jobs?${normalizedParams.toString()}` : `/api/v1/prediction-jobs`
 }
 
-export const listPredictionJobsApiV1PredictionJobsGet = async ( options?: RequestInit): Promise<listPredictionJobsApiV1PredictionJobsGetResponse> => {
+export const listPredictionJobsApiV1PredictionJobsGet = async (params?: ListPredictionJobsApiV1PredictionJobsGetParams, options?: RequestInit): Promise<listPredictionJobsApiV1PredictionJobsGetResponse> => {
 
-  return orvalFetcher<listPredictionJobsApiV1PredictionJobsGetResponse>(getListPredictionJobsApiV1PredictionJobsGetUrl(),
+  return orvalFetcher<listPredictionJobsApiV1PredictionJobsGetResponse>(getListPredictionJobsApiV1PredictionJobsGetUrl(params),
   {
     ...options,
     method: 'GET'
@@ -6030,21 +6200,21 @@ export const listPredictionJobsApiV1PredictionJobsGet = async ( options?: Reques
 
 
 
-export const getListPredictionJobsApiV1PredictionJobsGetQueryKey = () => {
-    return ['api','v1','prediction-jobs'] as const;
+export const getListPredictionJobsApiV1PredictionJobsGetQueryKey = (params?: MaybeRef<ListPredictionJobsApiV1PredictionJobsGetParams>,) => {
+    return ['api','v1','prediction-jobs', ...(params ? [params]: [])] as const;
     }
 
 
-export const getListPredictionJobsApiV1PredictionJobsGetQueryOptions = <TData = Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export const getListPredictionJobsApiV1PredictionJobsGetQueryOptions = <TData = Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError = HTTPValidationError>(params?: MaybeRef<ListPredictionJobsApiV1PredictionJobsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getListPredictionJobsApiV1PredictionJobsGetQueryKey();
+  const queryKey =  getListPredictionJobsApiV1PredictionJobsGetQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>> = ({ signal }) => listPredictionJobsApiV1PredictionJobsGet({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>> = ({ signal }) => listPredictionJobsApiV1PredictionJobsGet(unref(params), { signal, ...requestOptions });
 
 
 
@@ -6054,19 +6224,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ListPredictionJobsApiV1PredictionJobsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>>
-export type ListPredictionJobsApiV1PredictionJobsGetQueryError = unknown
+export type ListPredictionJobsApiV1PredictionJobsGetQueryError = HTTPValidationError
 
 
 /**
  * @summary List Prediction Jobs
  */
 
-export function useListPredictionJobsApiV1PredictionJobsGet<TData = Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export function useListPredictionJobsApiV1PredictionJobsGet<TData = Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError = HTTPValidationError>(
+ params?: MaybeRef<ListPredictionJobsApiV1PredictionJobsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionJobsApiV1PredictionJobsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListPredictionJobsApiV1PredictionJobsGetQueryOptions(options)
+  const queryOptions = getListPredictionJobsApiV1PredictionJobsGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -9741,6 +9911,82 @@ export function useListJobsApiV1TrainingJobsGet<TData = Awaited<ReturnType<typeo
 
 
 /**
+ * @summary Create Train And Predict Job
+ */
+export type createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostResponse = {
+  data: TrainAndPredictResponse | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getCreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostUrl = () => {
+
+
+  return `/api/v1/training-jobs/train-and-predict`
+}
+
+export const createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost = async (trainAndPredictRequest: TrainAndPredictRequest, options?: RequestInit): Promise<createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostResponse> => {
+
+  return orvalFetcher<createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostResponse>(getCreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      trainAndPredictRequest,)
+  }
+);}
+
+
+
+
+export const getCreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>, TError,{data: TrainAndPredictRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>, TError,{data: TrainAndPredictRequest}, TContext> => {
+
+const mutationKey = ['createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>, {data: TrainAndPredictRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost(data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostMutationResult = NonNullable<Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>>
+    export type CreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostMutationBody = TrainAndPredictRequest
+    export type CreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Create Train And Predict Job
+ */
+export const useCreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>, TError,{data: TrainAndPredictRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost>>,
+        TError,
+        {data: TrainAndPredictRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
  * @summary Get Job
  */
 export type getJobApiV1TrainingJobsJobIdGetResponse = {
@@ -10471,6 +10717,99 @@ export function useGetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKe
 
 
 /**
+ * @summary Stream Inspection Map Points Progress
+ */
+export type streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetUrl = (inspectionTime: string,
+    waferKey: number,
+    params?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/map-points/stream?${normalizedParams.toString()}` : `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/map-points/stream`
+}
+
+export const streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet = async (inspectionTime: string,
+    waferKey: number,
+    params?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams, options?: RequestInit): Promise<streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetResponse> => {
+
+  return orvalFetcher<streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetResponse>(getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetUrl(inspectionTime,waferKey,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryKey = (inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams>,) => {
+    return ['api','v1','sc','inspections',inspectionTime,waferKey,'map-points','stream', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryOptions = <TData = Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryKey(inspectionTime,waferKey,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>> = ({ signal }) => streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>, TError, TData>
+}
+
+export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryResult = NonNullable<Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>>
+export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Stream Inspection Map Points Progress
+ */
+
+export function useStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet<TData = Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>, TError = HTTPValidationError>(
+ inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetQueryOptions(inspectionTime,waferKey,params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Sc Dataset Defect Ids Binary
  */
 export type getScDatasetDefectIdsBinaryApiV1ScDatasetsDatasetIdDefectIdsBinGetResponse = {
@@ -10702,6 +11041,94 @@ export function useGetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGet<T
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetQueryOptions(datasetId,params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Stream Sc Dataset Plot Points Progress
+ */
+export type streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetUrl = (datasetId: string,
+    params?: StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/sc/datasets/${datasetId}/plot-points/stream?${normalizedParams.toString()}` : `/api/v1/sc/datasets/${datasetId}/plot-points/stream`
+}
+
+export const streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet = async (datasetId: string,
+    params?: StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams, options?: RequestInit): Promise<streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetResponse> => {
+
+  return orvalFetcher<streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetResponse>(getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetUrl(datasetId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryKey = (datasetId: MaybeRef<string>,
+    params?: MaybeRef<StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams>,) => {
+    return ['api','v1','sc','datasets',datasetId,'plot-points','stream', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryOptions = <TData = Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>, TError = HTTPValidationError>(datasetId: MaybeRef<string>,
+    params?: MaybeRef<StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryKey(datasetId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>> = ({ signal }) => streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet(unref(datasetId),unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>, TError, TData>
+}
+
+export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryResult = NonNullable<Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>>
+export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Stream Sc Dataset Plot Points Progress
+ */
+
+export function useStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet<TData = Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>, TError = HTTPValidationError>(
+ datasetId: MaybeRef<string>,
+    params?: MaybeRef<StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetQueryOptions(datasetId,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -10946,6 +11373,85 @@ export const useGetInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWafe
       > => {
 
       const mutationOptions = getGetInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Stream Inspection Sample Table Rows
+ */
+export type streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostUrl = (inspectionTime: string,
+    waferKey: number,) => {
+
+
+  return `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/sample-table-rows/stream`
+}
+
+export const streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost = async (inspectionTime: string,
+    waferKey: number,
+    scSampleTableRowsRequest: ScSampleTableRowsRequest, options?: RequestInit): Promise<streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostResponse> => {
+
+  return orvalFetcher<streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostResponse>(getStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostUrl(inspectionTime,waferKey),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scSampleTableRowsRequest,)
+  }
+);}
+
+
+
+
+export const getStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>, TError,{inspectionTime: string;waferKey: number;data: ScSampleTableRowsRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>, TError,{inspectionTime: string;waferKey: number;data: ScSampleTableRowsRequest}, TContext> => {
+
+const mutationKey = ['streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>, {inspectionTime: string;waferKey: number;data: ScSampleTableRowsRequest}> = (props) => {
+          const {inspectionTime,waferKey,data} = props ?? {};
+
+          return  streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost(inspectionTime,waferKey,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>>
+    export type StreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostMutationBody = ScSampleTableRowsRequest
+    export type StreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Stream Inspection Sample Table Rows
+ */
+export const useStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>, TError,{inspectionTime: string;waferKey: number;data: ScSampleTableRowsRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof streamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPost>>,
+        TError,
+        {inspectionTime: string;waferKey: number;data: ScSampleTableRowsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsStreamPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

@@ -64,6 +64,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/plugins/export-parquet/export/stream:
+    post:
+      tags:
+      - plugins
+      summary: Export Parquet Stream
+      operationId: export_parquet_stream_api_v1_plugins_export_parquet_export_stream_post
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/datasets/{dataset_id}/features/extract:
     post:
       tags:
@@ -970,6 +995,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PersistExportResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/exports/{dataset_id}/persist/stream:
+    post:
+      tags:
+      - datasets
+      summary: Export Dataset Persist Stream
+      operationId: export_dataset_persist_stream_api_v1_exports__dataset_id__persist_stream_post
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -2177,16 +2227,33 @@ paths:
       - prediction
       summary: List Prediction Jobs
       operationId: list_prediction_jobs_api_v1_prediction_jobs_get
+      parameters:
+      - name: dataset_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter prediction jobs to one dataset.
+          title: Dataset Id
+        description: Filter prediction jobs to one dataset.
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   $ref: '#/components/schemas/PredictionJobResponse'
-                type: array
                 title: Response List Prediction Jobs Api V1 Prediction Jobs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/prediction-jobs/{job_id}:
     get:
       tags:
@@ -3514,6 +3581,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/train-and-predict:
+    post:
+      tags:
+      - training
+      summary: Create Train And Predict Job
+      operationId: create_train_and_predict_job_api_v1_training_jobs_train_and_predict_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainAndPredictRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainAndPredictResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/training-jobs/{job_id}:
     get:
       tags:
@@ -4009,6 +4101,209 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/inspections/{inspection_time}/{wafer_key}/map-points/stream:
+    get:
+      tags:
+      - sc
+      summary: Stream Inspection Map Points Progress
+      operationId: stream_inspection_map_points_progress_api_v1_sc_inspections__inspection_time___wafer_key__map_points_stream_get
+      parameters:
+      - name: inspection_time
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Inspection Time
+      - name: wafer_key
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Wafer Key
+      - name: reticleXDieCount
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 10
+          title: Reticlexdiecount
+      - name: reticleYDieCount
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 10
+          title: Reticleydiecount
+      - name: reticleXDieShift
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Reticlexdieshift
+      - name: reticleYDieShift
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Reticleydieshift
+      - name: sampled
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Sampled
+      - name: gridSizeNm
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 600
+          title: Gridsizenm
+      - name: zoomX
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Zoomx
+      - name: zoomY
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Zoomy
+      - name: zoomW
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Zoomw
+      - name: zoomH
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Zoomh
+      - name: mode
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - wafer
+            - die
+            - reticle
+            type: string
+          - type: 'null'
+          title: Mode
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/datasets/{dataset_id}/defect-ids.bin:
     get:
       tags:
@@ -4233,6 +4528,159 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/datasets/{dataset_id}/plot-points/stream:
+    get:
+      tags:
+      - sc
+      summary: Stream Sc Dataset Plot Points Progress
+      operationId: stream_sc_dataset_plot_points_progress_api_v1_sc_datasets__dataset_id__plot_points_stream_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      - name: sampled
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Sampled
+      - name: targetResolution
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 600
+          title: Targetresolution
+      - name: reticleXDieCount
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 3
+          title: Reticlexdiecount
+      - name: reticleYDieCount
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 5
+          title: Reticleydiecount
+      - name: reticleXDieShift
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Reticlexdieshift
+      - name: reticleYDieShift
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Reticleydieshift
+      - name: class_numbers
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Class Numbers
+      - name: rough_bins
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Rough Bins
+      - name: predictions
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Predictions
+      - name: annotations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Annotations
+      - name: test_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Test Ids
+      - name: adders
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Adders
+      - name: cluster_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Cluster Ids
+      - name: legend_group_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - class
+            - bin
+            - annotation
+            - prediction
+            type: string
+          - type: 'null'
+          title: Legend Group By
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/datasets/{dataset_id}/box-filter:
     post:
       tags:
@@ -4329,6 +4777,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScSampleTableRowsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/inspections/{inspection_time}/{wafer_key}/sample-table-rows/stream:
+    post:
+      tags:
+      - sc
+      summary: Stream Inspection Sample Table Rows
+      operationId: stream_inspection_sample_table_rows_api_v1_sc_inspections__inspection_time___wafer_key__sample_table_rows_stream_post
+      parameters:
+      - name: inspection_time
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Inspection Time
+      - name: wafer_key
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Wafer Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScSampleTableRowsRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -7912,6 +8397,54 @@ components:
       - token_prefix
       - created_at
       title: TokenResponse
+    TrainAndPredictRequest:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        trainer_id:
+          type: string
+          title: Trainer Id
+        target:
+          type: string
+          title: Target
+          default: image_classification
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        sample_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Sample Ids
+        prompt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt
+      type: object
+      required:
+      - dataset_id
+      - trainer_id
+      title: TrainAndPredictRequest
+    TrainAndPredictResponse:
+      properties:
+        train_job:
+          additionalProperties: true
+          type: object
+          title: Train Job
+        workflow_run_id:
+          type: string
+          title: Workflow Run Id
+      type: object
+      required:
+      - train_job
+      - workflow_run_id
+      title: TrainAndPredictResponse
     TrainingEvent:
       properties:
         job_id:

@@ -17,6 +17,10 @@ WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
 DATA_DIR     := infra/compose/data
+IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
+SC_PATCH_ZIP_DEFECTS ?= 200000
+SC_PATCH_ZIP_BUCKET ?= sc-patch-images
+SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
 
 # ──────────────────────────────────────────────
 # Production split-stack (infra/compose/production/)
@@ -76,6 +80,7 @@ prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run con
 	uvx prefect init --profile local --no-prompt && \
 	PREFECT_API_URL=http://localhost:4200/api \
 	PLATFORM_API_URL=http://localhost:8000 \
+	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
@@ -176,7 +181,7 @@ generate-openapi-artifacts: generate-openapi-spec generate-api-models generate-o
 generate-protos: generate-protos-deps ## Generate protobuf Python, TypeScript, and Go stubs from protos/
 	mkdir -p libs/protos/src/proto_stubs/sc/v1 $(WEB_DIR)/src/features/sc/generated/proto
 	export PATH="$(CURDIR)/node_modules/.bin:$(CURDIR)/$(WEB_DIR)/node_modules/.bin:$$HOME/.local/bin:$$PATH" && \
-		npx buf generate $(PROTO_DIR) --template $(PROTO_DIR)/buf.gen.yaml
+		cd $(PROTO_DIR) && npx buf generate . --template buf.gen.yaml
 	export PATH="$$HOME/.local/bin:$$PATH" && \
 		python-grpc-tools-protoc \
 		--proto_path=$(PROTO_DIR) \
@@ -240,14 +245,22 @@ seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-sam
 	uv run scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-dev
-seed-dev: seed-wafer-mock ## Seed dev demo data (wafer-demo + mock SQLite, dev-no-auth org)
+seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed dev demo data (wafer-demo + mock SQLite/S3, dev-no-auth org)
 	$(MAKE) seed ARGS="wafer-demo --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth'"
 
 .PHONY: seed-wafer-mock
-seed-wafer-mock: ## Seed mock wafer inspection SQLite database (100K defects)
+seed-wafer-mock: ## Seed mock wafer inspection SQLite database (1M defects)
 	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--defects 1000000 --imaged 100 --images-per 5 --reset
+
+.PHONY: seed-wafer-patch-zips
+seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
+	uv run python infra/compose/seed_patch_zips.py \
+		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" \
+		--bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
+		--total-defects "$(SC_PATCH_ZIP_DEFECTS)"
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
@@ -309,19 +322,19 @@ e2e-live-report: ## Open Playwright HTML report
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d
+	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
 
 .PHONY: up-prod
 up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-compose.prod.yaml)
-	docker compose -f $(COMPOSE_PROD) up -d
+	docker compose -f $(COMPOSE_PROD) up -d $(ARGS)
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
-	docker compose -f $(COMPOSE_DEV) build image-parser
+	docker compose -f $(COMPOSE_DEV) build $(ARGS)
 
 .PHONY: build-prod
 build-prod: ## Build all prod-target Docker images (local validation stack)
-	docker compose -f $(COMPOSE_PROD) build
+	docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
 
 .PHONY: logs-dev
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
@@ -501,10 +514,10 @@ save-images: ## Save all compose Docker images as .tar archives
 .PHONY: image-parser-export
 image-parser-export: ## Build and export image-parser as offline loadable tar.gz
 	@echo "Building image-parser ..."
-	docker build --platform linux/amd64 -t image-parser:latest -f services/image-parser/Dockerfile .
+	docker build --platform linux/amd64 -t image-parser:local -f services/image-parser/Dockerfile .
 	@mkdir -p dist
-	@echo "Saving image-parser:latest -> dist/image-parser.tar.gz"
-	docker save image-parser:latest | gzip > dist/image-parser.tar.gz
+	@echo "Saving image-parser:local -> dist/image-parser.tar.gz"
+	docker save image-parser:local | gzip > dist/image-parser.tar.gz
 	@echo "Done: dist/image-parser.tar.gz ($(shell du -h dist/image-parser.tar.gz | cut -f1))"
 
 .PHONY: k8s-apply

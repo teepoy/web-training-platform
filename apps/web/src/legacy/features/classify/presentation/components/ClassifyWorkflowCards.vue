@@ -36,7 +36,7 @@ const page = injectClassifyPage();
             >
               Start Training
             </n-button>
-            <n-button @click="page.router.push('/tasks')">
+            <n-button @click="page.router.push({ path: '/tasks', query: { from: page.router.currentRoute.value.fullPath } })">
               Open Task Explorer
             </n-button>
           </n-space>

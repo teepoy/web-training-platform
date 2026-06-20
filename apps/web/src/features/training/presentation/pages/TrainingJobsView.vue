@@ -8,7 +8,6 @@
     <template v-else>
       <n-page-header title="Training Jobs">
         <template #extra>
-          <n-button style="margin-right: 8px" @click="router.push('/tasks')">Open Task Explorer</n-button>
           <n-button type="primary" :disabled="!canTrain" @click="showModal = true">Start New Job</n-button>
         </template>
       </n-page-header>
@@ -72,28 +71,26 @@
 <script setup lang="ts">
 import { ref, computed, h, watch } from "vue";
 import type { MaybeRef } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
 import { listDatasets } from "@/shared/api/datasets";
 import { useOrgStore } from '@/features/auth/application/org';
-import { useAuthStore } from '@/features/auth/application/store';
 import {
   useListJobsApiV1TrainingJobsGet,
   useCreateTrainingJobApiV1TrainingJobsPost,
   useListTrainersRouteApiV1TrainersGet,
-  useSetJobPublicApiV1TrainingJobsJobIdPublicPatch,
 } from "@/generated/orval/endpoints/api";
 import type { ListJobsApiV1TrainingJobsGetParams } from "@/generated/orval/models/listJobsApiV1TrainingJobsGetParams";
 import type { JobStatus, TrainingJob } from '@/generated/orval/models';
 import type { Trainer } from "@/shared/api/types";
 
 const router = useRouter();
+const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
-const authStore = useAuthStore();
 const props = defineProps<{ datasetId?: string | null; allowTrain?: boolean; compatibleViewTypes?: string[] | null }>();
 const canTrain = computed(() => props.allowTrain !== false);
 
@@ -234,26 +231,14 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
           { default: () => "View" },
         ),
       ];
-      if (authStore.user?.is_superadmin === true && row.org_id === orgStore.currentOrgId) {
-        nodes.push(
-          h(
-            NButton,
-            {
-              size: "small",
-              style: "margin-left: 6px",
-              onClick: (e: Event) => {
-                e.stopPropagation();
-                toggleJobPublic.mutate({ jobId: row.id!, data: { is_public: !row.is_public } });
-              },
-            },
-            { default: () => (row.is_public ? "Make Private" : "Make Public") },
-          ),
-        );
-      }
       return h("span", {}, nodes);
     },
   },
 ]);
+
+function openTaskExplorer() {
+  router.push({ path: "/tasks", query: { from: route.fullPath } });
+}
 
 function rowProps(row: TrainingJob) {
   return {
@@ -287,17 +272,6 @@ const createJobMutation = useCreateTrainingJobApiV1TrainingJobsPost({
     },
     onError: (err: Error) => {
       message.error(err.message ?? "Failed to start job");
-    },
-  },
-});
-
-const toggleJobPublic = useSetJobPublicApiV1TrainingJobsJobIdPublicPatch({
-  mutation: {
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
-    },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to update visibility");
     },
   },
 });

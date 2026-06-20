@@ -203,7 +203,6 @@ watch(() => props.highlightDefects, () => { drawOverlay(); });
         :zoom="props.zoom ?? undefined"
       />
       <canvas ref="overlayRef" class="srm-ol" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp" @pointerleave="onPointerUp" @dblclick="onDblClick" />
-      <div class="srm-footer">{{ pointCount }} points</div>
     </template>
   </div>
 </template>

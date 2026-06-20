@@ -17,7 +17,7 @@ import type {
   ScSampleTableFilter,
   ScSampleTableSort,
 } from "@/features/sc/domain/sampleTable";
-import { getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost } from "@/generated/orval/endpoints/api";
+import { streamApiSse } from "@/shared/api/sse";
 import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
 import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSampleTableRowsRequest";
 import type { ScSampleTableRowsResponse } from "@/generated/orval/models/scSampleTableRowsResponse";
@@ -57,28 +57,28 @@ interface ColumnDefinition {
 }
 
 const columnDefinitions: ColumnDefinition[] = [
-  { key: "defect_id", title: "Defect ID", width: 100, filter: "set" },
-  { key: "test_id", title: "Test ID", width: 80, filter: "set" },
-  { key: "index_x", title: "Index X", width: 70, filter: "range" },
-  { key: "index_y", title: "Index Y", width: 70, filter: "range" },
-  { key: "wafer_x", title: "Wafer X", width: 90, filter: "range" },
-  { key: "wafer_y", title: "Wafer Y", width: 90, filter: "range" },
-  { key: "die_x", title: "Die X", width: 70, filter: "range" },
-  { key: "die_y", title: "Die Y", width: 70, filter: "range" },
-  { key: "size_x", title: "Size X", width: 70, filter: "range" },
-  { key: "size_y", title: "Size Y", width: 70, filter: "range" },
-  { key: "size_d", title: "Size D", width: 70, filter: "range" },
-  { key: "area", title: "Area", width: 80, filter: "range" },
-  { key: "class_number", title: "Class", width: 70, filter: "set" },
-  { key: "rough_bin", title: "Rough Bin", width: 80, filter: "set" },
-  { key: "final_bin", title: "Final Bin", width: 80, filter: "set" },
-  { key: "manual_bin", title: "Manual Bin", width: 90, filter: "set" },
-  { key: "adder", title: "Adder", width: 70, filter: "set" },
-  { key: "cluster_id", title: "Cluster ID", width: 80, filter: "set" },
+  { key: "defect_id", title: "Defect ID", width: 130, filter: "set" },
+  { key: "test_id", title: "Test ID", width: 120, filter: "set" },
+  { key: "index_x", title: "Index X", width: 120, filter: "range" },
+  { key: "index_y", title: "Index Y", width: 120, filter: "range" },
+  { key: "wafer_x", title: "Wafer X", width: 120, filter: "range" },
+  { key: "wafer_y", title: "Wafer Y", width: 120, filter: "range" },
+  { key: "die_x", title: "Die X", width: 120, filter: "range" },
+  { key: "die_y", title: "Die Y", width: 120, filter: "range" },
+  { key: "size_x", title: "Size X", width: 120, filter: "range" },
+  { key: "size_y", title: "Size Y", width: 120, filter: "range" },
+  { key: "size_d", title: "Size D", width: 120, filter: "range" },
+  { key: "area", title: "Area", width: 120, filter: "range" },
+  { key: "class_number", title: "Class", width: 120, filter: "set" },
+  { key: "rough_bin", title: "Rough Bin", width: 120, filter: "set" },
+  { key: "final_bin", title: "Final Bin", width: 120, filter: "set" },
+  { key: "manual_bin", title: "Manual Bin", width: 120, filter: "set" },
+  { key: "adder", title: "Adder", width: 120, filter: "set" },
+  { key: "cluster_id", title: "Cluster ID", width: 120, filter: "set" },
   {
     key: "kill_ratio",
     title: "Kill Ratio",
-    width: 90,
+    width: 120,
     filter: "range",
     render: (row) => row.kill_ratio != null ? row.kill_ratio.toFixed(3) : '-',
   },
@@ -118,6 +118,7 @@ const serverTotal = ref(props.total);
 const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
 const pageError = ref<string | null>(null);
+const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
 const filterState = ref<
   Record<string, { min: number | null; max: number | null }>
@@ -404,18 +405,26 @@ async function fetchNextPage(): Promise<void> {
       payload.reticle_y_die_shift = props.reticleYDieShift;
     }
 
-    const { data } =
-      await getInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeWaferKeySampleTableRowsPost(
-        props.inspectionTime!,
-        props.waferKey!,
-        payload,
-      );
+    streamStatus.value = "Loading sample rows...";
+    const dataEvent = await streamApiSse(
+      `/sc/inspections/${encodeURIComponent(props.inspectionTime!)}/${encodeURIComponent(props.waferKey!)}/sample-table-rows/stream`,
+      {
+        method: "POST",
+        body: payload,
+        onEvent: (event) => {
+          if (event.event_type === "progress") {
+            streamStatus.value = event.message || event.status || "Loading rows...";
+          }
+        },
+      },
+    );
+    const data = dataEvent?.payload;
     if (!data || !("items" in data)) {
       throw new Error("Invalid sample table response");
     }
     if (version !== requestVersion) return;
 
-    const response = data as ScSampleTableRowsResponse & {
+    const response = data as unknown as ScSampleTableRowsResponse & {
       next_anchor?: string | null;
     };
     rows.value = anchor === "0" ? response.items : [...rows.value, ...response.items];
@@ -448,6 +457,7 @@ async function fetchNextPage(): Promise<void> {
   } finally {
     if (version === requestVersion) {
       isFetching.value = false;
+      streamStatus.value = "";
     }
   }
 }
@@ -552,6 +562,9 @@ defineExpose({
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded
+        </NText>
+        <NText v-if="streamStatus" depth="3" class="sst-loaded-info">
+          {{ streamStatus }}
         </NText>
       </div>
     </div>

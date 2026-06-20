@@ -8,7 +8,7 @@
     <n-spin :show="isLoading">
       <n-data-table
         :columns="columns"
-        :data="jobs ?? []"
+        :data="visibleJobs"
         :bordered="true"
         :striped="true"
         :loading="isLoading"
@@ -74,10 +74,12 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 
 const { data: jobs, isLoading } = useQuery({
-  queryKey: ["prediction-jobs"],
-  queryFn: listPredictionJobs,
+  queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId, props.datasetId ?? null]),
+  queryFn: () => listPredictionJobs(props.datasetId),
   refetchInterval: 5000,
 });
+
+const visibleJobs = computed<PredictionJob[]>(() => jobs.value ?? []);
 
 const { data: allJobs, isLoading: jobsLoading } = useListJobsApiV1TrainingJobsGet(undefined, {
   query: {

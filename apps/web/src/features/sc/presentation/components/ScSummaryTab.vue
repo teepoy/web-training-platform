@@ -10,9 +10,11 @@ import {
 } from "naive-ui";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 
-const props = defineProps<{
+defineProps<{
   dateRange: [number, number] | null;
   summariesLoading: boolean;
+  summariesError: string | null;
+  summariesEmpty: boolean;
   summaries: InspectionSummaryItem[];
   inspectionColumns: DataTableColumns<InspectionSummaryItem>;
   lotIdFilter: string;
@@ -102,6 +104,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
       <NDataTable
         :columns="inspectionColumns"
         :data="summaries"
+        :loading="summariesLoading"
         :row-key="rowKey"
         :row-props="rowProps"
         :single-line="false"
@@ -111,7 +114,18 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         style="flex: 1"
       >
         <template #empty>
-          <NText depth="3">No inspections</NText>
+          <div class="sc-preview-empty">
+            <NText v-if="summariesError" type="error">{{ summariesError }}</NText>
+            <NText v-else-if="summariesEmpty" depth="3">No inspections found</NText>
+            <NText v-else depth="3">Enter a time range to search</NText>
+            <NButton
+              v-if="summariesError"
+              size="small"
+              @click="emit('search')"
+            >
+              Retry
+            </NButton>
+          </div>
         </template>
       </NDataTable>
     </div>
@@ -140,5 +154,11 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.sc-preview-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

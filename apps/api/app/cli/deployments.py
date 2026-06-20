@@ -29,10 +29,12 @@ def apply(pool: str) -> None:
     )
     from app.modules.sensors.adapter.flows.timer_sensor import timer_sensor
     from app.modules.training.flows.train_job import train_job_flow
+    from app.modules.training.flows.train_predict import train_and_predict_flow
 
     flows: dict[str, dict[str, Any]] = {
         "default-gpu": {
             "training-train-job": train_job_flow,
+            "training-train-and-predict": train_and_predict_flow,
             "prediction-predict-job": predict_job_flow,
             "embedding-embed": embed_flow,
         },

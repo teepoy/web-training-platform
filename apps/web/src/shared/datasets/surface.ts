@@ -125,13 +125,6 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
           onView: (id: string) => {
             options.onViewDataset(id);
           },
-          onTogglePublic: (payload: { id: string; isPublic: boolean }) => {
-            if (!options.isSuperadmin) {
-              return;
-            }
-
-            options.onTogglePublic(payload);
-          },
           onDelete: (dataset: DatasetListItem) => {
             if (!options.isSuperadmin) {
               return;
@@ -165,7 +158,7 @@ export function useDatasetListSurface<
     return {
       isSuperadmin,
       hasOrg,
-      canTogglePublic: isSuperadmin && hasOrg,
+      canTogglePublic: false,
       canDelete: isSuperadmin && hasOrg,
     };
   });

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,11 +14,14 @@ import (
 )
 
 type SCRoutes struct {
-	r *resolve.Resolver
+	images resolve.ImageBytesSource
 }
 
-func NewSCRoutes(resolver *resolve.Resolver) *SCRoutes {
-	return &SCRoutes{r: resolver}
+var patchSpriteImageTypes = []string{"defective", "template", "difference"}
+var reviewSpritePatchImageTypes = []string{"defective", "template", "difference"}
+
+func NewSCRoutes(images resolve.ImageBytesSource) *SCRoutes {
+	return &SCRoutes{images: images}
 }
 
 func (s *SCRoutes) Register(r *gin.RouterGroup) {
@@ -47,7 +51,7 @@ func (s *SCRoutes) HandleSCImage(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "review_image_id is required"})
 			return
 		}
-		data, err := s.r.GetReviewImage(inspectionTime, waferKey, defectID, reviewImageID)
+		data, err := s.images.GetReviewImageBytes(c.Request.Context(), inspectionTime, waferKey, defectID, reviewImageID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
@@ -58,7 +62,7 @@ func (s *SCRoutes) HandleSCImage(c *gin.Context) {
 		return
 	}
 
-	data, err := s.r.GetPatchImage(inspectionTime, waferKey, defectID, normalized)
+	data, err := s.images.GetPatchImageBytes(c.Request.Context(), inspectionTime, waferKey, defectID, normalized)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -89,24 +93,17 @@ func (s *SCRoutes) HandleSCPatchSprite(c *gin.Context) {
 		}
 	}
 
-	_, _, _, _, allZips, err := s.r.GetMetaAndZips(inspectionTime, waferKey)
+	_, _, _, _, allZips, err := s.images.GetMetaAndZips(c.Request.Context(), inspectionTime, waferKey)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
 		return
 	}
 
-	types := []string{"template", "defective", "difference"}
-	pngs := make([][]byte, 0, len(types))
+	imageTypes := patchImageTypesFromQuery(c, patchSpriteImageTypes)
+	pngs := make([][]byte, 0, len(imageTypes))
 
-	for _, t := range types {
-		data, err := s.r.GetPatchImageFromZips(allZips, defectID, t)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("%s: %v", t, err)})
-			return
-		}
-		acquireBimg()
-		resized, err := sprite.ResizeSquarePNG(data, cellSize)
-		releaseBimg()
+	for _, t := range imageTypes {
+		resized, err := patchSpriteCell(c.Request.Context(), s.images, allZips, defectID, t, cellSize)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -156,9 +153,15 @@ func (s *SCRoutes) HandleSCReviewSprite(c *gin.Context) {
 		}
 	}
 
-	refs, err := s.r.GetReviewImages(inspectionTime, waferKey, defectID)
+	refs, err := s.images.GetReviewImages(c.Request.Context(), inspectionTime, waferKey, defectID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, _, _, _, allZips, err := s.images.GetMetaAndZips(c.Request.Context(), inspectionTime, waferKey)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
 		return
 	}
 
@@ -166,13 +169,23 @@ func (s *SCRoutes) HandleSCReviewSprite(c *gin.Context) {
 		refs = refs[:reviewCount]
 	}
 
-	pngs := make([][]byte, 0, len(refs))
+	imageTypes := patchImageTypesFromQuery(c, reviewSpritePatchImageTypes)
+	pngs := make([][]byte, 0, len(imageTypes)+len(refs))
+	for _, t := range imageTypes {
+		resized, err := patchSpriteCell(c.Request.Context(), s.images, allZips, defectID, t, cellSize)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		pngs = append(pngs, resized)
+	}
+
 	for _, filespec := range refs {
 		bucket, key := parseReviewFileSpec(filespec)
 		if bucket == "" || key == "" {
 			continue
 		}
-		data, err := resolve.GetRawS3Object(bucket, key)
+		data, err := s.images.GetReviewObjectBytes(c.Request.Context(), bucket, key)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
@@ -226,25 +239,18 @@ func (s *SCRoutes) HandleSCPatchBatchSprite(c *gin.Context) {
 		defectIDs = defectIDs[:200]
 	}
 
-	_, _, _, _, allZips, err := s.r.GetMetaAndZips(inspectionTime, waferKey)
+	_, _, _, _, allZips, err := s.images.GetMetaAndZips(c.Request.Context(), inspectionTime, waferKey)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
 		return
 	}
 
-	types := []string{"template", "defective", "difference"}
-	pngs := make([][]byte, 0, len(defectIDs)*len(types))
+	imageTypes := patchImageTypesFromQuery(c, patchSpriteImageTypes)
+	pngs := make([][]byte, 0, len(defectIDs)*len(imageTypes))
 
 	for _, did := range defectIDs {
-		for _, t := range types {
-			data, err := s.r.GetPatchImageFromZips(allZips, did, t)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("defect %s %s: %v", did, t, err)})
-				return
-			}
-			acquireBimg()
-			resized, err := sprite.ResizeSquarePNG(data, cellSize)
-			releaseBimg()
+		for _, t := range imageTypes {
+			resized, err := patchSpriteCell(c.Request.Context(), s.images, allZips, did, t, cellSize)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -303,10 +309,26 @@ func (s *SCRoutes) HandleSCReviewBatchSprite(c *gin.Context) {
 		defectIDs = defectIDs[:200]
 	}
 
+	_, _, _, _, allZips, err := s.images.GetMetaAndZips(c.Request.Context(), inspectionTime, waferKey)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resolve: %v", err)})
+		return
+	}
+
 	pngs := make([][]byte, 0)
 
+	imageTypes := patchImageTypesFromQuery(c, reviewSpritePatchImageTypes)
+
 	for _, did := range defectIDs {
-		refs, err := s.r.GetReviewImages(inspectionTime, waferKey, did)
+		for _, t := range imageTypes {
+			resized, err := patchSpriteCell(c.Request.Context(), s.images, allZips, did, t, cellSize)
+			if err != nil {
+				continue
+			}
+			pngs = append(pngs, resized)
+		}
+
+		refs, err := s.images.GetReviewImages(c.Request.Context(), inspectionTime, waferKey, did)
 		if err != nil {
 			continue
 		}
@@ -319,7 +341,7 @@ func (s *SCRoutes) HandleSCReviewBatchSprite(c *gin.Context) {
 			if bucket == "" || key == "" {
 				continue
 			}
-			data, err := resolve.GetRawS3Object(bucket, key)
+			data, err := s.images.GetReviewObjectBytes(c.Request.Context(), bucket, key)
 			if err != nil {
 				continue
 			}
@@ -361,13 +383,13 @@ func (s *SCRoutes) HandleSCWarm(c *gin.Context) {
 		req = WarmRequest{}
 	}
 
-	lotID, waferID, device, layerID, err := s.r.ResolveMetadataForWarm(inspectionTime, waferKey)
+	lotID, waferID, device, layerID, err := s.images.ResolveMetadataForWarm(c.Request.Context(), inspectionTime, waferKey)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("inspection not found: %v", err)})
 		return
 	}
 
-	allZips, err := s.r.ResolvePatchZipsForWarm(inspectionTime, lotID, waferID, device, layerID)
+	allZips, err := s.images.ResolvePatchZipsForWarm(c.Request.Context(), inspectionTime, lotID, waferID, device, layerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("resolve zips: %v", err)})
 		return
@@ -398,9 +420,7 @@ func (s *SCRoutes) HandleSCWarm(c *gin.Context) {
 		}
 	}
 
-	if s.r.Warmer != nil {
-		s.r.Warmer.WarmAsync(fmt.Sprintf("warm:%s:%d", inspectionTime, waferKey), bucket, keys)
-	}
+	s.images.WarmAsync(fmt.Sprintf("warm:%s:%d", inspectionTime, waferKey), bucket, keys)
 
 	c.JSON(http.StatusAccepted, gin.H{"status": "warming", "zips": len(keys)})
 }
@@ -408,7 +428,7 @@ func (s *SCRoutes) HandleSCWarm(c *gin.Context) {
 func normalizeImageType(imageType string) string {
 	lower := strings.ToLower(imageType)
 	switch lower {
-	case "patch_template", "template":
+	case "patch_template", "template", "reference":
 		return "template"
 	case "patch_defective", "defective":
 		return "defective"
@@ -419,6 +439,47 @@ func normalizeImageType(imageType string) string {
 	default:
 		return lower
 	}
+}
+
+func patchSpriteCell(ctx context.Context, images resolve.ImageBytesSource, zips []resolve.CacheZipRef, defectID string, imageType string, cellSize int) ([]byte, error) {
+	data, err := images.GetPatchImageBytesFromZips(ctx, zips, defectID, imageType)
+	if err != nil {
+		return sprite.BlankSquarePNG(cellSize)
+	}
+	acquireBimg()
+	resized, err := sprite.ResizeSquarePNG(data, cellSize)
+	releaseBimg()
+	if err != nil {
+		return sprite.BlankSquarePNG(cellSize)
+	}
+	return resized, nil
+}
+
+func patchImageTypesFromQuery(c *gin.Context, defaults []string) []string {
+	rawTypes := c.QueryArray("image_types")
+	if csv := c.Query("image_types"); csv != "" && len(rawTypes) == 1 {
+		rawTypes = strings.Split(csv, ",")
+	}
+	if len(rawTypes) == 0 {
+		return append([]string(nil), defaults...)
+	}
+	seen := make(map[string]bool, len(rawTypes))
+	types := make([]string, 0, len(rawTypes))
+	for _, raw := range rawTypes {
+		normalized := normalizeImageType(strings.TrimSpace(raw))
+		if normalized == "" || normalized == "review" || seen[normalized] {
+			continue
+		}
+		switch normalized {
+		case "defective", "template", "difference":
+			seen[normalized] = true
+			types = append(types, normalized)
+		}
+	}
+	if len(types) == 0 {
+		return append([]string(nil), defaults...)
+	}
+	return types
 }
 
 func parseReviewFileSpec(filespec string) (bucket, key string) {

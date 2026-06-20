@@ -1,5 +1,6 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { req } from "@/shared/api/client";
+import { streamApiSse } from "@/shared/api/sse";
 import {
   WaferMapResponseSchema,
   type WaferMapResponse,
@@ -15,6 +16,12 @@ export interface ScMapFilter {
   adders?: number[];
   cluster_ids?: number[];
 }
+
+export type ScMapProgressCallback = (
+  status: "warmup" | "headers" | "bytes" | "decode",
+  loaded: number,
+  message?: string,
+) => void;
 
 export function appendScMapFilterParams(
   params: URLSearchParams,
@@ -35,7 +42,35 @@ export async function fetchScPlotPoints(
   options: ReticleMapOptions,
   filter?: ScMapFilter,
   legendGroupBy?: string,
+  onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
+  const params = buildDatasetMapParams(options, filter, legendGroupBy);
+  const response = await req<Response>(
+    `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points?${params.toString()}`,
+    { headers: { Accept: "application/x-protobuf" } },
+  );
+  return readMapResponse(response, onProgress);
+}
+
+export async function warmupScPlotPoints(
+  datasetId: string,
+  options: ReticleMapOptions,
+  filter?: ScMapFilter,
+  legendGroupBy?: string,
+  onProgress?: ScMapProgressCallback,
+): Promise<void> {
+  const params = buildDatasetMapParams(options, filter, legendGroupBy);
+  await warmupMapPoints(
+    `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points/stream?${params.toString()}`,
+    onProgress,
+  );
+}
+
+function buildDatasetMapParams(
+  options: ReticleMapOptions,
+  filter?: ScMapFilter,
+  legendGroupBy?: string,
+): URLSearchParams {
   const params = new URLSearchParams({
     sampled: "true",
     targetResolution: "600",
@@ -48,14 +83,7 @@ export async function fetchScPlotPoints(
   if (legendGroupBy) {
     params.set("legend_group_by", legendGroupBy);
   }
-  const response = await req<Response>(
-    `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points?${params.toString()}`,
-    { headers: { Accept: "application/x-protobuf" } },
-  );
-  return fromBinary(
-    WaferMapResponseSchema,
-    new Uint8Array(await response.arrayBuffer()),
-  );
+  return params;
 }
 
 export interface InspectionMapExtra {
@@ -72,7 +100,38 @@ export async function fetchScInspectionMapPoints(
   filter?: ScMapFilter,
   legendGroupBy?: string,
   extra?: InspectionMapExtra,
+  onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
+  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra);
+  const response = await req<Response>(
+    `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points?${params.toString()}`,
+    { headers: { Accept: "application/x-protobuf" } },
+  );
+  return readMapResponse(response, onProgress);
+}
+
+export async function warmupScInspectionMapPoints(
+  inspectionTime: string,
+  waferKey: number,
+  options: ReticleMapOptions,
+  filter?: ScMapFilter,
+  legendGroupBy?: string,
+  extra?: InspectionMapExtra,
+  onProgress?: ScMapProgressCallback,
+): Promise<void> {
+  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra);
+  await warmupMapPoints(
+    `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points/stream?${params.toString()}`,
+    onProgress,
+  );
+}
+
+function buildInspectionMapParams(
+  options: ReticleMapOptions,
+  filter?: ScMapFilter,
+  legendGroupBy?: string,
+  extra?: InspectionMapExtra,
+): URLSearchParams {
   const params = new URLSearchParams({
     sampled: extra?.sampled !== undefined ? String(extra.sampled) : "true",
     gridSizeNm: String(extra?.gridSizeNm ?? 600),
@@ -94,12 +153,58 @@ export async function fetchScInspectionMapPoints(
   if (legendGroupBy) {
     params.set("legend_group_by", legendGroupBy);
   }
-  const response = await req<Response>(
-    `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points?${params.toString()}`,
-    { headers: { Accept: "application/x-protobuf" } },
-  );
-  return fromBinary(
-    WaferMapResponseSchema,
-    new Uint8Array(await response.arrayBuffer()),
-  );
+  return params;
+}
+
+async function warmupMapPoints(
+  path: string,
+  onProgress?: ScMapProgressCallback,
+): Promise<void> {
+  onProgress?.("warmup", 0, "Preparing map points...");
+  await streamApiSse(path, {
+    method: "GET",
+    onEvent: (event) => {
+      if (event.event_type === "progress") {
+        onProgress?.(
+          "warmup",
+          Number(event.loaded_count ?? 0),
+          event.message ?? "Preparing map points...",
+        );
+      } else if (event.event_type === "done") {
+        onProgress?.("warmup", Number(event.rows ?? 0), "Map points are ready");
+      }
+    },
+  });
+}
+
+async function readMapResponse(
+  response: Response,
+  onProgress?: ScMapProgressCallback,
+): Promise<WaferMapResponse> {
+  onProgress?.("headers", 0);
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    onProgress?.("bytes", bytes.byteLength);
+    onProgress?.("decode", bytes.byteLength, "Decoding map points...");
+    return fromBinary(WaferMapResponseSchema, bytes);
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value.byteLength === 0) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.("bytes", loaded, "Receiving map points...");
+  }
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  onProgress?.("decode", loaded, "Decoding map points...");
+  return fromBinary(WaferMapResponseSchema, bytes);
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NColorPicker, NTag } from 'naive-ui'
+import { NTag } from 'naive-ui'
 import {
   parsePoints,
   groupByClass,
@@ -133,13 +133,13 @@ const handleColorUpdate = (key: string, color: string) => {
           :data-testid="`sc-legend-color-${item.key}`"
           @click.stop
         >
-          <NColorPicker
+          <input
+            class="sc-legend-color-input"
+            type="color"
             :value="item.color"
-            :show-alpha="false"
-            size="small"
-            :modes="['hex']"
-            @update:value="(value) => handleColorUpdate(item.colorKey, value)"
-          />
+            :aria-label="`Set color for ${item.label}`"
+            @input="(event) => handleColorUpdate(item.colorKey, (event.target as HTMLInputElement).value)"
+          >
         </span>
         <span class="sc-legend-label">{{ item.label }}</span>
         <NTag size="small" :bordered="false" style="font-size: 10px;">{{ item.count }}</NTag>
@@ -185,21 +185,32 @@ const handleColorUpdate = (key: string, color: string) => {
 }
 .sc-legend-color-picker {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  width: 18px;
+  height: 16px;
+  width: 16px;
 }
-.sc-legend-color-picker :deep(.n-color-picker-trigger) {
-  border-radius: 50%;
+.sc-legend-color-input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
   height: 12px;
-  min-height: 12px;
   padding: 0;
   width: 12px;
 }
-.sc-legend-color-picker :deep(.n-color-picker-trigger__fill) {
-  border-radius: 50%;
+.sc-legend-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
 }
-.sc-legend-color-picker :deep(.n-color-picker-trigger__value) {
-  display: none;
+.sc-legend-color-input::-webkit-color-swatch {
+  border: 1px solid var(--n-border-color, rgba(0, 0, 0, 0.16));
+  border-radius: 2px;
+}
+.sc-legend-color-input::-moz-color-swatch {
+  border: 1px solid var(--n-border-color, rgba(0, 0, 0, 0.16));
+  border-radius: 2px;
 }
 .sc-legend-label {
   flex-grow: 1;

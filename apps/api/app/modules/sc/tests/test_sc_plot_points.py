@@ -29,6 +29,7 @@ _BOX_FILTER_ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/box-filter"
 
 def _make_service_mock(return_bytes: bytes) -> AsyncMock:
     svc = AsyncMock(spec=ScPlotPointsService)
+    svc.ensure_plot_points_allowed = AsyncMock(return_value=None)
     svc.build_plot_points_response = AsyncMock(return_value=return_bytes)
     return svc
 
@@ -74,6 +75,28 @@ def test_plot_points_happy_path_100_samples() -> None:
         msg.ParseFromString(resp.content)
         assert len(msg.wafer_points) == 600
         assert len(msg.die_points) == 600
+    finally:
+        app.dependency_overrides.pop(get_sc_plot_points_service, None)
+
+
+def test_plot_points_stream_warms_then_keeps_protobuf_transport() -> None:
+    mock_svc = _make_service_mock(b"\x08\x01")
+    app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
+    try:
+        with TestClient(app) as client:
+            stream_resp = client.get(f"{_ENDPOINT}/stream")
+            pb_resp = client.get(_ENDPOINT)
+
+        assert stream_resp.status_code == 200, stream_resp.text
+        assert stream_resp.headers.get("content-type", "").startswith(
+            "text/event-stream"
+        )
+        assert "event: progress" in stream_resp.text
+        assert "event: done" in stream_resp.text
+
+        assert pb_resp.status_code == 200, pb_resp.text
+        assert pb_resp.headers.get("content-type", "").startswith(PB_CONTENT_TYPE)
+        assert mock_svc.build_plot_points_response.await_count == 2
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
@@ -261,7 +284,7 @@ def test_dataset_defect_ids_nonexistent_dataset_returns_404() -> None:
 def test_plot_points_nonexistent_dataset_returns_404() -> None:
     """Non-existent dataset id → 404."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsNotFoundError(_DATASET_ID)
     )
     app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
@@ -276,7 +299,7 @@ def test_plot_points_nonexistent_dataset_returns_404() -> None:
 def test_plot_points_non_sc_dataset_returns_400() -> None:
     """Non-SC dataset (e.g., classification) → 400 with explanatory detail."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsRejectedError("plot-points requires an image_sc dataset")
     )
     app.dependency_overrides[get_sc_plot_points_service] = lambda: mock_svc
@@ -292,7 +315,7 @@ def test_plot_points_non_sc_dataset_returns_400() -> None:
 def test_plot_points_non_sparse_dataset_returns_400() -> None:
     """Non-sparse SC dataset (db_full) → 400 with explanatory detail."""
     mock_svc = AsyncMock(spec=ScPlotPointsService)
-    mock_svc.build_plot_points_response = AsyncMock(
+    mock_svc.ensure_plot_points_allowed = AsyncMock(
         side_effect=ScPlotPointsRejectedError(
             "plot-points requires a file_shard_sparse dataset"
         )

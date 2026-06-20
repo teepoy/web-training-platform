@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from omegaconf import OmegaConf
@@ -17,7 +17,7 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 7
+    assert mock_client.ensure_deployment.call_count == 8
 
     calls = mock_client.ensure_deployment.call_args_list
     called: list[dict] = []
@@ -30,6 +30,14 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
         "flow_name": "training-train-job",
         "work_pool_name": "default-gpu",
         "entrypoint": "app.modules.training.flows.train_job:train_job_flow",
+        "path": "",
+    } in called
+
+    assert {
+        "deployment_name": "train-and-predict-deployment",
+        "flow_name": "training-train-and-predict",
+        "work_pool_name": "default-gpu",
+        "entrypoint": "app.modules.training.flows.train_predict:train_and_predict_flow",
         "path": "",
     } in called
 
@@ -109,8 +117,9 @@ async def test_ensure_prefect_deployments_swallows_errors_per_entry() -> None:
         None,
         None,
         None,
+        None,
     ]
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 7
+    assert mock_client.ensure_deployment.call_count == 8

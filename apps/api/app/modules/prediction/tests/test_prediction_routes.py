@@ -14,10 +14,14 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.shared.api.schemas import JobStatus, PredictionJob
+from tests.conftest import DEFAULT_ORG_ID
 from tests.conftest import create_dataset, create_job, create_sample, upload_model
 
 
@@ -46,6 +50,43 @@ def test_prediction_job_not_found() -> None:
     with TestClient(app) as c:
         resp = c.get("/api/v1/prediction-jobs/nonexistent")
         assert resp.status_code == 404
+
+
+def test_list_prediction_jobs_filters_by_dataset() -> None:
+    with TestClient(app) as c:
+        dataset_id = create_dataset(c)
+        other_dataset_id = create_dataset(c, name="other-ds")
+        repo = app.state.app_context.prediction.prediction_repository
+
+        async def _seed() -> None:
+            await repo.create_prediction_job(
+                PredictionJob(
+                    id="prediction-current-dataset",
+                    org_id=DEFAULT_ORG_ID,
+                    dataset_id=dataset_id,
+                    model_id="model-current",
+                    status=JobStatus.COMPLETED,
+                    created_by="test",
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+            await repo.create_prediction_job(
+                PredictionJob(
+                    id="prediction-other-dataset",
+                    org_id=DEFAULT_ORG_ID,
+                    dataset_id=other_dataset_id,
+                    model_id="model-other",
+                    status=JobStatus.COMPLETED,
+                    created_by="test",
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+
+        asyncio.run(_seed())
+
+        resp = c.get("/api/v1/prediction-jobs", params={"dataset_id": dataset_id})
+        assert resp.status_code == 200
+        assert [item["id"] for item in resp.json()] == ["prediction-current-dataset"]
 
 
 @pytest.mark.skip(reason="Pre-existing failure - see errors.md")

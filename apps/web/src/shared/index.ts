@@ -19,7 +19,6 @@ export { default as RunLogViewer } from "./components/run-log-viewer";
 export { default as SampleBrowser } from "./components/sample-browser";
 export { default as SampleDetailDrawer } from "./components/sample-detail-drawer";
 export { sampleViewerPlugin as SampleViewerWidget } from "./components/sample-viewer";
-export { waferMapPlugin as WaferMapWidget } from "./components/wafer-map";
 export { default as TaskInsightModal, TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "./components/task-insight-modal";
 export { default as TrainingChart } from "./components/training-chart";
 

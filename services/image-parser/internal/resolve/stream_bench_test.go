@@ -3,6 +3,7 @@ package resolve
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 	b.SetBytes(int64(len(lookups)))
 	b.ResetTimer()
 	for range b.N {
-		results := resolver.GetPatchImagesFromZips(zips, lookups)
+		results := resolver.GetPatchImageBytesBatchFromZips(context.Background(), zips, lookups)
 		if len(results) != len(lookups) {
 			b.Fatalf("result count mismatch: got %d want %d", len(results), len(lookups))
 		}

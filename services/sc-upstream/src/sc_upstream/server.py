@@ -13,7 +13,7 @@ from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
 from .cache import QueryCache
 from .flight_server import UpstreamFlightServer
 from .service import ScUpstreamService
-from .upstream_db import InspectionZipsDB, UpstreamDB
+from .upstream_db import create_mock_inspection_zips_db, create_mock_upstream_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,9 +29,9 @@ async def serve() -> None:
     cache_dir = os.environ.get("CACHE_DIR", "/tmp/sc-upstream")
 
     logger.info("connecting to upstream db")
-    upstream = UpstreamDB(db_url=upstream_db_url)
+    upstream = create_mock_upstream_db(db_url=upstream_db_url)
     logger.info("connecting to zips db")
-    zips = InspectionZipsDB(db_url=zips_db_url)
+    zips = create_mock_inspection_zips_db(db_url=zips_db_url)
     logger.info("cache dir: %s", cache_dir)
     cache = QueryCache(cache_dir=cache_dir)
 

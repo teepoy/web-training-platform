@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, provide, ref } from "vue";
 import {
   NSpin,
   NEmpty,
@@ -17,10 +17,19 @@ import {
   NModal,
   NCheckbox,
   NTooltip,
+  NScrollbar,
+  NProgress,
   useThemeVars,
 } from "naive-ui";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
+import TaskInsightModal, {
+  TASK_INSIGHT_ORG_ID_KEY,
+  TASK_INSIGHT_STREAM_KEY,
+} from "@/shared/components/task-insight-modal";
+import { useTaskHandoffState } from "@/shared/composables/taskHandoffState";
+import { useTaskStream } from "@/shared/composables/useTaskHandoff";
+import { useOrgStore } from "@/features/auth/application/org";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import ScReclassifyBlinkVirtualTable from "../components/ScReclassifyBlinkVirtualTable.vue";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
@@ -35,11 +44,18 @@ import type {
   ScBoxRegion,
   ScMapMode,
 } from "@/features/sc/api/boxFilter";
+import type { TaskTrackerSummaryResponse } from "@/generated/orval/models";
 import { fetchScDatasetBoxFilter } from "@/features/sc/api/boxFilter";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
 const router = useRouter();
+const orgStore = useOrgStore();
+const taskInsightVisible = ref(false);
+const { watchedTaskIds, addTaskId, removeTaskId } = useTaskHandoffState();
+
+provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
+provide(TASK_INSIGHT_STREAM_KEY, useTaskStream);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -96,19 +112,29 @@ function clearSelectedDrafts(): void {
   page.annotationDraft.value = next;
 }
 
+function applyAnnotationCode(code: string): void {
+  if (page.selectedDefectIds.value.size === 0) return;
+  for (const id of page.selectedDefectIds.value) {
+    page.setAnnotationDraft(id, code);
+  }
+}
+
 function onBlinkTableSelect(
   defectIds: string[],
-  modifiers: { shift: boolean; ctrl: boolean; meta: boolean },
+  modifiers: {
+    shift: boolean;
+    ctrl: boolean;
+    meta: boolean;
+    selectionMode?: import("../../application/useReclassifyPage").SelectionMode;
+  },
 ): void {
-  const mode: import("../../application/useReclassifyPage").SelectionMode = modifiers.shift
-    ? "add"
-    : modifiers.ctrl || modifiers.meta
-      ? "toggle"
-      : "replace";
+  const mode: import("../../application/useReclassifyPage").SelectionMode =
+    modifiers.selectionMode ??
+    (modifiers.ctrl || modifiers.meta ? "toggle" : "replace");
   page.selectDefectIds(defectIds, mode);
 }
 
-// ── Keyboard shortcuts: digit 1-9 applies label by class index ──────
+// ── Keyboard shortcuts: user-configured single keys apply annotation codes ─
 
 function handleKeydown(e: KeyboardEvent): void {
   if (e.key === "Escape") {
@@ -117,9 +143,6 @@ function handleKeydown(e: KeyboardEvent): void {
       return;
     }
   }
-
-  const digit = Number(e.key);
-  if (!Number.isFinite(digit) || digit < 1 || digit > 9) return;
 
   const target = e.target as HTMLElement | null;
   if (target) {
@@ -134,18 +157,12 @@ function handleKeydown(e: KeyboardEvent): void {
     }
   }
 
-  const labelOpts = page.effectiveLabels.value;
-  const idx = digit - 1;
-  if (idx >= labelOpts.length) return;
-
-  const label = labelOpts[idx];
-  if (!label) return;
-
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+  const code = page.shortcutCodeByKey.value[e.key.toLowerCase()];
+  if (!code) return;
   if (page.selectedDefectIds.value.size === 0) return;
-
-  for (const id of page.selectedDefectIds.value) {
-    page.setAnnotationDraft(id, label);
-  }
+  e.preventDefault();
+  applyAnnotationCode(code);
 }
 
 onMounted(() => document.addEventListener("keydown", handleKeydown));
@@ -203,6 +220,47 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   }
   return map;
 });
+
+const activeTaskSummary = computed<TaskTrackerSummaryResponse | null>(() => {
+  const taskId = page.trainPredictTaskId.value;
+  if (!taskId) return null;
+  const now = new Date().toISOString();
+  return {
+    id: taskId,
+    task_kind: "training",
+    execution_kind: "prefect",
+    display_name: `Train & Predict ${taskId.slice(0, 8)}`,
+    display_status: page.isTrainPredictRunning.value ? "running" : "pending",
+    stage: "execution_flow",
+    dataset_id: page.datasetId.value,
+    model_id: null,
+    trainer_id: page.selectedTrainerId.value,
+    created_by: "",
+    created_at: now,
+    updated_at: now,
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: "",
+    queue_depth_ahead: null,
+    capacity_status: "",
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
+});
+
+const activeTaskHandoffEnabled = computed(() => {
+  const taskId = page.trainPredictTaskId.value;
+  return !!taskId && watchedTaskIds.value.includes(taskId);
+});
+
+function setActiveTaskHandoff(enabled: boolean): void {
+  const taskId = page.trainPredictTaskId.value;
+  if (!taskId) return;
+  if (enabled) addTaskId(taskId);
+  else removeTaskId(taskId);
+}
 
 </script>
 
@@ -273,6 +331,14 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
           >
             {{ page.trainPredictStatusMessage.value }}
           </NText>
+          <NButton
+            v-if="page.trainPredictTaskId.value"
+            size="small"
+            quaternary
+            @click="taskInsightVisible = true"
+          >
+            View Task
+          </NButton>
           <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
             Sampling
           </NButton>
@@ -319,6 +385,27 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               {{ page.activeFilterCount.value }} filter(s) active
               <NButton text size="tiny" type="primary" @click="page.clearMapFilter()">Clear</NButton>
             </span>
+            <NText
+              v-if="page.activeTab.value === 'map' && page.mapStreamMessage.value"
+              depth="3"
+              class="sc-stream-hint"
+            >
+              {{ page.mapStreamMessage.value }}
+            </NText>
+          </div>
+          <div
+            v-if="page.activeTab.value === 'map' && page.isMapLoading.value"
+            class="sc-map-progress"
+          >
+            <NProgress
+              type="line"
+              :percentage="100"
+              :show-indicator="false"
+              processing
+            />
+            <NText depth="3" class="sc-map-progress-text">
+              {{ page.mapStreamMessage.value || 'Loading map data...' }}
+            </NText>
           </div>
           <NSpin :show="page.activeTab.value === 'blink' ? page.isBlinkLoading.value : page.isMapLoading.value" class="sc-blink-spin">
             <!-- Blink table tab (default) -->
@@ -394,8 +481,8 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             <div class="sc-label-picker">
               <label class="sc-label-label">Label</label>
               <div class="sc-label-create-row">
-                <NInput v-model:value="newLabelInput" placeholder="New label name..." size="small" :disabled="page.isAddingLabel.value" @keyup.enter="onAddLabelClick" />
-                <NButton size="small" type="primary" :disabled="!newLabelInput.trim() || page.isAddingLabel.value" :loading="page.isAddingLabel.value" @click="onAddLabelClick">Add Label</NButton>
+                <NInput v-model:value="newLabelInput" data-testid="reclassify-new-label-input" placeholder="New label name..." size="small" :disabled="page.isAddingLabel.value" @keyup.enter="onAddLabelClick" />
+                <NButton data-testid="reclassify-add-label-button" size="small" type="primary" :disabled="!newLabelInput.trim() || page.isAddingLabel.value" :loading="page.isAddingLabel.value" @click="onAddLabelClick">Add Label</NButton>
               </div>
               <NText v-if="addLabelErrorMsg" type="error" depth="3" style="font-size: 11px; margin-top: 2px;">{{ addLabelErrorMsg }}</NText>
             </div>
@@ -404,22 +491,39 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               <NText depth="3" class="sc-bulk-hint">
                 Apply to all selected:
               </NText>
-                <div class="sc-bulk-actions">
-                  <NButton
-                  v-for="(lbl, i) in page.effectiveLabels.value"
-                  :key="lbl"
-                  size="tiny"
-                  :type="Object.values(page.annotationDraft.value).some((v) => v === lbl) ? 'primary' : 'default'"
-                  :ghost="!Object.values(page.annotationDraft.value).some((v) => v === lbl)"
-                  @click="() => {
-                    for (const id of page.selectedDefectIds.value) {
-                      page.setAnnotationDraft(id, lbl);
-                    }
-                  }"
+              <NScrollbar class="sc-code-list" data-testid="reclassify-code-list" style="max-height: 33vh;">
+                <div class="sc-code-row sc-code-row-head">
+                  <span>Code</span>
+                  <span>Name</span>
+                  <span>Key</span>
+                </div>
+                <div
+                  v-for="label in page.codeLabels.value"
+                  :key="label.code"
+                  class="sc-code-row sc-code-button"
+                  :class="{ 'is-active': Object.values(page.annotationDraft.value).some((v) => v === label.code) }"
+                  :data-testid="`reclassify-code-row-${label.code}`"
+                  role="button"
+                  tabindex="0"
+                  @click="applyAnnotationCode(label.code)"
+                  @keydown.enter.prevent="applyAnnotationCode(label.code)"
+                  @keydown.space.prevent="applyAnnotationCode(label.code)"
                 >
-                  {{ i + 1 }}. {{ lbl }}
-                </NButton>
-              </div>
+                  <span class="sc-code-value">{{ label.code }}</span>
+                  <span class="sc-code-name">{{ label.name }}</span>
+                  <NInput
+                    class="sc-shortcut-input"
+                    :data-testid="`reclassify-shortcut-input-${label.code}`"
+                    size="tiny"
+                    :value="label.shortcut"
+                    maxlength="1"
+                    placeholder="-"
+                    @click.stop
+                    @keydown.stop
+                    @update:value="(value) => page.setLabelShortcut(label.code, value)"
+                  />
+                </div>
+              </NScrollbar>
             </div>
 
             <div v-if="page.draftCount.value > 0" class="sc-draft-summary">
@@ -543,6 +647,12 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
         <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
       </template>
     </NModal>
+    <TaskInsightModal
+      v-model:show="taskInsightVisible"
+      :task="activeTaskSummary"
+      :handoff-enabled="activeTaskHandoffEnabled"
+      @toggle-handoff="setActiveTaskHandoff"
+    />
   </FullScreenLayout>
 </template>
 
@@ -650,6 +760,31 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   gap: 4px;
 }
 
+.sc-stream-hint {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.sc-map-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  padding: 0 0 8px;
+}
+
+.sc-map-progress :deep(.n-progress) {
+  width: 180px;
+  flex: 0 0 180px;
+}
+
+.sc-map-progress-text {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sc-blink-spin {
   flex: 1;
   display: flex;
@@ -724,10 +859,64 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   margin-bottom: 6px;
 }
 
-.sc-bulk-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.sc-code-list {
+  max-height: min(330px, 50vh);
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+}
+
+.sc-code-list :deep(.n-scrollbar-container),
+.sc-code-list :deep(.n-scrollbar-content) {
+  max-height: min(330px, 50vh);
+}
+
+.sc-code-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.sc-code-row-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
+  background: var(--cv-card-bg, #1a1a2e);
+  border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
+}
+
+.sc-code-button {
+  width: 100%;
+  border: 0;
+  color: var(--cv-text, rgba(255, 255, 255, 0.88));
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sc-code-button:hover,
+.sc-code-button.is-active {
+  background: var(--cv-hover, rgba(255, 255, 255, 0.08));
+}
+
+.sc-code-button.is-active .sc-code-value {
+  color: var(--cv-primary, #63e2b7);
+  font-weight: 700;
+}
+
+.sc-code-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-shortcut-input {
+  width: 38px;
 }
 
 .sc-draft-summary {

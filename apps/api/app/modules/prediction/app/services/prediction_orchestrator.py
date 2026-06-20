@@ -82,12 +82,11 @@ class PredictionOrchestrator:
         )
         external_id = run["id"]
         await self._repository.set_prediction_job_external_id(job.id, external_id)
-        await self._repository.update_prediction_job_status(job.id, JobStatus.RUNNING)
         start_event = PredictionEvent(
             job_id=job.id,
             ts=datetime.now(UTC),
-            message="prediction job started",
-            payload={"external_id": external_id},
+            message="prediction job submitted",
+            payload={"external_id": external_id, "status": JobStatus.QUEUED.value},
         )
         await self._repository.add_prediction_event(start_event)
         asyncio.create_task(self._poll_run(job.id, external_id))
@@ -111,6 +110,14 @@ class PredictionOrchestrator:
                         payload={"prefect_state": state},
                     )
                 )
+                if state == "RUNNING":
+                    await self._repository.update_prediction_job_status(
+                        job_id, JobStatus.RUNNING
+                    )
+                elif state in {"SCHEDULED", "PENDING"}:
+                    await self._repository.update_prediction_job_status(
+                        job_id, JobStatus.QUEUED
+                    )
                 previous_state = state
             logs = await self._prefect_client.get_flow_run_logs(external_id)
             for log in logs[last_log_count:]:

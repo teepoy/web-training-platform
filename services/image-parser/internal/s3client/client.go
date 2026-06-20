@@ -53,7 +53,7 @@ func newClient(accessKey, secretKey string) *s3.Client {
 		IdleConnTimeout:     90 * time.Second,
 	}
 
-	endpoint := envOrDefault("S3_ENDPOINT", "http://localhost:9000")
+	endpoint := envOrDefault("S3_ENDPOINT", "http://minio:9000")
 	region := envOrDefault("S3_REGION", "us-east-1")
 
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
@@ -83,7 +83,7 @@ func newClient(accessKey, secretKey string) *s3.Client {
 		panic("failed to load AWS config: " + err.Error())
 	}
 
-	usePathStyle := os.Getenv("S3_USE_PATH_STYLE") == "true"
+	usePathStyle := envOrDefault("S3_USE_PATH_STYLE", "true") == "true"
 
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = usePathStyle

@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 golang:1.26-bookworm AS base
+FROM golang:1.26-bookworm AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips-dev \
@@ -21,8 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS builder
 WORKDIR /app
 COPY services/image-parser/ ./
-RUN go env -w GOPROXY= && \
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /server ./cmd/server/
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /server ./cmd/server/
+
+FROM base AS dev
+WORKDIR /app/services/image-parser
+RUN go install github.com/air-verse/air@v1.63.0
+CMD ["air", "-c", ".air.toml"]
 
 FROM base
 COPY --from=builder /server /usr/local/bin/server

@@ -16,6 +16,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from fastapi.responses import StreamingResponse
 
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
@@ -39,7 +40,6 @@ from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
     require_admin,
-    require_superadmin,
 )
 from platform_runtime.sparse import SparseManifestReader
 from app.modules.datasets.port.http.schemas import (
@@ -95,6 +95,14 @@ from app.shared.infrastructure.label_studio.client import (
     platform_annotation_to_ls,
 )
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
+from app.shared.sse.emit import emit_sse
+from app.shared.sse.events import (
+    DoneEvent,
+    ScDataEvent,
+    ScErrorEvent,
+    ScProgressEvent,
+    SSEEvent,
+)
 
 
 def get_ls_read_repository_optional() -> LsReadRepository | None:
@@ -116,6 +124,11 @@ def _get_ls_read_repository_direct() -> LsReadRepository:
 router = APIRouter(prefix="/api/v1", tags=["datasets"])
 _logger = logging.getLogger(__name__)
 _MAX_SAMPLE_UPLOAD_BYTES = 10 * 1024 * 1024
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 DatasetStorageFactoryDep = Annotated[
     DatasetStorageFactory, Depends(get_dataset_storage_factory)
@@ -251,7 +264,7 @@ async def list_datasets(
     repo: DatasetRepository = Depends(get_repository),
 ) -> list[Dataset]:
     datasets = await repo.list_datasets(org_id=org.id)
-    return [service.to_response(d) for d in datasets]
+    return [await service.to_list_response(d) for d in datasets]
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -433,15 +446,10 @@ async def update_label_space(
 @router.patch("/datasets/{dataset_id}/public", response_model=SetPublicResponse)
 async def set_dataset_public(
     dataset_id: str,
-    payload: SetPublicRequest,
-    current_user: User = Depends(get_current_user),
-    repo: DatasetRepository = Depends(get_repository),
+    _payload: SetPublicRequest,
+    _current_user: User = Depends(get_current_user),
 ) -> SetPublicResponse:
-    await require_superadmin(current_user=current_user)
-    ok = await repo.set_dataset_public(dataset_id, payload.is_public)
-    if not ok:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    return SetPublicResponse(ok=True)
+    raise HTTPException(status_code=410, detail="Make Public is disabled")
 
 
 # ---------------------------------------------------------------------------
@@ -1417,6 +1425,75 @@ async def export_dataset_persist(
         dataset=dataset, samples=samples, annotations=anns
     )
     return PersistExportResponse(uri=uri)
+
+
+@router.post("/exports/{dataset_id}/persist/stream")
+async def export_dataset_persist_stream(
+    dataset_id: str,
+    request: Request,
+    service: DatasetServiceDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    repo: SqlRepository = Depends(get_repository),
+    ls_read_repository: LsReadRepository | None = Depends(
+        get_ls_read_repository_optional
+    ),
+    artifacts: ArtifactService = Depends(get_artifact_service),
+    payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
+    storage: ArtifactStorage = Depends(get_artifact_storage),
+) -> StreamingResponse:
+    async def event_generator():
+        if await request.is_disconnected():
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="dataset.export.persist",
+                    status="loading",
+                    message="Preparing dataset export",
+                )
+            )
+        )
+        try:
+            result = await export_dataset_persist(
+                dataset_id,
+                service,
+                current_user,
+                org,
+                repo,
+                ls_read_repository,
+                artifacts,
+                payload_store,
+                storage,
+            )
+        except Exception as exc:
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="dataset.export.persist",
+                    payload=result.model_dump(mode="json"),
+                )
+            )
+        )
+        yield emit_sse(SSEEvent(DoneEvent(event_type="done", uri=result.uri)))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.get("/exports/download")

@@ -161,9 +161,6 @@ watch(() => props.highlightDefects, () => { drawOverlay(); });
         :zoom="props.zoom ?? undefined"
       />
       <canvas ref="overlayRef" class="sdsm-ol" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp" @pointerleave="onPointerUp" @dblclick="onDblClick" />
-      <div class="sdsm-footer">
-        {{ pointCount }} {{ pointCount === 1 ? "point" : "points" }}
-      </div>
     </template>
   </div>
 </template>

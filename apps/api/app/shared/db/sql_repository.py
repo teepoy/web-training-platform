@@ -937,12 +937,14 @@ class SqlRepository:
             )
 
     async def list_prediction_jobs(
-        self, org_id: str | None = None
+        self, org_id: str | None = None, dataset_id: str | None = None
     ) -> list[PredictionJob]:
         async with self.session_factory() as session:
             stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
             if org_id is not None:
                 stmt = stmt.where(PredictionJobORM.org_id == org_id)
+            if dataset_id is not None:
+                stmt = stmt.where(PredictionJobORM.dataset_id == dataset_id)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionJob(

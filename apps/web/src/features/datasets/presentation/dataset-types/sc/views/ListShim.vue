@@ -2,10 +2,6 @@
   <div data-testid="datasets-shim-sc">
     <DatasetToolbar title="Patch Datasets" />
 
-    <n-alert type="info" style="margin-bottom: 16px">
-      Patch inspection workspace — wafer defect classification and review.
-    </n-alert>
-
     <n-data-table
       :columns="columns"
       :data="datasets"
@@ -20,7 +16,7 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
 import type { DataTableColumns } from "naive-ui";
-import { NAlert, NButton, NDataTable, NTag, NText } from "naive-ui";
+import { NButton, NDataTable, NTag, NText } from "naive-ui";
 import { DatasetToolbar } from "@/shared";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
@@ -40,6 +36,23 @@ function handleCheckedRowKeysChange(_keys: (string | number)[]) {
   // Reserved for batch operations
 }
 
+function toDisplayCount(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim() !== "") return value;
+  return null;
+}
+
+function resolveSampleCount(row: DatasetListItem): string {
+  const meta = row.dataset_meta ?? {};
+  return (
+    toDisplayCount(meta.sample_count) ??
+    toDisplayCount(meta.total_samples) ??
+    toDisplayCount(meta.samples_count) ??
+    toDisplayCount(meta.total_rows) ??
+    "0"
+  );
+}
+
 const columns = computed<DataTableColumns<DatasetListItem>>(
   () => [
     {
@@ -48,19 +61,6 @@ const columns = computed<DataTableColumns<DatasetListItem>>(
       width: 220,
       render(row) {
         return h(NText, { style: "font-weight: 500" }, { default: () => row.name });
-      },
-    },
-    {
-      title: "Inspection Time",
-      key: "inspection_time",
-      width: 200,
-      render(row) {
-        const time =
-          (row as any).dataset_meta?.inspection_time;
-        if (!time) {
-          return h(NText, { depth: "3", italic: true }, { default: () => "—" });
-        }
-        return h(NText, {}, { default: () => String(time) });
       },
     },
     {
@@ -80,12 +80,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(
       key: "sample_count",
       width: 100,
       render(row) {
-        const count =
-          (row as any).dataset_meta?.sample_count;
-        if (count === undefined || count === null) {
-          return h(NText, { depth: "3" }, { default: () => "0" });
-        }
-        return h(NText, {}, { default: () => String(count) });
+        return h(NText, {}, { default: () => resolveSampleCount(row) });
       },
     },
     {

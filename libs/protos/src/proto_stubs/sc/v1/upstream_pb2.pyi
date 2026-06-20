@@ -3,396 +3,463 @@
 isort:skip_file
 """
 
-import builtins
-import collections.abc
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.message
-import typing
+from collections import abc as _abc
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
+import builtins as _builtins
+import sys
+import typing as _typing
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+if sys.version_info >= (3, 11):
+    from typing import TypeAlias as _TypeAlias, Never as _Never
+else:
+    from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
 
-@typing.final
-class HealthRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+DESCRIPTOR: _descriptor.FileDescriptor
+
+@_typing.final
+class HealthRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
     def __init__(
         self,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___HealthRequest = HealthRequest
+Global___HealthRequest: _TypeAlias = HealthRequest  # noqa: Y015
 
-@typing.final
-class HealthResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class HealthResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    STATUS_FIELD_NUMBER: builtins.int
-    status: builtins.str
-    def __init__(
-        self,
-        *,
-        status: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["status", b"status"]) -> None: ...
-
-global___HealthResponse = HealthResponse
-
-@typing.final
-class GetInspectionRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    WAFER_KEY_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    wafer_key: builtins.int
+    STATUS_FIELD_NUMBER: _builtins.int
+    status: _builtins.str
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        wafer_key: builtins.int = ...,
+        status: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["status", b"status"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetInspectionRequest = GetInspectionRequest
+Global___HealthResponse: _TypeAlias = HealthResponse  # noqa: Y015
 
-@typing.final
-class GetInspectionResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetInspectionRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    WAFER_KEY_FIELD_NUMBER: builtins.int
-    LOT_ID_FIELD_NUMBER: builtins.int
-    WAFER_ID_FIELD_NUMBER: builtins.int
-    DEVICE_FIELD_NUMBER: builtins.int
-    LAYER_ID_FIELD_NUMBER: builtins.int
-    CENTER_X_FIELD_NUMBER: builtins.int
-    CENTER_Y_FIELD_NUMBER: builtins.int
-    ORIGIN_X_FIELD_NUMBER: builtins.int
-    ORIGIN_Y_FIELD_NUMBER: builtins.int
-    DIE_SIZE_X_FIELD_NUMBER: builtins.int
-    DIE_SIZE_Y_FIELD_NUMBER: builtins.int
-    EQP_ID_FIELD_NUMBER: builtins.int
-    RECIPE_ID_FIELD_NUMBER: builtins.int
-    DEFECTS_FIELD_NUMBER: builtins.int
-    IMAGES_FIELD_NUMBER: builtins.int
-    ORIGIN_INDEX_X_FIELD_NUMBER: builtins.int
-    ORIGIN_INDEX_Y_FIELD_NUMBER: builtins.int
-    LATEST_UPDATE_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    wafer_key: builtins.int
-    lot_id: builtins.str
-    wafer_id: builtins.str
-    device: builtins.str
-    layer_id: builtins.str
-    center_x: builtins.int
-    center_y: builtins.int
-    origin_x: builtins.int
-    origin_y: builtins.int
-    die_size_x: builtins.int
-    die_size_y: builtins.int
-    eqp_id: builtins.str
-    recipe_id: builtins.str
-    defects: builtins.int
-    images: builtins.int
-    origin_index_x: builtins.int
-    origin_index_y: builtins.int
-    latest_update: builtins.int
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        wafer_key: builtins.int = ...,
-        lot_id: builtins.str = ...,
-        wafer_id: builtins.str = ...,
-        device: builtins.str = ...,
-        layer_id: builtins.str = ...,
-        center_x: builtins.int = ...,
-        center_y: builtins.int = ...,
-        origin_x: builtins.int = ...,
-        origin_y: builtins.int = ...,
-        die_size_x: builtins.int = ...,
-        die_size_y: builtins.int = ...,
-        eqp_id: builtins.str = ...,
-        recipe_id: builtins.str = ...,
-        defects: builtins.int = ...,
-        images: builtins.int = ...,
-        origin_index_x: builtins.int = ...,
-        origin_index_y: builtins.int = ...,
-        latest_update: builtins.int = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetInspectionResponse = GetInspectionResponse
+Global___GetInspectionRequest: _TypeAlias = GetInspectionRequest  # noqa: Y015
 
-@typing.final
-class GetInspectionPatchZipsRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetInspectionResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    LOT_ID_FIELD_NUMBER: builtins.int
-    WAFER_ID_FIELD_NUMBER: builtins.int
-    DEVICE_FIELD_NUMBER: builtins.int
-    LAYER_ID_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    lot_id: builtins.str
-    wafer_id: builtins.str
-    device: builtins.str
-    layer_id: builtins.str
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    LOT_ID_FIELD_NUMBER: _builtins.int
+    WAFER_ID_FIELD_NUMBER: _builtins.int
+    DEVICE_FIELD_NUMBER: _builtins.int
+    LAYER_ID_FIELD_NUMBER: _builtins.int
+    CENTER_X_FIELD_NUMBER: _builtins.int
+    CENTER_Y_FIELD_NUMBER: _builtins.int
+    ORIGIN_X_FIELD_NUMBER: _builtins.int
+    ORIGIN_Y_FIELD_NUMBER: _builtins.int
+    DIE_SIZE_X_FIELD_NUMBER: _builtins.int
+    DIE_SIZE_Y_FIELD_NUMBER: _builtins.int
+    EQP_ID_FIELD_NUMBER: _builtins.int
+    RECIPE_ID_FIELD_NUMBER: _builtins.int
+    DEFECTS_FIELD_NUMBER: _builtins.int
+    IMAGES_FIELD_NUMBER: _builtins.int
+    ORIGIN_INDEX_X_FIELD_NUMBER: _builtins.int
+    ORIGIN_INDEX_Y_FIELD_NUMBER: _builtins.int
+    LATEST_UPDATE_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    lot_id: _builtins.str
+    wafer_id: _builtins.str
+    device: _builtins.str
+    layer_id: _builtins.str
+    center_x: _builtins.int
+    center_y: _builtins.int
+    origin_x: _builtins.int
+    origin_y: _builtins.int
+    die_size_x: _builtins.int
+    die_size_y: _builtins.int
+    eqp_id: _builtins.str
+    recipe_id: _builtins.str
+    defects: _builtins.int
+    images: _builtins.int
+    origin_index_x: _builtins.int
+    origin_index_y: _builtins.int
+    latest_update: _builtins.int
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        lot_id: builtins.str = ...,
-        wafer_id: builtins.str = ...,
-        device: builtins.str = ...,
-        layer_id: builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        lot_id: _builtins.str = ...,
+        wafer_id: _builtins.str = ...,
+        device: _builtins.str = ...,
+        layer_id: _builtins.str = ...,
+        center_x: _builtins.int = ...,
+        center_y: _builtins.int = ...,
+        origin_x: _builtins.int = ...,
+        origin_y: _builtins.int = ...,
+        die_size_x: _builtins.int = ...,
+        die_size_y: _builtins.int = ...,
+        eqp_id: _builtins.str = ...,
+        recipe_id: _builtins.str = ...,
+        defects: _builtins.int = ...,
+        images: _builtins.int = ...,
+        origin_index_x: _builtins.int = ...,
+        origin_index_y: _builtins.int = ...,
+        latest_update: _builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["device", b"device", "inspection_time", b"inspection_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "wafer_id", b"wafer_id"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetInspectionPatchZipsRequest = GetInspectionPatchZipsRequest
+Global___GetInspectionResponse: _TypeAlias = GetInspectionResponse  # noqa: Y015
 
-@typing.final
-class ZipRef(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetInspectionPatchZipsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    S3_BUCKET_FIELD_NUMBER: builtins.int
-    S3_KEY_FIELD_NUMBER: builtins.int
-    s3_bucket: builtins.str
-    s3_key: builtins.str
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    LOT_ID_FIELD_NUMBER: _builtins.int
+    WAFER_ID_FIELD_NUMBER: _builtins.int
+    DEVICE_FIELD_NUMBER: _builtins.int
+    LAYER_ID_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    lot_id: _builtins.str
+    wafer_id: _builtins.str
+    device: _builtins.str
+    layer_id: _builtins.str
     def __init__(
         self,
         *,
-        s3_bucket: builtins.str = ...,
-        s3_key: builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        lot_id: _builtins.str = ...,
+        wafer_id: _builtins.str = ...,
+        device: _builtins.str = ...,
+        layer_id: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["s3_bucket", b"s3_bucket", "s3_key", b"s3_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["device", b"device", "inspection_time", b"inspection_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "wafer_id", b"wafer_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ZipRef = ZipRef
+Global___GetInspectionPatchZipsRequest: _TypeAlias = GetInspectionPatchZipsRequest  # noqa: Y015
 
-@typing.final
-class GetInspectionPatchZipsResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class ZipRef(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    ZIPS_FIELD_NUMBER: builtins.int
-    @property
-    def zips(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ZipRef]: ...
+    S3_BUCKET_FIELD_NUMBER: _builtins.int
+    S3_KEY_FIELD_NUMBER: _builtins.int
+    s3_bucket: _builtins.str
+    s3_key: _builtins.str
     def __init__(
         self,
         *,
-        zips: collections.abc.Iterable[global___ZipRef] | None = ...,
+        s3_bucket: _builtins.str = ...,
+        s3_key: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["zips", b"zips"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["s3_bucket", b"s3_bucket", "s3_key", b"s3_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetInspectionPatchZipsResponse = GetInspectionPatchZipsResponse
+Global___ZipRef: _TypeAlias = ZipRef  # noqa: Y015
 
-@typing.final
-class GetReviewImageFileSpecRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetInspectionPatchZipsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    WAFER_KEY_FIELD_NUMBER: builtins.int
-    DEFECT_ID_FIELD_NUMBER: builtins.int
-    IMAGE_ID_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    wafer_key: builtins.int
-    defect_id: builtins.int
-    image_id: builtins.int
+    ZIPS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def zips(self) -> _containers.RepeatedCompositeFieldContainer[Global___ZipRef]: ...
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        wafer_key: builtins.int = ...,
-        defect_id: builtins.int = ...,
-        image_id: builtins.int = ...,
+        zips: _abc.Iterable[Global___ZipRef] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["defect_id", b"defect_id", "image_id", b"image_id", "inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["zips", b"zips"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetReviewImageFileSpecRequest = GetReviewImageFileSpecRequest
+Global___GetInspectionPatchZipsResponse: _TypeAlias = GetInspectionPatchZipsResponse  # noqa: Y015
 
-@typing.final
-class GetReviewImageFileSpecResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetReviewImageFileSpecRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    IMAGE_FILESPEC_FIELD_NUMBER: builtins.int
-    image_filespec: builtins.str
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    DEFECT_ID_FIELD_NUMBER: _builtins.int
+    IMAGE_ID_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    defect_id: _builtins.int
+    image_id: _builtins.int
     def __init__(
         self,
         *,
-        image_filespec: builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        defect_id: _builtins.int = ...,
+        image_id: _builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["image_filespec", b"image_filespec"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "image_id", b"image_id", "inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___GetReviewImageFileSpecResponse = GetReviewImageFileSpecResponse
+Global___GetReviewImageFileSpecRequest: _TypeAlias = GetReviewImageFileSpecRequest  # noqa: Y015
 
-@typing.final
-class ListReviewImagesRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class GetReviewImageFileSpecResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    WAFER_KEY_FIELD_NUMBER: builtins.int
-    DEFECT_ID_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    wafer_key: builtins.int
-    defect_id: builtins.int
+    IMAGE_FILESPEC_FIELD_NUMBER: _builtins.int
+    image_filespec: _builtins.str
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        wafer_key: builtins.int = ...,
-        defect_id: builtins.int = ...,
+        image_filespec: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["defect_id", b"defect_id", "inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["image_filespec", b"image_filespec"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ListReviewImagesRequest = ListReviewImagesRequest
+Global___GetReviewImageFileSpecResponse: _TypeAlias = GetReviewImageFileSpecResponse  # noqa: Y015
 
-@typing.final
-class ReviewImageRef(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class ListReviewImagesRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    IMAGE_FILESPEC_FIELD_NUMBER: builtins.int
-    DEFECT_ID_FIELD_NUMBER: builtins.int
-    IMAGE_ID_FIELD_NUMBER: builtins.int
-    IMAGE_TYPE_FIELD_NUMBER: builtins.int
-    image_filespec: builtins.str
-    defect_id: builtins.int
-    image_id: builtins.int
-    image_type: builtins.str
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    DEFECT_ID_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    defect_id: _builtins.int
     def __init__(
         self,
         *,
-        image_filespec: builtins.str = ...,
-        defect_id: builtins.int = ...,
-        image_id: builtins.int = ...,
-        image_type: builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        defect_id: _builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["defect_id", b"defect_id", "image_filespec", b"image_filespec", "image_id", b"image_id", "image_type", b"image_type"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ReviewImageRef = ReviewImageRef
+Global___ListReviewImagesRequest: _TypeAlias = ListReviewImagesRequest  # noqa: Y015
 
-@typing.final
-class ListReviewImagesResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class ReviewImageRef(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    IMAGES_FIELD_NUMBER: builtins.int
-    @property
-    def images(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReviewImageRef]: ...
+    IMAGE_FILESPEC_FIELD_NUMBER: _builtins.int
+    DEFECT_ID_FIELD_NUMBER: _builtins.int
+    IMAGE_ID_FIELD_NUMBER: _builtins.int
+    IMAGE_TYPE_FIELD_NUMBER: _builtins.int
+    image_filespec: _builtins.str
+    defect_id: _builtins.int
+    image_id: _builtins.int
+    image_type: _builtins.str
     def __init__(
         self,
         *,
-        images: collections.abc.Iterable[global___ReviewImageRef] | None = ...,
+        image_filespec: _builtins.str = ...,
+        defect_id: _builtins.int = ...,
+        image_id: _builtins.int = ...,
+        image_type: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["images", b"images"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "image_filespec", b"image_filespec", "image_id", b"image_id", "image_type", b"image_type"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ListReviewImagesResponse = ListReviewImagesResponse
+Global___ReviewImageRef: _TypeAlias = ReviewImageRef  # noqa: Y015
 
-@typing.final
-class ListInspectionsRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class ListReviewImagesResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    START_TIME_FIELD_NUMBER: builtins.int
-    END_TIME_FIELD_NUMBER: builtins.int
-    LOT_ID_FIELD_NUMBER: builtins.int
-    WAFER_ID_FIELD_NUMBER: builtins.int
-    LAYER_ID_FIELD_NUMBER: builtins.int
-    DEVICE_FIELD_NUMBER: builtins.int
-    start_time: builtins.str
-    end_time: builtins.str
-    lot_id: builtins.str
-    wafer_id: builtins.str
-    layer_id: builtins.str
-    device: builtins.str
+    IMAGES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def images(self) -> _containers.RepeatedCompositeFieldContainer[Global___ReviewImageRef]: ...
     def __init__(
         self,
         *,
-        start_time: builtins.str = ...,
-        end_time: builtins.str = ...,
-        lot_id: builtins.str = ...,
-        wafer_id: builtins.str = ...,
-        layer_id: builtins.str = ...,
-        device: builtins.str = ...,
+        images: _abc.Iterable[Global___ReviewImageRef] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["device", b"device", "end_time", b"end_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "start_time", b"start_time", "wafer_id", b"wafer_id"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["images", b"images"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ListInspectionsRequest = ListInspectionsRequest
+Global___ListReviewImagesResponse: _TypeAlias = ListReviewImagesResponse  # noqa: Y015
 
-@typing.final
-class InspectionSummary(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class ListInspectionsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    INSPECTION_TIME_FIELD_NUMBER: builtins.int
-    WAFER_KEY_FIELD_NUMBER: builtins.int
-    LOT_ID_FIELD_NUMBER: builtins.int
-    WAFER_ID_FIELD_NUMBER: builtins.int
-    DEVICE_FIELD_NUMBER: builtins.int
-    LAYER_ID_FIELD_NUMBER: builtins.int
-    EQP_ID_FIELD_NUMBER: builtins.int
-    RECIPE_ID_FIELD_NUMBER: builtins.int
-    DEFECTS_FIELD_NUMBER: builtins.int
-    IMAGES_FIELD_NUMBER: builtins.int
-    CENTER_X_FIELD_NUMBER: builtins.int
-    CENTER_Y_FIELD_NUMBER: builtins.int
-    ORIGIN_X_FIELD_NUMBER: builtins.int
-    ORIGIN_Y_FIELD_NUMBER: builtins.int
-    DIE_SIZE_X_FIELD_NUMBER: builtins.int
-    DIE_SIZE_Y_FIELD_NUMBER: builtins.int
-    ORIGIN_INDEX_X_FIELD_NUMBER: builtins.int
-    ORIGIN_INDEX_Y_FIELD_NUMBER: builtins.int
-    inspection_time: builtins.str
-    wafer_key: builtins.int
-    lot_id: builtins.str
-    wafer_id: builtins.str
-    device: builtins.str
-    layer_id: builtins.str
-    eqp_id: builtins.str
-    recipe_id: builtins.str
-    defects: builtins.int
-    images: builtins.int
-    center_x: builtins.int
-    center_y: builtins.int
-    origin_x: builtins.int
-    origin_y: builtins.int
-    die_size_x: builtins.int
-    die_size_y: builtins.int
-    origin_index_x: builtins.int
-    origin_index_y: builtins.int
+    START_TIME_FIELD_NUMBER: _builtins.int
+    END_TIME_FIELD_NUMBER: _builtins.int
+    LOT_ID_FIELD_NUMBER: _builtins.int
+    WAFER_ID_FIELD_NUMBER: _builtins.int
+    LAYER_ID_FIELD_NUMBER: _builtins.int
+    DEVICE_FIELD_NUMBER: _builtins.int
+    start_time: _builtins.str
+    end_time: _builtins.str
+    lot_id: _builtins.str
+    wafer_id: _builtins.str
+    layer_id: _builtins.str
+    device: _builtins.str
     def __init__(
         self,
         *,
-        inspection_time: builtins.str = ...,
-        wafer_key: builtins.int = ...,
-        lot_id: builtins.str = ...,
-        wafer_id: builtins.str = ...,
-        device: builtins.str = ...,
-        layer_id: builtins.str = ...,
-        eqp_id: builtins.str = ...,
-        recipe_id: builtins.str = ...,
-        defects: builtins.int = ...,
-        images: builtins.int = ...,
-        center_x: builtins.int = ...,
-        center_y: builtins.int = ...,
-        origin_x: builtins.int = ...,
-        origin_y: builtins.int = ...,
-        die_size_x: builtins.int = ...,
-        die_size_y: builtins.int = ...,
-        origin_index_x: builtins.int = ...,
-        origin_index_y: builtins.int = ...,
+        start_time: _builtins.str = ...,
+        end_time: _builtins.str = ...,
+        lot_id: _builtins.str = ...,
+        wafer_id: _builtins.str = ...,
+        layer_id: _builtins.str = ...,
+        device: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["device", b"device", "end_time", b"end_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "start_time", b"start_time", "wafer_id", b"wafer_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___InspectionSummary = InspectionSummary
+Global___ListInspectionsRequest: _TypeAlias = ListInspectionsRequest  # noqa: Y015
 
-@typing.final
-class ListInspectionsResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class InspectionSummary(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    ITEMS_FIELD_NUMBER: builtins.int
-    @property
-    def items(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___InspectionSummary]: ...
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    LOT_ID_FIELD_NUMBER: _builtins.int
+    WAFER_ID_FIELD_NUMBER: _builtins.int
+    DEVICE_FIELD_NUMBER: _builtins.int
+    LAYER_ID_FIELD_NUMBER: _builtins.int
+    EQP_ID_FIELD_NUMBER: _builtins.int
+    RECIPE_ID_FIELD_NUMBER: _builtins.int
+    DEFECTS_FIELD_NUMBER: _builtins.int
+    IMAGES_FIELD_NUMBER: _builtins.int
+    CENTER_X_FIELD_NUMBER: _builtins.int
+    CENTER_Y_FIELD_NUMBER: _builtins.int
+    ORIGIN_X_FIELD_NUMBER: _builtins.int
+    ORIGIN_Y_FIELD_NUMBER: _builtins.int
+    DIE_SIZE_X_FIELD_NUMBER: _builtins.int
+    DIE_SIZE_Y_FIELD_NUMBER: _builtins.int
+    ORIGIN_INDEX_X_FIELD_NUMBER: _builtins.int
+    ORIGIN_INDEX_Y_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    lot_id: _builtins.str
+    wafer_id: _builtins.str
+    device: _builtins.str
+    layer_id: _builtins.str
+    eqp_id: _builtins.str
+    recipe_id: _builtins.str
+    defects: _builtins.int
+    images: _builtins.int
+    center_x: _builtins.int
+    center_y: _builtins.int
+    origin_x: _builtins.int
+    origin_y: _builtins.int
+    die_size_x: _builtins.int
+    die_size_y: _builtins.int
+    origin_index_x: _builtins.int
+    origin_index_y: _builtins.int
     def __init__(
         self,
         *,
-        items: collections.abc.Iterable[global___InspectionSummary] | None = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        lot_id: _builtins.str = ...,
+        wafer_id: _builtins.str = ...,
+        device: _builtins.str = ...,
+        layer_id: _builtins.str = ...,
+        eqp_id: _builtins.str = ...,
+        recipe_id: _builtins.str = ...,
+        defects: _builtins.int = ...,
+        images: _builtins.int = ...,
+        center_x: _builtins.int = ...,
+        center_y: _builtins.int = ...,
+        origin_x: _builtins.int = ...,
+        origin_y: _builtins.int = ...,
+        die_size_x: _builtins.int = ...,
+        die_size_y: _builtins.int = ...,
+        origin_index_x: _builtins.int = ...,
+        origin_index_y: _builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["items", b"items"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-global___ListInspectionsResponse = ListInspectionsResponse
+Global___InspectionSummary: _TypeAlias = InspectionSummary  # noqa: Y015
+
+@_typing.final
+class ListInspectionsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ITEMS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___InspectionSummary]: ...
+    def __init__(
+        self,
+        *,
+        items: _abc.Iterable[Global___InspectionSummary] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["items", b"items"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListInspectionsResponse: _TypeAlias = ListInspectionsResponse  # noqa: Y015

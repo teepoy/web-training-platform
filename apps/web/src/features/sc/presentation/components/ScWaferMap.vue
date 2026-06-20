@@ -298,7 +298,6 @@ watch(() => props.geometry, (geo) => {
         @pointerleave="onPointerUp"
         @dblclick="onDblClick"
       />
-      <div class="swm-footer">{{ pointCount }} points</div>
     </template>
   </div>
 </template>

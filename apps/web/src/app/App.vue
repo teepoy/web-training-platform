@@ -152,6 +152,7 @@ const pgAdminUrl = "http://localhost:5050";
 const menuOptions = [
   { label: "Patch", key: "/sc" },
   { label: "Datasets", key: "/datasets" },
+  { label: "Tasks", key: "/tasks" },
 ];
 
 const userInitials = computed(() =>

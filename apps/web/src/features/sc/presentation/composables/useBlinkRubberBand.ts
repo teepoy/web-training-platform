@@ -4,7 +4,12 @@ export interface UseBlinkRubberBandParams {
   scrollRef: Ref<HTMLElement | null>;
   onSelect: (
     defectIds: string[],
-    modifiers: { shift: boolean; ctrl: boolean; meta: boolean },
+    modifiers: {
+      shift: boolean;
+      ctrl: boolean;
+      meta: boolean;
+      selectionMode?: "replace" | "add" | "toggle";
+    },
   ) => void;
 }
 
@@ -143,7 +148,14 @@ export function useBlinkRubberBand(params: UseBlinkRubberBandParams) {
     if (isDragging.value) {
       const ids = computeSelectedDefectIds();
       if (ids.length > 0) {
-        onSelect(ids, { ...dragModifiers.value });
+        const shouldAdd =
+          dragModifiers.value.shift ||
+          dragModifiers.value.ctrl ||
+          dragModifiers.value.meta;
+        onSelect(ids, {
+          ...dragModifiers.value,
+          selectionMode: shouldAdd ? "add" : "replace",
+        });
       }
     }
 

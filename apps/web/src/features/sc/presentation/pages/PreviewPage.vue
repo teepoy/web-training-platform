@@ -5,13 +5,9 @@ import {
   NInput,
   NInputNumber,
   NButton,
-  NDatePicker,
   NModal,
   NProgress,
   NSelect,
-  NSpin,
-  NResult,
-  NSpace,
   NText,
   useThemeVars,
 } from "naive-ui";
@@ -75,6 +71,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     return {
       dateRange: page.dateRange.value,
       summariesLoading: page.summariesLoading.value,
+      summariesError: page.summariesError.value,
+      summariesEmpty: page.summariesEmpty.value,
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns.value,
       lotIdFilter: page.lotIdFilter.value,
@@ -137,99 +135,54 @@ const activeComponentProps = computed((): Record<string, unknown> => {
   <FullScreenLayout>
   <div class="sc-preview" :style="containerStyle">
     <div class="sc-preview-body">
-      <!-- State views (no tabs) -->
-      <template v-if="page.tabs.value.length === 0">
-        <div class="sc-preview-search-bar">
-          <NSpace align="center" :wrap="true" :size="8">
-            <NDatePicker v-model:value="page.dateRange.value" type="daterange" clearable style="width: 280px" size="small" />
-            <NInput v-model:value="page.deviceFilter.value" placeholder="Device (*, a,b)" size="small" style="width: 140px" clearable />
-            <NInput v-model:value="page.layerIdFilter.value" placeholder="Layer ID (*, a,b)" size="small" style="width: 140px" clearable />
-            <NInput v-model:value="page.lotIdFilter.value" placeholder="Lot ID (*, a,b)" size="small" style="width: 140px" clearable />
-            <NInput v-model:value="page.eqpIdFilter.value" placeholder="Equipment ID (*, a,b)" size="small" style="width: 160px" clearable />
-            <NButton type="primary" :disabled="page.dateRange.value === null" :loading="page.summariesLoading.value" @click="page.searchInspections()" size="small">Search</NButton>
-          </NSpace>
-        </div>
-        <div v-if="page.summariesLoading.value && page.summaries.value.length === 0" class="sc-preview-state">
-          <NSpin size="medium">
-            <template #description>Loading inspections...</template>
-          </NSpin>
-        </div>
-
-        <div v-else-if="page.summariesError.value" class="sc-preview-state">
-          <NResult
-            status="error"
-            :title="page.summariesError.value"
-            description="Failed to load inspection summaries"
+      <div class="sc-preview-tab-bar">
+        <div class="sc-preview-tabs">
+          <button
+            v-for="tab in page.tabs.value"
+            :key="tab.id"
+            class="sc-preview-tab"
+            :class="{ active: tab.id === page.activeTabId.value, pinned: tab.pinned }"
+            @click="page.activeTabId.value = tab.id"
           >
-            <template #footer>
-              <NButton @click="page.searchInspections()">Retry</NButton>
-            </template>
-          </NResult>
+            {{ tab.label }}
+            <span
+              v-if="!tab.pinned"
+              class="sc-preview-tab-close"
+              @click.stop="page.closeTab(tab.id)"
+            >
+              x
+            </span>
+          </button>
         </div>
+        <div class="sc-preview-toolbar">
+          <NButton
+            size="small"
+            quaternary
+            @click="router.push('/sc/handbook')"
+          >
+            Handbook
+          </NButton>
+          <NButton
+            v-if="page.activeTab.value?.type === 'inspection' && page.activeTab.value.inspectionItem"
+            size="small"
+            type="primary"
+            :loading="page.isImporting.value"
+            @click="page.activeTab.value.inspectionItem && page.startImportDirectly(page.activeTab.value.inspectionItem)"
+          >
+            Import as Dataset
+          </NButton>
+        </div>
+      </div>
 
-        <div v-else-if="page.summariesEmpty.value" class="sc-preview-state">
-          <NResult
-            status="info"
-            title="No inspections found"
-            description="Try a different time range"
+      <div class="sc-preview-tab-content">
+        <KeepAlive :max="3">
+          <component
+            :is="activeComponent"
+            :key="page.activeTabId.value ?? 'summary'"
+            v-bind="activeComponentProps"
           />
-        </div>
-
-        <div v-else class="sc-preview-state">
-          <NResult
-            status="info"
-            title="Enter a time range to search"
-            description="Search for inspection summaries by start and end time"
-          />
-        </div>
-      </template>
-
-      <!-- Tabs view -->
-      <template v-else>
-        <div class="sc-preview-tab-bar">
-          <div class="sc-preview-tabs">
-            <button
-              v-for="tab in page.tabs.value"
-              :key="tab.id"
-              class="sc-preview-tab"
-              :class="{ active: tab.id === page.activeTabId.value }"
-              @click="page.activeTabId.value = tab.id"
-            >
-              {{ tab.label }}
-              <span class="sc-preview-tab-close" @click.stop="page.closeTab(tab.id)">x</span>
-            </button>
-            <button class="sc-preview-tab-add" @click="page.createSummaryTab()" title="New Summary tab">+</button>
-          </div>
-          <div class="sc-preview-toolbar">
-            <NButton
-              size="small"
-              quaternary
-              @click="router.push('/sc/handbook')"
-            >
-              Handbook
-            </NButton>
-            <NButton
-              v-if="page.activeTab.value?.type === 'inspection' && page.activeTab.value.inspectionItem"
-              size="small"
-              type="primary"
-              :loading="page.isImporting.value"
-              @click="page.activeTab.value.inspectionItem && page.startImportDirectly(page.activeTab.value.inspectionItem)"
-            >
-              Import as Dataset
-            </NButton>
-          </div>
-        </div>
-
-        <div class="sc-preview-tab-content">
-          <KeepAlive :max="3">
-            <component
-              :is="activeComponent"
-              :key="page.activeTabId.value ?? 'summary'"
-              v-bind="activeComponentProps"
-            />
-          </KeepAlive>
-        </div>
-      </template>
+        </KeepAlive>
+      </div>
     </div>
   </div>
   </FullScreenLayout>
@@ -322,14 +275,6 @@ const activeComponentProps = computed((): Record<string, unknown> => {
   overflow: hidden;
 }
 
-.sc-preview-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  min-height: 320px;
-}
-
 /* Tab bar */
 .sc-preview-tab-bar {
   display: flex;
@@ -383,6 +328,10 @@ const activeComponentProps = computed((): Record<string, unknown> => {
   background: var(--cv-primary-8, rgba(76, 128, 240, 0.08));
 }
 
+.sc-preview-tab.pinned {
+  padding-right: 14px;
+}
+
 .sc-preview-tab-close {
   display: inline-flex;
   align-items: center;
@@ -398,28 +347,6 @@ const activeComponentProps = computed((): Record<string, unknown> => {
 
 .sc-preview-tab-close:hover {
   background: rgba(255, 255, 255, 0.1);
-}
-
-.sc-preview-tab-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: 4px;
-  border: 1px dashed var(--cv-border, rgba(255, 255, 255, 0.2));
-  border-radius: 4px;
-  background: transparent;
-  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
-  cursor: pointer;
-  font-size: 16px;
-  font-family: inherit;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.sc-preview-tab-add:hover {
-  color: var(--cv-primary, #4c80f0);
-  border-color: var(--cv-primary, #4c80f0);
 }
 
 /* Tab content */

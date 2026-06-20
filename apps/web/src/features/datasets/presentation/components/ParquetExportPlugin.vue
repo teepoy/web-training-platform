@@ -2,7 +2,8 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
-import { exportViaCube, buildExportDownloadUrl } from "@/shared/api/datasets";
+import { buildExportDownloadUrl } from "@/shared/api/datasets";
+import { streamApiSse } from "@/shared/api/sse";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
@@ -10,15 +11,29 @@ const message = useMessage();
 const loading = ref(false);
 const uri = ref<string | null>(null);
 const rowCount = ref<number | null>(null);
+const statusMessage = ref("");
 
 async function runExport() {
   loading.value = true;
+  statusMessage.value = "Starting Parquet export...";
   try {
-    const result = await exportViaCube("export-parquet", {
-      dataset_id: props.datasetId,
-    });
-    uri.value = (result as Record<string, unknown>).uri as string;
-    rowCount.value = ((result as Record<string, unknown>).rows as number) ?? null;
+    const event = await streamApiSse(
+      `/plugins/export-parquet/export/stream?dataset_id=${encodeURIComponent(props.datasetId)}`,
+      {
+        method: "POST",
+        onEvent: (item) => {
+          if (item.event_type === "progress") {
+            statusMessage.value = item.message || item.status || "Exporting...";
+          }
+        },
+      },
+    );
+    const payload = event?.payload ?? {};
+    const resultUri = typeof payload.uri === "string" ? payload.uri : null;
+    if (!resultUri) throw new Error("Parquet export stream returned no URI");
+    uri.value = resultUri;
+    rowCount.value = typeof payload.rows === "number" ? payload.rows : null;
+    statusMessage.value = "Parquet export complete";
     message.success(`Parquet export complete: ${rowCount.value ?? "?"} rows`);
   } catch (error) {
     message.error(`Parquet export failed: ${(error as Error).message}`);
@@ -42,6 +57,7 @@ function done() {
       <n-button type="primary" :loading="loading" @click="runExport">
         Export as Parquet
       </n-button>
+      <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
 
       <n-space v-if="uri" vertical :size="4">
         <template v-if="rowCount !== null">
