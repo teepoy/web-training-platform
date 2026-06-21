@@ -128,7 +128,7 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 `file_shard_sparse` is the default storage mode for SC (patch wafer inspection) datasets. The SC sparse path operates end-to-end as follows:
 
-**Import.** The Prefect `sc_import` flow streams defect batches from the upstream wafer database, normalizes rows into generic `BulkSampleRow` objects, and writes them through `DatasetStorageAgg.write_samples(...)`. Sparse storage owns Parquet shard writing, image embedding, manifest creation, and `sample_index` construction. The small direct import path is retained as an explicit low-latency optimization, but smoke can force the Prefect path to verify worker-based ingest.
+**Import.** SC Import as Dataset uses the API service direct sparse import path. It reads upstream defect rows, normalizes them into sparse SC rows with image metadata references, writes Parquet shards, and publishes the sparse manifest / `sample_index`. It does not materialize image bytes during import and no longer registers a Prefect `sc_import` deployment.
 
 **List.** Sparse datasets expose shard-level summaries and manifest-driven pagination. The manifest's `total_rows` and `shards[]` metadata drive list views for datasets of 100k+ rows.
 
@@ -200,7 +200,7 @@ uv run python scripts/smoke_wafer_e2e.py
 uv run python scripts/smoke_wafer_e2e.py --import-max-rows 1000 --trainer-id resnet50-sc-v1
 ```
 
-Requires the compose stack to be running (`make up-dev`). The smoke script creates a sparse SC dataset from the local wafer SQLite database, forces the Prefect import path even when `--import-max-rows` is small, validates that patch/review view rows expose image refs, performs an actual image proxy GET for an embedded image, runs training with `resnet50-sc-v1`, runs full-dataset prediction with `sample_ids=None`, and verifies export contains predictions.
+Requires the compose stack to be running (`make up-dev`). The smoke script creates a sparse SC dataset from the local wafer SQLite database through the API direct import path, validates that patch/review view rows expose image refs, performs an actual image proxy GET for an embedded image, runs training with `resnet50-sc-v1`, runs full-dataset prediction with `sample_ids=None`, and verifies export contains predictions.
 
 ---
 

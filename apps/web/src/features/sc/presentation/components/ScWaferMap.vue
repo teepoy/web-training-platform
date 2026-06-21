@@ -12,6 +12,7 @@ import { getPackedPointIdsInRegion } from "./scMapUtils";
 
 const STRIDE = 6;
 const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
+const HIGHLIGHT_POINT_COLOR = "#A855F7";
 
 interface WaferGeometry {
   centerX: number;
@@ -186,9 +187,9 @@ function drawOverlay() {
   if (cvs.width !== _cw || cvs.height !== _ch) { cvs.width = _cw; cvs.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
 
-  // Draw highlight defects as cyan 3x3 dots
+  // Draw highlight defects as purple 3x3 dots
   if (props.highlightDefects && props.highlightDefects.length > 0) {
-    ctx.fillStyle = "#00FFFF";
+    ctx.fillStyle = HIGHLIGHT_POINT_COLOR;
     for (const hd of props.highlightDefects) {
       const sx = (hd.waferX + _ox) * _s + _cx;
       const sy = _cy - (hd.waferY + _oy) * _s;

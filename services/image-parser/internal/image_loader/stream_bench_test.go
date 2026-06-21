@@ -1,4 +1,4 @@
-package resolve
+package image_loader
 
 import (
 	"archive/zip"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"image-parser/internal/cache"
+	"image-parser/internal/image_loader/cache"
 )
 
 const benchmarkDefects = 300_000
@@ -22,9 +22,9 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 	defer zipCache.Close()
 
 	zipCount := benchmarkDefects / defectsPerZip
-	zips := make([]CacheZipRef, 0, zipCount)
+	zips := make([]cacheZipRef, 0, zipCount)
 	for i := range zipCount {
-		ref := CacheZipRef{Bucket: "bench", Key: fmt.Sprintf("patch-%04d.zip", i)}
+		ref := cacheZipRef{Bucket: "bench", Key: fmt.Sprintf("patch-%04d.zip", i)}
 		zips = append(zips, ref)
 		zipBytes := makeBenchmarkZip(b, i*defectsPerZip, defectsPerZip)
 		if err := zipCache.Set(cache.CacheKey(ref.Bucket, ref.Key), zipBytes); err != nil {
@@ -32,11 +32,11 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 		}
 	}
 
-	lookups := make([]PatchImageLookup, 0, benchmarkDefects*benchmarkImagesPerDefect)
+	lookups := make([]patchImageLookup, 0, benchmarkDefects*benchmarkImagesPerDefect)
 	idx := 0
 	for defectID := range benchmarkDefects {
-		for _, imageType := range []string{"template", "defective"} {
-			lookups = append(lookups, PatchImageLookup{
+		for _, imageType := range []string{"Reference", "Defective"} {
+			lookups = append(lookups, patchImageLookup{
 				Index:     idx,
 				DefectID:  fmt.Sprintf("%d", defectID),
 				ImageType: imageType,
@@ -45,12 +45,12 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 		}
 	}
 
-	resolver := &Resolver{ZipCache: zipCache}
+	resolver := &Resolver{zipCache: zipCache}
 	b.ReportAllocs()
 	b.SetBytes(int64(len(lookups)))
 	b.ResetTimer()
 	for range b.N {
-		results := resolver.GetPatchImageBytesBatchFromZips(context.Background(), zips, lookups)
+		results := resolver.getPatchImageBytesBatchFromZips(context.Background(), zips, lookups)
 		if len(results) != len(lookups) {
 			b.Fatalf("result count mismatch: got %d want %d", len(results), len(lookups))
 		}
@@ -68,7 +68,7 @@ func makeBenchmarkZip(b *testing.B, startDefectID int, defects int) []byte {
 	zw := zip.NewWriter(&buf)
 	for offset := range defects {
 		defectID := startDefectID + offset
-		for _, suffix := range []string{"Template", "Defective"} {
+		for _, suffix := range []string{"Reference", "Defective"} {
 			w, err := zw.Create(fmt.Sprintf("%06d_Patch%s.png", defectID, suffix))
 			if err != nil {
 				b.Fatal(err)

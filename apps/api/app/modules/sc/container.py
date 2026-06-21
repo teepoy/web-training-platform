@@ -74,7 +74,6 @@ def init_sc(
         )
 
     svc = ScImportService(
-        prefect_client=shared.prefect_client,
         repository=repository,
         payload_store=dataset_payload_store,
         upstream_reader=upstream_reader,

@@ -10,10 +10,6 @@
           </n-space>
         </n-space>
         <n-space>
-          <n-switch :value="handoffEnabled" @update:value="emit('toggle-handoff', $event)">
-            <template #checked>Handoff On</template>
-            <template #unchecked>Handoff Off</template>
-          </n-switch>
           <n-button v-if="canCancel" type="warning" ghost :loading="cancelMutation.isPending.value" @click="cancelMutation.mutate()">
             Interrupt
           </n-button>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/vue-query";
+import { useQuery, useMutation, type UseQueryOptions } from "@tanstack/vue-query";
 import { computed } from "vue";
 import {
   listTrackedTasks,
@@ -14,11 +14,13 @@ export const taskTrackerKeys = {
 
 export function useTrackedTasksQuery(
   kind?: () => "training" | "prediction" | undefined,
+  options?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrackedTasks>>>>,
 ) {
   return useQuery({
     queryKey: computed(() => taskTrackerKeys.list(kind?.())),
     queryFn: () => listTrackedTasks(kind?.()),
     refetchInterval: 5000,
+    ...options,
   });
 }
 

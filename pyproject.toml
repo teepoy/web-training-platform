@@ -18,13 +18,11 @@ members = [
   "libs/platform-runtime",
   "libs/python-sdk",
   "libs/protos",
-  "libs/seedmaker",
 ]
 
 [tool.uv.sources]
 finetune-ml = { workspace = true }
 finetune-api = { workspace = true }
-seedmaker = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -38,7 +36,6 @@ dev = [
   "pytest>=9.0.2",
   "pytest-asyncio>=1.3.0",
   "pytest-timeout>=2.4.0",
-  "seedmaker",
   "torch>=2.9.1",
 ]
 

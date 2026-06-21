@@ -111,7 +111,7 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
     expect(badges[0].text()).toContain('DraftLabel');
   });
 
-  it("renders review columns and sprite counts from each sample", async () => {
+  it("renders review columns and explicitly requests selected sprite images", async () => {
     const wrapper = createWrapper({
       showModeSwitch: true,
       reviewSamples: mockSamples,
@@ -122,7 +122,11 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
 
     expect(wrapper.text()).toContain("Rev 1");
     expect(wrapper.text()).toContain("Rev 3");
-    expect(wrapper.html()).toContain("review_count=1");
-    expect(wrapper.html()).toContain("review_count=3");
+    expect(wrapper.html()).not.toContain("review_count");
+    expect(wrapper.html()).toContain("image_types=patchDefective");
+    expect(wrapper.html()).toContain("image_types=patchReference");
+    expect(wrapper.html()).toContain("image_types=patchDifference");
+    expect(wrapper.html()).toContain("image_types=review1");
+    expect(wrapper.html()).toContain("image_types=review3");
   });
 });

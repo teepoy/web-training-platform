@@ -7,6 +7,8 @@ TDD: RED phase — these tests MUST fail before the route is implemented.
 
 import datetime  # noqa: E402
 import os  # noqa: E402
+from collections.abc import Awaitable, Callable  # noqa: E402
+from typing import cast  # noqa: E402
 from unittest.mock import AsyncMock, MagicMock  # noqa: E402
 
 import pytest  # noqa: E402
@@ -73,16 +75,15 @@ def _unset_service_mock() -> None:
 def test_post_import_success_returns_202() -> None:
     mock_service = MagicMock()
     mock_status = ScImportStatus(
-        status="running",
-        flow_run_id="flow-run-abc123",
+        status="completed",
+        dataset_id="dataset-abc123",
+        imported_count=123,
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="test-sc-dataset",
         storage_mode="file_shard_sparse",
     )
-    mock_service.submit_import = AsyncMock(
-        return_value=(mock_status, "flow-run-abc123")
-    )
+    mock_service.submit_import = AsyncMock(return_value=mock_status)
 
     _mock_auth()
     _set_service_mock(mock_service)
@@ -91,8 +92,63 @@ def test_post_import_success_returns_202() -> None:
             resp = client.post("/api/v1/sc/import", json=_VALID_BODY)
             assert resp.status_code == 202, resp.text
             body = resp.json()
-            assert body["flow_run_id"] == "flow-run-abc123"
-            assert body["status"] == "running"
+            assert body["dataset_id"] == "dataset-abc123"
+            assert body["imported_count"] == 123
+            assert body["status"] == "completed"
+    finally:
+        _unmock_auth()
+        _unset_service_mock()
+
+
+def test_post_import_stream_emits_progress_and_result() -> None:
+    mock_service = MagicMock()
+
+    async def submit_import(**kwargs: object) -> ScImportStatus:
+        on_progress = cast(
+            Callable[[ScImportStatus], Awaitable[None]],
+            kwargs["on_progress"],
+        )
+        await on_progress(
+            ScImportStatus(
+                status="running",
+                dataset_id="dataset-abc123",
+                imported_count=50,
+                remaining_count=50,
+                source_inspection_time="2024-01-15T08:30:00",
+                source_wafer_key=1,
+                dataset_name="test-sc-dataset",
+                storage_mode="file_shard_sparse",
+            )
+        )
+        return ScImportStatus(
+            status="completed",
+            dataset_id="dataset-abc123",
+            imported_count=100,
+            remaining_count=0,
+            source_inspection_time="2024-01-15T08:30:00",
+            source_wafer_key=1,
+            dataset_name="test-sc-dataset",
+            storage_mode="file_shard_sparse",
+        )
+
+    mock_service.submit_import = AsyncMock(side_effect=submit_import)
+
+    _mock_auth()
+    _set_service_mock(mock_service)
+    try:
+        with TestClient(app) as client:
+            with client.stream(
+                "POST",
+                "/api/v1/sc/import/stream",
+                json=_VALID_BODY,
+            ) as resp:
+                assert resp.status_code == 200, resp.text
+                body = resp.read().decode("utf-8")
+        assert "event: progress" in body
+        assert '"imported_count":50' in body
+        assert "event: data" in body
+        assert '"dataset_id":"dataset-abc123"' in body
+        assert "event: done" in body
     finally:
         _unmock_auth()
         _unset_service_mock()
@@ -118,17 +174,17 @@ def test_post_import_invalid_body_returns_422() -> None:
         _unmock_auth()
 
 
-def test_post_import_prefect_unavailable_returns_200_fallback() -> None:
+def test_post_import_direct_import_failure_returns_200_fallback() -> None:
     mock_service = MagicMock()
     mock_status = ScImportStatus(
         status="failed",
-        error="Prefect API error: Connection refused",
+        error="Direct import failed: upstream unavailable",
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="test-sc-dataset",
         storage_mode="file_shard_sparse",
     )
-    mock_service.submit_import = AsyncMock(return_value=(mock_status, None))
+    mock_service.submit_import = AsyncMock(return_value=mock_status)
 
     _mock_auth()
     _set_service_mock(mock_service)
@@ -138,8 +194,7 @@ def test_post_import_prefect_unavailable_returns_200_fallback() -> None:
             assert resp.status_code == 200, resp.text
             body = resp.json()
             assert body["status"] == "failed"
-            assert body["flow_run_id"] is None
-            assert "Prefect API error" in (body.get("error") or "")
+            assert "Direct import failed" in (body.get("error") or "")
     finally:
         _unmock_auth()
         _unset_service_mock()

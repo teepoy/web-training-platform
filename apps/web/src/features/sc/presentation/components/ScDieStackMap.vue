@@ -9,6 +9,8 @@ import type { HighlightDefect } from "./types";
 import { getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
 import type { ScBoxRegion } from "@/features/sc/api/boxFilter";
 
+const HIGHLIGHT_POINT_COLOR = "#A855F7";
+
 const props = defineProps<{
   points?: number[];
   dieSizeX?: number;
@@ -91,9 +93,9 @@ function drawOverlay() {
   if (c.width !== _cw || c.height !== _ch) { c.width = _cw; c.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
 
-  // Draw highlight defects as cyan 3x3 dots
+  // Draw highlight defects as purple 3x3 dots
   if (props.highlightDefects && props.highlightDefects.length > 0) {
-    ctx.fillStyle = "#00FFFF";
+    ctx.fillStyle = HIGHLIGHT_POINT_COLOR;
     for (const hd of props.highlightDefects) {
       const sx = (hd.dieX + _ox) * _s + _cx;
       const sy = _cy - (hd.dieY + _oy) * _s;

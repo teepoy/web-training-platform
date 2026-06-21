@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any, Protocol, cast
-
 
 from app.modules.datasets.app.services.sparse_import_operator import (
     SparseImportOperator,
@@ -35,7 +36,8 @@ from platform_runtime.sparse import (
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+SC_IMPORT_BATCH_SIZE = 100_000
+ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
 
 # ── SC-specific helpers ─────────────────────────────────────────────────────
@@ -148,17 +150,6 @@ async def _build_image_structs(
     return images
 
 
-class ScImportPrefectClient(Protocol):
-    async def resolve_deployment_id(self, deployment_name: str) -> str | None: ...
-
-    async def create_flow_run_from_deployment(
-        self,
-        deployment_id: str,
-        parameters: dict[str, Any],
-        idempotency_key: str | None = None,
-    ) -> dict[str, Any]: ...
-
-
 class ScImportRepository(Protocol):
     async def create_dataset(
         self, dataset: Dataset, org_id: str | None = None
@@ -176,13 +167,11 @@ class ScImportPayloadStore(Protocol):
 class ScImportService:
     def __init__(
         self,
-        prefect_client: ScImportPrefectClient | None = None,
         repository: ScImportRepository | None = None,
         payload_store: ScImportPayloadStore | None = None,
         upstream_reader: ScUpstreamReader | None = None,
         image_fetcher: ScImageFetcher | None = None,
     ) -> None:
-        self._prefect = prefect_client
         self._repo = repository
         self._payload_store = payload_store
         self._upstream = upstream_reader
@@ -198,8 +187,8 @@ class ScImportService:
         filters: dict | None = None,
         label_space: list[str] | None = None,
         max_rows: int | None = None,
-        force_prefect_flow: bool = False,
-    ) -> tuple[ScImportStatus, str | None]:
+        on_progress: ScImportProgressCallback | None = None,
+    ) -> ScImportStatus:
         assert self._upstream is not None
         assert self._repo is not None
         assert self._payload_store is not None
@@ -217,16 +206,13 @@ class ScImportService:
                     source_inspection_time,
                     source_wafer_key,
                 )
-                return (
-                    ScImportStatus(
-                        status="completed",
-                        source_inspection_time=source_inspection_time,
-                        source_wafer_key=source_wafer_key,
-                        dataset_name=dataset_name,
-                        storage_mode=storage_mode,
-                        imported_count=0,
-                    ),
-                    None,
+                return ScImportStatus(
+                    status="completed",
+                    source_inspection_time=source_inspection_time,
+                    source_wafer_key=source_wafer_key,
+                    dataset_name=dataset_name,
+                    storage_mode=storage_mode,
+                    imported_count=0,
                 )
         except Exception:
             logger.warning(
@@ -243,15 +229,12 @@ class ScImportService:
             label_space=label_space,
         )
         if dataset is None:
-            return (
-                await self._fail(
-                    "Failed to create dataset",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
+            return await self._fail(
+                "Failed to create dataset",
+                source_inspection_time,
+                source_wafer_key,
+                dataset_name,
+                storage_mode,
             )
 
         try:
@@ -262,6 +245,7 @@ class ScImportService:
                 source_wafer_key=source_wafer_key,
                 max_rows=max_rows,
                 logger=logger,
+                on_progress=on_progress,
             )
             imported_count_raw = result.get("imported_count", 0)
             imported_count: int = (
@@ -278,18 +262,15 @@ class ScImportService:
                 storage_mode=storage_mode,
                 imported_count=imported_count,
             )
-            return completed_status, None
+            return completed_status
         except Exception as e:
             logger.exception("Direct import failed, dataset=%s", dataset.id)
-            return (
-                await self._fail(
-                    f"Direct import failed: {e}",
-                    source_inspection_time,
-                    source_wafer_key,
-                    dataset_name,
-                    storage_mode,
-                ),
-                None,
+            return await self._fail(
+                f"Direct import failed: {e}",
+                source_inspection_time,
+                source_wafer_key,
+                dataset_name,
+                storage_mode,
             )
 
     async def _run_direct_import(
@@ -301,8 +282,9 @@ class ScImportService:
         source_wafer_key: int,
         max_rows: int | None = None,
         logger: logging.Logger | logging.LoggerAdapter | None = None,
+        on_progress: ScImportProgressCallback | None = None,
     ) -> dict[str, object]:
-        """Direct sparse import for small datasets (≤30k rows)."""
+        """Direct sparse import that keeps request handling cooperative."""
         assert self._upstream is not None
         assert self._payload_store is not None
         _payload_store = self._payload_store
@@ -326,7 +308,7 @@ class ScImportService:
         sample_index: dict[str, SampleLocator] = {}
         total_rows = 0
         shard_count = 0
-        batch_size = 1000
+        batch_size = SC_IMPORT_BATCH_SIZE
 
         async def publish_manifest() -> None:
             manifest = DatasetManifest(
@@ -341,6 +323,24 @@ class ScImportService:
             )
             await _payload_store.put_manifest(manifest, org_id=org_id)
 
+        async def publish_progress() -> None:
+            if on_progress is None:
+                return
+            imported_count = total_rows + len(batch)
+            await on_progress(
+                ScImportStatus(
+                    status="running",
+                    dataset_id=dataset_id,
+                    source_inspection_time=source_inspection_time,
+                    source_wafer_key=source_wafer_key,
+                    storage_mode="file_shard_sparse",
+                    imported_count=imported_count,
+                    remaining_count=max(total_rows_available - imported_count, 0),
+                    dataset_name="",
+                    error=None,
+                )
+            )
+
         batch: list[dict[str, Any]] = []
 
         lf = await _upstream.list_samples(insp_dt, source_wafer_key, count=None)
@@ -350,6 +350,8 @@ class ScImportService:
         if total_rows_available == 0:
             return {"dataset_id": dataset_id, "imported_count": 0, "total_available": 0}
 
+        await publish_progress()
+
         indices = (
             list(range(total_rows_available))[:max_rows]
             if max_rows is not None
@@ -357,7 +359,10 @@ class ScImportService:
         )
         filtered_df = df[indices]
 
-        for patch_sample in iter_patch_samples_from_upstream_chunk(filtered_df):
+        for row_offset, patch_sample in enumerate(
+            iter_patch_samples_from_upstream_chunk(filtered_df),
+            start=1,
+        ):
             images = await _build_image_structs(
                 patch_sample=patch_sample,
                 inspection_time=insp_dt,
@@ -376,7 +381,10 @@ class ScImportService:
                 total_rows += len(batch)
                 shard_count += 1
                 await publish_manifest()
+                await publish_progress()
                 batch = []
+            if row_offset % 5000 == 0:
+                await asyncio.sleep(0)
 
         if batch:
             shard_entry, locators = await operator.flush_shard(
@@ -390,6 +398,7 @@ class ScImportService:
             total_rows += len(batch)
             shard_count += 1
             await publish_manifest()
+            await publish_progress()
 
         if shard_count == 0:
             await publish_manifest()

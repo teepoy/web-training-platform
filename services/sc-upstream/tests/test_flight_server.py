@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
+import time
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
@@ -12,6 +15,110 @@ import pytest
 
 from sc_upstream.cache import QueryCache
 from sc_upstream.flight_server import UpstreamFlightServer
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.items: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.items.get(key)
+
+    def set(self, key: str, value: str, **kwargs) -> bool:
+        self.items[key] = value
+        return True
+
+    def delete(self, key: str) -> None:
+        self.items.pop(key, None)
+
+    def ping(self) -> bool:
+        return True
+
+
+def _install_fake_redis(
+    monkeypatch: pytest.MonkeyPatch,
+    redis: _FakeRedis | None = None,
+) -> _FakeRedis:
+    fake = redis or _FakeRedis()
+
+    monkeypatch.setenv("REDIS_URL", "redis://fake")
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "redis",
+        types.SimpleNamespace(
+            Redis=types.SimpleNamespace(from_url=lambda *args, **kwargs: fake),
+            asyncio=types.SimpleNamespace(from_url=lambda *args, **kwargs: fake),
+        ),
+    )
+    return fake
+
+
+def test_query_cache_uses_configured_size_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_redis(monkeypatch)
+    monkeypatch.setenv("SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES", "1048576")
+
+    cache = QueryCache(cache_dir=str(tmp_path / "cache"))
+
+    assert cache._cache.size_limit == 1048576
+
+
+def test_query_cache_rejects_invalid_size_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_redis(monkeypatch)
+    monkeypatch.setenv("SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES", "0")
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        QueryCache(cache_dir=str(tmp_path / "cache"))
+
+
+def test_query_cache_requires_redis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="REDIS_URL is required"):
+        QueryCache(cache_dir=str(tmp_path / "cache"))
+
+
+def test_query_cache_raw_samples_file_cache_reads_and_cleans_orphans(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SC_UPSTREAM_RAW_CACHE_ORPHAN_GRACE_SECONDS", "1")
+    redis = _install_fake_redis(monkeypatch)
+    cache = QueryCache(cache_dir=str(tmp_path / "cache"))
+    df = pl.DataFrame(
+        {
+            "defect_id": [1, 2],
+            "wafer_key": [7, 7],
+        }
+    )
+
+    writer = cache.sync_start_list_samples_writer(
+        "2026-01-01T00:00:00",
+        7,
+        df.to_arrow().schema,
+    )
+    writer.write_frame(df)
+    writer.finish()
+
+    cached = cache.sync_get_list_samples("2026-01-01T00:00:00", 7)
+    assert cached is not None
+    assert cached.collect().height == 2
+
+    redis.delete("samples:2026-01-01T00:00:00:7")
+    for path in cache._raw_objects_dir.iterdir():
+        old = time.time() - 10
+        os.utime(path, (old, old))
+    cache._cleanup_raw_samples_cache()
+
+    assert list(cache._raw_objects_dir.iterdir()) == []
 
 
 class TinyDB:

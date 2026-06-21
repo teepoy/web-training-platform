@@ -4,11 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScImportResponseFlowRunId } from './scImportResponseFlowRunId';
 import type { ScImportResponseError } from './scImportResponseError';
 
 export interface ScImportResponse {
-  flow_run_id?: ScImportResponseFlowRunId;
   status: string;
   dataset_id?: string;
   imported_count?: number;

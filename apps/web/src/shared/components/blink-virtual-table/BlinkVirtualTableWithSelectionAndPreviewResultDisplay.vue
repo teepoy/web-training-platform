@@ -9,9 +9,8 @@ import {
   NButton,
   NTag,
   NSelect,
+  NInput,
   NModal,
-  NCheckboxGroup,
-  NCheckbox,
 } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { withAuthQueryParams } from "@/shared/api/client";
@@ -93,25 +92,33 @@ const IMAGE_SIZE_SELECT_OPTIONS = IMAGE_SIZE_OPTIONS.map((size) => ({
   value: size,
 }));
 type ImageSizeOption = (typeof IMAGE_SIZE_OPTIONS)[number];
-type PatchImageType = "defective" | "template" | "difference";
-const PATCH_IMAGE_TYPE_OPTIONS: Array<{ label: string; value: PatchImageType }> = [
-  { label: "Defective", value: "defective" },
-  { label: "Reference", value: "template" },
-  { label: "Difference", value: "difference" },
-];
+type PatchImageType = "Defective" | "Reference" | "Difference";
 const PATCH_IMAGE_LABELS: Record<PatchImageType, string> = {
+  Defective: "Defective",
+  Reference: "Reference",
+  Difference: "Difference",
+};
+const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
+  Defective: "patchDefective",
+  Reference: "patchReference",
+  Difference: "patchDifference",
+};
+const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
+const DEFAULT_REVIEW_IMAGE_INDEXES = [0, 1, 2, 3, 4, 5];
+const patchImageTypeByInput: Record<string, PatchImageType> = {
   defective: "Defective",
+  reference: "Reference",
   template: "Reference",
   difference: "Difference",
 };
-const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["defective", "template", "difference"];
 const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
   IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption)
     ? (value as ImageSizeOption)
     : 64;
 const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
 const reviewImageSize = ref<ImageSizeOption>(normalizeImageSize(props.reviewCellSize));
-const selectedPatchImageTypes = ref<PatchImageType[]>([...DEFAULT_PATCH_IMAGE_TYPES]);
+const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
+const reviewImagesInput = ref(DEFAULT_REVIEW_IMAGE_INDEXES.join(","));
 const imageSize = computed({
   get: () => mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
   set: (value: number) => {
@@ -139,7 +146,7 @@ function adjustSamplesPerRow(delta: number): void {
 }
 
 const reviewDisabled = computed(
-  () => props.reviewLoading || !!props.reviewError || (props.reviewSamples ?? []).length === 0,
+  () => !!props.reviewError,
 );
 
 watch(() => props.patchSamplesPerRow, (v) => {
@@ -154,13 +161,6 @@ watch(() => props.patchCellSize, (v) => {
 watch(() => props.reviewCellSize, (v) => {
   reviewImageSize.value = normalizeImageSize(v);
 });
-watch(reviewDisabled, (disabled) => {
-  if (disabled && mode.value === "review") mode.value = "patch";
-});
-watch(selectedPatchImageTypes, (types) => {
-  if (types.length === 0) selectedPatchImageTypes.value = [...DEFAULT_PATCH_IMAGE_TYPES];
-});
-
 const samplesRef = computed(() =>
   mode.value === "review" ? props.reviewSamples ?? [] : props.samples,
 );
@@ -201,23 +201,47 @@ const cellSize = computed(() =>
   mode.value === "patch" ? patchImageSize.value : reviewImageSize.value
 );
 
-function reviewImageCount(sample: ScSampleItem): number {
-  return Array.isArray(sample.reviewImages) ? sample.reviewImages.length : 0;
-}
-
 const { enabled: blinkEnabled, phase: blinkPhase, toggle: toggleBlink } = useBlinkController({
   intervalMs: props.blinkIntervalMs,
   initialEnabled: props.initialBlinkEnabled,
 });
 
+const selectedPatchImageTypes = computed<PatchImageType[]>(() => {
+  const seen = new Set<PatchImageType>();
+  const parsed = patchImagesInput.value
+    .split(",")
+    .map((part) => patchImageTypeByInput[part.trim().toLowerCase()])
+    .filter((type): type is PatchImageType => !!type)
+    .filter((type) => {
+      if (seen.has(type)) return false;
+      seen.add(type);
+      return true;
+    });
+  return parsed.length > 0 ? parsed : DEFAULT_PATCH_IMAGE_TYPES;
+});
+
+const selectedReviewImageIndexes = computed<number[]>(() => {
+  const seen = new Set<number>();
+  const parsed = reviewImagesInput.value
+    .split(",")
+    .map((part) => Number(part.trim()))
+    .filter((index) => Number.isInteger(index) && index >= 0)
+    .filter((index) => {
+      if (seen.has(index)) return false;
+      seen.add(index);
+      return true;
+    });
+  return parsed.length > 0 ? parsed : DEFAULT_REVIEW_IMAGE_INDEXES;
+});
+
 const patchImageTypesForSprite = computed<PatchImageType[]>(() => {
   const requested = [...selectedPatchImageTypes.value];
   if (blinkEnabled.value) {
-    for (const required of ["template", "defective"] as PatchImageType[]) {
+    for (const required of ["Reference", "Defective"] as PatchImageType[]) {
       if (!requested.includes(required)) requested.unshift(required);
     }
   }
-  return DEFAULT_PATCH_IMAGE_TYPES.filter((type) => requested.includes(type));
+  return requested;
 });
 
 const basePatchColumns = computed(() =>
@@ -228,34 +252,19 @@ const basePatchColumns = computed(() =>
   })).filter((column) => column.spriteIndex >= 0),
 );
 
-function reviewColumnsForSample(sample: ScSampleItem): number[] {
-  return Array.from({ length: reviewImageCount(sample) }, (_, i) => i).filter(
-    (index) => selectedReviewImageIndexes.value.includes(index),
-  );
+function reviewColumnsForSample(_sample: ScSampleItem): number[] {
+  return selectedReviewImageIndexes.value;
 }
 
-const maxReviewImageCount = computed(() => {
-  if (mode.value !== "review") return 0;
-  return visibleSamples.value.reduce(
-    (max, sample) => Math.max(max, reviewImageCount(sample)),
-    0,
-  );
-});
-
-const reviewImageOptions = computed(() =>
-  Array.from({ length: maxReviewImageCount.value }, (_, index) => ({
-    label: `Rev ${index + 1}`,
-    value: index,
-  })),
-);
-const selectedReviewImageIndexes = ref<number[]>([]);
-watch(maxReviewImageCount, (count) => {
-  const all = Array.from({ length: count }, (_, index) => index);
-  selectedReviewImageIndexes.value =
-    selectedReviewImageIndexes.value.length === 0
-      ? all
-      : selectedReviewImageIndexes.value.filter((index) => index < count);
-}, { immediate: true });
+function spriteImageTypesForSample(sample: ScSampleItem): string[] {
+  const imageTypes = patchImageTypesForSprite.value.map((type) => PATCH_IMAGE_SPRITE_TOKENS[type]);
+  if (mode.value === "review") {
+    for (const index of reviewColumnsForSample(sample)) {
+      imageTypes.push(`review${index + 1}`);
+    }
+  }
+  return imageTypes;
+}
 
 function cellsForSample(sample: ScSampleItem): number {
   const imageCells = basePatchColumns.value.length +
@@ -360,11 +369,8 @@ function getSpriteUrl(sample: ScSampleItem): string {
   const t = props.inspectionTime ?? String(sample.inspectionTime);
   const params = new URLSearchParams();
   params.set("cell_size", String(cs));
-  for (const type of patchImageTypesForSprite.value) {
+  for (const type of spriteImageTypesForSample(sample)) {
     params.append("image_types", type);
-  }
-  if (!isPatch) {
-    params.set("review_count", String(reviewImageCount(sample)));
   }
   const spriteMode = isPatch ? "patch" : "review";
   return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
@@ -380,12 +386,11 @@ function shouldRenderSprite(sample: ScSampleItem): boolean {
 }
 
 function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
-  const isPatch = mode.value === "patch";
-  const cols = patchImageTypesForSprite.value.length + (isPatch ? 0 : reviewImageCount(sample));
+  const cols = spriteImageTypesForSample(sample).length;
   const url = getSpriteUrl(sample);
 
-  const bgSize = `${cols * 100}% 100%`;
-  const bgPos = cols > 1 ? `${(colIndex / (cols - 1)) * 100}% 0` : '0 0';
+  const bgSize = `${cols * cellSize.value}px ${cellSize.value}px`;
+  const bgPos = `${-colIndex * cellSize.value}px 0`;
 
   return {
     backgroundImage: `url(${withAuthQueryParams(url)})`,
@@ -396,13 +401,18 @@ function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
 }
 
 function blinkBaseSpriteIndex(): number {
-  const referenceIndex = patchImageTypesForSprite.value.indexOf("template");
+  const referenceIndex = patchImageTypesForSprite.value.indexOf("Reference");
   return referenceIndex >= 0 ? referenceIndex : 0;
 }
 
 function blinkOverlaySpriteIndex(): number {
-  const defectiveIndex = patchImageTypesForSprite.value.indexOf("defective");
+  const defectiveIndex = patchImageTypesForSprite.value.indexOf("Defective");
   return defectiveIndex >= 0 ? defectiveIndex : 0;
+}
+
+function reviewSpriteIndex(sample: ScSampleItem, reviewIndex: number): number {
+  const selectedIndex = reviewColumnsForSample(sample).indexOf(reviewIndex);
+  return patchImageTypesForSprite.value.length + Math.max(0, selectedIndex);
 }
 
 interface ScrollMetrics {
@@ -708,31 +718,20 @@ defineExpose({ scrollRef });
         </div>
 
         <div class="sbt-setting-block">
-          <n-text class="sbt-control-label">Image Types</n-text>
-          <n-checkbox-group
-            v-model:value="selectedPatchImageTypes"
-            class="sbt-image-type-group"
-          >
-            <n-checkbox
-              v-for="option in PATCH_IMAGE_TYPE_OPTIONS"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </n-checkbox>
-          </n-checkbox-group>
+          <n-text class="sbt-control-label">PatchImages</n-text>
+          <n-input
+            v-model:value="patchImagesInput"
+            size="small"
+            placeholder="Defective,Reference,Difference"
+          />
         </div>
 
-        <div v-if="mode === 'review' && reviewImageOptions.length > 0" class="sbt-setting-row">
+        <div class="sbt-setting-block">
           <n-text class="sbt-control-label">Review Images</n-text>
-          <n-select
-            v-model:value="selectedReviewImageIndexes"
-            multiple
+          <n-input
+            v-model:value="reviewImagesInput"
             size="small"
-            class="sbt-review-image-select"
-            :options="reviewImageOptions"
-            :consistent-menu-width="false"
-            placeholder="Review"
+            placeholder="0,1,2,3,4,5"
           />
         </div>
       </div>
@@ -835,7 +834,7 @@ defineExpose({ scrollRef });
                       :key="'rev_' + n"
                       class="sbt-img-cell"
                     >
-                      <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, patchImageTypesForSprite.length + n)"></div>
+                      <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, reviewSpriteIndex(sample, n))"></div>
                       <div v-else class="sbt-img-placeholder"></div>
                     </div>
                   </template>
@@ -999,10 +998,6 @@ defineExpose({ scrollRef });
   width: 72px;
 }
 
-.sbt-review-image-select {
-  width: 150px;
-}
-
 .sbt-settings {
   display: flex;
   flex-direction: column;
@@ -1020,12 +1015,6 @@ defineExpose({ scrollRef });
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.sbt-image-type-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
 /* Scroll body */

@@ -85,13 +85,6 @@ async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
         },
         # ── CPU pool ──
         {
-            "deployment_name": "sc-import-deployment",
-            "flow_name": "sc-import-upstream",
-            "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.sc.adapter.flows.sc_import:sc_import",
-            "path": "",
-        },
-        {
             "deployment_name": "timer-sensor",
             "flow_name": "timer-sensor",
             "work_pool_name": "default-cpu",

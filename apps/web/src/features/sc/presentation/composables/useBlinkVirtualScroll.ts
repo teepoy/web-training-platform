@@ -1,4 +1,4 @@
-import { ref, computed, watch, onBeforeUnmount, type Ref } from "vue";
+import { ref, computed, nextTick, watch, onBeforeUnmount, type Ref } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 
@@ -109,9 +109,9 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
     }, IMAGE_LOAD_DEBOUNCE_MS);
   }
 
-  watch([mode, patchPerRow, reviewPerRow], () => {
-    virtualizer.value.measure();
-  });
+  watch([mode, patchPerRow, reviewPerRow, virtualRowHeight], () => {
+    void nextTick(() => virtualizer.value.measure());
+  }, { flush: "post" });
 
   onBeforeUnmount(() => {
     if (imageLoadDebounceTimer !== undefined) {

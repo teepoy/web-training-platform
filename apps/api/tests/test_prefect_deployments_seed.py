@@ -17,7 +17,7 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 8
+    assert mock_client.ensure_deployment.call_count == 7
 
     calls = mock_client.ensure_deployment.call_args_list
     called: list[dict] = []
@@ -54,15 +54,6 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
         "flow_name": "embedding-embed",
         "work_pool_name": "default-gpu",
         "entrypoint": "app.modules.embedding.flows.embed:embed_flow",
-        "path": "",
-    } in called
-
-    # ── CPU pool ──
-    assert {
-        "deployment_name": "sc-import-deployment",
-        "flow_name": "sc-import-upstream",
-        "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.sc.adapter.flows.sc_import:sc_import",
         "path": "",
     } in called
 
@@ -117,9 +108,8 @@ async def test_ensure_prefect_deployments_swallows_errors_per_entry() -> None:
         None,
         None,
         None,
-        None,
     ]
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 8
+    assert mock_client.ensure_deployment.call_count == 7

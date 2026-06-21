@@ -24,7 +24,7 @@ DEFECTS_PER_ZIP = 500
 PATCH_BUCKET = "sc-patch-images"
 REVIEW_BUCKET = "sc-review-images"
 PATCH_IMAGE_TYPES = (
-    ("PatchTemplate", 72),
+    ("PatchReference", 72),
     ("PatchDefective", 128),
     ("PatchDifference", 196),
 )

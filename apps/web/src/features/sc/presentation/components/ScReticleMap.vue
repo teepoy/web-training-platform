@@ -8,6 +8,8 @@ import type { SimpleMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
 import { getPackedPointIdsInRegion, STRIDE } from "./scMapUtils";
 
+const HIGHLIGHT_POINT_COLOR = "#A855F7";
+
 const props = defineProps<{
   xDieCount: number;
   yDieCount: number;
@@ -130,9 +132,9 @@ function drawOverlay() {
   if (c.width !== _cw || c.height !== _ch) { c.width = _cw; c.height = _ch; }
   ctx.clearRect(0, 0, _cw, _ch);
 
-  // Draw highlight defects as cyan 3x3 dots
+  // Draw highlight defects as purple 3x3 dots
   if (props.highlightDefects && props.highlightDefects.length > 0) {
-    ctx.fillStyle = "#00FFFF";
+    ctx.fillStyle = HIGHLIGHT_POINT_COLOR;
     for (const hd of props.highlightDefects) {
       const sx = (hd.reticleX + _ox) * _s + _cx;
       const sy = _cy - (hd.reticleY + _oy) * _s;

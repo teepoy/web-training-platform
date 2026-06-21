@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+import pyarrow as pa
 import polars as pl
 import pyarrow.flight as flight  # pyright: ignore[reportPrivateImportUsage]
 from grpc import aio as grpc_aio
 
+from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
 
@@ -34,6 +37,34 @@ class GrpcScUpstream:
 
     def _ensure_flight_client(self) -> flight.FlightClient:  # pyright: ignore[reportPrivateImportUsage]
         return flight.FlightClient(self._flight_addr)  # pyright: ignore[reportPrivateImportUsage]
+
+    def _read_list_samples_table(
+        self,
+        ticket: flight.Ticket,  # pyright: ignore[reportPrivateImportUsage]
+        on_progress: ScSampleProgressCallback | None,
+    ) -> pa.Table:
+        fc = self._ensure_flight_client()
+        reader = fc.do_get(ticket)
+        batches: list[pa.RecordBatch] = []
+        loaded = 0
+        while True:
+            try:
+                chunk = reader.read_chunk()
+            except StopIteration:
+                break
+            data = chunk.data
+            if data is None or data.num_rows == 0:
+                continue
+            if isinstance(data, pa.Table):
+                batches.extend(data.to_batches())
+            else:
+                batches.append(data)
+            loaded += data.num_rows
+            if on_progress is not None:
+                on_progress(loaded)
+        if not batches:
+            return pa.table({})
+        return pa.Table.from_batches(batches)
 
     async def list_inspections(
         self,
@@ -124,8 +155,8 @@ class GrpcScUpstream:
         reticle_size_y: int = 1,
         reticle_offset_x: int = 0,
         reticle_offset_y: int = 0,
+        on_progress: ScSampleProgressCallback | None = None,
     ) -> pl.LazyFrame:
-        fc = self._ensure_flight_client()
         ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
             json.dumps(
                 {
@@ -135,8 +166,11 @@ class GrpcScUpstream:
                 }
             ).encode()
         )
-        reader = fc.do_get(ticket)
-        table = reader.read_all()
+        table = await asyncio.to_thread(
+            self._read_list_samples_table,
+            ticket,
+            on_progress,
+        )
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
         if "die_x" not in df.columns:

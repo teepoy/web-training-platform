@@ -1013,40 +1013,30 @@ class SparseDatasetStorage:
         existing = await self._annotations.load_all(
             dataset_id=self._dataset_id, org_id=self._org_id
         )
-
-        # Filter out deleted annotation_ids
-        remaining = [r for r in existing if r.annotation_id not in doomed]
-        deleted_count = len(existing) - len(remaining)
+        deleted_records = [r for r in existing if r.annotation_id in doomed]
+        deleted_count = len(deleted_records)
         if deleted_count == 0:
             return 0
 
-        # Compute latest-per-sample from remaining records
-        latest: dict[str, SparseAnnotationRecord] = {}
-        for r in remaining:
-            cur = latest.get(r.sample_id)
-            if cur is None or r.created_at >= cur.created_at:
-                latest[r.sample_id] = r
-
-        # Rewrite with fresh timestamps so they supersede old parquet files
-        if latest:
-            fresh: list[SparseAnnotationRecord] = []
-            for r in latest.values():
-                fresh.append(
-                    SparseAnnotationRecord(
-                        annotation_id=r.annotation_id,
-                        sample_id=r.sample_id,
-                        label=r.label,
-                        annotation_value=r.annotation_value,
-                        created_by=r.created_by,
-                        created_at=datetime.now(timezone.utc).isoformat(),
-                        user_id=r.user_id,
-                    )
+        tombstones: list[SparseAnnotationRecord] = []
+        now = datetime.now(timezone.utc).isoformat()
+        for sample_id in {r.sample_id for r in deleted_records}:
+            tombstones.append(
+                SparseAnnotationRecord(
+                    annotation_id=f"deleted:{sample_id}:{now}",
+                    sample_id=sample_id,
+                    label="",
+                    annotation_value="",
+                    created_by="",
+                    created_at=now,
+                    user_id="",
                 )
-            await self._annotations.append(
-                dataset_id=self._dataset_id,
-                org_id=self._org_id,
-                items=fresh,
             )
+        await self._annotations.append(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            items=tombstones,
+        )
 
         return deleted_count
 
@@ -1072,9 +1062,10 @@ class SparseDatasetStorage:
         dataset_id: str | None = None,
         limit: int | None = None,
     ) -> list[Annotation]:
-        items = await self._annotations.load_all(
+        latest_by_sample = await self._annotations.latest_by_sample(
             dataset_id=self._dataset_id, org_id=self._org_id
         )
+        items = list(latest_by_sample.values())
         if sample_id:
             items = [i for i in items if i.sample_id == sample_id]
         if limit is not None:

@@ -8,57 +8,6 @@ import pytest
 from app.modules.sc.domain.models import ScInspectionRecord
 
 
-class _MockPrefectSuccess:
-    """Mock Prefect client that returns a valid deployment and flow run."""
-
-    def __init__(self) -> None:
-        self.parameters: dict[str, object] = {}
-        self.create_calls = 0
-
-    async def resolve_deployment_id(self, deployment_name: str) -> str | None:
-        return "test-deployment-id"
-
-    async def create_flow_run_from_deployment(
-        self,
-        deployment_id: str,
-        parameters: dict[str, object],
-        idempotency_key: str | None = None,
-    ) -> dict[str, object]:
-        self.create_calls += 1
-        self.parameters = parameters
-        return {"id": "test-run-id-123"}
-
-
-class _MockPrefectNoDeployment:
-    """Mock Prefect client where deployment is not found."""
-
-    async def resolve_deployment_id(self, deployment_name: str) -> str | None:
-        return None
-
-    async def create_flow_run_from_deployment(
-        self,
-        deployment_id: str,
-        parameters: dict[str, object],
-        idempotency_key: str | None = None,
-    ) -> dict[str, object]:
-        raise RuntimeError("should not be called")
-
-
-class _MockPrefectCreateFails:
-    """Mock Prefect client where flow run creation raises."""
-
-    async def resolve_deployment_id(self, deployment_name: str) -> str | None:
-        return "test-deployment-id"
-
-    async def create_flow_run_from_deployment(
-        self,
-        deployment_id: str,
-        parameters: dict[str, object],
-        idempotency_key: str | None = None,
-    ) -> dict[str, object]:
-        raise Exception("Prefect API unavailable")
-
-
 class _MockRepository:
     def __init__(self) -> None:
         self.updated_meta: dict | None = None
@@ -128,6 +77,7 @@ class _MockUpstream:
         reticle_size_y=1,
         reticle_offset_x=0,
         reticle_offset_y=0,
+        on_progress=None,
     ):
 
         self.list_samples_calls.append((inspection_time, wafer_key, offset, count))
@@ -196,13 +146,10 @@ class _MockImageFetcher:
         return {"status": "ok"}
 
 
-def _make_service(
-    prefect_client, upstream_reader=None, repository=None, payload_store=None
-):
+def _make_service(upstream_reader=None, repository=None, payload_store=None):
     from app.modules.sc.app.services.sc_import_service import ScImportService
 
     return ScImportService(
-        prefect_client=prefect_client,
         repository=repository or _MockRepository(),
         payload_store=payload_store or _MockPayloadStore(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
@@ -212,11 +159,10 @@ def _make_service(
 
 @pytest.mark.asyncio
 async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
-    mock_prefect = _MockPrefectSuccess()
     upstream = _MockUpstream(row_count=20)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
+    service = _make_service(upstream_reader=upstream)
 
-    status, flow_run_id = await service.submit_import(
+    status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Hybrid exhausted",
@@ -227,18 +173,14 @@ async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
 
     assert status.status == "completed"
     assert status.imported_count == 20
-    assert status.flow_run_id is None
-    assert flow_run_id is None
-    assert mock_prefect.create_calls == 0
 
 
 @pytest.mark.asyncio
 async def test_boundary_exact_30k_stays_direct_only() -> None:
-    mock_prefect = _MockPrefectSuccess()
     upstream = _MockUpstream(row_count=30_005)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
+    service = _make_service(upstream_reader=upstream)
 
-    status, flow_run_id = await service.submit_import(
+    status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Direct boundary",
@@ -249,15 +191,8 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
 
     assert status.status == "completed"
     assert status.imported_count == 30_000
-    assert status.flow_run_id is None
-    assert flow_run_id is None
-    assert mock_prefect.create_calls == 0
 
 
-@pytest.mark.asyncio
-@pytest.mark.asyncio
-@pytest.mark.asyncio
-@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_direct_import_persists_geometry_metadata() -> None:
     """Direct (sync) import should persist wafer geometry in dataset_meta."""
@@ -282,11 +217,10 @@ async def test_direct_import_persists_geometry_metadata() -> None:
 
     upstream = _MockUpstream(inspection_return=mock_inspection)
     repo = _MockRepository()
-    prefect_client = _MockPrefectSuccess()
 
-    service = _make_service(prefect_client, upstream_reader=upstream, repository=repo)
+    service = _make_service(upstream_reader=upstream, repository=repo)
 
-    status, flow_run_id = await service.submit_import(
+    await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Geometry Test Dataset",
@@ -318,13 +252,11 @@ async def test_direct_import_persists_geometry_metadata() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_hybrid_shuffle_exhausted_early() -> None:
-    mock_prefect = _MockPrefectSuccess()
     upstream = _MockUpstream(row_count=1000)
-    service = _make_service(mock_prefect, upstream_reader=upstream)
+    service = _make_service(upstream_reader=upstream)
 
-    status, flow_run_id = await service.submit_import(
+    status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Hybrid shuffle exhausted",
@@ -334,19 +266,15 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
     )
 
     assert status.status == "completed"
-    assert mock_prefect.create_calls == 0
-    assert flow_run_id is None
 
 
-@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_direct_import_uses_shuffled_ids() -> None:
-    mock_prefect = _MockPrefectSuccess()
     payload_store = _MockPayloadStore()
     upstream = _MockUpstream(row_count=100)
-    service = _make_service(mock_prefect, upstream_reader=upstream, payload_store=payload_store)
+    service = _make_service(upstream_reader=upstream, payload_store=payload_store)
 
-    status, flow_run_id = await service.submit_import(
+    status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Shuffle direct",
@@ -356,7 +284,6 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     )
 
     assert status.status == "completed"
-    assert flow_run_id is None
     assert len(upstream.list_samples_calls) >= 1
     assert payload_store.manifest is not None
     assert payload_store.manifest.total_rows == 50
@@ -366,7 +293,7 @@ async def test_direct_import_uses_shuffled_ids() -> None:
 async def test_direct_import_shuffle_reproducible() -> None:
     payload_store_a = _MockPayloadStore()
     upstream_a = _MockUpstream(row_count=100)
-    service_a = _make_service(_MockPrefectSuccess(), upstream_reader=upstream_a, payload_store=payload_store_a)
+    service_a = _make_service(upstream_reader=upstream_a, payload_store=payload_store_a)
     await service_a.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
@@ -378,7 +305,7 @@ async def test_direct_import_shuffle_reproducible() -> None:
 
     payload_store_b = _MockPayloadStore()
     upstream_b = _MockUpstream(row_count=100)
-    service_b = _make_service(_MockPrefectSuccess(), upstream_reader=upstream_b, payload_store=payload_store_b)
+    service_b = _make_service(upstream_reader=upstream_b, payload_store=payload_store_b)
     await service_b.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,

@@ -173,7 +173,8 @@ function openScClassify() {
       </div>
 
       <div v-if="compatibleViewOptions.length > 0" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
-        <n-text depth="3" style="font-size: 12px; white-space: nowrap">View:</n-text>
+        <!-- Temp Disable View Switch -->
+        <!-- <n-text depth="3" style="font-size: 12px; white-space: nowrap">View:</n-text> -->
         <n-select
           data-testid="view-type-selector"
           :value="currentViewType"

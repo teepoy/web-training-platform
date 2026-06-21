@@ -21,6 +21,7 @@ export type ScMapProgressCallback = (
   status: "warmup" | "headers" | "bytes" | "decode",
   loaded: number,
   message?: string,
+  total?: number,
 ) => void;
 
 export function appendScMapFilterParams(
@@ -160,18 +161,24 @@ async function warmupMapPoints(
   path: string,
   onProgress?: ScMapProgressCallback,
 ): Promise<void> {
-  onProgress?.("warmup", 0, "Preparing map points...");
+  onProgress?.("warmup", 0, undefined, 0);
   await streamApiSse(path, {
     method: "GET",
     onEvent: (event) => {
       if (event.event_type === "progress") {
+        const total = Number(event.total_count ?? event.rows ?? 0);
+        const rawLoaded = Number(event.loaded_count ?? 0);
+        const loaded =
+          total > 0 && rawLoaded > 0 && rawLoaded <= total ? rawLoaded : 0;
         onProgress?.(
           "warmup",
-          Number(event.loaded_count ?? 0),
-          event.message ?? "Preparing map points...",
+          loaded,
+          undefined,
+          total,
         );
       } else if (event.event_type === "done") {
-        onProgress?.("warmup", Number(event.rows ?? 0), "Map points are ready");
+        const rows = Number(event.rows ?? 0);
+        onProgress?.("warmup", rows, undefined, rows);
       }
     },
   });
@@ -181,12 +188,14 @@ async function readMapResponse(
   response: Response,
   onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
-  onProgress?.("headers", 0);
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  onProgress?.("headers", 0, undefined, contentLength);
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
-    onProgress?.("bytes", bytes.byteLength);
-    onProgress?.("decode", bytes.byteLength, "Decoding map points...");
-    return fromBinary(WaferMapResponseSchema, bytes);
+    onProgress?.("bytes", bytes.byteLength, undefined, contentLength);
+    const parsed = fromBinary(WaferMapResponseSchema, bytes);
+    onProgress?.("decode", parsed.total, undefined, parsed.total);
+    return parsed;
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -197,7 +206,7 @@ async function readMapResponse(
     if (value.byteLength === 0) continue;
     chunks.push(value);
     loaded += value.byteLength;
-    onProgress?.("bytes", loaded, "Receiving map points...");
+    onProgress?.("bytes", loaded, undefined, contentLength);
   }
   const bytes = new Uint8Array(loaded);
   let offset = 0;
@@ -205,6 +214,7 @@ async function readMapResponse(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  onProgress?.("decode", loaded, "Decoding map points...");
-  return fromBinary(WaferMapResponseSchema, bytes);
+  const parsed = fromBinary(WaferMapResponseSchema, bytes);
+  onProgress?.("decode", parsed.total, undefined, parsed.total);
+  return parsed;
 }

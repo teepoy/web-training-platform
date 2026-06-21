@@ -1,4 +1,4 @@
-package sprite
+package handler
 
 import (
 	"bytes"
@@ -20,12 +20,14 @@ func generateTestPNG(c color.Color, w, h int) []byte {
 	return buf.Bytes()
 }
 
-func TestCreateSprite_Single(t *testing.T) {
-	pngs := [][]byte{
-		generateTestPNG(color.RGBA{255, 0, 0, 255}, 32, 32),
+func TestCreateSpriteFromResized_Single(t *testing.T) {
+	raw := generateTestPNG(color.RGBA{255, 0, 0, 255}, 32, 32)
+	resized, err := resizeSquarePNG(raw, 64)
+	if err != nil {
+		t.Fatalf("resize: %v", err)
 	}
 
-	result, err := CreateSprite(pngs, 64)
+	result, err := createSpriteFromResized([][]byte{resized}, 64)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,14 +51,21 @@ func TestCreateSprite_Single(t *testing.T) {
 	}
 }
 
-func TestCreateSprite_Multi(t *testing.T) {
-	pngs := [][]byte{
+func TestCreateSpriteFromResized_Multi(t *testing.T) {
+	pngs := make([][]byte, 0, 3)
+	for _, raw := range [][]byte{
 		generateTestPNG(color.RGBA{255, 0, 0, 255}, 32, 32),
 		generateTestPNG(color.RGBA{0, 255, 0, 255}, 16, 16),
 		generateTestPNG(color.RGBA{0, 0, 255, 255}, 64, 64),
+	} {
+		resized, err := resizeSquarePNG(raw, 48)
+		if err != nil {
+			t.Fatalf("resize: %v", err)
+		}
+		pngs = append(pngs, resized)
 	}
 
-	result, err := CreateSprite(pngs, 48)
+	result, err := createSpriteFromResized(pngs, 48)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,36 +84,12 @@ func TestCreateSprite_Multi(t *testing.T) {
 	}
 }
 
-func TestCreateSprite_Empty(t *testing.T) {
-	result, err := CreateSprite([][]byte{}, 64)
+func TestCreateSpriteFromResized_Empty(t *testing.T) {
+	result, err := createSpriteFromResized([][]byte{}, 64)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result != nil {
 		t.Errorf("expected nil for empty input")
-	}
-}
-
-func TestParseSize(t *testing.T) {
-	tests := []struct {
-		raw  string
-		want int
-	}{
-		{"", 64},
-		{"128", 128},
-		{"5000", 4096},
-		{"0", 0},
-		{"-1", 0},
-	}
-
-	for _, tc := range tests {
-		got, err := ParseSize(tc.raw)
-		if tc.want == 0 && err == nil {
-			t.Errorf("ParseSize(%q) expected error", tc.raw)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("ParseSize(%q) = %d, want %d", tc.raw, got, tc.want)
-		}
 	}
 }

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import io
+import json
 import os
+import shutil
 import time
+import threading
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncIterator, Iterator, TypeVar
+from pathlib import Path
+from typing import Any, AsyncIterator, Iterator, TypeVar
 
 from diskcache import Cache
+import pyarrow as pa
 import polars as pl
 from polars import LazyFrame
 
@@ -17,6 +21,15 @@ CACHE_TTL = 3600
 LOCK_TTL_SECONDS = 60
 LOCK_WAIT_SECONDS = 30
 LOCK_POLL_SECONDS = 0.1
+CACHE_SIZE_LIMIT_ENV = "SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES"
+RAW_CACHE_TTL_ENV = "SC_UPSTREAM_RAW_CACHE_TTL_SECONDS"
+RAW_CACHE_DIR_ENV = "SC_UPSTREAM_RAW_CACHE_DIR"
+RAW_CACHE_CLEANUP_INTERVAL_ENV = "SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS"
+RAW_CACHE_STALE_WRITE_ENV = "SC_UPSTREAM_RAW_CACHE_STALE_WRITE_SECONDS"
+RAW_CACHE_ORPHAN_GRACE_ENV = "SC_UPSTREAM_RAW_CACHE_ORPHAN_GRACE_SECONDS"
+RAW_CACHE_CLEANUP_INTERVAL_SECONDS = 7200
+RAW_CACHE_STALE_WRITE_SECONDS = 300
+RAW_CACHE_ORPHAN_GRACE_SECONDS = 600
 _T = TypeVar("_T")
 
 _RELEASE_SCRIPT = """
@@ -27,10 +40,130 @@ return 0
 """
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than 0")
+    return value
+
+
+class RawSamplesWriter:
+    def __init__(
+        self,
+        *,
+        redis_sync: Any,
+        redis_key: str,
+        token: str,
+        temp_dir: Path,
+        final_dir: Path,
+        data_path: Path,
+        final_data_path: Path,
+        ttl_seconds: int,
+        schema: pa.Schema,
+    ) -> None:
+        self._redis_sync = redis_sync
+        self._redis_key = redis_key
+        self._token = token
+        self._temp_dir = temp_dir
+        self._final_dir = final_dir
+        self._data_path = data_path
+        self._final_data_path = final_data_path
+        self._ttl_seconds = ttl_seconds
+        self._writer = pa.ipc.new_file(str(data_path), schema)
+        self._rows = 0
+        self._created_at = int(time.time())
+        self._closed = False
+
+    def write_frame(self, df: pl.DataFrame) -> None:
+        if self._closed:
+            raise RuntimeError("raw samples writer is already closed")
+        table = df.to_arrow()
+        self._writer.write_table(table)
+        self._rows += df.height
+        self._write_metadata("writing")
+
+    def finish(self) -> None:
+        if self._closed:
+            return
+        self._writer.close()
+        self._closed = True
+        self._temp_dir.rename(self._final_dir)
+        self._write_metadata("ready", path=self._final_data_path)
+
+    def abort(self) -> None:
+        if not self._closed:
+            self._writer.close()
+            self._closed = True
+        self._redis_sync.delete(self._redis_key)
+        shutil.rmtree(self._temp_dir, ignore_errors=True)
+
+    def _write_metadata(self, state: str, path: Path | None = None) -> None:
+        now = int(time.time())
+        data_path = path or self._data_path
+        payload = {
+            "uuid": self._token,
+            "state": state,
+            "rows": self._rows,
+            "bytes": data_path.stat().st_size if data_path.exists() else 0,
+            "created_at": self._created_at,
+            "updated_at": now,
+            "expires_at": now + self._ttl_seconds,
+        }
+        self._redis_sync.set(
+            self._redis_key,
+            json.dumps(payload, separators=(",", ":")),
+            ex=self._ttl_seconds,
+        )
+        meta_path = data_path.parent / "meta.json"
+        meta_path.write_text(
+            json.dumps(
+                {"redis_key": self._redis_key, **payload},
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+
+
 class QueryCache:
     def __init__(self, cache_dir: str | None = None) -> None:
         self._dir = cache_dir or os.environ.get("CACHE_DIR", "/tmp/sc-upstream")
-        self._cache = Cache(self._dir)
+        self._raw_ttl_seconds = _positive_int_env(RAW_CACHE_TTL_ENV, CACHE_TTL)
+        self._raw_cleanup_interval_seconds = _positive_int_env(
+            RAW_CACHE_CLEANUP_INTERVAL_ENV,
+            RAW_CACHE_CLEANUP_INTERVAL_SECONDS,
+        )
+        self._raw_stale_write_seconds = _positive_int_env(
+            RAW_CACHE_STALE_WRITE_ENV,
+            RAW_CACHE_STALE_WRITE_SECONDS,
+        )
+        self._raw_orphan_grace_seconds = _positive_int_env(
+            RAW_CACHE_ORPHAN_GRACE_ENV,
+            RAW_CACHE_ORPHAN_GRACE_SECONDS,
+        )
+        self._raw_dir = Path(
+            os.environ.get(RAW_CACHE_DIR_ENV, str(Path(self._dir) / "raw-samples"))
+        )
+        self._raw_tmp_dir = self._raw_dir / "tmp"
+        self._raw_objects_dir = self._raw_dir / "objects"
+        cache_kwargs: dict[str, int] = {}
+        raw_size_limit = os.environ.get(CACHE_SIZE_LIMIT_ENV, "").strip()
+        if raw_size_limit:
+            try:
+                size_limit = int(raw_size_limit)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{CACHE_SIZE_LIMIT_ENV} must be an integer byte count"
+                ) from exc
+            if size_limit <= 0:
+                raise ValueError(f"{CACHE_SIZE_LIMIT_ENV} must be greater than 0")
+            cache_kwargs["size_limit"] = size_limit
+        self._cache = Cache(self._dir, **cache_kwargs)
         self._redis = None
         self._redis_sync = None
         redis_url = os.environ.get("REDIS_URL", "").strip()
@@ -41,19 +174,28 @@ class QueryCache:
 
                 self._redis = redis_asyncio.from_url(redis_url, decode_responses=True)
                 self._redis_sync = Redis.from_url(redis_url, decode_responses=True)
+                self._redis_sync.ping()
             except Exception:
-                self._redis = None
-                self._redis_sync = None
+                raise
+        if self._redis is None or self._redis_sync is None:
+            raise RuntimeError(
+                "REDIS_URL is required for sc-upstream cache coordination"
+            )
+        self._raw_tmp_dir.mkdir(parents=True, exist_ok=True)
+        self._raw_objects_dir.mkdir(parents=True, exist_ok=True)
+        self._cleanup_raw_samples_cache()
+        cleanup_thread = threading.Thread(
+            target=self._raw_cleanup_loop,
+            name="sc-upstream-raw-cache-cleanup",
+            daemon=True,
+        )
+        cleanup_thread.start()
 
     def _key(self, *parts: str) -> str:
         return ":".join(parts)
 
     @asynccontextmanager
     async def fill_lock(self, *parts: str) -> AsyncIterator[bool]:
-        if self._redis is None:
-            yield True
-            return
-
         key = self._key("lock", *parts)
         token = uuid.uuid4().hex
         acquired = bool(await self._redis.set(key, token, nx=True, ex=LOCK_TTL_SECONDS))
@@ -82,10 +224,6 @@ class QueryCache:
 
     @contextmanager
     def sync_fill_lock(self, *parts: str) -> Iterator[bool]:
-        if self._redis_sync is None:
-            yield True
-            return
-
         key = self._key("lock", *parts)
         token = uuid.uuid4().hex
         acquired = bool(self._redis_sync.set(key, token, nx=True, ex=LOCK_TTL_SECONDS))
@@ -182,46 +320,126 @@ class QueryCache:
     async def get_list_samples(
         self, inspection_time: str, wafer_key: int
     ) -> LazyFrame | None:
-        key = self._key("samples", inspection_time, str(wafer_key))
-        ipc_bytes = await asyncio.to_thread(self._cache.get, key)
-        if ipc_bytes is not None:
-            from polars import read_ipc
-
-            return read_ipc(io.BytesIO(ipc_bytes)).lazy()
-        return None
+        return await asyncio.to_thread(
+            self.sync_get_list_samples, inspection_time, wafer_key
+        )
 
     def sync_get_list_samples(
         self, inspection_time: str, wafer_key: int
     ) -> LazyFrame | None:
         key = self._key("samples", inspection_time, str(wafer_key))
-        ipc_bytes = self._cache.get(key)
-        if ipc_bytes is not None:
-            from polars import read_ipc
+        raw_meta = self._redis_sync.get(key)
+        if not raw_meta:
+            return None
+        try:
+            meta = json.loads(raw_meta)
+        except json.JSONDecodeError:
+            self._redis_sync.delete(key)
+            return None
+        if meta.get("state") != "ready":
+            return None
+        token = str(meta.get("uuid", ""))
+        if not token:
+            self._redis_sync.delete(key)
+            return None
+        data_path = self._raw_objects_dir / token / "data.arrow"
+        if not data_path.exists():
+            self._redis_sync.delete(key)
+            return None
+        return pl.read_ipc(data_path).lazy()
 
-            return read_ipc(io.BytesIO(ipc_bytes)).lazy()
-        return None
-
-    async def set_list_samples(
-        self, inspection_time: str, wafer_key: int, lf: LazyFrame
-    ) -> None:
+    def sync_start_list_samples_writer(
+        self,
+        inspection_time: str,
+        wafer_key: int,
+        schema: pa.Schema,
+    ) -> RawSamplesWriter:
         key = self._key("samples", inspection_time, str(wafer_key))
-        buf = io.BytesIO()
-        lf.collect().write_ipc(buf)
+        token = uuid.uuid4().hex
+        temp_dir = self._raw_tmp_dir / token
+        final_dir = self._raw_objects_dir / token
+        temp_dir.mkdir(parents=True, exist_ok=False)
+        writer = RawSamplesWriter(
+            redis_sync=self._redis_sync,
+            redis_key=key,
+            token=token,
+            temp_dir=temp_dir,
+            final_dir=final_dir,
+            data_path=temp_dir / "data.arrow",
+            final_data_path=final_dir / "data.arrow",
+            ttl_seconds=self._raw_ttl_seconds,
+            schema=schema,
+        )
+        writer._write_metadata("writing")
+        return writer
 
-        def _set() -> None:
-            self._cache.set(key, buf.getvalue(), expire=CACHE_TTL)
+    def _raw_cleanup_loop(self) -> None:
+        while True:
+            time.sleep(self._raw_cleanup_interval_seconds)
+            self._cleanup_raw_samples_cache()
 
-        await asyncio.to_thread(_set)
+    def _cleanup_raw_samples_cache(self) -> None:
+        now = time.time()
+        for path in self._raw_tmp_dir.iterdir() if self._raw_tmp_dir.exists() else []:
+            if not self._is_stale_temp_dir(path, now):
+                continue
+            shutil.rmtree(path, ignore_errors=True)
 
-    def sync_set_list_samples_from_frames(
-        self, inspection_time: str, wafer_key: int, frames: list[pl.DataFrame]
-    ) -> None:
-        if not frames:
-            return
-        key = self._key("samples", inspection_time, str(wafer_key))
-        buf = io.BytesIO()
-        pl.concat(frames, how="vertical").write_ipc(buf)
-        self._cache.set(key, buf.getvalue(), expire=CACHE_TTL)
+        for path in (
+            self._raw_objects_dir.iterdir() if self._raw_objects_dir.exists() else []
+        ):
+            if not path.is_dir():
+                continue
+            if self._is_recent(path, now, self._raw_orphan_grace_seconds):
+                continue
+            meta_path = path / "meta.json"
+            if not meta_path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            redis_key = meta.get("redis_key")
+            raw_redis_meta = self._redis_sync.get(redis_key) if redis_key else None
+            if not raw_redis_meta:
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            try:
+                redis_meta = json.loads(raw_redis_meta)
+            except json.JSONDecodeError:
+                self._redis_sync.delete(redis_key)
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            if redis_meta.get("expires_at", now + 1) < now:
+                self._redis_sync.delete(redis_key)
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            if redis_meta.get("state") in {"failed", "writing"} and (
+                float(redis_meta.get("updated_at", 0)) + self._raw_stale_write_seconds
+                < now
+            ):
+                self._redis_sync.delete(redis_key)
+                shutil.rmtree(path, ignore_errors=True)
+
+    @staticmethod
+    def _is_recent(path: Path, now: float, threshold_seconds: int) -> bool:
+        try:
+            return path.stat().st_mtime + threshold_seconds >= now
+        except FileNotFoundError:
+            return False
+
+    def _is_stale_temp_dir(self, path: Path, now: float) -> bool:
+        meta_path = path / "meta.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                updated_at = float(meta.get("updated_at", 0))
+                return updated_at + self._raw_stale_write_seconds < now
+            except (ValueError, json.JSONDecodeError):
+                return True
+        return not self._is_recent(path, now, self._raw_stale_write_seconds)
 
     async def get_patch_zips(
         self,

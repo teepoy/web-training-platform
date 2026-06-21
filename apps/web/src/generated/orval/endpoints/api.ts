@@ -154,7 +154,6 @@ import type {
   StartPersistRequest,
   StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams,
   StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams,
-  StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams,
   SurfaceStateDocumentInput,
   SurfaceStateDocumentOutput,
   SyncAnnotationsResponse,
@@ -11455,94 +11454,6 @@ export const useStreamInspectionSampleTableRowsApiV1ScInspectionsInspectionTimeW
 
       return useMutation(mutationOptions);
     }
-
-/**
- * @summary Stream Sc Import Progress
- */
-export type streamScImportProgressApiV1ScImportFlowRunIdStreamGetResponse = {
-  data: HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetUrl = (flowRunId: string,
-    params?: StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  return normalizedParams.size ? `/api/v1/sc/import/${flowRunId}/stream?${normalizedParams.toString()}` : `/api/v1/sc/import/${flowRunId}/stream`
-}
-
-export const streamScImportProgressApiV1ScImportFlowRunIdStreamGet = async (flowRunId: string,
-    params?: StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams, options?: RequestInit): Promise<streamScImportProgressApiV1ScImportFlowRunIdStreamGetResponse> => {
-
-  return orvalFetcher<streamScImportProgressApiV1ScImportFlowRunIdStreamGetResponse>(getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetUrl(flowRunId,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryKey = (flowRunId: MaybeRef<string>,
-    params?: MaybeRef<StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams>,) => {
-    return ['api','v1','sc','import',flowRunId,'stream', ...(params ? [params]: [])] as const;
-    }
-
-
-export const getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryOptions = <TData = Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>, TError = HTTPValidationError>(flowRunId: MaybeRef<string>,
-    params?: MaybeRef<StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryKey(flowRunId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>> = ({ signal }) => streamScImportProgressApiV1ScImportFlowRunIdStreamGet(unref(flowRunId),unref(params), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(flowRunId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>, TError, TData>
-}
-
-export type StreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryResult = NonNullable<Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>>
-export type StreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryError = HTTPValidationError
-
-
-/**
- * @summary Stream Sc Import Progress
- */
-
-export function useStreamScImportProgressApiV1ScImportFlowRunIdStreamGet<TData = Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>, TError = HTTPValidationError>(
- flowRunId: MaybeRef<string>,
-    params?: MaybeRef<StreamScImportProgressApiV1ScImportFlowRunIdStreamGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamScImportProgressApiV1ScImportFlowRunIdStreamGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getStreamScImportProgressApiV1ScImportFlowRunIdStreamGetQueryOptions(flowRunId,params,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
 
 /**
  * @summary Start Sc Import

@@ -4820,39 +4820,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/import/{flow_run_id}/stream:
-    get:
-      tags:
-      - sc
-      summary: Stream Sc Import Progress
-      operationId: stream_sc_import_progress_api_v1_sc_import__flow_run_id__stream_get
-      parameters:
-      - name: flow_run_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Flow Run Id
-      - name: dataset_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Dataset Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/import:
     post:
       tags:
@@ -7041,10 +7008,6 @@ components:
           - type: integer
           - type: 'null'
           title: Max Rows
-        force_prefect_flow:
-          type: boolean
-          title: Force Prefect Flow
-          default: false
       type: object
       required:
       - source_inspection_time
@@ -7053,11 +7016,6 @@ components:
       title: ScImportRequest
     ScImportResponse:
       properties:
-        flow_run_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Flow Run Id
         status:
           type: string
           title: Status

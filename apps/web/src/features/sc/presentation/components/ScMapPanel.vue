@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NTabs, NTabPane, NSpin, NResult, NButton, NSelect, NIcon, NTooltip } from "naive-ui";
+import { NTabs, NTabPane, NResult, NButton, NSelect, NIcon, NTooltip, NProgress, NText } from "naive-ui";
 import { MenuOutline } from "@vicons/ionicons5";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
@@ -42,6 +42,8 @@ const props = defineProps<{
   // Loading / error
   mapLoading?: boolean;
   mapError?: string | null;
+  mapProgressMessage?: string;
+  mapProgressPercent?: number;
 
   // Legend control (optional)
   legendPoints?: number[];
@@ -57,7 +59,7 @@ const props = defineProps<{
    *  Parent curries inspection identity; ScMapPanel curries mode for each child map. */
   queryBoxSelection?: (mode: "wafer" | "die" | "reticle", region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
 
-  // Highlight defects from table selection (cyan overlay, self-contained coordinates)
+  // Highlight defects from table selection (purple overlay, self-contained coordinates)
   highlightDefects?: HighlightDefect[];
 }>();
 
@@ -295,14 +297,8 @@ const predictionGroups = computed(() =>
   legendSource.value === "prediction" ? (props.legendGroups ?? undefined) : undefined,
 );
 
-const showWaferLoading = computed(
-  () => Boolean(props.mapLoading) && (props.waferPoints?.length ?? 0) === 0,
-);
-const showDieLoading = computed(
-  () => Boolean(props.mapLoading) && (props.diePoints?.length ?? 0) === 0,
-);
-const showReticleLoading = computed(
-  () => Boolean(props.mapLoading) && (props.reticlePoints?.length ?? 0) === 0,
+const showMapProgress = computed(
+  () => Boolean(props.mapLoading) && Boolean(props.mapProgressMessage),
 );
 
 const ZERO_REGION = { x: 0, y: 0, w: 0, h: 0 };
@@ -356,25 +352,22 @@ const handleLegendSelect = (key: LegendKey | null) => {
               style="flex: 1; min-height: 0; display: flex; flex-direction: column;"
             >
               <NTabPane name="wafer" tab="Wafer" data-testid="sc-map-tab-wafer">
-            <NSpin :show="showWaferLoading">
-              <ScWaferMap
-                :points="waferPoints"
-                :geometry="waferGeometry"
-                :waferRadiusNm="waferRadiusNm"
-                :selectedIds="selectedIds"
-                :highlightDefects="highlightDefects"
-                :color-map="colorMap"
-                :query-box-selection="waferBoxQuery"
-                :zoom="zoom"
-                :mode="mapMode.wafer"
-                @selection-change="handleSelectionChange"
-                @zoom-in="handleZoomIn"
-              />
-            </NSpin>
-          </NTabPane>
+                <ScWaferMap
+                  :points="waferPoints"
+                  :geometry="waferGeometry"
+                  :waferRadiusNm="waferRadiusNm"
+                  :selectedIds="selectedIds"
+                  :highlightDefects="highlightDefects"
+                  :color-map="colorMap"
+                  :query-box-selection="waferBoxQuery"
+                  :zoom="zoom"
+                  :mode="mapMode.wafer"
+                  @selection-change="handleSelectionChange"
+                  @zoom-in="handleZoomIn"
+                />
+              </NTabPane>
 
           <NTabPane name="die" tab="Die Stack" data-testid="sc-map-tab-die">
-            <NSpin :show="showDieLoading">
               <ScDieStackMap
                 :points="diePoints"
                 :die-size-x="waferGeometry?.dieSizeX"
@@ -388,11 +381,9 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 @selection-change="handleSelectionChange"
                 @zoom-in="handleZoomIn"
               />
-            </NSpin>
           </NTabPane>
 
           <NTabPane name="reticle" tab="Reticle" data-testid="sc-map-tab-reticle">
-            <NSpin :show="showReticleLoading">
               <ScReticleMap
                 v-if="reticleXDieCount !== undefined && reticleYDieCount !== undefined && reticleDieSizeX !== undefined && reticleDieSizeY !== undefined"
                 :points="reticlePoints"
@@ -412,10 +403,23 @@ const handleLegendSelect = (key: LegendKey | null) => {
               <div v-else class="reticle-map-placeholder">
                 Missing reticle configuration
               </div>
-            </NSpin>
 
           </NTabPane>
         </NTabs>
+          </div>
+          <div
+            v-if="showMapProgress"
+            class="sc-map-progress"
+          >
+            <NProgress
+              type="line"
+              :percentage="mapProgressPercent ?? 0"
+              :indicator-placement="'inside'"
+              processing
+            />
+            <NText depth="3" class="sc-map-progress-text">
+              {{ mapProgressMessage }}
+            </NText>
           </div>
         <div class="floating-toolbar">
           <NButton
@@ -571,6 +575,29 @@ const handleLegendSelect = (key: LegendKey | null) => {
   align-items: flex-start;
   flex: 1;
   min-height: 0;
+}
+
+.sc-map-progress {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--sc-map-canvas-top) + (100% - var(--sc-map-canvas-top)) / 2);
+  width: min(320px, calc(100% - 48px));
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--n-color) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.sc-map-progress-text {
+  font-size: 12px;
+  text-align: center;
 }
 
 .map-area :deep(.n-tabs) {

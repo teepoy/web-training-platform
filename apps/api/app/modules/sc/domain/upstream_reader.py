@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -7,6 +8,8 @@ if TYPE_CHECKING:
     import polars as pl
 
 from app.modules.sc.domain.models import ScInspectionRecord
+
+ScSampleProgressCallback = Callable[[int], None]
 
 
 class ScUpstreamReader(Protocol):
@@ -41,6 +44,7 @@ class ScUpstreamReader(Protocol):
         reticle_size_y: int = 1,
         reticle_offset_x: int = 0,
         reticle_offset_y: int = 0,
+        on_progress: ScSampleProgressCallback | None = None,
     ) -> pl.LazyFrame: ...
 
     async def list_review_images(

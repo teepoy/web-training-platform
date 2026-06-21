@@ -101,6 +101,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     reviewError: tab.reviewError,
     mapLoading: tab.mapLoading,
     mapError: tab.mapError,
+    mapStreamMessage: tab.mapStreamMessage,
+    mapProgressPercent: tab.mapProgressPercent,
     activeMapTab: tab.activeMapTab,
     waferGeometry: tab.waferGeometry,
     waferDisplay: tab.waferDisplay,

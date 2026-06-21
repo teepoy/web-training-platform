@@ -130,7 +130,6 @@ class ScImportRequest(BaseModel):
     filters: dict | None = None
     label_space: list[str] = []
     max_rows: int | None = None
-    force_prefect_flow: bool = False
 
     @field_validator("storage_mode")
     @classmethod
@@ -141,7 +140,6 @@ class ScImportRequest(BaseModel):
 
 
 class ScImportResponse(BaseModel):
-    flow_run_id: str | None = None
     status: str
     dataset_id: str = ""
     imported_count: int = 0

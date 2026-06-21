@@ -2,18 +2,16 @@ package cache
 
 import (
 	"sync"
-
-	"image-parser/internal/s3client"
-	"image-parser/internal/zipreader"
 )
 
 type Warmer struct {
 	zip     *ZipCache
+	load    func(bucket, key string) ([]byte, error)
 	warming sync.Map
 }
 
-func NewWarmer(z *ZipCache) *Warmer {
-	return &Warmer{zip: z}
+func NewWarmer(z *ZipCache, load func(bucket, key string) ([]byte, error)) *Warmer {
+	return &Warmer{zip: z, load: load}
 }
 
 func (w *Warmer) Warm(bucket string, keys []string) {
@@ -28,7 +26,7 @@ func (w *Warmer) Warm(bucket string, keys []string) {
 			defer func() { <-sem }()
 			ck := CacheKey(bucket, key)
 			w.zip.GetOrLoad(ck, func() ([]byte, error) {
-				return zipreader.DownloadFullZip(s3client.GetZips(), bucket, key)
+				return w.load(bucket, key)
 			})
 		}(k)
 	}

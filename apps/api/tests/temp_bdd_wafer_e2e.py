@@ -182,7 +182,6 @@ def api_headers(auth_token: str, api_url: str) -> dict[str, str]:
     }
 
 
-_SC_IMPORT_TIMEOUT = 300
 _BDD_SPARSE_DATASET_NAME = "BDD Wafer Sparse"
 
 
@@ -210,45 +209,13 @@ def _find_inspection_bdd(
     return str(items[0]["inspection_time"]), int(items[0]["wafer_key"])
 
 
-def _wait_sc_import_sse(
-    client: httpx.Client,
-    flow_run_id: str,
-    timeout: int,
-    dataset_id: str | None = None,
-) -> dict[str, Any]:
-    """Wait for SC import completion via the canonical SSE stream endpoint."""
-    deadline = time.time() + timeout
-    params = {"dataset_id": dataset_id} if dataset_id else None
-    with client.stream(
-        "GET",
-        f"/api/v1/sc/import/{flow_run_id}/stream",
-        params=params,
-    ) as resp:
-        resp.raise_for_status()
-        for line in resp.iter_lines():
-            if time.time() > deadline:
-                raise RuntimeError(f"SC import timed out after {timeout}s")
-            if not line.startswith("data:"):
-                continue
-            try:
-                data = json.loads(line.removeprefix("data:").strip())
-            except json.JSONDecodeError:
-                continue
-            event_type = data.get("event_type", "")
-            if event_type == "done":
-                return data
-            if event_type == "error":
-                raise RuntimeError(f"SC import failed: {data.get('error', data)}")
-    raise RuntimeError(f"SC import stream ended before completion: {flow_run_id}")
-
-
 def _create_sparse_dataset(
     api_url: str,
     api_headers: dict[str, str],
     inspection_time: str,
     wafer_key: int,
 ) -> str:
-    """POST /sc/import and wait for the Prefect flow to complete. Returns dataset_id."""
+    """POST /sc/import through the direct sparse import path. Returns dataset_id."""
     r = httpx.post(
         f"{api_url}/api/v1/sc/import",
         headers=api_headers,
@@ -261,23 +228,14 @@ def _create_sparse_dataset(
     )
     r.raise_for_status()
     body = r.json()
-    flow_run_id = body.get("flow_run_id")
+    status = body.get("status", "")
     dataset_id = body.get("dataset_id", "")
-    if not flow_run_id:
-        raise RuntimeError(f"SC import returned no flow_run_id: {body}")
-
-    deadline = time.time() + _SC_IMPORT_TIMEOUT
-    print(f"\n  [BDD] Waiting for SC import (flow={flow_run_id}) ...")
-    with httpx.Client(base_url=api_url.rstrip("/"), timeout=60.0) as poll_client:
-        poll_client.headers.update(api_headers)
-        _wait_sc_import_sse(
-            poll_client,
-            flow_run_id,
-            max(1, int(deadline - time.time())),
-            dataset_id=dataset_id,
+    if status != "completed" or not dataset_id:
+        raise RuntimeError(
+            f"SC import returned unexpected response: status={status!r}, body={body}"
         )
-        print(f"  [BDD] SC import complete: dataset={dataset_id}")
-        return str(dataset_id)
+    print(f"  [BDD] SC import complete: dataset={dataset_id}")
+    return str(dataset_id)
 
 
 @pytest.fixture(scope="module")
@@ -285,7 +243,7 @@ def wafer_demo_dataset_id(api_url: str, api_headers: dict[str, str]) -> str:
     """Find or create a file_shard_sparse SC dataset for BDD testing.
 
     Prefers existing file_shard_sparse datasets. If none are found,
-    creates one via POST /sc/import (requires Prefect worker).
+    creates one via POST /sc/import.
     Falls back to any image_sc dataset as a last resort.
     """
     r = httpx.get(f"{api_url}/api/v1/datasets", headers=api_headers)
@@ -1338,25 +1296,11 @@ class TestWafeGeometryPersistence:
         status = body.get("status", "")
         dataset_id = body.get("dataset_id", "")
 
-        if status == "completed":
-            print(f"  [BDD-Geo-Fixture] SC import completed synchronously: dataset={dataset_id}")
-        elif body.get("flow_run_id"):
-            flow_run_id = body["flow_run_id"]
-            deadline = time.time() + _SC_IMPORT_TIMEOUT
-            print(f"\n  [BDD-Geo-Fixture] Waiting for SC import (flow={flow_run_id}) ...")
-            with httpx.Client(base_url=api_url.rstrip("/"), timeout=60.0) as poll_client:
-                poll_client.headers.update(api_headers)
-                _wait_sc_import_sse(
-                    poll_client,
-                    flow_run_id,
-                    max(1, int(deadline - time.time())),
-                    dataset_id=dataset_id,
-                )
-                print(f"  [BDD-Geo-Fixture] SC import complete: dataset={dataset_id}")
-        else:
+        if status != "completed" or not dataset_id:
             raise RuntimeError(
                 f"SC import returned unexpected response: status={status!r}, body={body}"
             )
+        print(f"  [BDD-Geo-Fixture] SC import complete: dataset={dataset_id}")
 
         yield str(dataset_id)
 
@@ -1481,22 +1425,13 @@ class TestWafeGeometryPersistence:
         )
         r2.raise_for_status()
         body = r2.json()
-        flow_run_id = body.get("flow_run_id")
+        status = body.get("status", "")
         dataset_id2 = body.get("dataset_id", "")
-        if not flow_run_id:
-            raise RuntimeError(f"SC import returned no flow_run_id: {body}")
-
-        deadline = time.time() + _SC_IMPORT_TIMEOUT
-        print(f"\n  [BDD-Geo] Waiting for SC import (flow={flow_run_id}) ...")
-        with httpx.Client(base_url=api_url.rstrip("/"), timeout=60.0) as poll_client:
-            poll_client.headers.update(api_headers)
-            _wait_sc_import_sse(
-                poll_client,
-                flow_run_id,
-                max(1, int(deadline - time.time())),
-                dataset_id=dataset_id2,
+        if status != "completed" or not dataset_id2:
+            raise RuntimeError(
+                f"SC import returned unexpected response: status={status!r}, body={body}"
             )
-            print(f"  [BDD-Geo] SC import complete: dataset={dataset_id2}")
+        print(f"  [BDD-Geo] SC import complete: dataset={dataset_id2}")
 
         # ── Fetch dataset 2 geometry ──
         r3 = httpx.get(

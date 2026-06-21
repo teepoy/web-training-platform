@@ -16,13 +16,12 @@ class TestScImportStatus:
             assert s.status == status
 
     def test_defaults_are_correct(self) -> None:
-        """Default values: imported_count=0, remaining_count=0, error=None, flow_run_id=None."""
+        """Default values: imported_count=0, remaining_count=0, error=None."""
         s = ScImportStatus(status="pending", dataset_id="ds-1")
 
         assert s.imported_count == 0
         assert s.remaining_count == 0
         assert s.error is None
-        assert s.flow_run_id is None
         assert s.dataset_id == "ds-1"
 
     def test_invalid_status_raises_validation_error(self) -> None:
@@ -34,7 +33,6 @@ class TestScImportStatus:
         """model_dump(mode='json') produces correct JSON-serializable dict."""
         s = ScImportStatus(
             status="running",
-            flow_run_id="abc-123",
             dataset_id="ds-42",
             imported_count=5,
             remaining_count=95,
@@ -43,7 +41,6 @@ class TestScImportStatus:
         dumped = s.model_dump(mode="json")
         assert dumped == {
             "status": "running",
-            "flow_run_id": "abc-123",
             "dataset_id": "ds-42",
             "dataset_name": "",
             "source_inspection_time": "",

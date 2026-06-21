@@ -12,6 +12,7 @@ that writes ``file_shard_sparse`` datasets.  See
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 from typing import TYPE_CHECKING, Any
@@ -99,10 +100,13 @@ class SparseImportOperator:
 
         from platform_runtime.sparse import SampleLocator
 
-        table = pa.Table.from_pylist(rows, schema=pyarrow_schema)
-        buf = io.BytesIO()
-        pq.write_table(table, buf)
-        data = buf.getvalue()
+        def _build_parquet_bytes() -> bytes:
+            table = pa.Table.from_pylist(rows, schema=pyarrow_schema)
+            buf = io.BytesIO()
+            pq.write_table(table, buf)
+            return buf.getvalue()
+
+        data = await asyncio.to_thread(_build_parquet_bytes)
 
         shard_entry = await self._payload_store.put_shard(
             dataset_id=self._dataset_id,

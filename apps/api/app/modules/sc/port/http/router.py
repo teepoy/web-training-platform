@@ -18,15 +18,16 @@ from app.modules.auth.port.http.deps import get_current_org, get_current_user
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
+    get_dataset_storage_factory,
     get_repository,
 )
+from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.sc.port.http.deps import (
     DatasetPayloadStoreDep,
     ScDatasetReaderDep,
     ScDatasetStoreDep,
     ScImageFetcherDep,
     ScImportServiceDep,
-    PrefectClientDep,
     ScPlotPointsServiceDep,
     ScUpstreamReaderDep,
 )
@@ -38,6 +39,8 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     filter_box_defect_ids,
     sorted_defect_ids_from_lazyframe,
 )
+from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
+from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.proto_adapter import (
     make_wafer_map_response_pb,
 )
@@ -409,6 +412,7 @@ async def _build_inspection_map_points_payload(
     zoom_h: int | None,
     mode: Literal["wafer", "die", "reticle"] | None,
     filters: ScFilterParams,
+    on_sample_progress: ScSampleProgressCallback | None = None,
 ) -> bytes:
     samples_lf = await upstream_reader.list_samples(
         insp_dt,
@@ -419,6 +423,7 @@ async def _build_inspection_map_points_payload(
         reticle_size_y=reticle_y_die_count,
         reticle_offset_x=reticle_x_die_shift,
         reticle_offset_y=reticle_y_die_shift,
+        on_progress=on_sample_progress,
     )
     samples_lf = _apply_sample_filters(
         samples_lf,
@@ -492,8 +497,14 @@ async def stream_inspection_map_points_progress(
                 )
             )
         )
-        try:
-            payload = await _build_inspection_map_points_payload(
+        progress_queue: asyncio.Queue[int] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _on_sample_progress(loaded: int) -> None:
+            loop.call_soon_threadsafe(progress_queue.put_nowait, loaded)
+
+        build_task = asyncio.create_task(
+            _build_inspection_map_points_payload(
                 upstream_reader=upstream_reader,
                 inspection=inspection,
                 insp_dt=insp_dt,
@@ -510,8 +521,39 @@ async def stream_inspection_map_points_progress(
                 zoom_h=zoom_h,
                 mode=mode,
                 filters=filters,
+                on_sample_progress=_on_sample_progress,
             )
+        )
+        last_loaded = 0
+        try:
+            while not build_task.done():
+                if await request.is_disconnected():
+                    build_task.cancel()
+                    return
+                try:
+                    loaded = await asyncio.wait_for(progress_queue.get(), timeout=0.25)
+                except TimeoutError:
+                    continue
+                loaded = min(max(loaded, 0), max(inspection.defects, 0))
+                if loaded <= last_loaded:
+                    continue
+                last_loaded = loaded
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.map-points",
+                            status="loading",
+                            message="Preparing map points",
+                            loaded_count=loaded,
+                            total_count=inspection.defects,
+                        )
+                    )
+                )
+            await build_task
         except Exception as exc:
+            if not build_task.done():
+                build_task.cancel()
             yield emit_sse(
                 SSEEvent(
                     ScErrorEvent(
@@ -529,7 +571,7 @@ async def stream_inspection_map_points_progress(
                     operation="sc.map-points",
                     status="cached",
                     message="Map points are ready",
-                    loaded_count=len(payload),
+                    loaded_count=inspection.defects,
                     total_count=inspection.defects,
                 )
             )
@@ -1146,140 +1188,6 @@ async def stream_inspection_sample_table_rows(
     )
 
 
-TERMINAL_FAILED_STATES = frozenset({"CRASHED", "FAILED", "CANCELLED"})
-
-
-def _prefect_state_type(flow_run: Any) -> str:
-    if isinstance(flow_run, dict):
-        return str(flow_run.get("state_type", ""))
-    return getattr(flow_run, "state_type", "")
-
-
-def _prefect_state_message(flow_run: Any) -> str | None:
-    if isinstance(flow_run, dict):
-        return flow_run.get("state_message")
-    return getattr(flow_run, "state_message", None)
-
-
-def _prefect_state_data(flow_run: Any, key: str) -> object:
-    if isinstance(flow_run, dict):
-        data = flow_run.get("state", {}).get("data", {})
-        if isinstance(data, dict):
-            return data.get(key)
-        return None
-    state = getattr(flow_run, "state", {})
-    if isinstance(state, dict):
-        data_obj = state.get("data", {})
-    else:
-        data_obj = getattr(state, "data", {}) if state else {}
-    if isinstance(data_obj, dict):
-        return data_obj.get(key)
-    return None
-
-
-def _prefect_parameter(flow_run: Any, key: str) -> object:
-    if isinstance(flow_run, dict):
-        parameters = flow_run.get("parameters", {})
-        if isinstance(parameters, dict):
-            return parameters.get(key)
-        return None
-    parameters = getattr(flow_run, "parameters", {})
-    if isinstance(parameters, dict):
-        return parameters.get(key)
-    return None
-
-
-@router.get("/import/{flow_run_id}/stream")
-async def stream_sc_import_progress(
-    flow_run_id: str,
-    request: Request,
-    prefect_client: PrefectClientDep,
-    payload_store: DatasetPayloadStoreDep,
-    requested_dataset_id: str | None = Query(None, alias="dataset_id"),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-):
-    async def event_generator():
-        dataset_open_emitted = False
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                flow_run = await prefect_client.get_flow_run(flow_run_id)
-            except HTTPException as e:
-                detail = str(e.detail)
-                if e.status_code == 404:
-                    detail = "import flow run not found"
-                yield emit_sse(SSEEvent(ScErrorEvent(event_type="error", error=detail)))
-                return
-
-            state_type = _prefect_state_type(flow_run)
-            state_message = _prefect_state_message(flow_run)
-            dataset_id = requested_dataset_id or _prefect_parameter(
-                flow_run, "dataset_id"
-            )
-            imported_count = 0
-            if isinstance(dataset_id, str):
-                try:
-                    payload_store.invalidate_manifest(dataset_id, org.id)
-                    manifest = await payload_store.get_manifest(dataset_id, org.id)
-                    imported_count = manifest.total_rows
-                except (FileNotFoundError, KeyError):
-                    imported_count = 0
-            if state_type == "COMPLETED":
-                state_dataset_id = _prefect_state_data(flow_run, "dataset_id")
-                if isinstance(state_dataset_id, str):
-                    dataset_id = state_dataset_id
-                yield emit_sse(
-                    SSEEvent(
-                        DoneEvent(
-                            event_type="done",
-                            dataset_id=dataset_id
-                            if isinstance(dataset_id, str)
-                            else None,
-                        )
-                    )
-                )
-                return
-            if state_type in TERMINAL_FAILED_STATES:
-                error = state_message or f"import flow run {state_type.lower()}"
-                yield emit_sse(
-                    SSEEvent(
-                        ScErrorEvent(
-                            event_type="error",
-                            flow_run_id=flow_run_id,
-                            status=state_type.lower(),
-                            error=error,
-                        )
-                    )
-                )
-                return
-            yield emit_sse(
-                SSEEvent(
-                    ScProgressEvent(
-                        event_type="progress",
-                        flow_run_id=flow_run_id,
-                        status=state_type.lower(),
-                        dataset_id=dataset_id
-                        if isinstance(dataset_id, str)
-                        and imported_count > 0
-                        and not dataset_open_emitted
-                        else None,
-                        imported_count=imported_count,
-                    )
-                )
-            )
-            if imported_count > 0:
-                dataset_open_emitted = True
-            await asyncio.sleep(3)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers=_SSE_HEADERS,
-    )
-
-
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 
@@ -1291,7 +1199,7 @@ async def start_sc_import(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
 ) -> ScImportResponse | JSONResponse:
-    status, flow_run_id = await sc_import_service.submit_import(
+    status = await sc_import_service.submit_import(
         source_inspection_time=payload.source_inspection_time,
         source_wafer_key=payload.source_wafer_key,
         dataset_name=payload.dataset_name,
@@ -1300,23 +1208,140 @@ async def start_sc_import(
         filters=payload.filters,
         label_space=payload.label_space,
         max_rows=payload.max_rows,
-        force_prefect_flow=payload.force_prefect_flow,
     )
     if status.status == "failed":
         return JSONResponse(
             content=ScImportResponse(
-                flow_run_id=None,
                 status="failed",
                 error=status.error,
             ).model_dump(mode="json"),
             status_code=200,
         )
     return ScImportResponse(
-        flow_run_id=flow_run_id,
         status=status.status,
         dataset_id=status.dataset_id,
         imported_count=status.imported_count,
         error=status.error,
+    )
+
+
+@router.post("/import/stream")
+async def stream_sc_import(
+    payload: ScImportRequest,
+    request: Request,
+    sc_import_service: ScImportServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+) -> StreamingResponse:
+    progress_queue: asyncio.Queue[ScImportStatus] = asyncio.Queue()
+
+    async def on_progress(status: ScImportStatus) -> None:
+        await progress_queue.put(status)
+
+    async def event_generator():
+        yield emit_sse(
+            SSEEvent(
+                ScProgressEvent(
+                    event_type="progress",
+                    operation="sc.import",
+                    status="running",
+                    message="Starting import",
+                    imported_count=0,
+                )
+            )
+        )
+        import_task = asyncio.create_task(
+            sc_import_service.submit_import(
+                source_inspection_time=payload.source_inspection_time,
+                source_wafer_key=payload.source_wafer_key,
+                dataset_name=payload.dataset_name,
+                storage_mode=payload.storage_mode,
+                org_id=org.id,
+                filters=payload.filters,
+                label_space=payload.label_space,
+                max_rows=payload.max_rows,
+                on_progress=on_progress,
+            )
+        )
+        try:
+            while not import_task.done():
+                if await request.is_disconnected():
+                    import_task.cancel()
+                    return
+                try:
+                    status = await asyncio.wait_for(
+                        progress_queue.get(),
+                        timeout=0.25,
+                    )
+                except TimeoutError:
+                    continue
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.import",
+                            status=status.status,
+                            dataset_id=status.dataset_id or None,
+                            imported_count=status.imported_count,
+                            total_count=status.imported_count + status.remaining_count,
+                        )
+                    )
+                )
+            status = await import_task
+        except Exception as exc:
+            if not import_task.done():
+                import_task.cancel()
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=str(exc),
+                    )
+                )
+            )
+            return
+
+        if status.status == "failed":
+            yield emit_sse(
+                SSEEvent(
+                    ScErrorEvent(
+                        event_type="error",
+                        status="failed",
+                        error=status.error or "Import failed",
+                    )
+                )
+            )
+            return
+
+        yield emit_sse(
+            SSEEvent(
+                ScDataEvent(
+                    event_type="data",
+                    operation="sc.import",
+                    payload=ScImportResponse(
+                        status=status.status,
+                        dataset_id=status.dataset_id,
+                        imported_count=status.imported_count,
+                        error=status.error,
+                    ).model_dump(mode="json"),
+                )
+            )
+        )
+        yield emit_sse(
+            SSEEvent(
+                DoneEvent(
+                    event_type="done",
+                    dataset_id=status.dataset_id,
+                    rows=status.imported_count,
+                )
+            )
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
     )
 
 
@@ -1339,6 +1364,9 @@ async def sc_bulk_create_annotations(
     dataset_reader: ScDatasetReaderDep,
     dataset_store: ScDatasetStoreDep,
     dataset_service: DatasetServiceDep,
+    storage_factory: Annotated[
+        DatasetStorageFactory, Depends(get_dataset_storage_factory)
+    ],
     repo: Annotated[DatasetRepository, Depends(get_repository)],
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
@@ -1356,9 +1384,15 @@ async def sc_bulk_create_annotations(
 
     created = 0
     created_labels: set[str] = set()
+    storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
         if sample_id is None:
+            continue
+        existing = await storage.list_annotations(sample_id=sample_id)
+        if existing:
+            await storage.delete_annotations([ann.id for ann in existing if ann.id])
+        if item.label == "0":
             continue
         ann = Annotation(
             id=__import__("uuid").uuid4().hex,

@@ -1,184 +1,162 @@
 package handler
 
 import (
-	"net/http"
-	"strconv"
-	"strings"
+	"context"
+	"fmt"
 
-	"github.com/gin-gonic/gin"
-	imageparserv1 "image-parser/gen/go/imageparser/v1"
+	imageloader "image-parser/internal/image_loader"
 )
 
-type Handler struct {
-	svc imageparserv1.ImageParserServer
+type scRoutes struct {
+	images imageloader.ImageLoader
 }
 
-func New(svc imageparserv1.ImageParserServer) *Handler {
-	return &Handler{svc: svc}
+type SCImageRequest struct {
+	Inspection    imageloader.InspectionKey
+	DefectID      string
+	ImageType     string
+	ReviewImageID int
 }
 
-func (h *Handler) Health(c *gin.Context) {
-	resp, err := h.svc.Health(c, &imageparserv1.HealthRequest{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": resp.Status})
+type SCSpriteRequest struct {
+	Inspection imageloader.InspectionKey
+	DefectID   string
+	CellSize   int
+	Images     []SCSpriteImage
 }
 
-func (h *Handler) GetImage(c *gin.Context) {
-	bucket := c.Query("bucket")
-	key := c.Query("key")
-	prefix := c.Query("prefix")
-	useCache := c.Query("cache") == "true" || c.Query("cache") == "1"
-
-	if bucket == "" || key == "" || prefix == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket, key, and prefix are required"})
-		return
-	}
-
-	resp, err := h.svc.GetImage(c, &imageparserv1.GetImageRequest{
-		Bucket: bucket,
-		Key:    key,
-		Prefix: prefix,
-		Cache:  useCache,
-	})
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.Header("Content-Type", "image/png")
-	c.Data(http.StatusOK, "image/png", resp.ImageData)
+type SCSpriteImage struct {
+	Kind          imageloader.ImageKind
+	ImageType     string
+	ReviewImageID int
 }
 
-func (h *Handler) Sprite(c *gin.Context) {
-	bucket := c.Query("bucket")
-	key := c.Query("key")
-	useCache := c.Query("cache") == "true" || c.Query("cache") == "1"
-
-	req, err := parseSpriteRequest(bucket, key, c.Query("prefix"), c.Query("size"), useCache)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	resp, err := h.svc.Sprite(c, req)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.Header("Content-Type", "image/png")
-	c.Data(http.StatusOK, "image/png", resp.ImageData)
+type SCWarmRequest struct {
+	Inspection   imageloader.InspectionKey
+	DefectIDs    []string
+	RecordPrefix string
 }
 
-func (h *Handler) HandleV2Sprite(c *gin.Context) {
-	bucket := c.Query("bucket")
-	if bucket == "" {
-		bucket = "images"
-	}
-	record := c.Query("record")
-	if record == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "record is required"})
-		return
-	}
-
-	req, err := parseV2SpriteRequest(bucket, record, c.Query("items"), c.Query("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	resp, err := h.svc.V2Sprite(c, req)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.Header("Content-Type", "image/png")
-	c.Data(http.StatusOK, "image/png", resp.ImageData)
+type ImageResponse struct {
+	Data        []byte
+	ContentType string
 }
 
-func parseSpriteRequest(bucket, key, rawPrefix, rawSize string, useCache bool) (*imageparserv1.SpriteRequest, error) {
-	if bucket == "" || key == "" || rawPrefix == "" {
-		return nil, http.ErrNotSupported
+type WarmResponse struct {
+	Zips int
+}
+
+func NewSCRoutes(images imageloader.ImageLoader) *scRoutes {
+	return &scRoutes{images: images}
+}
+
+func (s *scRoutes) GetSCImage(ctx context.Context, req SCImageRequest) (ImageResponse, error) {
+	imageType := normalizeImageType(req.ImageType)
+	key := imageloader.ImageKey{
+		Kind:          imageloader.ImageKindPatch,
+		InspectionKey: req.Inspection,
+		DefectID:      req.DefectID,
+		ImageType:     imageType,
+	}
+	contentType := "image/png"
+	if imageType == "review" {
+		key.Kind = imageloader.ImageKindReview
+		key.ReviewImageID = req.ReviewImageID
+		contentType = "image/jpeg"
 	}
 
-	parts := strings.Split(rawPrefix, ",")
-	if len(parts) > 20 {
-		return nil, http.ErrNotSupported
+	result := firstImageResult(s.images.GetImageBytes(ctx, []imageloader.ImageKey{key}))
+	if result.Err != nil {
+		return ImageResponse{}, result.Err
 	}
+	return ImageResponse{Data: result.Data, ContentType: contentType}, nil
+}
 
-	prefixes := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			prefixes = append(prefixes, p)
+func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageResponse, error) {
+	pngs := make([][]byte, 0, len(req.Images))
+	for _, image := range req.Images {
+		switch image.Kind {
+		case imageloader.ImageKindPatch:
+			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize)
+			if err != nil {
+				return ImageResponse{}, err
+			}
+			pngs = append(pngs, resized)
+		case imageloader.ImageKindReview:
+			resized, err := reviewSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ReviewImageID, req.CellSize)
+			if err != nil {
+				return ImageResponse{}, err
+			}
+			pngs = append(pngs, resized)
+		default:
+			resized, err := blankSquarePNG(req.CellSize)
+			if err != nil {
+				return ImageResponse{}, err
+			}
+			pngs = append(pngs, resized)
 		}
 	}
-	if len(prefixes) == 0 {
-		return nil, http.ErrNotSupported
-	}
 
-	sz, err := parseSize(rawSize)
+	result, err := createSpriteFromResized(pngs, req.CellSize)
 	if err != nil {
-		return nil, err
+		return ImageResponse{}, err
 	}
-
-	return &imageparserv1.SpriteRequest{
-		Bucket:   bucket,
-		Key:      key,
-		Prefixes: prefixes,
-		Size:     int32(sz),
-		Cache:    useCache,
-	}, nil
+	return ImageResponse{Data: result, ContentType: "image/png"}, nil
 }
 
-func parseV2SpriteRequest(bucket, record, rawItems, rawSize string) (*imageparserv1.V2SpriteRequest, error) {
-	if rawItems == "" {
-		return nil, http.ErrNotSupported
+func (s *scRoutes) WarmSC(ctx context.Context, req SCWarmRequest) (WarmResponse, error) {
+	prefix := req.RecordPrefix
+	if prefix == "" {
+		prefix = "warm"
 	}
-
-	parts := strings.Split(rawItems, ",")
-	if len(parts) > 20 {
-		return nil, http.ErrNotSupported
-	}
-
-	items := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			items = append(items, p)
-		}
-	}
-	if len(items) == 0 {
-		return nil, http.ErrNotSupported
-	}
-
-	sz, err := parseSize(rawSize)
+	warmed, err := s.images.WarmInspection(ctx, req.Inspection, req.DefectIDs, prefix)
 	if err != nil {
-		return nil, err
+		return WarmResponse{}, err
 	}
-
-	return &imageparserv1.V2SpriteRequest{
-		Bucket: bucket,
-		Record: record,
-		Items:  items,
-		Size:   int32(sz),
-	}, nil
+	return WarmResponse{Zips: warmed}, nil
 }
 
-func parseSize(raw string) (int, error) {
-	if raw == "" {
-		return 64, nil
+func patchSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspection imageloader.InspectionKey, defectID string, imageType string, cellSize int) ([]byte, error) {
+	result := firstImageResult(images.GetImageBytes(ctx, []imageloader.ImageKey{{
+		Kind:          imageloader.ImageKindPatch,
+		InspectionKey: inspection,
+		DefectID:      defectID,
+		ImageType:     imageType,
+	}}))
+	if result.Err != nil {
+		return blankSquarePNG(cellSize)
 	}
-	s, err := strconv.Atoi(raw)
+	acquireBimg()
+	resized, err := resizeSquarePNG(result.Data, cellSize)
+	releaseBimg()
 	if err != nil {
-		return 0, err
+		return blankSquarePNG(cellSize)
 	}
-	if s < 1 {
-		return 0, err
+	return resized, nil
+}
+
+func reviewSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspection imageloader.InspectionKey, defectID string, reviewImageID int, cellSize int) ([]byte, error) {
+	result := firstImageResult(images.GetImageBytes(ctx, []imageloader.ImageKey{{
+		Kind:          imageloader.ImageKindReview,
+		InspectionKey: inspection,
+		DefectID:      defectID,
+		ReviewImageID: reviewImageID,
+	}}))
+	if result.Err != nil {
+		return blankSquarePNG(cellSize)
 	}
-	return s, nil
+	acquireBimg()
+	resized, err := resizeSquarePNG(result.Data, cellSize)
+	releaseBimg()
+	if err != nil {
+		return blankSquarePNG(cellSize)
+	}
+	return resized, nil
+}
+
+func firstImageResult(results []imageloader.ImageBytes) imageloader.ImageBytes {
+	if len(results) == 0 {
+		return imageloader.ImageBytes{Err: fmt.Errorf("no image result")}
+	}
+	return results[0]
 }

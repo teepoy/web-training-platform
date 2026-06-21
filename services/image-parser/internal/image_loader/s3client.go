@@ -1,4 +1,4 @@
-package s3client
+package image_loader
 
 import (
 	"context"
@@ -19,10 +19,10 @@ var (
 	zipsOnce     sync.Once
 	reviewClient *s3.Client
 	reviewOnce   sync.Once
-	MaxConns     int32 = 1000
+	maxConns     int32 = 1000
 )
 
-func GetZips() *s3.Client {
+func getZips() *s3.Client {
 	zipsOnce.Do(func() {
 		zipsClient = newClient(
 			envOrDefault("S3_ZIPS_ACCESS_KEY", os.Getenv("S3_ACCESS_KEY")),
@@ -32,7 +32,7 @@ func GetZips() *s3.Client {
 	return zipsClient
 }
 
-func GetReview() *s3.Client {
+func getReview() *s3.Client {
 	reviewOnce.Do(func() {
 		reviewClient = newClient(
 			envOrDefault("S3_REVIEW_ACCESS_KEY", os.Getenv("S3_ACCESS_KEY")),
@@ -42,10 +42,8 @@ func GetReview() *s3.Client {
 	return reviewClient
 }
 
-func Get() *s3.Client { return GetZips() }
-
 func newClient(accessKey, secretKey string) *s3.Client {
-	maxConns := int(atomic.LoadInt32(&MaxConns))
+	maxConns := int(atomic.LoadInt32(&maxConns))
 
 	customTransport := &http.Transport{
 		MaxIdleConns:        maxConns,

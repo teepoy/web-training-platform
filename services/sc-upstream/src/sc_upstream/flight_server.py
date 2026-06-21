@@ -7,7 +7,6 @@ from typing import Iterator
 
 import pyarrow.flight as flight
 import pyarrow as pa
-import polars as pl
 
 from .cache import QueryCache
 from .upstream_db import UpstreamDB
@@ -63,8 +62,7 @@ class UpstreamFlightServer(flight.FlightServerBase):
         batch_iter = self._db.iter_list_samples_batches(
             inspection_time,
             wafer_key,
-            batch_size=int(os.environ.get("SC_FLIGHT_BATCH_SIZE", "8192")),
-            delay_seconds=float(os.environ.get("SC_UPSTREAM_DB_DELAY_SECONDS", "0")),
+            batch_size=int(os.environ.get("SC_FLIGHT_BATCH_SIZE", "65536")),
         )
         try:
             first_df = next(batch_iter)
@@ -73,16 +71,21 @@ class UpstreamFlightServer(flight.FlightServerBase):
             return flight.RecordBatchStream(pa.table({}))
 
         def _stream_batches() -> Iterator[pa.Table]:
-            frames: list[pl.DataFrame] = []
+            writer = self._cache.sync_start_list_samples_writer(
+                req["inspection_time"],
+                wafer_key,
+                first_df.to_arrow().schema,
+            )
             try:
-                frames.append(first_df)
+                writer.write_frame(first_df)
                 yield first_df.to_arrow()
                 for df in batch_iter:
-                    frames.append(df)
+                    writer.write_frame(df)
                     yield df.to_arrow()
-                self._cache.sync_set_list_samples_from_frames(
-                    req["inspection_time"], wafer_key, frames
-                )
+                writer.finish()
+            except Exception:
+                writer.abort()
+                raise
             finally:
                 lock_ctx.__exit__(None, None, None)
 

@@ -1,6 +1,12 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header title="Task Explorer" />
+    <n-page-header title="Task Explorer">
+      <template #extra>
+        <n-button size="small" :loading="isFetching" @click="handleRefresh">
+          Refresh
+        </n-button>
+      </template>
+    </n-page-header>
     <n-spin :show="isLoading">
       <n-data-table
         :columns="columns"
@@ -16,11 +22,18 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
 import type { DataTableColumns } from "naive-ui";
-import { NTag } from "naive-ui";
+import { NButton, NTag } from "naive-ui";
 import { useTrackedTasksQuery } from "@/shared/api/hooks/task-tracker";
 import type { TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 
-const { data: tasks, isLoading } = useTrackedTasksQuery();
+const { data: tasks, isLoading, isFetching, refetch } = useTrackedTasksQuery(
+  undefined,
+  { refetchInterval: false },
+);
+
+function handleRefresh(): void {
+  void refetch();
+}
 
 const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
   { title: "Task", key: "display_name", ellipsis: { tooltip: true } },

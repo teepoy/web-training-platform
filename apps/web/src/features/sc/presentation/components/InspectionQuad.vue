@@ -34,6 +34,8 @@ const props = defineProps<{
   reviewError?: string | null;
   mapLoading?: boolean;
   mapError?: string | null;
+  mapStreamMessage?: string;
+  mapProgressPercent?: number;
   inspectionItem?: InspectionSummaryItem;
   activeMapTab: "wafer" | "die" | "reticle";
   /** Wafer geometry (center, origin, die sizes) for die grid rendering */
@@ -92,7 +94,7 @@ const emit = defineEmits<{
   (e: "retry"): void;
 }>();
 
-const DEFAULT_COLUMN_PCT = 55;
+const DEFAULT_COLUMN_PCT = 52;
 const MIN_COLUMN_PCT = 20;
 const MAX_COLUMN_PCT = 80;
 const DEFAULT_MAP_PCT = 55;
@@ -320,6 +322,8 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
           :zoom="zoom"
           :map-loading="mapLoading"
           :map-error="mapError"
+          :map-progress-message="mapStreamMessage"
+          :map-progress-percent="mapProgressPercent"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
           @selection-change="(ids: number[]) => (mapSelectionIds = ids)"

@@ -84,6 +84,47 @@ def test_bulk_create_annotations_success():
         assert body["created"] == 3
 
 
+def test_bulk_create_annotation_zero_clears_existing_annotation():
+    """SC code 0 is Unclassified and clears annotation instead of persisting label 0."""
+    with TestClient(app) as client:
+        dataset_id = _create_sparse_sc_dataset(client, "SC Bulk Sparse Clear")
+        _seed_sc_sparse_manifest(dataset_id, ["D001"])
+
+        create_resp = client.post(
+            f"/api/v1/datasets/{dataset_id}/annotations/bulk-sc",
+            json={
+                "annotations": [
+                    {"defect_id": "D001", "label": "scratch", "annotator": "user1"},
+                ],
+            },
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        assert create_resp.json()["created"] == 1
+
+        annotations_resp = client.get(
+            f"/api/v1/datasets/{dataset_id}/samples/D001/annotations"
+        )
+        assert annotations_resp.status_code == 200, annotations_resp.text
+        assert [ann["label"] for ann in annotations_resp.json()] == ["scratch"]
+
+        clear_resp = client.post(
+            f"/api/v1/datasets/{dataset_id}/annotations/bulk-sc",
+            json={
+                "annotations": [
+                    {"defect_id": "D001", "label": "0", "annotator": "user1"},
+                ],
+            },
+        )
+        assert clear_resp.status_code == 200, clear_resp.text
+        assert clear_resp.json()["created"] == 0
+
+        cleared_resp = client.get(
+            f"/api/v1/datasets/{dataset_id}/samples/D001/annotations"
+        )
+        assert cleared_resp.status_code == 200, cleared_resp.text
+        assert cleared_resp.json() == []
+
+
 def test_bulk_create_annotations_empty_list():
     """Empty annotations list — should return created=0 without error."""
     with TestClient(app) as client:

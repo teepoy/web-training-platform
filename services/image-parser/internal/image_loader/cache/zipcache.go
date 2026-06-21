@@ -14,7 +14,6 @@ type ZipCache struct {
 	maxBytes  int64
 	usedBytes int64
 	cache     *lru.Cache[string, []byte]
-	sizeCache sync.Map
 	sf        singleflight.Group
 }
 
@@ -110,22 +109,4 @@ func (c *ZipCache) Stats() (usedBytes int64, maxBytes int64, entryCount int) {
 
 func CacheKey(bucket, key string) string {
 	return bucket + "/" + key
-}
-
-func SizeCacheKey(bucket, key string) string {
-	return "size:" + bucket + "/" + key
-}
-
-func (c *ZipCache) GetZipSize(bucket, key string) (int64, bool) {
-	k := SizeCacheKey(bucket, key)
-	v, ok := c.sizeCache.Load(k)
-	if !ok {
-		return 0, false
-	}
-	return v.(int64), true
-}
-
-func (c *ZipCache) SetZipSize(bucket, key string, size int64) {
-	k := SizeCacheKey(bucket, key)
-	c.sizeCache.Store(k, size)
 }

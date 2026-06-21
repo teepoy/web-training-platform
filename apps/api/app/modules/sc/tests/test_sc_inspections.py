@@ -271,6 +271,35 @@ def test_inspection_defect_ids_binary_returns_sorted_int32(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_inspection_map_points_stream_reports_sample_progress(
+    mock_wafer_db_reader,
+):
+    original_samples = mock_wafer_db_reader.list_samples.return_value
+
+    async def _list_samples_with_progress(*args, **kwargs):
+        on_progress = kwargs.get("on_progress")
+        if on_progress is not None:
+            on_progress(1)
+            on_progress(2)
+            on_progress(3)
+        return original_samples
+
+    mock_wafer_db_reader.list_samples.side_effect = _list_samples_with_progress
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections/2026-01-01T00:00:00+00:00/1/map-points/stream"
+            )
+            assert resp.status_code == 200, resp.text
+            assert '"loaded_count":1' in resp.text
+            assert '"loaded_count":2' in resp.text
+            assert '"loaded_count":3' in resp.text
+            assert "event: done" in resp.text
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_inspection_split_preview_endpoints_success(
     mock_wafer_db_reader,
 ):

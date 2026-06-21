@@ -133,6 +133,8 @@ services:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
       - CACHE_DIR=/data/cache
+      - SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
+      - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       - REDIS_URL=redis://redis:6379/0
       # Mock SQLite DB paths use sc-upstream service defaults.
     expose:

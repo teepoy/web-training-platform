@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 class ScImportStatus(BaseModel):
     status: Literal["pending", "running", "completed", "failed"]
-    flow_run_id: str | None = None
     dataset_id: str = ""
     dataset_name: str = ""
     source_inspection_time: str = ""

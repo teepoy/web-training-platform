@@ -104,7 +104,7 @@ Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet sha
 
 `DatasetAgg` 是 domain-specific 聚合层：它包装一个 `DatasetStorageAgg`，承载 SC 等业务语义（如 wafer point 计算、`defect_id` 批量标注、domain 预测编排），但不拥有物理存储、manifest、Parquet shard 或通用 annotation/prediction persistence 细节。新的 domain 能力应优先放在对应 `DatasetAgg`，不是塞进通用 storage Protocol，也不是在 route/service 中新增 hardcoded switch。
 
-SC import 的标准 worker 路径是 `upstream.stream(...)` → domain row normalization → `DatasetStorageAgg.write_samples(...)`。小批量 direct import 是显式低延迟能力，可以保留，但只能作为受限 import 优化；它不能成为训练/预测/导出读取 fallback，也不能重新引入旧 SampleAccess/RuntimeMaterializer 层。Smoke 若要验证 worker path，应显式强制 Prefect flow。
+SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径：`upstream.list_samples(...)` → domain row normalization → sparse shard writer / manifest update。SC import 不再注册或依赖 Prefect flow；Prefect CPU worker 仍保留给 sensors、dataset drain 等后台任务。该 direct import 路径不能成为训练/预测/导出读取 fallback，也不能重新引入旧 SampleAccess/RuntimeMaterializer 层。
 
 平台 sample storage identity 与 module domain identity 必须解耦。`Sample.id` 是平台存储身份；SC `defect_id`、`sample_id`、`inspection_time`、`wafer_key` 等是 domain/upstream identity，不应默认写入全局主键。
 

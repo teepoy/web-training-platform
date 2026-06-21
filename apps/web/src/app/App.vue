@@ -37,14 +37,14 @@
                 />
               </n-layout-sider>
               <n-layout vertical>
-                <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
+                <n-layout-header v-if="showAppHeader" bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
                   <span style="font-weight: 600; flex: 1">ML Training Platform</span>
                   <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
                   <!-- External service links -->
-                  <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
-                    Label Studio ↗
-                  </n-button>
                   <template v-if="isAdmin">
+                    <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
+                      Label Studio ↗
+                    </n-button>
                     <n-button tag="a" :href="prefectUrl" target="_blank" text type="primary" size="small">
                       Prefect ↗
                     </n-button>
@@ -68,7 +68,7 @@
                     >{{ userInitials }}</n-avatar>
                   </n-dropdown>
                 </n-layout-header>
-                <n-layout-content style="padding: 24px; overflow-y: auto; display: flex; flex-direction: column;">
+                <n-layout-content :style="contentStyle">
                   <div style="flex: 1; min-height: 0;">
                     <RouterView />
                   </div>
@@ -92,15 +92,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
+import { computed, h, onMounted, watch, type Component } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
-import { darkTheme, type GlobalThemeOverrides } from "naive-ui";
+import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
+import { AlbumsOutline, ImagesOutline, ListCircleOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useUiStore } from '@/features/auth/application/ui';
 import { useAuthStore } from '@/features/auth/application/store';
 import { useOrgStore } from '@/features/auth/application/org';
-import { useTaskHandoff, syncWatchedTaskIds } from "@/shared/composables/useTaskHandoff";
-import { useTaskHandoffState } from "@/shared/composables/taskHandoffState";
 import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
 import { AgentChatDrawer } from "@/shared";
 
@@ -110,14 +109,19 @@ const uiStore = useUiStore();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();
 const queryClient = useQueryClient();
-const { watchedTaskIds } = useTaskHandoffState();
-const { watchTask, syncTask } = useTaskHandoff();
 const globalAgent = useAgentAdapter();
 
 const AUTH_PATHS = ["/login", "/register"];
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path));
 const isSettingsRoute = computed(() => route.path.startsWith("/settings"));
 const isAdminRoute = computed(() => route.path.startsWith("/admin"));
+const showAppHeader = computed(() => route.meta.hideAppHeader !== true);
+const contentStyle = computed(() => ({
+  padding: typeof route.meta.contentPadding === "string" ? route.meta.contentPadding : "24px",
+  overflowY: "auto",
+  display: "flex",
+  flexDirection: "column",
+}));
 
 const computedTheme = computed(() => {
   return uiStore.darkMode ? darkTheme : null;
@@ -149,10 +153,14 @@ const prefectUrl = "http://localhost:4200";
 const minioUrl = "http://localhost:9001";
 const pgAdminUrl = "http://localhost:5050";
 
-const menuOptions = [
-  { label: "Patch", key: "/sc" },
-  { label: "Datasets", key: "/datasets" },
-  { label: "Tasks", key: "/tasks" },
+function renderMenuIcon(icon: Component) {
+  return () => h(NIcon, null, { default: () => h(icon) });
+}
+
+const menuOptions: MenuOption[] = [
+  { label: "Patch", key: "/sc", icon: renderMenuIcon(ImagesOutline) },
+  { label: "Datasets", key: "/datasets", icon: renderMenuIcon(AlbumsOutline) },
+  { label: "Tasks", key: "/tasks", icon: renderMenuIcon(ListCircleOutline) },
 ];
 
 const userInitials = computed(() =>
@@ -204,33 +212,9 @@ onMounted(async () => {
   }
 });
 
-watch(watchedTaskIds, (ids) => {
-  void syncWatchedTaskIds(ids, (detail) => {
-    const task = {
-      id: detail.id,
-      task_kind: detail.task_kind,
-      execution_kind: detail.derived.execution_kind,
-      display_name: String(detail.meta?.trainer_id || detail.meta?.model_id || detail.id),
-      display_status: detail.derived.display_status,
-      stage: detail.derived.stage,
-      dataset_id: String(detail.meta?.dataset_id || ""),
-      model_id: detail.meta?.model_id ? String(detail.meta.model_id) : null,
-      trainer_id: detail.meta?.trainer_id ? String(detail.meta.trainer_id) : null,
-      created_by: String((detail.raw.platform_job?.created_by as string | undefined) || ""),
-      created_at: String((detail.raw.platform_job?.created_at as string | undefined) || ""),
-      updated_at: String((detail.raw.platform_job?.updated_at as string | undefined) || ""),
-      prefect_state: detail.derived.prefect_state ?? null,
-      work_pool_name: detail.raw.flow_run?.work_pool_name ? String(detail.raw.flow_run.work_pool_name) : null,
-      work_queue_name: detail.raw.flow_run?.work_queue_name ? String(detail.raw.flow_run.work_queue_name) : null,
-      queue_priority: detail.derived.queue_priority ?? null,
-      queue_priority_label: detail.derived.queue_priority_label ?? '',
-      queue_depth_ahead: detail.derived.queue_depth_ahead ?? null,
-      capacity_status: detail.derived.capacity_status ?? '',
-      pool_concurrency_limit: detail.derived.pool_concurrency_limit ?? null,
-      pool_slots_used: detail.derived.pool_slots_used ?? null,
-    };
-    watchTask(task);
-    void syncTask(task);
-  });
+watch(() => route.fullPath, () => {
+  if (route.meta.autoCollapseSidebar === true) {
+    uiStore.sidebarCollapsed = true;
+  }
 }, { immediate: true });
 </script>

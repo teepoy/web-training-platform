@@ -23,7 +23,6 @@ def apply(pool: str) -> None:
     from app.modules.datasets.adapter.flows.drain_dataset import drain_dataset
     from app.modules.embedding.flows.embed import embed_flow
     from app.modules.prediction.flows.predict_job import predict_job_flow
-    from app.modules.sc.adapter.flows.sc_import import sc_import
     from app.modules.sensors.adapter.flows.dataset_size_sensor import (
         dataset_size_sensor,
     )
@@ -39,7 +38,6 @@ def apply(pool: str) -> None:
             "embedding-embed": embed_flow,
         },
         "default-cpu": {
-            "sc-import-upstream": sc_import,
             "timer-sensor": timer_sensor,
             "dataset-size-sensor": dataset_size_sensor,
             "drain-dataset": drain_dataset,

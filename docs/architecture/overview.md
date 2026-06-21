@@ -71,6 +71,11 @@ finetune-api (:8000)      - platform API (control plane)
 prefect-worker            - CPU Prefect flow runtime (no exposed port); built from apps/worker
 ```
 
+### Current data-plane pitfalls
+
+- **image-parser is a stateful singleton.** It depends on in-process memory cache for image and sprite resolution, so it cannot be horizontally scaled safely today. The preferred optimization direction is upstream/ETL: extract and materialize image bytes earlier, instead of relying on the service as an online image resolver.
+- **sc-upstream is a stateful singleton.** It depends on local storage cache for expensive upstream sample queries, so multiple replicas would not share cache state effectively. The preferred optimization direction is upstream: use an MPP database with query cache/materialized acceleration for large wafer queries.
+
 ### Observability
 
 Observability is split across several systems, each with a distinct role:

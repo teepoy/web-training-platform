@@ -49,8 +49,7 @@ class UpstreamDB(Protocol):
         inspection_time: datetime,
         wafer_key: int,
         *,
-        batch_size: int = 8192,
-        delay_seconds: float = 0.0,
+        batch_size: int = 65536,
     ) -> Iterator[pl.DataFrame]: ...
 
     async def list_review_images(
@@ -91,7 +90,7 @@ class _MockUpstreamDB:
         return await asyncio.to_thread(_sync)
 
     def _read_batches(
-        self, query: str, *, batch_size: int = 8192
+        self, query: str, *, batch_size: int = 65536
     ) -> Iterator[pl.DataFrame]:
         conn = self._sync_engine.connect()
         try:
@@ -226,8 +225,7 @@ class _MockUpstreamDB:
         inspection_time: datetime,
         wafer_key: int,
         *,
-        batch_size: int = 8192,
-        delay_seconds: float = 0.0,
+        batch_size: int = 65536,
     ) -> Iterator[pl.DataFrame]:
         insp_str = inspection_time.strftime("%Y-%m-%d %H:%M:%S.%f")
         query = f"""
@@ -244,10 +242,9 @@ class _MockUpstreamDB:
         ORDER BY d.defect_id
         """
         for df in self._read_batches(query, batch_size=batch_size):
-            if delay_seconds > 0:
-                import time
+            import time
 
-                time.sleep(delay_seconds)
+            time.sleep(0.3)
             yield df.with_columns(
                 [
                     (

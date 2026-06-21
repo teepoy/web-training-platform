@@ -103,6 +103,8 @@ export interface ApiSseEvent {
   message?: string;
   operation?: string;
   error?: string;
+  dataset_id?: string;
+  imported_count?: number;
   loaded_count?: number;
   total_count?: number;
   payload?: Record<string, unknown>;

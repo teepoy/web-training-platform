@@ -1,4 +1,4 @@
-package resolve
+package image_loader
 
 import "testing"
 
