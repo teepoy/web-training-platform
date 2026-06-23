@@ -56,6 +56,10 @@ class TaskTrackerService:
         if kind in (None, "schedule_run"):
             tasks.extend(await self._list_schedule_run_records(org_id))
 
+        dataset_names = await self._repository.list_dataset_names(
+            [task.dataset_id for task in tasks if task.dataset_id],
+            org_id=org_id,
+        )
         summaries = []
         for task in tasks:
             detail = await self._build_detail(task)
@@ -68,6 +72,7 @@ class TaskTrackerService:
                     display_status=detail.derived.display_status,
                     stage=detail.derived.stage,
                     dataset_id=task.dataset_id,
+                    dataset_name=dataset_names.get(task.dataset_id),
                     model_id=task.model_id,
                     trainer_id=task.trainer_id,
                     created_by=task.platform_job.created_by,

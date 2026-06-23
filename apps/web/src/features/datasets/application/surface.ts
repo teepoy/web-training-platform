@@ -126,7 +126,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
         ),
     },
     {
-      title: "Created At",
+      title: "Create Time",
       key: "created_at",
       render: (row: TDataset) =>
         h("span", {}, new Date(row.created_at).toLocaleString()),

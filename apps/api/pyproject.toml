@@ -84,6 +84,7 @@ gpu = ["ultralytics>=8.4.58"]
 extraPaths = [
   "../../libs/platform-runtime/src",
   "../../libs/ml",
+  "../../libs/seedmaker/src",
 ]
 exclude = [
   "app/shared/generated/**",

@@ -38,6 +38,14 @@ function handleRefresh(): void {
 const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
   { title: "Task", key: "display_name", ellipsis: { tooltip: true } },
   {
+    title: "Dataset",
+    key: "dataset_name",
+    width: 220,
+    ellipsis: { tooltip: true },
+    render: (row) =>
+      row.dataset_name || (row.dataset_id ? `${row.dataset_id.slice(0, 8)}…` : "—"),
+  },
+  {
     title: "Status",
     key: "display_status",
     width: 140,

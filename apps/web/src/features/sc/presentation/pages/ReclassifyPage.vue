@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, provide, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import {
   NSpin,
   NEmpty,
@@ -18,16 +18,11 @@ import {
 } from "naive-ui";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
-import TaskInsightModal, {
-  TASK_INSIGHT_ORG_ID_KEY,
-  TASK_INSIGHT_STREAM_KEY,
-} from "@/shared/components/task-insight-modal";
-import { useTaskStream } from "@/shared/composables/useTaskHandoff";
-import { useOrgStore } from "@/features/auth/application/org";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import ScReclassifyBlinkVirtualTable from "../components/ScReclassifyBlinkVirtualTable.vue";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
+import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
 import { create } from "@bufbuild/protobuf";
 import type { ScBlinkImageUrls } from "@/features/sc/domain/models";
 import {
@@ -36,20 +31,12 @@ import {
   type ScSampleItem,
 } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScBoxRegion, ScMapMode } from "@/features/sc/api/boxFilter";
-import type { TaskTrackerSummaryResponse } from "@/generated/orval/models";
 import { fetchScDatasetBoxFilter } from "@/features/sc/api/boxFilter";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
 const router = useRouter();
-const orgStore = useOrgStore();
 const taskInsightVisible = ref(false);
-
-provide(
-  TASK_INSIGHT_ORG_ID_KEY,
-  computed(() => orgStore.currentOrgId),
-);
-provide(TASK_INSIGHT_STREAM_KEY, useTaskStream);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -103,6 +90,13 @@ function applyAnnotationCode(code: string): void {
   if (page.selectedDefectIds.value.size === 0) return;
   for (const id of page.selectedDefectIds.value) {
     page.setAnnotationDraft(id, code);
+  }
+}
+
+async function handleTrainAndPredictClick(): Promise<void> {
+  await page.trainAndPredict();
+  if (page.trainPredictTaskId.value) {
+    taskInsightVisible.value = true;
   }
 }
 
@@ -210,36 +204,6 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   }
   return map;
 });
-
-const activeTaskSummary = computed<TaskTrackerSummaryResponse | null>(() => {
-  const taskId = page.trainPredictTaskId.value;
-  if (!taskId) return null;
-  const now = new Date().toISOString();
-  return {
-    id: taskId,
-    task_kind: "training",
-    execution_kind: "prefect",
-    display_name: `Train & Predict ${taskId.slice(0, 8)}`,
-    display_status: page.isTrainPredictRunning.value ? "running" : "pending",
-    stage: "execution_flow",
-    dataset_id: page.datasetId.value,
-    model_id: null,
-    trainer_id: page.selectedTrainerId.value,
-    created_by: "",
-    created_at: now,
-    updated_at: now,
-    prefect_state: null,
-    work_pool_name: null,
-    work_queue_name: null,
-    queue_priority: null,
-    queue_priority_label: "",
-    queue_depth_ahead: null,
-    capacity_status: "",
-    pool_concurrency_limit: null,
-    pool_slots_used: null,
-  };
-});
-
 </script>
 
 <template>
@@ -306,7 +270,7 @@ const activeTaskSummary = computed<TaskTrackerSummaryResponse | null>(() => {
                 page.annotatedCount.value === 0
               "
               :loading="page.isTrainPredictRunning.value"
-              @click="page.trainAndPredict()"
+              @click="handleTrainAndPredictClick"
             >
               Train &amp; Predict
             </NButton>
@@ -460,9 +424,6 @@ const activeTaskSummary = computed<TaskTrackerSummaryResponse | null>(() => {
             :selected-draft-count="selectedDraftCount"
             :is-submitting="page.isSubmitting.value"
             :annotation-grid-items="page.annotationGridItems.value"
-            :add-label-error="page.addLabelError.value"
-            :is-adding-label="page.isAddingLabel.value"
-            @add-label="page.addLabel"
             @apply-code="applyAnnotationCode"
             @set-shortcut="page.setLabelShortcut"
             @submit="page.submitAnnotations"
@@ -505,10 +466,17 @@ const activeTaskSummary = computed<TaskTrackerSummaryResponse | null>(() => {
         <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
       </template>
     </NModal>
-    <TaskInsightModal
+    <ReclassifyTaskProgressModal
       v-model:show="taskInsightVisible"
-      :task="activeTaskSummary"
-      :handoff-enabled="false"
+      :training-job-id="page.trainPredictTaskId.value"
+      :training-status="page.trainPredictTrainingStatus.value"
+      :prediction-job-id="page.trainPredictPredictionJob.value?.id ?? null"
+      :prediction-status="page.trainPredictPredictionStatus.value"
+      :prediction-percent="page.trainPredictPredictionPercent.value"
+      :prediction-progress-label="
+        page.trainPredictPredictionProgressLabel.value
+      "
+      :prediction-processing="page.trainPredictPredictionProcessing.value"
     />
   </FullScreenLayout>
 </template>

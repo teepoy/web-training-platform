@@ -262,8 +262,17 @@ def _normalize_inspection_time(value: str) -> datetime:
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+            return datetime(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                tzinfo=timezone.utc,
+            )
+        return dt.astimezone(timezone.utc)
     except ValueError:
         pass
 

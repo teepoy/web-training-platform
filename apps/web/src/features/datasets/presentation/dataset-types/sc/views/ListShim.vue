@@ -53,6 +53,11 @@ function resolveSampleCount(row: DatasetListItem): string {
   );
 }
 
+function formatCreateTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 const columns = computed<DataTableColumns<DatasetListItem>>(
   () => [
     {
@@ -81,6 +86,14 @@ const columns = computed<DataTableColumns<DatasetListItem>>(
       width: 100,
       render(row) {
         return h(NText, {}, { default: () => resolveSampleCount(row) });
+      },
+    },
+    {
+      title: "Create Time",
+      key: "created_at",
+      width: 180,
+      render(row) {
+        return h(NText, {}, { default: () => formatCreateTime(row.created_at) });
       },
     },
     {

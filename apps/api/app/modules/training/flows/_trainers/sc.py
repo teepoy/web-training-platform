@@ -22,6 +22,13 @@ from app.core.registry import trainer
 IMAGE_FETCH_BATCH_SIZE = 512
 
 
+def _normalize_training_label(value: object) -> str | None:
+    if value is None:
+        return None
+    label = str(value)
+    return label or None
+
+
 def _collate_sc_tensor_batch(
     batch: list[dict[str, Any]],
     *,
@@ -144,6 +151,7 @@ async def resnet_sc_train(
         if df is not None:
             rows = [dict(row) for row in df.iter_rows(named=True)]
             for row in rows:
+                row["label"] = _normalize_training_label(row.get("label"))
                 row["images"] = [dict(img) for img in row.get("images") or []]
 
             grouped_fetches: dict[
@@ -203,7 +211,7 @@ async def resnet_sc_train(
                             )
                         img["bytes"] = bytes(result.get("image_data", b""))
 
-            lazyframe = pl.DataFrame(rows).lazy()
+            lazyframe = pl.DataFrame(rows, infer_schema_length=None).lazy()
 
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")

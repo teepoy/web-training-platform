@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import inspect
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
@@ -55,6 +56,9 @@ from app.shared.db.models import (
 )
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+
+PREDICTION_PROGRESS_FLUSH_EVERY = 50
+PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
 
 
 @dataclass
@@ -651,7 +655,15 @@ async def _run_prediction_job_with_container(
 
     predictor_fn = get_predictor(predictor_id)
 
+    existing_job = await repo.get_prediction_job(job_id, org_id)
+    existing_summary = (
+        existing_job.summary_json
+        if existing_job is not None and isinstance(existing_job.summary_json, dict)
+        else {}
+    )
+
     summary: dict[str, Any] = {
+        **existing_summary,
         "model_id": model_id,
         "dataset_id": dataset_id,
         "total_samples": total_samples,
@@ -662,6 +674,26 @@ async def _run_prediction_job_with_container(
         "model_version": model_version or f"model-{model_id[:8]}",
     }
     await repo.update_prediction_job_status(job_id, JobStatus.RUNNING, summary=summary)
+    last_progress_flush_at = time.monotonic()
+
+    async def flush_prediction_progress(*, force: bool = False) -> None:
+        nonlocal last_progress_flush_at
+        processed = int(summary["processed"])
+        now = time.monotonic()
+        should_flush = (
+            force
+            or processed % PREDICTION_PROGRESS_FLUSH_EVERY == 0
+            or now - last_progress_flush_at
+            >= PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS
+        )
+        if not should_flush:
+            return
+        await repo.update_prediction_job_status(
+            job_id,
+            JobStatus.RUNNING,
+            summary=dict(summary),
+        )
+        last_progress_flush_at = now
 
     async def prediction_results():
         image_fetcher = None
@@ -745,6 +777,7 @@ async def _run_prediction_job_with_container(
                         summary["failed"],
                     )
                 yield result
+                await flush_prediction_progress()
         finally:
             if materialization is not None:
                 materialization.cleanup()
@@ -759,6 +792,7 @@ async def _run_prediction_job_with_container(
     )
 
     summary["completed_at"] = datetime.now(UTC).isoformat()
+    await flush_prediction_progress(force=True)
     await repo.update_prediction_job_status(
         job_id, JobStatus.COMPLETED, summary=summary
     )

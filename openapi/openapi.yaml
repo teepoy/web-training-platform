@@ -4845,6 +4845,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sc/import/stream:
+    post:
+      tags:
+      - sc
+      summary: Stream Sc Import
+      operationId: stream_sc_import_api_v1_sc_import_stream_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScImportRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}:
     get:
       tags:
@@ -8234,6 +8258,11 @@ components:
         dataset_id:
           type: string
           title: Dataset Id
+        dataset_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Name
         model_id:
           anyOf:
           - type: string

@@ -11532,6 +11532,82 @@ export const useStartScImportApiV1ScImportPost = <TError = HTTPValidationError,
     }
 
 /**
+ * @summary Stream Sc Import
+ */
+export type streamScImportApiV1ScImportStreamPostResponse = {
+  data: HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getStreamScImportApiV1ScImportStreamPostUrl = () => {
+
+
+  return `/api/v1/sc/import/stream`
+}
+
+export const streamScImportApiV1ScImportStreamPost = async (scImportRequest: ScImportRequest, options?: RequestInit): Promise<streamScImportApiV1ScImportStreamPostResponse> => {
+
+  return orvalFetcher<streamScImportApiV1ScImportStreamPostResponse>(getStreamScImportApiV1ScImportStreamPostUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scImportRequest,)
+  }
+);}
+
+
+
+
+export const getStreamScImportApiV1ScImportStreamPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>, TError,{data: ScImportRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>, TError,{data: ScImportRequest}, TContext> => {
+
+const mutationKey = ['streamScImportApiV1ScImportStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>, {data: ScImportRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  streamScImportApiV1ScImportStreamPost(data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StreamScImportApiV1ScImportStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>>
+    export type StreamScImportApiV1ScImportStreamPostMutationBody = ScImportRequest
+    export type StreamScImportApiV1ScImportStreamPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Stream Sc Import
+ */
+export const useStreamScImportApiV1ScImportStreamPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>, TError,{data: ScImportRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof streamScImportApiV1ScImportStreamPost>>,
+        TError,
+        {data: ScImportRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getStreamScImportApiV1ScImportStreamPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
  * @summary Serve Sc Sample Image
  */
 export type serveScSampleImageApiV1ScDatasetsDatasetIdSamplesSampleIdImagesImageIdGetResponse = {

@@ -7,7 +7,7 @@ from typing import Any
 from prefect import flow, get_run_logger, task
 from sqlalchemy import select
 
-from app.composition import build_flow_app_context, close_flow_app_context
+from app.composition import build_flow_container
 from app.core.config import load_config
 from app.modules.prediction.flows.predict_job import _run_prediction_job_with_container
 from app.modules.training.flows.train_job import run_training_pipeline
@@ -18,17 +18,14 @@ from app.shared.api.schemas import (
     TrainingEvent,
 )
 from app.shared.db.models.artifacts import ArtifactORM
-from app.shared.context import AppContext
 
 
-async def _add_training_event(ctx: AppContext, event: TrainingEvent) -> None:
-    if ctx.training is None:
-        raise RuntimeError("AppContext training module was not initialized")
-    await ctx.training.repository.add_event(event)
+async def _add_training_event(container: Any, event: TrainingEvent) -> None:
+    await container.training_orchestrator.repository.add_event(event)
 
 
-async def _latest_model_artifact_id(ctx: AppContext, job_id: str) -> str | None:
-    async with ctx.shared.session_factory() as session:
+async def _latest_model_artifact_id(container: Any, job_id: str) -> str | None:
+    async with container.session_factory() as session:
         stmt = (
             select(ArtifactORM)
             .where(ArtifactORM.job_id == job_id)
@@ -47,14 +44,13 @@ async def train_stage(
 ) -> dict[str, Any]:
     logger = get_run_logger()
     cfg = load_config(skip_runtime_validation=True)
-    app_context = build_flow_app_context(cfg)
-    if app_context.training is None:
-        raise RuntimeError("AppContext training module was not initialized")
-    training = app_context.training
+    container = build_flow_container(cfg)
     try:
-        await training.repository.update_job_status(job_id, JobStatus.RUNNING)
+        await container.training_orchestrator.repository.update_job_status(
+            job_id, JobStatus.RUNNING
+        )
         await _add_training_event(
-            app_context,
+            container,
             TrainingEvent(
                 job_id=job_id,
                 ts=datetime.now(UTC),
@@ -67,12 +63,14 @@ async def train_stage(
             dataset_id=dataset_id,
             trainer_id=trainer_id,
         )
-        model_id = await _latest_model_artifact_id(app_context, job_id)
+        model_id = await _latest_model_artifact_id(container, job_id)
         if model_id is None:
             raise RuntimeError("Training completed without a model artifact")
-        await training.repository.update_job_status(job_id, JobStatus.COMPLETED)
+        await container.training_orchestrator.repository.update_job_status(
+            job_id, JobStatus.COMPLETED
+        )
         await _add_training_event(
-            app_context,
+            container,
             TrainingEvent(
                 job_id=job_id,
                 ts=datetime.now(UTC),
@@ -83,9 +81,11 @@ async def train_stage(
         return {"model_id": model_id, "training": train_result}
     except Exception as exc:
         logger.exception("train stage failed: job_id=%s", job_id)
-        await training.repository.update_job_status(job_id, JobStatus.FAILED)
+        await container.training_orchestrator.repository.update_job_status(
+            job_id, JobStatus.FAILED
+        )
         await _add_training_event(
-            app_context,
+            container,
             TrainingEvent(
                 job_id=job_id,
                 ts=datetime.now(UTC),
@@ -95,7 +95,7 @@ async def train_stage(
         )
         raise
     finally:
-        await close_flow_app_context(app_context)
+        await container.close()
 
 
 @task(name="predict-stage")
@@ -112,12 +112,10 @@ async def predict_stage(
 ) -> dict[str, Any]:
     logger = get_run_logger()
     cfg = load_config(skip_runtime_validation=True)
-    app_context = build_flow_app_context(cfg)
+    container = build_flow_container(cfg)
     try:
-        if app_context.prediction is None:
-            raise RuntimeError("AppContext prediction module was not initialized")
         await _add_training_event(
-            app_context,
+            container,
             TrainingEvent(
                 job_id=source_training_job_id,
                 ts=datetime.now(UTC),
@@ -138,12 +136,10 @@ async def predict_stage(
                 **({"prompt": prompt} if prompt else {}),
             },
         )
-        prediction_job = (
-            await app_context.prediction.prediction_repository.create_prediction_job(
-                prediction_job, org_id=org_id
-            )
+        prediction_job = await container.prediction_repository.create_prediction_job(
+            prediction_job, org_id=org_id
         )
-        await app_context.prediction.prediction_repository.add_prediction_event(
+        await container.prediction_repository.add_prediction_event(
             PredictionEvent(
                 job_id=prediction_job.id,
                 ts=datetime.now(UTC),
@@ -155,7 +151,7 @@ async def predict_stage(
             )
         )
         prediction_summary = await _run_prediction_job_with_container(
-            app_context=app_context,
+            container=container,
             job_id=prediction_job.id,
             dataset_id=dataset_id,
             model_id=model_id,
@@ -166,7 +162,7 @@ async def predict_stage(
             prompt=prompt,
         )
         await _add_training_event(
-            app_context,
+            container,
             TrainingEvent(
                 job_id=source_training_job_id,
                 ts=datetime.now(UTC),
@@ -184,7 +180,7 @@ async def predict_stage(
             "prediction": prediction_summary,
         }
     finally:
-        await close_flow_app_context(app_context)
+        await container.close()
 
 
 @flow(name="training-train-and-predict")

@@ -21,12 +21,9 @@ const props = defineProps<{
   selectedDraftCount: number;
   isSubmitting: boolean;
   annotationGridItems: AnnotationGridItem[];
-  addLabelError: string | null;
-  isAddingLabel: boolean;
 }>();
 
 const emit = defineEmits<{
-  "add-label": [label: string];
   "apply-code": [code: string];
   "set-shortcut": [code: string, shortcut: string];
   submit: [];
@@ -34,18 +31,19 @@ const emit = defineEmits<{
   "clear-selected-drafts": [];
 }>();
 
-const newLabelInput = ref("");
+const codeSearch = ref("");
 const shortcutModalVisible = ref(false);
 const shortcutTarget = ref<ReclassifyCodeLabel | null>(null);
 const draftValues = computed(() => Object.values(props.annotationDraft));
 const shortcutDisplay = computed(() => shortcutTarget.value?.shortcut || "-");
 
-function onAddLabelClick(): void {
-  const value = newLabelInput.value.trim();
-  if (!value) return;
-  emit("add-label", value);
-  newLabelInput.value = "";
-}
+const filteredCodeLabels = computed(() => {
+  const query = codeSearch.value.trim().toLowerCase();
+  if (!query) return props.codeLabels;
+  return props.codeLabels.filter((label) =>
+    label.name.toLowerCase().includes(query),
+  );
+});
 
 function openShortcutModal(label: ReclassifyCodeLabel): void {
   shortcutTarget.value = label;
@@ -109,48 +107,32 @@ onBeforeUnmount(() => {
 
       <NDivider style="margin: 8px 0" />
 
-      <div class="sc-label-picker">
-        <label class="sc-label-label">Label</label>
-        <div class="sc-label-create-row">
-          <NInput
-            v-model:value="newLabelInput"
-            data-testid="reclassify-new-label-input"
-            placeholder="New label name..."
-            size="small"
-            :disabled="isAddingLabel"
-            @keyup.enter="onAddLabelClick"
-          />
-          <NButton
-            data-testid="reclassify-add-label-button"
-            size="small"
-            type="primary"
-            :disabled="!newLabelInput.trim() || isAddingLabel"
-            :loading="isAddingLabel"
-            @click="onAddLabelClick"
-          >
-            Add Label
-          </NButton>
-        </div>
-        <NText
-          v-if="addLabelError"
-          type="error"
-          depth="3"
-          class="sc-label-error"
-        >
-          {{ addLabelError }}
-        </NText>
+      <div class="sc-code-search">
+        <label class="sc-code-search-label">Code Search</label>
+        <NInput
+          v-model:value="codeSearch"
+          clearable
+          data-testid="reclassify-code-search-input"
+          placeholder="Filter code names..."
+          size="small"
+        />
       </div>
 
       <div class="sc-bulk-apply">
         <NText depth="3" class="sc-bulk-hint"> Apply to all selected: </NText>
-        <NScrollbar class="sc-code-list" data-testid="reclassify-code-list">
+        <NScrollbar
+          class="sc-code-list"
+          content-style="max-height: min(330px, 50vh);"
+          data-testid="reclassify-code-list"
+          style="max-height: min(330px, 50vh)"
+        >
           <div class="sc-code-row sc-code-row-head">
             <span>Code</span>
             <span>Name</span>
             <span>Key</span>
           </div>
           <div
-            v-for="label in codeLabels"
+            v-for="label in filteredCodeLabels"
             :key="label.code"
             class="sc-code-row sc-code-button"
             :class="{
@@ -176,6 +158,9 @@ onBeforeUnmount(() => {
             >
               {{ label.shortcut || "-" }}
             </NButton>
+          </div>
+          <div v-if="filteredCodeLabels.length === 0" class="sc-code-empty">
+            No code names match "{{ codeSearch.trim() }}"
           </div>
         </NScrollbar>
       </div>
@@ -313,7 +298,8 @@ onBeforeUnmount(() => {
   background: var(--cv-card-bg, #1e1e2e);
   width: 340px;
   flex-shrink: 0;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sc-annotate {
@@ -321,6 +307,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sc-annotate-header {
@@ -329,27 +318,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
 }
 
-.sc-label-picker {
+.sc-code-search {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.sc-label-label {
+.sc-code-search-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
-}
-
-.sc-label-create-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.sc-label-error {
-  margin-top: 2px;
-  font-size: 11px;
 }
 
 .sc-bulk-hint {
@@ -358,14 +336,10 @@ onBeforeUnmount(() => {
 }
 
 .sc-code-list {
-  max-height: min(330px, 50vh);
+  display: block;
+  overflow: hidden;
   border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
   border-radius: 6px;
-}
-
-.sc-code-list :deep(.n-scrollbar-container),
-.sc-code-list :deep(.n-scrollbar-content) {
-  max-height: min(330px, 50vh);
 }
 
 .sc-code-row {
@@ -411,6 +385,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sc-code-empty {
+  padding: 14px 8px;
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
+  font-size: 12px;
+  text-align: center;
 }
 
 .sc-shortcut-button {

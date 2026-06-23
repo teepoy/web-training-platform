@@ -33,11 +33,58 @@ export function stringColor(value: string): string {
 }
 
 /**
- * Map a numeric class ID to a deterministic HSL color string.
+ * Map a numeric class ID to a deterministic hex color.
+ *
+ * Keep this as #rrggbb instead of hsl(...): native input[type=color] in older
+ * browsers rejects non-hex values and falls back to black.
  */
 export function classColor(classId: number): string {
-  const hue = ((classId * GOLDEN_RATIO_CONJUGATE * 360) % 360 + 360) % 360;
-  return `hsl(${hue}, 65%, 50%)`;
+  const hue = (((classId * GOLDEN_RATIO_CONJUGATE * 360) % 360) + 360) % 360;
+  return hslToHex(hue, 65, 50);
+}
+
+function hslToHex(
+  hue: number,
+  saturationPercent: number,
+  lightnessPercent: number,
+): string {
+  const saturation = saturationPercent / 100;
+  const lightness = lightnessPercent / 100;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const huePrime = hue / 60;
+  const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  const match = lightness - chroma / 2;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (huePrime >= 0 && huePrime < 1) {
+    red = chroma;
+    green = x;
+  } else if (huePrime < 2) {
+    red = x;
+    green = chroma;
+  } else if (huePrime < 3) {
+    green = chroma;
+    blue = x;
+  } else if (huePrime < 4) {
+    green = x;
+    blue = chroma;
+  } else if (huePrime < 5) {
+    red = x;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = x;
+  }
+
+  return `#${[red, green, blue]
+    .map((channel) =>
+      Math.round((channel + match) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 /**
@@ -65,7 +112,9 @@ export function parsePoints(flat: number[]): ScatterPoint[] {
 /**
  * Group scatter points by their classNumber.
  */
-export function groupByClass(points: ScatterPoint[]): Map<number, ScatterPoint[]> {
+export function groupByClass(
+  points: ScatterPoint[],
+): Map<number, ScatterPoint[]> {
   const groups = new Map<number, ScatterPoint[]>();
 
   for (const p of points) {
@@ -84,14 +133,19 @@ export function groupByClass(points: ScatterPoint[]): Map<number, ScatterPoint[]
 /**
  * Extract defect IDs for all points belonging to a given class number.
  */
-export function getDefectIdsByClass(points: ScatterPoint[], classId: number): number[] {
+export function getDefectIdsByClass(
+  points: ScatterPoint[],
+  classId: number,
+): number[] {
   return points.filter((p) => p.classNumber === classId).map((p) => p.defectId);
 }
 
 /**
  * Group scatter points by their roughBin.
  */
-export function groupByBin(points: ScatterPoint[]): Map<number, ScatterPoint[]> {
+export function groupByBin(
+  points: ScatterPoint[],
+): Map<number, ScatterPoint[]> {
   const groups = new Map<number, ScatterPoint[]>();
 
   for (const p of points) {
@@ -110,7 +164,10 @@ export function groupByBin(points: ScatterPoint[]): Map<number, ScatterPoint[]> 
 /**
  * Extract defect IDs for all points belonging to a given rough bin.
  */
-export function getDefectIdsByBin(points: ScatterPoint[], bin: number): number[] {
+export function getDefectIdsByBin(
+  points: ScatterPoint[],
+  bin: number,
+): number[] {
   return points.filter((p) => p.roughBin === bin).map((p) => p.defectId);
 }
 
@@ -132,7 +189,7 @@ export function getPackedPointIdsInRegion(
 }
 
 /**
- * Map a rough bin value to a deterministic HSL color.
+ * Map a rough bin value to a deterministic hex color.
  */
 export function binColor(bin: number): string {
   return classColor(bin);
@@ -174,7 +231,9 @@ export function padStride3to6(triples: number[]): number[] {
  * Return a requestAnimationFrame-throttled wrapper: only the latest
  * scheduled callback fires per frame, and concurrent calls are no-ops.
  */
-export function createRafThrottle(): ((fn: () => void) => void) & { cancel: () => void } {
+export function createRafThrottle(): ((fn: () => void) => void) & {
+  cancel: () => void;
+} {
   let rafId = 0;
   const scheduleDraw = function (fn: () => void) {
     if (rafId) return;
@@ -197,7 +256,9 @@ export function createRafThrottle(): ((fn: () => void) => void) & { cancel: () =
 /**
  * Build an O(1) defectId → ScatterPoint lookup map from a point array.
  */
-export function buildPointLookup(points: ScatterPoint[]): Map<number, ScatterPoint> {
+export function buildPointLookup(
+  points: ScatterPoint[],
+): Map<number, ScatterPoint> {
   const map = new Map<number, ScatterPoint>();
   for (const p of points) {
     map.set(p.defectId, p);
@@ -208,7 +269,9 @@ export function buildPointLookup(points: ScatterPoint[]): Map<number, ScatterPoi
 /**
  * Build an O(1) defectId → {x, y} coordinate lookup from a packed STRIDE=6 array.
  */
-export function buildPackedCoordMap(packed: number[]): Map<number, { x: number; y: number }> {
+export function buildPackedCoordMap(
+  packed: number[],
+): Map<number, { x: number; y: number }> {
   const map = new Map<number, { x: number; y: number }>();
   for (let i = 0; i + STRIDE - 1 < packed.length; i += STRIDE) {
     map.set(packed[i + 2], { x: packed[i], y: packed[i + 1] });

@@ -28,10 +28,14 @@ import {
   getJobApiV1TrainingJobsJobIdGet,
   getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
-import { startTrainAndPredict } from "@/shared/api/predictions";
+import {
+  listPredictionJobs,
+  startTrainAndPredict,
+} from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type {
   DatasetStatusResponse,
+  PredictionJobResponse,
   TrainingJob,
 } from "@/generated/orval/models";
 import { fetchScPlotPoints, warmupScPlotPoints } from "../api/plotPoints";
@@ -228,6 +232,12 @@ export interface ReclassifyPageState {
   isTrainPredictRunning: Ref<boolean>;
   trainPredictStatusMessage: Ref<string>;
   trainPredictTaskId: Ref<string | null>;
+  trainPredictTrainingStatus: ComputedRef<string>;
+  trainPredictPredictionJob: ComputedRef<PredictionJobResponse | null>;
+  trainPredictPredictionStatus: ComputedRef<string>;
+  trainPredictPredictionPercent: ComputedRef<number | null>;
+  trainPredictPredictionProgressLabel: ComputedRef<string>;
+  trainPredictPredictionProcessing: ComputedRef<boolean>;
   trainAndPredict: () => Promise<void>;
 
   reviewSamples: Ref<
@@ -1379,6 +1389,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const isTrainPredictRunning = ref(false);
   const trainPredictStatusMessage = ref("");
   const trainPredictTaskId = ref<string | null>(null);
+  const completedPredictionRefreshId = ref<string | null>(null);
 
   const trainPredictStatusQuery = useQuery({
     queryKey: computed(() => [
@@ -1395,17 +1406,120 @@ export function useReclassifyPage(): ReclassifyPageState {
     },
     enabled: computed(() => !!trainPredictTaskId.value),
     refetchInterval: computed(() =>
-      isTrainPredictRunning.value ? 2500 : false,
+      isTrainPredictRunning.value ? 1000 : false,
     ),
   });
+
+  const trainPredictTrainingStatus = computed(() =>
+    String(
+      trainPredictStatusQuery.data.value?.status ?? "pending",
+    ).toLowerCase(),
+  );
+
+  const trainPredictPredictionJobsQuery = useQuery({
+    queryKey: computed(() => [
+      "sc",
+      "train-predict-prediction-jobs",
+      datasetId.value,
+      trainPredictTaskId.value,
+    ]),
+    queryFn: () => listPredictionJobs(datasetId.value),
+    enabled: computed(() => !!trainPredictTaskId.value),
+    refetchInterval: computed(() =>
+      isTrainPredictRunning.value ? 1500 : false,
+    ),
+  });
+
+  function predictionSummaryValue(
+    job: PredictionJobResponse | null,
+    key: string,
+  ): number | null {
+    const raw = job?.summary?.[key];
+    const value = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const trainPredictPredictionJob = computed<PredictionJobResponse | null>(
+    () => {
+      const trainingJobId = trainPredictTaskId.value;
+      if (!trainingJobId) return null;
+      return (
+        (trainPredictPredictionJobsQuery.data.value ?? []).find(
+          (job) => job.summary?.source_training_job_id === trainingJobId,
+        ) ?? null
+      );
+    },
+  );
+
+  const trainPredictPredictionStatus = computed(() => {
+    const job = trainPredictPredictionJob.value;
+    if (!job) {
+      return trainPredictTrainingStatus.value === "completed"
+        ? "waiting"
+        : "not_started";
+    }
+    return String(job.status ?? "pending").toLowerCase();
+  });
+
+  const trainPredictPredictionPercent = computed<number | null>(() => {
+    const job = trainPredictPredictionJob.value;
+    const status = trainPredictPredictionStatus.value;
+    if (status === "completed") return 100;
+    const total = predictionSummaryValue(job, "total_samples");
+    const processed = predictionSummaryValue(job, "processed");
+    if (!total || processed === null) return null;
+    return Math.max(0, Math.min(100, Math.round((processed / total) * 100)));
+  });
+
+  const trainPredictPredictionProgressLabel = computed(() => {
+    const job = trainPredictPredictionJob.value;
+    if (!job) {
+      return trainPredictTrainingStatus.value === "completed"
+        ? "Waiting for prediction job..."
+        : "Prediction starts after training completes";
+    }
+    const total = predictionSummaryValue(job, "total_samples");
+    const processed = predictionSummaryValue(job, "processed");
+    const successful = predictionSummaryValue(job, "successful");
+    const failed = predictionSummaryValue(job, "failed");
+    if (total && processed !== null) {
+      return `Processed ${processed} of ${total} · ok ${successful ?? 0} · failed ${failed ?? 0}`;
+    }
+    return `Prediction ${trainPredictPredictionStatus.value}`;
+  });
+
+  const trainPredictPredictionProcessing = computed(() => {
+    const status = trainPredictPredictionStatus.value;
+    return status === "running" || status === "waiting";
+  });
+
+  function invalidatePredictionViews(): void {
+    void queryClient.invalidateQueries({
+      queryKey: ["sc", "view-samples-paged", datasetId.value],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["sc", "plot-points-warmup", datasetId.value],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["sc", "plot-points", datasetId.value],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["sc", "class-list", datasetId.value],
+    });
+  }
 
   watch(trainPredictStatusQuery.data, (job) => {
     if (!job || !trainPredictTaskId.value) return;
     const status = String(job.status ?? "").toLowerCase();
     const shortId = trainPredictTaskId.value.slice(0, 8);
     if (status === "completed") {
-      trainPredictStatusMessage.value = `Training ${shortId} completed; prediction is running in workflow.`;
-      isTrainPredictRunning.value = false;
+      if (trainPredictPredictionStatus.value === "completed") {
+        trainPredictStatusMessage.value = `Workflow ${shortId} completed.`;
+        isTrainPredictRunning.value = false;
+      } else {
+        trainPredictStatusMessage.value = `Training ${shortId} completed; prediction is ${trainPredictPredictionStatus.value}.`;
+        isTrainPredictRunning.value = true;
+      }
       return;
     }
     if (status === "failed" || status === "cancelled") {
@@ -1413,7 +1527,32 @@ export function useReclassifyPage(): ReclassifyPageState {
       isTrainPredictRunning.value = false;
       return;
     }
+    isTrainPredictRunning.value = true;
     trainPredictStatusMessage.value = `Training ${shortId} ${status || "queued"}...`;
+  });
+
+  watch(trainPredictPredictionJob, (job) => {
+    if (!job || !trainPredictTaskId.value) return;
+    const status = String(job.status ?? "").toLowerCase();
+    const shortId = trainPredictTaskId.value.slice(0, 8);
+    if (status === "completed") {
+      trainPredictStatusMessage.value = `Workflow ${shortId} completed.`;
+      isTrainPredictRunning.value = false;
+      if (completedPredictionRefreshId.value !== job.id) {
+        completedPredictionRefreshId.value = job.id;
+        invalidatePredictionViews();
+      }
+      return;
+    }
+    if (status === "failed" || status === "cancelled") {
+      trainPredictStatusMessage.value = `Prediction ${job.id.slice(0, 8)} ${status}`;
+      isTrainPredictRunning.value = false;
+      return;
+    }
+    if (trainPredictTrainingStatus.value === "completed") {
+      trainPredictStatusMessage.value = `Prediction ${job.id.slice(0, 8)} ${status || "queued"}...`;
+      isTrainPredictRunning.value = true;
+    }
   });
 
   const mounted = ref(true);
@@ -1446,6 +1585,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         );
       }
       trainPredictTaskId.value = trainJobId;
+      completedPredictionRefreshId.value = null;
       await queryClient.invalidateQueries({
         queryKey: ["jobs", datasetId.value],
       });
@@ -1633,6 +1773,12 @@ export function useReclassifyPage(): ReclassifyPageState {
     isTrainPredictRunning,
     trainPredictStatusMessage,
     trainPredictTaskId,
+    trainPredictTrainingStatus,
+    trainPredictPredictionJob,
+    trainPredictPredictionStatus,
+    trainPredictPredictionPercent,
+    trainPredictPredictionProgressLabel,
+    trainPredictPredictionProcessing,
     trainAndPredict,
     reviewSamples,
     reviewLoading,

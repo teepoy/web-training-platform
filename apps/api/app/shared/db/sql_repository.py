@@ -142,6 +142,23 @@ class SqlRepository:
                 dataset_meta=row.dataset_meta,
             )
 
+    async def list_dataset_names(
+        self, dataset_ids: list[str], org_id: str | None = None
+    ) -> dict[str, str]:
+        if not dataset_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(dataset_ids))
+        async with self.session_factory() as session:
+            stmt = select(DatasetORM.id, DatasetORM.name).where(
+                DatasetORM.id.in_(unique_ids)
+            )
+            if org_id is not None:
+                stmt = stmt.where(
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
+                )
+            rows = (await session.execute(stmt)).all()
+            return {str(dataset_id): str(name) for dataset_id, name in rows}
+
     async def update_dataset_embed_config(
         self, dataset_id: str, embed_config: dict
     ) -> None:

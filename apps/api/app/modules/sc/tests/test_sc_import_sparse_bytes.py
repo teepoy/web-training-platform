@@ -260,8 +260,8 @@ class TestV2SparseImportBytes:
         ]
         pyarrow_schema = _build_v2_pyarrow_schema()
         insp_dt = datetime.fromisoformat("2026-05-26T08:00:00+00:00")
-        if insp_dt.tzinfo is None:
-            insp_dt = insp_dt.replace(tzinfo=timezone.utc)
+        if insp_dt.tzinfo is not None:
+            insp_dt = insp_dt.astimezone(timezone.utc)
 
         payload_store: Any = CapturePayloadStore()
         operator = SparseImportOperator(

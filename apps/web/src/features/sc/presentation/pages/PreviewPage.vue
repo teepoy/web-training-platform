@@ -75,17 +75,30 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       summariesEmpty: page.summariesEmpty.value,
       summaries: page.summaries.value,
       inspectionColumns: page.inspectionColumns.value,
+      lastOpenedSummaryKey: page.lastOpenedSummaryKey.value,
+      lastOpenedSummaryLabel: page.lastOpenedSummaryLabel.value,
       lotIdFilter: page.lotIdFilter.value,
       eqpIdFilter: page.eqpIdFilter.value,
       layerIdFilter: page.layerIdFilter.value,
       deviceFilter: page.deviceFilter.value,
-      "onUpdate:dateRange": (v: [number, number] | null) => { page.dateRange.value = v; },
-      "onUpdate:lotIdFilter": (v: string) => { page.lotIdFilter.value = v; },
-      "onUpdate:eqpIdFilter": (v: string) => { page.eqpIdFilter.value = v; },
-      "onUpdate:layerIdFilter": (v: string) => { page.layerIdFilter.value = v; },
-      "onUpdate:deviceFilter": (v: string) => { page.deviceFilter.value = v; },
+      "onUpdate:dateRange": (v: [number, number] | null) => {
+        page.dateRange.value = v;
+      },
+      "onUpdate:lotIdFilter": (v: string) => {
+        page.lotIdFilter.value = v;
+      },
+      "onUpdate:eqpIdFilter": (v: string) => {
+        page.eqpIdFilter.value = v;
+      },
+      "onUpdate:layerIdFilter": (v: string) => {
+        page.layerIdFilter.value = v;
+      },
+      "onUpdate:deviceFilter": (v: string) => {
+        page.deviceFilter.value = v;
+      },
       onSearch: () => page.searchInspections(),
-      onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) => page.openInspectionTab(row),
+      onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) =>
+        page.openInspectionTab(row),
     };
   }
   return {
@@ -121,13 +134,24 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     selectedDefectIds: tab.selectedDefectIds,
     tableFilter: tab.tableFilter,
     tableSort: tab.tableSort,
-    "onUpdate:activeMapTab": (v: "wafer" | "die" | "reticle") => page.setMapTab(tab.id, v),
-    "onUpdate:reticleOptions": (v: Parameters<typeof page.updateReticleOptions>[1]) => page.updateReticleOptions(tab.id, v),
-    onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) => page.setZoom(tab.id, vp),
-    onTableSelectionChange: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
-    onTableFilterChange: (filter: Parameters<typeof page.handleTableFilterChange>[1]) => page.handleTableFilterChange(tab.id, filter),
-    onTableSortChange: (sort: { field: string; direction: "asc" | "desc" | null }) => page.handleTableSortChange(tab.id, sort),
-    onLegendGroupChange: (groupBy: string | null) => page.handleLegendGroupByChange(tab.id, groupBy),
+    "onUpdate:activeMapTab": (v: "wafer" | "die" | "reticle") =>
+      page.setMapTab(tab.id, v),
+    "onUpdate:reticleOptions": (
+      v: Parameters<typeof page.updateReticleOptions>[1],
+    ) => page.updateReticleOptions(tab.id, v),
+    onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) =>
+      page.setZoom(tab.id, vp),
+    onTableSelectionChange: (ids: number[]) =>
+      page.setSelectedDefectIds(tab.id, ids),
+    onTableFilterChange: (
+      filter: Parameters<typeof page.handleTableFilterChange>[1],
+    ) => page.handleTableFilterChange(tab.id, filter),
+    onTableSortChange: (sort: {
+      field: string;
+      direction: "asc" | "desc" | null;
+    }) => page.handleTableSortChange(tab.id, sort),
+    onLegendGroupChange: (groupBy: string | null) =>
+      page.handleLegendGroupByChange(tab.id, groupBy),
     onRetry: () => page.fetchPreviewDataForTab(tab),
   };
 });
@@ -135,58 +159,67 @@ const activeComponentProps = computed((): Record<string, unknown> => {
 
 <template>
   <FullScreenLayout>
-  <div class="sc-preview" :style="containerStyle">
-    <div class="sc-preview-body">
-      <div class="sc-preview-tab-bar">
-        <div class="sc-preview-tabs">
-          <button
-            v-for="tab in page.tabs.value"
-            :key="tab.id"
-            class="sc-preview-tab"
-            :class="{ active: tab.id === page.activeTabId.value, pinned: tab.pinned }"
-            @click="page.activeTabId.value = tab.id"
-          >
-            {{ tab.label }}
-            <span
-              v-if="!tab.pinned"
-              class="sc-preview-tab-close"
-              @click.stop="page.closeTab(tab.id)"
+    <div class="sc-preview" :style="containerStyle">
+      <div class="sc-preview-body">
+        <div class="sc-preview-tab-bar">
+          <div class="sc-preview-tabs">
+            <button
+              v-for="tab in page.tabs.value"
+              :key="tab.id"
+              class="sc-preview-tab"
+              :class="{
+                active: tab.id === page.activeTabId.value,
+                pinned: tab.pinned,
+              }"
+              @click="page.activeTabId.value = tab.id"
             >
-              x
-            </span>
-          </button>
+              {{ tab.label }}
+              <span
+                v-if="!tab.pinned"
+                class="sc-preview-tab-close"
+                @click.stop="page.closeTab(tab.id)"
+              >
+                x
+              </span>
+            </button>
+          </div>
+          <div class="sc-preview-toolbar">
+            <NButton
+              size="small"
+              quaternary
+              @click="router.push('/sc/handbook')"
+            >
+              Handbook
+            </NButton>
+            <NButton
+              v-if="
+                page.activeTab.value?.type === 'inspection' &&
+                page.activeTab.value.inspectionItem
+              "
+              size="small"
+              type="primary"
+              :loading="page.isImporting.value"
+              @click="
+                page.activeTab.value.inspectionItem &&
+                page.startImportDirectly(page.activeTab.value.inspectionItem)
+              "
+            >
+              Import as Dataset
+            </NButton>
+          </div>
         </div>
-        <div class="sc-preview-toolbar">
-          <NButton
-            size="small"
-            quaternary
-            @click="router.push('/sc/handbook')"
-          >
-            Handbook
-          </NButton>
-          <NButton
-            v-if="page.activeTab.value?.type === 'inspection' && page.activeTab.value.inspectionItem"
-            size="small"
-            type="primary"
-            :loading="page.isImporting.value"
-            @click="page.activeTab.value.inspectionItem && page.startImportDirectly(page.activeTab.value.inspectionItem)"
-          >
-            Import as Dataset
-          </NButton>
-        </div>
-      </div>
 
-      <div class="sc-preview-tab-content">
-        <KeepAlive :max="3">
-          <component
-            :is="activeComponent"
-            :key="page.activeTabId.value ?? 'summary'"
-            v-bind="activeComponentProps"
-          />
-        </KeepAlive>
+        <div class="sc-preview-tab-content">
+          <KeepAlive :max="3">
+            <component
+              :is="activeComponent"
+              :key="page.activeTabId.value ?? 'summary'"
+              v-bind="activeComponentProps"
+            />
+          </KeepAlive>
+        </div>
       </div>
     </div>
-  </div>
   </FullScreenLayout>
 
   <!-- Import Modal -->
@@ -194,7 +227,7 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     v-model:show="page.showImportModal.value"
     preset="card"
     title="Import from SC Upstream"
-    style="width: 520px;"
+    style="width: 520px"
   >
     <div class="sc-import-form">
       <NInput
@@ -234,7 +267,10 @@ const activeComponentProps = computed((): Record<string, unknown> => {
         />
         <NText depth="3">
           Imported {{ page.importProgress.value.imported_count }} of
-          {{ (page.importProgress.value.imported_count ?? 0) + (page.importProgress.value.remaining_count ?? 0) }}
+          {{
+            (page.importProgress.value.imported_count ?? 0) +
+            (page.importProgress.value.remaining_count ?? 0)
+          }}
         </NText>
       </div>
       <div v-if="page.importError.value" class="sc-import-error">
@@ -242,13 +278,19 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       </div>
     </div>
     <template #footer>
-      <NButton @click="page.showImportModal.value = false" :disabled="page.isImporting.value">
+      <NButton
+        @click="page.showImportModal.value = false"
+        :disabled="page.isImporting.value"
+      >
         Cancel
       </NButton>
       <NButton
         type="primary"
         :loading="page.isImporting.value"
-        :disabled="!page.importSourceInspectionTime.value.trim() || !page.importDatasetName.value.trim()"
+        :disabled="
+          !page.importSourceInspectionTime.value.trim() ||
+          !page.importDatasetName.value.trim()
+        "
         @click="page.handleImport()"
       >
         Start Import
@@ -315,7 +357,9 @@ const activeComponentProps = computed((): Record<string, unknown> => {
   color: var(--cv-text-secondary, rgba(255, 255, 255, 0.6));
   border-bottom: 2px solid transparent;
   white-space: nowrap;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
   font-family: inherit;
 }
 

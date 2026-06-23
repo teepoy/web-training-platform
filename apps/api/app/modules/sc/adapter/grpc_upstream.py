@@ -18,6 +18,22 @@ if TYPE_CHECKING:
     from app.modules.sc.domain.models import ScInspectionRecord
 
 
+def _parse_upstream_datetime(value: str) -> datetime:
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return datetime(
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            dt.microsecond,
+            tzinfo=timezone.utc,
+        )
+    return dt.astimezone(timezone.utc)
+
+
 class GrpcScUpstream:
     def __init__(
         self,
@@ -87,9 +103,7 @@ class GrpcScUpstream:
         resp = await stub.ListInspections(req)
         rows = [
             {
-                "inspection_time": datetime.fromisoformat(i.inspection_time).replace(
-                    tzinfo=timezone.utc
-                ),
+                "inspection_time": _parse_upstream_datetime(i.inspection_time),
                 "wafer_key": i.wafer_key,
                 "lot_id": i.lot_id,
                 "wafer_id": i.wafer_id,

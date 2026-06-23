@@ -10,13 +10,15 @@ import {
 } from "naive-ui";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 
-defineProps<{
+const props = defineProps<{
   dateRange: [number, number] | null;
   summariesLoading: boolean;
   summariesError: string | null;
   summariesEmpty: boolean;
   summaries: InspectionSummaryItem[];
   inspectionColumns: DataTableColumns<InspectionSummaryItem>;
+  lastOpenedSummaryKey: string | null;
+  lastOpenedSummaryLabel: string | null;
   lotIdFilter: string;
   eqpIdFilter: string;
   layerIdFilter: string;
@@ -38,7 +40,9 @@ function rowKey(row: InspectionSummaryItem): string {
 }
 
 function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
+  const isLastOpened = rowKey(row) === props.lastOpenedSummaryKey;
   return {
+    class: isLastOpened ? "sc-summary-row--last-opened" : "",
     style: { cursor: "pointer" },
     onClick: () => emit("rowClick", row),
   };
@@ -98,6 +102,13 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         >
           Search
         </NButton>
+        <NText
+          v-if="lastOpenedSummaryLabel"
+          depth="3"
+          class="sc-preview-last-opened"
+        >
+          Last opened: {{ lastOpenedSummaryLabel }}
+        </NText>
       </NSpace>
     </div>
     <div class="sc-preview-table-wrapper">
@@ -115,14 +126,14 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
       >
         <template #empty>
           <div class="sc-preview-empty">
-            <NText v-if="summariesError" type="error">{{ summariesError }}</NText>
-            <NText v-else-if="summariesEmpty" depth="3">No inspections found</NText>
-            <NText v-else depth="3">Enter a time range to search</NText>
-            <NButton
-              v-if="summariesError"
-              size="small"
-              @click="emit('search')"
+            <NText v-if="summariesError" type="error">{{
+              summariesError
+            }}</NText>
+            <NText v-else-if="summariesEmpty" depth="3"
+              >No inspections found</NText
             >
+            <NText v-else depth="3">Enter a time range to search</NText>
+            <NButton v-if="summariesError" size="small" @click="emit('search')">
               Retry
             </NButton>
           </div>
@@ -160,5 +171,18 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.sc-preview-last-opened {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+:deep(.sc-summary-row--last-opened td) {
+  background: color-mix(in srgb, var(--cv-primary, #18a058) 14%, transparent);
+}
+
+:deep(.sc-summary-row--last-opened td:first-child) {
+  box-shadow: inset 3px 0 0 var(--cv-primary, #18a058);
 }
 </style>

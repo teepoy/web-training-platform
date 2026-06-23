@@ -120,6 +120,8 @@ export interface PreviewPageState {
   summariesError: Ref<string | null>;
   summariesEmpty: Ref<boolean>;
   inspectionColumns: ComputedRef<DataTableColumns<InspectionSummaryItem>>;
+  lastOpenedSummaryKey: Ref<string | null>;
+  lastOpenedSummaryLabel: ComputedRef<string | null>;
 
   tabs: Ref<PreviewTab[]>;
   activeTabId: Ref<string | null>;
@@ -211,6 +213,15 @@ export function usePreviewPage(): PreviewPageState {
   const summariesLoading = ref(false);
   const summariesError = ref<string | null>(null);
   const summariesEmpty = ref(false);
+  const lastOpenedSummaryKey = ref<string | null>(null);
+  const lastOpenedSummaryLabel = computed(() => {
+    const key = lastOpenedSummaryKey.value;
+    if (!key) return null;
+    const row = summaries.value.find((item) => rowKey(item) === key);
+    if (!row) return "Last opened summary is outside the current result set";
+    const lot = row.lot_id ? `${row.lot_id} / ` : "";
+    return `${lot}W${row.wafer_key} · ${formatInspectionTime(row.inspection_time)}`;
+  });
 
   const searchParams = ref<GetInspectionsApiV1ScInspectionsGetParams | null>(
     null,
@@ -246,6 +257,16 @@ export function usePreviewPage(): PreviewPageState {
     | "layer_id"
     | "device";
 
+  function formatInspectionTime(value: string): string {
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return value;
+    return new Date(parsed).toLocaleString();
+  }
+
+  function summaryFilterLabel(key: SummaryFilterKey, value: string): string {
+    return key === "inspection_time" ? formatInspectionTime(value) : value;
+  }
+
   function summaryFilterOptions(key: SummaryFilterKey) {
     const values = new Set<string>();
     for (const row of summaries.value) {
@@ -258,7 +279,7 @@ export function usePreviewPage(): PreviewPageState {
       .sort((left, right) =>
         left.localeCompare(right, undefined, { numeric: true }),
       )
-      .map((value) => ({ label: value, value }));
+      .map((value) => ({ label: summaryFilterLabel(key, value), value }));
   }
 
   function summaryStringSorter(
@@ -289,6 +310,7 @@ export function usePreviewPage(): PreviewPageState {
         ellipsis: { tooltip: true },
         sorter: (left, right) =>
           Date.parse(left.inspection_time) - Date.parse(right.inspection_time),
+        render: (row) => formatInspectionTime(row.inspection_time),
         filter: summaryStringFilter("inspection_time"),
         filterOptions: summaryFilterOptions("inspection_time"),
         filterMultiple: true,
@@ -400,9 +422,10 @@ export function usePreviewPage(): PreviewPageState {
   }
 
   function openInspectionTab(row: InspectionSummaryItem): void {
+    lastOpenedSummaryKey.value = rowKey(row);
     const id = `tab-${nextTabId++}`;
     const label = row.lot_id
-      ? `${row.lot_id} / W${row.wafer_key}`
+      ? `${row.lot_id}#${row.wafer_id}`
       : `W${row.wafer_key}`;
     const reticleOptions = normalizeReticleMapOptions(
       DEFAULT_RETICLE_MAP_OPTIONS,
@@ -1061,9 +1084,13 @@ export function usePreviewPage(): PreviewPageState {
       const resp: ScImportResponse = {
         status: typeof payload.status === "string" ? payload.status : "failed",
         dataset_id:
-          typeof payload.dataset_id === "string" ? payload.dataset_id : undefined,
+          typeof payload.dataset_id === "string"
+            ? payload.dataset_id
+            : undefined,
         imported_count:
-          typeof payload.imported_count === "number" ? payload.imported_count : 0,
+          typeof payload.imported_count === "number"
+            ? payload.imported_count
+            : 0,
         error: typeof payload.error === "string" ? payload.error : null,
       };
       isImporting.value = false;
@@ -1106,6 +1133,8 @@ export function usePreviewPage(): PreviewPageState {
     summariesError,
     summariesEmpty,
     inspectionColumns,
+    lastOpenedSummaryKey,
+    lastOpenedSummaryLabel,
 
     tabs,
     activeTabId,

@@ -43,6 +43,22 @@ ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 # ── SC-specific helpers ─────────────────────────────────────────────────────
 
 
+def _parse_source_inspection_time(value: str) -> datetime:
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return datetime(
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            dt.microsecond,
+            tzinfo=timezone.utc,
+        )
+    return dt.astimezone(timezone.utc)
+
+
 def _patch_sample_to_parquet_row(
     ps: Any, images: list[dict[str, object]]
 ) -> dict[str, Any]:
@@ -194,7 +210,7 @@ class ScImportService:
         assert self._payload_store is not None
         # ── Pre-check: skip dataset creation when upstream has no data ──
         try:
-            insp_dt = datetime.fromisoformat(source_inspection_time)
+            insp_dt = _parse_source_inspection_time(source_inspection_time)
             samples_lf = await self._upstream.list_samples(
                 insp_dt, source_wafer_key, offset=0, count=1
             )
@@ -295,9 +311,7 @@ class ScImportService:
         ]
         pyarrow_schema = _build_v2_pyarrow_schema()
 
-        insp_dt = datetime.fromisoformat(source_inspection_time)
-        if insp_dt.tzinfo is None:
-            insp_dt = insp_dt.replace(tzinfo=timezone.utc)
+        insp_dt = _parse_source_inspection_time(source_inspection_time)
 
         operator = SparseImportOperator(
             dataset_id=dataset_id,
@@ -455,9 +469,7 @@ class ScImportService:
             )
 
             if storage_mode == "file_shard_sparse":
-                insp_dt_geo = datetime.fromisoformat(source_inspection_time)
-                if insp_dt_geo.tzinfo is None:
-                    insp_dt_geo = insp_dt_geo.replace(tzinfo=timezone.utc)
+                insp_dt_geo = _parse_source_inspection_time(source_inspection_time)
                 inspection = await self._upstream.get_inspection(
                     insp_dt_geo, source_wafer_key
                 )
