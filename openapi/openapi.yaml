@@ -1026,12 +1026,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/exports/download:
+  /api/v1/download:
     get:
       tags:
       - datasets
       summary: Download Export
-      operationId: download_export_api_v1_exports_download_get
+      operationId: download_export_api_v1_download_get
       parameters:
       - name: uri
         in: query

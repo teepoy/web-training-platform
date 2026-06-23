@@ -23,7 +23,7 @@ import {
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
 } from "@/generated/orval/endpoints/api";
 import { orvalFetcher } from "@/shared/api/orval-fetcher";
-import { getApiBase } from "./client";
+import { getApiBase, withAuthQueryParams } from "./client";
 import type {
   DatasetAnnotationStats,
   SparseSummaryResponse,
@@ -310,5 +310,5 @@ export async function getViewSamples<
 export { getApiBase };
 
 export function buildExportDownloadUrl(uri: string): string {
-  return `/api/v1/exports/download?uri=${encodeURIComponent(uri)}`;
+  return withAuthQueryParams(`/api/v1/download?uri=${encodeURIComponent(uri)}`);
 }

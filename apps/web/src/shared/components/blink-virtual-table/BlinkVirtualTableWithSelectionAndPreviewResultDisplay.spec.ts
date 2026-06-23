@@ -16,14 +16,14 @@ vi.mock("@/features/sc/presentation/composables/useBlinkVirtualScroll", () => ({
     queueViewportImageLoad: () => {},
     scrollRef: ref(null),
     visibleSamples: ref([
-      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }] },
-      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }, { imageId: 2 }, { imageId: 3 }] },
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
     ]),
     reviewColumnIndices: ref([]),
     imageCellHeightPxStr: ref('60px'),
     samplesForVirtualRow: (_idx: number) => [
-      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }] },
-      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 1 }, { imageId: 2 }, { imageId: 3 }] },
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
     ],
     effectiveSamplesPerRow: ref(3),
   }),
@@ -112,21 +112,25 @@ describe("BlinkVirtualTableWithSelectionAndPreviewResultDisplay", () => {
   });
 
   it("renders review columns and explicitly requests selected sprite images", async () => {
+    const reviewSamples = [
+      { defectId: 10, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }] },
+      { defectId: 11, waferKey: 1, inspectionTime: 1234n, reviewImages: [{ imageId: 100 }, { imageId: 101 }, { imageId: 105 }] },
+    ] as unknown as ScSampleItem[];
     const wrapper = createWrapper({
       showModeSwitch: true,
-      reviewSamples: mockSamples,
+      reviewSamples,
     });
 
     wrapper.findComponent(NRadioGroup).vm.$emit("update:value", "review");
     await nextTick();
 
-    expect(wrapper.text()).toContain("Rev 1");
-    expect(wrapper.text()).toContain("Rev 3");
+    expect(wrapper.text()).toContain("Rev 100");
+    expect(wrapper.text()).toContain("Rev 105");
     expect(wrapper.html()).not.toContain("review_count");
     expect(wrapper.html()).toContain("image_types=patchDefective");
     expect(wrapper.html()).toContain("image_types=patchReference");
     expect(wrapper.html()).toContain("image_types=patchDifference");
-    expect(wrapper.html()).toContain("image_types=review1");
-    expect(wrapper.html()).toContain("image_types=review3");
+    expect(wrapper.html()).toContain("image_types=review100");
+    expect(wrapper.html()).toContain("image_types=review105");
   });
 });

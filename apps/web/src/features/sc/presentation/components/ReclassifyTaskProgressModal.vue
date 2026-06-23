@@ -73,9 +73,15 @@ const defaultExpanded = computed(() => {
 const displayStatus = computed(
   () => activeDetail.value?.derived.display_status || props.trainingStatus || "pending",
 );
-const capacityStatus = computed(
-  () => activeDetail.value?.derived.capacity_status || "unknown",
-);
+const workerSlotsLabel = computed(() => {
+  const used = activeDetail.value?.derived.pool_slots_used;
+  const limit = activeDetail.value?.derived.pool_concurrency_limit;
+  if (used !== null && used !== undefined && limit !== null && limit !== undefined) {
+    return `${used} / ${limit}`;
+  }
+  if (used !== null && used !== undefined) return String(used);
+  return "unknown";
+});
 const flowRun = computed(() => activeDetail.value?.raw.flow_run ?? null);
 const workQueueName = computed(() => {
   const queueName = flowRun.value?.work_queue_name;
@@ -229,8 +235,11 @@ function formatDuration(durationMs: number) {
             <NTag size="small" :type="statusType(displayStatus)">
               {{ displayStatus }}
             </NTag>
-            <NTag size="small" :type="capacityType(capacityStatus)">
-              {{ capacityStatus }}
+            <NTag
+              size="small"
+              :type="capacityType(activeDetail?.derived.capacity_status)"
+            >
+              Slots {{ workerSlotsLabel }}
             </NTag>
           </NSpace>
         </NSpace>
@@ -261,7 +270,7 @@ function formatDuration(durationMs: number) {
             />
           </NGi>
           <NGi>
-            <NStatistic label="Capacity" :value="capacityStatus" />
+            <NStatistic label="Worker Slots" :value="workerSlotsLabel" />
           </NGi>
         </NGrid>
 

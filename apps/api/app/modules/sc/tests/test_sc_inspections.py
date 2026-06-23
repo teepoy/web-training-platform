@@ -97,6 +97,28 @@ def test_list_inspections_empty_time_range(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_list_inspections_empty_time_range_with_eqp_filter(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/v1/sc/inspections",
+                params={
+                    "start_time": "1970-01-01T00:00:00",
+                    "end_time": "1970-01-02T00:00:00",
+                    "eqp_id": "EQP01",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            msg = _parse_summary_resp(resp.content)
+            assert msg["total"] == 0
+            assert len(msg["items"]) == 0
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_list_inspections_range_exceeds_14_days_returns_400(
     mock_wafer_db_reader,
 ):

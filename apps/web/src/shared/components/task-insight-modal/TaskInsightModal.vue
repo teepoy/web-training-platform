@@ -6,7 +6,7 @@
           <n-text strong>{{ task?.display_name || 'Task Insight' }}</n-text>
           <n-space size="small" align="center">
             <n-tag size="small" :type="statusType(activeDetail?.derived.display_status)">{{ activeDetail?.derived.display_status || 'unknown' }}</n-tag>
-            <n-tag size="small" :type="capacityType(activeDetail?.derived.capacity_status)">{{ activeDetail?.derived.capacity_status || 'unknown' }}</n-tag>
+            <n-tag size="small" :type="capacityType(activeDetail?.derived.capacity_status)">Slots {{ workerSlotsLabel }}</n-tag>
           </n-space>
         </n-space>
         <n-space>
@@ -33,7 +33,7 @@
             <n-statistic label="Ahead In Queue" :value="activeDetail?.derived.queue_depth_ahead !== null && activeDetail?.derived.queue_depth_ahead !== undefined ? String(activeDetail.derived.queue_depth_ahead) : '-'" />
           </n-gi>
           <n-gi>
-            <n-statistic label="Capacity" :value="activeDetail?.derived.capacity_status || 'unknown'" />
+            <n-statistic label="Worker Slots" :value="workerSlotsLabel" />
           </n-gi>
         </n-grid>
 
@@ -254,6 +254,16 @@ function checkType(status?: string) {
   if (status === 'passed') return 'success'
   return 'default'
 }
+
+const workerSlotsLabel = computed(() => {
+  const used = activeDetail.value?.derived.pool_slots_used
+  const limit = activeDetail.value?.derived.pool_concurrency_limit
+  if (used !== null && used !== undefined && limit !== null && limit !== undefined) {
+    return `${used} / ${limit}`
+  }
+  if (used !== null && used !== undefined) return String(used)
+  return 'unknown'
+})
 
 const waterfallWidth = 920
 const waterfallLabelWidth = 180

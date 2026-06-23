@@ -31,9 +31,9 @@ RUN uv sync --frozen --package finetune-api --no-dev --extra gpu
 FROM deps AS dev
 
 WORKDIR /app
-ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-gpu"]
+ENTRYPOINT ["/bin/sh", "-lc", "exec /app/.venv/bin/prefect worker start --pool default-gpu --limit ${PREFECT_WORKER_LIMIT:-1}"]
 
 FROM deps AS prod
 
 WORKDIR /app
-ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-gpu"]
+ENTRYPOINT ["/bin/sh", "-lc", "exec /app/.venv/bin/prefect worker start --pool default-gpu --limit ${PREFECT_WORKER_LIMIT:-1}"]

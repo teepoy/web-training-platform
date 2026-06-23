@@ -42,5 +42,6 @@ test('Export results show downloadable link after persist @mock', async ({
   await expect(downloadLink).toBeVisible({ timeout: 10_000 })
 
   const href = await downloadLink.getAttribute('href')
-  expect(href).toContain('/api/v1/exports/download?uri=')
+  expect(href).toContain('/api/v1/download?uri=')
+  expect(href).toContain('token=')
 })

@@ -16,7 +16,6 @@
         <n-data-table
           :columns="columns"
           :data="jobs ?? []"
-          :row-props="rowProps"
           :bordered="true"
           :striped="true"
           :loading="isLoading"
@@ -64,12 +63,18 @@
           </n-form-item>
         </n-form>
       </n-modal>
+
+      <TaskInsightModal
+        v-model:show="insightVisible"
+        :task="selectedTask"
+        :handoff-enabled="false"
+      />
     </template>
   </n-space>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, watch } from "vue";
+import { ref, computed, h, provide, watch } from "vue";
 import type { MaybeRef } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
@@ -83,8 +88,9 @@ import {
   useListTrainersRouteApiV1TrainersGet,
 } from "@/generated/orval/endpoints/api";
 import type { ListJobsApiV1TrainingJobsGetParams } from "@/generated/orval/models/listJobsApiV1TrainingJobsGetParams";
-import type { JobStatus, TrainingJob } from '@/generated/orval/models';
+import type { JobStatus, TaskTrackerSummaryResponse as TaskTrackerSummary, TrainingJob } from '@/generated/orval/models';
 import type { Trainer } from "@/shared/api/types";
+import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 
 const router = useRouter();
 const route = useRoute();
@@ -93,6 +99,7 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 const props = defineProps<{ datasetId?: string | null; allowTrain?: boolean; compatibleViewTypes?: string[] | null }>();
 const canTrain = computed(() => props.allowTrain !== false);
+provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
 
 const jobsQueryParams = computed(() =>
   props.datasetId ? { dataset_id: props.datasetId } : undefined,
@@ -216,38 +223,51 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 180,
+    width: 300,
     render: (row) => {
       const nodes = [
         h(
           NButton,
           {
             size: "small",
+            disabled: true,
+          },
+          { default: () => "Artifact View" },
+        ),
+        h(
+          NButton,
+          {
+            size: "small",
+            disabled: !row.id,
             onClick: (e: Event) => {
               e.stopPropagation();
-              router.push("/jobs/" + row.id);
+              openTaskView(row);
             },
           },
-          { default: () => "View" },
+          { default: () => "Task View" },
+        ),
+        h(
+          NButton,
+          {
+            size: "small",
+            tertiary: true,
+            disabled: !row.id,
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              openInsight(row);
+            },
+          },
+          { default: () => "Insight" },
         ),
       ];
-      return h("span", {}, nodes);
+      return h("span", { style: "display: inline-flex; gap: 8px" }, nodes);
     },
   },
 ]);
 
-function openTaskExplorer() {
-  router.push({ path: "/tasks", query: { from: route.fullPath } });
-}
-
-function rowProps(row: TrainingJob) {
-  return {
-    style: "cursor: pointer",
-    onClick: () => router.push("/jobs/" + row.id),
-  };
-}
-
 const showModal = ref(false);
+const insightVisible = ref(false);
+const selectedTask = ref<TaskTrackerSummary | null>(null);
 const formRef = ref<FormInst | null>(null);
 const formModel = ref({ dataset_id: null as string | null, trainer_id: null as string | null });
 
@@ -297,5 +317,45 @@ function onCancel() {
 function resetForm() {
   formModel.value = { dataset_id: null, trainer_id: null };
   formRef.value?.restoreValidation();
+}
+
+function openTaskView(row: TrainingJob) {
+  if (!row.id) return;
+  router.push({
+    path: "/tasks",
+    query: { kind: "training", task: row.id, from: route.fullPath },
+  });
+}
+
+function openInsight(row: TrainingJob) {
+  if (!row.id) return;
+  selectedTask.value = trainingTaskSummary(row);
+  insightVisible.value = true;
+}
+
+function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
+  return {
+    id: row.id ?? "",
+    task_kind: "training",
+    execution_kind: "training-default",
+    display_name: `Training ${row.trainer_id}`,
+    display_status: row.status ?? "queued",
+    stage: row.status === "completed" || row.status === "failed" ? "validation_output" : "queue_allocation",
+    dataset_id: row.dataset_id,
+    model_id: null,
+    trainer_id: row.trainer_id,
+    created_by: row.created_by,
+    created_at: row.created_at ?? "",
+    updated_at: row.updated_at ?? row.created_at ?? "",
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: "none",
+    queue_depth_ahead: null,
+    capacity_status: "unknown",
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
 }
 </script>

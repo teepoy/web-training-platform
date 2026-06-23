@@ -12,6 +12,7 @@
         :bordered="true"
         :striped="true"
         :loading="isLoading"
+        :row-key="predictionJobRowKey"
       />
     </n-spin>
 
@@ -50,28 +51,39 @@
           </template>
         </n-form>
       </n-modal>
+
+    <TaskInsightModal
+      v-model:show="insightVisible"
+      :task="selectedTask"
+      :handoff-enabled="false"
+    />
   </n-space>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from "vue";
+import { ref, computed, h, provide } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
-import { useMessage, NTag } from "naive-ui";
+import { useMessage, NButton, NTag } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
 import {
   useListJobsApiV1TrainingJobsGet,
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs } from "@/shared/api/predictions";
-import type { PredictionJobResponse as PredictionJob, TrainingJob } from "@/generated/orval/models";
+import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
+import type { PredictionJobResponse as PredictionJob, TaskTrackerSummaryResponse as TaskTrackerSummary, TrainingJob } from "@/generated/orval/models";
 import type { RunPredictionRequest } from "@/generated/orval/models";
 
 const props = defineProps<{ datasetId?: string | null }>();
 
+const route = useRoute();
+const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
 
 const { data: jobs, isLoading } = useQuery({
   queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId, props.datasetId ?? null]),
@@ -80,6 +92,10 @@ const { data: jobs, isLoading } = useQuery({
 });
 
 const visibleJobs = computed<PredictionJob[]>(() => jobs.value ?? []);
+
+function predictionJobRowKey(row: PredictionJob): string {
+  return row.id;
+}
 
 const { data: allJobs, isLoading: jobsLoading } = useListJobsApiV1TrainingJobsGet(undefined, {
   query: {
@@ -155,19 +171,47 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => [
     render: (row) => row.model_id.slice(0, 8) + "…",
   },
   {
-    title: "Target",
-    key: "target",
-    width: 160,
-  },
-  {
     title: "Created At",
     key: "created_at",
     width: 180,
     render: (row) => new Date(row.created_at).toLocaleString(),
   },
+  {
+    title: "Actions",
+    key: "actions",
+    width: 210,
+    render: (row) =>
+      h("span", { style: "display: inline-flex; gap: 8px" }, [
+        h(
+          NButton,
+          {
+            size: "small",
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              openTaskView(row);
+            },
+          },
+          { default: () => "Task View" },
+        ),
+        h(
+          NButton,
+          {
+            size: "small",
+            tertiary: true,
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              openInsight(row);
+            },
+          },
+          { default: () => "Insight" },
+        ),
+      ]),
+  },
 ]);
 
 const showModal = ref(false);
+const insightVisible = ref(false);
+const selectedTask = ref<TaskTrackerSummary | null>(null);
 const formRef = ref<FormInst | null>(null);
 const formModel = ref({ model_id: null as string | null });
 
@@ -211,5 +255,43 @@ function onCancel() {
 function resetForm() {
   formModel.value = { model_id: null };
   formRef.value?.restoreValidation();
+}
+
+function openTaskView(row: PredictionJob) {
+  router.push({
+    path: "/tasks",
+    query: { kind: "prediction", task: row.id, from: route.fullPath },
+  });
+}
+
+function openInsight(row: PredictionJob) {
+  selectedTask.value = predictionTaskSummary(row);
+  insightVisible.value = true;
+}
+
+function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
+  return {
+    id: row.id,
+    task_kind: "prediction",
+    execution_kind: "predict-batch",
+    display_name: "Prediction",
+    display_status: row.status,
+    stage: row.status === "completed" || row.status === "failed" ? "validation_output" : "queue_allocation",
+    dataset_id: row.dataset_id,
+    model_id: row.model_id,
+    trainer_id: null,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    prefect_state: null,
+    work_pool_name: null,
+    work_queue_name: null,
+    queue_priority: null,
+    queue_priority_label: "none",
+    queue_depth_ahead: null,
+    capacity_status: "unknown",
+    pool_concurrency_limit: null,
+    pool_slots_used: null,
+  };
 }
 </script>

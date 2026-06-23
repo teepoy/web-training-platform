@@ -84,7 +84,7 @@ export * from './datasetStorageMode';
 export * from './deleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams';
 export * from './deleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200';
 export * from './deleteSettingApiV1SettingsKeyDelete200';
-export * from './downloadExportApiV1ExportsDownloadGetParams';
+export * from './downloadExportApiV1DownloadGetParams';
 export * from './embedConfigResponse';
 export * from './exportDatasetApiV1ExportsDatasetIdGet200';
 export * from './exportFormatResponse';

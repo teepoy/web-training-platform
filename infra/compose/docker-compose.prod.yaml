@@ -105,6 +105,7 @@ services:
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      PREFECT_WORKER_LIMIT: ${CPU_PREFECT_WORKER_LIMIT:-2}
     mem_limit: ${CPU_WORKER_MEMORY:-8g}
     shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     volumes:
@@ -143,6 +144,7 @@ services:
       LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      PREFECT_WORKER_LIMIT: ${GPU_PREFECT_WORKER_LIMIT:-1}
     mem_limit: ${GPU_WORKER_MEMORY:-16g}
     shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     volumes:

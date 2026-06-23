@@ -161,14 +161,14 @@ async def get_inspections(
     records_lf = await upstream_reader.list_inspections(
         start_time, end_time, lot_id, None, layer_id, device
     )
-    records_lf = _apply_top_level_inspection_filters(
-        records_lf,
-        lot_id=lot_id,
-        layer_id=layer_id,
-        device=device,
-        eqp_id=eqp_id,
-    )
     records_df = await records_lf.collect_async()
+    eqp_values = _parse_top_level_condition(eqp_id)
+    if (
+        eqp_values
+        and not records_df.is_empty()
+        and "inspect_equip_id" in records_df.columns
+    ):
+        records_df = records_df.filter(_condition_expr("inspect_equip_id", eqp_values))
 
     items: list[ScInspectionSummaryItem] = []
     for row in records_df.to_dicts():

@@ -105,7 +105,9 @@ services:
 
   prefect-worker-cpu:
     image: ${FINETUNE_CPU_WORKER_IMAGE:?Set FINETUNE_CPU_WORKER_IMAGE to an immutable tag}
-    environment: *platform-environment
+    environment:
+      <<: *platform-environment
+      PREFECT_WORKER_LIMIT: ${CPU_PREFECT_WORKER_LIMIT:-2}
     mem_limit: ${CPU_WORKER_MEMORY:-8g}
     shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     depends_on:
@@ -120,7 +122,9 @@ services:
   prefect-worker-gpu:
     image: ${FINETUNE_GPU_WORKER_IMAGE:?Set FINETUNE_GPU_WORKER_IMAGE to an immutable tag}
     profiles: ["gpu"]
-    environment: *platform-environment
+    environment:
+      <<: *platform-environment
+      PREFECT_WORKER_LIMIT: ${GPU_PREFECT_WORKER_LIMIT:-1}
     mem_limit: ${GPU_WORKER_MEMORY:-16g}
     shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     depends_on:

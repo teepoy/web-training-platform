@@ -92,17 +92,21 @@ class SqlRepository:
 
     async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
         async with self.session_factory() as session:
-            stmt = select(DatasetORM).order_by(DatasetORM.created_at.desc())
+            stmt = (
+                select(DatasetORM, OrganizationORM.name)
+                .join(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .order_by(DatasetORM.created_at.desc())
+            )
             if org_id is not None:
                 stmt = stmt.where(
                     or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
                 )  # noqa: E712
-            rows = (await session.execute(stmt)).scalars().all()
+            rows = (await session.execute(stmt)).all()
             return [
                 Dataset(
                     id=r.id,
                     org_id=r.org_id,
-                    org_name=await _org_name_for(session, r.org_id),
+                    org_name=str(org_name or ""),
                     name=r.name,
                     dataset_type=r.dataset_type,
                     task_spec=cast(TaskSpec, r.dataset_meta),
@@ -114,8 +118,21 @@ class SqlRepository:
                     storage_mode=cast(DatasetStorageMode, r.storage_mode),
                     dataset_meta=r.dataset_meta,
                 )
-                for r in rows
+                for r, org_name in rows
             ]
+
+    async def count_samples_by_dataset(self, dataset_ids: list[str]) -> dict[str, int]:
+        if not dataset_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(dataset_ids))
+        async with self.session_factory() as session:
+            stmt = (
+                select(SampleORM.dataset_id, func.count(SampleORM.id))
+                .where(SampleORM.dataset_id.in_(unique_ids))
+                .group_by(SampleORM.dataset_id)
+            )
+            rows = (await session.execute(stmt)).all()
+            return {str(dataset_id): int(count) for dataset_id, count in rows}
 
     async def get_dataset(
         self, dataset_id: str, org_id: str | None = None

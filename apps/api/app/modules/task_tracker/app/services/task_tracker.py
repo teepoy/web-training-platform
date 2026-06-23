@@ -62,15 +62,16 @@ class TaskTrackerService:
         )
         summaries = []
         for task in tasks:
-            detail = await self._build_detail(task)
+            display_status = self._display_status(task.platform_job, None)
+            stage = self._stage_for_display_status(display_status)
             summaries.append(
                 TaskTrackerSummaryResponse(
-                    id=detail.id,
-                    task_kind=detail.task_kind,
-                    execution_kind=detail.derived.execution_kind,
+                    id=task.platform_job.id,
+                    task_kind=task.task_kind,
+                    execution_kind=self._execution_kind(task, None),
                     display_name=self._display_name(task),
-                    display_status=detail.derived.display_status,
-                    stage=detail.derived.stage,
+                    display_status=display_status,
+                    stage=stage,
                     dataset_id=task.dataset_id,
                     dataset_name=dataset_names.get(task.dataset_id),
                     model_id=task.model_id,
@@ -78,19 +79,6 @@ class TaskTrackerService:
                     created_by=task.platform_job.created_by,
                     created_at=task.platform_job.created_at,
                     updated_at=task.platform_job.updated_at,
-                    prefect_state=detail.derived.prefect_state,
-                    work_pool_name=self._string_or_none(
-                        detail.raw.flow_run, "work_pool_name"
-                    ),
-                    work_queue_name=self._string_or_none(
-                        detail.raw.flow_run, "work_queue_name"
-                    ),
-                    queue_priority=detail.derived.queue_priority,
-                    queue_priority_label=detail.derived.queue_priority_label,
-                    queue_depth_ahead=detail.derived.queue_depth_ahead,
-                    capacity_status=detail.derived.capacity_status,
-                    pool_concurrency_limit=detail.derived.pool_concurrency_limit,
-                    pool_slots_used=detail.derived.pool_slots_used,
                 )
             )
         summaries.sort(key=lambda item: item.updated_at, reverse=True)
@@ -376,7 +364,11 @@ class TaskTrackerService:
         pool_slots = self._int_or_none(work_pool, "status", "slot_count")
         if pool_slots is None:
             pool_slots = self._int_or_none(work_pool, "status", "slots_used")
-        queue_depth = await self._queue_depth(flow_run)
+        queue_depth = await self._queue_depth(
+            flow_run,
+            deployment=deployment,
+            work_queue=work_queue,
+        )
         artifacts = self._artifacts(task)
         scorecard = self._scorecard(task, display_status, artifacts)
         summary_metrics = self._summary_metrics(task)
@@ -408,13 +400,30 @@ class TaskTrackerService:
             deep_links=self._deep_links(task, flow_run, deployment),
         )
 
-    async def _queue_depth(self, flow_run: dict[str, object] | None) -> int | None:
+    async def _queue_depth(
+        self,
+        flow_run: dict[str, object] | None,
+        *,
+        deployment: dict[str, object] | None = None,
+        work_queue: dict[str, object] | None = None,
+    ) -> int | None:
         if flow_run is None:
             return None
-        work_queue_name = self._string_or_none(flow_run, "work_queue_name")
+        current_state = self._nested_string(flow_run, "state", "type")
+        if current_state not in _QUEUE_STATES:
+            return 0
+        work_queue_name = (
+            self._string_or_none(flow_run, "work_queue_name")
+            or self._string_or_none(deployment, "work_queue_name")
+            or self._string_or_none(work_queue, "name")
+        )
         if work_queue_name is None:
             return None
-        work_pool_name = self._string_or_none(flow_run, "work_pool_name")
+        work_pool_name = (
+            self._string_or_none(flow_run, "work_pool_name")
+            or self._string_or_none(deployment, "work_pool_name")
+            or self._string_or_none(work_queue, "work_pool_name")
+        )
         runs = await self._prefect.filter_flow_runs(
             work_pool_name=work_pool_name,
             work_queue_name=work_queue_name,
@@ -422,7 +431,23 @@ class TaskTrackerService:
             limit=200,
         )
         current_id = self._string_or_none(flow_run, "id")
-        ahead = [run for run in runs if run.get("id") != current_id]
+        current_expected = self._timestamp_sort_value(flow_run, "expected_start_time")
+        current_created = self._timestamp_sort_value(flow_run, "created")
+        ahead = []
+        for run in runs:
+            if run.get("id") == current_id:
+                continue
+            run_expected = self._timestamp_sort_value(run, "expected_start_time")
+            if current_expected is not None and run_expected is not None:
+                if run_expected <= current_expected:
+                    ahead.append(run)
+                continue
+            run_created = self._timestamp_sort_value(run, "created")
+            if current_created is not None and run_created is not None:
+                if run_created <= current_created:
+                    ahead.append(run)
+                continue
+            ahead.append(run)
         return max(0, len(ahead))
 
     def _artifacts(self, task: _TaskRecord) -> list[dict[str, object]]:
@@ -588,6 +613,13 @@ class TaskTrackerService:
         if prefect_state in _TERMINAL_STATES:
             return "validation_output"
         if prefect_state in _RUNNING_STATES:
+            return "execution_flow"
+        return "queue_allocation"
+
+    def _stage_for_display_status(self, display_status: str) -> str:
+        if display_status in {"completed", "failed", "cancelled"}:
+            return "validation_output"
+        if display_status == "running":
             return "execution_flow"
         return "queue_allocation"
 
@@ -836,6 +868,17 @@ class TaskTrackerService:
         self, task_run: dict[str, object], key: str
     ) -> datetime | None:
         value = self._string_or_none(task_run, key)
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def _timestamp_sort_value(
+        self, payload: dict[str, object], key: str
+    ) -> datetime | None:
+        value = self._string_or_none(payload, key)
         if not value:
             return None
         try:

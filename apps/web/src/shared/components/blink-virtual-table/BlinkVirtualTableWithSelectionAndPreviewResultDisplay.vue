@@ -104,7 +104,6 @@ const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
   Difference: "patchDifference",
 };
 const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
-const DEFAULT_REVIEW_IMAGE_INDEXES = [0, 1, 2, 3, 4, 5];
 const patchImageTypeByInput: Record<string, PatchImageType> = {
   defective: "Defective",
   reference: "Reference",
@@ -118,7 +117,8 @@ const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
 const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
 const reviewImageSize = ref<ImageSizeOption>(normalizeImageSize(props.reviewCellSize));
 const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
-const reviewImagesInput = ref(DEFAULT_REVIEW_IMAGE_INDEXES.join(","));
+const reviewImagesInput = ref("");
+const reviewImagesInputEdited = ref(false);
 const imageSize = computed({
   get: () => mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
   set: (value: number) => {
@@ -220,18 +220,42 @@ const selectedPatchImageTypes = computed<PatchImageType[]>(() => {
   return parsed.length > 0 ? parsed : DEFAULT_PATCH_IMAGE_TYPES;
 });
 
-const selectedReviewImageIndexes = computed<number[]>(() => {
+const inferredReviewImageIds = computed<number[]>(() => {
+  const seen = new Set<number>();
+  const samples = props.reviewSamples?.length ? props.reviewSamples : props.samples;
+  for (const sample of samples) {
+    for (const image of sample.reviewImages ?? []) {
+      const imageId = Number(image.imageId);
+      if (Number.isInteger(imageId) && imageId > 0) {
+        seen.add(imageId);
+      }
+    }
+  }
+  return [...seen].sort((a, b) => a - b);
+});
+
+watch(
+  inferredReviewImageIds,
+  (ids) => {
+    if (!reviewImagesInputEdited.value) {
+      reviewImagesInput.value = ids.join(",");
+    }
+  },
+  { immediate: true },
+);
+
+const selectedReviewImageIds = computed<number[]>(() => {
   const seen = new Set<number>();
   const parsed = reviewImagesInput.value
     .split(",")
     .map((part) => Number(part.trim()))
-    .filter((index) => Number.isInteger(index) && index >= 0)
-    .filter((index) => {
-      if (seen.has(index)) return false;
-      seen.add(index);
+    .filter((imageId) => Number.isInteger(imageId) && imageId > 0)
+    .filter((imageId) => {
+      if (seen.has(imageId)) return false;
+      seen.add(imageId);
       return true;
     });
-  return parsed.length > 0 ? parsed : DEFAULT_REVIEW_IMAGE_INDEXES;
+  return parsed;
 });
 
 const patchImageTypesForSprite = computed<PatchImageType[]>(() => {
@@ -252,15 +276,20 @@ const basePatchColumns = computed(() =>
   })).filter((column) => column.spriteIndex >= 0),
 );
 
-function reviewColumnsForSample(_sample: ScSampleItem): number[] {
-  return selectedReviewImageIndexes.value;
+function reviewColumnsForSample(sample: ScSampleItem): number[] {
+  const available = new Set(
+    (sample.reviewImages ?? [])
+      .map((image) => Number(image.imageId))
+      .filter((imageId) => Number.isInteger(imageId) && imageId > 0),
+  );
+  return selectedReviewImageIds.value.filter((imageId) => available.has(imageId));
 }
 
 function spriteImageTypesForSample(sample: ScSampleItem): string[] {
   const imageTypes = patchImageTypesForSprite.value.map((type) => PATCH_IMAGE_SPRITE_TOKENS[type]);
   if (mode.value === "review") {
-    for (const index of reviewColumnsForSample(sample)) {
-      imageTypes.push(`review${index + 1}`);
+    for (const imageId of reviewColumnsForSample(sample)) {
+      imageTypes.push(`review${imageId}`);
     }
   }
   return imageTypes;
@@ -274,7 +303,7 @@ function cellsForSample(sample: ScSampleItem): number {
 
 const maxCellsPerSample = computed(() =>
   basePatchColumns.value.length +
-  (mode.value === "review" ? selectedReviewImageIndexes.value.length : 0) +
+  (mode.value === "review" ? selectedReviewImageIds.value.length : 0) +
   (blinkEnabled.value ? 1 : 0),
 );
 
@@ -410,8 +439,8 @@ function blinkOverlaySpriteIndex(): number {
   return defectiveIndex >= 0 ? defectiveIndex : 0;
 }
 
-function reviewSpriteIndex(sample: ScSampleItem, reviewIndex: number): number {
-  const selectedIndex = reviewColumnsForSample(sample).indexOf(reviewIndex);
+function reviewSpriteIndex(sample: ScSampleItem, imageId: number): number {
+  const selectedIndex = reviewColumnsForSample(sample).indexOf(imageId);
   return patchImageTypesForSprite.value.length + Math.max(0, selectedIndex);
 }
 
@@ -532,7 +561,7 @@ watch(
     virtualRowHeightStr,
     imageSize,
     selectedPatchImageTypes,
-    selectedReviewImageIndexes,
+    selectedReviewImageIds,
     blinkEnabled,
   ],
   () => {
@@ -731,7 +760,8 @@ defineExpose({ scrollRef });
           <n-input
             v-model:value="reviewImagesInput"
             size="small"
-            placeholder="0,1,2,3,4,5"
+            placeholder="Inferred from review images"
+            @update:value="reviewImagesInputEdited = true"
           />
         </div>
       </div>
@@ -794,11 +824,11 @@ defineExpose({ scrollRef });
                   </div>
                   <template v-if="mode === 'review'">
                     <div
-                      v-for="n in reviewColumnsForSample(sample)"
-                      :key="'rev_header_' + n"
+                      v-for="imageId in reviewColumnsForSample(sample)"
+                      :key="'rev_header_' + imageId"
                       class="sbt-sample-header-label"
                     >
-                      Rev {{ n + 1 }}
+                      Rev {{ imageId }}
                     </div>
                   </template>
                 </div>
@@ -830,11 +860,11 @@ defineExpose({ scrollRef });
                   <!-- Review Cells -->
                   <template v-if="mode === 'review'">
                     <div
-                      v-for="n in reviewColumnsForSample(sample)"
-                      :key="'rev_' + n"
+                      v-for="imageId in reviewColumnsForSample(sample)"
+                      :key="'rev_' + imageId"
                       class="sbt-img-cell"
                     >
-                      <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, reviewSpriteIndex(sample, n))"></div>
+                      <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"></div>
                       <div v-else class="sbt-img-placeholder"></div>
                     </div>
                   </template>

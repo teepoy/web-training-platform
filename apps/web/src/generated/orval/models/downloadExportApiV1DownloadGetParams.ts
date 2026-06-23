@@ -5,6 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DownloadExportApiV1ExportsDownloadGetParams = {
+export type DownloadExportApiV1DownloadGetParams = {
 uri: string;
 };

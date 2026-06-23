@@ -213,7 +213,7 @@ export async function mockDatasetStatus(
 }
 
 export async function mockExportDownload(page: Page): Promise<void> {
-  await page.route('**/api/v1/exports/download?uri=*', async (route) => {
+  await page.route('**/api/v1/download?uri=*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/octet-stream',

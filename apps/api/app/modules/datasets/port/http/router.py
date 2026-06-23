@@ -264,7 +264,7 @@ async def list_datasets(
     repo: DatasetRepository = Depends(get_repository),
 ) -> list[Dataset]:
     datasets = await repo.list_datasets(org_id=org.id)
-    return [await service.to_list_response(d) for d in datasets]
+    return await service.to_list_responses(datasets)
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -1496,7 +1496,7 @@ async def export_dataset_persist_stream(
     )
 
 
-@router.get("/exports/download")
+@router.get("/download")
 async def download_export(
     uri: str = Query(...),
     current_user: User = Depends(get_current_user),

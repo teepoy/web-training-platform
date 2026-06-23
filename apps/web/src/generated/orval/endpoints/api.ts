@@ -56,7 +56,7 @@ import type {
   DeleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams,
   DeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200,
   DeleteSettingApiV1SettingsKeyDelete200,
-  DownloadExportApiV1ExportsDownloadGetParams,
+  DownloadExportApiV1DownloadGetParams,
   EmbedConfigResponse,
   ExportDatasetApiV1ExportsDatasetIdGet200,
   ExportFormatResponse,
@@ -2735,13 +2735,13 @@ export const useExportDatasetPersistStreamApiV1ExportsDatasetIdPersistStreamPost
 /**
  * @summary Download Export
  */
-export type downloadExportApiV1ExportsDownloadGetResponse = {
+export type downloadExportApiV1DownloadGetResponse = {
   data: HTTPValidationError;
   status: number;
   headers: Headers;
 }
 
-export const getDownloadExportApiV1ExportsDownloadGetUrl = (params: DownloadExportApiV1ExportsDownloadGetParams,) => {
+export const getDownloadExportApiV1DownloadGetUrl = (params: DownloadExportApiV1DownloadGetParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -2751,12 +2751,12 @@ export const getDownloadExportApiV1ExportsDownloadGetUrl = (params: DownloadExpo
     }
   });
 
-  return normalizedParams.size ? `/api/v1/exports/download?${normalizedParams.toString()}` : `/api/v1/exports/download`
+  return normalizedParams.size ? `/api/v1/download?${normalizedParams.toString()}` : `/api/v1/download`
 }
 
-export const downloadExportApiV1ExportsDownloadGet = async (params: DownloadExportApiV1ExportsDownloadGetParams, options?: RequestInit): Promise<downloadExportApiV1ExportsDownloadGetResponse> => {
+export const downloadExportApiV1DownloadGet = async (params: DownloadExportApiV1DownloadGetParams, options?: RequestInit): Promise<downloadExportApiV1DownloadGetResponse> => {
 
-  return orvalFetcher<downloadExportApiV1ExportsDownloadGetResponse>(getDownloadExportApiV1ExportsDownloadGetUrl(params),
+  return orvalFetcher<downloadExportApiV1DownloadGetResponse>(getDownloadExportApiV1DownloadGetUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2767,43 +2767,43 @@ export const downloadExportApiV1ExportsDownloadGet = async (params: DownloadExpo
 
 
 
-export const getDownloadExportApiV1ExportsDownloadGetQueryKey = (params: MaybeRef<DownloadExportApiV1ExportsDownloadGetParams>,) => {
-    return ['api','v1','exports','download', ...(params ? [params]: [])] as const;
+export const getDownloadExportApiV1DownloadGetQueryKey = (params: MaybeRef<DownloadExportApiV1DownloadGetParams>,) => {
+    return ['api','v1','download', ...(params ? [params]: [])] as const;
     }
 
 
-export const getDownloadExportApiV1ExportsDownloadGetQueryOptions = <TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>, TError = HTTPValidationError>(params: MaybeRef<DownloadExportApiV1ExportsDownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export const getDownloadExportApiV1DownloadGetQueryOptions = <TData = Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>, TError = HTTPValidationError>(params: MaybeRef<DownloadExportApiV1DownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getDownloadExportApiV1ExportsDownloadGetQueryKey(params);
+  const queryKey =  getDownloadExportApiV1DownloadGetQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>> = ({ signal }) => downloadExportApiV1ExportsDownloadGet(unref(params), { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>> = ({ signal }) => downloadExportApiV1DownloadGet(unref(params), { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>, TError, TData>
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>, TError, TData>
 }
 
-export type DownloadExportApiV1ExportsDownloadGetQueryResult = NonNullable<Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>>
-export type DownloadExportApiV1ExportsDownloadGetQueryError = HTTPValidationError
+export type DownloadExportApiV1DownloadGetQueryResult = NonNullable<Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>>
+export type DownloadExportApiV1DownloadGetQueryError = HTTPValidationError
 
 
 /**
  * @summary Download Export
  */
 
-export function useDownloadExportApiV1ExportsDownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>, TError = HTTPValidationError>(
- params: MaybeRef<DownloadExportApiV1ExportsDownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1ExportsDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export function useDownloadExportApiV1DownloadGet<TData = Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>, TError = HTTPValidationError>(
+ params: MaybeRef<DownloadExportApiV1DownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadExportApiV1DownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getDownloadExportApiV1ExportsDownloadGetQueryOptions(params,options)
+  const queryOptions = getDownloadExportApiV1DownloadGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

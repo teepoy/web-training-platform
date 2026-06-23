@@ -56,6 +56,27 @@ class DatasetService:
     async def to_list_response(self, dataset: Dataset) -> Dataset:
         """Compute lightweight fields used by the dataset index."""
         sample_count = await self._resolve_sample_count(dataset)
+        return self._with_list_sample_count(dataset, sample_count)
+
+    async def to_list_responses(self, datasets: list[Dataset]) -> list[Dataset]:
+        """Compute lightweight dataset index fields in bulk."""
+        db_full_ids = [
+            dataset.id
+            for dataset in datasets
+            if dataset.storage_mode == DatasetStorageMode.DB_FULL
+        ]
+        db_counts = await self._repository.count_samples_by_dataset(db_full_ids)
+
+        responses: list[Dataset] = []
+        for dataset in datasets:
+            if dataset.storage_mode == DatasetStorageMode.DB_FULL:
+                sample_count = db_counts.get(dataset.id, 0)
+            else:
+                sample_count = await self._resolve_sample_count(dataset)
+            responses.append(self._with_list_sample_count(dataset, sample_count))
+        return responses
+
+    def _with_list_sample_count(self, dataset: Dataset, sample_count: int) -> Dataset:
         dataset_meta = dict(dataset.dataset_meta or {})
         dataset_meta.update(
             {"sample_count": sample_count, "total_samples": sample_count}

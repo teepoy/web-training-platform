@@ -40,8 +40,10 @@ FROM deps AS dev
 
 WORKDIR /app
 
-ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-cpu"]
+ENTRYPOINT ["/bin/sh", "-lc", "exec /app/.venv/bin/prefect worker start --pool default-cpu --limit ${PREFECT_WORKER_LIMIT:-2}"]
 
 FROM deps AS prod
 
-ENTRYPOINT ["uv", "run", "--no-dev", "--directory", "apps/api", "prefect", "worker", "start", "--pool", "default-cpu"]
+WORKDIR /app
+
+ENTRYPOINT ["/bin/sh", "-lc", "exec /app/.venv/bin/prefect worker start --pool default-cpu --limit ${PREFECT_WORKER_LIMIT:-2}"]
