@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
       <NDivider style="margin: 8px 0" />
 
       <div class="sc-code-search">
-        <label class="sc-code-search-label">Code Search</label>
+        <label class="sc-code-search-label">Search</label>
         <NInput
           v-model:value="codeSearch"
           clearable

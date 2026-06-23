@@ -82,6 +82,10 @@ def test_bulk_create_annotations_success():
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["created"] == 3
+        storage = app.state.app_context.shared.artifact_storage
+        prefix = f"datasets/{DEFAULT_ORG_ID}/{dataset_id}/annotations/"
+        annotation_sidecars = asyncio.run(storage.list_prefix(prefix))
+        assert len(annotation_sidecars) == 1
 
 
 def test_bulk_create_annotation_zero_clears_existing_annotation():

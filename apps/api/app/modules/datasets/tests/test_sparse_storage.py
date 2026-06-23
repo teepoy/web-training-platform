@@ -22,6 +22,7 @@ from app.modules.datasets.domain.sample_row import (
     SampleRow,
 )
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode
+from app.shared.db.registry import PredictionJobORM
 
 
 def _utcnow() -> datetime:
@@ -62,6 +63,34 @@ async def _bulk_sample_stream(
 ) -> AsyncIterator[BulkSampleRow]:
     for item in items:
         yield item
+
+
+async def _create_prediction_job(
+    _test_infra: dict,
+    *,
+    job_id: str,
+    dataset_id: str,
+    org_id: str,
+    created_at: datetime,
+) -> None:
+    async with _test_infra["session_factory"]() as session:
+        session.add(
+            PredictionJobORM(
+                id=job_id,
+                org_id=org_id,
+                dataset_id=dataset_id,
+                model_id="test-model",
+                status="completed",
+                target="classification",
+                model_version="v1",
+                sample_ids=None,
+                summary_json={},
+                created_by="test-user",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+        await session.commit()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -414,8 +443,14 @@ class TestSparseDatasetStorage:
     # ── 12. write_predictions ───────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_write_predictions(self, storage: SparseDatasetStorage) -> None:
+    async def test_write_predictions(
+        self,
+        storage: SparseDatasetStorage,
+        _test_infra: dict,
+        sparse_fixture: tuple[str, str],
+    ) -> None:
         """Stream 3 predictions, verify persisted and visible via listing."""
+        dataset_id, org_id = sparse_fixture
         rows, _ = await storage.list_samples(limit=3)
         sample_ids = [r.sample_id for r in rows]
 
@@ -440,6 +475,13 @@ class TestSparseDatasetStorage:
             model_version="v1",
         )
         assert count == 3
+        await _create_prediction_job(
+            _test_infra,
+            job_id="test-job",
+            dataset_id=dataset_id,
+            org_id=org_id,
+            created_at=_utcnow(),
+        )
 
         # Verify via list_samples with predictions
         rows2, _ = await storage.list_samples(
@@ -451,6 +493,81 @@ class TestSparseDatasetStorage:
         # Verify prediction_summary
         summary = await storage.prediction_summary()
         assert summary["total_predictions"] == 3
+
+    @pytest.mark.asyncio
+    async def test_with_predictions_without_job_id_reads_latest_prediction_job(
+        self,
+        storage: SparseDatasetStorage,
+        _test_infra: dict,
+        sparse_fixture: tuple[str, str],
+    ) -> None:
+        """Unscoped prediction listing reads only the latest completed job."""
+        dataset_id, org_id = sparse_fixture
+        rows, _ = await storage.list_samples(limit=1)
+        sample_id = rows[0].sample_id
+
+        old_job_id = "old-prediction-job"
+        latest_job_id = "latest-prediction-job"
+        await storage.write_predictions(
+            _prediction_stream(
+                [
+                    PredictionResult(
+                        sample_id=sample_id,
+                        predicted_label="old-label",
+                        confidence=0.1,
+                        model_id="test-model",
+                        target="classification",
+                        model_version="v1",
+                        job_id=old_job_id,
+                    )
+                ]
+            ),
+            job_id=old_job_id,
+            model_id="test-model",
+            model_version="v1",
+        )
+        await storage.write_predictions(
+            _prediction_stream(
+                [
+                    PredictionResult(
+                        sample_id=sample_id,
+                        predicted_label="latest-label",
+                        confidence=0.9,
+                        model_id="test-model",
+                        target="classification",
+                        model_version="v1",
+                        job_id=latest_job_id,
+                    )
+                ]
+            ),
+            job_id=latest_job_id,
+            model_id="test-model",
+            model_version="v1",
+        )
+        await _create_prediction_job(
+            _test_infra,
+            job_id=old_job_id,
+            dataset_id=dataset_id,
+            org_id=org_id,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        await _create_prediction_job(
+            _test_infra,
+            job_id=latest_job_id,
+            dataset_id=dataset_id,
+            org_id=org_id,
+            created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        )
+
+        listed, _ = await storage.list_samples(
+            limit=1,
+            with_predictions=True,
+            sample_ids=[sample_id],
+        )
+
+        assert listed[0].latest_prediction is not None
+        assert listed[0].latest_prediction["predicted_label"] == "latest-label"
+        assert listed[0].latest_prediction["job_id"] == latest_job_id
 
     # ── 13. materialize ─────────────────────────────────────────────────
 

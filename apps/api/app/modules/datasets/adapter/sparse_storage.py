@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pyarrow as pa
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from platform_runtime.sparse import (
@@ -34,12 +34,13 @@ from app.modules.datasets.domain.sample_row import (
     SampleRow,
     SampleRowImageRef,
 )
+from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.domain.storage_agg import (
     Capabilities,
     MaterializeResult,
 )
 from app.shared.api.schemas import Annotation, DatasetStorageMode
-from app.shared.db.registry import SampleFeatureORM
+from app.shared.db.registry import PredictionJobORM, SampleFeatureORM
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
 
 _SCAN_PARQUET_SCHEMES = ("s3://", "file://")
@@ -87,7 +88,7 @@ class SparseDatasetStorage:
         payload_store: DatasetPayloadStore,
         ls_client: LabelStudioClient | None = None,
         session_factory: async_sessionmaker | None = None,
-        repo: Any = None,
+        repo: DatasetRepository | None = None,
         dataset_type: str = "",
     ) -> None:
         self._dataset_id: str = dataset_id
@@ -96,7 +97,7 @@ class SparseDatasetStorage:
         self._payload_store: DatasetPayloadStore = payload_store
         self._ls_client: LabelStudioClient | None = ls_client
         self._session_factory: async_sessionmaker | None = session_factory
-        self._repo: Any = repo
+        self._repo: DatasetRepository | None = repo
         self._reader: SparseManifestReader = SparseManifestReader()
         self._annotations: SparseAnnotationStore = SparseAnnotationStore(storage)
         self._dataset_type: str = dataset_type
@@ -218,12 +219,32 @@ class SparseDatasetStorage:
             return lf
         return await self._read_parquet_uris_fallback(uris)
 
+    async def _resolve_latest_prediction_job_id(self) -> str | None:
+        if self._session_factory is None:
+            return None
+        async with self._session_factory() as session:
+            stmt = (
+                select(PredictionJobORM.id)
+                .where(
+                    PredictionJobORM.dataset_id == self._dataset_id,
+                    PredictionJobORM.status == "completed",
+                )
+                .order_by(PredictionJobORM.created_at.desc())
+                .limit(1)
+            )
+            if self._org_id:
+                stmt = stmt.where(PredictionJobORM.org_id == self._org_id)
+            return (await session.execute(stmt)).scalars().first()
+
     async def _prediction_lazyframe(
         self, prediction_job_id: str | None = None
     ) -> Any | None:
+        if prediction_job_id is None:
+            prediction_job_id = await self._resolve_latest_prediction_job_id()
+            if prediction_job_id is None:
+                return None
         prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
-        if prediction_job_id is not None:
-            prefix = f"{prefix}{prediction_job_id}/"
+        prefix = f"{prefix}{prediction_job_id}/"
         try:
             uris = await self._storage.list_prefix(prefix)
         except Exception:
@@ -628,9 +649,13 @@ class SparseDatasetStorage:
         """
         import pyarrow.parquet as pq
 
+        if prediction_job_id is None:
+            prediction_job_id = await self._resolve_latest_prediction_job_id()
+            if prediction_job_id is None:
+                return {}
+
         prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
-        if prediction_job_id is not None:
-            prefix = f"{prefix}{prediction_job_id}/"
+        prefix = f"{prefix}{prediction_job_id}/"
 
         try:
             uris = await self._storage.list_prefix(prefix)

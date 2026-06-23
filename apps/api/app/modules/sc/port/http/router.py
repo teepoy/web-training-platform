@@ -15,11 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
-from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
     get_dataset_storage_factory,
-    get_repository,
 )
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.sc.port.http.deps import (
@@ -1376,7 +1374,6 @@ async def sc_bulk_create_annotations(
     storage_factory: Annotated[
         DatasetStorageFactory, Depends(get_dataset_storage_factory)
     ],
-    repo: Annotated[DatasetRepository, Depends(get_repository)],
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
 ) -> ScBulkAnnotationResponse:
@@ -1393,6 +1390,8 @@ async def sc_bulk_create_annotations(
 
     created = 0
     created_labels: set[str] = set()
+    annotations_to_create: list[Annotation] = []
+    annotation_ids_to_delete: list[str] = []
     storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
@@ -1400,18 +1399,22 @@ async def sc_bulk_create_annotations(
             continue
         existing = await storage.list_annotations(sample_id=sample_id)
         if existing:
-            await storage.delete_annotations([ann.id for ann in existing if ann.id])
+            annotation_ids_to_delete.extend(ann.id for ann in existing if ann.id)
         if item.label == "0":
             continue
-        ann = Annotation(
-            id=__import__("uuid").uuid4().hex,
-            sample_id=sample_id,
-            label=item.label,
-            created_by=current_user.id,
+        annotations_to_create.append(
+            Annotation(
+                sample_id=sample_id,
+                label=item.label,
+                created_by=current_user.id,
+            )
         )
-        await dataset_reader.create_annotation(ann, dataset_id=dataset_id)
-        created += 1
         created_labels.add(item.label)
+
+    if annotation_ids_to_delete:
+        await storage.delete_annotations(annotation_ids_to_delete)
+    if annotations_to_create:
+        created = await storage.create_annotations(annotations_to_create)
 
     if created_labels:
         await dataset_service.merge_label_space(dataset_id, created_labels)
