@@ -101,6 +101,18 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     prefect_ui_url = os.getenv("PREFECT_UI_URL")
     if prefect_ui_url:
         cfg.prefect.ui_url = prefect_ui_url
+    redis_host = os.getenv("REDIS_HOST")
+    if redis_host:
+        cfg.redis.host = redis_host
+    redis_port = os.getenv("REDIS_PORT")
+    if redis_port:
+        cfg.redis.port = int(redis_port)
+    redis_db = os.getenv("REDIS_DB")
+    if redis_db:
+        cfg.redis.db = int(redis_db)
+    redis_password = os.getenv("REDIS_PASSWORD")
+    if redis_password:
+        cfg.redis.password = redis_password
     llm_base_url = os.getenv("LLM_BASE_URL")
     if llm_base_url:
         cfg.llm.base_url = llm_base_url

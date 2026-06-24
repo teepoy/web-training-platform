@@ -7,11 +7,12 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 from starlette.routing import compile_path
 
 from app.composition import build_app_context
+from app.modules.auth.app.services.auth_service import decode_access_token
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
@@ -24,6 +25,7 @@ from app.shared.api.schemas import (
 from app.core.config import load_config
 from app.core.logger import init_logging
 from app.shared.db.session import init_db
+from app.shared.infrastructure.metrics import online_jwt_users
 from app.shared.api.schemas import Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
 import app.registrations as _registrations  # noqa: F401
@@ -145,24 +147,29 @@ async def lifespan(api: FastAPI):
         _logger.error("Readiness check failed: postgres unreachable", exc_info=True)
         sys.exit(1)
 
-    # 2. Redis (if enabled)
-    if bool(getattr(cfg, "redis", None) and getattr(cfg.redis, "enabled", False)):
-        import redis.asyncio as redis_client  # type: ignore[import-untyped]
+    # 2. Redis-backed metrics (best effort)
+    import redis.asyncio as redis_client  # type: ignore[import-untyped]
 
-        try:
-            r = redis_client.Redis(
-                host=str(cfg.redis.host),
-                port=int(cfg.redis.port),
-                password=str(cfg.redis.password) if cfg.redis.password else None,
-                db=int(cfg.redis.db),
-                socket_connect_timeout=5,
-            )
-            await r.ping()  # type: ignore[awaitable]
-            await r.close()
-            _logger.info("Readiness check passed: redis")
-        except Exception:
-            _logger.error("Readiness check failed: redis unreachable", exc_info=True)
-            sys.exit(1)
+    metrics_redis: Any | None = None
+    try:
+        metrics_redis = redis_client.Redis(
+            host=str(cfg.redis.host),
+            port=int(cfg.redis.port),
+            password=str(cfg.redis.password) if cfg.redis.password else None,
+            db=int(cfg.redis.db),
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
+        await metrics_redis.ping()  # type: ignore[awaitable]
+        online_jwt_users.configure_redis(metrics_redis)
+        _logger.info("Metrics Redis configured")
+    except Exception:
+        if metrics_redis is not None:
+            await metrics_redis.aclose()
+        online_jwt_users.configure_redis(None)
+        _logger.warning(
+            "Metrics Redis unavailable; falling back to per-process counters"
+        )
 
     # 3. Label Studio
     ls_url = str(cfg.label_studio.url)
@@ -202,6 +209,7 @@ async def lifespan(api: FastAPI):
     try:
         yield
     finally:
+        await online_jwt_users.close()
         prefect_close = getattr(ctx.shared.prefect_client, "close", None)
         if prefect_close is not None:
             await prefect_close()
@@ -217,6 +225,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def collect_online_jwt_users(request: Request, call_next: Any) -> Response:
+    token: str | None = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    elif "token" in request.query_params:
+        token = request.query_params["token"]
+
+    if token and not token.startswith("ftp_"):
+        try:
+            payload = decode_access_token(token)
+            user_id = payload.get("sub")
+            if isinstance(user_id, str):
+                await online_jwt_users.observe_user(user_id)
+        except Exception:
+            pass
+
+    response = await call_next(request)
+    return response
+
+
 for r in [*MODULE_ROUTERS, *EXTENSION_ROUTERS]:
     _strip_api_prefix(r)
     app.include_router(r, prefix="/api/v1")
@@ -230,6 +261,14 @@ for r in [*MODULE_ROUTERS, *EXTENSION_ROUTERS]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    return Response(
+        content=await online_jwt_users.render_prometheus(),
+        media_type=online_jwt_users.content_type,
+    )
 
 
 @app.get(
