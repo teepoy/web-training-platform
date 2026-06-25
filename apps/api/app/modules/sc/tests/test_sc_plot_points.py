@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 
 import polars as pl
@@ -14,6 +15,7 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     ScPlotPointsService,
+    _apply_sample_table_sort,
 )
 from app.modules.sc.port.http.deps import get_sc_plot_points_service
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
@@ -40,6 +42,19 @@ def _decode_int32le(body: bytes) -> list[int]:
         int.from_bytes(body[i : i + 4], "little", signed=True)
         for i in range(0, len(body), 4)
     ]
+
+
+@pytest.mark.asyncio
+async def test_dataset_sample_table_sort_orders_defect_id_numerically() -> None:
+    lf = pl.DataFrame({"defect_id": ["1", "10", "2"]}).lazy()
+
+    sorted_df = await _apply_sample_table_sort(
+        lf,
+        SimpleNamespace(field="defect_id", direction="asc"),
+        requested=None,
+    ).collect_async()
+
+    assert sorted_df["defect_id"].to_list() == ["1", "2", "10"]
 
 
 def test_plot_points_happy_path_100_samples() -> None:

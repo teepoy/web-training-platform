@@ -61,10 +61,7 @@ function canvasPixelRatio(): number {
   return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 }
 
-function prepareCanvas(
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-): void {
+function prepareCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
   const dpr = canvasPixelRatio();
   const width = Math.max(1, Math.round(canvasW * dpr));
   const height = Math.max(1, Math.round(canvasH * dpr));
@@ -141,8 +138,8 @@ function recalcTransform() {
 
   if (props.zoom) {
     const z = props.zoom;
-    const scaleX = (canvasW * 0.95) / z.w;
-    const scaleY = (canvasH * 0.95) / z.h;
+    const scaleX = canvasW / z.w;
+    const scaleY = canvasH / z.h;
     scale = Math.min(scaleX, scaleY);
     offsetX = -(z.x + z.w / 2);
     offsetY = -(z.y + z.h / 2);
@@ -156,7 +153,6 @@ function recalcTransform() {
   const viewMaxX = (canvasW - cx) / scale - offsetX;
   const viewMinY = -(canvasH - cy) / scale - offsetY;
   const viewMaxY = cy / scale - offsetY;
-
 }
 
 function dataToScreen(x: number, y: number): [number, number] {
@@ -316,7 +312,10 @@ function renderPoints() {
   }
 
   // Pass 1 — defect pixels: exactly (wx - 1, wy), (wx, wy), (wx - 1, wy + 1), (wx, wy + 1).
-  for (const [label, group] of groups) {
+  const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
+    left.localeCompare(right, undefined, { numeric: true }),
+  );
+  for (const [label, group] of sortedGroups) {
     ctx.fillStyle = props.colorMap[label] ?? "rgb(255, 0, 0)";
     ctx.beginPath();
     for (const p of group) {
@@ -334,7 +333,7 @@ function renderPoints() {
     if (!p.hasImageFlag) continue;
     const [sx, sy] = dataToScreen(p.x, p.y);
     const [cx, cy] = screenPixel(sx, sy);
-    ctx.strokeRect(cx - 1.5, cy - 2.5, 5, 5);
+    ctx.strokeRect(cx - 3, cy - 2, 5, 5);
   }
 
   // Pass 3 — selected crosshair above all point markers.
@@ -360,8 +359,10 @@ function draw() {
   if (!ctx) return;
   prepareCanvas(canvas, ctx);
   ctx.clearRect(0, 0, canvasW, canvasH);
-  if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
-  if (ptCanvas) ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
+  if (bgCanvas)
+    ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
+  if (ptCanvas)
+    ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
 }
 
 function fullRender() {
@@ -369,14 +370,16 @@ function fullRender() {
 
   const pts = props.points;
   if (pts.length > 0) {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
     for (const p of pts) {
       if (p.x < minX) minX = p.x;
       if (p.x > maxX) maxX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-
   }
 
   renderBackground();
@@ -462,7 +465,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.swm { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.swm {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .swm-empty-overlay {
   position: absolute;

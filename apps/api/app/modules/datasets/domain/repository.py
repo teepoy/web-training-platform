@@ -37,6 +37,14 @@ class DatasetRepository(Protocol):
         meta_update: dict,
     ) -> Dataset | None: ...
 
+    async def rename_dataset(
+        self,
+        dataset_id: str,
+        *,
+        name: str,
+        org_id: str | None = None,
+    ) -> Dataset | None: ...
+
     async def set_dataset_public(
         self,
         dataset_id: str,

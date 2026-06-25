@@ -35,15 +35,7 @@
 <script setup lang="ts">
 import { computed, h, reactive, ref, watch } from "vue";
 import type { DataTableColumns, PaginationProps } from "naive-ui";
-import {
-  NButton,
-  NDataTable,
-  NInput,
-  NSelect,
-  NTag,
-  NText,
-  NSpace,
-} from "naive-ui";
+import { NButton, NDataTable, NInput, NSelect, NTag, NText, NSpace } from "naive-ui";
 import { DatasetToolbar } from "@/shared";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
@@ -62,6 +54,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   view: [id: string];
   "toggle-public": [payload: { id: string; isPublic: boolean }];
+  rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
 }>();
 
@@ -114,9 +107,7 @@ const creatorFilter = ref<string | null>(null);
 
 const creatorOptions = computed(() =>
   Array.from(new Set(props.datasets.map(resolveCreator)))
-    .sort((left, right) =>
-      left.localeCompare(right, undefined, { numeric: true }),
-    )
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
     .map((creator) => ({ label: creator, value: creator })),
 );
 
@@ -145,117 +136,112 @@ const filteredDatasets = computed(() => {
   });
 });
 
-const columns = computed<DataTableColumns<DatasetListItem>>(
-  () => [
-    {
-      title: "Name",
-      key: "name",
-      width: 220,
-      sorter: "default",
-      filterOptionValue: null,
-      filterOptions: Array.from(new Set(props.datasets.map((row) => row.name)))
-        .sort((left, right) =>
-          left.localeCompare(right, undefined, { numeric: true }),
-        )
-        .map((name) => ({
-          label: name,
-          value: name,
-        })),
-      filter(value, row) {
-        return row.name === value;
-      },
-      render(row) {
-        return h(
-          NText,
-          { style: "font-weight: 500" },
-          { default: () => row.name },
-        );
-      },
+const columns = computed<DataTableColumns<DatasetListItem>>(() => [
+  {
+    title: "Name",
+    key: "name",
+    width: 220,
+    sorter: "default",
+    filterOptionValue: null,
+    filterOptions: Array.from(new Set(props.datasets.map((row) => row.name)))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+      .map((name) => ({
+        label: name,
+        value: name,
+      })),
+    filter(value, row) {
+      return row.name === value;
     },
-    {
-      title: "Task Type",
-      key: "task_type",
-      width: 150,
-      render() {
-        return h(
-          NTag,
-          { type: "info", size: "small", bordered: false },
-          { default: () => "Patch" },
-        );
-      },
+    render(row) {
+      return h(NText, { style: "font-weight: 500" }, { default: () => row.name });
     },
-    {
-      title: "Samples",
-      key: "sample_count",
-      width: 100,
-      sorter: (left, right) =>
-        Number(resolveSampleCount(left)) - Number(resolveSampleCount(right)),
-      render(row) {
-        return h(NText, {}, { default: () => resolveSampleCount(row) });
-      },
+  },
+  {
+    title: "Task Type",
+    key: "task_type",
+    width: 150,
+    render() {
+      return h(NTag, { type: "info", size: "small", bordered: false }, { default: () => "Patch" });
     },
-    {
-      title: "Creator",
-      key: "created_by",
-      width: 160,
-      sorter: "default",
-      filterOptions: creatorOptions.value,
-      filter(value, row) {
-        return resolveCreator(row) === value;
-      },
-      render(row) {
-        return h(NText, {}, { default: () => resolveCreator(row) });
-      },
+  },
+  {
+    title: "Samples",
+    key: "sample_count",
+    width: 100,
+    sorter: (left, right) => Number(resolveSampleCount(left)) - Number(resolveSampleCount(right)),
+    render(row) {
+      return h(NText, {}, { default: () => resolveSampleCount(row) });
     },
-    {
-      title: "Create Time",
-      key: "created_at",
-      width: 180,
-      sorter: (left, right) =>
-        new Date(left.created_at).getTime() -
-        new Date(right.created_at).getTime(),
-      render(row) {
-        return h(NText, {}, { default: () => formatCreateTime(row.created_at) });
-      },
+  },
+  {
+    title: "Creator",
+    key: "created_by",
+    width: 160,
+    sorter: "default",
+    filterOptions: creatorOptions.value,
+    filter(value, row) {
+      return resolveCreator(row) === value;
     },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 150,
-      render(row) {
-        return h(
-          NSpace,
-          { size: 6, wrap: false },
-          {
-            default: () => [
-              h(
-                NButton,
-                {
-                  size: "small",
-                  quaternary: true,
-                  onClick: () => emit("view", row.id),
-                },
-                { default: () => "View" },
-              ),
-              row.created_by === props.currentUserId
-                ? h(
-                    NButton,
-                    {
-                      size: "small",
-                      quaternary: true,
-                      type: "error",
-                      onClick: () => emit("delete", row),
-                    },
-                    { default: () => "Delete" },
-                  )
-                : null,
-            ],
-          },
-        );
-      },
+    render(row) {
+      return h(NText, {}, { default: () => resolveCreator(row) });
     },
-  ],
-);
+  },
+  {
+    title: "Create Time",
+    key: "created_at",
+    width: 180,
+    sorter: (left, right) =>
+      new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+    render(row) {
+      return h(NText, {}, { default: () => formatCreateTime(row.created_at) });
+    },
+  },
+  {
+    title: "Actions",
+    key: "actions",
+    width: 150,
+    render(row) {
+      return h(
+        NSpace,
+        { size: 6, wrap: false },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: "small",
+                quaternary: true,
+                onClick: () => emit("view", row.id),
+              },
+              { default: () => "View" },
+            ),
+            h(
+              NButton,
+              {
+                size: "small",
+                quaternary: true,
+                onClick: () => emit("rename", row),
+              },
+              { default: () => "Rename" },
+            ),
+            row.created_by === props.currentUserId
+              ? h(
+                  NButton,
+                  {
+                    size: "small",
+                    quaternary: true,
+                    type: "error",
+                    onClick: () => emit("delete", row),
+                  },
+                  { default: () => "Delete" },
+                )
+              : null,
+          ],
+        },
+      );
+    },
+  },
+]);
 </script>
 
 <style scoped>

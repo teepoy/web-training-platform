@@ -382,6 +382,7 @@ export * from './trainingJobExternalJobId';
 export * from './trainingJobOrgId';
 export * from './uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet200';
 export * from './updateAnnotationRequest';
+export * from './updateDatasetRequest';
 export * from './updateEmbedConfigRequest';
 export * from './updateLabelSpaceRequest';
 export * from './updateModelRequest';

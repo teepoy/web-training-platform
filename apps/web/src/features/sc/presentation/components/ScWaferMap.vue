@@ -105,7 +105,7 @@ function recalcTransform() {
   const cx = props.geometry?.centerX ?? 0;
   const cy = props.geometry?.centerY ?? 0;
   if (props.zoom) {
-    transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 0.95);
+    transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 1.0);
   } else {
     const radius = waferRadiusNm.value;
     transform = buildMapTransform(
@@ -306,9 +306,7 @@ watch(
 
 <template>
   <div ref="containerRef" class="swm-wrap">
-    <div v-if="pointCount === 0" class="swm-empty">No points</div>
     <SimpleWaferMap
-      v-else
       :points="simplePoints"
       :colorMap="props.colorMap ?? {}"
       :zoom="props.zoom ?? undefined"
@@ -330,9 +328,6 @@ watch(
       @pointerleave="onPointerUp"
       @dblclick="onDblClick"
     />
-    <div v-if="pointCount > 0" class="swm-footer">
-      {{ pointCount }} {{ pointCount === 1 ? "point" : "points" }}
-    </div>
   </div>
 </template>
 
@@ -351,24 +346,5 @@ watch(
   pointer-events: auto;
   touch-action: none;
   z-index: 1;
-}
-.swm-empty {
-  display: grid;
-  flex: 1;
-  place-items: center;
-  color: var(--text-color-3, #888);
-  font-size: 12px;
-}
-.swm-footer {
-  padding: 6px;
-  color: #888;
-  font-size: 12px;
-  text-align: center;
-}
-.swm-footer {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
 }
 </style>

@@ -148,8 +148,8 @@ const previousDefaultColorMap = ref<Record<string, string>>({});
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
-    class: "Class Mapping",
-    bin: "Rough Bin Mapping",
+    class: "Class",
+    bin: "Rough Bin",
     annotation: "Annotation",
     prediction: "Prediction (Latest)",
   };

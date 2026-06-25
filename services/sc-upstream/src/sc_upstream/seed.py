@@ -4,7 +4,7 @@ import argparse
 import math
 import os
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -238,9 +238,12 @@ def seed_single_summary_mass(
     origin_y = 145_000_000
 
     wafer_key = 1
-    lot_id = "LOT-2026-001"
-    wafer_id = "WAF-001"
-    inspection_time = datetime(2026, 5, 26, 8, 0, 0, tzinfo=timezone.utc)
+    lot_id = "A123456"
+    wafer_id = "24"
+    now = datetime.now().astimezone()
+    inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
+    if now < inspection_time:
+        inspection_time -= timedelta(days=1)
     total_images = imaged_defects * images_per_defect
 
     summary = _make_summary(

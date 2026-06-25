@@ -65,6 +65,7 @@ export interface BuildDatasetColumnsOptions<TDataset extends DatasetListItem = D
   onViewDataset: (datasetId: string) => void;
   onTogglePublic: (payload: { id: string; isPublic: boolean }) => void;
   onDeleteDataset: (dataset: TDataset) => void;
+  onRenameDataset?: (datasetId: string, name: string) => void;
 }
 
 export interface UseDatasetListSurfaceOptions<
@@ -83,6 +84,7 @@ export interface UseDatasetListSurfaceOptions<
   onViewDataset: (datasetId: string) => void;
   onTogglePublic: (payload: { id: string; isPublic: boolean }) => void;
   onDeleteDataset: (dataset: TDataset) => void;
+  onRenameDataset?: (datasetId: string, name: string) => void;
 }
 
 export interface UseDatasetListSurfaceResult<TDataset extends DatasetListItem = DatasetListItem> {

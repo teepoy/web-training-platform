@@ -12,7 +12,7 @@ import io
 import os
 import struct
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import zlib
 
 import boto3
@@ -194,16 +194,22 @@ def main() -> None:
     )
     parser.add_argument("--defects-per-zip", type=int, default=DEFECTS_PER_ZIP)
     parser.add_argument("--wafer-key", type=int, default=1)
-    parser.add_argument("--inspection-time", default="2026-05-26T08:00:00+00:00")
-    parser.add_argument("--lot-id", default="LOT-2026-001")
-    parser.add_argument("--wafer-id", default="WAF-001")
+    parser.add_argument("--inspection-time", default=None)
+    parser.add_argument("--lot-id", default="A123456")
+    parser.add_argument("--wafer-id", default="24")
     parser.add_argument("--device", default="DEVICE-DEMO-A")
     parser.add_argument("--layer-id", default="LAYER-M1")
     args = parser.parse_args()
 
-    inspection_time = datetime.fromisoformat(args.inspection_time)
-    if inspection_time.tzinfo is None:
-        inspection_time = inspection_time.replace(tzinfo=timezone.utc)
+    if args.inspection_time:
+        inspection_time = datetime.fromisoformat(args.inspection_time)
+        if inspection_time.tzinfo is None:
+            inspection_time = inspection_time.replace(tzinfo=timezone.utc)
+    else:
+        now = datetime.now().astimezone()
+        inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
+        if now < inspection_time:
+            inspection_time -= timedelta(days=1)
 
     s3 = boto3.client(
         "s3",

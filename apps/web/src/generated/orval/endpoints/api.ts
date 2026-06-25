@@ -169,6 +169,7 @@ import type {
   TrainingJob,
   UncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet200,
   UpdateAnnotationRequest,
+  UpdateDatasetRequest,
   UpdateEmbedConfigRequest,
   UpdateLabelSpaceRequest,
   UpdateModelRequest,
@@ -896,6 +897,83 @@ export const useDeleteDatasetApiV1DatasetsDatasetIdDelete = <TError = HTTPValida
       > => {
 
       const mutationOptions = getDeleteDatasetApiV1DatasetsDatasetIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Update Dataset
+ */
+export type updateDatasetApiV1DatasetsDatasetIdPatchResponse = {
+  data: Dataset | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getUpdateDatasetApiV1DatasetsDatasetIdPatchUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/datasets/${datasetId}`
+}
+
+export const updateDatasetApiV1DatasetsDatasetIdPatch = async (datasetId: string,
+    updateDatasetRequest: UpdateDatasetRequest, options?: RequestInit): Promise<updateDatasetApiV1DatasetsDatasetIdPatchResponse> => {
+
+  return orvalFetcher<updateDatasetApiV1DatasetsDatasetIdPatchResponse>(getUpdateDatasetApiV1DatasetsDatasetIdPatchUrl(datasetId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateDatasetRequest,)
+  }
+);}
+
+
+
+
+export const getUpdateDatasetApiV1DatasetsDatasetIdPatchMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>, TError,{datasetId: string;data: UpdateDatasetRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>, TError,{datasetId: string;data: UpdateDatasetRequest}, TContext> => {
+
+const mutationKey = ['updateDatasetApiV1DatasetsDatasetIdPatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>, {datasetId: string;data: UpdateDatasetRequest}> = (props) => {
+          const {datasetId,data} = props ?? {};
+
+          return  updateDatasetApiV1DatasetsDatasetIdPatch(datasetId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDatasetApiV1DatasetsDatasetIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>>
+    export type UpdateDatasetApiV1DatasetsDatasetIdPatchMutationBody = UpdateDatasetRequest
+    export type UpdateDatasetApiV1DatasetsDatasetIdPatchMutationError = HTTPValidationError
+
+    /**
+ * @summary Update Dataset
+ */
+export const useUpdateDatasetApiV1DatasetsDatasetIdPatch = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>, TError,{datasetId: string;data: UpdateDatasetRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof updateDatasetApiV1DatasetsDatasetIdPatch>>,
+        TError,
+        {datasetId: string;data: UpdateDatasetRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getUpdateDatasetApiV1DatasetsDatasetIdPatchMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

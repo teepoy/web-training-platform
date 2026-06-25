@@ -1058,6 +1058,11 @@ def _apply_sample_table_sort(
     if sort_params:
         sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
         if sort_field is not None and sort_field in samples_df.columns:
+            if sort_params.field == "defect_id":
+                return samples_df.sort(
+                    pl.col(sort_field).cast(pl.Int64),
+                    descending=(sort_params.direction == "desc"),
+                )
             return samples_df.sort(
                 sort_field, descending=(sort_params.direction == "desc")
             )
@@ -1074,7 +1079,7 @@ def _apply_sample_table_sort(
             .drop("_request_order")
         )
     return (
-        samples_df.sort("defect_id")
+        samples_df.sort(pl.col("defect_id").cast(pl.Int64))
         if "defect_id" in samples_df.columns
         else samples_df
     )

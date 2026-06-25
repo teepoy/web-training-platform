@@ -106,6 +106,14 @@ describe("ScSampleTable", () => {
     expect(dataColumns).toHaveLength(19);
     expect(dataColumns.every((column) => column.sorter === true)).toBe(true);
 
+    const defectIdColumn = dataColumns.find((column) => column.key === "defect_id");
+    expect(defectIdColumn?.filterOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "1", value: 1 }),
+        expect.objectContaining({ label: "2", value: 2 }),
+      ]),
+    );
+
     const roughBinColumn = dataColumns.find((column) => column.key === "rough_bin");
     expect(roughBinColumn?.filterOptionValues).toEqual([2]);
     expect(roughBinColumn?.filterOptions).toEqual(
@@ -145,5 +153,26 @@ describe("ScSampleTable", () => {
     await flushPromises();
 
     expect(wrapper.emitted("selection-change")).toBeUndefined();
+  });
+
+  it("emits table selection only when selection is enabled", async () => {
+    const { wrapper } = await mountWithProviders(ScSampleTable, {
+      props: {
+        dataSource: dataSource([makeRow(1), makeRow(2)]),
+        loading: false,
+        total: 2,
+        enableSelection: true,
+      },
+    });
+    await flushPromises();
+
+    const table = wrapper.findComponent({ name: "DataTable" });
+    const columns = table.props("columns") as Array<Record<string, unknown>>;
+    expect(columns.some((column) => column.type === "selection")).toBe(true);
+
+    table.vm.$emit("update:checked-row-keys", [1, 2]);
+    await flushPromises();
+
+    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual([1, 2]);
   });
 });

@@ -37,6 +37,7 @@ const props = defineProps<{
   reticleYDieShift?: number;
   showReclassifyColumns?: boolean;
   showGlobalFilterAction?: boolean;
+  globalFilterActionEnabled?: boolean;
   enableSelection?: boolean;
 }>();
 
@@ -57,7 +58,13 @@ interface ColumnDefinition {
 }
 
 const columnDefinitions: ColumnDefinition[] = [
-  { key: "defect_id", title: "Defect ID", width: 130, filter: "set" },
+  {
+    key: "defect_id",
+    title: "Defect ID",
+    width: 130,
+    filter: "set",
+    render: (row) => String(Number(row.defect_id)),
+  },
   { key: "test_id", title: "Test ID", width: 120, filter: "set" },
   { key: "index_x", title: "Index X", width: 120, filter: "range" },
   { key: "index_y", title: "Index Y", width: 120, filter: "range" },
@@ -125,13 +132,24 @@ const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
 const filterState = ref<Record<string, { min: number | null; max: number | null }>>({});
 const setFilterSearch = ref<Record<string, string>>({});
+const setFilterDraft = ref<Record<string, Set<string>>>({});
 const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
 let requestVersion = 0;
 
 const hasMore = computed(() => nextAnchor.value !== null);
 const checkedRowKeys = computed<DataTableRowKey[]>(() => Array.from(selectedIds.value));
-const hasActiveFilter = computed(() => Object.keys(props.filter ?? {}).length > 0);
+const hasAnyFilter = computed(() => Object.keys(props.filter ?? {}).length > 0);
+const globalFilterActionEnabled = computed(() => props.globalFilterActionEnabled === true);
+const clearFilterActionEnabled = computed(() =>
+  props.showGlobalFilterAction ? globalFilterActionEnabled.value : hasAnyFilter.value,
+);
 const selectionEnabled = computed(() => props.enableSelection === true);
+
+function normalizeFilterValue(field: string, value: string | number): string | number {
+  if (field !== "defect_id") return value;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : value;
+}
 
 function getFilterState(field: string): {
   min: number | null;
@@ -165,6 +183,13 @@ function clearFilter(field: string): void {
   emit("filter-change", next);
 }
 
+function clearAllFilters(): void {
+  setFilterSearch.value = {};
+  setFilterDraft.value = {};
+  filterState.value = {};
+  emit("filter-change", {});
+}
+
 function handleSorter(sortState: DataTableSortState | null): void {
   if (!sortState || sortState.order === false) {
     emit("sort-change", {
@@ -181,7 +206,9 @@ function handleSorter(sortState: DataTableSortState | null): void {
 
 function getSetFilterValues(field: string): Array<string | number> {
   const filter = props.filter?.[field];
-  return filter?.operator === "in" ? filter.values : [];
+  return filter?.operator === "in"
+    ? filter.values.map((value) => normalizeFilterValue(field, value))
+    : [];
 }
 
 function getRangeFilterValues(field: string): number[] {
@@ -193,10 +220,12 @@ function getSetFilterOptions(definition: ColumnDefinition) {
   const field = definition.key;
   const values = new Map<string, string | number>();
   for (const value of discoveredSetFilterValues.value[String(field)] ?? []) {
-    values.set(String(value), value);
+    const normalized = normalizeFilterValue(String(field), value);
+    values.set(String(normalized), normalized);
   }
   for (const value of getSetFilterValues(String(field))) {
-    values.set(String(value), value);
+    const normalized = normalizeFilterValue(String(field), value);
+    values.set(String(normalized), normalized);
   }
   return Array.from(values.values())
     .sort((left, right) =>
@@ -214,7 +243,10 @@ function applySetFilter(field: string, values: Array<string | number>): void {
   if (values.length === 0) {
     delete next[field];
   } else {
-    next[field] = { operator: "in", values };
+    next[field] = {
+      operator: "in",
+      values: values.map((value) => normalizeFilterValue(field, value)),
+    };
   }
   emit("filter-change", next);
 }
@@ -222,10 +254,41 @@ function applySetFilter(field: string, values: Array<string | number>): void {
 function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
   const field = String(definition.key);
   const search = (setFilterSearch.value[field] ?? "").trim().toLowerCase();
-  const selected = new Set(getSetFilterValues(field).map(String));
-  const options = getSetFilterOptions(definition).filter((option) =>
-    search.length === 0 ? true : option.label.toLowerCase().includes(search),
-  );
+  const isSearching = search.length > 0;
+  const appliedValues = new Set(getSetFilterValues(field).map(String));
+
+  if (!setFilterDraft.value[field]) {
+    setFilterDraft.value[field] = new Set(appliedValues);
+  }
+  function draftForField(): Set<string> {
+    return setFilterDraft.value[field] ?? new Set<string>();
+  }
+
+  const allOptions = getSetFilterOptions(definition);
+  const options = isSearching
+    ? allOptions.filter((option) => option.label.toLowerCase().includes(search))
+    : allOptions.filter((option) => appliedValues.has(String(option.value)));
+
+  function commitDraft() {
+    const valuesByKey = new Map<string, string | number>();
+    for (const item of allOptions) valuesByKey.set(String(item.value), item.value);
+    const vals = Array.from(draftForField())
+      .map((key) => valuesByKey.get(key))
+      .filter(
+        (value): value is string | number => typeof value === "string" || typeof value === "number",
+      );
+    applySetFilter(field, vals);
+    hide();
+  }
+
+  function resetDraft() {
+    setFilterSearch.value[field] = "";
+    setFilterDraft.value[field] = new Set(appliedValues);
+  }
+
+  function clearDraft() {
+    setFilterDraft.value[field] = new Set();
+  }
 
   return h("div", { class: "sst-filter-popover sst-filter-popover--set" }, [
     h(NInput, {
@@ -246,33 +309,30 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
               NCheckbox,
               {
                 key: String(option.value),
-                checked: selected.has(String(option.value)),
+                class: "sst-set-filter-option",
+                checked: draftForField().has(String(option.value)),
                 "onUpdate:checked": (checked: boolean) => {
-                  const current = getSetFilterValues(field);
-                  const currentKeys = new Set(current.map(String));
+                  const next = new Set(draftForField());
                   const optionKey = String(option.value);
-                  if (checked) currentKeys.add(optionKey);
-                  else currentKeys.delete(optionKey);
-                  const valuesByKey = new Map<string, string | number>();
-                  for (const item of current) valuesByKey.set(String(item), item);
-                  for (const item of getSetFilterOptions(definition)) {
-                    valuesByKey.set(String(item.value), item.value);
-                  }
-                  applySetFilter(
-                    field,
-                    Array.from(currentKeys)
-                      .map((key) => valuesByKey.get(key))
-                      .filter(
-                        (value): value is string | number =>
-                          typeof value === "string" || typeof value === "number",
-                      ),
-                  );
+                  if (checked) next.add(optionKey);
+                  else next.delete(optionKey);
+                  setFilterDraft.value[field] = next;
                 },
               },
               () => option.label,
             ),
           )
-        : [h(NText, { depth: 3, class: "sst-set-filter-empty" }, () => "No matches")],
+        : isSearching
+          ? [h(NText, { depth: 3, class: "sst-set-filter-empty" }, () => "No matches")]
+          : appliedValues.size > 0
+            ? []
+            : [
+                h(
+                  NText,
+                  { depth: 3, class: "sst-set-filter-empty" },
+                  () => "Type to search for options",
+                ),
+              ],
     ),
     h(NSpace, { size: 4 }, () => [
       h(
@@ -280,9 +340,7 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
         {
           size: "tiny",
           quaternary: true,
-          onClick: () => {
-            setFilterSearch.value[field] = "";
-          },
+          onClick: resetDraft,
         },
         () => "Reset",
       ),
@@ -291,10 +349,7 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
         {
           size: "tiny",
           quaternary: true,
-          onClick: () => {
-            applySetFilter(field, []);
-            hide();
-          },
+          onClick: clearDraft,
         },
         () => "Clear",
       ),
@@ -303,9 +358,9 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
         {
           size: "tiny",
           type: "primary",
-          onClick: () => hide(),
+          onClick: commitDraft,
         },
-        () => "Done",
+        () => "Apply",
       ),
     ]),
   ]);
@@ -496,12 +551,16 @@ async function fetchNextPage(): Promise<void> {
       if (definition.filter !== "set") continue;
       const field = String(definition.key);
       const values = new Map(
-        (discoveredSetFilterValues.value[field] ?? []).map((value) => [String(value), value]),
+        (discoveredSetFilterValues.value[field] ?? []).map((value) => {
+          const normalized = normalizeFilterValue(field, value);
+          return [String(normalized), normalized];
+        }),
       );
       for (const row of response.items) {
         const value = row[definition.key];
         if (typeof value === "string" || typeof value === "number") {
-          values.set(String(value), value);
+          const normalized = normalizeFilterValue(field, value);
+          values.set(String(normalized), normalized);
         }
       }
       discoveredSetFilterValues.value[field] = Array.from(values.values());
@@ -696,13 +755,16 @@ defineExpose({
           Clear Selection ({{ selectedIds.size }})
         </NButton>
         <NButton
-          v-if="showGlobalFilterAction && hasActiveFilter"
+          v-if="showGlobalFilterAction && globalFilterActionEnabled"
           size="tiny"
           quaternary
           type="primary"
           @click="applyFilterAsGlobal"
         >
           Set Filter as Global
+        </NButton>
+        <NButton v-if="clearFilterActionEnabled" size="tiny" quaternary @click="clearAllFilters">
+          {{ showGlobalFilterAction ? "Clear Table Filter" : "Clear All Filters" }}
         </NButton>
         <NButton
           v-if="selectionEnabled && selectedIds.size > 0"
@@ -821,10 +883,12 @@ defineExpose({
   flex-direction: column;
   gap: 8px;
   padding: 8px;
+  max-width: min(320px, calc(100vw - 48px));
+  min-width: 0;
 }
 
 .sst-filter-popover--set {
-  width: 220px;
+  width: 260px;
 }
 
 .sst-set-filter-options {
@@ -832,7 +896,23 @@ defineExpose({
   flex-direction: column;
   gap: 4px;
   max-height: 220px;
+  min-width: 0;
+  max-width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+:deep(.sst-set-filter-option) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:deep(.sst-set-filter-option .n-checkbox__label) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sst-set-filter-empty {

@@ -8,7 +8,7 @@
           </template>
           <template v-else-if="isSettingsRoute || isAdminRoute">
             <RouterView />
-            <!-- Global Agent Chat Drawer (available on settings/admin pages too) -->
+            <!-- TODO: re-enable Agent Chat Drawer
             <AgentChatDrawer
               :messages="globalAgent.messages.value"
               :status="globalAgent.status.value"
@@ -16,6 +16,7 @@
               @abort="globalAgent.abort"
               @clear="globalAgent.clearHistory"
             />
+            -->
           </template>
           <template v-else>
             <n-layout has-sider style="height: 100vh">
@@ -37,21 +38,61 @@
                 />
               </n-layout-sider>
               <n-layout vertical>
-                <n-layout-header v-if="showAppHeader" bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
+                <n-layout-header
+                  v-if="showAppHeader"
+                  bordered
+                  style="
+                    height: 48px;
+                    display: flex;
+                    align-items: center;
+                    padding: 0 16px;
+                    gap: 12px;
+                  "
+                >
                   <span style="font-weight: 600; flex: 1">ML Training Platform</span>
-                  <n-button text @click="uiStore.toggleDarkMode">{{ uiStore.darkMode ? '☀' : '🌙' }}</n-button>
+                  <n-button text @click="uiStore.toggleDarkMode">{{
+                    uiStore.darkMode ? "☀" : "🌙"
+                  }}</n-button>
                   <!-- External service links -->
                   <template v-if="isAdmin">
-                    <n-button tag="a" :href="labelStudioUrl" target="_blank" text type="primary" size="small">
+                    <n-button
+                      tag="a"
+                      :href="labelStudioUrl"
+                      target="_blank"
+                      text
+                      type="primary"
+                      size="small"
+                    >
                       Label Studio ↗
                     </n-button>
-                    <n-button tag="a" :href="prefectUrl" target="_blank" text type="primary" size="small">
+                    <n-button
+                      tag="a"
+                      :href="prefectUrl"
+                      target="_blank"
+                      text
+                      type="primary"
+                      size="small"
+                    >
                       Prefect ↗
                     </n-button>
-                    <n-button tag="a" :href="minioUrl" target="_blank" text type="primary" size="small">
+                    <n-button
+                      tag="a"
+                      :href="minioUrl"
+                      target="_blank"
+                      text
+                      type="primary"
+                      size="small"
+                    >
                       MinIO ↗
                     </n-button>
-                    <n-button tag="a" :href="pgAdminUrl" target="_blank" text type="primary" size="small">
+                    <n-button
+                      tag="a"
+                      :href="pgAdminUrl"
+                      target="_blank"
+                      text
+                      type="primary"
+                      size="small"
+                    >
                       pgAdmin ↗
                     </n-button>
                   </template>
@@ -60,23 +101,20 @@
                     :options="avatarDropdownOptions"
                     @select="handleAvatarSelect"
                   >
-                    <n-avatar
-                      round
-                      size="small"
-                      style="cursor: pointer"
-                      data-testid="nav-avatar"
-                    >{{ userInitials }}</n-avatar>
+                    <n-avatar round size="small" style="cursor: pointer" data-testid="nav-avatar">{{
+                      userInitials
+                    }}</n-avatar>
                   </n-dropdown>
                 </n-layout-header>
                 <n-layout-content :style="contentStyle">
-                  <div style="flex: 1; min-height: 0;">
+                  <div style="flex: 1; min-height: 0">
                     <RouterView />
                   </div>
                   <n-back-top />
                 </n-layout-content>
               </n-layout>
             </n-layout>
-            <!-- Global Agent Chat Drawer (available on all authenticated pages) -->
+            <!-- TODO: re-enable Agent Chat Drawer
             <AgentChatDrawer
               :messages="globalAgent.messages.value"
               :status="globalAgent.status.value"
@@ -84,6 +122,7 @@
               @abort="globalAgent.abort"
               @clear="globalAgent.clearHistory"
             />
+            -->
           </template>
         </n-dialog-provider>
       </n-notification-provider>
@@ -97,11 +136,12 @@ import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
 import { AlbumsOutline, CubeOutline, ImagesOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
-import { useUiStore } from '@/features/auth/application/ui';
-import { useAuthStore } from '@/features/auth/application/store';
-import { useOrgStore } from '@/features/auth/application/org';
+import { useUiStore } from "@/features/auth/application/ui";
+import { useAuthStore } from "@/features/auth/application/store";
+import { useOrgStore } from "@/features/auth/application/org";
 import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
-import { AgentChatDrawer } from "@/shared";
+// TODO: re-enable Agent Chat Drawer
+// import { AgentChatDrawer } from "@/shared";
 
 const router = useRouter();
 const route = useRoute();
@@ -163,12 +203,12 @@ const menuOptions: MenuOption[] = [
   { label: "Models", key: "/models", icon: renderMenuIcon(CubeOutline) },
 ];
 
-const userInitials = computed(() =>
-  authStore.user?.name?.slice(0, 2).toUpperCase() ?? "LU",
-);
+const userInitials = computed(() => authStore.user?.name?.slice(0, 2).toUpperCase() ?? "LU");
 
 const avatarDropdownOptions = computed(() => {
-  const options: Array<{ label: string; key: string; disabled: boolean } | { type: "divider"; key: string }> = [
+  const options: Array<
+    { label: string; key: string; disabled: boolean } | { type: "divider"; key: string }
+  > = [
     { label: authStore.user?.name || "Local User", key: "name", disabled: true },
     { type: "divider" as const, key: "d1" },
     { label: "Profile", key: "profile", disabled: true },
@@ -212,9 +252,13 @@ onMounted(async () => {
   }
 });
 
-watch(() => route.fullPath, () => {
-  if (route.meta.autoCollapseSidebar === true) {
-    uiStore.sidebarCollapsed = true;
-  }
-}, { immediate: true });
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.meta.autoCollapseSidebar === true) {
+      uiStore.sidebarCollapsed = true;
+    }
+  },
+  { immediate: true },
+);
 </script>

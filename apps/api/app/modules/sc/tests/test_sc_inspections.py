@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+import polars as pl
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
+from app.modules.sc.port.http.router import _apply_sample_table_sort
 from proto_stubs.sc.v1 import sample_pb2
 
 PB_CONTENT_TYPE = "application/x-protobuf"
@@ -30,6 +33,18 @@ def _parse_map_points_resp(body: bytes) -> sample_pb2.WaferMapResponse:
 TODAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 SAFE_START = (TODAY - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
 SAFE_END = (TODAY + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def test_sample_table_sort_orders_defect_id_numerically():
+    df = pl.DataFrame({"defect_id": ["1", "10", "2"]})
+
+    sorted_df = _apply_sample_table_sort(
+        df,
+        SimpleNamespace(field="defect_id", direction="asc"),
+        requested=None,
+    )
+
+    assert sorted_df["defect_id"].to_list() == ["1", "2", "10"]
 
 
 def test_list_inspections_returns_items_and_total(

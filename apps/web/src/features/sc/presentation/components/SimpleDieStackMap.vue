@@ -33,10 +33,7 @@ function canvasPixelRatio(): number {
   return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 }
 
-function prepareCanvas(
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-): void {
+function prepareCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
   const dpr = canvasPixelRatio();
   const width = Math.max(1, Math.round(canvasW * dpr));
   const height = Math.max(1, Math.round(canvasH * dpr));
@@ -60,15 +57,24 @@ function computeBounds(pts: SimpleMapPoint[]) {
   const dieSizeX = Math.max(0, props.dieSizeX ?? 0);
   const dieSizeY = Math.max(0, props.dieSizeY ?? 0);
   if (pts.length === 0 && dieSizeX === 0 && dieSizeY === 0) return;
-  let minX = 0, maxX = dieSizeX, minY = 0, maxY = dieSizeY;
+  let minX = 0,
+    maxX = dieSizeX,
+    minY = 0,
+    maxY = dieSizeY;
   for (const p of pts) {
     if (p.x < minX) minX = p.x;
     if (p.x > maxX) maxX = p.x;
     if (p.y < minY) minY = p.y;
     if (p.y > maxY) maxY = p.y;
   }
-  if (minX === maxX) { minX -= 0.5; maxX += 0.5; }
-  if (minY === maxY) { minY -= 0.5; maxY += 0.5; }
+  if (minX === maxX) {
+    minX -= 0.5;
+    maxX += 0.5;
+  }
+  if (minY === maxY) {
+    minY -= 0.5;
+    maxY += 0.5;
+  }
   return { minX, maxX, minY, maxY };
 }
 
@@ -82,7 +88,8 @@ function recalcTransform(bounds?: { minX: number; maxX: number; minY: number; ma
   if (bounds) {
     const spanX = bounds.maxX - bounds.minX;
     const spanY = bounds.maxY - bounds.minY;
-    scale = Math.min((canvasW * 0.9) / spanX, (canvasH * 0.9) / spanY);
+    const padding = props.zoom ? 1.0 : 0.9;
+    scale = Math.min((canvasW * padding) / spanX, (canvasH * padding) / spanY);
     if (!Number.isFinite(scale) || scale === 0) scale = 1;
     offsetX = -(bounds.minX + bounds.maxX) / 2;
     offsetY = -(bounds.minY + bounds.maxY) / 2;
@@ -131,7 +138,10 @@ function renderPoints() {
   }
 
   // Pass 1 — defect pixels: exactly (wx - 1, wy), (wx, wy), (wx - 1, wy + 1), (wx, wy + 1).
-  for (const [label, group] of groups) {
+  const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
+    left.localeCompare(right, undefined, { numeric: true }),
+  );
+  for (const [label, group] of sortedGroups) {
     ctx.fillStyle = props.colorMap[label] ?? "rgb(255, 0, 0)";
     ctx.beginPath();
     for (const p of group) {
@@ -149,7 +159,7 @@ function renderPoints() {
     if (!p.hasImageFlag) continue;
     const [sx, sy] = dataToScreen(p.x, p.y);
     const [cx, cy] = screenPixel(sx, sy);
-    ctx.strokeRect(cx - 1.5, cy - 2.5, 5, 5);
+    ctx.strokeRect(cx - 3, cy - 2, 5, 5);
   }
 
   // Pass 3 — selected crosshair above all point markers.
@@ -175,8 +185,10 @@ function draw() {
   if (!ctx) return;
   prepareCanvas(canvas, ctx);
   ctx.clearRect(0, 0, canvasW, canvasH);
-  if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
-  if (ptCanvas) ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
+  if (bgCanvas)
+    ctx.drawImage(bgCanvas, 0, 0, bgCanvas.width, bgCanvas.height, 0, 0, canvasW, canvasH);
+  if (ptCanvas)
+    ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
 }
 
 function fullRender() {
@@ -251,7 +263,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.sdsm { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.sdsm {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .sdsm-empty {
   font-size: 12px;

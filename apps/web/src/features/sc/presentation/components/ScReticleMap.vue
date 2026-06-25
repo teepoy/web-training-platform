@@ -101,7 +101,7 @@ function recalcTransform() {
   const size = measureMapElement(containerRef.value);
   if (!size) return;
   mapSize = size;
-  transform = buildMapTransform(mapSize, currentBounds(), props.zoom ? 0.95 : 0.9);
+  transform = buildMapTransform(mapSize, currentBounds(), props.zoom ? 1.0 : 0.9);
 }
 function getPos(e: MouseEvent): [number, number] {
   return eventToLocalPoint(containerRef.value, e);
@@ -283,9 +283,7 @@ watch(
 
 <template>
   <div ref="containerRef" class="srm-wrap">
-    <div v-if="pointCount === 0" class="srm-empty">No points</div>
     <SimpleReticleMap
-      v-else
       :points="simplePoints"
       :colorMap="props.colorMap ?? {}"
       :xDieCount="xDieCount"
@@ -305,9 +303,6 @@ watch(
       @pointerleave="onPointerUp"
       @dblclick="onDblClick"
     />
-    <div v-if="pointCount > 0" class="srm-footer">
-      {{ pointCount }} {{ pointCount === 1 ? "point" : "points" }}
-    </div>
   </div>
 </template>
 
@@ -326,24 +321,5 @@ watch(
   pointer-events: auto;
   touch-action: none;
   z-index: 1;
-}
-.srm-empty {
-  display: grid;
-  flex: 1;
-  place-items: center;
-  color: var(--text-color-3, #888);
-  font-size: 12px;
-}
-.srm-footer {
-  padding: 6px;
-  color: #888;
-  font-size: 12px;
-  text-align: center;
-}
-.srm-footer {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
 }
 </style>

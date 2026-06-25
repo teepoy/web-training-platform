@@ -260,10 +260,10 @@ seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed dev demo data (wafer-dem
 	$(MAKE) seed ARGS="wafer-demo --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth'"
 
 .PHONY: seed-wafer-mock
-seed-wafer-mock: ## Seed mock wafer inspection SQLite database (1M defects)
+seed-wafer-mock: ## Seed mock wafer inspection SQLite database (300k defects)
 	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
-		--defects 1000000 --imaged 100 --images-per 5 --reset
+		--defects 300000 --imaged 100 --images-per 5 --reset
 
 .PHONY: seed-wafer-patch-zips
 seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db

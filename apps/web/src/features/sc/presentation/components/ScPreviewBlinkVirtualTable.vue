@@ -19,7 +19,7 @@ const props = withDefaults(
   {
     samples: () => [],
     reviewSamples: () => [],
-    patchSamplesPerRow: 3,
+    patchSamplesPerRow: 4,
     reviewSamplesPerRow: 1,
     overscan: 10,
   },

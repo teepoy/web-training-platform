@@ -60,6 +60,7 @@ from app.modules.datasets.port.http.schemas import (
     SparseSummaryResponse,
     SyncAnnotationsResponse,
     UpdateAnnotationRequest,
+    UpdateDatasetRequest,
     UpdateEmbedConfigRequest,
     UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
@@ -399,6 +400,23 @@ async def delete_dataset(
     if not deleted:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return Response(status_code=204)
+
+
+@router.patch("/datasets/{dataset_id}", response_model=Dataset)
+async def update_dataset(
+    dataset_id: str,
+    payload: UpdateDatasetRequest,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    repo: DatasetRepository = Depends(get_repository),
+) -> Dataset:
+    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    updated = await repo.rename_dataset(dataset_id, name=payload.name, org_id=org.id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return updated
 
 
 @router.patch("/datasets/{dataset_id}/label-space", response_model=Dataset)

@@ -103,7 +103,7 @@ function recalcTransform() {
   const size = measureMapElement(containerRef.value);
   if (!size) return;
   mapSize = size;
-  transform = buildMapTransform(mapSize, currentBounds(), props.zoom ? 0.95 : 0.9);
+  transform = buildMapTransform(mapSize, currentBounds(), props.zoom ? 1.0 : 0.9);
 }
 function getPos(e: MouseEvent): [number, number] {
   return eventToLocalPoint(containerRef.value, e);
@@ -284,9 +284,7 @@ watch(
 
 <template>
   <div ref="containerRef" class="sdsm-wrap">
-    <div v-if="pointCount === 0" class="sdsm-empty">No points</div>
     <SimpleDieStackMap
-      v-else
       :points="simplePoints"
       :colorMap="props.colorMap ?? {}"
       :die-size-x="dieSizeX"
@@ -304,9 +302,6 @@ watch(
       @pointerleave="onPointerUp"
       @dblclick="onDblClick"
     />
-    <div v-if="pointCount > 0" class="sdsm-footer">
-      {{ pointCount }} {{ pointCount === 1 ? "point" : "points" }}
-    </div>
   </div>
 </template>
 
@@ -325,20 +320,5 @@ watch(
   pointer-events: auto;
   touch-action: none;
   z-index: 1;
-}
-.sdsm-empty {
-  display: grid;
-  flex: 1;
-  place-items: center;
-  color: var(--text-color-3, #888);
-  font-size: 12px;
-}
-.sdsm-footer {
-  bottom: 8px;
-  color: var(--text-color-3);
-  font-size: 12px;
-  pointer-events: none;
-  position: absolute;
-  right: 10px;
 }
 </style>

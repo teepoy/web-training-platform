@@ -198,6 +198,35 @@ class SqlRepository:
             rows = (await session.execute(stmt)).all()
             return {str(dataset_id): str(name) for dataset_id, name in rows}
 
+    async def rename_dataset(
+        self, dataset_id: str, *, name: str, org_id: str | None = None
+    ) -> Dataset | None:
+        async with self.session_factory() as session:
+            row = await session.get(DatasetORM, dataset_id)
+            if row is None:
+                return None
+            if org_id is not None and row.org_id != org_id and not row.is_public:
+                return None
+            row.name = name
+            await session.commit()
+            return Dataset(
+                id=row.id,
+                org_id=row.org_id,
+                org_name=await _org_name_for(session, row.org_id),
+                creator_name=await _user_name_for(session, row.created_by),
+                name=row.name,
+                dataset_type=row.dataset_type,
+                task_spec=cast(TaskSpec, row.dataset_meta),
+                view_types=cast(list[str], row.view_types),
+                created_by=row.created_by,
+                is_public=row.is_public,
+                created_at=row.created_at,
+                embed_config=row.embed_config or {},
+                ls_project_id=row.ls_project_id,
+                storage_mode=cast(DatasetStorageMode, row.storage_mode),
+                dataset_meta=row.dataset_meta,
+            )
+
     async def update_dataset_embed_config(
         self, dataset_id: str, embed_config: dict
     ) -> None:

@@ -227,6 +227,10 @@ def _apply_sample_table_sort(
         direction = getattr(sort_params, "direction", None)
         column = _SAMPLE_TABLE_FILTER_COLUMNS.get(field)
         if column is not None and column in lf.collect_schema().names() and direction:
+            if field == "defect_id":
+                return lf.sort(
+                    pl.col(column).cast(pl.Int64), descending=(direction == "desc")
+                )
             return lf.sort(column, descending=(direction == "desc"))
     if requested is not None:
         request_order = {defect_id: index for index, defect_id in enumerate(requested)}
@@ -240,7 +244,11 @@ def _apply_sample_table_sort(
             .sort("_request_order")
             .drop("_request_order")
         )
-    return lf.sort("defect_id") if "defect_id" in lf.collect_schema().names() else lf
+    return (
+        lf.sort(pl.col("defect_id").cast(pl.Int64))
+        if "defect_id" in lf.collect_schema().names()
+        else lf
+    )
 
 
 def _int_value(row: dict[str, Any], key: str) -> int:

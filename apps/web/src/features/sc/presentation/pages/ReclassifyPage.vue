@@ -28,7 +28,6 @@ import {
   type ScSampleItem,
 } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
-import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
@@ -179,26 +178,9 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   return map;
 });
 
-const legendFilterFieldBySource: Record<ScLegendSource, string> = {
-  class: "class_number",
-  bin: "rough_bin",
-  annotation: "annotation_label",
-  prediction: "prediction_label",
-};
-
-function onLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
-  const field = legendFilterFieldBySource[payload.source];
-  const next: ScSampleTableFilter = { ...page.globalFilter.value };
-  if (payload.hiddenKeys.length === 0) {
-    delete next[field];
-  } else {
-    next[field] = {
-      operator: "not_in",
-      values: payload.hiddenKeys,
-    };
-  }
-  page.globalFilter.value = next;
-}
+const hasLocalSampleTableFilter = computed(
+  () => Object.keys(page.sampleTableFilter.value).length > 0,
+);
 
 function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
   const local: ScSampleTableFilter = {};
@@ -237,7 +219,8 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
         v-else-if="
           !page.isBlinkLoading.value &&
           !page.isMapLoading.value &&
-          page.scSamples.value.length === 0
+          page.scSamples.value.length === 0 &&
+          Object.keys(page.globalFilter.value).length === 0
         "
         class="sc-state"
       >
@@ -333,9 +316,10 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :reticle-die-size-y="page.reticleDieSizeY.value"
             :reticle-options="page.reticleOptions.value"
             :zoom="page.mapZoom.value"
-            :selected-defect-ids="Array.from(page.selectedDefectIds.value)"
+            :selected-defect-ids="Array.from(page.sampleTableSelectedIds.value)"
             :table-filter="page.effectiveSampleTableFilter.value"
             :map-sample-filter="page.globalFilter.value"
+            :global-filter-action-enabled="hasLocalSampleTableFilter"
             :legend-group-by="page.legendGroupBy.value"
             :legend-sources="['class', 'bin', 'annotation', 'prediction']"
             @update:active-map-tab="page.setActiveMapTab"
@@ -345,10 +329,9 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @table-filter-change="onSampleTableFilterChange"
             @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
             @table-sort-change="() => {}"
-            @table-selection-change="(ids) => page.handleBoxSelectionChange(ids)"
+            @table-selection-change="page.setSampleTableSelectedIds"
             @table-apply-selection="(ids) => page.selectDefectIds(ids.map(String), 'replace')"
             @legend-group-change="page.handleLegendGroupByChange"
-            @legend-hidden-change="onLegendHiddenChange"
             @retry="() => {}"
           >
             <template #blink>
@@ -412,12 +395,14 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
           </NText>
         </div>
         <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
-          Assign default draft label (label 1) to all sampled data
+          Assign draft label to sampled
         </NCheckbox>
       </div>
       <template #footer>
-        <NButton @click="page.showSamplingModal.value = false">Cancel</NButton>
-        <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
+        <div class="sc-sampling-footer">
+          <NButton @click="page.showSamplingModal.value = false">Cancel</NButton>
+          <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
+        </div>
       </template>
     </NModal>
     <ReclassifyTaskProgressModal
@@ -582,5 +567,11 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.sc-sampling-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

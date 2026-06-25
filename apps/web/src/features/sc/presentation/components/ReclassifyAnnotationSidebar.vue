@@ -99,9 +99,9 @@ onBeforeUnmount(() => {
         <NText depth="3" class="sc-bulk-hint"> Apply to all selected: </NText>
         <NScrollbar
           class="sc-code-list"
-          content-style="max-height: min(330px, 50vh);"
+          content-style="max-height: min(555px, 75vh);"
           data-testid="reclassify-code-list"
-          style="max-height: min(330px, 50vh)"
+          style="max-height: min(555px, 75vh)"
         >
           <div class="sc-code-row sc-code-row-head">
             <span>Code</span>
@@ -213,9 +213,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
-  width: 340px;
-  flex-shrink: 0;
+  border-radius: 8px;
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 

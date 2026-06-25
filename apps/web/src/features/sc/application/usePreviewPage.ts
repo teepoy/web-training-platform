@@ -179,7 +179,7 @@ export function usePreviewPage(): PreviewPageState {
 
   function getDefaultDateRange(): [number, number] {
     const now = new Date();
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const startTime = today - 3 * 24 * 60 * 60 * 1000;
     const tomorrow = today + 24 * 60 * 60 * 1000;
     return [startTime, tomorrow];

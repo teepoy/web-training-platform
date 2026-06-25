@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { NButton, NResult, NSelect, NText } from "naive-ui";
+import VChart from "vue-echarts";
+import { use } from "echarts/core";
+import { BarChart } from "echarts/charts";
+import { GridComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { EChartsOption } from "echarts";
+import type { ECElementEvent } from "echarts/core";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
@@ -20,6 +27,8 @@ import {
   type ScBoxRegion,
   type ScMapMode,
 } from "@/features/sc/api/boxFilter";
+
+use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 // ── Props / emits ────────────────────────────────
 const props = defineProps<{
@@ -72,6 +81,7 @@ const props = defineProps<{
   selectedDefectIds?: Array<number | string>;
   tableFilter?: ScSampleTableFilter;
   mapSampleFilter?: ScSampleTableFilter;
+  globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
 }>();
 
@@ -97,35 +107,44 @@ const emit = defineEmits<{
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
-const RECLASSIFY_LEFT_COLUMN_PCT = 35;
-const RECLASSIFY_CENTER_COLUMN_PCT = 50;
 const MIN_COLUMN_PCT = 20;
 const MAX_COLUMN_PCT = 80;
+const RECLASSIFY_ANNOTATION_PCT = 15;
+const MIN_CENTER_PCT = 15;
 const DEFAULT_MAP_PCT = 55;
-const RECLASSIFY_MAP_PCT = 60;
 const MIN_MAP_PCT = 25;
 const MAX_MAP_PCT = 75;
+const DEFAULT_BAR_PCT = 60;
+const MIN_BAR_PCT = 15;
+const MAX_BAR_PCT = 85;
 
 const quadEl = ref<HTMLElement | null>(null);
 const leftPanelEl = ref<HTMLElement | null>(null);
+const rightPanelEl = ref<HTMLElement | null>(null);
 const columnPct = ref(DEFAULT_COLUMN_PCT);
 const mapPct = ref(DEFAULT_MAP_PCT);
+const barPct = ref(DEFAULT_BAR_PCT);
 const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
+const isBarResizing = ref(false);
 
 const quadStyle = computed(() => ({
   gridTemplateColumns:
     props.variant === "reclassify"
-      ? `${RECLASSIFY_LEFT_COLUMN_PCT}fr 12px ${RECLASSIFY_CENTER_COLUMN_PCT}fr 12px 15fr`
+      ? `${columnPct.value}fr 12px ${100 - RECLASSIFY_ANNOTATION_PCT - columnPct.value}fr 12px ${RECLASSIFY_ANNOTATION_PCT}fr`
       : `${columnPct.value}fr 12px ${100 - columnPct.value}fr`,
 }));
 
 const leftPanelStyle = computed(() => ({
-  gridTemplateRows:
-    props.variant === "reclassify"
-      ? `${RECLASSIFY_MAP_PCT}fr 10px ${100 - RECLASSIFY_MAP_PCT}fr`
-      : `${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
+  gridTemplateRows: `${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
 }));
+
+const rightPanelStyle = computed(() => {
+  if (!isReclassify.value) return undefined;
+  return {
+    gridTemplateRows: `${barPct.value}fr 10px ${100 - barPct.value}fr`,
+  };
+});
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const enabledLegendSources = computed<ScLegendSource[]>(
@@ -151,7 +170,10 @@ function onColumnResizeMove(e: PointerEvent): void {
   const rect = quadEl.value.getBoundingClientRect();
   if (rect.width <= 0) return;
   const nextPct = ((e.clientX - rect.left) / rect.width) * 100;
-  columnPct.value = clamp(nextPct, MIN_COLUMN_PCT, MAX_COLUMN_PCT);
+  const maxPct = isReclassify.value
+    ? 100 - RECLASSIFY_ANNOTATION_PCT - MIN_CENTER_PCT
+    : MAX_COLUMN_PCT;
+  columnPct.value = clamp(nextPct, MIN_COLUMN_PCT, maxPct);
 }
 
 function onColumnResizeEnd(e: PointerEvent): void {
@@ -181,6 +203,30 @@ function onRowResizeMove(e: PointerEvent): void {
 function onRowResizeEnd(e: PointerEvent): void {
   if (!isRowResizing.value) return;
   isRowResizing.value = false;
+  if (e.currentTarget instanceof Element) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+}
+
+function onBarResizeStart(e: PointerEvent): void {
+  e.preventDefault();
+  if (e.currentTarget instanceof Element) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  isBarResizing.value = true;
+}
+
+function onBarResizeMove(e: PointerEvent): void {
+  if (!isBarResizing.value || !rightPanelEl.value) return;
+  const rect = rightPanelEl.value.getBoundingClientRect();
+  if (rect.height <= 0) return;
+  const nextPct = ((e.clientY - rect.top) / rect.height) * 100;
+  barPct.value = clamp(nextPct, MIN_BAR_PCT, MAX_BAR_PCT);
+}
+
+function onBarResizeEnd(e: PointerEvent): void {
+  if (!isBarResizing.value) return;
+  isBarResizing.value = false;
   if (e.currentTarget instanceof Element) {
     e.currentTarget.releasePointerCapture(e.pointerId);
   }
@@ -339,9 +385,54 @@ const barChartItems = computed(() => {
     .sort((a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }));
 });
 
-const maxBarChartCount = computed(() =>
-  barChartItems.value.reduce((max, item) => Math.max(max, item.count), 0),
-);
+const barChartOption = computed<EChartsOption>(() => ({
+  animation: false,
+  grid: { left: 80, right: 32, top: 8, bottom: 18 },
+  tooltip: {
+    trigger: "axis",
+    axisPointer: { type: "shadow" },
+  },
+  xAxis: {
+    type: "value",
+    axisLabel: { color: "rgba(120, 120, 120, 0.8)", fontSize: 10 },
+    splitLine: { lineStyle: { color: "rgba(128, 128, 128, 0.15)" } },
+  },
+  yAxis: {
+    type: "category",
+    inverse: true,
+    data: barChartItems.value.map((item) => item.key),
+    axisLabel: { color: "rgba(120, 120, 120, 0.9)", fontSize: 10 },
+    axisTick: { show: false },
+    axisLine: { show: false },
+  },
+  series: [
+    {
+      type: "bar",
+      data: barChartItems.value.map((item) => item.count),
+      barMaxWidth: 12,
+      itemStyle: {
+        color: "#4c80f0",
+        borderRadius: [0, 3, 3, 0],
+      },
+    },
+  ],
+}));
+
+function handleMapSelectionChange(ids: number[]): void {
+  mapSelectionIds.value = ids;
+  emit("select-points", {
+    ids,
+    region: { x: 0, y: 0, w: 0, h: 0 },
+  });
+}
+
+function handleMapSelectPoints(payload: {
+  ids: number[];
+  region: { x: number; y: number; w: number; h: number };
+}): void {
+  mapSelectionIds.value = payload.ids;
+  emit("select-points", payload);
+}
 
 const barLegendSource = computed<ScLegendSource>({
   get: () => props.legendGroupBy ?? enabledLegendSources.value[0] ?? "class",
@@ -368,6 +459,12 @@ function selectBarChartGroup(defectIds: number[]): void {
     region: { x: 0, y: 0, w: 0, h: 0 },
   });
 }
+
+function handleBarChartClick(event: ECElementEvent): void {
+  const index = typeof event.dataIndex === "number" ? event.dataIndex : -1;
+  const item = barChartItems.value[index];
+  if (item) selectBarChartGroup(item.defectIds);
+}
 </script>
 
 <template>
@@ -388,6 +485,7 @@ function selectBarChartGroup(defectIds: number[]): void {
     :class="{
       'iq-quad--column-resizing': isColumnResizing,
       'iq-quad--row-resizing': isRowResizing,
+      'iq-quad--bar-resizing': isBarResizing,
       'iq-quad--reclassify': isReclassify,
     }"
     :style="quadStyle"
@@ -423,8 +521,8 @@ function selectBarChartGroup(defectIds: number[]): void {
           :map-progress-percent="mapProgressPercent"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
-          @selection-change="(ids: number[]) => (mapSelectionIds = ids)"
-          @select-points="(payload) => (mapSelectionIds = payload.ids)"
+          @selection-change="handleMapSelectionChange"
+          @select-points="handleMapSelectPoints"
           @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
           @legend-hidden-change="(payload) => emit('legend-hidden-change', payload)"
           @zoom-in="(vp) => emit('zoom-in', vp)"
@@ -451,6 +549,8 @@ function selectBarChartGroup(defectIds: number[]): void {
         :sort="tableSort"
         :show-reclassify-columns="isReclassify"
         :show-global-filter-action="isReclassify"
+        :global-filter-action-enabled="globalFilterActionEnabled"
+        :enable-selection="isReclassify"
         :reticle-x-die-count="reticleOptionsModel.xDieCount"
         :reticle-y-die-count="reticleOptionsModel.yDieCount"
         :reticle-x-die-shift="reticleOptionsModel.xDieShift"
@@ -474,7 +574,12 @@ function selectBarChartGroup(defectIds: number[]): void {
     />
 
     <!-- Right column: Blink Table -->
-    <div class="iq-panel-right" :class="{ 'iq-panel-right--split': isReclassify }">
+    <div
+      ref="rightPanelEl"
+      class="iq-panel-right"
+      :class="{ 'iq-panel-right--split': isReclassify }"
+      :style="rightPanelStyle"
+    >
       <div class="iq-blink-pane">
         <slot name="blink">
           <ScPreviewBlinkVirtualTable
@@ -489,6 +594,16 @@ function selectBarChartGroup(defectIds: number[]): void {
           />
         </slot>
       </div>
+      <div
+        v-if="isReclassify"
+        class="iq-splitter iq-splitter--row iq-splitter--bar"
+        role="separator"
+        aria-orientation="horizontal"
+        @pointerdown="onBarResizeStart"
+        @pointermove="onBarResizeMove"
+        @pointerup="onBarResizeEnd"
+        @pointercancel="onBarResizeEnd"
+      />
       <div v-if="isReclassify" class="iq-bar-pane">
         <div class="iq-bar-header">
           <div class="iq-bar-title">Group Distribution</div>
@@ -499,26 +614,12 @@ function selectBarChartGroup(defectIds: number[]): void {
             class="iq-bar-source"
           />
         </div>
-        <div class="iq-bar-list">
-          <button
-            v-for="item in barChartItems"
-            :key="item.key"
-            class="iq-bar-row"
-            type="button"
-            @click="selectBarChartGroup(item.defectIds)"
-          >
-            <span class="iq-bar-label">{{ item.key }}</span>
-            <span class="iq-bar-track">
-              <span
-                class="iq-bar-fill"
-                :style="{
-                  width: `${maxBarChartCount > 0 ? (item.count / maxBarChartCount) * 100 : 0}%`,
-                }"
-              />
-            </span>
-            <span class="iq-bar-count">{{ item.count }}</span>
-          </button>
-        </div>
+        <VChart
+          class="iq-bar-chart"
+          :option="barChartOption"
+          autoresize
+          @click="handleBarChartClick"
+        />
       </div>
     </div>
 
@@ -545,6 +646,7 @@ function selectBarChartGroup(defectIds: number[]): void {
 .iq-quad {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
@@ -555,17 +657,20 @@ function selectBarChartGroup(defectIds: number[]): void {
   cursor: col-resize;
 }
 
-.iq-quad--row-resizing {
+.iq-quad--row-resizing,
+.iq-quad--bar-resizing {
   cursor: row-resize;
 }
 
 .iq-quad--column-resizing,
-.iq-quad--row-resizing {
+.iq-quad--row-resizing,
+.iq-quad--bar-resizing {
   user-select: none;
 }
 
 .iq-quad--column-resizing *,
-.iq-quad--row-resizing * {
+.iq-quad--row-resizing *,
+.iq-quad--bar-resizing * {
   user-select: none;
 }
 
@@ -580,10 +685,6 @@ function selectBarChartGroup(defectIds: number[]): void {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: var(--cv-card-bg, #1a1a2e);
-  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  padding: 8px 10px;
 }
 
 .iq-splitter {
@@ -604,7 +705,8 @@ function selectBarChartGroup(defectIds: number[]): void {
 
 .iq-splitter:hover::before,
 .iq-quad--column-resizing .iq-splitter--column::before,
-.iq-quad--row-resizing .iq-splitter--row::before {
+.iq-quad--row-resizing .iq-splitter--row::before,
+.iq-quad--bar-resizing .iq-splitter--bar::before {
   background: var(--cv-primary, rgba(76, 128, 240, 0.45));
 }
 
@@ -636,7 +738,6 @@ function selectBarChartGroup(defectIds: number[]): void {
 
 .iq-panel-right--split {
   display: grid;
-  grid-template-rows: minmax(0, 3fr) 10px minmax(0, 2fr);
   gap: 0;
 }
 
@@ -644,6 +745,10 @@ function selectBarChartGroup(defectIds: number[]): void {
   display: flex;
   min-height: 0;
   overflow: hidden;
+  background: var(--cv-card-bg, #1a1a2e);
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .iq-bar-pane {
@@ -652,8 +757,10 @@ function selectBarChartGroup(defectIds: number[]): void {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
-  padding-top: 8px;
+  background: var(--cv-card-bg, #1a1a2e);
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .iq-bar-header {
@@ -677,58 +784,10 @@ function selectBarChartGroup(defectIds: number[]): void {
   flex: 0 0 112px;
 }
 
-.iq-bar-list {
+.iq-bar-chart {
+  flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.iq-bar-row {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  padding: 2px 0;
-  text-align: left;
-}
-
-.iq-bar-row:hover .iq-bar-fill {
-  background: var(--cv-primary-hover, #5b8cff);
-}
-
-.iq-bar-label,
-.iq-bar-count {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
-.iq-bar-count {
-  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.55));
-  text-align: right;
-}
-
-.iq-bar-track {
-  height: 8px;
-  min-width: 0;
-  border-radius: 3px;
-  background: var(--cv-hover, rgba(255, 255, 255, 0.08));
-  overflow: hidden;
-}
-
-.iq-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--cv-primary, #4c80f0);
+  width: 100%;
 }
 
 .iq-panel-annotation {

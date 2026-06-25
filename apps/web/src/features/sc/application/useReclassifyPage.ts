@@ -161,6 +161,8 @@ export interface ReclassifyPageState {
   applySampleTableFilterAsGlobal: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
+  sampleTableSelectedIds: Ref<Set<string>>;
+  setSampleTableSelectedIds: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
   highlightDefects: ComputedRef<HighlightDefect[]>;
   selectedDefectIds: ComputedRef<Set<string>>;
@@ -438,6 +440,12 @@ export function useReclassifyPage(): ReclassifyPageState {
     mapFilterVersion.value += 1;
   }
 
+  const sampleTableSelectedIds = ref<Set<string>>(new Set());
+
+  function setSampleTableSelectedIds(ids: number[]): void {
+    sampleTableSelectedIds.value = new Set(ids.map(String));
+  }
+
   const selectedDefectIds = computed(
     () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
   );
@@ -575,6 +583,9 @@ export function useReclassifyPage(): ReclassifyPageState {
       const sourceIds = blinkSourceDefectIds.value;
       if (sourceIds) {
         const ids = sourceIds.slice(pageParam, pageParam + pageSize);
+        if (ids.length === 0) {
+          return { items: [], total: sourceIds.length } as ScViewRowsPage;
+        }
         const resp = await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
           datasetId.value,
           "patch_image_v1",
@@ -904,6 +915,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     mapFilter.value = {};
     globalFilter.value = {};
     sampleTableFilter.value = {};
+    sampleTableSelectedIds.value = new Set();
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
     mapFilterVersion.value += 1;
@@ -1293,14 +1305,11 @@ export function useReclassifyPage(): ReclassifyPageState {
     sampledIds.value = new Set(sampled);
 
     if (assignDefaultDraftLabel.value) {
-      const firstLabel = effectiveLabels.value[0];
-      if (firstLabel) {
-        const next: Record<string, string> = {};
-        for (const id of sampled) {
-          next[id] = firstLabel;
-        }
-        annotationDraft.value = next;
+      const next: Record<string, string> = {};
+      for (const id of sampled) {
+        next[id] = "60";
       }
+      annotationDraft.value = next;
     }
 
     showSamplingModal.value = false;
@@ -1637,6 +1646,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     applySampleTableFilterAsGlobal,
     clearMapFilter,
     handleBoxSelectionChange,
+    sampleTableSelectedIds,
+    setSampleTableSelectedIds,
     mapFilteredIds,
     highlightDefects,
     selectedDefectIds,

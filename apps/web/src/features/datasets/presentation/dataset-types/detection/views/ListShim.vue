@@ -29,9 +29,10 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "view": [id: string];
+  view: [id: string];
   "toggle-public": [payload: { id: string; isPublic: boolean }];
-  "delete": [row: DatasetListItem];
+  rename: [row: DatasetListItem];
+  delete: [row: DatasetListItem];
 }>();
 
 const columns = computed(() =>
@@ -42,6 +43,7 @@ const columns = computed(() =>
     resolveTaskType: resolveDatasetTaskType,
     onViewDataset: (id: string) => emit("view", id),
     onTogglePublic: (payload: { id: string; isPublic: boolean }) => emit("toggle-public", payload),
+    onRenameDataset: (id: string, name: string) => emit("rename", { id, name } as DatasetListItem),
     onDeleteDataset: (row: DatasetListItem) => emit("delete", row),
   }),
 );

@@ -25,7 +25,7 @@ const props = withDefaults(
     reviewError?: string | null;
   }>(),
   {
-    patchSamplesPerRow: 5,
+    patchSamplesPerRow: 3,
     reviewSamplesPerRow: 1,
     predictionLabels: () => ({}),
     predictionConfidences: () => ({}),
@@ -34,7 +34,7 @@ const props = withDefaults(
     overscan: 10,
     hasNextPage: false,
     isFetchingNextPage: false,
-  }
+  },
 );
 
 const emit = defineEmits<{
@@ -73,7 +73,7 @@ function setupIntersectionObserver() {
       }
       lastIntersecting = isIntersecting;
     },
-    { root, rootMargin: '200px' }
+    { root, rootMargin: "200px" },
   );
 
   if (sentinelRef.value) {
@@ -85,10 +85,14 @@ function handleScrollContainerChange(element: HTMLElement | null): void {
   scrollContainer.value = element;
 }
 
-watch([scrollContainer, sentinelRef], async () => {
-  await nextTick();
-  setupIntersectionObserver();
-}, { flush: "post" });
+watch(
+  [scrollContainer, sentinelRef],
+  async () => {
+    await nextTick();
+    setupIntersectionObserver();
+  },
+  { flush: "post" },
+);
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect();

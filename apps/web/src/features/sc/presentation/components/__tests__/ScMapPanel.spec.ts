@@ -373,8 +373,8 @@ describe("ScMapPanel", () => {
 
     const select = wrapper.findComponent({ name: "Select" });
     expect(select.props("options")).toEqual([
-      { label: "Class Mapping", value: "class" },
-      { label: "Rough Bin Mapping", value: "bin" },
+      { label: "Class", value: "class" },
+      { label: "Rough Bin", value: "bin" },
       { label: "Annotation", value: "annotation" },
       { label: "Prediction (Latest)", value: "prediction" },
     ]);

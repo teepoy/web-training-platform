@@ -9,8 +9,6 @@ export const imageScSchema = {
   viewTypes: ["patch_image_v1", "review_image_v1"],
   annotationType: "none" as const,
   shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
-  viewComponent: defineAsyncComponent(() => import("./ScPatchImageView.vue")),
-  selfLoading: true,
   mockSampleFactory: (index: number, _labelSpace?: string[]) => ({
     id: `sc-sample-${index}`,
     template_url: `https://picsum.photos/seed/sc-tpl${index}/400/300`,

@@ -148,6 +148,18 @@ const handleColorUpdate = (key: string, color: string) => {
 
 const hiddenKeySet = computed(() => new Set(props.hiddenKeys ?? []));
 
+const allVisible = computed(() => (props.hiddenKeys ?? []).length === 0);
+
+const allLegendKeys = computed(() => legendData.value.map((item) => item.rawKey));
+
+function handleToggleAll() {
+  if (allVisible.value) {
+    emit("update:hiddenKeys", allLegendKeys.value);
+  } else {
+    emit("update:hiddenKeys", []);
+  }
+}
+
 const handleVisibleToggle = (rawKey: string) => {
   const next = new Set(props.hiddenKeys ?? []);
   if (next.has(rawKey)) next.delete(rawKey);
@@ -159,6 +171,11 @@ const handleVisibleToggle = (rawKey: string) => {
 <template>
   <div class="sc-legend">
     <div v-if="legendData.length > 0" class="sc-legend-list" data-testid="sc-legend-list">
+      <div class="sc-legend-toggle-row">
+        <NButton size="tiny" quaternary @click="handleToggleAll">
+          {{ allVisible ? "Hide All" : "Show All" }}
+        </NButton>
+      </div>
       <div
         v-for="item in legendData"
         :key="item.key"
@@ -187,7 +204,12 @@ const handleVisibleToggle = (rawKey: string) => {
             "
           />
         </span>
-        <span class="sc-legend-label">{{ item.label }}</span>
+        <NTooltip>
+          <template #trigger>
+            <span class="sc-legend-label">{{ item.label }}</span>
+          </template>
+          {{ item.label }}
+        </NTooltip>
         <NTooltip>
           <template #trigger>
             <NButton
@@ -210,7 +232,7 @@ const handleVisibleToggle = (rawKey: string) => {
           </template>
           {{ hiddenKeySet.has(item.rawKey) ? "Show" : "Hide" }}
         </NTooltip>
-        <NTag size="small" :bordered="false" style="font-size: 10px">{{ item.count }}</NTag>
+        <NTag size="small" :bordered="false" class="sc-legend-count">{{ item.count }}</NTag>
       </div>
     </div>
     <div v-else class="sc-legend-empty" data-testid="sc-legend-empty">No classes</div>
@@ -228,6 +250,11 @@ const handleVisibleToggle = (rawKey: string) => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.sc-legend-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 4px;
 }
 .sc-legend-empty {
   padding: 8px 4px;
@@ -284,5 +311,15 @@ const handleVisibleToggle = (rawKey: string) => {
   flex-grow: 1;
   font-size: 11px;
   min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-legend-count {
+  min-width: 6ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
 }
 </style>

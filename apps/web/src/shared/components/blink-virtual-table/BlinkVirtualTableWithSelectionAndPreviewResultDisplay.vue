@@ -22,6 +22,7 @@ import {
   MINI_HEADER_HEIGHT,
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
+import { scReviewUrl } from "@/features/sc/domain/models";
 
 const props = withDefaults(
   defineProps<{
@@ -48,7 +49,7 @@ const props = withDefaults(
     inspectionTime?: string;
   }>(),
   {
-    patchSamplesPerRow: 3,
+    patchSamplesPerRow: 4,
     reviewSamplesPerRow: 1,
     patchCellSize: 64,
     reviewCellSize: 128,
@@ -64,7 +65,7 @@ const props = withDefaults(
     blinkIntervalMs: 1000,
     initialBlinkEnabled: true,
     showModeSwitch: false,
-  }
+  },
 );
 
 const emit = defineEmits<{
@@ -75,7 +76,7 @@ const emit = defineEmits<{
       ctrl: boolean;
       meta: boolean;
       selectionMode?: "replace" | "add" | "toggle";
-    }
+    },
   ];
   scrollContainerChange: [element: HTMLElement | null];
 }>();
@@ -112,16 +113,26 @@ const patchImageTypeByInput: Record<string, PatchImageType> = {
   difference: "Difference",
 };
 const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
-  IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption)
-    ? (value as ImageSizeOption)
-    : 64;
+  IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption) ? (value as ImageSizeOption) : 64;
 const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
 const reviewImageSize = ref<ImageSizeOption>(normalizeImageSize(props.reviewCellSize));
 const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
+const patchDefectiveEnabled = ref(true);
+const patchReferenceEnabled = ref(true);
+const patchDifferenceEnabled = ref(true);
+
+function rebuildPatchImagesInput() {
+  const parts: string[] = [];
+  if (patchDefectiveEnabled.value) parts.push("Defective");
+  if (patchReferenceEnabled.value) parts.push("Reference");
+  if (patchDifferenceEnabled.value) parts.push("Difference");
+  patchImagesInput.value = parts.join(",");
+}
+
 const reviewImagesInput = ref("");
 const reviewImagesInputEdited = ref(false);
 const imageSize = computed({
-  get: () => mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
+  get: () => (mode.value === "patch" ? patchImageSize.value : reviewImageSize.value),
   set: (value: number) => {
     const normalized = normalizeImageSize(value);
     if (mode.value === "patch") {
@@ -132,7 +143,7 @@ const imageSize = computed({
   },
 });
 const samplesPerRow = computed({
-  get: () => mode.value === "patch" ? patchPerRow.value : reviewPerRow.value,
+  get: () => (mode.value === "patch" ? patchPerRow.value : reviewPerRow.value),
   set: (value: number) => {
     if (mode.value === "patch") {
       patchPerRow.value = clampSamplesPerRow(value);
@@ -146,28 +157,38 @@ function adjustSamplesPerRow(delta: number): void {
   samplesPerRow.value += delta;
 }
 
-const reviewDisabled = computed(
-  () => !!props.reviewError,
-);
+const reviewDisabled = computed(() => !!props.reviewError);
 
-watch(() => props.patchSamplesPerRow, (v) => {
-  const next = clampSamplesPerRow(v);
-  if (patchPerRow.value !== next) patchPerRow.value = next;
-});
-watch(() => props.reviewSamplesPerRow, (v) => {
-  const next = clampSamplesPerRow(v);
-  if (reviewPerRow.value !== next) reviewPerRow.value = next;
-});
-watch(() => props.patchCellSize, (v) => {
-  const next = normalizeImageSize(v);
-  if (patchImageSize.value !== next) patchImageSize.value = next;
-});
-watch(() => props.reviewCellSize, (v) => {
-  const next = normalizeImageSize(v);
-  if (reviewImageSize.value !== next) reviewImageSize.value = next;
-});
+watch(
+  () => props.patchSamplesPerRow,
+  (v) => {
+    const next = clampSamplesPerRow(v);
+    if (patchPerRow.value !== next) patchPerRow.value = next;
+  },
+);
+watch(
+  () => props.reviewSamplesPerRow,
+  (v) => {
+    const next = clampSamplesPerRow(v);
+    if (reviewPerRow.value !== next) reviewPerRow.value = next;
+  },
+);
+watch(
+  () => props.patchCellSize,
+  (v) => {
+    const next = normalizeImageSize(v);
+    if (patchImageSize.value !== next) patchImageSize.value = next;
+  },
+);
+watch(
+  () => props.reviewCellSize,
+  (v) => {
+    const next = normalizeImageSize(v);
+    if (reviewImageSize.value !== next) reviewImageSize.value = next;
+  },
+);
 const samplesRef = computed(() =>
-  mode.value === "review" ? props.reviewSamples ?? [] : props.samples,
+  mode.value === "review" ? (props.reviewSamples ?? []) : props.samples,
 );
 const patchCellSizeRef = patchImageSize;
 const reviewCellSizeRef = reviewImageSize;
@@ -203,10 +224,14 @@ watch(scrollRef, (element) => emit("scrollContainerChange", element), {
 });
 
 const cellSize = computed(() =>
-  mode.value === "patch" ? patchImageSize.value : reviewImageSize.value
+  mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
 );
 
-const { enabled: blinkEnabled, phase: blinkPhase, toggle: toggleBlink } = useBlinkController({
+const {
+  enabled: blinkEnabled,
+  phase: blinkPhase,
+  toggle: toggleBlink,
+} = useBlinkController({
   intervalMs: props.blinkIntervalMs,
   initialEnabled: props.initialBlinkEnabled,
 });
@@ -222,8 +247,17 @@ const selectedPatchImageTypes = computed<PatchImageType[]>(() => {
       seen.add(type);
       return true;
     });
-  return parsed.length > 0 ? parsed : DEFAULT_PATCH_IMAGE_TYPES;
+  return parsed;
 });
+
+function syncPatchSwitchesFromInput() {
+  const types = selectedPatchImageTypes.value;
+  patchDefectiveEnabled.value = types.includes("Defective");
+  patchReferenceEnabled.value = types.includes("Reference");
+  patchDifferenceEnabled.value = types.includes("Difference");
+}
+
+syncPatchSwitchesFromInput();
 
 const inferredReviewImageIds = computed<number[]>(() => {
   const seen = new Set<number>();
@@ -274,11 +308,13 @@ const patchImageTypesForSprite = computed<PatchImageType[]>(() => {
 });
 
 const basePatchColumns = computed(() =>
-  selectedPatchImageTypes.value.map((type) => ({
-    label: PATCH_IMAGE_LABELS[type],
-    spriteIndex: patchImageTypesForSprite.value.indexOf(type),
-    type,
-  })).filter((column) => column.spriteIndex >= 0),
+  selectedPatchImageTypes.value
+    .map((type) => ({
+      label: PATCH_IMAGE_LABELS[type],
+      spriteIndex: patchImageTypesForSprite.value.indexOf(type),
+      type,
+    }))
+    .filter((column) => column.spriteIndex >= 0),
 );
 
 function reviewColumnsForSample(sample: ScSampleItem): number[] {
@@ -301,15 +337,17 @@ function spriteImageTypesForSample(sample: ScSampleItem): string[] {
 }
 
 function cellsForSample(sample: ScSampleItem): number {
-  const imageCells = basePatchColumns.value.length +
+  const imageCells =
+    basePatchColumns.value.length +
     (mode.value === "review" ? reviewColumnsForSample(sample).length : 0);
   return imageCells + (blinkEnabled.value ? 1 : 0);
 }
 
-const maxCellsPerSample = computed(() =>
-  basePatchColumns.value.length +
-  (mode.value === "review" ? selectedReviewImageIds.value.length : 0) +
-  (blinkEnabled.value ? 1 : 0),
+const maxCellsPerSample = computed(
+  () =>
+    basePatchColumns.value.length +
+    (mode.value === "review" ? selectedReviewImageIds.value.length : 0) +
+    (blinkEnabled.value ? 1 : 0),
 );
 
 const SAMPLE_BLOCK_PADDING_X = 4;
@@ -319,17 +357,18 @@ function sampleBlockWidthPx(sample: ScSampleItem): number {
   return cells * cellSize.value + Math.max(0, cells - 1) * props.cellGap + SAMPLE_BLOCK_PADDING_X;
 }
 
-const maxSampleBlockWidthPx = computed(() =>
-  maxCellsPerSample.value * cellSize.value +
-  Math.max(0, maxCellsPerSample.value - 1) * props.cellGap +
-  SAMPLE_BLOCK_PADDING_X,
+const maxSampleBlockWidthPx = computed(
+  () =>
+    maxCellsPerSample.value * cellSize.value +
+    Math.max(0, maxCellsPerSample.value - 1) * props.cellGap +
+    SAMPLE_BLOCK_PADDING_X,
 );
 
 const rowMinWidthPx = computed(
   () =>
     effectiveSamplesPerRow.value * maxSampleBlockWidthPx.value +
     (effectiveSamplesPerRow.value - 1) * props.rowGap +
-    24 /* left+right row padding */
+    24 /* left+right row padding */,
 );
 const cellSizePx = computed(() => `${cellSize.value}px`);
 function sampleBlockWidthStr(sample: ScSampleItem): string {
@@ -337,10 +376,7 @@ function sampleBlockWidthStr(sample: ScSampleItem): string {
 }
 const rowMinWidthStr = computed(() => `${rowMinWidthPx.value}px`);
 
-const {
-  rubberBandStyle,
-  onMouseDown,
-} = useBlinkRubberBand({
+const { rubberBandStyle, onMouseDown } = useBlinkRubberBand({
   scrollRef,
   onSelect: (ids, mods) => emit("selectSamples", ids, mods),
 });
@@ -397,6 +433,20 @@ function handleSampleClick(sample: ScSampleItem, event: MouseEvent): void {
   });
 }
 
+const previewImageSrc = ref<string | null>(null);
+const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
+
+function handleReviewPreview(sample: ScSampleItem, imageId: number) {
+  const t = props.inspectionTime ?? String(sample.inspectionTime);
+  previewImageSrc.value = scReviewUrl(t, sample.waferKey, sample.defectId, imageId);
+  void nextTick(() => {
+    const el = hiddenImageRef.value?.$el;
+    if (el instanceof HTMLElement) {
+      el.click();
+    }
+  });
+}
+
 function getSpriteUrl(sample: ScSampleItem): string {
   const isPatch = mode.value === "patch";
   const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
@@ -408,19 +458,6 @@ function getSpriteUrl(sample: ScSampleItem): string {
   }
   const spriteMode = isPatch ? "patch" : "review";
   return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
-}
-
-function getSingleSpriteUrl(sample: ScSampleItem, imageType: string): string {
-  const isPatch = mode.value === "patch";
-  const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
-  const t = props.inspectionTime ?? String(sample.inspectionTime);
-  const params = new URLSearchParams();
-  params.set("cell_size", String(cs));
-  params.append("image_types", imageType);
-  const spriteMode = isPatch ? "patch" : "review";
-  return withAuthQueryParams(
-    `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`,
-  );
 }
 
 function shouldRenderSprite(sample: ScSampleItem): boolean {
@@ -443,7 +480,7 @@ function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
     backgroundImage: `url(${withAuthQueryParams(url)})`,
     backgroundSize: bgSize,
     backgroundPosition: bgPos,
-    backgroundRepeat: 'no-repeat',
+    backgroundRepeat: "no-repeat",
   };
 }
 
@@ -481,15 +518,13 @@ const scrollMetrics = ref<ScrollMetrics>({
   scrollTop: 0,
 });
 let resizeObserver: ResizeObserver | null = null;
-let dragState:
-  | {
-      axis: "x" | "y";
-      startPointer: number;
-      startScroll: number;
-      scrollableDistance: number;
-      trackDistance: number;
-    }
-  | null = null;
+let dragState: {
+  axis: "x" | "y";
+  startPointer: number;
+  startScroll: number;
+  scrollableDistance: number;
+  trackDistance: number;
+} | null = null;
 
 const showYScrollbar = computed(
   () => scrollMetrics.value.scrollHeight > scrollMetrics.value.clientHeight + 1,
@@ -567,10 +602,14 @@ function attachResizeObserver(element: HTMLElement | null): void {
   }
 }
 
-watch(scrollRef, (element) => {
-  attachResizeObserver(element);
-  void nextTick(syncScrollMetrics);
-}, { flush: "post" });
+watch(
+  scrollRef,
+  (element) => {
+    attachResizeObserver(element);
+    void nextTick(syncScrollMetrics);
+  },
+  { flush: "post" },
+);
 
 watch(
   [
@@ -602,9 +641,7 @@ function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
       ? metrics.scrollHeight - metrics.clientHeight
       : metrics.scrollWidth - metrics.clientWidth;
   const trackDistance =
-    axis === "y"
-      ? metrics.clientHeight - yThumbSize.value
-      : metrics.clientWidth - xThumbSize.value;
+    axis === "y" ? metrics.clientHeight - yThumbSize.value : metrics.clientWidth - xThumbSize.value;
   if (scrollableDistance <= 0 || trackDistance <= 0) return;
   dragState = {
     axis,
@@ -662,7 +699,58 @@ function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
   syncScrollMetrics();
 }
 
+const SETTINGS_STORAGE_KEY = "blink-table-settings";
+
+interface PersistedSettings {
+  blinkEnabled?: boolean;
+  patchPerRow?: number;
+  reviewPerRow?: number;
+  patchImageSize?: number;
+  reviewImageSize?: number;
+  patchImagesInput?: string;
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+    const saved: PersistedSettings = JSON.parse(raw);
+    if (typeof saved.blinkEnabled === "boolean" && blinkEnabled.value !== saved.blinkEnabled) {
+      toggleBlink();
+    }
+    if (typeof saved.patchPerRow === "number")
+      patchPerRow.value = clampSamplesPerRow(saved.patchPerRow);
+    if (typeof saved.reviewPerRow === "number")
+      reviewPerRow.value = clampSamplesPerRow(saved.reviewPerRow);
+    if (typeof saved.patchImageSize === "number")
+      patchImageSize.value = normalizeImageSize(saved.patchImageSize);
+    if (typeof saved.reviewImageSize === "number")
+      reviewImageSize.value = normalizeImageSize(saved.reviewImageSize);
+    if (typeof saved.patchImagesInput === "string") patchImagesInput.value = saved.patchImagesInput;
+    syncPatchSwitchesFromInput();
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveSettings() {
+  const data: PersistedSettings = {
+    blinkEnabled: blinkEnabled.value,
+    patchPerRow: patchPerRow.value,
+    reviewPerRow: reviewPerRow.value,
+    patchImageSize: patchImageSize.value,
+    reviewImageSize: reviewImageSize.value,
+    patchImagesInput: patchImagesInput.value,
+  };
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
 onMounted(() => {
+  loadSettings();
   window.addEventListener("resize", syncScrollMetrics);
   void nextTick(syncScrollMetrics);
 });
@@ -671,6 +759,10 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   document.removeEventListener("mousemove", handleScrollbarDrag);
   window.removeEventListener("resize", syncScrollMetrics);
+});
+
+watch(settingsOpen, (open) => {
+  if (!open) saveSettings();
 });
 
 defineExpose({ scrollRef });
@@ -698,14 +790,10 @@ defineExpose({ scrollRef });
           Review unavailable
         </n-text>
 
-        <n-button size="tiny" quaternary @click="settingsOpen = true">
-          Settings
-        </n-button>
+        <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
       </div>
       <div class="sbt-toolbar-right">
-        <n-text class="sbt-row-count" depth="3">
-          {{ visibleSamples.length }} samples
-        </n-text>
+        <n-text class="sbt-row-count" depth="3"> {{ visibleSamples.length }} samples </n-text>
       </div>
     </div>
 
@@ -717,15 +805,6 @@ defineExpose({ scrollRef });
       :style="{ width: '380px' }"
     >
       <div class="sbt-settings">
-        <div class="sbt-setting-row">
-          <n-text class="sbt-control-label">Blink</n-text>
-          <n-switch
-            :value="blinkEnabled"
-            size="small"
-            @update:value="toggleBlink"
-          />
-        </div>
-
         <div class="sbt-setting-row">
           <n-text class="sbt-control-label">Per Row</n-text>
           <div class="sbt-per-row">
@@ -767,12 +846,44 @@ defineExpose({ scrollRef });
         </div>
 
         <div class="sbt-setting-block">
-          <n-text class="sbt-control-label">PatchImages</n-text>
-          <n-input
-            v-model:value="patchImagesInput"
-            size="small"
-            placeholder="Defective,Reference,Difference"
-          />
+          <n-text class="sbt-control-label">Patch Image</n-text>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Blink</n-text>
+            <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Defective</n-text>
+            <n-switch
+              :value="patchDefectiveEnabled"
+              size="small"
+              @update:value="
+                patchDefectiveEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Reference</n-text>
+            <n-switch
+              :value="patchReferenceEnabled"
+              size="small"
+              @update:value="
+                patchReferenceEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">Difference</n-text>
+            <n-switch
+              :value="patchDifferenceEnabled"
+              size="small"
+              @update:value="
+                patchDifferenceEnabled = $event;
+                rebuildPatchImagesInput();
+              "
+            />
+          </div>
         </div>
 
         <div class="sbt-setting-block">
@@ -787,6 +898,12 @@ defineExpose({ scrollRef });
       </div>
     </n-modal>
 
+    <NImage
+      ref="hiddenImageRef"
+      :src="previewImageSrc || ''"
+      :style="{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px' }"
+    />
+
     <!-- Empty state -->
     <div v-if="visibleSamples.length === 0" class="sbt-empty">
       <n-text depth="3">
@@ -795,18 +912,12 @@ defineExpose({ scrollRef });
     </div>
 
     <!-- Scroll body -->
-    <div
-      v-else
-      class="sbt-scroll-shell"
-      data-testid="blink-table-scrollbar"
-    >
-      <div
-        ref="scrollRef"
-        class="sbt-scroll"
-        @scroll="handleScroll"
-        @mousedown="onMouseDown"
-      >
-        <div class="sbt-vrow" :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }">
+    <div v-else class="sbt-scroll-shell" data-testid="blink-table-scrollbar">
+      <div ref="scrollRef" class="sbt-scroll" @scroll="handleScroll" @mousedown="onMouseDown">
+        <div
+          class="sbt-vrow"
+          :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
+        >
           <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
           <div
             v-for="virtualRow in virtualizer.getVirtualItems()"
@@ -859,7 +970,10 @@ defineExpose({ scrollRef });
                   <div v-if="blinkEnabled" class="sbt-img-cell">
                     <template v-if="shouldRenderSprite(sample)">
                       <!-- Base reference layer -->
-                      <div class="sbt-sprite-layer" :style="getSpriteStyle(sample, blinkBaseSpriteIndex())"></div>
+                      <div
+                        class="sbt-sprite-layer"
+                        :style="getSpriteStyle(sample, blinkBaseSpriteIndex())"
+                      ></div>
                       <!-- Defective overlay layer -->
                       <div
                         class="sbt-sprite-layer sbt-overlay"
@@ -872,8 +986,16 @@ defineExpose({ scrollRef });
                   </div>
 
                   <!-- Base patch cells -->
-                  <div v-for="col in basePatchColumns" :key="'base_' + col.spriteIndex" class="sbt-img-cell">
-                    <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, col.spriteIndex)"></div>
+                  <div
+                    v-for="col in basePatchColumns"
+                    :key="'base_' + col.spriteIndex"
+                    class="sbt-img-cell"
+                  >
+                    <div
+                      v-if="shouldRenderSprite(sample)"
+                      class="sbt-sprite-layer"
+                      :style="getSpriteStyle(sample, col.spriteIndex)"
+                    ></div>
                     <div v-else class="sbt-img-placeholder"></div>
                   </div>
 
@@ -883,17 +1005,13 @@ defineExpose({ scrollRef });
                       v-for="imageId in reviewColumnsForSample(sample)"
                       :key="'rev_' + imageId"
                       class="sbt-img-cell sbt-img-cell--preview"
-                      @click.stop
+                      @click.stop="handleReviewPreview(sample, imageId)"
                     >
-                      <NImage
+                      <div
                         v-if="shouldRenderSprite(sample)"
-                        class="sbt-review-image"
-                        :src="getSingleSpriteUrl(sample, `review${imageId}`)"
-                        :width="cellSize"
-                        :height="cellSize"
-                        object-fit="contain"
-                        lazy
-                      />
+                        class="sbt-sprite-layer"
+                        :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"
+                      ></div>
                       <div v-else class="sbt-img-placeholder"></div>
                     </div>
                   </template>
@@ -926,7 +1044,12 @@ defineExpose({ scrollRef });
                     class="sbt-prediction-badge"
                     title="Latest prediction"
                   >
-                    P: {{ predictionLabels[defectIdKey(sample.defectId)] }}{{ predictionConfidences[defectIdKey(sample.defectId)] != null ? ` (${(predictionConfidences[defectIdKey(sample.defectId)]! * 100).toFixed(0)}%)` : '' }}
+                    P: {{ predictionLabels[defectIdKey(sample.defectId)]
+                    }}{{
+                      predictionConfidences[defectIdKey(sample.defectId)] != null
+                        ? ` (${(predictionConfidences[defectIdKey(sample.defectId)]! * 100).toFixed(0)}%)`
+                        : ""
+                    }}
                   </n-tag>
                   <div v-else></div>
                 </div>
@@ -981,11 +1104,7 @@ defineExpose({ scrollRef });
   justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
-  background: color-mix(
-    in srgb,
-    var(--cv-card-bg, #1e1e2e) 50%,
-    var(--cv-bg, #16162a)
-  );
+  background: color-mix(in srgb, var(--cv-card-bg, #1e1e2e) 50%, var(--cv-bg, #16162a));
   flex-shrink: 0;
 }
 
@@ -1139,11 +1258,7 @@ defineExpose({ scrollRef });
 }
 
 .sbt-vrow--odd .sbt-row {
-  background: color-mix(
-    in srgb,
-    var(--cv-card-bg, #1e1e2e) 60%,
-    var(--cv-bg, #16162a)
-  );
+  background: color-mix(in srgb, var(--cv-card-bg, #1e1e2e) 60%, var(--cv-bg, #16162a));
 }
 
 /* Row (horizontal flex of sample blocks) */
@@ -1165,15 +1280,13 @@ defineExpose({ scrollRef });
   border-radius: 4px;
   padding: 2px;
   box-sizing: border-box;
-  transition: background-color 0.15s, box-shadow 0.15s;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .sbt-sample-block--selected {
-  background: color-mix(
-    in srgb,
-    var(--cv-primary, #4098fc) 12%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--cv-primary, #4098fc) 12%, transparent);
   box-shadow: inset 0 0 0 2px var(--cv-primary, #4098fc);
 }
 
@@ -1246,11 +1359,7 @@ defineExpose({ scrollRef });
 .sbt-rubber-band {
   position: absolute;
   border: 2px dashed var(--cv-primary, #4098fc);
-  background: color-mix(
-    in srgb,
-    var(--cv-primary, #4098fc) 15%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--cv-primary, #4098fc) 15%, transparent);
   pointer-events: none;
   z-index: 10;
 }
