@@ -31,7 +31,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && ( uv run --no-dev alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev fastapi dev app/main.py --host 0.0.0.0 --port 8000 --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos",
+        "cd /app/apps/api && ( uv run --no-dev alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos",
       ]
     environment:
       PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src

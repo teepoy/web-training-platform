@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import re
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -997,27 +998,34 @@ def _apply_sample_table_sort(
 
 
 def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
+    def int_or_zero(value: Any) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, float) and math.isnan(value):
+            return 0
+        return int(value)
+
     return ScSampleTableRow(
         defect_id=str(row["defect_id"]),
-        rough_bin=row["rough_bin"],
-        class_number=row["class_number"],
-        test_id=row["test_id"],
-        wafer_x=row["wafer_x"],
-        wafer_y=row["wafer_y"],
-        index_x=row["index_x"],
-        index_y=row["index_y"],
-        adder=row["adder"],
-        cluster_id=row["cluster"],
-        die_x=row["index_x"],
-        die_y=row["index_y"],
-        reticle_x=row.get("reticle_x", 0),
-        reticle_y=row.get("reticle_y", 0),
-        size_x=row["size_x"],
-        size_y=row["size_y"],
-        size_d=row["size_d"],
-        area=row["area"],
-        final_bin=row["final_bin"],
-        manual_bin=row["manual_bin"],
+        rough_bin=int_or_zero(row["rough_bin"]),
+        class_number=int_or_zero(row["class_number"]),
+        test_id=int_or_zero(row["test_id"]),
+        wafer_x=int_or_zero(row["wafer_x"]),
+        wafer_y=int_or_zero(row["wafer_y"]),
+        index_x=int_or_zero(row["index_x"]),
+        index_y=int_or_zero(row["index_y"]),
+        adder=int_or_zero(row["adder"]),
+        cluster_id=None if row["cluster"] is None else int_or_zero(row["cluster"]),
+        die_x=int_or_zero(row["index_x"]),
+        die_y=int_or_zero(row["index_y"]),
+        reticle_x=int_or_zero(row.get("reticle_x", 0)),
+        reticle_y=int_or_zero(row.get("reticle_y", 0)),
+        size_x=int_or_zero(row["size_x"]),
+        size_y=int_or_zero(row["size_y"]),
+        size_d=int_or_zero(row["size_d"]),
+        area=int_or_zero(row["area"]),
+        final_bin=int_or_zero(row["final_bin"]),
+        manual_bin=int_or_zero(row["manual_bin"]),
         kill_ratio=row["kill_ratio"],
     )
 
@@ -1212,6 +1220,7 @@ async def start_sc_import(
         dataset_name=payload.dataset_name,
         storage_mode=payload.storage_mode,
         org_id=org.id,
+        created_by=current_user.id,
         filters=payload.filters,
         label_space=payload.label_space,
         max_rows=payload.max_rows,
@@ -1264,6 +1273,7 @@ async def stream_sc_import(
                 dataset_name=payload.dataset_name,
                 storage_mode=payload.storage_mode,
                 org_id=org.id,
+                created_by=current_user.id,
                 filters=payload.filters,
                 label_space=payload.label_space,
                 max_rows=payload.max_rows,

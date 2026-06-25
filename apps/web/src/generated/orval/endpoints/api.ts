@@ -170,6 +170,7 @@ import type {
   UpdateAnnotationRequest,
   UpdateEmbedConfigRequest,
   UpdateLabelSpaceRequest,
+  UpdateModelRequest,
   UpdateSampleImageResponse,
   UpdateScheduleRequest,
   UpdateSubscriptionRequest,
@@ -5305,6 +5306,83 @@ export function useGetModelApiV1ModelsModelIdGet<TData = Awaited<ReturnType<type
 
 
 
+
+/**
+ * @summary Update Model
+ */
+export type updateModelApiV1ModelsModelIdPatchResponse = {
+  data: ModelResponse | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getUpdateModelApiV1ModelsModelIdPatchUrl = (modelId: string,) => {
+
+
+  return `/api/v1/models/${modelId}`
+}
+
+export const updateModelApiV1ModelsModelIdPatch = async (modelId: string,
+    updateModelRequest: UpdateModelRequest, options?: RequestInit): Promise<updateModelApiV1ModelsModelIdPatchResponse> => {
+
+  return orvalFetcher<updateModelApiV1ModelsModelIdPatchResponse>(getUpdateModelApiV1ModelsModelIdPatchUrl(modelId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateModelRequest,)
+  }
+);}
+
+
+
+
+export const getUpdateModelApiV1ModelsModelIdPatchMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>, TError,{modelId: string;data: UpdateModelRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>, TError,{modelId: string;data: UpdateModelRequest}, TContext> => {
+
+const mutationKey = ['updateModelApiV1ModelsModelIdPatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>, {modelId: string;data: UpdateModelRequest}> = (props) => {
+          const {modelId,data} = props ?? {};
+
+          return  updateModelApiV1ModelsModelIdPatch(modelId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateModelApiV1ModelsModelIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>>
+    export type UpdateModelApiV1ModelsModelIdPatchMutationBody = UpdateModelRequest
+    export type UpdateModelApiV1ModelsModelIdPatchMutationError = HTTPValidationError
+
+    /**
+ * @summary Update Model
+ */
+export const useUpdateModelApiV1ModelsModelIdPatch = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>, TError,{modelId: string;data: UpdateModelRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof updateModelApiV1ModelsModelIdPatch>>,
+        TError,
+        {modelId: string;data: UpdateModelRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getUpdateModelApiV1ModelsModelIdPatchMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
 
 /**
  * @summary Delete Model

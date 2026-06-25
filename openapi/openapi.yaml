@@ -1931,6 +1931,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - models
+      summary: Update Model
+      operationId: update_model_api_v1_models__model_id__patch
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
       tags:
       - models
@@ -5653,6 +5684,14 @@ components:
           type: string
           title: Org Name
           default: ''
+        created_by:
+          type: string
+          title: Created By
+          default: system
+        creator_name:
+          type: string
+          title: Creator Name
+          default: ''
         is_public:
           type: boolean
           title: Is Public
@@ -6003,6 +6042,14 @@ components:
         trainer_name:
           type: string
           title: Trainer Name
+        created_by:
+          type: string
+          title: Created By
+          default: system
+        creator_name:
+          type: string
+          title: Creator Name
+          default: ''
       type: object
       required:
       - id
@@ -7325,7 +7372,7 @@ components:
           title: Anchor
         limit:
           type: integer
-          maximum: 500.0
+          maximum: 50000.0
           minimum: 1.0
           title: Limit
           default: 100
@@ -8548,6 +8595,17 @@ components:
       required:
       - label_space
       title: UpdateLabelSpaceRequest
+    UpdateModelRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+      type: object
+      required:
+      - name
+      title: UpdateModelRequest
     UpdateSampleImageResponse:
       properties:
         uri:

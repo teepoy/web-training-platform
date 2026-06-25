@@ -41,6 +41,15 @@ class ModelService:
             raise HTTPException(status_code=404, detail="Model not found")
         return model
 
+    async def rename_model(self, artifact_id: str, org_id: str, name: str) -> Model:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise HTTPException(status_code=422, detail="Model name is required")
+        model = await self.repository.rename_model(artifact_id, org_id, normalized_name)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        return model
+
     async def delete_model(self, artifact_id: str, org_id: str) -> None:
         model = await self.repository.get_model(artifact_id, org_id)
         if model is None:

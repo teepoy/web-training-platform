@@ -44,6 +44,12 @@ class ModelResponse(BaseModel):
     dataset_id: str
     dataset_name: str
     trainer_name: str
+    created_by: str = "system"
+    creator_name: str = ""
+
+
+class UpdateModelRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
 
 
 class UploadModelRequest(BaseModel):

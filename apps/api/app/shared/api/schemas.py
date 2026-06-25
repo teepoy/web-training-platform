@@ -54,6 +54,8 @@ class Model(ArtifactRef):
     dataset_name: str | None = None
     trainer_id: str | None = None
     trainer_name: str | None = None
+    created_by: str = "system"
+    creator_name: str = ""
 
 
 class TaskSpec(BaseModel):
@@ -70,6 +72,8 @@ class Dataset(BaseModel):
     view_types: list[str] = Field(default_factory=list)
     org_id: str | None = None
     org_name: str = ""
+    created_by: str = "system"
+    creator_name: str = ""
     is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     embed_config: dict = Field(default_factory=dict)

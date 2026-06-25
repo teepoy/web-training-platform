@@ -6,7 +6,6 @@
           <n-text strong>{{ task?.display_name || 'Task Insight' }}</n-text>
           <n-space size="small" align="center">
             <n-tag size="small" :type="statusType(activeDetail?.derived.display_status)">{{ activeDetail?.derived.display_status || 'unknown' }}</n-tag>
-            <n-tag size="small" :type="capacityType(activeDetail?.derived.capacity_status)">Slots {{ workerSlotsLabel }}</n-tag>
           </n-space>
         </n-space>
         <n-space>
@@ -22,7 +21,7 @@
 
     <n-spin :show="isLoading">
       <n-space vertical size="large">
-        <n-grid :cols="4" :x-gap="12">
+        <n-grid :cols="3" :x-gap="12">
           <n-gi>
             <n-statistic label="Queue" :value="task?.work_queue_name || '-'" />
           </n-gi>
@@ -32,13 +31,10 @@
           <n-gi>
             <n-statistic label="Ahead In Queue" :value="activeDetail?.derived.queue_depth_ahead !== null && activeDetail?.derived.queue_depth_ahead !== undefined ? String(activeDetail.derived.queue_depth_ahead) : '-'" />
           </n-gi>
-          <n-gi>
-            <n-statistic label="Worker Slots" :value="workerSlotsLabel" />
-          </n-gi>
         </n-grid>
 
         <n-collapse :default-expanded-names="defaultExpanded">
-          <n-collapse-item v-for="stage in activeDetail?.derived.stages || []" :key="stage.key" :name="stage.key" :title="stage.label">
+          <n-collapse-item v-for="stage in visibleStages" :key="stage.key" :name="stage.key" :title="stage.label">
             <n-space vertical>
               <n-text depth="3">{{ stage.summary }}</n-text>
               <div v-if="stage.key === 'execution_flow'">
@@ -97,7 +93,7 @@
           </n-collapse-item>
         </n-collapse>
 
-        <n-grid :cols="2" :x-gap="16">
+        <n-grid v-if="false" :cols="2" :x-gap="16">
           <n-gi>
             <n-card title="Dynamic Console" size="small">
               <n-space vertical size="small">
@@ -182,6 +178,13 @@ watch(detail, (value) => {
 }, { immediate: true })
 
 const activeDetail = computed(() => streamedDetail.value ?? detail.value ?? null)
+const visibleStages = computed(() =>
+  (activeDetail.value?.derived.stages ?? []).filter(
+    (stage) =>
+      stage.key !== 'validation_output' &&
+      stage.label !== 'Validation & Output',
+  ),
+)
 
 const stream = inject(TASK_INSIGHT_STREAM_KEY, null)
 if (stream) {
@@ -210,8 +213,9 @@ const cancelMutation = {
 
 const defaultExpanded = computed(() => {
   const stage = activeDetail.value?.derived.stage
-  if (!stage) return ['queue_allocation']
-  return [stage]
+  const visibleKeys = new Set(visibleStages.value.map((item) => item.key))
+  if (stage && visibleKeys.has(stage)) return [stage]
+  return visibleStages.value[0]?.key ? [visibleStages.value[0].key] : ['queue_allocation']
 })
 
 const canCancel = computed(() => {

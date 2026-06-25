@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { reactive } from "vue";
 import {
   NButton,
   NDataTable,
@@ -7,6 +8,7 @@ import {
   NSpace,
   NText,
   type DataTableColumns,
+  type PaginationProps,
 } from "naive-ui";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 
@@ -39,11 +41,26 @@ function rowKey(row: InspectionSummaryItem): string {
   return `${row.inspection_time}_${row.wafer_key}`;
 }
 
+const clickableRowStyle = { cursor: "pointer" };
+const tablePagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 100,
+  showSizePicker: true,
+  pageSizes: [50, 100, 200, 500],
+  onUpdatePage: (page: number) => {
+    tablePagination.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    tablePagination.pageSize = pageSize;
+    tablePagination.page = 1;
+  },
+});
+
 function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   const isLastOpened = rowKey(row) === props.lastOpenedSummaryKey;
   return {
     class: isLastOpened ? "sc-summary-row--last-opened" : "",
-    style: { cursor: "pointer" },
+    style: clickableRowStyle,
     onClick: () => emit("rowClick", row),
   };
 }
@@ -118,7 +135,10 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         :loading="summariesLoading"
         :row-key="rowKey"
         :row-props="rowProps"
+        :pagination="tablePagination"
         :single-line="false"
+        :virtual-scroll="true"
+        :min-row-height="32"
         striped
         size="small"
         flex-height

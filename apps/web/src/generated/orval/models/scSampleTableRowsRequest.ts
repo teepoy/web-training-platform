@@ -20,7 +20,7 @@ export interface ScSampleTableRowsRequest {
   anchor?: ScSampleTableRowsRequestAnchor;
   /**
    * @minimum 1
-   * @maximum 500
+   * @maximum 50000
    */
   limit?: number;
   filter?: ScSampleTableRowsRequestFilter;

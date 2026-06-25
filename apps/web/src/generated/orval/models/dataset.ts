@@ -21,6 +21,8 @@ export interface Dataset {
   view_types?: string[];
   org_id?: DatasetOrgId;
   org_name?: string;
+  created_by?: string;
+  creator_name?: string;
   is_public?: boolean;
   created_at?: string;
   embed_config?: DatasetEmbedConfig;

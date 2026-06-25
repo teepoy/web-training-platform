@@ -39,7 +39,6 @@ from app.shared.api.schemas import (
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
-    require_admin,
 )
 from platform_runtime.sparse import SparseManifestReader
 from app.modules.datasets.port.http.schemas import (
@@ -241,6 +240,7 @@ async def create_dataset(
         view_types=view_types,
         task_spec=payload.task_spec,
         org_id=org.id,
+        created_by=current_user.id,
         ls_project_id=ls_project_id,
         storage_mode=payload.storage_mode,
     )
@@ -365,17 +365,20 @@ async def get_sparse_summary(
 @router.delete("/datasets/{dataset_id}", status_code=204)
 async def delete_dataset(
     dataset_id: str,
-    request: Request,
     ls_client: LabelStudioClientDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> Response:
-    await require_admin(request, current_user=current_user, org=org)
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the dataset creator can delete this dataset",
+        )
 
     if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
         store = DatasetPayloadStore(storage=storage)

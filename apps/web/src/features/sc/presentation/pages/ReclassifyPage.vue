@@ -13,7 +13,6 @@ import {
   NModal,
   NCheckbox,
   NTooltip,
-  NProgress,
   useThemeVars,
 } from "naive-ui";
 import { useRouter } from "vue-router";
@@ -339,20 +338,6 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
                 {{ page.mapStreamMessage.value }}
               </NText>
             </div>
-            <div
-              v-if="page.activeTab.value === 'map' && page.isMapLoading.value"
-              class="sc-map-progress"
-            >
-              <NProgress
-                type="line"
-                :percentage="100"
-                :show-indicator="false"
-                processing
-              />
-              <NText depth="3" class="sc-map-progress-text">
-                {{ page.mapStreamMessage.value || "Loading map data..." }}
-              </NText>
-            </div>
             <NSpin
               :show="
                 page.activeTab.value === 'blink'
@@ -363,7 +348,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             >
               <!-- Blink table tab (default) -->
               <ScReclassifyBlinkVirtualTable
-                v-if="page.activeTab.value === 'blink'"
+                v-show="page.activeTab.value === 'blink'"
                 :samples="blinkSamples"
                 :image-urls-by-defect-id="blinkImageUrlsByDefectId"
                 :initial-blink-enabled="true"
@@ -385,7 +370,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
               />
               <!-- Map panel (handles wafer/die/reticle internally) -->
               <ScMapPanel
-                v-if="page.activeTab.value === 'map'"
+                v-show="page.activeTab.value === 'map'"
                 :active-map-tab="page.activeMapTab.value"
                 :wafer-points="page.waferDisplay.value"
                 :wafer-geometry="page.waferGeometry.value"

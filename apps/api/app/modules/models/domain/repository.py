@@ -15,6 +15,10 @@ class ModelRepository(Protocol):
 
     async def get_model(self, artifact_id: str, org_id: str) -> Model | None: ...
 
+    async def rename_model(
+        self, artifact_id: str, org_id: str, name: str
+    ) -> Model | None: ...
+
     async def delete_artifact(self, artifact_id: str) -> bool: ...
 
     async def add_artifacts(

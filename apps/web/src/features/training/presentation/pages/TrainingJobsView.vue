@@ -223,29 +223,9 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 300,
+    width: 150,
     render: (row) => {
       const nodes = [
-        h(
-          NButton,
-          {
-            size: "small",
-            disabled: true,
-          },
-          { default: () => "Artifact View" },
-        ),
-        h(
-          NButton,
-          {
-            size: "small",
-            disabled: !row.id,
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              openTaskView(row);
-            },
-          },
-          { default: () => "Task View" },
-        ),
         h(
           NButton,
           {
@@ -257,7 +237,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
               openInsight(row);
             },
           },
-          { default: () => "Insight" },
+          { default: () => "Task Progress" },
         ),
       ];
       return h("span", { style: "display: inline-flex; gap: 8px" }, nodes);

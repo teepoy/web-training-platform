@@ -66,7 +66,7 @@ class ScSampleTableRowsRequest(BaseModel):
     page: int = Field(default=0, ge=0)
     page_size: int = Field(default=100, ge=1, le=10000)
     anchor: str | None = None
-    limit: int = Field(default=100, ge=1, le=500)
+    limit: int = Field(default=100, ge=1, le=50_000)
     filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
     sort: ScSampleTableSort | None = None
     reticle_x_die_count: int = Field(default=10, ge=1)

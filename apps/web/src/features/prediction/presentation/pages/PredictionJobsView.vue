@@ -34,12 +34,12 @@
           label-width="auto"
         >
           <template v-if="orgStore.currentOrgId">
-            <n-form-item label="Training Job" path="model_id">
+            <n-form-item label="Model" path="model_id">
               <n-select
                 v-model:value="formModel.model_id"
-                :options="completedJobOptions"
-                :loading="jobsLoading"
-                placeholder="Select a completed training job"
+                :options="modelOptions"
+                :loading="modelsLoading"
+                placeholder="Select a model"
                 filterable
               />
             </n-form-item>
@@ -68,12 +68,12 @@ import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-
 import { useMessage, NButton, NTag } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
 import {
-  useListJobsApiV1TrainingJobsGet,
+  useListModelsApiV1ModelsGet,
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs } from "@/shared/api/predictions";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
-import type { PredictionJobResponse as PredictionJob, TaskTrackerSummaryResponse as TaskTrackerSummary, TrainingJob } from "@/generated/orval/models";
+import type { ModelResponse, PredictionJobResponse as PredictionJob, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 import type { RunPredictionRequest } from "@/generated/orval/models";
 
 const props = defineProps<{ datasetId?: string | null }>();
@@ -97,35 +97,27 @@ function predictionJobRowKey(row: PredictionJob): string {
   return row.id;
 }
 
-const { data: allJobs, isLoading: jobsLoading } = useListJobsApiV1TrainingJobsGet(undefined, {
+const { data: models, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
+  computed(() => ({})),
+  {
   query: {
     select: (response: any) => response.data,
-    queryKey: computed(() => ["jobs", "prediction-launcher", orgStore.currentOrgId]),
+    queryKey: computed(() => [
+      "models",
+      "prediction-launcher",
+      orgStore.currentOrgId,
+    ]),
     enabled: computed(() => !!orgStore.currentOrgId),
     refetchInterval: 5000,
   },
-});
-
-const completedJobs = computed<TrainingJob[]>(() =>
-  (allJobs.value ?? []).filter(
-    (j: any) =>
-      j.status === "completed" &&
-      (props.datasetId ? j.dataset_id === props.datasetId : true),
-  ),
+},
 );
 
-const completedJobOptions = computed<SelectOption[]>(() =>
-  completedJobs.value
-    .map((j) => {
-      const modelArtifact = (j.artifact_refs ?? []).find(
-        (a) => a.kind === "model",
-      );
-      return { job: j, artifactId: modelArtifact?.id ?? null };
-    })
-    .filter(({ artifactId }) => artifactId != null)
-    .map(({ job: j, artifactId }) => ({
-      label: `${j.trainer_id} — ${(j.id ?? "").slice(0, 8)}…`,
-      value: artifactId as string,
+const modelOptions = computed<SelectOption[]>(() =>
+  ((models.value ?? []) as ModelResponse[])
+    .map((model) => ({
+      label: model.name?.trim() || model.id.slice(0, 8),
+      value: model.id,
     })),
 );
 
@@ -179,20 +171,9 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 210,
+    width: 150,
     render: (row) =>
       h("span", { style: "display: inline-flex; gap: 8px" }, [
-        h(
-          NButton,
-          {
-            size: "small",
-            onClick: (event: Event) => {
-              event.stopPropagation();
-              openTaskView(row);
-            },
-          },
-          { default: () => "Task View" },
-        ),
         h(
           NButton,
           {
@@ -203,7 +184,7 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => [
               openInsight(row);
             },
           },
-          { default: () => "Insight" },
+          { default: () => "Task Progress" },
         ),
       ]),
   },
@@ -216,7 +197,7 @@ const formRef = ref<FormInst | null>(null);
 const formModel = ref({ model_id: null as string | null });
 
 const formRules: FormRules = {
-  model_id: [{ required: true, message: "Please select a completed training job", trigger: ["blur", "change"] }],
+  model_id: [{ required: true, message: "Please select a model", trigger: ["blur", "change"] }],
 };
 
 const runMutation = useRunPredictionsApiV1PredictionsRunPost({

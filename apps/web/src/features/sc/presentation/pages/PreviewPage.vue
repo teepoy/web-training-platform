@@ -143,6 +143,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       page.setZoom(tab.id, vp),
     onTableSelectionChange: (ids: number[]) =>
       page.setSelectedDefectIds(tab.id, ids),
+    onTableApplySelection: (ids: number[]) =>
+      page.setSelectedDefectIds(tab.id, ids),
     onTableFilterChange: (
       filter: Parameters<typeof page.handleTableFilterChange>[1],
     ) => page.handleTableFilterChange(tab.id, filter),
@@ -194,7 +196,8 @@ const activeComponentProps = computed((): Record<string, unknown> => {
             <NButton
               v-if="
                 page.activeTab.value?.type === 'inspection' &&
-                page.activeTab.value.inspectionItem
+                page.activeTab.value.inspectionItem &&
+                !page.importedDatasetIdForInspection(page.activeTab.value.inspectionItem)
               "
               size="small"
               type="primary"
@@ -204,7 +207,21 @@ const activeComponentProps = computed((): Record<string, unknown> => {
                 page.startImportDirectly(page.activeTab.value.inspectionItem)
               "
             >
-              Import as Dataset
+              Reclassify
+            </NButton>
+            <NButton
+              v-else-if="
+                page.activeTab.value?.type === 'inspection' &&
+                page.activeTab.value.inspectionItem &&
+                page.importedDatasetIdForInspection(page.activeTab.value.inspectionItem)
+              "
+              tag="a"
+              size="small"
+              type="primary"
+              target="_blank"
+              :href="`/datasets/${page.importedDatasetIdForInspection(page.activeTab.value.inspectionItem)}/sc/classify`"
+            >
+              Open Dataset
             </NButton>
           </div>
         </div>

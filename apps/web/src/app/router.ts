@@ -7,6 +7,7 @@ import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
 import { authRoutes } from "@/features/auth/router";
 import { dashboardRoutes } from "@/features/dashboard/router";
 import { datasetRoutes } from "@/features/datasets/router";
+import { modelRoutes } from "@/features/models/router";
 import { predictionRoutes } from "@/features/prediction/router";
 import { scRoutes } from "@/features/sc/router";
 import { scheduleRoutes } from "@/features/schedules/router";
@@ -24,6 +25,7 @@ export const router = createRouter({
     ...dashboardRoutes,
     ...taskTrackerRoutes,
     ...datasetRoutes,
+    ...modelRoutes,
     ...trainingRoutes,
     ...predictionRoutes,
     ...scheduleRoutes,

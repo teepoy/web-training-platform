@@ -83,7 +83,7 @@ describe("ScSampleTable", () => {
     expect(requestBody).toHaveBeenCalledWith(
       expect.objectContaining({
         anchor: "0",
-        limit: 100,
+        limit: 1000,
         filter: {
           rough_bin: { operator: "in", values: [1, 5] },
           wafer_x: { operator: "between", min: -100, max: 100 },

@@ -52,6 +52,13 @@ function getDatasetOrgLabel(
   return dataset.org_name?.trim() || "Other Org";
 }
 
+function isDatasetCreator(
+  dataset: DatasetListItem,
+  currentUserId: string | null | undefined,
+): boolean {
+  return Boolean(currentUserId && dataset.created_by === currentUserId);
+}
+
 export function buildDatasetColumns<TDataset extends DatasetListItem>(
   options: BuildDatasetColumnsOptions<TDataset>,
 ): DataTableColumns<TDataset> {
@@ -139,11 +146,12 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
           row,
           isSuperadmin: options.isSuperadmin,
           isOwnOrg: row.org_id === options.currentOrgId,
+          canDelete: isDatasetCreator(row, options.currentUserId),
           onView: (id: string) => {
             options.onViewDataset(id);
           },
           onDelete: (dataset: DatasetListItem) => {
-            if (!options.isSuperadmin) {
+            if (!isDatasetCreator(dataset, options.currentUserId)) {
               return;
             }
 
@@ -169,14 +177,13 @@ export function useDatasetListSurface<
   const resolvedUser = computed(() => unref(options.user));
 
   const permissions = computed(() => {
-    const isSuperadmin = resolvedUser.value?.is_superadmin === true;
     const hasOrg = resolvedCurrentOrgId.value !== null;
 
     return {
-      isSuperadmin,
+      isSuperadmin: resolvedUser.value?.is_superadmin === true,
       hasOrg,
       canTogglePublic: false,
-      canDelete: isSuperadmin && hasOrg,
+      canDelete: hasOrg,
     };
   });
 
@@ -208,6 +215,7 @@ export function useDatasetListSurface<
       row,
       isSuperadmin: permissions.value.isSuperadmin,
       isOwnOrg: row.org_id === resolvedCurrentOrgId.value,
+      canDelete: isDatasetCreator(row, resolvedUser.value?.id),
     };
   }
 
@@ -215,6 +223,7 @@ export function useDatasetListSurface<
     buildDatasetColumns<TDataset>({
       currentOrgId: resolvedCurrentOrgId.value,
       isSuperadmin: permissions.value.isSuperadmin,
+      currentUserId: resolvedUser.value?.id ?? null,
       taskTagType: unref(options.taskTagType) ?? "info",
       resolveTaskType: options.resolveTaskType,
       onViewDataset: options.onViewDataset,
@@ -226,7 +235,7 @@ export function useDatasetListSurface<
         options.onTogglePublic(payload);
       },
       onDeleteDataset: (dataset) => {
-        if (!permissions.value.canDelete) {
+        if (!isDatasetCreator(dataset, resolvedUser.value?.id)) {
           return;
         }
 

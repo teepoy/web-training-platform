@@ -61,6 +61,15 @@ async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
     return "" if org_row is None else org_row.name
 
 
+async def _user_name_for(session: AsyncSession, user_id: str | None) -> str:
+    if not user_id or user_id == "system":
+        return "system"
+    user_row = await session.get(UserORM, user_id)
+    if user_row is None:
+        return user_id
+    return user_row.name or user_row.email or user_id
+
+
 class SqlRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
@@ -73,6 +82,7 @@ class SqlRepository:
             raise ValueError("org_id is required for create_dataset")
         async with self.session_factory() as session:
             org_name = await _org_name_for(session, org_id)
+            creator_name = await _user_name_for(session, dataset.created_by)
             row = DatasetORM(
                 id=dataset.id,
                 org_id=org_id,
@@ -80,6 +90,7 @@ class SqlRepository:
                 dataset_type=dataset.dataset_type,
                 dataset_meta=dataset.task_spec.model_dump(mode="json"),
                 view_types=dataset.view_types,
+                created_by=dataset.created_by,
                 is_public=dataset.is_public,
                 created_at=dataset.created_at,
                 embed_config=dataset.embed_config or None,
@@ -88,13 +99,20 @@ class SqlRepository:
             )
             session.add(row)
             await session.commit()
-        return dataset.model_copy(update={"org_id": org_id, "org_name": org_name})
+        return dataset.model_copy(
+            update={
+                "org_id": org_id,
+                "org_name": org_name,
+                "creator_name": creator_name,
+            }
+        )
 
     async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
         async with self.session_factory() as session:
             stmt = (
-                select(DatasetORM, OrganizationORM.name)
+                select(DatasetORM, OrganizationORM.name, UserORM.name, UserORM.email)
                 .join(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
                 .order_by(DatasetORM.created_at.desc())
             )
             if org_id is not None:
@@ -107,10 +125,12 @@ class SqlRepository:
                     id=r.id,
                     org_id=r.org_id,
                     org_name=str(org_name or ""),
+                    creator_name=str(user_name or user_email or r.created_by),
                     name=r.name,
                     dataset_type=r.dataset_type,
                     task_spec=cast(TaskSpec, r.dataset_meta),
                     view_types=cast(list[str], r.view_types),
+                    created_by=r.created_by,
                     is_public=r.is_public,
                     created_at=r.created_at,
                     embed_config=r.embed_config or {},
@@ -118,7 +138,7 @@ class SqlRepository:
                     storage_mode=cast(DatasetStorageMode, r.storage_mode),
                     dataset_meta=r.dataset_meta,
                 )
-                for r, org_name in rows
+                for r, org_name, user_name, user_email in rows
             ]
 
     async def count_samples_by_dataset(self, dataset_ids: list[str]) -> dict[str, int]:
@@ -147,10 +167,12 @@ class SqlRepository:
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
+                creator_name=await _user_name_for(session, row.created_by),
                 name=row.name,
                 dataset_type=row.dataset_type,
                 task_spec=cast(TaskSpec, row.dataset_meta),
                 view_types=cast(list[str], row.view_types),
+                created_by=row.created_by,
                 is_public=row.is_public,
                 created_at=row.created_at,
                 embed_config=row.embed_config or {},

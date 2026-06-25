@@ -7,6 +7,7 @@ const props = defineProps<{
   row: DatasetListItem;
   isSuperadmin: boolean;
   isOwnOrg: boolean;
+  canDelete: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -28,7 +29,7 @@ function onDelete(e: MouseEvent): void {
 <template>
   <span>
     <NButton size="small" @click="onView">View</NButton>
-    <template v-if="isSuperadmin && isOwnOrg">
+    <template v-if="canDelete">
       <NButton size="small" type="error" style="margin-left: 6px" @click="onDelete">
         Delete
       </NButton>

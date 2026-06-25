@@ -20,10 +20,13 @@ export interface DatasetListItem {
   ls_project_url?: string | null;
   org_id?: string | null;
   org_name?: string | null;
+  created_by?: string | null;
+  creator_name?: string | null;
   is_public?: boolean | null;
 }
 
 export interface DatasetListUser {
+  id?: string;
   is_superadmin?: boolean;
 }
 
@@ -56,6 +59,7 @@ export interface DatasetListPermissions {
 export interface BuildDatasetColumnsOptions<TDataset extends DatasetListItem = DatasetListItem> {
   currentOrgId: string | null;
   isSuperadmin: boolean;
+  currentUserId?: string | null;
   taskTagType?: "default" | "error" | "primary" | "info" | "success" | "warning";
   resolveTaskType?: (taskType: string | null | undefined) => string;
   onViewDataset: (datasetId: string) => void;
@@ -97,5 +101,6 @@ export interface UseDatasetListSurfaceResult<TDataset extends DatasetListItem = 
     row: TDataset;
     isSuperadmin: boolean;
     isOwnOrg: boolean;
+    canDelete: boolean;
   };
 }

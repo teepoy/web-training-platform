@@ -10,6 +10,10 @@ import {
   legendColor,
 } from './scMapUtils'
 import type { DefectList } from '../../generated/proto/sc/v1/sample_pb'
+import {
+  DEFAULT_RECLASSIFY_CODE_NAMES,
+  DEFAULT_ROUGH_BIN_CODE_NAMES,
+} from '@/features/sc/application/reclassifyCodeNames'
 
 type LegendSource = 'class' | 'bin' | 'annotation' | 'prediction'
 type LegendKey = number | string
@@ -49,6 +53,24 @@ function colorMapKeyForLegendKey(source: LegendSource, rawKey: string, compactGr
   )
 }
 
+function groupDisplayName(group: DefectList): string | null {
+  const record = group as unknown as Record<string, unknown>
+  const value = record.name ?? record.display_name ?? record.displayName ?? record.label
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function codeNameLabel(prefix: string, rawKey: string, group?: DefectList): string {
+  const source = props.legendSource ?? 'class'
+  const hardcodedName =
+    source === 'class'
+      ? DEFAULT_RECLASSIFY_CODE_NAMES[rawKey]
+      : source === 'bin'
+        ? DEFAULT_ROUGH_BIN_CODE_NAMES[rawKey]
+        : undefined
+  const name = hardcodedName ?? (group ? groupDisplayName(group) : null)
+  return name ? `${prefix}${rawKey} - ${name}` : `${prefix}${rawKey}`
+}
+
 const legendData = computed(() => {
   const source = props.legendSource ?? 'class'
   const compactGroups = {
@@ -59,7 +81,7 @@ const legendData = computed(() => {
   }[source]
   const isNumericSource = source === 'class' || source === 'bin'
   const colorFn = source === 'bin' ? binColor : classColor
-  const labelPrefix = source === 'class' ? 'Class ' : source === 'bin' ? 'Bin ' : ''
+  const labelPrefix = source === 'class' || source === 'bin' ? '' : ''
   const missingLabels: Record<string, string> = {
     [UNLABELED_KEY]: 'Unlabeled',
     [NO_PREDICTION_KEY]: 'No Prediction',
@@ -74,7 +96,7 @@ const legendData = computed(() => {
           colorKey,
           count: group.count,
           color: props.colorMap?.[colorKey] ?? legendColor(source, rawKey),
-          label: missingLabels[rawKey] ?? (labelPrefix + rawKey),
+          label: missingLabels[rawKey] ?? codeNameLabel(labelPrefix, rawKey, group),
         }
       })
       .filter((item) => typeof item.key === 'string' || Number.isFinite(item.key))

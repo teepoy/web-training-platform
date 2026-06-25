@@ -5,6 +5,7 @@
           :is="activeShim"
           :datasets="surface.datasets.value"
           :current-org-id="orgStore.currentOrgId"
+          :current-user-id="authStore.user?.id ?? null"
           :is-superadmin="authStore.user?.is_superadmin ?? false"
         @view="handleViewDataset"
         @toggle-public="handleTogglePublic"
@@ -73,6 +74,10 @@ function handleTogglePublic(payload: { id: string; isPublic: boolean }) {
 }
 
 function handleDeleteDataset(row: DatasetListItem) {
+  if (row.created_by !== authStore.user?.id) {
+    message.error("Only the dataset creator can delete this dataset");
+    return;
+  }
   if (!window.confirm(`Delete dataset '${row.name}'? This removes its local jobs, samples, models, and Label Studio project.`)) {
     return;
   }

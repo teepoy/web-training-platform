@@ -41,6 +41,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
+  (e: "apply-selection", ids: number[]): void;
   (e: "filter-change", filter: ScSampleTableFilter): void;
   (
     e: "sort-change",
@@ -84,7 +85,8 @@ const columnDefinitions: ColumnDefinition[] = [
   },
 ];
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 1000;
+const SELECT_ALL_LIMIT = 50_000;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
 const SCROLL_X = 1590;
 
@@ -117,6 +119,7 @@ const rows = ref<ScSampleTableRow[]>([]);
 const serverTotal = ref(props.total);
 const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
+const isSelectingAll = ref(false);
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
@@ -343,6 +346,34 @@ function updateSelection(keys: DataTableRowKey[]): void {
   emit("selection-change", Array.from(next));
 }
 
+function buildRowsPayload(anchor: string, limit: number): ScSampleTableRowsRequest {
+  const payload: ScSampleTableRowsRequest = {
+    anchor,
+    limit,
+  };
+  if (resolvedDefectIds.value.length > 0) {
+    payload.defect_ids = resolvedDefectIds.value;
+  }
+  if (props.filter && Object.keys(props.filter).length > 0) {
+    payload.filter = props.filter;
+  }
+  if (props.sort?.direction) {
+    payload.sort = props.sort;
+  }
+  if (
+    props.reticleXDieCount !== undefined &&
+    props.reticleYDieCount !== undefined &&
+    props.reticleXDieShift !== undefined &&
+    props.reticleYDieShift !== undefined
+  ) {
+    payload.reticle_x_die_count = props.reticleXDieCount;
+    payload.reticle_y_die_count = props.reticleYDieCount;
+    payload.reticle_x_die_shift = props.reticleXDieShift;
+    payload.reticle_y_die_shift = props.reticleYDieShift;
+  }
+  return payload;
+}
+
 function toggleRow(row: ScSampleTableRow): void {
   const id = Number(row.defect_id);
   if (!Number.isFinite(id)) return;
@@ -380,31 +411,7 @@ async function fetchNextPage(): Promise<void> {
   isFetching.value = true;
   pageError.value = null;
   try {
-    const payload: ScSampleTableRowsRequest = {
-      anchor,
-      limit: PAGE_SIZE,
-    };
-    if (resolvedDefectIds.value.length > 0) {
-      payload.defect_ids = resolvedDefectIds.value;
-    }
-    if (props.filter && Object.keys(props.filter).length > 0) {
-      payload.filter = props.filter;
-    }
-    if (props.sort?.direction) {
-      payload.sort = props.sort;
-    }
-    if (
-      props.reticleXDieCount !== undefined &&
-      props.reticleYDieCount !== undefined &&
-      props.reticleXDieShift !== undefined &&
-      props.reticleYDieShift !== undefined
-    ) {
-      payload.reticle_x_die_count = props.reticleXDieCount;
-      payload.reticle_y_die_count = props.reticleYDieCount;
-      payload.reticle_x_die_shift = props.reticleXDieShift;
-      payload.reticle_y_die_shift = props.reticleYDieShift;
-    }
-
+    const payload = buildRowsPayload(anchor, PAGE_SIZE);
     streamStatus.value = "Loading sample rows...";
     const dataEvent = await streamApiSse(
       `/sc/inspections/${encodeURIComponent(props.inspectionTime!)}/${encodeURIComponent(props.waferKey!)}/sample-table-rows/stream`,
@@ -460,6 +467,68 @@ async function fetchNextPage(): Promise<void> {
       streamStatus.value = "";
     }
   }
+}
+
+async function selectAllMatching(): Promise<void> {
+  if (!queryEnabled.value || isSelectingAll.value) return;
+  if (serverTotal.value > SELECT_ALL_LIMIT) {
+    pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
+    return;
+  }
+  const hasFilter = props.filter && Object.keys(props.filter).length > 0;
+  if (!hasFilter && resolvedDefectIds.value.length > 0) {
+    if (resolvedDefectIds.value.length > SELECT_ALL_LIMIT) {
+      pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
+      return;
+    }
+    const ids = resolvedDefectIds.value.map(Number).filter(Number.isFinite);
+    selectedIds.value = new Set(ids);
+    emit("selection-change", ids);
+    return;
+  }
+
+  const version = requestVersion;
+  isSelectingAll.value = true;
+  pageError.value = null;
+  try {
+    const ids: number[] = [];
+    let anchor: string | null = "0";
+    while (anchor !== null) {
+      const dataEvent = await streamApiSse(
+        `/sc/inspections/${encodeURIComponent(props.inspectionTime!)}/${encodeURIComponent(props.waferKey!)}/sample-table-rows/stream`,
+        {
+          method: "POST",
+          body: buildRowsPayload(anchor, SELECT_ALL_LIMIT),
+        },
+      );
+      const data = dataEvent?.payload;
+      if (!data || !("items" in data)) {
+        throw new Error("Invalid sample table response");
+      }
+      const response = data as unknown as ScSampleTableRowsResponse & {
+        next_anchor?: string | null;
+      };
+      ids.push(
+        ...response.items
+          .map((row) => Number(row.defect_id))
+          .filter(Number.isFinite),
+      );
+      anchor = response.next_anchor ?? null;
+      if (version !== requestVersion) return;
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+    selectedIds.value = new Set(ids);
+    emit("selection-change", ids);
+  } catch (error) {
+    pageError.value =
+      error instanceof Error ? error.message : "Failed to select all rows";
+  } finally {
+    if (version === requestVersion) isSelectingAll.value = false;
+  }
+}
+
+function applySelectionAsDefects(): void {
+  emit("apply-selection", Array.from(selectedIds.value));
 }
 
 function handleScroll(event: Event): void {
@@ -553,12 +622,30 @@ defineExpose({
       </NText>
       <div class="sst-header-actions">
         <NButton
+          v-if="serverTotal > 0"
+          size="tiny"
+          quaternary
+          :loading="isSelectingAll"
+          @click="selectAllMatching"
+        >
+          Select All ({{ serverTotal }})
+        </NButton>
+        <NButton
           v-if="selectedIds.size > 0"
           size="tiny"
           quaternary
           @click="clearSelection"
         >
           Clear Selection ({{ selectedIds.size }})
+        </NButton>
+        <NButton
+          v-if="selectedIds.size > 0"
+          size="tiny"
+          quaternary
+          type="primary"
+          @click="applySelectionAsDefects"
+        >
+          Set as Selected Defects
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded

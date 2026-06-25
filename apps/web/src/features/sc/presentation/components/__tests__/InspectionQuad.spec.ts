@@ -24,7 +24,7 @@ const Stub = defineComponent({
     sort: Object,
     selectedDefectIds: Object,
   },
-  emits: ["filter-change", "sort-change", "selection-change"],
+  emits: ["filter-change", "sort-change", "selection-change", "apply-selection"],
   template: "<div />",
 });
 
@@ -162,11 +162,13 @@ describe("InspectionQuad", () => {
     });
 
     table.vm.$emit("selection-change", [1, 2]);
+    table.vm.$emit("apply-selection", [2, 3]);
     table.vm.$emit("filter-change", {
       rough_bin: { operator: "in", values: [2, 3] },
     });
     await wrapper.vm.$nextTick();
     expect(wrapper.emitted("table-selection-change")?.[0]).toEqual([[1, 2]]);
+    expect(wrapper.emitted("table-apply-selection")?.[0]).toEqual([[2, 3]]);
     expect(wrapper.emitted("table-filter-change")?.[0]).toEqual([
       { rough_bin: { operator: "in", values: [2, 3] } },
     ]);

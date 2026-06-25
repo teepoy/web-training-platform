@@ -164,6 +164,7 @@ export interface PreviewPageState {
   handleImport: () => Promise<void>;
   openImportForInspection: (item: InspectionSummaryItem) => void;
   startImportDirectly: (item: InspectionSummaryItem) => void;
+  importedDatasetIdForInspection: (item: InspectionSummaryItem) => string | null;
 }
 
 // ── Composable ────────────────────────────────────────────────────────
@@ -256,11 +257,28 @@ export function usePreviewPage(): PreviewPageState {
     | "wafer_id"
     | "layer_id"
     | "device";
+  type SummaryFilterOptionKey = Exclude<SummaryFilterKey, "inspection_time">;
+
+  const SUMMARY_FILTER_OPTION_LIMIT = 500;
+  const inspectionTimeLabelCache = new Map<string, string>();
+  const inspectionTimeEpochCache = new Map<string, number>();
+
+  function parseInspectionTime(value: string): number {
+    const cached = inspectionTimeEpochCache.get(value);
+    if (cached !== undefined) return cached;
+    const parsed = Date.parse(value);
+    const epoch = Number.isFinite(parsed) ? parsed : 0;
+    inspectionTimeEpochCache.set(value, epoch);
+    return epoch;
+  }
 
   function formatInspectionTime(value: string): string {
-    const parsed = Date.parse(value);
-    if (!Number.isFinite(parsed)) return value;
-    return new Date(parsed).toLocaleString();
+    const cached = inspectionTimeLabelCache.get(value);
+    if (cached !== undefined) return cached;
+    const parsed = parseInspectionTime(value);
+    const label = parsed > 0 ? new Date(parsed).toLocaleString() : value;
+    inspectionTimeLabelCache.set(value, label);
+    return label;
   }
 
   function summaryFilterLabel(key: SummaryFilterKey, value: string): string {
@@ -268,19 +286,48 @@ export function usePreviewPage(): PreviewPageState {
   }
 
   function summaryFilterOptions(key: SummaryFilterKey) {
-    const values = new Set<string>();
+    return summaryFilterOptionsByKey.value[key];
+  }
+
+  const summaryFilterOptionsByKey = computed<
+    Record<SummaryFilterKey, { label: string; value: string }[]>
+  >(() => {
+    const valuesByKey: Record<SummaryFilterOptionKey, Set<string>> = {
+      lot_id: new Set(),
+      wafer_id: new Set(),
+      layer_id: new Set(),
+      device: new Set(),
+    };
+    const filterKeys = Object.keys(valuesByKey) as SummaryFilterOptionKey[];
     for (const row of summaries.value) {
-      const value = row[key];
-      if (value !== undefined && value !== null && String(value).length > 0) {
-        values.add(String(value));
+      for (const key of filterKeys) {
+        const value = row[key];
+        if (value !== undefined && value !== null && String(value).length > 0) {
+          valuesByKey[key].add(String(value));
+        }
       }
     }
-    return [...values]
-      .sort((left, right) =>
-        left.localeCompare(right, undefined, { numeric: true }),
-      )
-      .map((value) => ({ label: summaryFilterLabel(key, value), value }));
-  }
+    const result: Record<SummaryFilterKey, { label: string; value: string }[]> =
+      {
+        inspection_time: [],
+        lot_id: [],
+        wafer_id: [],
+        layer_id: [],
+        device: [],
+      };
+    for (const key of filterKeys) {
+      if (valuesByKey[key].size > SUMMARY_FILTER_OPTION_LIMIT) {
+        result[key] = [];
+        continue;
+      }
+      result[key] = [...valuesByKey[key]]
+        .sort((left, right) =>
+          left.localeCompare(right, undefined, { numeric: true }),
+        )
+        .map((value) => ({ label: summaryFilterLabel(key, value), value }));
+    }
+    return result;
+  });
 
   function summaryStringSorter(
     key: SummaryFilterKey,
@@ -309,11 +356,9 @@ export function usePreviewPage(): PreviewPageState {
         width: 200,
         ellipsis: { tooltip: true },
         sorter: (left, right) =>
-          Date.parse(left.inspection_time) - Date.parse(right.inspection_time),
+          parseInspectionTime(left.inspection_time) -
+          parseInspectionTime(right.inspection_time),
         render: (row) => formatInspectionTime(row.inspection_time),
-        filter: summaryStringFilter("inspection_time"),
-        filterOptions: summaryFilterOptions("inspection_time"),
-        filterMultiple: true,
       },
       {
         key: "lot_id",
@@ -1017,6 +1062,7 @@ export function usePreviewPage(): PreviewPageState {
     remaining_count: 0,
   });
   const importError = ref("");
+  const importedDatasetIdsByInspection = ref<Record<string, string>>({});
 
   createSummaryTab();
 
@@ -1042,6 +1088,16 @@ export function usePreviewPage(): PreviewPageState {
     importSourceWaferKey.value = item.wafer_key;
     importDatasetName.value = `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`;
     void handleImport();
+  }
+
+  function importKey(inspectionTime: string, waferKey: number): string {
+    return `${inspectionTime}::${waferKey}`;
+  }
+
+  function importedDatasetIdForInspection(item: InspectionSummaryItem): string | null {
+    return importedDatasetIdsByInspection.value[
+      importKey(item.inspection_time, item.wafer_key)
+    ] ?? null;
   }
 
   // ── Import handlers ──────────────────────────────
@@ -1097,6 +1153,11 @@ export function usePreviewPage(): PreviewPageState {
       showImportModal.value = false;
       if (resp.status === "completed" && resp.dataset_id) {
         datasetId.value = resp.dataset_id;
+        importedDatasetIdsByInspection.value = {
+          ...importedDatasetIdsByInspection.value,
+          [importKey(req.source_inspection_time, req.source_wafer_key)]:
+            resp.dataset_id,
+        };
         importProgress.value = {
           status: resp.status,
           imported_count: resp.imported_count ?? 0,
@@ -1105,7 +1166,6 @@ export function usePreviewPage(): PreviewPageState {
         message.success(
           `Import complete: ${resp.imported_count ?? 0} samples imported`,
         );
-        window.open(`/datasets/${resp.dataset_id}/sc/classify`, "_blank");
       } else if (resp.status === "failed") {
         message.error(resp.error || "Import failed");
       }
@@ -1168,5 +1228,6 @@ export function usePreviewPage(): PreviewPageState {
     handleImport,
     openImportForInspection,
     startImportDirectly,
+    importedDatasetIdForInspection,
   };
 }

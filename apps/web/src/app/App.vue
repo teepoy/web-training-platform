@@ -95,7 +95,7 @@
 import { computed, h, onMounted, watch, type Component } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
-import { AlbumsOutline, ImagesOutline, ListCircleOutline } from "@vicons/ionicons5";
+import { AlbumsOutline, CubeOutline, ImagesOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useUiStore } from '@/features/auth/application/ui';
 import { useAuthStore } from '@/features/auth/application/store';
@@ -138,9 +138,9 @@ const themeOverrides: GlobalThemeOverrides = {
 const activeRoute = computed(() => {
   const p = route.path;
   if (p.startsWith("/datasets")) return "/datasets";
+  if (p.startsWith("/models")) return "/models";
   if (p.startsWith("/sc")) return "/sc";
   if (p.startsWith("/sensors")) return "/sensors";
-  if (p.startsWith("/tasks")) return "/tasks";
   return p;
 });
 
@@ -160,7 +160,7 @@ function renderMenuIcon(icon: Component) {
 const menuOptions: MenuOption[] = [
   { label: "Patch", key: "/sc", icon: renderMenuIcon(ImagesOutline) },
   { label: "Datasets", key: "/datasets", icon: renderMenuIcon(AlbumsOutline) },
-  { label: "Tasks", key: "/tasks", icon: renderMenuIcon(ListCircleOutline) },
+  { label: "Models", key: "/models", icon: renderMenuIcon(CubeOutline) },
 ];
 
 const userInitials = computed(() =>

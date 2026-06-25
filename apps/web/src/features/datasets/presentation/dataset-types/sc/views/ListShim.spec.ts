@@ -11,6 +11,17 @@ const stubs = {
   NButton: {
     template: "<button><slot /></button>",
   },
+  NInput: {
+    props: ["value"],
+    emits: ["update:value"],
+    template:
+      "<input :value=\"value\" @input=\"$emit('update:value', $event.target.value)\" />",
+  },
+  NSelect: {
+    props: ["value", "options"],
+    emits: ["update:value"],
+    template: "<select :value=\"value ?? ''\"><slot /></select>",
+  },
   NDataTable: {
     props: ["columns", "data"],
     template: `
@@ -39,7 +50,10 @@ const stubs = {
   },
 };
 
-function makeDataset(datasetMeta: Record<string, unknown>): DatasetListItem {
+function makeDataset(
+  datasetMeta: Record<string, unknown>,
+  overrides: Partial<DatasetListItem> = {},
+): DatasetListItem {
   return {
     id: "dataset-1",
     name: "Patch A",
@@ -47,6 +61,7 @@ function makeDataset(datasetMeta: Record<string, unknown>): DatasetListItem {
     task_spec: { task_type: "patch" },
     dataset_meta: datasetMeta,
     created_at: "2026-06-19T00:00:00Z",
+    ...overrides,
   };
 }
 
@@ -78,5 +93,34 @@ describe("SC dataset list shim", () => {
 
     expect(wrapper.text()).toContain("Samples");
     expect(wrapper.text()).toContain("37");
+  });
+
+  it("shows creator names and filters by keyword", async () => {
+    const wrapper = mount(ListShim, {
+      props: {
+        datasets: [
+          makeDataset(
+            { total_samples: 37 },
+            { id: "dataset-1", name: "Patch Alpha", creator_name: "Alice" },
+          ),
+          makeDataset(
+            { total_samples: 11 },
+            { id: "dataset-2", name: "Patch Beta", creator_name: "Bob" },
+          ),
+        ],
+        currentOrgId: "org-1",
+        isSuperadmin: false,
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain("Creator");
+    expect(wrapper.text()).toContain("Alice");
+    expect(wrapper.text()).toContain("Bob");
+
+    await wrapper.find("input").setValue("alpha");
+
+    expect(wrapper.text()).toContain("Patch Alpha");
+    expect(wrapper.text()).not.toContain("Patch Beta");
   });
 });

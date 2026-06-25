@@ -172,10 +172,11 @@ function openScClassify() {
         <n-button v-if="dataset.task_spec?.task_type === 'sc'" type="primary" size="small" @click="openScClassify">Classify</n-button>
       </div>
 
-      <div v-if="compatibleViewOptions.length > 0" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
+      <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
         <!-- Temp Disable View Switch -->
         <!-- <n-text depth="3" style="font-size: 12px; white-space: nowrap">View:</n-text> -->
         <n-select
+          v-if="false"
           data-testid="view-type-selector"
           :value="currentViewType"
           :options="compatibleViewOptions"
@@ -201,7 +202,7 @@ function openScClassify() {
 
         <n-tab-pane name="train" tab="Train"><DatasetTrainTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
-        <n-tab-pane name="export" tab="Export">
+        <n-tab-pane v-if="false" name="export" tab="Export">
           <n-empty v-if="exporterFlows.length === 0" description="No export plugins available." style="margin-top: 24px" />
           <template v-else-if="exportStep === 'select'">
             <FlowTypeSelector :flows="exporterFlows" @select="handleExportSelect" />
@@ -211,7 +212,7 @@ function openScClassify() {
               <n-button text @click="handleExportBack">&larr; Back to export options</n-button>
             </div>
             <component
-              :is="selectedExporter.component"
+              :is="selectedExporter?.component"
               :dataset-id="id"
               :on-complete="handleExportComplete"
               :on-cancel="handleExportBack"

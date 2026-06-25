@@ -373,6 +373,7 @@ export * from './uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet200';
 export * from './updateAnnotationRequest';
 export * from './updateEmbedConfigRequest';
 export * from './updateLabelSpaceRequest';
+export * from './updateModelRequest';
 export * from './updateSampleImageResponse';
 export * from './updateScheduleRequest';
 export * from './updateScheduleRequestCron';

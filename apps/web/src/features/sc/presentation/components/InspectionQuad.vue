@@ -90,6 +90,7 @@ const emit = defineEmits<{
     sort: { field: string; direction: "asc" | "desc" | null },
   ): void;
   (e: "table-selection-change", ids: number[]): void;
+  (e: "table-apply-selection", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "retry"): void;
 }>();
@@ -171,14 +172,19 @@ function onRowResizeEnd(e: PointerEvent): void {
 // ── Selection state ──────────────────────────────
 const mapSelectionIds = ref<number[]>([]);
 
-const selectionVersion = computed(() =>
-  mapSelectionIds.value.length > 0 ? mapSelectionIds.value.join(",") : "0",
-);
-
 const filteredSamples = computed<ScSampleItem[]>(() => {
   if (mapSelectionIds.value.length === 0) return props.samples;
   const filter = new Set(mapSelectionIds.value);
   return props.samples.filter((s) => filter.has(s.defectId));
+});
+
+const blinkSamples = computed<ScSampleItem[]>(() => {
+  const selectedIds = props.selectedDefectIds ?? [];
+  if (selectedIds.length > 0) {
+    const filter = new Set(selectedIds);
+    return props.samples.filter((s) => filter.has(s.defectId));
+  }
+  return filteredSamples.value;
 });
 
 const filteredDefectIds = computed<string[] | undefined>(() =>
@@ -189,8 +195,10 @@ const filteredDefectIds = computed<string[] | undefined>(() =>
 
 const filteredReviewSamples = computed<ScSampleItem[]>(() => {
   const samples = props.reviewSamples ?? [];
-  if (mapSelectionIds.value.length === 0) return samples;
-  const filter = new Set(mapSelectionIds.value);
+  const selectedIds = props.selectedDefectIds ?? [];
+  const sourceIds = selectedIds.length > 0 ? selectedIds : mapSelectionIds.value;
+  if (sourceIds.length === 0) return samples;
+  const filter = new Set(sourceIds);
   return samples.filter((s) => filter.has(s.defectId));
 });
 
@@ -346,7 +354,6 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
       />
       <ScSampleTable
         ref="sampleTableRef"
-        :key="selectionVersion"
         :defect-ids="filteredDefectIds"
         :inspection-time="inspectionTime"
         :wafer-key="waferKey"
@@ -360,6 +367,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
         :reticle-x-die-shift="reticleOptionsModel.xDieShift"
         :reticle-y-die-shift="reticleOptionsModel.yDieShift"
         @selection-change="(ids) => emit('table-selection-change', ids)"
+        @apply-selection="(ids) => emit('table-apply-selection', ids)"
         @filter-change="(filter) => emit('table-filter-change', filter)"
         @sort-change="(sort) => emit('table-sort-change', sort)"
       />
@@ -378,14 +386,13 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
     <!-- Right column: Blink Table -->
     <div class="iq-panel-right">
       <ScPreviewBlinkVirtualTable
-        :key="selectionVersion"
-        :samples="filteredSamples"
+        :samples="blinkSamples"
         :review-samples="filteredReviewSamples"
         :review-loading="reviewLoading"
         :review-error="reviewError"
         :blink-interval-ms="800"
         :initial-blink-enabled="true"
-        :selected-defect-ids="new Set()"
+        :selected-defect-ids="new Set((selectedDefectIds ?? []).map(String))"
         :inspection-time="inspectionTime"
       />
     </div>

@@ -23,6 +23,7 @@ from app.modules.auth.port.http.deps import (
 from app.modules.models.port.http.schemas import (
     ModelResponse,
     ModelUploadTemplateResponse,
+    UpdateModelRequest,
     UploadTemplateProfileResponse,
 )
 from app.modules.models.app.services.model_service import ModelService
@@ -56,6 +57,8 @@ def _model_to_response(model) -> ModelResponse:
         dataset_id=model.dataset_id,
         dataset_name=model.dataset_name,
         trainer_name=model.trainer_name,
+        created_by=model.created_by,
+        creator_name=model.creator_name,
     )
 
 
@@ -83,6 +86,22 @@ async def get_model(
     org: CurrentOrgDep,
 ) -> ModelResponse:
     model = await model_service.get_model(model_id, org_id=org.id)
+    return _model_to_response(model)
+
+
+@router.patch("/models/{model_id}", response_model=ModelResponse)
+async def update_model(
+    model_id: str,
+    payload: UpdateModelRequest,
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+) -> ModelResponse:
+    model = await model_service.rename_model(
+        model_id,
+        org_id=org.id,
+        name=payload.name,
+    )
     return _model_to_response(model)
 
 

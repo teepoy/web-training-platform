@@ -100,8 +100,8 @@ const previousDefaultColorMap = ref<Record<string, string>>({});
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
-    class: "Class",
-    bin: "Rough Bin",
+    class: "Class Mapping",
+    bin: "Rough Bin Mapping",
     annotation: "Annotation",
     prediction: "Prediction (Latest)",
   };
@@ -342,6 +342,20 @@ const handleLegendSelect = (key: LegendKey | null) => {
         :style="{ '--sc-map-canvas-top': `${canvasTopPx}px` }"
       >
         <div ref="mapAreaRef" class="map-area">
+          <div
+            v-if="showMapProgress"
+            class="sc-map-progress"
+          >
+            <NProgress
+              type="line"
+              :percentage="mapProgressPercent ?? 0"
+              :indicator-placement="'inside'"
+              processing
+            />
+            <NText depth="3" class="sc-map-progress-text">
+              {{ mapProgressMessage }}
+            </NText>
+          </div>
           <div class="map-tabs-row">
             <NTabs
               :value="internalTab"
@@ -407,20 +421,6 @@ const handleLegendSelect = (key: LegendKey | null) => {
           </NTabPane>
         </NTabs>
           </div>
-          <div
-            v-if="showMapProgress"
-            class="sc-map-progress"
-          >
-            <NProgress
-              type="line"
-              :percentage="mapProgressPercent ?? 0"
-              :indicator-placement="'inside'"
-              processing
-            />
-            <NText depth="3" class="sc-map-progress-text">
-              {{ mapProgressMessage }}
-            </NText>
-          </div>
         <div class="floating-toolbar">
           <NButton
             data-testid="sc-map-toolbar-toggle"
@@ -483,7 +483,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
         data-testid="sc-map-drawer"
         class="legend-drawer"
         :class="{ 'legend-drawer--collapsed': !drawerVisible }"
-        :style="{ width: drawerVisible ? '130px' : '0px', minWidth: drawerVisible ? '130px' : '0px' }"
+        :style="{ width: drawerVisible ? '190px' : '0px', minWidth: drawerVisible ? '190px' : '0px' }"
       >
         <NButton
           data-testid="sc-map-drawer-toggle"
@@ -541,8 +541,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
   flex-direction: column;
   height: 100%;
   width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .sc-map-content {
@@ -583,14 +582,14 @@ const handleLegendSelect = (key: LegendKey | null) => {
   top: calc(var(--sc-map-canvas-top) + (100% - var(--sc-map-canvas-top)) / 2);
   width: min(320px, calc(100% - 48px));
   transform: translate(-50%, -50%);
-  z-index: 50;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
   border: 1px solid var(--n-border-color);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--n-color) 94%, transparent);
+  background: var(--n-color);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   pointer-events: none;
 }

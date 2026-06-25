@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    import polars as pl
+import polars as pl
 
 from app.modules.sc.domain.models import ScInspectionRecord
 

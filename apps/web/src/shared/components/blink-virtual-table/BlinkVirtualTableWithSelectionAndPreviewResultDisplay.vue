@@ -11,6 +11,7 @@ import {
   NSelect,
   NInput,
   NModal,
+  NImage,
 } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { withAuthQueryParams } from "@/shared/api/client";
@@ -81,7 +82,7 @@ const emit = defineEmits<{
 
 const mode = ref<"patch" | "review">("patch");
 const settingsOpen = ref(false);
-const MAX_SAMPLES_PER_ROW = 6;
+const MAX_SAMPLES_PER_ROW = 30;
 const clampSamplesPerRow = (value: number): number =>
   Math.min(MAX_SAMPLES_PER_ROW, Math.max(1, value));
 const patchPerRow = ref(clampSamplesPerRow(props.patchSamplesPerRow));
@@ -150,16 +151,20 @@ const reviewDisabled = computed(
 );
 
 watch(() => props.patchSamplesPerRow, (v) => {
-  patchPerRow.value = clampSamplesPerRow(v);
+  const next = clampSamplesPerRow(v);
+  if (patchPerRow.value !== next) patchPerRow.value = next;
 });
 watch(() => props.reviewSamplesPerRow, (v) => {
-  reviewPerRow.value = clampSamplesPerRow(v);
+  const next = clampSamplesPerRow(v);
+  if (reviewPerRow.value !== next) reviewPerRow.value = next;
 });
 watch(() => props.patchCellSize, (v) => {
-  patchImageSize.value = normalizeImageSize(v);
+  const next = normalizeImageSize(v);
+  if (patchImageSize.value !== next) patchImageSize.value = next;
 });
 watch(() => props.reviewCellSize, (v) => {
-  reviewImageSize.value = normalizeImageSize(v);
+  const next = normalizeImageSize(v);
+  if (reviewImageSize.value !== next) reviewImageSize.value = next;
 });
 const samplesRef = computed(() =>
   mode.value === "review" ? props.reviewSamples ?? [] : props.samples,
@@ -403,6 +408,19 @@ function getSpriteUrl(sample: ScSampleItem): string {
   }
   const spriteMode = isPatch ? "patch" : "review";
   return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
+}
+
+function getSingleSpriteUrl(sample: ScSampleItem, imageType: string): string {
+  const isPatch = mode.value === "patch";
+  const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
+  const t = props.inspectionTime ?? String(sample.inspectionTime);
+  const params = new URLSearchParams();
+  params.set("cell_size", String(cs));
+  params.append("image_types", imageType);
+  const spriteMode = isPatch ? "patch" : "review";
+  return withAuthQueryParams(
+    `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`,
+  );
 }
 
 function shouldRenderSprite(sample: ScSampleItem): boolean {
@@ -663,13 +681,6 @@ defineExpose({ scrollRef });
     <!-- Toolbar -->
     <div class="sbt-toolbar">
       <div class="sbt-toolbar-left">
-        <n-switch
-          :value="blinkEnabled"
-          size="small"
-          @update:value="toggleBlink"
-        />
-        <n-text class="sbt-blink-label">Blink</n-text>
-
         <n-radio-group
           v-if="showModeSwitch"
           v-model:value="mode"
@@ -706,6 +717,15 @@ defineExpose({ scrollRef });
       :style="{ width: '380px' }"
     >
       <div class="sbt-settings">
+        <div class="sbt-setting-row">
+          <n-text class="sbt-control-label">Blink</n-text>
+          <n-switch
+            :value="blinkEnabled"
+            size="small"
+            @update:value="toggleBlink"
+          />
+        </div>
+
         <div class="sbt-setting-row">
           <n-text class="sbt-control-label">Per Row</n-text>
           <div class="sbt-per-row">
@@ -862,9 +882,18 @@ defineExpose({ scrollRef });
                     <div
                       v-for="imageId in reviewColumnsForSample(sample)"
                       :key="'rev_' + imageId"
-                      class="sbt-img-cell"
+                      class="sbt-img-cell sbt-img-cell--preview"
+                      @click.stop
                     >
-                      <div v-if="shouldRenderSprite(sample)" class="sbt-sprite-layer" :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"></div>
+                      <NImage
+                        v-if="shouldRenderSprite(sample)"
+                        class="sbt-review-image"
+                        :src="getSingleSpriteUrl(sample, `review${imageId}`)"
+                        :width="cellSize"
+                        :height="cellSize"
+                        object-fit="contain"
+                        lazy
+                      />
                       <div v-else class="sbt-img-placeholder"></div>
                     </div>
                   </template>
@@ -1003,7 +1032,7 @@ defineExpose({ scrollRef });
 }
 
 .sbt-per-row-value {
-  width: 14px;
+  min-width: 24px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1186,6 +1215,20 @@ defineExpose({ scrollRef });
   overflow: hidden;
   background: #111;
   flex-shrink: 0;
+}
+
+.sbt-img-cell--preview {
+  cursor: zoom-in;
+}
+
+.sbt-review-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sbt-review-image :deep(img) {
+  display: block;
 }
 
 .sbt-sprite-layer {
