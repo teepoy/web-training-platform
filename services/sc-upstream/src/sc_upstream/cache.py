@@ -121,13 +121,13 @@ class RawSamplesWriter:
             ex=self._ttl_seconds,
         )
         meta_path = data_path.parent / "meta.json"
-        meta_path.write_text(
-            json.dumps(
-                {"redis_key": self._redis_key, **payload},
-                separators=(",", ":"),
-            ),
-            encoding="utf-8",
+        tmp_path = data_path.parent / "meta.json.tmp"
+        content = json.dumps(
+            {"redis_key": self._redis_key, **payload},
+            separators=(",", ":"),
         )
+        tmp_path.write_text(content, encoding="utf-8")
+        tmp_path.rename(meta_path)
 
 
 class QueryCache:

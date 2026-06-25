@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import {
-  NButton,
-  NDivider,
-  NImage,
-  NInput,
-  NModal,
-  NScrollbar,
-  NTag,
-  NText,
-} from "naive-ui";
-import type { AnnotationGridItem } from "@/shared/types/components";
+import { NButton, NDivider, NInput, NModal, NScrollbar, NTag, NText } from "naive-ui";
 import type { ReclassifyCodeLabel } from "../../application/useReclassifyPage";
 
 const props = defineProps<{
@@ -20,7 +10,6 @@ const props = defineProps<{
   draftCount: number;
   selectedDraftCount: number;
   isSubmitting: boolean;
-  annotationGridItems: AnnotationGridItem[];
 }>();
 
 const emit = defineEmits<{
@@ -40,9 +29,7 @@ const shortcutDisplay = computed(() => shortcutTarget.value?.shortcut || "-");
 const filteredCodeLabels = computed(() => {
   const query = codeSearch.value.trim().toLowerCase();
   if (!query) return props.codeLabels;
-  return props.codeLabels.filter((label) =>
-    label.name.toLowerCase().includes(query),
-  );
+  return props.codeLabels.filter((label) => label.name.toLowerCase().includes(query));
 });
 
 function openShortcutModal(label: ReclassifyCodeLabel): void {
@@ -71,12 +58,7 @@ function handleShortcutKeydown(event: KeyboardEvent): void {
     closeShortcutModal();
     return;
   }
-  if (
-    event.ctrlKey ||
-    event.metaKey ||
-    event.altKey ||
-    event.key.length !== 1
-  ) {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) {
     return;
   }
   event.stopPropagation();
@@ -95,12 +77,7 @@ onBeforeUnmount(() => {
     <div class="sc-annotate">
       <div class="sc-annotate-header">
         <NText strong>Annotation</NText>
-        <NTag
-          v-if="selectedCount > 0"
-          size="tiny"
-          :bordered="false"
-          type="warning"
-        >
+        <NTag v-if="selectedCount > 0" size="tiny" :bordered="false" type="warning">
           {{ selectedCount }} sample{{ selectedCount === 1 ? "" : "s" }}
         </NTag>
       </div>
@@ -183,11 +160,7 @@ onBeforeUnmount(() => {
         >
           Submit {{ draftCount > 0 ? `(${draftCount})` : "" }}
         </NButton>
-        <NButton
-          v-if="draftCount > 0"
-          size="small"
-          @click="emit('clear-drafts')"
-        >
+        <NButton v-if="draftCount > 0" size="small" @click="emit('clear-drafts')">
           Clear Drafts
         </NButton>
         <NButton
@@ -201,58 +174,6 @@ onBeforeUnmount(() => {
       </div>
 
       <NDivider style="margin: 8px 0" />
-
-      <div class="sc-sample-detail">
-        <NText depth="3" class="sc-detail-title">Sample Detail</NText>
-        <div
-          v-for="item in annotationGridItems"
-          :key="item.id"
-          class="sc-detail-row"
-        >
-          <div class="sc-detail-images">
-            <NImage
-              v-for="(src, i) in item.imageSrcs.slice(0, 3)"
-              :key="i"
-              :src="src"
-              width="80"
-              height="80"
-              object-fit="cover"
-              class="sc-detail-img"
-              lazy
-            />
-          </div>
-          <div class="sc-detail-meta">
-            <div class="sc-meta-item">
-              <span class="sc-meta-key">ID</span>
-              <span class="sc-meta-val">{{ item.id.slice(0, 12) }}</span>
-            </div>
-            <div class="sc-meta-item">
-              <span class="sc-meta-key">Defect</span>
-              <span class="sc-meta-val">{{
-                item.metadata.defectId ?? "\u2014"
-              }}</span>
-            </div>
-            <div class="sc-meta-item">
-              <span class="sc-meta-key">Class</span>
-              <span class="sc-meta-val">{{
-                item.metadata.classNumber ?? "\u2014"
-              }}</span>
-            </div>
-            <div class="sc-meta-item">
-              <span class="sc-meta-key">Current Label</span>
-              <NTag
-                v-if="item.currentLabel"
-                size="tiny"
-                :bordered="false"
-                type="success"
-              >
-                {{ item.currentLabel }}
-              </NTag>
-              <span v-else class="sc-meta-val">\u2014</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <NModal
@@ -272,18 +193,14 @@ onBeforeUnmount(() => {
           </NText>
         </div>
         <div class="sc-shortcut-status" aria-live="polite">
-          <NText depth="3" class="sc-shortcut-hint">
-            Press a single key to assign it.
-          </NText>
+          <NText depth="3" class="sc-shortcut-hint"> Press a single key to assign it. </NText>
           <span class="sc-shortcut-current">{{ shortcutDisplay }}</span>
         </div>
       </div>
       <template #footer>
         <div class="sc-shortcut-footer">
           <NButton size="small" @click="clearShortcut">Clear</NButton>
-          <NButton size="small" type="primary" @click="closeShortcutModal">
-            Done
-          </NButton>
+          <NButton size="small" type="primary" @click="closeShortcutModal"> Done </NButton>
         </div>
       </template>
     </NModal>
@@ -409,51 +326,6 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-top: 4px;
   flex-wrap: wrap;
-}
-
-.sc-detail-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.sc-detail-images {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.sc-detail-img {
-  border-radius: 4px;
-  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
-  flex-shrink: 0;
-}
-
-.sc-detail-meta {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sc-meta-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 2px 0;
-}
-
-.sc-meta-key {
-  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.45));
-  min-width: 80px;
-}
-
-.sc-meta-val {
-  color: var(--cv-text, #fff);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .sc-shortcut-modal {

@@ -7003,6 +7003,15 @@ components:
           type: integer
           title: Reticle Y Die Shift
           default: 0
+        filter:
+          anyOf:
+          - additionalProperties:
+              anyOf:
+              - $ref: '#/components/schemas/ScSampleTableSetFilter'
+              - $ref: '#/components/schemas/ScSampleTableRangeFilter'
+            type: object
+          - type: 'null'
+          title: Filter
       type: object
       required:
       - mode

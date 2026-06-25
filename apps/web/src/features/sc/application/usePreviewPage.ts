@@ -1,11 +1,4 @@
-import {
-  computed,
-  onMounted,
-  ref,
-  watch,
-  type ComputedRef,
-  type Ref,
-} from "vue";
+import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue";
 import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
@@ -34,15 +27,13 @@ import type {
   ScImportResponse,
 } from "../domain/models";
 import type { GetInspectionsApiV1ScInspectionsGetParams } from "@/generated/orval/models/getInspectionsApiV1ScInspectionsGetParams";
-import type {
-  ScSampleTableFilter,
-  ScSampleTableSort,
-} from "../domain/sampleTable";
+import type { ScSampleTableFilter, ScSampleTableSort } from "../domain/sampleTable";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
   type ReticleMapOptions,
 } from "./reticleMapOptions";
+import { sampleTableFilterToMapFilter } from "./globalFilter";
 
 // ── Tab type ──────────────────────────────────────────────────────────
 
@@ -138,10 +129,7 @@ export interface PreviewPageState {
     tabId: string,
     vp: { x: number; y: number; w: number; h: number } | null,
   ) => Promise<void>;
-  updateReticleOptions: (
-    tabId: string,
-    options: ReticleMapOptions,
-  ) => Promise<void>;
+  updateReticleOptions: (tabId: string, options: ReticleMapOptions) => Promise<void>;
   setSelectedDefectIds: (tabId: string, ids: number[]) => void;
   handleTableFilterChange: (tabId: string, filter: ScSampleTableFilter) => void;
   handleTableSortChange: (
@@ -191,11 +179,7 @@ export function usePreviewPage(): PreviewPageState {
 
   function getDefaultDateRange(): [number, number] {
     const now = new Date();
-    const today = Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-    );
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     const startTime = today - 3 * 24 * 60 * 60 * 1000;
     const tomorrow = today + 24 * 60 * 60 * 1000;
     return [startTime, tomorrow];
@@ -224,9 +208,7 @@ export function usePreviewPage(): PreviewPageState {
     return `${lot}W${row.wafer_key} · ${formatInspectionTime(row.inspection_time)}`;
   });
 
-  const searchParams = ref<GetInspectionsApiV1ScInspectionsGetParams | null>(
-    null,
-  );
+  const searchParams = ref<GetInspectionsApiV1ScInspectionsGetParams | null>(null);
 
   const searchNonce = ref(0);
 
@@ -251,12 +233,7 @@ export function usePreviewPage(): PreviewPageState {
     },
   );
 
-  type SummaryFilterKey =
-    | "inspection_time"
-    | "lot_id"
-    | "wafer_id"
-    | "layer_id"
-    | "device";
+  type SummaryFilterKey = "inspection_time" | "lot_id" | "wafer_id" | "layer_id" | "device";
   type SummaryFilterOptionKey = Exclude<SummaryFilterKey, "inspection_time">;
 
   const SUMMARY_FILTER_OPTION_LIMIT = 500;
@@ -307,23 +284,20 @@ export function usePreviewPage(): PreviewPageState {
         }
       }
     }
-    const result: Record<SummaryFilterKey, { label: string; value: string }[]> =
-      {
-        inspection_time: [],
-        lot_id: [],
-        wafer_id: [],
-        layer_id: [],
-        device: [],
-      };
+    const result: Record<SummaryFilterKey, { label: string; value: string }[]> = {
+      inspection_time: [],
+      lot_id: [],
+      wafer_id: [],
+      layer_id: [],
+      device: [],
+    };
     for (const key of filterKeys) {
       if (valuesByKey[key].size > SUMMARY_FILTER_OPTION_LIMIT) {
         result[key] = [];
         continue;
       }
       result[key] = [...valuesByKey[key]]
-        .sort((left, right) =>
-          left.localeCompare(right, undefined, { numeric: true }),
-        )
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
         .map((value) => ({ label: summaryFilterLabel(key, value), value }));
     }
     return result;
@@ -333,13 +307,9 @@ export function usePreviewPage(): PreviewPageState {
     key: SummaryFilterKey,
   ): (left: InspectionSummaryItem, right: InspectionSummaryItem) => number {
     return (left, right) =>
-      String(left[key] ?? "").localeCompare(
-        String(right[key] ?? ""),
-        undefined,
-        {
-          numeric: true,
-        },
-      );
+      String(left[key] ?? "").localeCompare(String(right[key] ?? ""), undefined, {
+        numeric: true,
+      });
   }
 
   function summaryStringFilter(
@@ -348,73 +318,68 @@ export function usePreviewPage(): PreviewPageState {
     return (value, row) => String(row[key] ?? "") === String(value);
   }
 
-  const inspectionColumns = computed<DataTableColumns<InspectionSummaryItem>>(
-    () => [
-      {
-        key: "inspection_time",
-        title: "Inspection Time",
-        width: 200,
-        ellipsis: { tooltip: true },
-        sorter: (left, right) =>
-          parseInspectionTime(left.inspection_time) -
-          parseInspectionTime(right.inspection_time),
-        render: (row) => formatInspectionTime(row.inspection_time),
-      },
-      {
-        key: "lot_id",
-        title: "Lot ID",
-        width: 100,
-        sorter: summaryStringSorter("lot_id"),
-        filter: summaryStringFilter("lot_id"),
-        filterOptions: summaryFilterOptions("lot_id"),
-        filterMultiple: true,
-      },
-      {
-        key: "wafer_id",
-        title: "Wafer ID",
-        width: 80,
-        sorter: summaryStringSorter("wafer_id"),
-        filter: summaryStringFilter("wafer_id"),
-        filterOptions: summaryFilterOptions("wafer_id"),
-        filterMultiple: true,
-      },
-      {
-        key: "layer_id",
-        title: "Layer ID",
-        width: 80,
-        sorter: summaryStringSorter("layer_id"),
-        filter: summaryStringFilter("layer_id"),
-        filterOptions: summaryFilterOptions("layer_id"),
-        filterMultiple: true,
-      },
-      {
-        key: "device",
-        title: "Device",
-        width: 90,
-        sorter: summaryStringSorter("device"),
-        filter: summaryStringFilter("device"),
-        filterOptions: summaryFilterOptions("device"),
-        filterMultiple: true,
-      },
-      { key: "defects", title: "Defects", width: 80 },
-      {
-        key: "images",
-        title: "Images",
-        width: 120,
-        ellipsis: { tooltip: true },
-      },
-      { key: "eqp_id", title: "Equipment ID", width: 80 },
-      { key: "recipe_id", title: "Recipe ID", width: 80 },
-    ],
-  );
+  const inspectionColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
+    {
+      key: "inspection_time",
+      title: "Inspection Time",
+      width: 200,
+      ellipsis: { tooltip: true },
+      sorter: (left, right) =>
+        parseInspectionTime(left.inspection_time) - parseInspectionTime(right.inspection_time),
+      render: (row) => formatInspectionTime(row.inspection_time),
+    },
+    {
+      key: "lot_id",
+      title: "Lot ID",
+      width: 100,
+      sorter: summaryStringSorter("lot_id"),
+      filter: summaryStringFilter("lot_id"),
+      filterOptions: summaryFilterOptions("lot_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "wafer_id",
+      title: "Wafer ID",
+      width: 80,
+      sorter: summaryStringSorter("wafer_id"),
+      filter: summaryStringFilter("wafer_id"),
+      filterOptions: summaryFilterOptions("wafer_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "layer_id",
+      title: "Layer ID",
+      width: 80,
+      sorter: summaryStringSorter("layer_id"),
+      filter: summaryStringFilter("layer_id"),
+      filterOptions: summaryFilterOptions("layer_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "device",
+      title: "Device",
+      width: 90,
+      sorter: summaryStringSorter("device"),
+      filter: summaryStringFilter("device"),
+      filterOptions: summaryFilterOptions("device"),
+      filterMultiple: true,
+    },
+    { key: "defects", title: "Defects", width: 80 },
+    {
+      key: "images",
+      title: "Images",
+      width: 120,
+      ellipsis: { tooltip: true },
+    },
+    { key: "eqp_id", title: "Equipment ID", width: 80 },
+    { key: "recipe_id", title: "Recipe ID", width: 80 },
+  ]);
 
   // ── Tab system ───────────────────────────────────
 
   const tabs = ref<PreviewTab[]>([]);
   const activeTabId = ref<string | null>(null);
-  const activeTab = computed(
-    () => tabs.value.find((t) => t.id === activeTabId.value) ?? null,
-  );
+  const activeTab = computed(() => tabs.value.find((t) => t.id === activeTabId.value) ?? null);
 
   let nextTabId = 1;
 
@@ -469,12 +434,8 @@ export function usePreviewPage(): PreviewPageState {
   function openInspectionTab(row: InspectionSummaryItem): void {
     lastOpenedSummaryKey.value = rowKey(row);
     const id = `tab-${nextTabId++}`;
-    const label = row.lot_id
-      ? `${row.lot_id}#${row.wafer_id}`
-      : `W${row.wafer_key}`;
-    const reticleOptions = normalizeReticleMapOptions(
-      DEFAULT_RETICLE_MAP_OPTIONS,
-    );
+    const label = row.lot_id ? `${row.lot_id}#${row.wafer_id}` : `W${row.wafer_key}`;
+    const reticleOptions = normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS);
     const tab: PreviewTab = {
       id,
       type: "inspection",
@@ -563,26 +524,15 @@ export function usePreviewPage(): PreviewPageState {
 
   async function fetchDefectIdsForTab(tab: PreviewTab): Promise<void> {
     const tabId = tab.id;
-    if (
-      !tab.inspectionTime ||
-      tab.waferKey === undefined ||
-      !tab.inspectionItem
-    )
-      return;
+    if (!tab.inspectionTime || tab.waferKey === undefined || !tab.inspectionItem) return;
     try {
-      const defectIds = await fetchInspectionDefectIds(
-        tab.inspectionTime,
-        tab.waferKey,
-      );
+      const defectIds = await fetchInspectionDefectIds(tab.inspectionTime, tab.waferKey);
       const idx = tabs.value.findIndex((t) => t.id === tabId);
       if (idx === -1 || tabs.value[idx].type !== "inspection") return;
       tabs.value[idx] = {
         ...tabs.value[idx],
         samplesTotal: defectIds.length,
-        patchSamples: makePatchSamplesForDefectIds(
-          tab.inspectionItem,
-          defectIds,
-        ),
+        patchSamples: makePatchSamplesForDefectIds(tab.inspectionItem, defectIds),
       };
     } catch {
       // Keep the immediate 1..summary.defects fallback if the optional id list fails.
@@ -606,6 +556,7 @@ export function usePreviewPage(): PreviewPageState {
     };
 
     const opts = normalizeReticleMapOptions(tab.reticleOptions);
+    const globalMapFilter = sampleTableFilterToMapFilter(tab.tableFilter);
     try {
       const allThree = modes.length === 3;
       const results: {
@@ -618,7 +569,7 @@ export function usePreviewPage(): PreviewPageState {
           tab,
           undefined,
           opts,
-          undefined,
+          globalMapFilter,
           tab.legendGroupBy ?? undefined,
         );
         results.push(
@@ -634,7 +585,7 @@ export function usePreviewPage(): PreviewPageState {
               tab,
               mode,
               opts,
-              undefined,
+              globalMapFilter,
               tab.legendGroupBy ?? undefined,
             ),
           })),
@@ -674,16 +625,14 @@ export function usePreviewPage(): PreviewPageState {
           yDieShift: opts.yDieShift,
         },
         legendGroups:
-          (firstResult?.legendGroupBy || "class") ===
-          (tab.legendGroupBy ?? "class")
+          (firstResult?.legendGroupBy || "class") === (tab.legendGroupBy ?? "class")
             ? (firstResult?.legendGroups ?? null)
             : null,
       };
       for (const { mode, result } of results) {
         if (mode === "wafer") baseUpdate.waferDisplay = result.waferPoints;
         if (mode === "die") baseUpdate.dieDisplay = result.diePoints;
-        if (mode === "reticle")
-          baseUpdate.reticleDisplay = result.reticlePoints;
+        if (mode === "reticle") baseUpdate.reticleDisplay = result.reticlePoints;
       }
       tabs.value[idx2] = {
         ...current,
@@ -706,8 +655,7 @@ export function usePreviewPage(): PreviewPageState {
           mapLoading: false,
           mapStreamMessage: "",
           mapProgressPercent: 0,
-          mapError:
-            err instanceof Error ? err.message : "Failed to fetch map points",
+          mapError: err instanceof Error ? err.message : "Failed to fetch map points",
         };
       }
     }
@@ -738,10 +686,7 @@ export function usePreviewPage(): PreviewPageState {
         status === "decode"
           ? 100
           : boundedTotal > 0
-            ? Math.max(
-                0,
-                Math.min(99, Math.round((loaded / boundedTotal) * 100)),
-              )
+            ? Math.max(0, Math.min(99, Math.round((loaded / boundedTotal) * 100)))
             : 0;
       const label = status === "warmup" ? "Loading" : "Streaming";
       tabs.value[idx] = {
@@ -757,6 +702,7 @@ export function usePreviewPage(): PreviewPageState {
       filter,
       legendGroupBy,
       mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
+      tab.tableFilter,
       updateProgress,
     );
     return fetchScInspectionMapPoints(
@@ -766,6 +712,7 @@ export function usePreviewPage(): PreviewPageState {
       filter,
       legendGroupBy,
       mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
+      tab.tableFilter,
       updateProgress,
     );
   }
@@ -786,8 +733,7 @@ export function usePreviewPage(): PreviewPageState {
           tab.inspectionTime,
           tab.waferKey,
         );
-      if (!data || !("items" in data))
-        throw new Error("Invalid review images response");
+      if (!data || !("items" in data)) throw new Error("Invalid review images response");
       const inspectionTime = inspectionTimeEpochSeconds(tab.inspectionTime);
       const reviewSamples = data.items.map((item) =>
         create(ScSampleItemSchema, {
@@ -818,10 +764,7 @@ export function usePreviewPage(): PreviewPageState {
           ...tabs.value[idx2],
           reviewSamples: [],
           reviewLoading: false,
-          reviewError:
-            err instanceof Error
-              ? err.message
-              : "Failed to fetch review images",
+          reviewError: err instanceof Error ? err.message : "Failed to fetch review images",
         };
       }
     }
@@ -842,9 +785,7 @@ export function usePreviewPage(): PreviewPageState {
     tabs.value.splice(idx, 1);
     if (activeTabId.value === id) {
       activeTabId.value =
-        tabs.value.length > 0
-          ? tabs.value[Math.min(idx, tabs.value.length - 1)].id
-          : null;
+        tabs.value.length > 0 ? tabs.value[Math.min(idx, tabs.value.length - 1)].id : null;
     }
   }
 
@@ -895,10 +836,7 @@ export function usePreviewPage(): PreviewPageState {
     await fetchMapPointsForTab(tabs.value[idx], [tab.activeMapTab]);
   }
 
-  async function updateReticleOptions(
-    tabId: string,
-    options: ReticleMapOptions,
-  ): Promise<void> {
+  async function updateReticleOptions(tabId: string, options: ReticleMapOptions): Promise<void> {
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     const normalized = normalizeReticleMapOptions(options);
@@ -925,16 +863,15 @@ export function usePreviewPage(): PreviewPageState {
     };
   }
 
-  function handleTableFilterChange(
-    tabId: string,
-    filter: ScSampleTableFilter,
-  ): void {
+  function handleTableFilterChange(tabId: string, filter: ScSampleTableFilter): void {
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     tabs.value[idx] = {
       ...tabs.value[idx],
       tableFilter: filter,
+      zoom: null,
     };
+    void fetchMapPointsForTab(tabs.value[idx]);
   }
 
   function handleTableSortChange(
@@ -945,16 +882,11 @@ export function usePreviewPage(): PreviewPageState {
     if (idx === -1) return;
     tabs.value[idx] = {
       ...tabs.value[idx],
-      tableSort: sort.direction
-        ? { field: sort.field, direction: sort.direction }
-        : null,
+      tableSort: sort.direction ? { field: sort.field, direction: sort.direction } : null,
     };
   }
 
-  function handleLegendGroupByChange(
-    tabId: string,
-    groupBy: string | null,
-  ): void {
+  function handleLegendGroupByChange(tabId: string, groupBy: string | null): void {
     const idx = tabs.value.findIndex((t) => t.id === tabId);
     if (idx === -1) return;
     tabs.value[idx] = {
@@ -1029,8 +961,7 @@ export function usePreviewPage(): PreviewPageState {
         summariesEmpty.value = true;
       }
     } catch (err) {
-      summariesError.value =
-        err instanceof Error ? err.message : "Failed to fetch inspections";
+      summariesError.value = err instanceof Error ? err.message : "Failed to fetch inspections";
       summaries.value = [];
     } finally {
       summariesLoading.value = false;
@@ -1095,9 +1026,9 @@ export function usePreviewPage(): PreviewPageState {
   }
 
   function importedDatasetIdForInspection(item: InspectionSummaryItem): string | null {
-    return importedDatasetIdsByInspection.value[
-      importKey(item.inspection_time, item.wafer_key)
-    ] ?? null;
+    return (
+      importedDatasetIdsByInspection.value[importKey(item.inspection_time, item.wafer_key)] ?? null
+    );
   }
 
   // ── Import handlers ──────────────────────────────
@@ -1123,15 +1054,12 @@ export function usePreviewPage(): PreviewPageState {
         body: req,
         onEvent: (event) => {
           if (event.event_type !== "progress") return;
-          const importedCount = Number(
-            event.imported_count ?? event.loaded_count ?? 0,
-          );
+          const importedCount = Number(event.imported_count ?? event.loaded_count ?? 0);
           const totalCount = Number(event.total_count ?? 0);
           importProgress.value = {
             status: event.status ?? "running",
             imported_count: importedCount,
-            remaining_count:
-              totalCount > 0 ? Math.max(totalCount - importedCount, 0) : 0,
+            remaining_count: totalCount > 0 ? Math.max(totalCount - importedCount, 0) : 0,
             dataset_id: event.dataset_id,
           };
         },
@@ -1139,14 +1067,8 @@ export function usePreviewPage(): PreviewPageState {
       const payload = dataEvent?.payload ?? {};
       const resp: ScImportResponse = {
         status: typeof payload.status === "string" ? payload.status : "failed",
-        dataset_id:
-          typeof payload.dataset_id === "string"
-            ? payload.dataset_id
-            : undefined,
-        imported_count:
-          typeof payload.imported_count === "number"
-            ? payload.imported_count
-            : 0,
+        dataset_id: typeof payload.dataset_id === "string" ? payload.dataset_id : undefined,
+        imported_count: typeof payload.imported_count === "number" ? payload.imported_count : 0,
         error: typeof payload.error === "string" ? payload.error : null,
       };
       isImporting.value = false;
@@ -1155,17 +1077,14 @@ export function usePreviewPage(): PreviewPageState {
         datasetId.value = resp.dataset_id;
         importedDatasetIdsByInspection.value = {
           ...importedDatasetIdsByInspection.value,
-          [importKey(req.source_inspection_time, req.source_wafer_key)]:
-            resp.dataset_id,
+          [importKey(req.source_inspection_time, req.source_wafer_key)]: resp.dataset_id,
         };
         importProgress.value = {
           status: resp.status,
           imported_count: resp.imported_count ?? 0,
           remaining_count: 0,
         };
-        message.success(
-          `Import complete: ${resp.imported_count ?? 0} samples imported`,
-        );
+        message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
       } else if (resp.status === "failed") {
         message.error(resp.error || "Import failed");
       }

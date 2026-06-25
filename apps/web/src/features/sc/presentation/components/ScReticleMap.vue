@@ -44,23 +44,38 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   const result: SimpleMapPoint[] = new Array(count);
   for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
     const defectId = pts[i + 2];
-    result[pi] = { x: pts[i], y: pts[i + 1], id: defectId, label: String(pts[i + 3]), hasImageFlag: pts[i + 5] !== 0, isSelectedFlag: selectionState.value.has(defectId) };
+    result[pi] = {
+      x: pts[i],
+      y: pts[i + 1],
+      id: defectId,
+      label: String(pts[i + 3]),
+      hasImageFlag: pts[i + 5] !== 0,
+      isSelectedFlag: selectionState.value.has(defectId),
+    };
   }
   return result;
 });
 
 // Transform
-let _cw = 600; let _ch = 240; let _cx = 300; let _cy = 120; let _s = 1; let _ox = 0; let _oy = 0;
+let _cw = 600;
+let _ch = 240;
+let _cx = 300;
+let _cy = 120;
+let _s = 1;
+let _ox = 0;
+let _oy = 0;
 
 function recalcTransform() {
   if (!containerRef.value) return;
   _cw = containerRef.value.clientWidth || 1;
   _ch = containerRef.value.clientHeight || 1;
-  _cx = _cw / 2; _cy = _ch / 2;
+  _cx = _cw / 2;
+  _cy = _ch / 2;
   if (props.zoom) {
     const z = props.zoom;
     _s = Math.min((_cw * 0.95) / z.w, (_ch * 0.95) / z.h);
-    _ox = -(z.x + z.w / 2); _oy = -(z.y + z.h / 2);
+    _ox = -(z.x + z.w / 2);
+    _oy = -(z.y + z.h / 2);
   } else {
     const pts = simplePoints.value;
     let minX = 0;
@@ -79,8 +94,13 @@ function recalcTransform() {
   }
 }
 
-function screenToData(sx: number, sy: number): [number, number] { return [(sx - _cx) / _s - _ox, (_cy - sy) / _s - _oy]; }
-function getPos(e: MouseEvent): [number, number] { const r = containerRef.value?.getBoundingClientRect(); return r ? [e.clientX - r.left, e.clientY - r.top] : [0, 0]; }
+function screenToData(sx: number, sy: number): [number, number] {
+  return [(sx - _cx) / _s - _ox, (_cy - sy) / _s - _oy];
+}
+function getPos(e: MouseEvent): [number, number] {
+  const r = containerRef.value?.getBoundingClientRect();
+  return r ? [e.clientX - r.left, e.clientY - r.top] : [0, 0];
+}
 
 // Drag
 const dragging = ref(false);
@@ -88,16 +108,58 @@ const dStart = ref({ x: 0, y: 0 });
 const dEnd = ref({ x: 0, y: 0 });
 const dragRect = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 
-function onPointerDown(e: PointerEvent) { if (e.button !== 0) return; recalcTransform(); drawOverlay(); const [sx, sy] = getPos(e); dStart.value = dEnd.value = { x: sx, y: sy }; dragging.value = true; }
-function onPointerMove(e: PointerEvent) { if (!dragging.value) return; const [sx, sy] = getPos(e); let ax = sx, ay = sy; const rw = Math.abs(sx - dStart.value.x); const rh = Math.abs(sy - dStart.value.y); if (mode.value === "zoomin" && rw > 0 && rh > 0 && _cw > 0 && _ch > 0) { const ar = _cw / _ch; const rar = rw / rh; if (rar > ar) { const ah = rw / ar; const s = Math.sign(sy - dStart.value.y) || 1; ay = dStart.value.y + s * ah; } else if (rar < ar) { const aw = rh * ar; const s = Math.sign(sx - dStart.value.x) || 1; ax = dStart.value.x + s * aw; } } dEnd.value = { x: ax, y: ay }; dragRect.value = { x: Math.min(dStart.value.x, ax), y: Math.min(dStart.value.y, ay), w: Math.abs(ax - dStart.value.x), h: Math.abs(ay - dStart.value.y) }; drawOverlay(); }
+function onPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return;
+  recalcTransform();
+  drawOverlay();
+  const [sx, sy] = getPos(e);
+  dStart.value = dEnd.value = { x: sx, y: sy };
+  dragging.value = true;
+}
+function onPointerMove(e: PointerEvent) {
+  if (!dragging.value) return;
+  const [sx, sy] = getPos(e);
+  let ax = sx,
+    ay = sy;
+  const rw = Math.abs(sx - dStart.value.x);
+  const rh = Math.abs(sy - dStart.value.y);
+  if (mode.value === "zoomin" && rw > 0 && rh > 0 && _cw > 0 && _ch > 0) {
+    const ar = _cw / _ch;
+    const rar = rw / rh;
+    if (rar > ar) {
+      const ah = rw / ar;
+      const s = Math.sign(sy - dStart.value.y) || 1;
+      ay = dStart.value.y + s * ah;
+    } else if (rar < ar) {
+      const aw = rh * ar;
+      const s = Math.sign(sx - dStart.value.x) || 1;
+      ax = dStart.value.x + s * aw;
+    }
+  }
+  dEnd.value = { x: ax, y: ay };
+  dragRect.value = {
+    x: Math.min(dStart.value.x, ax),
+    y: Math.min(dStart.value.y, ay),
+    w: Math.abs(ax - dStart.value.x),
+    h: Math.abs(ay - dStart.value.y),
+  };
+  drawOverlay();
+}
 async function onPointerUp() {
   if (!dragging.value) return;
   dragging.value = false;
-  if (Math.abs(dEnd.value.x - dStart.value.x) < 4 || Math.abs(dEnd.value.y - dStart.value.y) < 4) { dragRect.value = null; drawOverlay(); return; }
+  if (Math.abs(dEnd.value.x - dStart.value.x) < 4 || Math.abs(dEnd.value.y - dStart.value.y) < 4) {
+    dragRect.value = null;
+    drawOverlay();
+    return;
+  }
   recalcTransform();
   const [x1, y1] = screenToData(dStart.value.x, dStart.value.y);
   const [x2, y2] = screenToData(dEnd.value.x, dEnd.value.y);
-  const x = Math.min(x1, x2), X = Math.max(x1, x2), y = Math.min(y1, y2), Y = Math.max(y1, y2);
+  const x = Math.min(x1, x2),
+    X = Math.max(x1, x2),
+    y = Math.min(y1, y2),
+    Y = Math.max(y1, y2);
   if (mode.value === "zoomin") {
     emit("zoom-in", { x, y, w: X - x, h: Y - y });
   } else {
@@ -129,7 +191,10 @@ function drawOverlay() {
   if (!c || _cw <= 0 || _ch <= 0) return;
   const ctx = c.getContext("2d");
   if (!ctx) return;
-  if (c.width !== _cw || c.height !== _ch) { c.width = _cw; c.height = _ch; }
+  if (c.width !== _cw || c.height !== _ch) {
+    c.width = _cw;
+    c.height = _ch;
+  }
   ctx.clearRect(0, 0, _cw, _ch);
 
   // Draw highlight defects as purple 3x3 dots
@@ -162,7 +227,20 @@ function onDblClick() {
 }
 
 let _ro: ResizeObserver | null = null;
-watch(containerRef, (el) => { _ro?.disconnect(); if (el) { _ro = new ResizeObserver(() => { recalcTransform(); drawOverlay(); }); _ro.observe(el); } }, { immediate: true });
+watch(
+  containerRef,
+  (el) => {
+    _ro?.disconnect();
+    if (el) {
+      _ro = new ResizeObserver(() => {
+        recalcTransform();
+        drawOverlay();
+      });
+      _ro.observe(el);
+    }
+  },
+  { immediate: true },
+);
 
 function scheduleOverlayRefresh(): void {
   void nextTick(() => {
@@ -177,42 +255,95 @@ function scheduleOverlayRefresh(): void {
 
 watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
 
-watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
+watch(
+  () => props.zoom,
+  () => {
+    recalcTransform();
+    drawOverlay();
+  },
+);
 
-watch(() => props.selectedIds, (incoming) => {
-  if (isBoxSelecting.value || !incoming) return;
-  const cur = selectionState.value;
-  let changed = false;
-  for (const id of incoming) { if (!cur.has(id)) { cur.add(id); changed = true; } }
-  for (const id of cur) { if (!incoming.has(id)) { cur.delete(id); changed = true; } }
-  if (changed) selectionState.value = new Set(cur);
-}, { immediate: true });
+watch(
+  () => props.selectedIds,
+  (incoming) => {
+    if (isBoxSelecting.value || !incoming) return;
+    const cur = selectionState.value;
+    let changed = false;
+    for (const id of incoming) {
+      if (!cur.has(id)) {
+        cur.add(id);
+        changed = true;
+      }
+    }
+    for (const id of cur) {
+      if (!incoming.has(id)) {
+        cur.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) selectionState.value = new Set(cur);
+  },
+  { immediate: true },
+);
 
-watch(() => props.highlightDefects, () => { drawOverlay(); });
+watch(
+  () => props.highlightDefects,
+  () => {
+    drawOverlay();
+  },
+);
 </script>
 
 <template>
   <div ref="containerRef" class="srm-wrap">
-    <div v-if="pointCount === 0" class="srm-empty">No points</div>
-    <template v-else>
-      <SimpleReticleMap
-        :points="simplePoints"
-        :colorMap="props.colorMap ?? {}"
-        :xDieCount="xDieCount"
-        :yDieCount="yDieCount"
-        :dieSizeX="dieSizeX"
-        :dieSizeY="dieSizeY"
-        :zoom="props.zoom ?? undefined"
-      />
-      <canvas ref="overlayRef" class="srm-ol" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp" @pointerleave="onPointerUp" @dblclick="onDblClick" />
-    </template>
+    <SimpleReticleMap
+      :points="simplePoints"
+      :colorMap="props.colorMap ?? {}"
+      :xDieCount="xDieCount"
+      :yDieCount="yDieCount"
+      :dieSizeX="dieSizeX"
+      :dieSizeY="dieSizeY"
+      :zoom="props.zoom ?? undefined"
+    />
+    <canvas
+      ref="overlayRef"
+      class="srm-ol"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+      @pointerleave="onPointerUp"
+      @dblclick="onDblClick"
+    />
   </div>
 </template>
 
 <style scoped>
-.srm-wrap { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
-.srm-ol { position: absolute; inset: 0; pointer-events: auto; touch-action: none; z-index: 1; }
-.srm-empty, .srm-footer { padding: 6px; color: #888; font-size: 12px; text-align: center; }
-.srm-empty { margin: auto; }
-.srm-footer { position: absolute; right: 0; bottom: 0; pointer-events: none; }
+.srm-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.srm-ol {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 1;
+}
+.srm-footer {
+  padding: 6px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+.srm-footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
 </style>

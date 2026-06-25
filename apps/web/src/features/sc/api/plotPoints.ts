@@ -1,11 +1,9 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { req } from "@/shared/api/client";
 import { streamApiSse } from "@/shared/api/sse";
-import {
-  WaferMapResponseSchema,
-  type WaferMapResponse,
-} from "../generated/proto/sc/v1/sample_pb";
+import { WaferMapResponseSchema, type WaferMapResponse } from "../generated/proto/sc/v1/sample_pb";
 import type { ReticleMapOptions } from "../application/reticleMapOptions";
+import type { ScSampleTableFilter } from "../domain/sampleTable";
 
 export interface ScMapFilter {
   class_numbers?: number[];
@@ -24,10 +22,7 @@ export type ScMapProgressCallback = (
   total?: number,
 ) => void;
 
-export function appendScMapFilterParams(
-  params: URLSearchParams,
-  filter?: ScMapFilter,
-): void {
+export function appendScMapFilterParams(params: URLSearchParams, filter?: ScMapFilter): void {
   if (!filter) return;
   for (const [key, values] of Object.entries(filter)) {
     if (values && values.length > 0) {
@@ -43,9 +38,10 @@ export async function fetchScPlotPoints(
   options: ReticleMapOptions,
   filter?: ScMapFilter,
   legendGroupBy?: string,
+  sampleFilter?: ScSampleTableFilter,
   onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
-  const params = buildDatasetMapParams(options, filter, legendGroupBy);
+  const params = buildDatasetMapParams(options, filter, legendGroupBy, sampleFilter);
   const response = await req<Response>(
     `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points?${params.toString()}`,
     { headers: { Accept: "application/x-protobuf" } },
@@ -58,9 +54,10 @@ export async function warmupScPlotPoints(
   options: ReticleMapOptions,
   filter?: ScMapFilter,
   legendGroupBy?: string,
+  sampleFilter?: ScSampleTableFilter,
   onProgress?: ScMapProgressCallback,
 ): Promise<void> {
-  const params = buildDatasetMapParams(options, filter, legendGroupBy);
+  const params = buildDatasetMapParams(options, filter, legendGroupBy, sampleFilter);
   await warmupMapPoints(
     `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points/stream?${params.toString()}`,
     onProgress,
@@ -71,6 +68,7 @@ function buildDatasetMapParams(
   options: ReticleMapOptions,
   filter?: ScMapFilter,
   legendGroupBy?: string,
+  sampleFilter?: ScSampleTableFilter,
 ): URLSearchParams {
   const params = new URLSearchParams({
     sampled: "true",
@@ -84,6 +82,7 @@ function buildDatasetMapParams(
   if (legendGroupBy) {
     params.set("legend_group_by", legendGroupBy);
   }
+  appendSampleFilterParam(params, sampleFilter);
   return params;
 }
 
@@ -101,9 +100,10 @@ export async function fetchScInspectionMapPoints(
   filter?: ScMapFilter,
   legendGroupBy?: string,
   extra?: InspectionMapExtra,
+  sampleFilter?: ScSampleTableFilter,
   onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
-  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra);
+  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra, sampleFilter);
   const response = await req<Response>(
     `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points?${params.toString()}`,
     { headers: { Accept: "application/x-protobuf" } },
@@ -118,9 +118,10 @@ export async function warmupScInspectionMapPoints(
   filter?: ScMapFilter,
   legendGroupBy?: string,
   extra?: InspectionMapExtra,
+  sampleFilter?: ScSampleTableFilter,
   onProgress?: ScMapProgressCallback,
 ): Promise<void> {
-  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra);
+  const params = buildInspectionMapParams(options, filter, legendGroupBy, extra, sampleFilter);
   await warmupMapPoints(
     `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points/stream?${params.toString()}`,
     onProgress,
@@ -132,6 +133,7 @@ function buildInspectionMapParams(
   filter?: ScMapFilter,
   legendGroupBy?: string,
   extra?: InspectionMapExtra,
+  sampleFilter?: ScSampleTableFilter,
 ): URLSearchParams {
   const params = new URLSearchParams({
     sampled: extra?.sampled !== undefined ? String(extra.sampled) : "true",
@@ -154,13 +156,19 @@ function buildInspectionMapParams(
   if (legendGroupBy) {
     params.set("legend_group_by", legendGroupBy);
   }
+  appendSampleFilterParam(params, sampleFilter);
   return params;
 }
 
-async function warmupMapPoints(
-  path: string,
-  onProgress?: ScMapProgressCallback,
-): Promise<void> {
+function appendSampleFilterParam(
+  params: URLSearchParams,
+  sampleFilter?: ScSampleTableFilter,
+): void {
+  if (!sampleFilter || Object.keys(sampleFilter).length === 0) return;
+  params.set("sample_filter", JSON.stringify(sampleFilter));
+}
+
+async function warmupMapPoints(path: string, onProgress?: ScMapProgressCallback): Promise<void> {
   onProgress?.("warmup", 0, undefined, 0);
   await streamApiSse(path, {
     method: "GET",
@@ -168,14 +176,8 @@ async function warmupMapPoints(
       if (event.event_type === "progress") {
         const total = Number(event.total_count ?? event.rows ?? 0);
         const rawLoaded = Number(event.loaded_count ?? 0);
-        const loaded =
-          total > 0 && rawLoaded > 0 && rawLoaded <= total ? rawLoaded : 0;
-        onProgress?.(
-          "warmup",
-          loaded,
-          undefined,
-          total,
-        );
+        const loaded = total > 0 && rawLoaded > 0 && rawLoaded <= total ? rawLoaded : 0;
+        onProgress?.("warmup", loaded, undefined, total);
       } else if (event.event_type === "done") {
         const rows = Number(event.rows ?? 0);
         onProgress?.("warmup", rows, undefined, rows);

@@ -61,7 +61,9 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
     const defectId = pts[i + 2];
     result[pi] = {
-      x: pts[i], y: pts[i + 1], id: defectId,
+      x: pts[i],
+      y: pts[i + 1],
+      id: defectId,
       label: String(pts[i + 3]),
       hasImageFlag: pts[i + 5] !== 0,
       isSelectedFlag: selected.has(defectId),
@@ -72,15 +74,20 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
 
 // ── Coordinate transform (mirrors SimpleWaferMap internals) ──
 
-let _cw = 600; let _ch = 600;
-let _cx = 300; let _cy = 300;
-let _s = 1; let _ox = 0; let _oy = 0;
+let _cw = 600;
+let _ch = 600;
+let _cx = 300;
+let _cy = 300;
+let _s = 1;
+let _ox = 0;
+let _oy = 0;
 
 function recalcTransform() {
   if (!containerRef.value) return;
   _cw = containerRef.value.clientWidth || 1;
   _ch = containerRef.value.clientHeight || 1;
-  _cx = _cw / 2; _cy = _ch / 2;
+  _cx = _cw / 2;
+  _cy = _ch / 2;
   const cx = props.geometry?.centerX ?? 0;
   const cy = props.geometry?.centerY ?? 0;
   if (props.zoom) {
@@ -126,7 +133,8 @@ function onPointerMove(e: PointerEvent) {
   if (!dragging.value) return;
   const [sx, sy] = getPos(e);
 
-  let ax = sx, ay = sy;
+  let ax = sx,
+    ay = sy;
   if (mode.value === "zoomin") {
     const rawW = Math.abs(sx - dragStart.value.x);
     const rawH = Math.abs(sy - dragStart.value.y);
@@ -161,13 +169,19 @@ function onPointerUp(e: PointerEvent) {
   const dx = Math.abs(dragEnd.value.x - dragStart.value.x);
   const dy = Math.abs(dragEnd.value.y - dragStart.value.y);
 
-  if (dx < 4 || dy < 4) { dragRect.value = null; drawOverlay(); return; }
+  if (dx < 4 || dy < 4) {
+    dragRect.value = null;
+    drawOverlay();
+    return;
+  }
 
   recalcTransform();
   const [d1x, d1y] = screenToData(dragStart.value.x, dragStart.value.y);
   const [d2x, d2y] = screenToData(dragEnd.value.x, dragEnd.value.y);
-  const x = Math.min(d1x, d2x), X = Math.max(d1x, d2x);
-  const y = Math.min(d1y, d2y), Y = Math.max(d1y, d2y);
+  const x = Math.min(d1x, d2x),
+    X = Math.max(d1x, d2x);
+  const y = Math.min(d1y, d2y),
+    Y = Math.max(d1y, d2y);
 
   if (mode.value === "zoomin") {
     emit("zoom-in", { x, y, w: X - x, h: Y - y });
@@ -184,7 +198,10 @@ function drawOverlay() {
   if (!cvs || _cw <= 0 || _ch <= 0) return;
   const ctx = cvs.getContext("2d");
   if (!ctx) return;
-  if (cvs.width !== _cw || cvs.height !== _ch) { cvs.width = _cw; cvs.height = _ch; }
+  if (cvs.width !== _cw || cvs.height !== _ch) {
+    cvs.width = _cw;
+    cvs.height = _ch;
+  }
   ctx.clearRect(0, 0, _cw, _ch);
 
   // Draw highlight defects as purple 3x3 dots
@@ -244,12 +261,22 @@ async function handleBoxSelect(region: { x: number; y: number; w: number; h: num
 // ── Resize ──
 
 let _ro: ResizeObserver | null = null;
-function onResize() { recalcTransform(); drawOverlay(); }
+function onResize() {
+  recalcTransform();
+  drawOverlay();
+}
 
-watch(containerRef, (el) => {
-  _ro?.disconnect();
-  if (el) { _ro = new ResizeObserver(onResize); _ro.observe(el); }
-}, { immediate: true });
+watch(
+  containerRef,
+  (el) => {
+    _ro?.disconnect();
+    if (el) {
+      _ro = new ResizeObserver(onResize);
+      _ro.observe(el);
+    }
+  },
+  { immediate: true },
+);
 
 function scheduleOverlayRefresh(): void {
   void nextTick(() => {
@@ -264,49 +291,83 @@ function scheduleOverlayRefresh(): void {
 
 watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
 
-watch(() => props.zoom, () => { recalcTransform(); drawOverlay(); });
+watch(
+  () => props.zoom,
+  () => {
+    recalcTransform();
+    drawOverlay();
+  },
+);
 
-watch(() => props.highlightDefects, () => { drawOverlay(); });
+watch(
+  () => props.highlightDefects,
+  () => {
+    drawOverlay();
+  },
+);
 
-watch(() => props.geometry, (geo) => {
-  recalcTransform();
-  drawOverlay();
-}, { immediate: true });
+watch(
+  () => props.geometry,
+  (geo) => {
+    recalcTransform();
+    drawOverlay();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div ref="containerRef" class="swm-wrap">
-    <div v-if="pointCount === 0" class="swm-empty">No points</div>
-    <template v-else>
-      <SimpleWaferMap
-        :points="simplePoints"
-        :colorMap="props.colorMap ?? {}"
-        :zoom="props.zoom ?? undefined"
-        :center-x="props.geometry?.centerX"
-        :center-y="props.geometry?.centerY"
-        :origin-x="props.geometry?.originX"
-        :origin-y="props.geometry?.originY"
-        :die-size-x="props.geometry?.dieSizeX"
-        :die-size-y="props.geometry?.dieSizeY"
-      />
-      <canvas
-        ref="overlayRef"
-        class="swm-ol"
-        @pointerdown="onPointerDown"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
-        @pointerleave="onPointerUp"
-        @dblclick="onDblClick"
-      />
-    </template>
+    <SimpleWaferMap
+      :points="simplePoints"
+      :colorMap="props.colorMap ?? {}"
+      :zoom="props.zoom ?? undefined"
+      :center-x="props.geometry?.centerX"
+      :center-y="props.geometry?.centerY"
+      :origin-x="props.geometry?.originX"
+      :origin-y="props.geometry?.originY"
+      :die-size-x="props.geometry?.dieSizeX"
+      :die-size-y="props.geometry?.dieSizeY"
+    />
+    <canvas
+      ref="overlayRef"
+      class="swm-ol"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+      @pointerleave="onPointerUp"
+      @dblclick="onDblClick"
+    />
   </div>
 </template>
 
 <style scoped>
-.swm-wrap { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
-.swm-ol { position: absolute; inset: 0; pointer-events: auto; touch-action: none; z-index: 1; }
-.swm-empty, .swm-footer { padding: 6px; color: #888; font-size: 12px; text-align: center; }
-.swm-empty { margin: auto; }
-.swm-footer { position: absolute; right: 0; bottom: 0; pointer-events: none; }
+.swm-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.swm-ol {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 1;
+}
+.swm-footer {
+  padding: 6px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+.swm-footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
 </style>

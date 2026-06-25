@@ -71,6 +71,7 @@ Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
 ## Verification
 
+- **After any code change, run `make lint` first.** It checks only git-diff files (ruff for Python, prettier for web) and is fast enough for every edit cycle.
 - After modifying code, run the narrowest relevant tests first, then the required broader checks before handing off.
 - For backend Python changes, run `ruff check apps/api`, `uv run --directory apps/api pyright .`, and `make test`.
 - For frontend changes, run `make test-web` and `make build-web`; run `make test-e2e` when route/user-flow behavior changes.

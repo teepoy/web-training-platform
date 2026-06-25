@@ -2,11 +2,9 @@ import {
   filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPost,
   filterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost,
 } from "@/generated/orval/endpoints/api";
-import type {
-  ScBoxFilterRequest,
-  ScBoxFilterResponse,
-} from "@/generated/orval/models";
+import type { ScBoxFilterRequest, ScBoxFilterResponse } from "@/generated/orval/models";
 import type { ReticleMapOptions } from "../application/reticleMapOptions";
+import type { ScSampleTableFilter } from "../domain/sampleTable";
 
 export type ScMapMode = "wafer" | "die" | "reticle";
 
@@ -21,8 +19,9 @@ function boxFilterBody(
   mode: ScMapMode,
   region: ScBoxRegion,
   options: ReticleMapOptions,
+  globalFilter?: ScSampleTableFilter,
 ): ScBoxFilterRequest {
-  return {
+  const body: ScBoxFilterRequest = {
     mode,
     x: region.x,
     y: region.y,
@@ -33,6 +32,10 @@ function boxFilterBody(
     reticle_x_die_shift: options.xDieShift,
     reticle_y_die_shift: options.yDieShift,
   };
+  if (globalFilter && Object.keys(globalFilter).length > 0) {
+    body.filter = globalFilter;
+  }
+  return body;
 }
 
 export async function fetchScDatasetBoxFilter(
@@ -40,12 +43,12 @@ export async function fetchScDatasetBoxFilter(
   mode: ScMapMode,
   region: ScBoxRegion,
   options: ReticleMapOptions,
+  globalFilter?: ScSampleTableFilter,
 ): Promise<ScBoxFilterResponse> {
-  const response =
-    await filterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost(
-      datasetId,
-      boxFilterBody(mode, region, options),
-    );
+  const response = await filterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost(
+    datasetId,
+    boxFilterBody(mode, region, options, globalFilter),
+  );
   return response.data as ScBoxFilterResponse;
 }
 
@@ -55,12 +58,12 @@ export async function fetchScInspectionBoxFilter(
   mode: ScMapMode,
   region: ScBoxRegion,
   options: ReticleMapOptions,
+  globalFilter?: ScSampleTableFilter,
 ): Promise<ScBoxFilterResponse> {
-  const response =
-    await filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPost(
-      inspectionTime,
-      waferKey,
-      boxFilterBody(mode, region, options),
-    );
+  const response = await filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPost(
+    inspectionTime,
+    waferKey,
+    boxFilterBody(mode, region, options, globalFilter),
+  );
   return response.data as ScBoxFilterResponse;
 }

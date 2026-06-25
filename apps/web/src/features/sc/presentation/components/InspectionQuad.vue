@@ -4,15 +4,9 @@ import { NButton, NResult, NText } from "naive-ui";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
-import type {
-  DefectList,
-  ScSampleItem,
-} from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import type { DefectList, ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
-import type {
-  ScSampleTableFilter,
-  ScSampleTableSort,
-} from "@/features/sc/domain/sampleTable";
+import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
 import {
@@ -73,10 +67,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
   (e: "update:reticleOptions", v: ReticleMapOptions): void;
-  (
-    e: "zoom-in",
-    vp: { x: number; y: number; w: number; h: number } | null,
-  ): void;
+  (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (
     e: "select-points",
     payload: {
@@ -85,10 +76,7 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "table-filter-change", filter: ScSampleTableFilter): void;
-  (
-    e: "table-sort-change",
-    sort: { field: string; direction: "asc" | "desc" | null },
-  ): void;
+  (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
   (e: "table-apply-selection", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
@@ -188,9 +176,7 @@ const blinkSamples = computed<ScSampleItem[]>(() => {
 });
 
 const filteredDefectIds = computed<string[] | undefined>(() =>
-  mapSelectionIds.value.length > 0
-    ? mapSelectionIds.value.map(String)
-    : undefined,
+  mapSelectionIds.value.length > 0 ? mapSelectionIds.value.map(String) : undefined,
 );
 
 const filteredReviewSamples = computed<ScSampleItem[]>(() => {
@@ -211,10 +197,7 @@ const filteredTotal = computed<number>(() => {
 const legendSelectedIds = computed<ReadonlySet<number>>(() => new Set());
 
 // ── queryBoxSelection: curried API call for map wrapper box-selection ──
-async function queryBoxSelection(
-  mode: ScMapMode,
-  region: ScBoxRegion,
-): Promise<number[]> {
+async function queryBoxSelection(mode: ScMapMode, region: ScBoxRegion): Promise<number[]> {
   if (!props.inspectionTime || props.waferKey === undefined) return [];
   const result = await fetchScInspectionBoxFilter(
     props.inspectionTime,
@@ -222,22 +205,23 @@ async function queryBoxSelection(
     mode,
     region,
     reticleOptionsModel.value,
+    props.tableFilter,
   );
   return result.defect_ids.map(Number);
 }
 
 const reticleOptionsModel = computed<ReticleMapOptions>(() => ({
-  xDieCount: props.reticleOptions?.xDieCount ?? props.reticleXDieCount ?? 10,
-  yDieCount: props.reticleOptions?.yDieCount ?? props.reticleYDieCount ?? 10,
+  xDieCount: props.reticleOptions?.xDieCount ?? props.reticleXDieCount ?? 2,
+  yDieCount: props.reticleOptions?.yDieCount ?? props.reticleYDieCount ?? 6,
   xDieShift: props.reticleOptions?.xDieShift ?? 0,
   yDieShift: props.reticleOptions?.yDieShift ?? 0,
 }));
 
 const reticleDieSizeXModel = computed(
-  () => props.reticleDieSizeX ?? props.inspectionItem?.die_size_x ?? 100000,
+  () => props.reticleDieSizeX ?? props.inspectionItem?.die_size_x ?? 150_000_000,
 );
 const reticleDieSizeYModel = computed(
-  () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 100000,
+  () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 150_000_000,
 );
 
 // ── Unzoomed-points fallback (empty array is not nullish, so `??` won't work) ──
@@ -283,11 +267,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
 <template>
   <!-- Error state -->
   <div v-if="samplesError" class="iq-state">
-    <NResult
-      status="error"
-      :title="samplesError"
-      description="Failed to load inspection samples"
-    >
+    <NResult status="error" :title="samplesError" description="Failed to load inspection samples">
       <template #footer>
         <NButton @click="emit('retry')">Retry</NButton>
       </template>
@@ -336,9 +316,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
           @selection-change="(ids: number[]) => (mapSelectionIds = ids)"
           @select-points="(payload) => (mapSelectionIds = payload.ids)"
-          @legend-group-change="
-            (groupBy) => emit('legend-group-change', groupBy)
-          "
+          @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
           @zoom-in="(vp) => emit('zoom-in', vp)"
           @retry="() => emit('retry')"
         />

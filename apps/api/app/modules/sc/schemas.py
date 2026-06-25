@@ -115,6 +115,7 @@ class ScBoxFilterRequest(BaseModel):
     reticle_y_die_count: int = Field(default=5, ge=1)
     reticle_x_die_shift: int = 0
     reticle_y_die_shift: int = 0
+    filter: dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None = None
 
 
 class ScBoxFilterResponse(BaseModel):
@@ -175,3 +176,6 @@ class ScFilterParams(BaseModel):
     adders: list[int] | None = None
     cluster_ids: list[int] | None = None
     legend_group_by: str | None = None
+    sample_filter: (
+        dict[str, ScSampleTableSetFilter | ScSampleTableRangeFilter] | None
+    ) = None

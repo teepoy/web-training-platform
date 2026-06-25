@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+import json
+from unittest.mock import ANY, AsyncMock
 
 import polars as pl
 import pytest
@@ -113,27 +114,43 @@ def test_plot_points_forwards_reticle_options() -> None:
                     "reticleYDieCount": 6,
                     "reticleXDieShift": 1,
                     "reticleYDieShift": -2,
+                    "sample_filter": json.dumps(
+                        {
+                            "wafer_x": {
+                                "operator": "between",
+                                "min": 10,
+                                "max": 20,
+                            }
+                        }
+                    ),
                 },
             )
         assert resp.status_code == 200
         mock_svc.build_plot_points_response.assert_awaited_once_with(
-                _DATASET_ID,
-                "00000000-0000-0000-0000-000000000001",
-                sampled=True,
-                target_resolution=600,
-                reticle_x_die_count=4,
-                reticle_y_die_count=6,
-                reticle_x_die_shift=1,
-                reticle_y_die_shift=-2,
-                legend_group_by=None,
-                class_numbers=None,
-                rough_bins=None,
-                predictions=None,
-                annotations=None,
-                test_ids=None,
-                adders=None,
-                cluster_ids=None,
-            )
+            _DATASET_ID,
+            "00000000-0000-0000-0000-000000000001",
+            sampled=True,
+            target_resolution=600,
+            reticle_x_die_count=4,
+            reticle_y_die_count=6,
+            reticle_x_die_shift=1,
+            reticle_y_die_shift=-2,
+            legend_group_by=None,
+            class_numbers=None,
+            rough_bins=None,
+            predictions=None,
+            annotations=None,
+            test_ids=None,
+            adders=None,
+            cluster_ids=None,
+            filter_params=ANY,
+        )
+        filter_params = mock_svc.build_plot_points_response.await_args.kwargs[
+            "filter_params"
+        ]
+        assert filter_params["wafer_x"].operator == "between"
+        assert filter_params["wafer_x"].min == 10
+        assert filter_params["wafer_x"].max == 20
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 
@@ -221,6 +238,7 @@ def test_box_filter_forwards_region_and_reticle_options() -> None:
             reticle_y_die_count=6,
             reticle_x_die_shift=1,
             reticle_y_die_shift=-2,
+            filter_params=None,
         )
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)

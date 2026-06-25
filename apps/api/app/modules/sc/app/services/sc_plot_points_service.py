@@ -45,6 +45,30 @@ _REQUIRED_POINT_COLUMNS = frozenset(
     }
 )
 
+_SAMPLE_TABLE_FILTER_COLUMNS = {
+    "defect_id": "defect_id",
+    "rough_bin": "rough_bin",
+    "class_number": "class_number",
+    "test_id": "test_id",
+    "wafer_x": "wafer_x",
+    "wafer_y": "wafer_y",
+    "index_x": "index_x",
+    "index_y": "index_y",
+    "die_x": "die_x",
+    "die_y": "die_y",
+    "reticle_x": "reticle_x",
+    "reticle_y": "reticle_y",
+    "size_x": "size_x",
+    "size_y": "size_y",
+    "size_d": "size_d",
+    "area": "area",
+    "final_bin": "final_bin",
+    "manual_bin": "manual_bin",
+    "adder": "adder",
+    "cluster_id": "cluster_id",
+    "kill_ratio": "kill_ratio",
+}
+
 
 def _apply_sample_filters(
     lf: pl.LazyFrame,
@@ -54,6 +78,38 @@ def _apply_sample_filters(
     for col, values in filters.items():
         if values and col in columns:
             lf = lf.filter(pl.col(col).is_in(values))
+    return lf
+
+
+def apply_sample_table_filter(
+    lf: pl.LazyFrame,
+    filter_params: dict | None,
+) -> pl.LazyFrame:
+    if not filter_params:
+        return lf
+    columns = set(lf.collect_schema().names())
+    for field, filter_value in filter_params.items():
+        col = _SAMPLE_TABLE_FILTER_COLUMNS.get(field)
+        if col is None or col not in columns:
+            continue
+        operator = getattr(filter_value, "operator", None)
+        if operator == "in":
+            values = list(getattr(filter_value, "values", []) or [])
+            if not values:
+                continue
+            lf = lf.filter(
+                pl.col(col).cast(pl.Utf8).is_in([str(value) for value in values])
+                if field == "defect_id"
+                else pl.col(col).is_in(values)
+            )
+        elif operator == "between":
+            lf = lf.filter(
+                pl.col(col).is_between(
+                    getattr(filter_value, "min"),
+                    getattr(filter_value, "max"),
+                    closed="both",
+                )
+            )
     return lf
 
 
@@ -176,6 +232,7 @@ class ScPlotPointsService:
         test_ids: list[int] | None = None,
         adders: list[int] | None = None,
         cluster_ids: list[int] | None = None,
+        filter_params: dict | None = None,
     ) -> bytes:
         storage = await self._storage_factory.open(dataset_id, org_id)
 
@@ -207,6 +264,7 @@ class ScPlotPointsService:
             adder=adders,
             cluster_id=cluster_ids,
         )
+        lf = apply_sample_table_filter(lf, filter_params)
         df: pl.DataFrame = await lf.collect_async()
 
         missing_columns = _REQUIRED_POINT_COLUMNS - set(df.columns)
@@ -309,6 +367,7 @@ class ScPlotPointsService:
         reticle_y_die_count: int = 5,
         reticle_x_die_shift: int = 0,
         reticle_y_die_shift: int = 0,
+        filter_params: dict | None = None,
     ) -> list[str]:
         storage = await self._storage_factory.open(dataset_id, org_id)
         dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
@@ -363,6 +422,8 @@ class ScPlotPointsService:
                     * die_size_y
                 ).alias("reticle_y"),
             )
+
+        lf = apply_sample_table_filter(lf, filter_params)
 
         return await filter_box_defect_ids(
             lf,

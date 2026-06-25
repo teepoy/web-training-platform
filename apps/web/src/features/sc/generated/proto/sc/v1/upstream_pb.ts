@@ -9,20 +9,23 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file sc/v1/upstream.proto.
  */
-export const file_sc_v1_upstream: GenFile = /*@__PURE__*/
-  fileDesc("ChRzYy92MS91cHN0cmVhbS5wcm90bxIFc2MudjEiDwoNSGVhbHRoUmVxdWVzdCIgCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkiQgoUR2V0SW5zcGVjdGlvblJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBSKCAwoVR2V0SW5zcGVjdGlvblJlc3BvbnNlEhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSDgoGbG90X2lkGAMgASgJEhAKCHdhZmVyX2lkGAQgASgJEg4KBmRldmljZRgFIAEoCRIQCghsYXllcl9pZBgGIAEoCRIQCghjZW50ZXJfeBgHIAEoBRIQCghjZW50ZXJfeRgIIAEoBRIQCghvcmlnaW5feBgJIAEoBRIQCghvcmlnaW5feRgKIAEoBRISCgpkaWVfc2l6ZV94GAsgASgFEhIKCmRpZV9zaXplX3kYDCABKAUSDgoGZXFwX2lkGA0gASgJEhEKCXJlY2lwZV9pZBgOIAEoCRIPCgdkZWZlY3RzGA8gASgFEg4KBmltYWdlcxgQIAEoBRIWCg5vcmlnaW5faW5kZXhfeBgRIAEoBRIWCg5vcmlnaW5faW5kZXhfeRgSIAEoBRIVCg1sYXRlc3RfdXBkYXRlGBMgASgFInwKHUdldEluc3BlY3Rpb25QYXRjaFppcHNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIOCgZsb3RfaWQYAiABKAkSEAoId2FmZXJfaWQYAyABKAkSDgoGZGV2aWNlGAQgASgJEhAKCGxheWVyX2lkGAUgASgJIisKBlppcFJlZhIRCglzM19idWNrZXQYASABKAkSDgoGczNfa2V5GAIgASgJIj0KHkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRIbCgR6aXBzGAEgAygLMg0uc2MudjEuWmlwUmVmInAKHUdldFJldmlld0ltYWdlRmlsZVNwZWNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEQoJZGVmZWN0X2lkGAMgASgFEhAKCGltYWdlX2lkGAQgASgFIjgKHkdldFJldmlld0ltYWdlRmlsZVNwZWNSZXNwb25zZRIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCSJYChdMaXN0UmV2aWV3SW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhEKCWRlZmVjdF9pZBgDIAEoBSJhCg5SZXZpZXdJbWFnZVJlZhIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCRIRCglkZWZlY3RfaWQYAiABKAUSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCSJBChhMaXN0UmV2aWV3SW1hZ2VzUmVzcG9uc2USJQoGaW1hZ2VzGAEgAygLMhUuc2MudjEuUmV2aWV3SW1hZ2VSZWYiggEKFkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QSEgoKc3RhcnRfdGltZRgBIAEoCRIQCghlbmRfdGltZRgCIAEoCRIOCgZsb3RfaWQYAyABKAkSEAoId2FmZXJfaWQYBCABKAkSEAoIbGF5ZXJfaWQYBSABKAkSDgoGZGV2aWNlGAYgASgJIucCChFJbnNwZWN0aW9uU3VtbWFyeRIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEg4KBmxvdF9pZBgDIAEoCRIQCgh3YWZlcl9pZBgEIAEoCRIOCgZkZXZpY2UYBSABKAkSEAoIbGF5ZXJfaWQYBiABKAkSDgoGZXFwX2lkGAcgASgJEhEKCXJlY2lwZV9pZBgIIAEoCRIPCgdkZWZlY3RzGAkgASgFEg4KBmltYWdlcxgKIAEoBRIQCghjZW50ZXJfeBgLIAEoBRIQCghjZW50ZXJfeRgMIAEoBRIQCghvcmlnaW5feBgNIAEoBRIQCghvcmlnaW5feRgOIAEoBRISCgpkaWVfc2l6ZV94GA8gASgFEhIKCmRpZV9zaXplX3kYECABKAUSFgoOb3JpZ2luX2luZGV4X3gYESABKAUSFgoOb3JpZ2luX2luZGV4X3kYEiABKAUiQgoXTGlzdEluc3BlY3Rpb25zUmVzcG9uc2USJwoFaXRlbXMYASADKAsyGC5zYy52MS5JbnNwZWN0aW9uU3VtbWFyeTKEBAoKU2NVcHN0cmVhbRI1CgZIZWFsdGgSFC5zYy52MS5IZWFsdGhSZXF1ZXN0GhUuc2MudjEuSGVhbHRoUmVzcG9uc2USSgoNR2V0SW5zcGVjdGlvbhIbLnNjLnYxLkdldEluc3BlY3Rpb25SZXF1ZXN0Ghwuc2MudjEuR2V0SW5zcGVjdGlvblJlc3BvbnNlEmUKFkdldEluc3BlY3Rpb25QYXRjaFppcHMSJC5zYy52MS5HZXRJbnNwZWN0aW9uUGF0Y2haaXBzUmVxdWVzdBolLnNjLnYxLkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRJlChZHZXRSZXZpZXdJbWFnZUZpbGVTcGVjEiQuc2MudjEuR2V0UmV2aWV3SW1hZ2VGaWxlU3BlY1JlcXVlc3QaJS5zYy52MS5HZXRSZXZpZXdJbWFnZUZpbGVTcGVjUmVzcG9uc2USUwoQTGlzdFJldmlld0ltYWdlcxIeLnNjLnYxLkxpc3RSZXZpZXdJbWFnZXNSZXF1ZXN0Gh8uc2MudjEuTGlzdFJldmlld0ltYWdlc1Jlc3BvbnNlElAKD0xpc3RJbnNwZWN0aW9ucxIdLnNjLnYxLkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QaHi5zYy52MS5MaXN0SW5zcGVjdGlvbnNSZXNwb25zZUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw");
+export const file_sc_v1_upstream: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChRzYy92MS91cHN0cmVhbS5wcm90bxIFc2MudjEiDwoNSGVhbHRoUmVxdWVzdCIgCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkiQgoUR2V0SW5zcGVjdGlvblJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBSKCAwoVR2V0SW5zcGVjdGlvblJlc3BvbnNlEhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSDgoGbG90X2lkGAMgASgJEhAKCHdhZmVyX2lkGAQgASgJEg4KBmRldmljZRgFIAEoCRIQCghsYXllcl9pZBgGIAEoCRIQCghjZW50ZXJfeBgHIAEoBRIQCghjZW50ZXJfeRgIIAEoBRIQCghvcmlnaW5feBgJIAEoBRIQCghvcmlnaW5feRgKIAEoBRISCgpkaWVfc2l6ZV94GAsgASgFEhIKCmRpZV9zaXplX3kYDCABKAUSDgoGZXFwX2lkGA0gASgJEhEKCXJlY2lwZV9pZBgOIAEoCRIPCgdkZWZlY3RzGA8gASgFEg4KBmltYWdlcxgQIAEoBRIWCg5vcmlnaW5faW5kZXhfeBgRIAEoBRIWCg5vcmlnaW5faW5kZXhfeRgSIAEoBRIVCg1sYXRlc3RfdXBkYXRlGBMgASgFInwKHUdldEluc3BlY3Rpb25QYXRjaFppcHNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIOCgZsb3RfaWQYAiABKAkSEAoId2FmZXJfaWQYAyABKAkSDgoGZGV2aWNlGAQgASgJEhAKCGxheWVyX2lkGAUgASgJIisKBlppcFJlZhIRCglzM19idWNrZXQYASABKAkSDgoGczNfa2V5GAIgASgJIj0KHkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRIbCgR6aXBzGAEgAygLMg0uc2MudjEuWmlwUmVmInAKHUdldFJldmlld0ltYWdlRmlsZVNwZWNSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEQoJZGVmZWN0X2lkGAMgASgFEhAKCGltYWdlX2lkGAQgASgFIjgKHkdldFJldmlld0ltYWdlRmlsZVNwZWNSZXNwb25zZRIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCSJYChdMaXN0UmV2aWV3SW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhEKCWRlZmVjdF9pZBgDIAEoBSJhCg5SZXZpZXdJbWFnZVJlZhIWCg5pbWFnZV9maWxlc3BlYxgBIAEoCRIRCglkZWZlY3RfaWQYAiABKAUSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCSJBChhMaXN0UmV2aWV3SW1hZ2VzUmVzcG9uc2USJQoGaW1hZ2VzGAEgAygLMhUuc2MudjEuUmV2aWV3SW1hZ2VSZWYiggEKFkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QSEgoKc3RhcnRfdGltZRgBIAEoCRIQCghlbmRfdGltZRgCIAEoCRIOCgZsb3RfaWQYAyABKAkSEAoId2FmZXJfaWQYBCABKAkSEAoIbGF5ZXJfaWQYBSABKAkSDgoGZGV2aWNlGAYgASgJIucCChFJbnNwZWN0aW9uU3VtbWFyeRIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEg4KBmxvdF9pZBgDIAEoCRIQCgh3YWZlcl9pZBgEIAEoCRIOCgZkZXZpY2UYBSABKAkSEAoIbGF5ZXJfaWQYBiABKAkSDgoGZXFwX2lkGAcgASgJEhEKCXJlY2lwZV9pZBgIIAEoCRIPCgdkZWZlY3RzGAkgASgFEg4KBmltYWdlcxgKIAEoBRIQCghjZW50ZXJfeBgLIAEoBRIQCghjZW50ZXJfeRgMIAEoBRIQCghvcmlnaW5feBgNIAEoBRIQCghvcmlnaW5feRgOIAEoBRISCgpkaWVfc2l6ZV94GA8gASgFEhIKCmRpZV9zaXplX3kYECABKAUSFgoOb3JpZ2luX2luZGV4X3gYESABKAUSFgoOb3JpZ2luX2luZGV4X3kYEiABKAUiQgoXTGlzdEluc3BlY3Rpb25zUmVzcG9uc2USJwoFaXRlbXMYASADKAsyGC5zYy52MS5JbnNwZWN0aW9uU3VtbWFyeTKEBAoKU2NVcHN0cmVhbRI1CgZIZWFsdGgSFC5zYy52MS5IZWFsdGhSZXF1ZXN0GhUuc2MudjEuSGVhbHRoUmVzcG9uc2USSgoNR2V0SW5zcGVjdGlvbhIbLnNjLnYxLkdldEluc3BlY3Rpb25SZXF1ZXN0Ghwuc2MudjEuR2V0SW5zcGVjdGlvblJlc3BvbnNlEmUKFkdldEluc3BlY3Rpb25QYXRjaFppcHMSJC5zYy52MS5HZXRJbnNwZWN0aW9uUGF0Y2haaXBzUmVxdWVzdBolLnNjLnYxLkdldEluc3BlY3Rpb25QYXRjaFppcHNSZXNwb25zZRJlChZHZXRSZXZpZXdJbWFnZUZpbGVTcGVjEiQuc2MudjEuR2V0UmV2aWV3SW1hZ2VGaWxlU3BlY1JlcXVlc3QaJS5zYy52MS5HZXRSZXZpZXdJbWFnZUZpbGVTcGVjUmVzcG9uc2USUwoQTGlzdFJldmlld0ltYWdlcxIeLnNjLnYxLkxpc3RSZXZpZXdJbWFnZXNSZXF1ZXN0Gh8uc2MudjEuTGlzdFJldmlld0ltYWdlc1Jlc3BvbnNlElAKD0xpc3RJbnNwZWN0aW9ucxIdLnNjLnYxLkxpc3RJbnNwZWN0aW9uc1JlcXVlc3QaHi5zYy52MS5MaXN0SW5zcGVjdGlvbnNSZXNwb25zZUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw",
+  );
 
 /**
  * @generated from message sc.v1.HealthRequest
  */
-export type HealthRequest = Message<"sc.v1.HealthRequest"> & {
-};
+export type HealthRequest = Message<"sc.v1.HealthRequest"> & {};
 
 /**
  * Describes the message sc.v1.HealthRequest.
  * Use `create(HealthRequestSchema)` to create a new message.
  */
-export const HealthRequestSchema: GenMessage<HealthRequest> = /*@__PURE__*/
+export const HealthRequestSchema: GenMessage<HealthRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 0);
 
 /**
@@ -39,7 +42,8 @@ export type HealthResponse = Message<"sc.v1.HealthResponse"> & {
  * Describes the message sc.v1.HealthResponse.
  * Use `create(HealthResponseSchema)` to create a new message.
  */
-export const HealthResponseSchema: GenMessage<HealthResponse> = /*@__PURE__*/
+export const HealthResponseSchema: GenMessage<HealthResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 1);
 
 /**
@@ -61,7 +65,8 @@ export type GetInspectionRequest = Message<"sc.v1.GetInspectionRequest"> & {
  * Describes the message sc.v1.GetInspectionRequest.
  * Use `create(GetInspectionRequestSchema)` to create a new message.
  */
-export const GetInspectionRequestSchema: GenMessage<GetInspectionRequest> = /*@__PURE__*/
+export const GetInspectionRequestSchema: GenMessage<GetInspectionRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 2);
 
 /**
@@ -168,7 +173,8 @@ export type GetInspectionResponse = Message<"sc.v1.GetInspectionResponse"> & {
  * Describes the message sc.v1.GetInspectionResponse.
  * Use `create(GetInspectionResponseSchema)` to create a new message.
  */
-export const GetInspectionResponseSchema: GenMessage<GetInspectionResponse> = /*@__PURE__*/
+export const GetInspectionResponseSchema: GenMessage<GetInspectionResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 3);
 
 /**
@@ -205,7 +211,8 @@ export type GetInspectionPatchZipsRequest = Message<"sc.v1.GetInspectionPatchZip
  * Describes the message sc.v1.GetInspectionPatchZipsRequest.
  * Use `create(GetInspectionPatchZipsRequestSchema)` to create a new message.
  */
-export const GetInspectionPatchZipsRequestSchema: GenMessage<GetInspectionPatchZipsRequest> = /*@__PURE__*/
+export const GetInspectionPatchZipsRequestSchema: GenMessage<GetInspectionPatchZipsRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 4);
 
 /**
@@ -227,8 +234,7 @@ export type ZipRef = Message<"sc.v1.ZipRef"> & {
  * Describes the message sc.v1.ZipRef.
  * Use `create(ZipRefSchema)` to create a new message.
  */
-export const ZipRefSchema: GenMessage<ZipRef> = /*@__PURE__*/
-  messageDesc(file_sc_v1_upstream, 5);
+export const ZipRefSchema: GenMessage<ZipRef> = /*@__PURE__*/ messageDesc(file_sc_v1_upstream, 5);
 
 /**
  * @generated from message sc.v1.GetInspectionPatchZipsResponse
@@ -244,7 +250,8 @@ export type GetInspectionPatchZipsResponse = Message<"sc.v1.GetInspectionPatchZi
  * Describes the message sc.v1.GetInspectionPatchZipsResponse.
  * Use `create(GetInspectionPatchZipsResponseSchema)` to create a new message.
  */
-export const GetInspectionPatchZipsResponseSchema: GenMessage<GetInspectionPatchZipsResponse> = /*@__PURE__*/
+export const GetInspectionPatchZipsResponseSchema: GenMessage<GetInspectionPatchZipsResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 6);
 
 /**
@@ -276,7 +283,8 @@ export type GetReviewImageFileSpecRequest = Message<"sc.v1.GetReviewImageFileSpe
  * Describes the message sc.v1.GetReviewImageFileSpecRequest.
  * Use `create(GetReviewImageFileSpecRequestSchema)` to create a new message.
  */
-export const GetReviewImageFileSpecRequestSchema: GenMessage<GetReviewImageFileSpecRequest> = /*@__PURE__*/
+export const GetReviewImageFileSpecRequestSchema: GenMessage<GetReviewImageFileSpecRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 7);
 
 /**
@@ -293,7 +301,8 @@ export type GetReviewImageFileSpecResponse = Message<"sc.v1.GetReviewImageFileSp
  * Describes the message sc.v1.GetReviewImageFileSpecResponse.
  * Use `create(GetReviewImageFileSpecResponseSchema)` to create a new message.
  */
-export const GetReviewImageFileSpecResponseSchema: GenMessage<GetReviewImageFileSpecResponse> = /*@__PURE__*/
+export const GetReviewImageFileSpecResponseSchema: GenMessage<GetReviewImageFileSpecResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 8);
 
 /**
@@ -320,7 +329,8 @@ export type ListReviewImagesRequest = Message<"sc.v1.ListReviewImagesRequest"> &
  * Describes the message sc.v1.ListReviewImagesRequest.
  * Use `create(ListReviewImagesRequestSchema)` to create a new message.
  */
-export const ListReviewImagesRequestSchema: GenMessage<ListReviewImagesRequest> = /*@__PURE__*/
+export const ListReviewImagesRequestSchema: GenMessage<ListReviewImagesRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 9);
 
 /**
@@ -352,7 +362,8 @@ export type ReviewImageRef = Message<"sc.v1.ReviewImageRef"> & {
  * Describes the message sc.v1.ReviewImageRef.
  * Use `create(ReviewImageRefSchema)` to create a new message.
  */
-export const ReviewImageRefSchema: GenMessage<ReviewImageRef> = /*@__PURE__*/
+export const ReviewImageRefSchema: GenMessage<ReviewImageRef> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 10);
 
 /**
@@ -369,7 +380,8 @@ export type ListReviewImagesResponse = Message<"sc.v1.ListReviewImagesResponse">
  * Describes the message sc.v1.ListReviewImagesResponse.
  * Use `create(ListReviewImagesResponseSchema)` to create a new message.
  */
-export const ListReviewImagesResponseSchema: GenMessage<ListReviewImagesResponse> = /*@__PURE__*/
+export const ListReviewImagesResponseSchema: GenMessage<ListReviewImagesResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 11);
 
 /**
@@ -411,7 +423,8 @@ export type ListInspectionsRequest = Message<"sc.v1.ListInspectionsRequest"> & {
  * Describes the message sc.v1.ListInspectionsRequest.
  * Use `create(ListInspectionsRequestSchema)` to create a new message.
  */
-export const ListInspectionsRequestSchema: GenMessage<ListInspectionsRequest> = /*@__PURE__*/
+export const ListInspectionsRequestSchema: GenMessage<ListInspectionsRequest> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 12);
 
 /**
@@ -513,7 +526,8 @@ export type InspectionSummary = Message<"sc.v1.InspectionSummary"> & {
  * Describes the message sc.v1.InspectionSummary.
  * Use `create(InspectionSummarySchema)` to create a new message.
  */
-export const InspectionSummarySchema: GenMessage<InspectionSummary> = /*@__PURE__*/
+export const InspectionSummarySchema: GenMessage<InspectionSummary> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 13);
 
 /**
@@ -530,7 +544,8 @@ export type ListInspectionsResponse = Message<"sc.v1.ListInspectionsResponse"> &
  * Describes the message sc.v1.ListInspectionsResponse.
  * Use `create(ListInspectionsResponseSchema)` to create a new message.
  */
-export const ListInspectionsResponseSchema: GenMessage<ListInspectionsResponse> = /*@__PURE__*/
+export const ListInspectionsResponseSchema: GenMessage<ListInspectionsResponse> =
+  /*@__PURE__*/
   messageDesc(file_sc_v1_upstream, 14);
 
 /**
@@ -544,7 +559,7 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof HealthRequestSchema;
     output: typeof HealthResponseSchema;
-  },
+  };
   /**
    * @generated from rpc sc.v1.ScUpstream.GetInspection
    */
@@ -552,7 +567,7 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof GetInspectionRequestSchema;
     output: typeof GetInspectionResponseSchema;
-  },
+  };
   /**
    * @generated from rpc sc.v1.ScUpstream.GetInspectionPatchZips
    */
@@ -560,7 +575,7 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof GetInspectionPatchZipsRequestSchema;
     output: typeof GetInspectionPatchZipsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc sc.v1.ScUpstream.GetReviewImageFileSpec
    */
@@ -568,7 +583,7 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof GetReviewImageFileSpecRequestSchema;
     output: typeof GetReviewImageFileSpecResponseSchema;
-  },
+  };
   /**
    * @generated from rpc sc.v1.ScUpstream.ListReviewImages
    */
@@ -576,7 +591,7 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof ListReviewImagesRequestSchema;
     output: typeof ListReviewImagesResponseSchema;
-  },
+  };
   /**
    * @generated from rpc sc.v1.ScUpstream.ListInspections
    */
@@ -584,6 +599,5 @@ export const ScUpstream: GenService<{
     methodKind: "unary";
     input: typeof ListInspectionsRequestSchema;
     output: typeof ListInspectionsResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_sc_v1_upstream, 0);
+  };
+}> = /*@__PURE__*/ serviceDesc(file_sc_v1_upstream, 0);

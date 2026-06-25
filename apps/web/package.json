@@ -16,6 +16,8 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "generate:proto": "cd ../.. && make generate-protos"
   },
   "dependencies": {
@@ -53,6 +55,7 @@
     "msw": "^2.14.6",
     "orval": "7.5.0",
     "playwright": "^1.60.0",
+    "prettier": "^3.8.3",
     "storybook": "^8.6.18",
     "tsup": "^8.5.1",
     "typescript": "~5.7.3",

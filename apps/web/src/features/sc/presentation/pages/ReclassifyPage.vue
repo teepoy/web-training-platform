@@ -55,15 +55,13 @@ function goBack() {
 }
 
 /** Curried box-selection: bakes datasetId + reticleOptions, takes mode + region → defect IDs. */
-async function queryBoxSelection(
-  mode: ScMapMode,
-  region: ScBoxRegion,
-): Promise<number[]> {
+async function queryBoxSelection(mode: ScMapMode, region: ScBoxRegion): Promise<number[]> {
   const result = await fetchScDatasetBoxFilter(
     page.datasetId.value,
     mode,
     region,
     page.reticleOptions.value,
+    page.globalFilter.value,
   );
   return result.defect_ids.map(Number);
 }
@@ -109,8 +107,7 @@ function onBlinkTableSelect(
   },
 ): void {
   const mode: import("../../application/useReclassifyPage").SelectionMode =
-    modifiers.selectionMode ??
-    (modifiers.ctrl || modifiers.meta ? "toggle" : "replace");
+    modifiers.selectionMode ?? (modifiers.ctrl || modifiers.meta ? "toggle" : "replace");
   page.selectDefectIds(defectIds, mode);
 }
 
@@ -127,12 +124,7 @@ function handleKeydown(e: KeyboardEvent): void {
   const target = e.target as HTMLElement | null;
   if (target) {
     const tag = target.tagName.toLowerCase();
-    if (
-      tag === "input" ||
-      tag === "textarea" ||
-      tag === "select" ||
-      target.isContentEditable
-    ) {
+    if (tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable) {
       return;
     }
   }
@@ -171,35 +163,32 @@ const blinkSamples = computed<ScSampleItem[]>(() =>
   }),
 );
 
-const blinkImageUrlsByDefectId = computed<Record<string, ScBlinkImageUrls>>(
-  () => {
-    const urlsByDefectId: Record<string, ScBlinkImageUrls> = {};
-    for (const sample of page.scSamples.value) {
-      const urls: ScBlinkImageUrls = {
-        template: "",
-        defective: "",
-        difference: "",
-        review: [],
-      };
-      for (const image of sample.images) {
-        const role = image.role.toLowerCase();
-        if (role.includes("template")) urls.template = image.url;
-        else if (role.includes("defective")) urls.defective = image.url;
-        else if (role.includes("difference")) urls.difference = image.url;
-        else if (role === "review") urls.review.push(image.url);
-      }
-      urlsByDefectId[sample.defectId] = urls;
+const blinkImageUrlsByDefectId = computed<Record<string, ScBlinkImageUrls>>(() => {
+  const urlsByDefectId: Record<string, ScBlinkImageUrls> = {};
+  for (const sample of page.scSamples.value) {
+    const urls: ScBlinkImageUrls = {
+      template: "",
+      defective: "",
+      difference: "",
+      review: [],
+    };
+    for (const image of sample.images) {
+      const role = image.role.toLowerCase();
+      if (role.includes("template")) urls.template = image.url;
+      else if (role.includes("defective")) urls.defective = image.url;
+      else if (role.includes("difference")) urls.difference = image.url;
+      else if (role === "review") urls.review.push(image.url);
     }
-    return urlsByDefectId;
-  },
-);
+    urlsByDefectId[sample.defectId] = urls;
+  }
+  return urlsByDefectId;
+});
 
 /** Saved annotation labels keyed by defectId (matches BlinkTable lookup). */
 const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {};
   for (const s of page.scSamples.value) {
-    if (s.currentLabel && s.currentLabel !== "__unlabeled__")
-      map[s.defectId] = s.currentLabel;
+    if (s.currentLabel && s.currentLabel !== "__unlabeled__") map[s.defectId] = s.currentLabel;
   }
   return map;
 });
@@ -273,11 +262,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             >
               Train &amp; Predict
             </NButton>
-            <NText
-              v-if="page.trainPredictStatusMessage.value"
-              depth="3"
-              style="font-size: 11px"
-            >
+            <NText v-if="page.trainPredictStatusMessage.value" depth="3" style="font-size: 11px">
               {{ page.trainPredictStatusMessage.value }}
             </NText>
             <NButton
@@ -288,18 +273,10 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             >
               View Task
             </NButton>
-            <NButton
-              size="small"
-              type="primary"
-              @click="page.showSamplingModal.value = true"
-            >
+            <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
               Sampling
             </NButton>
-            <NButton
-              size="small"
-              quaternary
-              @click="router.push('/sc/handbook')"
-            >
+            <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
             </NButton>
           </div>
@@ -315,23 +292,14 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
                 <NRadioButton value="blink">Blink Table</NRadioButton>
                 <NRadioButton value="map">Map</NRadioButton>
               </NRadioGroup>
-              <span
-                v-if="page.activeFilterCount.value > 0"
-                class="sc-filter-hint"
-              >
+              <span v-if="page.activeFilterCount.value > 0" class="sc-filter-hint">
                 {{ page.activeFilterCount.value }} filter(s) active
-                <NButton
-                  text
-                  size="tiny"
-                  type="primary"
-                  @click="page.clearMapFilter()"
+                <NButton text size="tiny" type="primary" @click="page.clearMapFilter()"
                   >Clear</NButton
                 >
               </span>
               <NText
-                v-if="
-                  page.activeTab.value === 'map' && page.mapStreamMessage.value
-                "
+                v-if="page.activeTab.value === 'map' && page.mapStreamMessage.value"
                 depth="3"
                 class="sc-stream-hint"
               >
@@ -359,9 +327,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
                 :annotation-drafts="page.annotationDraft.value"
                 :has-next-page="page.hasMoreSamples.value"
                 :is-fetching-next-page="page.isFetchingMoreSamples.value"
-                :inspection-time="
-                  page.inspectionContext.value?.inspectionTime ?? ''
-                "
+                :inspection-time="page.inspectionContext.value?.inspectionTime ?? ''"
                 :review-samples="page.reviewSamples.value"
                 :review-loading="page.reviewLoading.value"
                 :review-error="page.reviewError.value"
@@ -408,7 +374,6 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             :draft-count="page.draftCount.value"
             :selected-draft-count="selectedDraftCount"
             :is-submitting="page.isSubmitting.value"
-            :annotation-grid-items="page.annotationGridItems.value"
             @apply-code="applyAnnotationCode"
             @set-shortcut="page.setLabelShortcut"
             @submit="page.submitAnnotations"
@@ -439,10 +404,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
             Total available: {{ page.samplingAvailableCount.value }} samples
           </NText>
         </div>
-        <NCheckbox
-          v-model:checked="page.assignDefaultDraftLabel.value"
-          style="margin-top: 12px"
-        >
+        <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
           Assign default draft label (label 1) to all sampled data
         </NCheckbox>
       </div>
@@ -458,9 +420,7 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
       :prediction-job-id="page.trainPredictPredictionJob.value?.id ?? null"
       :prediction-status="page.trainPredictPredictionStatus.value"
       :prediction-percent="page.trainPredictPredictionPercent.value"
-      :prediction-progress-label="
-        page.trainPredictPredictionProgressLabel.value
-      "
+      :prediction-progress-label="page.trainPredictPredictionProgressLabel.value"
       :prediction-processing="page.trainPredictPredictionProcessing.value"
     />
   </FullScreenLayout>

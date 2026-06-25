@@ -114,6 +114,9 @@ importers:
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
+      prettier:
+        specifier: ^3.8.3
+        version: 3.8.3
       storybook:
         specifier: ^8.6.18
         version: 8.6.18(prettier@3.8.3)

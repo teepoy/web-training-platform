@@ -2,7 +2,9 @@
 import { computed, h, ref, watch } from "vue";
 import {
   NButton,
+  NCheckbox,
   NDataTable,
+  NInput,
   NInputNumber,
   NSpace,
   NText,
@@ -13,10 +15,7 @@ import {
   type DataTableSortState,
 } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import type {
-  ScSampleTableFilter,
-  ScSampleTableSort,
-} from "@/features/sc/domain/sampleTable";
+import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import { streamApiSse } from "@/shared/api/sse";
 import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
 import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSampleTableRowsRequest";
@@ -43,10 +42,7 @@ const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
   (e: "apply-selection", ids: number[]): void;
   (e: "filter-change", filter: ScSampleTableFilter): void;
-  (
-    e: "sort-change",
-    sort: { field: string; direction: "asc" | "desc" | null },
-  ): void;
+  (e: "sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
 }>();
 
 interface ColumnDefinition {
@@ -81,7 +77,7 @@ const columnDefinitions: ColumnDefinition[] = [
     title: "Kill Ratio",
     width: 120,
     filter: "range",
-    render: (row) => row.kill_ratio != null ? row.kill_ratio.toFixed(3) : '-',
+    render: (row) => (row.kill_ratio != null ? row.kill_ratio.toFixed(3) : "-"),
   },
 ];
 
@@ -91,13 +87,9 @@ const SCROLL_LOAD_THRESHOLD_PX = 240;
 const SCROLL_X = 1590;
 
 const resolvedDefectIds = computed(
-  () =>
-    props.defectIds ??
-    (props.samples ?? []).map((sample) => String(sample.defectId)),
+  () => props.defectIds ?? (props.samples ?? []).map((sample) => String(sample.defectId)),
 );
-const queryEnabled = computed(
-  () => Boolean(props.inspectionTime) && props.waferKey !== undefined,
-);
+const queryEnabled = computed(() => Boolean(props.inspectionTime) && props.waferKey !== undefined);
 const tableQueryKey = computed(() =>
   [
     props.inspectionTime,
@@ -108,11 +100,7 @@ const tableQueryKey = computed(() =>
   ].join(":"),
 );
 const filterOptionsScopeKey = computed(() =>
-  [
-    props.inspectionTime,
-    props.waferKey,
-    resolvedDefectIds.value.join(","),
-  ].join(":"),
+  [props.inspectionTime, props.waferKey, resolvedDefectIds.value.join(",")].join(":"),
 );
 
 const rows = ref<ScSampleTableRow[]>([]);
@@ -123,18 +111,13 @@ const isSelectingAll = ref(false);
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
-const filterState = ref<
-  Record<string, { min: number | null; max: number | null }>
->({});
-const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>(
-  {},
-);
+const filterState = ref<Record<string, { min: number | null; max: number | null }>>({});
+const setFilterSearch = ref<Record<string, string>>({});
+const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
 let requestVersion = 0;
 
 const hasMore = computed(() => nextAnchor.value !== null);
-const checkedRowKeys = computed<DataTableRowKey[]>(() =>
-  Array.from(selectedIds.value),
-);
+const checkedRowKeys = computed<DataTableRowKey[]>(() => Array.from(selectedIds.value));
 
 function getFilterState(field: string): {
   min: number | null;
@@ -148,12 +131,7 @@ function getFilterState(field: string): {
 
 function applyRangeFilter(field: string): void {
   const state = filterState.value[field];
-  if (
-    !state ||
-    state.min === null ||
-    state.max === null ||
-    state.min > state.max
-  ) {
+  if (!state || state.min === null || state.max === null || state.min > state.max) {
     return;
   }
   emit("filter-change", {
@@ -217,6 +195,108 @@ function getSetFilterOptions(definition: ColumnDefinition) {
     .map((value) => ({ label: String(value), value }));
 }
 
+function applySetFilter(field: string, values: Array<string | number>): void {
+  const next = { ...(props.filter ?? {}) };
+  if (values.length === 0) {
+    delete next[field];
+  } else {
+    next[field] = { operator: "in", values };
+  }
+  emit("filter-change", next);
+}
+
+function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
+  const field = String(definition.key);
+  const search = (setFilterSearch.value[field] ?? "").trim().toLowerCase();
+  const selected = new Set(getSetFilterValues(field).map(String));
+  const options = getSetFilterOptions(definition).filter((option) =>
+    search.length === 0 ? true : option.label.toLowerCase().includes(search),
+  );
+
+  return h("div", { class: "sst-filter-popover sst-filter-popover--set" }, [
+    h(NInput, {
+      value: setFilterSearch.value[field] ?? "",
+      placeholder: "Search",
+      size: "small",
+      clearable: true,
+      "onUpdate:value": (value: string) => {
+        setFilterSearch.value[field] = value;
+      },
+    }),
+    h(
+      "div",
+      { class: "sst-set-filter-options" },
+      options.length > 0
+        ? options.map((option) =>
+            h(
+              NCheckbox,
+              {
+                key: String(option.value),
+                checked: selected.has(String(option.value)),
+                "onUpdate:checked": (checked: boolean) => {
+                  const current = getSetFilterValues(field);
+                  const currentKeys = new Set(current.map(String));
+                  const optionKey = String(option.value);
+                  if (checked) currentKeys.add(optionKey);
+                  else currentKeys.delete(optionKey);
+                  const valuesByKey = new Map<string, string | number>();
+                  for (const item of current) valuesByKey.set(String(item), item);
+                  for (const item of getSetFilterOptions(definition)) {
+                    valuesByKey.set(String(item.value), item.value);
+                  }
+                  applySetFilter(
+                    field,
+                    Array.from(currentKeys)
+                      .map((key) => valuesByKey.get(key))
+                      .filter(
+                        (value): value is string | number =>
+                          typeof value === "string" || typeof value === "number",
+                      ),
+                  );
+                },
+              },
+              () => option.label,
+            ),
+          )
+        : [h(NText, { depth: 3, class: "sst-set-filter-empty" }, () => "No matches")],
+    ),
+    h(NSpace, { size: 4 }, () => [
+      h(
+        NButton,
+        {
+          size: "tiny",
+          quaternary: true,
+          onClick: () => {
+            setFilterSearch.value[field] = "";
+          },
+        },
+        () => "Reset",
+      ),
+      h(
+        NButton,
+        {
+          size: "tiny",
+          quaternary: true,
+          onClick: () => {
+            applySetFilter(field, []);
+            hide();
+          },
+        },
+        () => "Clear",
+      ),
+      h(
+        NButton,
+        {
+          size: "tiny",
+          type: "primary",
+          onClick: () => hide(),
+        },
+        () => "Done",
+      ),
+    ]),
+  ]);
+}
+
 function renderRangeFilterMenu(field: string, hide: () => void) {
   return h("div", { class: "sst-filter-popover" }, [
     h(NSpace, { wrap: false }, () => [
@@ -272,16 +352,13 @@ function handleFilters(
   sourceColumn: { key: string | number },
 ): void {
   const field = String(sourceColumn.key);
-  const definition = columnDefinitions.find(
-    (column) => String(column.key) === field,
-  );
+  const definition = columnDefinitions.find((column) => String(column.key) === field);
   if (definition?.filter !== "set") return;
 
   const selected = filterState[field];
   const values = Array.isArray(selected)
     ? selected.filter(
-        (value): value is string | number =>
-          typeof value === "string" || typeof value === "number",
+        (value): value is string | number => typeof value === "string" || typeof value === "number",
       )
     : [];
   const next = { ...(props.filter ?? {}) };
@@ -299,49 +376,41 @@ const columns = computed<DataTableColumns<ScSampleTableRow>>(() => [
     fixed: "left",
     width: 40,
   },
-  ...columnDefinitions.map(
-    (definition): DataTableBaseColumn<ScSampleTableRow> => {
-      const field = String(definition.key);
-      return {
-        key: definition.key,
-        title: definition.title,
-        width: definition.width,
-        fixed: definition.key === "defect_id" ? ("left" as const) : undefined,
-        ellipsis: { tooltip: true },
-        sorter: true,
-        sortOrder:
-          props.sort?.field === field
-            ? props.sort.direction === "asc"
-              ? ("ascend" as const)
-              : ("descend" as const)
-            : false,
-        filter: true,
-        filterOptionValues:
-          definition.filter === "set"
-            ? getSetFilterValues(field)
-            : getRangeFilterValues(field),
-        filterOptions:
-          definition.filter === "set"
-            ? getSetFilterOptions(definition)
+  ...columnDefinitions.map((definition): DataTableBaseColumn<ScSampleTableRow> => {
+    const field = String(definition.key);
+    return {
+      key: definition.key,
+      title: definition.title,
+      width: definition.width,
+      fixed: definition.key === "defect_id" ? ("left" as const) : undefined,
+      ellipsis: { tooltip: true },
+      sorter: true,
+      sortOrder:
+        props.sort?.field === field
+          ? props.sort.direction === "asc"
+            ? ("ascend" as const)
+            : ("descend" as const)
+          : false,
+      filter: true,
+      filterOptionValues:
+        definition.filter === "set" ? getSetFilterValues(field) : getRangeFilterValues(field),
+      filterOptions: definition.filter === "set" ? getSetFilterOptions(definition) : undefined,
+      filterMultiple: definition.filter === "set",
+      renderFilterMenu:
+        definition.filter === "set"
+          ? ({ hide }: { hide: () => void }) => renderSetFilterMenu(definition, hide)
+          : definition.filter === "range"
+            ? ({ hide }: { hide: () => void }) => renderRangeFilterMenu(field, hide)
             : undefined,
-        filterMultiple: definition.filter === "set",
-        renderFilterMenu:
-          definition.filter === "range"
-            ? ({ hide }: { hide: () => void }) =>
-                renderRangeFilterMenu(field, hide)
-            : undefined,
-        render: definition.render
-          ? (row: ScSampleTableRow) => definition.render?.(row) ?? ""
-          : undefined,
-      };
-    },
-  ),
+      render: definition.render
+        ? (row: ScSampleTableRow) => definition.render?.(row) ?? ""
+        : undefined,
+    };
+  }),
 ]);
 
 function updateSelection(keys: DataTableRowKey[]): void {
-  const next = new Set(
-    keys.map(Number).filter((value) => Number.isFinite(value)),
-  );
+  const next = new Set(keys.map(Number).filter((value) => Number.isFinite(value)));
   selectedIds.value = next;
   emit("selection-change", Array.from(next));
 }
@@ -386,15 +455,10 @@ function toggleRow(row: ScSampleTableRow): void {
 
 function rowProps(row: ScSampleTableRow): Record<string, unknown> {
   return {
-    class: selectedIds.value.has(Number(row.defect_id))
-      ? "sst-row--selected"
-      : undefined,
+    class: selectedIds.value.has(Number(row.defect_id)) ? "sst-row--selected" : undefined,
     onClick: (event: MouseEvent) => {
       const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest(".n-checkbox, button, input")
-      ) {
+      if (target instanceof Element && target.closest(".n-checkbox, button, input")) {
         return;
       }
       toggleRow(row);
@@ -439,10 +503,7 @@ async function fetchNextPage(): Promise<void> {
       if (definition.filter !== "set") continue;
       const field = String(definition.key);
       const values = new Map(
-        (discoveredSetFilterValues.value[field] ?? []).map((value) => [
-          String(value),
-          value,
-        ]),
+        (discoveredSetFilterValues.value[field] ?? []).map((value) => [String(value), value]),
       );
       for (const row of response.items) {
         const value = row[definition.key];
@@ -456,10 +517,7 @@ async function fetchNextPage(): Promise<void> {
     nextAnchor.value = response.next_anchor ?? null;
   } catch (error) {
     if (version === requestVersion) {
-      pageError.value =
-        error instanceof Error
-          ? error.message
-          : "Failed to load sample table rows";
+      pageError.value = error instanceof Error ? error.message : "Failed to load sample table rows";
     }
   } finally {
     if (version === requestVersion) {
@@ -508,11 +566,7 @@ async function selectAllMatching(): Promise<void> {
       const response = data as unknown as ScSampleTableRowsResponse & {
         next_anchor?: string | null;
       };
-      ids.push(
-        ...response.items
-          .map((row) => Number(row.defect_id))
-          .filter(Number.isFinite),
-      );
+      ids.push(...response.items.map((row) => Number(row.defect_id)).filter(Number.isFinite));
       anchor = response.next_anchor ?? null;
       if (version !== requestVersion) return;
       await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -520,8 +574,7 @@ async function selectAllMatching(): Promise<void> {
     selectedIds.value = new Set(ids);
     emit("selection-change", ids);
   } catch (error) {
-    pageError.value =
-      error instanceof Error ? error.message : "Failed to select all rows";
+    pageError.value = error instanceof Error ? error.message : "Failed to select all rows";
   } finally {
     if (version === requestVersion) isSelectingAll.value = false;
   }
@@ -534,8 +587,7 @@ function applySelectionAsDefects(): void {
 function handleScroll(event: Event): void {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  const remaining =
-    target.scrollHeight - target.scrollTop - target.clientHeight;
+  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
   if (remaining <= SCROLL_LOAD_THRESHOLD_PX) {
     void fetchNextPage();
   }
@@ -592,14 +644,16 @@ watch(
 );
 
 defineExpose({
-  getDefectCoords(defectId: number): {
-    waferX: number;
-    waferY: number;
-    dieX: number;
-    dieY: number;
-    reticleX: number;
-    reticleY: number;
-  } | undefined {
+  getDefectCoords(defectId: number):
+    | {
+        waferX: number;
+        waferY: number;
+        dieX: number;
+        dieY: number;
+        reticleX: number;
+        reticleY: number;
+      }
+    | undefined {
     const row = rows.value.find((r) => Number(r.defect_id) === defectId);
     if (!row) return undefined;
     return {
@@ -617,9 +671,7 @@ defineExpose({
 <template>
   <div class="sst">
     <div class="sst-header">
-      <NText depth="2" class="sst-header-label">
-        Sample Data ({{ serverTotal }})
-      </NText>
+      <NText depth="2" class="sst-header-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-header-actions">
         <NButton
           v-if="serverTotal > 0"
@@ -630,12 +682,7 @@ defineExpose({
         >
           Select All ({{ serverTotal }})
         </NButton>
-        <NButton
-          v-if="selectedIds.size > 0"
-          size="tiny"
-          quaternary
-          @click="clearSelection"
-        >
+        <NButton v-if="selectedIds.size > 0" size="tiny" quaternary @click="clearSelection">
           Clear Selection ({{ selectedIds.size }})
         </NButton>
         <NButton
@@ -755,5 +802,22 @@ defineExpose({
   flex-direction: column;
   gap: 8px;
   padding: 8px;
+}
+
+.sst-filter-popover--set {
+  width: 220px;
+}
+
+.sst-set-filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sst-set-filter-empty {
+  font-size: 12px;
+  padding: 4px 0;
 }
 </style>

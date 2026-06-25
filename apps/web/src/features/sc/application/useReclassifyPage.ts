@@ -1,22 +1,10 @@
-import {
-  ref,
-  computed,
-  watch,
-  onBeforeUnmount,
-  type Ref,
-  type ComputedRef,
-} from "vue";
+import { ref, computed, watch, onBeforeUnmount, type Ref, type ComputedRef } from "vue";
 import { useRoute } from "vue-router";
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/vue-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { withAuthQueryParams } from "@/shared/api/client";
 import { buildBlinkTableData } from "@/shared/utils/blink-table-data";
 import type { BlinkSampleInput } from "@/shared/utils/blink-table-data";
-import type { AnnotationGridItem } from "@/shared/types/components";
 
 import {
   useGetDatasetApiV1DatasetsDatasetIdGet,
@@ -28,10 +16,7 @@ import {
   getJobApiV1TrainingJobsJobIdGet,
   getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
-import {
-  listPredictionJobs,
-  startTrainAndPredict,
-} from "@/shared/api/predictions";
+import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type {
   DatasetStatusResponse,
@@ -41,20 +26,18 @@ import type {
 import { fetchScPlotPoints, warmupScPlotPoints } from "../api/plotPoints";
 import { fetchDatasetDefectIds } from "../api/defectIds";
 import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
+import type { ScSampleTableFilter } from "../domain/sampleTable";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
   type ReticleMapOptions,
 } from "./reticleMapOptions";
+import { sampleTableFilterToMapFilter } from "./globalFilter";
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
 import type { HighlightDefect } from "../presentation/components/types";
 import type { LegendColorSource } from "../presentation/components/scMapUtils";
-import {
-  scPatchUrl,
-  scReviewUrl,
-  normalizeScImageRole,
-} from "../domain/models";
+import { scPatchUrl, scReviewUrl, normalizeScImageRole } from "../domain/models";
 import { DEFAULT_RECLASSIFY_CODE_NAMES } from "./reclassifyCodeNames";
 
 interface WaferGeometryView {
@@ -167,6 +150,7 @@ export interface ReclassifyPageState {
   setMapZoom: (viewport: MapViewport | null) => void;
   waferDisplay: ComputedRef<number[]>;
   mapFilter: Ref<Record<string, (number | string)[]>>;
+  globalFilter: Ref<ScSampleTableFilter>;
   legendGroupBy: Ref<LegendColorSource | null>;
   activeFilterCount: ComputedRef<number>;
   handleMapFilterChange: (filter: Record<string, (number | string)[]>) => void;
@@ -201,7 +185,6 @@ export interface ReclassifyPageState {
     columns: import("@/shared/types/blink-table").BlinkColumnDef[];
   }>;
 
-  annotationGridItems: ComputedRef<AnnotationGridItem[]>;
   annotationDraft: Ref<Record<string, string>>;
   draftCount: ComputedRef<number>;
   isSubmitting: ComputedRef<boolean>;
@@ -240,9 +223,7 @@ export interface ReclassifyPageState {
   trainPredictPredictionProcessing: ComputedRef<boolean>;
   trainAndPredict: () => Promise<void>;
 
-  reviewSamples: Ref<
-    import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]
-  >;
+  reviewSamples: Ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>;
   reviewLoading: Ref<boolean>;
   reviewError: Ref<string | null>;
 }
@@ -260,12 +241,7 @@ function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
   }
   const patchRole = normalizeScImageRole(rawRole);
   if (patchRole) {
-    return scPatchUrl(
-      row.inspection_time,
-      row.wafer_key,
-      row.defect_id,
-      patchRole,
-    );
+    return scPatchUrl(row.inspection_time, row.wafer_key, row.defect_id, patchRole);
   }
   return "";
 }
@@ -302,9 +278,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     },
   );
 
-  const selectedDataset = computed<ScDatasetInfo | undefined>(
-    () => datasetQuery.data.value,
-  );
+  const selectedDataset = computed<ScDatasetInfo | undefined>(() => datasetQuery.data.value);
 
   const datasetStatusQuery =
     useGetDatasetStatusApiV1DatasetsDatasetIdStatusGet<DatasetStatusResponse>(
@@ -321,14 +295,14 @@ export function useReclassifyPage(): ReclassifyPageState {
   const isLoading = computed(() => datasetQuery.isLoading.value);
   const isError = computed(() => datasetQuery.isError.value);
   const errorMessage = computed(
-    () =>
-      (datasetQuery.error.value as Error)?.message ?? "Failed to load dataset",
+    () => (datasetQuery.error.value as Error)?.message ?? "Failed to load dataset",
   );
 
   const labelSpace = computed<string[]>(
     () =>
-      ((selectedDataset.value?.task_spec as Record<string, unknown> | undefined)
-        ?.label_space as string[] | undefined) ?? [],
+      ((selectedDataset.value?.task_spec as Record<string, unknown> | undefined)?.label_space as
+        | string[]
+        | undefined) ?? [],
   );
 
   // ── Dataset-scoped samples (SC patch_image_v1 view) ────────────────
@@ -336,11 +310,17 @@ export function useReclassifyPage(): ReclassifyPageState {
   const pageSize = 200;
 
   const mapFilter = ref<Record<string, (number | string)[]>>({});
+  const globalFilter = ref<ScSampleTableFilter>({});
   const mapFilterVersion = ref(0);
   const legendGroupBy = ref<LegendColorSource | null>(null);
+  const combinedMapFilter = computed(() => ({
+    ...sampleTableFilterToMapFilter(globalFilter.value),
+    ...mapFilter.value,
+  }));
   const activeFilterCount = computed(
     () =>
-      Object.values(mapFilter.value).filter((v) => v && v.length > 0).length,
+      Object.values(combinedMapFilter.value).filter((v) => v && v.length > 0).length +
+      Object.values(globalFilter.value).filter((value) => value?.operator === "between").length,
   );
 
   const reticleOptionsState = ref<ReticleMapOptions>({
@@ -358,6 +338,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       datasetId.value,
       reticleOptions.value,
       mapFilter.value,
+      globalFilter.value,
       legendGroupBy.value,
     ]),
     queryFn: async () => {
@@ -366,8 +347,9 @@ export function useReclassifyPage(): ReclassifyPageState {
         await warmupScPlotPoints(
           datasetId.value,
           reticleOptions.value,
-          mapFilter.value,
+          combinedMapFilter.value,
           legendGroupBy.value ?? undefined,
+          globalFilter.value,
           (status, loaded, message) => {
             mapStreamMessage.value =
               status === "warmup"
@@ -395,15 +377,23 @@ export function useReclassifyPage(): ReclassifyPageState {
   });
 
   const plotPointsQuery = useQuery({
-    queryKey: computed(() => ["sc", "plot-points", datasetId.value]),
+    queryKey: computed(() => [
+      "sc",
+      "plot-points",
+      datasetId.value,
+      reticleOptions.value,
+      combinedMapFilter.value,
+      legendGroupBy.value,
+    ]),
     queryFn: async () => {
       mapStreamMessage.value = "Opening map stream...";
       try {
         return await fetchScPlotPoints(
           datasetId.value,
           reticleOptions.value,
-          mapFilter.value,
+          combinedMapFilter.value,
           legendGroupBy.value ?? undefined,
+          globalFilter.value,
           (status, loaded, message) => {
             mapStreamMessage.value =
               status === "headers"
@@ -439,14 +429,10 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   const selectedDefectIds = computed(
-    () =>
-      new Set(
-        reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? [],
-      ),
+    () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
   );
   const mapSelectedDefectIds = computed(
-    () =>
-      new Set([...mapFilteredIds.value].map(Number).filter(Number.isFinite)),
+    () => new Set([...mapFilteredIds.value].map(Number).filter(Number.isFinite)),
   );
 
   const selectedCount = computed(() => selectedDefectIds.value.size);
@@ -494,8 +480,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (typeof statusTotal === "number" && Number.isFinite(statusTotal)) {
       return Math.max(0, statusTotal);
     }
-    if (datasetMetaSampleCount.value !== null)
-      return datasetMetaSampleCount.value;
+    if (datasetMetaSampleCount.value !== null) return datasetMetaSampleCount.value;
     return 0;
   });
 
@@ -541,34 +526,27 @@ export function useReclassifyPage(): ReclassifyPageState {
   });
 
   const sampleRowsInfiniteQuery = useInfiniteQuery({
-    queryKey: computed(() => [
-      "sc",
-      "view-samples-paged",
-      datasetId.value,
-      blinkSourceKey.value,
-    ]),
+    queryKey: computed(() => ["sc", "view-samples-paged", datasetId.value, blinkSourceKey.value]),
     initialPageParam: 0,
     queryFn: async ({ pageParam }: { pageParam: number }) => {
       const sourceIds = blinkSourceDefectIds.value;
       if (sourceIds) {
         const ids = sourceIds.slice(pageParam, pageParam + pageSize);
-        const resp =
-          await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
-            datasetId.value,
-            "patch_image_v1",
-            { sampleIds: ids.join(","), limit: ids.length },
-          );
+        const resp = await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
+          datasetId.value,
+          "patch_image_v1",
+          { sampleIds: ids.join(","), limit: ids.length },
+        );
         return (resp.data ?? {
           items: [],
           total: sourceIds.length,
         }) as ScViewRowsPage;
       }
-      const resp =
-        await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
-          datasetId.value,
-          "patch_image_v1",
-          { offset: pageParam, limit: pageSize },
-        );
+      const resp = await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
+        datasetId.value,
+        "patch_image_v1",
+        { offset: pageParam, limit: pageSize },
+      );
       return (resp.data ?? { items: [], total: 0 }) as ScViewRowsPage;
     },
     getNextPageParam: (lastPage, allPages) => {
@@ -589,9 +567,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Annotation join ────────────────────────────────────────────────
 
   const loadedRows = computed<ScViewRow[]>(() => {
-    return (sampleRowsInfiniteQuery.data.value?.pages ?? []).flatMap(
-      (page) => page.items,
-    );
+    return (sampleRowsInfiniteQuery.data.value?.pages ?? []).flatMap((page) => page.items);
   });
 
   const scSamples = computed<ReclassifySample[]>(() => {
@@ -646,9 +622,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     return result;
   });
 
-  const isBlinkLoading = computed(
-    () => sampleRowsInfiniteQuery.isLoading.value,
-  );
+  const isBlinkLoading = computed(() => sampleRowsInfiniteQuery.isLoading.value);
 
   const isMapLoading = computed(
     () =>
@@ -665,26 +639,18 @@ export function useReclassifyPage(): ReclassifyPageState {
       null,
   );
 
-  const hasMoreSamples = computed(
-    () => sampleRowsInfiniteQuery.hasNextPage.value ?? false,
-  );
-  const isFetchingMoreSamples = computed(
-    () => sampleRowsInfiniteQuery.isFetchingNextPage.value,
-  );
+  const hasMoreSamples = computed(() => sampleRowsInfiniteQuery.hasNextPage.value ?? false);
+  const isFetchingMoreSamples = computed(() => sampleRowsInfiniteQuery.isFetchingNextPage.value);
 
   const plotPointTotal = computed<number>(
     () =>
       datasetSampleTotal.value ||
-      (sampleRowsInfiniteQuery.data.value?.pages?.[0]?.total ??
-        scSamples.value.length),
+      (sampleRowsInfiniteQuery.data.value?.pages?.[0]?.total ?? scSamples.value.length),
   );
 
   const annotatedCount = computed<number>(() => {
     const statusAnnotated = datasetStatusQuery.data.value?.annotated_samples;
-    if (
-      typeof statusAnnotated === "number" &&
-      Number.isFinite(statusAnnotated)
-    ) {
+    if (typeof statusAnnotated === "number" && Number.isFinite(statusAnnotated)) {
       return Math.max(0, statusAnnotated);
     }
     return 0;
@@ -732,8 +698,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Label options ───────────────────────────────────────────────────
 
   const roughBinOptions = computed(() => {
-    const values =
-      legendGroupBy.value === "bin" ? Object.keys(classList.value ?? {}) : [];
+    const values = legendGroupBy.value === "bin" ? Object.keys(classList.value ?? {}) : [];
     if (values.length > 0) return values.sort((a, b) => Number(a) - Number(b));
     return packedPointOptions(plotPointsQuery.data.value?.waferPoints ?? [], 4);
   });
@@ -746,15 +711,10 @@ export function useReclassifyPage(): ReclassifyPageState {
   const classNumberOptions = computed(() => {
     const values =
       legendGroupBy.value === "class"
-        ? Object.keys(classList.value ?? {}).sort(
-            (a, b) => Number(a) - Number(b),
-          )
+        ? Object.keys(classList.value ?? {}).sort((a, b) => Number(a) - Number(b))
         : [];
     if (values.length === 0) {
-      const pointValues = packedPointOptions(
-        plotPointsQuery.data.value?.waferPoints ?? [],
-        3,
-      );
+      const pointValues = packedPointOptions(plotPointsQuery.data.value?.waferPoints ?? [], 3);
       return pointValues.length > 0 ? pointValues : labelOptions.value;
     }
     return values.length > 0 ? values : labelOptions.value;
@@ -808,13 +768,9 @@ export function useReclassifyPage(): ReclassifyPageState {
     };
   }
 
-  const waferDisplay = computed(
-    () => plotPointsQuery.data.value?.waferPoints ?? [],
-  );
+  const waferDisplay = computed(() => plotPointsQuery.data.value?.waferPoints ?? []);
 
-  const dieDisplay = computed(
-    () => plotPointsQuery.data.value?.diePoints ?? [],
-  );
+  const dieDisplay = computed(() => plotPointsQuery.data.value?.diePoints ?? []);
 
   const dieFullPoints = computed<Array<[number, number, number]>>(() => {
     const src = plotPointsQuery.data.value?.diePoints ?? [];
@@ -849,14 +805,12 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const inferredReticleDieSizeX = computed(() => {
     let maxDieX = 0;
-    for (const point of dieFullPoints.value)
-      maxDieX = Math.max(maxDieX, point[0]);
+    for (const point of dieFullPoints.value) maxDieX = Math.max(maxDieX, point[0]);
     return Math.max(1, Math.ceil(maxDieX || 100000));
   });
   const inferredReticleDieSizeY = computed(() => {
     let maxDieY = 0;
-    for (const point of dieFullPoints.value)
-      maxDieY = Math.max(maxDieY, point[1]);
+    for (const point of dieFullPoints.value) maxDieY = Math.max(maxDieY, point[1]);
     return Math.max(1, Math.ceil(maxDieY || 100000));
   });
 
@@ -878,18 +832,14 @@ export function useReclassifyPage(): ReclassifyPageState {
     void plotPointsQuery.refetch();
   }
 
-  const reticleDisplay = computed(
-    () => plotPointsQuery.data.value?.reticlePoints ?? [],
-  );
+  const reticleDisplay = computed(() => plotPointsQuery.data.value?.reticlePoints ?? []);
   const reticleMapError = computed<string | null>(() => null);
 
   // ── Map filter + selection state ─────────────────────────────────────
 
   const filteredScSamples = computed<ReclassifySample[]>(() => scSamples.value);
 
-  function handleMapFilterChange(
-    filter: Record<string, (number | string)[]>,
-  ): void {
+  function handleMapFilterChange(filter: Record<string, (number | string)[]>): void {
     mapFilter.value = filter;
     void plotPointsQuery.refetch();
   }
@@ -902,6 +852,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function clearMapFilter(): void {
     mapFilter.value = {};
+    globalFilter.value = {};
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
     mapFilterVersion.value += 1;
@@ -922,8 +873,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   function readLocalRecord(key: string): Record<string, string> {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-        return {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
       const out: Record<string, string> = {};
       for (const [rawKey, rawValue] of Object.entries(parsed)) {
         if (typeof rawValue === "string") out[String(rawKey)] = rawValue;
@@ -952,9 +902,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function defaultShortcutForCode(code: string): string {
     const numeric = Number(code);
-    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 8
-      ? String(numeric + 1)
-      : "";
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 8 ? String(numeric + 1) : "";
   }
 
   const codeLabels = computed<ReclassifyCodeLabel[]>(() => {
@@ -965,9 +913,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       name: customLabelNames.value[code] || name,
     }));
     const usedCodes = new Set(labels.map((label) => label.code));
-    const existingNames = new Set(
-      labels.map((label) => label.name.toLowerCase()),
-    );
+    const existingNames = new Set(labels.map((label) => label.name.toLowerCase()));
     for (const rawLabel of labelSpace.value) {
       const label = String(rawLabel).trim();
       if (!label) continue;
@@ -1000,11 +946,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
     for (const [code, rawName] of Object.entries(customLabelNames.value)) {
       const name = rawName.trim();
-      if (
-        !name ||
-        usedCodes.has(code) ||
-        existingNames.has(name.toLowerCase())
-      ) {
+      if (!name || usedCodes.has(code) || existingNames.has(name.toLowerCase())) {
         continue;
       }
       usedCodes.add(code);
@@ -1027,8 +969,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     const effectiveShortcuts: Record<string, string> = {};
 
     for (const label of labels) {
-      const shortcut =
-        customShortcuts.value[label.code]?.trim().slice(0, 1) ?? "";
+      const shortcut = customShortcuts.value[label.code]?.trim().slice(0, 1) ?? "";
       const key = shortcut.toLowerCase();
       if (!shortcut || usedShortcuts.has(key)) continue;
       usedShortcuts.add(key);
@@ -1065,10 +1006,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     const normalized = shortcut.trim().slice(0, 1);
     const next = { ...customShortcuts.value };
     for (const [candidateCode, candidateShortcut] of Object.entries(next)) {
-      if (
-        candidateCode !== code &&
-        candidateShortcut.toLowerCase() === normalized.toLowerCase()
-      ) {
+      if (candidateCode !== code && candidateShortcut.toLowerCase() === normalized.toLowerCase()) {
         delete next[candidateCode];
       }
     }
@@ -1100,9 +1038,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   const draftCount = computed(
-    () =>
-      Object.keys(annotationDraft.value).filter((k) => annotationDraft.value[k])
-        .length,
+    () => Object.keys(annotationDraft.value).filter((k) => annotationDraft.value[k]).length,
   );
 
   // ── Helper: use dataset-owned image URLs only ───────────────────────
@@ -1111,48 +1047,13 @@ export function useReclassifyPage(): ReclassifyPageState {
     s: ReclassifySample,
     role: "template" | "defective" | "difference",
   ): string {
-    const matched = s.images.find((img) =>
-      img.role.toLowerCase().includes(role),
-    );
+    const matched = s.images.find((img) => img.role.toLowerCase().includes(role));
     return matched?.url ?? "";
   }
 
-  // ── Annotation grid items ───────────────────────────────────────────
-
-  const annotationGridItems = computed<AnnotationGridItem[]>(() => {
-    const selected = selectedDefectIds.value;
-    if (selected.size === 0) return [];
-    return scSamples.value
-      .filter((s) => selected.has(s.defectId))
-      .map((s) => ({
-        id: s.defectId,
-        imageSrcs: [
-          imageUrlByRole(s, "template"),
-          imageUrlByRole(s, "defective"),
-          imageUrlByRole(s, "difference"),
-        ].filter((url) => url.length > 0),
-        currentLabel: s.currentLabel,
-        draftLabel: annotationDraft.value[s.defectId] ?? null,
-        predictionLabel: predictionLabels.value[s.defectId] ?? null,
-        predictionConfidence: predictionConfidences.value[s.defectId] ?? null,
-        predictionId: null,
-        metadata: {
-          defectId: s.defectId,
-          waferX: s.waferX,
-          waferY: s.waferY,
-          roughBin: s.roughBin,
-          classNumber: s.classNumber,
-        },
-      }));
-  });
-
   // ── Blink table data ────────────────────────────────────────────────
 
-  const BLINK_ROLE_ORDER = [
-    "patch_template",
-    "patch_defective",
-    "patch_difference",
-  ];
+  const BLINK_ROLE_ORDER = ["patch_template", "patch_defective", "patch_difference"];
 
   function orderedImageUrls(images: ReclassifySampleImage[]): string[] {
     const byRole = new Map<string, ReclassifySampleImage[]>();
@@ -1266,9 +1167,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     });
 
   function submitAnnotations(): void {
-    const entries = Object.entries(annotationDraft.value).filter(
-      ([, label]) => label,
-    );
+    const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
     if (entries.length === 0) {
       message.warning("No annotations to submit");
       return;
@@ -1287,9 +1186,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   // ── Add label ──────────────────────────────────────────────────────
 
-  const effectiveLabels = computed<string[]>(() =>
-    codeLabels.value.map((label) => label.code),
-  );
+  const effectiveLabels = computed<string[]>(() => codeLabels.value.map((label) => label.code));
 
   const addLabelError = ref<string | null>(null);
   const isAddingLabel = computed(() => false);
@@ -1297,11 +1194,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   function addLabel(newLabel: string) {
     const name = newLabel.trim();
     if (!name) return;
-    if (
-      codeLabels.value.some(
-        (label) => label.name.toLowerCase() === name.toLowerCase(),
-      )
-    ) {
+    if (codeLabels.value.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
       addLabelError.value = "Name already exists";
       return;
     }
@@ -1392,28 +1285,18 @@ export function useReclassifyPage(): ReclassifyPageState {
   const completedPredictionRefreshId = ref<string | null>(null);
 
   const trainPredictStatusQuery = useQuery({
-    queryKey: computed(() => [
-      "sc",
-      "train-predict-task",
-      trainPredictTaskId.value,
-    ]),
+    queryKey: computed(() => ["sc", "train-predict-task", trainPredictTaskId.value]),
     queryFn: async () => {
       if (!trainPredictTaskId.value) return null;
-      const response = await getJobApiV1TrainingJobsJobIdGet(
-        trainPredictTaskId.value,
-      );
+      const response = await getJobApiV1TrainingJobsJobIdGet(trainPredictTaskId.value);
       return response.data as TrainingJob;
     },
     enabled: computed(() => !!trainPredictTaskId.value),
-    refetchInterval: computed(() =>
-      isTrainPredictRunning.value ? 1000 : false,
-    ),
+    refetchInterval: computed(() => (isTrainPredictRunning.value ? 1000 : false)),
   });
 
   const trainPredictTrainingStatus = computed(() =>
-    String(
-      trainPredictStatusQuery.data.value?.status ?? "pending",
-    ).toLowerCase(),
+    String(trainPredictStatusQuery.data.value?.status ?? "pending").toLowerCase(),
   );
 
   const trainPredictPredictionJobsQuery = useQuery({
@@ -1425,38 +1308,29 @@ export function useReclassifyPage(): ReclassifyPageState {
     ]),
     queryFn: () => listPredictionJobs(datasetId.value),
     enabled: computed(() => !!trainPredictTaskId.value),
-    refetchInterval: computed(() =>
-      isTrainPredictRunning.value ? 1500 : false,
-    ),
+    refetchInterval: computed(() => (isTrainPredictRunning.value ? 1500 : false)),
   });
 
-  function predictionSummaryValue(
-    job: PredictionJobResponse | null,
-    key: string,
-  ): number | null {
+  function predictionSummaryValue(job: PredictionJobResponse | null, key: string): number | null {
     const raw = job?.summary?.[key];
     const value = typeof raw === "number" ? raw : Number(raw);
     return Number.isFinite(value) ? value : null;
   }
 
-  const trainPredictPredictionJob = computed<PredictionJobResponse | null>(
-    () => {
-      const trainingJobId = trainPredictTaskId.value;
-      if (!trainingJobId) return null;
-      return (
-        (trainPredictPredictionJobsQuery.data.value ?? []).find(
-          (job) => job.summary?.source_training_job_id === trainingJobId,
-        ) ?? null
-      );
-    },
-  );
+  const trainPredictPredictionJob = computed<PredictionJobResponse | null>(() => {
+    const trainingJobId = trainPredictTaskId.value;
+    if (!trainingJobId) return null;
+    return (
+      (trainPredictPredictionJobsQuery.data.value ?? []).find(
+        (job) => job.summary?.source_training_job_id === trainingJobId,
+      ) ?? null
+    );
+  });
 
   const trainPredictPredictionStatus = computed(() => {
     const job = trainPredictPredictionJob.value;
     if (!job) {
-      return trainPredictTrainingStatus.value === "completed"
-        ? "waiting"
-        : "not_started";
+      return trainPredictTrainingStatus.value === "completed" ? "waiting" : "not_started";
     }
     return String(job.status ?? "pending").toLowerCase();
   });
@@ -1577,12 +1451,9 @@ export function useReclassifyPage(): ReclassifyPageState {
         trainer_id: trainerId,
         target: "image_classification",
       });
-      const trainJobId =
-        typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
+      const trainJobId = typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
       if (!trainJobId) {
-        throw new Error(
-          "Train & Predict workflow did not return a training job id",
-        );
+        throw new Error("Train & Predict workflow did not return a training job id");
       }
       trainPredictTaskId.value = trainJobId;
       completedPredictionRefreshId.value = null;
@@ -1602,9 +1473,9 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   // ── Review images (fetched via /sc/inspections/.../review-images) ──
 
-  const reviewSamples = ref<
-    import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]
-  >([]);
+  const reviewSamples = ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>(
+    [],
+  );
   const reviewLoading = ref(false);
   const reviewError = ref<string | null>(null);
 
@@ -1627,8 +1498,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       const { create } = await import("@bufbuild/protobuf");
       const { ScSampleItemSchema, ReviewImageSchema } =
         await import("@/features/sc/generated/proto/sc/v1/sample_pb");
-      const inspTimeBigInt =
-        BigInt(Date.parse(ctx.inspectionTime)) * BigInt(1_000_000);
+      const inspTimeBigInt = BigInt(Date.parse(ctx.inspectionTime)) * BigInt(1_000_000);
       const resp = data.data;
       if (!("items" in resp)) {
         throw new Error("Failed to load review images");
@@ -1647,11 +1517,7 @@ export function useReclassifyPage(): ReclassifyPageState {
             inspectionTime: inspTimeBigInt,
             waferKey: Number(ctx.waferKey),
             reviewImages: item.review_images.map(
-              (image: {
-                image_name: string;
-                image_id: number;
-                image_type: string;
-              }) =>
+              (image: { image_name: string; image_id: number; image_type: string }) =>
                 create(ReviewImageSchema, {
                   imageName: image.image_name,
                   imageId: image.image_id,
@@ -1661,8 +1527,7 @@ export function useReclassifyPage(): ReclassifyPageState {
           }),
       );
     } catch (err: unknown) {
-      reviewError.value =
-        (err as Error)?.message ?? "Failed to load review images";
+      reviewError.value = (err as Error)?.message ?? "Failed to load review images";
       reviewSamples.value = [];
     } finally {
       reviewLoading.value = false;
@@ -1670,10 +1535,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   watch(
-    () => [
-      inspectionContext.value?.inspectionTime,
-      inspectionContext.value?.waferKey,
-    ],
+    () => [inspectionContext.value?.inspectionTime, inspectionContext.value?.waferKey],
     () => {
       fetchReviewImages();
     },
@@ -1714,6 +1576,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     setMapZoom,
     waferDisplay,
     mapFilter,
+    globalFilter,
     legendGroupBy,
     activeFilterCount,
     handleMapFilterChange,
@@ -1745,7 +1608,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     blinkTableData,
 
-    annotationGridItems,
     annotationDraft,
     draftCount,
     isSubmitting: computed(() => bulkAnnotateMutation.isPending.value),

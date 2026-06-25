@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NTabs, NTabPane, NResult, NButton, NSelect, NIcon, NTooltip, NProgress, NText } from "naive-ui";
+import {
+  NTabs,
+  NTabPane,
+  NResult,
+  NButton,
+  NSelect,
+  NIcon,
+  NTooltip,
+  NProgress,
+  NText,
+} from "naive-ui";
 import { MenuOutline } from "@vicons/ionicons5";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
@@ -29,7 +39,14 @@ const props = defineProps<{
   reticleFullPoints?: number[];
 
   // Wafer-specific
-  waferGeometry?: { centerX: number; centerY: number; originX: number; originY: number; dieSizeX: number; dieSizeY: number } | null;
+  waferGeometry?: {
+    centerX: number;
+    centerY: number;
+    originX: number;
+    originY: number;
+    dieSizeX: number;
+    dieSizeY: number;
+  } | null;
   waferRadiusNm?: number;
 
   // Reticle-specific
@@ -57,7 +74,10 @@ const props = defineProps<{
 
   /** Box-selection query function (mode, region) → defect IDs.
    *  Parent curries inspection identity; ScMapPanel curries mode for each child map. */
-  queryBoxSelection?: (mode: "wafer" | "die" | "reticle", region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
+  queryBoxSelection?: (
+    mode: "wafer" | "die" | "reticle",
+    region: { x: number; y: number; w: number; h: number },
+  ) => Promise<number[]>;
 
   // Highlight defects from table selection (purple overlay, self-contained coordinates)
   highlightDefects?: HighlightDefect[];
@@ -65,8 +85,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
-  (e: "update:reticleOptions", v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number }): void;
-  (e: "select-points", payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } }): void;
+  (
+    e: "update:reticleOptions",
+    v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number },
+  ): void;
+  (
+    e: "select-points",
+    payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } },
+  ): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
   (e: "selection-change", ids: number[]): void;
@@ -75,14 +101,29 @@ const emit = defineEmits<{
 }>();
 
 const internalTab = ref<"wafer" | "die" | "reticle">(props.activeMapTab ?? "wafer");
-const mapMode = ref<Record<string, "select" | "zoomin">>({ wafer: "select", die: "select", reticle: "select" });
+const mapMode = ref<Record<string, "select" | "zoomin">>({
+  wafer: "select",
+  die: "select",
+  reticle: "select",
+});
+const initialLoadDone = ref(false);
+
+watch(
+  () => props.mapLoading,
+  (loading) => {
+    if (!loading) initialLoadDone.value = true;
+  },
+);
 
 // Sync prop to internal state
-watch(() => props.activeMapTab, (newVal) => {
-  if (newVal && newVal !== internalTab.value) {
-    internalTab.value = newVal;
-  }
-});
+watch(
+  () => props.activeMapTab,
+  (newVal) => {
+    if (newVal && newVal !== internalTab.value) {
+      internalTab.value = newVal;
+    }
+  },
+);
 
 const handleTabChange = (value: string | number) => {
   const tab = value as "wafer" | "die" | "reticle";
@@ -95,6 +136,12 @@ const handleTabChange = (value: string | number) => {
 const selectedClassNumber = ref<LegendKey | null>(null);
 const selectedIds = ref<Set<number>>(new Set(props.selectedIds ?? []));
 const legendSource = ref<LegendSource>(props.legendGroupBy ?? "class");
+const hiddenLegendKeysBySource = ref<Record<LegendSource, string[]>>({
+  class: [],
+  bin: [],
+  annotation: [],
+  prediction: [],
+});
 const colorMap = ref<Record<string, string>>({});
 const previousDefaultColorMap = ref<Record<string, string>>({});
 const legendSourceOptions = computed(() => {
@@ -116,12 +163,15 @@ watch(
   { deep: true },
 );
 
-watch(() => props.legendGroupBy, (newSource) => {
-  const nextSource = newSource ?? "class";
-  if (nextSource !== legendSource.value) {
-    legendSource.value = nextSource;
-  }
-});
+watch(
+  () => props.legendGroupBy,
+  (newSource) => {
+    const nextSource = newSource ?? "class";
+    if (nextSource !== legendSource.value) {
+      legendSource.value = nextSource;
+    }
+  },
+);
 
 const toolbarVisible = ref<boolean>(!loadPersistedState("sc_map_panel.toolbar_collapsed", false));
 const drawerVisible = ref<boolean>(!loadPersistedState("sc_map_panel.drawer_collapsed", false));
@@ -180,21 +230,26 @@ watch(drawerVisible, (val) => {
 });
 
 // Curried queryBoxSelection for each map wrapper (bakes in the mode)
-interface BoxRegion { x: number; y: number; w: number; h: number }
+interface BoxRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 const waferBoxQuery = computed(() => {
   const q = props.queryBoxSelection;
   if (!q) return undefined;
-  return (region: BoxRegion) => q("wafer", region);
+  return async (region: BoxRegion) => filterVisibleIds(await q("wafer", region));
 });
 const dieBoxQuery = computed(() => {
   const q = props.queryBoxSelection;
   if (!q) return undefined;
-  return (region: BoxRegion) => q("die", region);
+  return async (region: BoxRegion) => filterVisibleIds(await q("die", region));
 });
 const reticleBoxQuery = computed(() => {
   const q = props.queryBoxSelection;
   if (!q) return undefined;
-  return (region: BoxRegion) => q("reticle", region);
+  return async (region: BoxRegion) => filterVisibleIds(await q("reticle", region));
 });
 
 const selectionIds = ref<number[]>([]);
@@ -213,7 +268,12 @@ const handleRetry = () => {
   emit("retry");
 };
 
-const handleReticleOptionsSubmit = (opts: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number }) => {
+const handleReticleOptionsSubmit = (opts: {
+  xDieCount: number;
+  yDieCount: number;
+  xDieShift: number;
+  yDieShift: number;
+}) => {
   emit("update:reticleOptions", opts);
 };
 
@@ -235,14 +295,69 @@ const currentLegendPoints = computed(() => {
 });
 
 const parsedCache = computed(() => parsePoints(currentLegendPoints.value));
+const activeHiddenLegendKeys = computed(
+  () => hiddenLegendKeysBySource.value[legendSource.value] ?? [],
+);
+const activeHiddenLegendKeySet = computed(() => new Set(activeHiddenLegendKeys.value));
 
-function sortLegendKeys(keys: string[]): string[] {
-  return [...keys].sort((a, b) =>
-    String(a).localeCompare(String(b), undefined, { numeric: true }),
-  );
+function hiddenDefectIdsForSource(source: LegendSource, hiddenKeys: Set<string>): Set<number> {
+  const hiddenIds = new Set<number>();
+  if (hiddenKeys.size === 0) return hiddenIds;
+
+  const compactGroups = props.legendGroups ?? undefined;
+  if (compactGroups && (source === "annotation" || source === "prediction")) {
+    for (const key of hiddenKeys) {
+      for (const defectId of compactGroups[key]?.defectIds ?? []) {
+        hiddenIds.add(Number(defectId));
+      }
+    }
+    return hiddenIds;
+  }
+
+  for (const point of parsePoints(currentLegendPoints.value)) {
+    const key = source === "bin" ? String(point.roughBin) : String(point.classNumber);
+    if (hiddenKeys.has(key)) hiddenIds.add(point.defectId);
+  }
+  return hiddenIds;
 }
 
-function colorMapKeyForLegendKey(source: LegendSource, rawKey: string, compactGroups?: Record<string, DefectList>): string {
+const hiddenDefectIds = computed(() =>
+  hiddenDefectIdsForSource(legendSource.value, activeHiddenLegendKeySet.value),
+);
+
+function filterPointArray(points?: number[]): number[] | undefined {
+  if (!points) return points;
+  const hidden = hiddenDefectIds.value;
+  if (hidden.size === 0) return points;
+  const result: number[] = [];
+  for (let i = 0; i + STRIDE - 1 < points.length; i += STRIDE) {
+    const defectId = points[i + 2];
+    if (!hidden.has(defectId)) {
+      result.push(...points.slice(i, i + STRIDE));
+    }
+  }
+  return result;
+}
+
+const visibleWaferPoints = computed(() => filterPointArray(props.waferPoints));
+const visibleDiePoints = computed(() => filterPointArray(props.diePoints));
+const visibleReticlePoints = computed(() => filterPointArray(props.reticlePoints));
+
+function filterVisibleIds(ids: number[]): number[] {
+  const hidden = hiddenDefectIds.value;
+  if (hidden.size === 0) return ids;
+  return ids.filter((id) => !hidden.has(id));
+}
+
+function sortLegendKeys(keys: string[]): string[] {
+  return [...keys].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+}
+
+function colorMapKeyForLegendKey(
+  source: LegendSource,
+  rawKey: string,
+  compactGroups?: Record<string, DefectList>,
+): string {
   if (source === "class" || source === "bin" || !compactGroups) {
     return rawKey;
   }
@@ -250,9 +365,11 @@ function colorMapKeyForLegendKey(source: LegendSource, rawKey: string, compactGr
     return "-1";
   }
   return String(
-    sortLegendKeys(Object.keys(compactGroups).filter(
-      (key) => key !== "__unlabeled__" && key !== "__no_prediction__",
-    )).indexOf(rawKey),
+    sortLegendKeys(
+      Object.keys(compactGroups).filter(
+        (key) => key !== "__unlabeled__" && key !== "__no_prediction__",
+      ),
+    ).indexOf(rawKey),
   );
 }
 
@@ -298,7 +415,7 @@ const predictionGroups = computed(() =>
 );
 
 const showMapProgress = computed(
-  () => Boolean(props.mapLoading) && Boolean(props.mapProgressMessage),
+  () => Boolean(props.mapLoading) && Boolean(props.mapProgressMessage) && !initialLoadDone.value,
 );
 
 const ZERO_REGION = { x: 0, y: 0, w: 0, h: 0 };
@@ -311,18 +428,29 @@ const handleLegendSelect = (key: LegendKey | null) => {
   } else {
     selectedClassNumber.value = key;
     const compactGroup = props.legendGroups?.[String(key)];
-    const ids = compactGroup?.defectIds ?? (
-      typeof key === "number"
+    const ids =
+      compactGroup?.defectIds ??
+      (typeof key === "number"
         ? parsedCache.value
             .filter((point) => point.classNumber === key)
             .map((point) => point.defectId)
-        : []
-    );
-    selectedIds.value = new Set(ids);
-    emit("select-points", { ids, region: ZERO_REGION });
+        : []);
+    const visibleIds = filterVisibleIds(ids);
+    selectedIds.value = new Set(visibleIds);
+    emit("select-points", { ids: visibleIds, region: ZERO_REGION });
   }
 };
 
+function handleHiddenLegendKeysUpdate(keys: string[]): void {
+  hiddenLegendKeysBySource.value = {
+    ...hiddenLegendKeysBySource.value,
+    [legendSource.value]: keys,
+  };
+  const nextSelection = filterVisibleIds(Array.from(selectedIds.value));
+  selectedIds.value = new Set(nextSelection);
+  selectionIds.value = filterVisibleIds(selectionIds.value);
+  emit("selection-change", selectionIds.value);
+}
 </script>
 
 <template>
@@ -342,10 +470,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
         :style="{ '--sc-map-canvas-top': `${canvasTopPx}px` }"
       >
         <div ref="mapAreaRef" class="map-area">
-          <div
-            v-if="showMapProgress"
-            class="sc-map-progress"
-          >
+          <div v-if="showMapProgress" class="sc-map-progress">
             <NProgress
               type="line"
               :percentage="mapProgressPercent ?? 0"
@@ -363,11 +488,11 @@ const handleLegendSelect = (key: LegendKey | null) => {
               type="line"
               size="small"
               display-directive="show"
-              style="flex: 1; min-height: 0; display: flex; flex-direction: column;"
+              style="flex: 1; min-height: 0; display: flex; flex-direction: column"
             >
               <NTabPane name="wafer" tab="Wafer" data-testid="sc-map-tab-wafer">
                 <ScWaferMap
-                  :points="waferPoints"
+                  :points="visibleWaferPoints"
                   :geometry="waferGeometry"
                   :waferRadiusNm="waferRadiusNm"
                   :selectedIds="selectedIds"
@@ -381,155 +506,180 @@ const handleLegendSelect = (key: LegendKey | null) => {
                 />
               </NTabPane>
 
-          <NTabPane name="die" tab="Die Stack" data-testid="sc-map-tab-die">
-              <ScDieStackMap
-                :points="diePoints"
-                :die-size-x="waferGeometry?.dieSizeX"
-                :die-size-y="waferGeometry?.dieSizeY"
-                :selectedIds="selectedIds"
-                :highlightDefects="highlightDefects"
-                :color-map="colorMap"
-                :query-box-selection="dieBoxQuery"
-                :zoom="zoom"
-                :mode="mapMode.die"
-                @selection-change="handleSelectionChange"
-                @zoom-in="handleZoomIn"
-              />
-          </NTabPane>
+              <NTabPane name="die" tab="Die Stack" data-testid="sc-map-tab-die">
+                <ScDieStackMap
+                  :points="visibleDiePoints"
+                  :die-size-x="waferGeometry?.dieSizeX"
+                  :die-size-y="waferGeometry?.dieSizeY"
+                  :selectedIds="selectedIds"
+                  :highlightDefects="highlightDefects"
+                  :color-map="colorMap"
+                  :query-box-selection="dieBoxQuery"
+                  :zoom="zoom"
+                  :mode="mapMode.die"
+                  @selection-change="handleSelectionChange"
+                  @zoom-in="handleZoomIn"
+                />
+              </NTabPane>
 
-          <NTabPane name="reticle" tab="Reticle" data-testid="sc-map-tab-reticle">
-              <ScReticleMap
-                v-if="reticleXDieCount !== undefined && reticleYDieCount !== undefined && reticleDieSizeX !== undefined && reticleDieSizeY !== undefined"
-                :points="reticlePoints"
-                :xDieCount="reticleXDieCount"
-                :yDieCount="reticleYDieCount"
-                :dieSizeX="reticleDieSizeX"
-                :dieSizeY="reticleDieSizeY"
-                :selectedIds="selectedIds"
-                :highlightDefects="highlightDefects"
-                :color-map="colorMap"
-                :query-box-selection="reticleBoxQuery"
-                :zoom="zoom"
-                :mode="mapMode.reticle"
-                @selection-change="handleSelectionChange"
-                @zoom-in="handleZoomIn"
+              <NTabPane name="reticle" tab="Reticle" data-testid="sc-map-tab-reticle">
+                <ScReticleMap
+                  v-if="
+                    reticleXDieCount !== undefined &&
+                    reticleYDieCount !== undefined &&
+                    reticleDieSizeX !== undefined &&
+                    reticleDieSizeY !== undefined
+                  "
+                  :points="visibleReticlePoints"
+                  :xDieCount="reticleXDieCount"
+                  :yDieCount="reticleYDieCount"
+                  :dieSizeX="reticleDieSizeX"
+                  :dieSizeY="reticleDieSizeY"
+                  :selectedIds="selectedIds"
+                  :highlightDefects="highlightDefects"
+                  :color-map="colorMap"
+                  :query-box-selection="reticleBoxQuery"
+                  :zoom="zoom"
+                  :mode="mapMode.reticle"
+                  @selection-change="handleSelectionChange"
+                  @zoom-in="handleZoomIn"
+                />
+                <div v-else class="reticle-map-placeholder">Missing reticle configuration</div>
+              </NTabPane>
+            </NTabs>
+          </div>
+          <div class="floating-toolbar">
+            <NButton
+              data-testid="sc-map-toolbar-toggle"
+              size="small"
+              quaternary
+              @click="toolbarVisible = !toolbarVisible"
+              style="margin-bottom: 4px"
+            >
+              <template #icon
+                ><NIcon><MenuOutline /></NIcon
+              ></template>
+            </NButton>
+            <div v-show="toolbarVisible" class="floating-toolbar-actions">
+              <NTooltip placement="right">
+                <template #trigger>
+                  <NButton
+                    data-testid="sc-map-select-tool"
+                    size="small"
+                    quaternary
+                    :type="mapMode[internalTab] === 'select' ? 'primary' : 'default'"
+                    aria-label="Box selection"
+                    @click="mapMode[internalTab] = 'select'"
+                  >
+                    <template #icon
+                      ><NIcon><ScanOutline /></NIcon
+                    ></template>
+                  </NButton>
+                </template>
+                Box selection
+              </NTooltip>
+              <NTooltip placement="right">
+                <template #trigger>
+                  <NButton
+                    data-testid="sc-map-zoom-tool"
+                    size="small"
+                    quaternary
+                    :type="mapMode[internalTab] === 'zoomin' ? 'primary' : 'default'"
+                    aria-label="Zoom in"
+                    @click="mapMode[internalTab] = 'zoomin'"
+                  >
+                    <template #icon>
+                      <span class="zoom-in-icon">
+                        <NIcon><SearchOutline /></NIcon>
+                        <NIcon class="zoom-in-icon__plus"><AddOutline /></NIcon>
+                      </span>
+                    </template>
+                  </NButton>
+                </template>
+                Zoom in
+              </NTooltip>
+              <ScReticleMapOptionsButton
+                v-if="internalTab === 'reticle' && reticleOptions"
+                :modelValue="reticleOptions"
+                size="small"
+                icon-only
+                quaternary
+                @submit="handleReticleOptionsSubmit"
               />
-              <div v-else class="reticle-map-placeholder">
-                Missing reticle configuration
+            </div>
+          </div>
+        </div>
+
+        <aside
+          data-testid="sc-map-drawer"
+          class="legend-drawer"
+          :class="{ 'legend-drawer--collapsed': !drawerVisible }"
+          :style="{
+            width: drawerVisible ? '190px' : '0px',
+            minWidth: drawerVisible ? '190px' : '0px',
+          }"
+        >
+          <NButton
+            data-testid="sc-map-drawer-toggle"
+            class="drawer-toggle"
+            size="tiny"
+            quaternary
+            @click="drawerVisible = !drawerVisible"
+          >
+            <template #icon>
+              <NIcon>
+                <ArrowForwardOutline v-if="drawerVisible" />
+                <ArrowBackOutline v-else />
+              </NIcon>
+            </template>
+          </NButton>
+
+          <NTabs
+            v-show="drawerVisible"
+            type="segment"
+            animated
+            data-testid="sc-map-drawer-tabs"
+            size="small"
+            style="flex: 1; min-height: 0; display: flex; flex-direction: column"
+          >
+            <NTabPane
+              name="legend"
+              tab="Legend"
+              data-testid="sc-legend-tab"
+              style="flex: 1; min-height: 0; display: flex; flex-direction: column"
+            >
+              <div class="drawer-header">
+                <NSelect
+                  data-testid="sc-legend-source-select"
+                  v-model:value="legendSource"
+                  :options="legendSourceOptions"
+                  size="small"
+                  placeholder="Source"
+                />
               </div>
 
-          </NTabPane>
-        </NTabs>
-          </div>
-        <div class="floating-toolbar">
-          <NButton
-            data-testid="sc-map-toolbar-toggle"
-            size="small"
-            quaternary
-            @click="toolbarVisible = !toolbarVisible"
-            style="margin-bottom: 4px"
-          >
-            <template #icon><NIcon><MenuOutline /></NIcon></template>
-          </NButton>
-          <div v-show="toolbarVisible" class="floating-toolbar-actions">
-            <NTooltip placement="right">
-              <template #trigger>
-                <NButton
-                  data-testid="sc-map-select-tool"
-                  size="small"
-                  quaternary
-                  :type="mapMode[internalTab] === 'select' ? 'primary' : 'default'"
-                  aria-label="Box selection"
-                  @click="mapMode[internalTab] = 'select'"
-                >
-                  <template #icon><NIcon><ScanOutline /></NIcon></template>
-                </NButton>
-              </template>
-              Box selection
-            </NTooltip>
-            <NTooltip placement="right">
-              <template #trigger>
-                <NButton
-                  data-testid="sc-map-zoom-tool"
-                  size="small"
-                  quaternary
-                  :type="mapMode[internalTab] === 'zoomin' ? 'primary' : 'default'"
-                  aria-label="Zoom in"
-                  @click="mapMode[internalTab] = 'zoomin'"
-                >
-                  <template #icon>
-                    <span class="zoom-in-icon">
-                      <NIcon><SearchOutline /></NIcon>
-                      <NIcon class="zoom-in-icon__plus"><AddOutline /></NIcon>
-                    </span>
-                  </template>
-                </NButton>
-              </template>
-              Zoom in
-            </NTooltip>
-            <ScReticleMapOptionsButton
-              v-if="internalTab === 'reticle' && reticleOptions"
-              :modelValue="reticleOptions"
-              size="small"
-              icon-only
-              quaternary
-              @submit="handleReticleOptionsSubmit"
-            />
-          </div>
-        </div>
-        </div>
-
-      <aside
-        data-testid="sc-map-drawer"
-        class="legend-drawer"
-        :class="{ 'legend-drawer--collapsed': !drawerVisible }"
-        :style="{ width: drawerVisible ? '190px' : '0px', minWidth: drawerVisible ? '190px' : '0px' }"
-      >
-        <NButton
-          data-testid="sc-map-drawer-toggle"
-          class="drawer-toggle"
-          size="tiny"
-          quaternary
-          @click="drawerVisible = !drawerVisible"
-        >
-          <template #icon>
-            <NIcon>
-              <ArrowForwardOutline v-if="drawerVisible" />
-              <ArrowBackOutline v-else />
-            </NIcon>
-          </template>
-        </NButton>
-
-        <NTabs v-show="drawerVisible" type="segment" animated data-testid="sc-map-drawer-tabs" size="small" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
-          <NTabPane name="legend" tab="Legend" data-testid="sc-legend-tab" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
-            <div class="drawer-header">
-              <NSelect
-                data-testid="sc-legend-source-select"
-                v-model:value="legendSource"
-                :options="legendSourceOptions"
-                size="small"
-                placeholder="Source"
-              />
-            </div>
-
-            <div style="flex: 1; min-height: 0; overflow-y: auto;">
-              <ScLegend
-                :points="[]"
-                :fullPoints="currentLegendPoints"
-                :class-numbers="legendSource === 'class' ? (legendGroups ?? undefined) : undefined"
-                :rough-bins="legendSource === 'bin' ? (legendGroups ?? undefined) : undefined"
-                :annotations="annotationGroups"
-                :predictions="predictionGroups"
-                :color-map="colorMap"
-                :selectedClassNumber="selectedClassNumber"
-                :legendSource="legendSource"
-                @select-class="handleLegendSelect"
-                @update:color-map="colorMap = $event"
-              />
-            </div>
-          </NTabPane>
-        </NTabs>
-      </aside>
+              <div style="flex: 1; min-height: 0; overflow-y: auto">
+                <ScLegend
+                  :points="[]"
+                  :fullPoints="currentLegendPoints"
+                  :class-numbers="
+                    legendSource === 'class' ? (legendGroups ?? undefined) : undefined
+                  "
+                  :rough-bins="legendSource === 'bin' ? (legendGroups ?? undefined) : undefined"
+                  :annotations="annotationGroups"
+                  :predictions="predictionGroups"
+                  :color-map="colorMap"
+                  :selectedClassNumber="selectedClassNumber"
+                  :legendSource="legendSource"
+                  :hidden-keys="activeHiddenLegendKeys"
+                  @select-class="handleLegendSelect"
+                  @update:color-map="colorMap = $event"
+                  @update:hidden-keys="handleHiddenLegendKeysUpdate"
+                />
+              </div>
+            </NTabPane>
+          </NTabs>
+        </aside>
       </div>
     </div>
   </div>
@@ -705,7 +855,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
 
 .floating-toolbar-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 4px;
 }
 

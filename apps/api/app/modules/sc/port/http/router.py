@@ -34,6 +34,7 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     _apply_sample_filters,
+    apply_sample_table_filter,
     encode_defect_ids_int32le,
     filter_box_defect_ids,
     sorted_defect_ids_from_lazyframe,
@@ -130,7 +131,20 @@ def get_sc_filter_params(
         Literal["class", "bin", "annotation", "prediction"] | None,
         Query(),
     ] = None,
+    sample_filter: Annotated[str | None, Query()] = None,
 ) -> ScFilterParams:
+    parsed_sample_filter = None
+    if sample_filter:
+        try:
+            parsed = json.loads(sample_filter)
+            parsed_sample_filter = ScSampleTableRowsRequest.model_validate(
+                {"filter": parsed}
+            ).filter
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid sample_filter: {exc}",
+            ) from exc
     return ScFilterParams(
         class_numbers=class_numbers,
         rough_bins=rough_bins,
@@ -140,6 +154,7 @@ def get_sc_filter_params(
         adders=adders,
         cluster_ids=cluster_ids,
         legend_group_by=legend_group_by,
+        sample_filter=parsed_sample_filter,
     )
 
 
@@ -443,6 +458,7 @@ async def _build_inspection_map_points_payload(
         adder=filters.adders,
         cluster_id=filters.cluster_ids,
     )
+    samples_lf = apply_sample_table_filter(samples_lf, filters.sample_filter)
     df = await samples_lf.collect_async()
     df = df.with_columns((pl.col("images") > 0).cast(pl.Int32).alias("has_review"))
     return make_wafer_map_response_pb(
@@ -648,6 +664,7 @@ async def filter_inspection_box(
         reticle_offset_x=payload.reticle_x_die_shift,
         reticle_offset_y=payload.reticle_y_die_shift,
     )
+    samples_lf = apply_sample_table_filter(samples_lf, payload.filter)
     try:
         defect_ids = await filter_box_defect_ids(
             samples_lf,
@@ -707,6 +724,7 @@ async def get_sc_dataset_plot_points(
             test_ids=filters.test_ids,
             adders=filters.adders,
             cluster_ids=filters.cluster_ids,
+            filter_params=filters.sample_filter,
         )
 
     try:
@@ -772,6 +790,7 @@ async def stream_sc_dataset_plot_points_progress(
                 test_ids=filters.test_ids,
                 adders=filters.adders,
                 cluster_ids=filters.cluster_ids,
+                filter_params=filters.sample_filter,
             )
         except Exception as exc:
             yield emit_sse(
@@ -829,6 +848,7 @@ async def filter_sc_dataset_box(
             reticle_y_die_count=payload.reticle_y_die_count,
             reticle_x_die_shift=payload.reticle_x_die_shift,
             reticle_y_die_shift=payload.reticle_y_die_shift,
+            filter_params=payload.filter,
         )
     except ScPlotPointsNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
