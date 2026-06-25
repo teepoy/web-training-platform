@@ -98,6 +98,7 @@ const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
   (e: "update:legendGroupBy", groupBy: LegendSource | null): void;
   (e: "legend-group-change", groupBy: string | null): void;
+  (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
 }>();
 
 const internalTab = ref<"wafer" | "die" | "reticle">(props.activeMapTab ?? "wafer");
@@ -442,14 +443,16 @@ const handleLegendSelect = (key: LegendKey | null) => {
 };
 
 function handleHiddenLegendKeysUpdate(keys: string[]): void {
+  const source = legendSource.value;
   hiddenLegendKeysBySource.value = {
     ...hiddenLegendKeysBySource.value,
-    [legendSource.value]: keys,
+    [source]: keys,
   };
   const nextSelection = filterVisibleIds(Array.from(selectedIds.value));
   selectedIds.value = new Set(nextSelection);
   selectionIds.value = filterVisibleIds(selectionIds.value);
   emit("selection-change", selectionIds.value);
+  emit("legend-hidden-change", { source, hiddenKeys: keys });
 }
 </script>
 

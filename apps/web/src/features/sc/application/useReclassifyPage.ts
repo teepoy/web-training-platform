@@ -27,6 +27,7 @@ import { fetchScPlotPoints, warmupScPlotPoints } from "../api/plotPoints";
 import { fetchDatasetDefectIds } from "../api/defectIds";
 import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter } from "../domain/sampleTable";
+import { createDatasetSampleTableDataSource } from "../api/sampleTableDataSource";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
@@ -151,10 +152,13 @@ export interface ReclassifyPageState {
   waferDisplay: ComputedRef<number[]>;
   mapFilter: Ref<Record<string, (number | string)[]>>;
   globalFilter: Ref<ScSampleTableFilter>;
+  sampleTableFilter: Ref<ScSampleTableFilter>;
+  effectiveSampleTableFilter: ComputedRef<ScSampleTableFilter>;
   legendGroupBy: Ref<LegendColorSource | null>;
   activeFilterCount: ComputedRef<number>;
   handleMapFilterChange: (filter: Record<string, (number | string)[]>) => void;
   handleLegendGroupByChange: (source: LegendColorSource | null) => void;
+  applySampleTableFilterAsGlobal: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
@@ -311,6 +315,11 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const mapFilter = ref<Record<string, (number | string)[]>>({});
   const globalFilter = ref<ScSampleTableFilter>({});
+  const sampleTableFilter = ref<ScSampleTableFilter>({});
+  const effectiveSampleTableFilter = computed<ScSampleTableFilter>(() => ({
+    ...globalFilter.value,
+    ...sampleTableFilter.value,
+  }));
   const mapFilterVersion = ref(0);
   const legendGroupBy = ref<LegendColorSource | null>(null);
   const combinedMapFilter = computed(() => ({
@@ -383,6 +392,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       datasetId.value,
       reticleOptions.value,
       combinedMapFilter.value,
+      globalFilter.value,
       legendGroupBy.value,
     ]),
     queryFn: async () => {
@@ -494,13 +504,45 @@ export function useReclassifyPage(): ReclassifyPageState {
     (datasetDefectIdsQuery.data.value ?? []).map(String),
   );
 
+  function hasEffectiveSampleTableFilter(): boolean {
+    return Object.keys(effectiveSampleTableFilter.value).length > 0;
+  }
+
+  const sampleTableFilteredDefectIdsQuery = useQuery({
+    queryKey: computed(() => [
+      "sc",
+      "sample-table-filtered-defect-ids",
+      datasetId.value,
+      explicitBlinkSourceDefectIds.value,
+      effectiveSampleTableFilter.value,
+      reticleOptions.value,
+    ]),
+    queryFn: async () => {
+      const dataSource = createDatasetSampleTableDataSource(datasetId.value);
+      const response = await dataSource.loadRows({
+        defectIds: explicitBlinkSourceDefectIds.value ?? [],
+        anchor: "0",
+        limit: 50_000,
+        filter: effectiveSampleTableFilter.value,
+        reticleOptions: reticleOptions.value,
+      });
+      return response.items.map((row) => String(row.defect_id));
+    },
+    enabled: computed(() => !!selectedDataset.value && hasEffectiveSampleTableFilter()),
+    retry: false,
+  });
+
   const blinkSourceDefectIds = computed<string[] | null>(() => {
+    if (hasEffectiveSampleTableFilter()) {
+      return sampleTableFilteredDefectIdsQuery.data.value ?? [];
+    }
     const explicitIds = explicitBlinkSourceDefectIds.value;
     if (explicitIds) return explicitIds;
     return realDefectIds.value.length > 0 ? realDefectIds.value : null;
   });
 
   const shouldUseOffsetSamples = computed<boolean>(() => {
+    if (hasEffectiveSampleTableFilter()) return false;
     if (explicitBlinkSourceDefectIds.value) return false;
     if (realDefectIds.value.length > 0) return false;
     return datasetDefectIdsQuery.isFetched.value;
@@ -522,6 +564,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       ids[0] ?? "",
       ids.at(-1) ?? "",
       mapFilterVersion.value,
+      JSON.stringify(effectiveSampleTableFilter.value),
     ].join(":");
   });
 
@@ -635,6 +678,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     () =>
       (plotPointsWarmupQuery.error.value as Error)?.message ??
       (plotPointsQuery.error.value as Error)?.message ??
+      (sampleTableFilteredDefectIdsQuery.error.value as Error)?.message ??
       (sampleRowsInfiniteQuery.error.value as Error)?.message ??
       null,
   );
@@ -850,9 +894,16 @@ export function useReclassifyPage(): ReclassifyPageState {
     void plotPointsQuery.refetch();
   }
 
+  function applySampleTableFilterAsGlobal(): void {
+    globalFilter.value = { ...globalFilter.value, ...sampleTableFilter.value };
+    sampleTableFilter.value = {};
+    void plotPointsQuery.refetch();
+  }
+
   function clearMapFilter(): void {
     mapFilter.value = {};
     globalFilter.value = {};
+    sampleTableFilter.value = {};
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
     mapFilterVersion.value += 1;
@@ -1577,10 +1628,13 @@ export function useReclassifyPage(): ReclassifyPageState {
     waferDisplay,
     mapFilter,
     globalFilter,
+    sampleTableFilter,
+    effectiveSampleTableFilter,
     legendGroupBy,
     activeFilterCount,
     handleMapFilterChange,
     handleLegendGroupByChange,
+    applySampleTableFilterAsGlobal,
     clearMapFilter,
     handleBoxSelectionChange,
     mapFilteredIds,

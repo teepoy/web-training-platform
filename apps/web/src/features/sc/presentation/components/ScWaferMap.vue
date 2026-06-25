@@ -9,6 +9,18 @@ import SimpleWaferMap from "./SimpleWaferMap.vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
 import { getPackedPointIdsInRegion } from "./scMapUtils";
+import {
+  boundsFromRegion,
+  buildMapTransform,
+  constrainDragToAspect,
+  dataToScreen,
+  eventToLocalPoint,
+  measureMapElement,
+  prepareOverlayCanvas,
+  screenToData,
+  type ScMapSize,
+  type ScMapTransform,
+} from "./scMapViewport";
 
 const STRIDE = 6;
 const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
@@ -72,44 +84,40 @@ const simplePoints = computed<SimpleMapPoint[]>(() => {
   return result;
 });
 
-// ── Coordinate transform (mirrors SimpleWaferMap internals) ──
+// ── Coordinate transform (shared with map wrappers) ──
 
-let _cw = 600;
-let _ch = 600;
-let _cx = 300;
-let _cy = 300;
-let _s = 1;
-let _ox = 0;
-let _oy = 0;
+let mapSize: ScMapSize = { width: 600, height: 600 };
+let transform: ScMapTransform = buildMapTransform(
+  mapSize,
+  {
+    minX: -DEFAULT_WAFER_RADIUS_NM,
+    maxX: DEFAULT_WAFER_RADIUS_NM,
+    minY: -DEFAULT_WAFER_RADIUS_NM,
+    maxY: DEFAULT_WAFER_RADIUS_NM,
+  },
+  1,
+);
 
 function recalcTransform() {
-  if (!containerRef.value) return;
-  _cw = containerRef.value.clientWidth || 1;
-  _ch = containerRef.value.clientHeight || 1;
-  _cx = _cw / 2;
-  _cy = _ch / 2;
+  const size = measureMapElement(containerRef.value);
+  if (!size) return;
+  mapSize = size;
   const cx = props.geometry?.centerX ?? 0;
   const cy = props.geometry?.centerY ?? 0;
   if (props.zoom) {
-    const z = props.zoom;
-    _s = Math.min((_cw * 0.95) / z.w, (_ch * 0.95) / z.h);
-    _ox = -(z.x + z.w / 2);
-    _oy = -(z.y + z.h / 2);
+    transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 0.95);
   } else {
-    _s = Math.min(_cw, _ch) / (2 * waferRadiusNm.value);
-    _ox = -cx;
-    _oy = -cy;
+    const radius = waferRadiusNm.value;
+    transform = buildMapTransform(
+      mapSize,
+      { minX: cx - radius, maxX: cx + radius, minY: cy - radius, maxY: cy + radius },
+      1,
+    );
   }
 }
 
-function screenToData(sx: number, sy: number): [number, number] {
-  return [(sx - _cx) / _s - _ox, (_cy - sy) / _s - _oy];
-}
-
 function getPos(e: MouseEvent): [number, number] {
-  const rect = containerRef.value?.getBoundingClientRect();
-  if (!rect) return [0, 0];
-  return [e.clientX - rect.left, e.clientY - rect.top];
+  return eventToLocalPoint(containerRef.value, e);
 }
 
 // ── Drag ──
@@ -133,24 +141,10 @@ function onPointerMove(e: PointerEvent) {
   if (!dragging.value) return;
   const [sx, sy] = getPos(e);
 
-  let ax = sx,
-    ay = sy;
+  let ax = sx;
+  let ay = sy;
   if (mode.value === "zoomin") {
-    const rawW = Math.abs(sx - dragStart.value.x);
-    const rawH = Math.abs(sy - dragStart.value.y);
-    if (rawW > 0 && rawH > 0 && _cw > 0 && _ch > 0) {
-      const ar = _cw / _ch;
-      const rawAR = rawW / rawH;
-      if (rawAR > ar) {
-        const adjH = rawW / ar;
-        const sign = Math.sign(sy - dragStart.value.y) || 1;
-        ay = dragStart.value.y + sign * adjH;
-      } else if (rawAR < ar) {
-        const adjW = rawH * ar;
-        const sign = Math.sign(sx - dragStart.value.x) || 1;
-        ax = dragStart.value.x + sign * adjW;
-      }
-    }
+    ({ x: ax, y: ay } = constrainDragToAspect(dragStart.value, { x: sx, y: sy }, mapSize));
   }
 
   dragEnd.value = { x: ax, y: ay };
@@ -176,8 +170,8 @@ function onPointerUp(e: PointerEvent) {
   }
 
   recalcTransform();
-  const [d1x, d1y] = screenToData(dragStart.value.x, dragStart.value.y);
-  const [d2x, d2y] = screenToData(dragEnd.value.x, dragEnd.value.y);
+  const [d1x, d1y] = screenToData(transform, dragStart.value.x, dragStart.value.y);
+  const [d2x, d2y] = screenToData(transform, dragEnd.value.x, dragEnd.value.y);
   const x = Math.min(d1x, d2x),
     X = Math.max(d1x, d2x);
   const y = Math.min(d1y, d2y),
@@ -195,21 +189,15 @@ function onPointerUp(e: PointerEvent) {
 
 function drawOverlay() {
   const cvs = overlayRef.value;
-  if (!cvs || _cw <= 0 || _ch <= 0) return;
-  const ctx = cvs.getContext("2d");
+  if (!cvs || mapSize.width <= 0 || mapSize.height <= 0) return;
+  const ctx = prepareOverlayCanvas(cvs, mapSize);
   if (!ctx) return;
-  if (cvs.width !== _cw || cvs.height !== _ch) {
-    cvs.width = _cw;
-    cvs.height = _ch;
-  }
-  ctx.clearRect(0, 0, _cw, _ch);
 
   // Draw highlight defects as purple 3x3 dots
   if (props.highlightDefects && props.highlightDefects.length > 0) {
     ctx.fillStyle = HIGHLIGHT_POINT_COLOR;
     for (const hd of props.highlightDefects) {
-      const sx = (hd.waferX + _ox) * _s + _cx;
-      const sy = _cy - (hd.waferY + _oy) * _s;
+      const [sx, sy] = dataToScreen(transform, hd.waferX, hd.waferY);
       ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
     }
   }
@@ -318,7 +306,9 @@ watch(
 
 <template>
   <div ref="containerRef" class="swm-wrap">
+    <div v-if="pointCount === 0" class="swm-empty">No points</div>
     <SimpleWaferMap
+      v-else
       :points="simplePoints"
       :colorMap="props.colorMap ?? {}"
       :zoom="props.zoom ?? undefined"
@@ -330,6 +320,7 @@ watch(
       :die-size-y="props.geometry?.dieSizeY"
     />
     <canvas
+      v-if="pointCount > 0"
       ref="overlayRef"
       class="swm-ol"
       @pointerdown="onPointerDown"
@@ -339,6 +330,9 @@ watch(
       @pointerleave="onPointerUp"
       @dblclick="onDblClick"
     />
+    <div v-if="pointCount > 0" class="swm-footer">
+      {{ pointCount }} {{ pointCount === 1 ? "point" : "points" }}
+    </div>
   </div>
 </template>
 
@@ -357,6 +351,13 @@ watch(
   pointer-events: auto;
   touch-action: none;
   z-index: 1;
+}
+.swm-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--text-color-3, #888);
+  font-size: 12px;
 }
 .swm-footer {
   padding: 6px;

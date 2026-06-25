@@ -4,10 +4,11 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScSampleTableSetFilterOperator } from './scSampleTableSetFilterOperator';
 import type { ScSampleTableSetFilterValuesItem } from './scSampleTableSetFilterValuesItem';
 
 export interface ScSampleTableSetFilter {
-  operator: 'in';
+  operator: ScSampleTableSetFilterOperator;
   /** @minItems 1 */
   values: ScSampleTableSetFilterValuesItem[];
 }

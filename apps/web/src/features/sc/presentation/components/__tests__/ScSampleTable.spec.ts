@@ -1,8 +1,7 @@
 import { flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
-import { HttpResponse, http } from "msw";
 import { mountWithProviders } from "@/testing";
-import { server } from "@/testing/msw/server";
+import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import ScSampleTable from "../ScSampleTable.vue";
 
 function makeRow(defectId: number) {
@@ -29,41 +28,27 @@ function makeRow(defectId: number) {
   };
 }
 
-function sampleTableStream(rows: ReturnType<typeof makeRow>[]) {
-  return [
-    'event: progress\ndata: {"event_type":"progress","status":"loading","operation":"sc.sample-table"}\n\n',
-    `event: data\ndata: ${JSON.stringify({
-      event_type: "data",
-      operation: "sc.sample-table",
-      payload: {
-        items: rows,
-        total: rows.length,
-        next_anchor: null,
-      },
-    })}\n\n`,
-    'event: done\ndata: {"event_type":"done"}\n\n',
-  ].join("");
+function dataSource(
+  rows: ReturnType<typeof makeRow>[],
+  loadRows = vi.fn(),
+): ScSampleTableDataSource {
+  return {
+    scopeKey: "test-source",
+    loadRows: loadRows.mockResolvedValue({
+      items: rows,
+      total: rows.length,
+      nextAnchor: null,
+    }),
+  };
 }
 
 describe("ScSampleTable", () => {
   it("sends controlled filter and sort parameters to the rows API", async () => {
-    const requestBody = vi.fn();
-    server.use(
-      http.post(
-        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows/stream",
-        async ({ request }) => {
-          requestBody(await request.json());
-          return new HttpResponse(sampleTableStream([makeRow(9)]), {
-            headers: { "Content-Type": "text/event-stream" },
-          });
-        },
-      ),
-    );
+    const loadRows = vi.fn();
 
     await mountWithProviders(ScSampleTable, {
       props: {
-        inspectionTime: "2026-01-01T00:00:00",
-        waferKey: 1,
+        dataSource: dataSource([makeRow(9)], loadRows),
         loading: false,
         total: 10,
         filter: {
@@ -75,12 +60,12 @@ describe("ScSampleTable", () => {
     });
     await flushPromises();
 
-    expect(requestBody).toHaveBeenCalledTimes(1);
-    expect(requestBody.mock.calls[0][0]).not.toHaveProperty("defect_ids");
-    expect(requestBody.mock.calls[0][0]).not.toHaveProperty(
-      "reticle_x_die_count",
-    );
-    expect(requestBody).toHaveBeenCalledWith(
+    expect(loadRows).toHaveBeenCalledTimes(1);
+    expect(loadRows.mock.calls[0][0]).toMatchObject({
+      defectIds: [],
+      reticleOptions: undefined,
+    });
+    expect(loadRows).toHaveBeenCalledWith(
       expect.objectContaining({
         anchor: "0",
         limit: 1000,
@@ -93,20 +78,10 @@ describe("ScSampleTable", () => {
     );
   });
 
-  it("uses controlled sort, set filters, range filters, and selection", async () => {
-    server.use(
-      http.post(
-        "/api/v1/sc/inspections/:inspectionTime/:waferKey/sample-table-rows/stream",
-        () =>
-          new HttpResponse(sampleTableStream([makeRow(1), makeRow(2)]), {
-            headers: { "Content-Type": "text/event-stream" },
-          }),
-      ),
-    );
+  it("uses controlled sort, set filters, range filters, and disables selection by default", async () => {
     const { wrapper } = await mountWithProviders(ScSampleTable, {
       props: {
-        inspectionTime: "2026-01-01T00:00:00",
-        waferKey: 1,
+        dataSource: dataSource([makeRow(1), makeRow(2)]),
         loading: false,
         total: 2,
         selectedDefectIds: new Set([2]),
@@ -125,15 +100,13 @@ describe("ScSampleTable", () => {
     expect(table.props("virtualScrollX")).toBe(true);
     expect(table.props("checkedRowKeys")).toEqual([2]);
 
-    const dataColumns = (
-      table.props("columns") as Array<Record<string, unknown>>
-    ).filter((column) => column.type !== "selection");
+    const columns = table.props("columns") as Array<Record<string, unknown>>;
+    expect(columns.some((column) => column.type === "selection")).toBe(false);
+    const dataColumns = columns.filter((column) => column.type !== "selection");
     expect(dataColumns).toHaveLength(19);
     expect(dataColumns.every((column) => column.sorter === true)).toBe(true);
 
-    const roughBinColumn = dataColumns.find(
-      (column) => column.key === "rough_bin",
-    );
+    const roughBinColumn = dataColumns.find((column) => column.key === "rough_bin");
     expect(roughBinColumn?.filterOptionValues).toEqual([2]);
     expect(roughBinColumn?.filterOptions).toEqual(
       expect.arrayContaining([
@@ -150,11 +123,7 @@ describe("ScSampleTable", () => {
     const waferYColumn = dataColumns.find((column) => column.key === "wafer_y");
     expect(waferYColumn?.sortOrder).toBe("ascend");
 
-    table.vm.$emit(
-      "update:filters",
-      { rough_bin: [1, 2], wafer_x: [1, 2] },
-      roughBinColumn,
-    );
+    table.vm.$emit("update:filters", { rough_bin: [1, 2], wafer_x: [1, 2] }, roughBinColumn);
     await flushPromises();
     expect(wrapper.emitted("filter-change")?.at(-1)?.[0]).toEqual({
       rough_bin: { operator: "in", values: [1, 2] },
@@ -175,6 +144,6 @@ describe("ScSampleTable", () => {
     table.vm.$emit("update:checked-row-keys", [1, 2]);
     await flushPromises();
 
-    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual([1, 2]);
+    expect(wrapper.emitted("selection-change")).toBeUndefined();
   });
 });

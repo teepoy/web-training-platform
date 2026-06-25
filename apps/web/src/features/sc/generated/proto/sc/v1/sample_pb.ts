@@ -9,11 +9,8 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file sc/v1/sample.proto.
  */
-export const file_sc_v1_sample: GenFile =
-  /*@__PURE__*/
-  fileDesc(
-    "ChJzYy92MS9zYW1wbGUucHJvdG8SBXNjLnYxIk0KC1Jldmlld0ltYWdlEhIKCmltYWdlX25hbWUYAiABKAkSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCUoECAEQAiLEAgoMU2NTYW1wbGVJdGVtEhEKCWRlZmVjdF9pZBgFIAEoDRIPCgd3YWZlcl94GAYgASgREg8KB3dhZmVyX3kYByABKBESEQoJcm91Z2hfYmluGAggASgFEhkKDGNsYXNzX251bWJlchgJIAEoBUgAiAEBEikKDXJldmlld19pbWFnZXMYCiADKAsyEi5zYy52MS5SZXZpZXdJbWFnZRIXCg9pbnNwZWN0aW9uX3RpbWUYCyABKAMSEQoJd2FmZXJfa2V5GAwgASgFEg8KB2luZGV4X3gYDSABKBESDwoHaW5kZXhfeRgOIAEoERINCgVhZGRlchgPIAEoBRIPCgdjbHVzdGVyGBAgASgFEg8KB3Rlc3RfaWQYESABKAVCDwoNX2NsYXNzX251bWJlckoECAEQAkoECAIQA0oECAMQBEoECAQQBSKYAQoNV2FmZXJHZW9tZXRyeRIXCg93YWZlcl9yYWRpdXNfbm0YASABKAUSEAoIY2VudGVyX3gYAiABKAUSEAoIY2VudGVyX3kYAyABKAUSEAoIb3JpZ2luX3gYBCABKAUSEAoIb3JpZ2luX3kYBSABKAUSEgoKZGllX3NpemVfeBgGIAEoBRISCgpkaWVfc2l6ZV95GAcgASgFIo8DChBXYWZlck1hcFJlc3BvbnNlEg0KBXRvdGFsGAEgASgFEhEKCXdhZmVyX2tleRgCIAEoBRImCghnZW9tZXRyeRgDIAEoCzIULnNjLnYxLldhZmVyR2VvbWV0cnkSFAoMd2FmZXJfcG9pbnRzGAQgAygREhIKCmRpZV9wb2ludHMYBSADKBESFgoOcmV0aWNsZV9wb2ludHMYBiADKBESGwoTcmV0aWNsZV94X2RpZV9jb3VudBgHIAEoBRIbChNyZXRpY2xlX3lfZGllX2NvdW50GAggASgFEhIKCmlzX3NhbXBsZWQYCSABKAgSFwoPbGVnZW5kX2dyb3VwX2J5GAogASgJEkAKDWxlZ2VuZF9ncm91cHMYCyADKAsyKS5zYy52MS5XYWZlck1hcFJlc3BvbnNlLkxlZ2VuZEdyb3Vwc0VudHJ5GkYKEUxlZ2VuZEdyb3Vwc0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBIi8KCkRlZmVjdExpc3QSDQoFY291bnQYASABKAUSEgoKZGVmZWN0X2lkcxgCIAMoBUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw",
-  );
+export const file_sc_v1_sample: GenFile = /*@__PURE__*/
+  fileDesc("ChJzYy92MS9zYW1wbGUucHJvdG8SBXNjLnYxIk0KC1Jldmlld0ltYWdlEhIKCmltYWdlX25hbWUYAiABKAkSEAoIaW1hZ2VfaWQYAyABKAUSEgoKaW1hZ2VfdHlwZRgEIAEoCUoECAEQAiLEAgoMU2NTYW1wbGVJdGVtEhEKCWRlZmVjdF9pZBgFIAEoDRIPCgd3YWZlcl94GAYgASgREg8KB3dhZmVyX3kYByABKBESEQoJcm91Z2hfYmluGAggASgFEhkKDGNsYXNzX251bWJlchgJIAEoBUgAiAEBEikKDXJldmlld19pbWFnZXMYCiADKAsyEi5zYy52MS5SZXZpZXdJbWFnZRIXCg9pbnNwZWN0aW9uX3RpbWUYCyABKAMSEQoJd2FmZXJfa2V5GAwgASgFEg8KB2luZGV4X3gYDSABKBESDwoHaW5kZXhfeRgOIAEoERINCgVhZGRlchgPIAEoBRIPCgdjbHVzdGVyGBAgASgFEg8KB3Rlc3RfaWQYESABKAVCDwoNX2NsYXNzX251bWJlckoECAEQAkoECAIQA0oECAMQBEoECAQQBSKYAQoNV2FmZXJHZW9tZXRyeRIXCg93YWZlcl9yYWRpdXNfbm0YASABKAUSEAoIY2VudGVyX3gYAiABKAUSEAoIY2VudGVyX3kYAyABKAUSEAoIb3JpZ2luX3gYBCABKAUSEAoIb3JpZ2luX3kYBSABKAUSEgoKZGllX3NpemVfeBgGIAEoBRISCgpkaWVfc2l6ZV95GAcgASgFIo8DChBXYWZlck1hcFJlc3BvbnNlEg0KBXRvdGFsGAEgASgFEhEKCXdhZmVyX2tleRgCIAEoBRImCghnZW9tZXRyeRgDIAEoCzIULnNjLnYxLldhZmVyR2VvbWV0cnkSFAoMd2FmZXJfcG9pbnRzGAQgAygREhIKCmRpZV9wb2ludHMYBSADKBESFgoOcmV0aWNsZV9wb2ludHMYBiADKBESGwoTcmV0aWNsZV94X2RpZV9jb3VudBgHIAEoBRIbChNyZXRpY2xlX3lfZGllX2NvdW50GAggASgFEhIKCmlzX3NhbXBsZWQYCSABKAgSFwoPbGVnZW5kX2dyb3VwX2J5GAogASgJEkAKDWxlZ2VuZF9ncm91cHMYCyADKAsyKS5zYy52MS5XYWZlck1hcFJlc3BvbnNlLkxlZ2VuZEdyb3Vwc0VudHJ5GkYKEUxlZ2VuZEdyb3Vwc0VudHJ5EgsKA2tleRgBIAEoCRIgCgV2YWx1ZRgCIAEoCzIRLnNjLnYxLkRlZmVjdExpc3Q6AjgBIi8KCkRlZmVjdExpc3QSDQoFY291bnQYASABKAUSEgoKZGVmZWN0X2lkcxgCIAMoBUImWiRmdC1wbGF0Zm9ybS9wcm90b3MvZ2VuL2dvL3NjL3YxO3NjdjFiBnByb3RvMw");
 
 /**
  * @generated from message sc.v1.ReviewImage
@@ -39,8 +36,7 @@ export type ReviewImage = Message<"sc.v1.ReviewImage"> & {
  * Describes the message sc.v1.ReviewImage.
  * Use `create(ReviewImageSchema)` to create a new message.
  */
-export const ReviewImageSchema: GenMessage<ReviewImage> =
-  /*@__PURE__*/
+export const ReviewImageSchema: GenMessage<ReviewImage> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 0);
 
 /**
@@ -119,8 +115,7 @@ export type ScSampleItem = Message<"sc.v1.ScSampleItem"> & {
  * Describes the message sc.v1.ScSampleItem.
  * Use `create(ScSampleItemSchema)` to create a new message.
  */
-export const ScSampleItemSchema: GenMessage<ScSampleItem> =
-  /*@__PURE__*/
+export const ScSampleItemSchema: GenMessage<ScSampleItem> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 1);
 
 /**
@@ -167,8 +162,7 @@ export type WaferGeometry = Message<"sc.v1.WaferGeometry"> & {
  * Describes the message sc.v1.WaferGeometry.
  * Use `create(WaferGeometrySchema)` to create a new message.
  */
-export const WaferGeometrySchema: GenMessage<WaferGeometry> =
-  /*@__PURE__*/
+export const WaferGeometrySchema: GenMessage<WaferGeometry> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 2);
 
 /**
@@ -266,8 +260,7 @@ export type WaferMapResponse = Message<"sc.v1.WaferMapResponse"> & {
  * Describes the message sc.v1.WaferMapResponse.
  * Use `create(WaferMapResponseSchema)` to create a new message.
  */
-export const WaferMapResponseSchema: GenMessage<WaferMapResponse> =
-  /*@__PURE__*/
+export const WaferMapResponseSchema: GenMessage<WaferMapResponse> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 3);
 
 /**
@@ -289,6 +282,5 @@ export type DefectList = Message<"sc.v1.DefectList"> & {
  * Describes the message sc.v1.DefectList.
  * Use `create(DefectListSchema)` to create a new message.
  */
-export const DefectListSchema: GenMessage<DefectList> =
-  /*@__PURE__*/
+export const DefectListSchema: GenMessage<DefectList> = /*@__PURE__*/
   messageDesc(file_sc_v1_sample, 4);

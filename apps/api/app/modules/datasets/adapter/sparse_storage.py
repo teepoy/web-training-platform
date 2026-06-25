@@ -293,7 +293,8 @@ class SparseDatasetStorage:
             pred_lf.with_columns(pl.col("sample_id").cast(pl.Utf8))
             .group_by("sample_id")
             .agg(
-                pl.col("predicted_label").last().cast(pl.Utf8).alias("predicted_label")
+                pl.col("predicted_label").last().cast(pl.Utf8).alias("predicted_label"),
+                pl.col("confidence").last().cast(pl.Float64).alias("confidence"),
             )
         )
 

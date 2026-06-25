@@ -51,7 +51,7 @@ class ScSampleTableSort(BaseModel):
 
 
 class ScSampleTableSetFilter(BaseModel):
-    operator: Literal["in"]
+    operator: Literal["in", "not_in"]
     values: list[float | str] = Field(min_length=1)
 
 
@@ -99,8 +99,20 @@ class ScSampleTableRow(BaseModel):
     kill_ratio: float | None = None
 
 
+class ScReclassifySampleTableRow(ScSampleTableRow):
+    annotation_label: str | None = None
+    prediction_label: str | None = None
+    prediction_confidence: float | None = None
+
+
 class ScSampleTableRowsResponse(BaseModel):
     items: list[ScSampleTableRow]
+    total: int
+    next_anchor: str | None = None
+
+
+class ScReclassifySampleTableRowsResponse(BaseModel):
+    items: list[ScReclassifySampleTableRow]
     total: int
     next_anchor: str | None = None
 

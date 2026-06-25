@@ -8,8 +8,6 @@ import {
   NButton,
   NInputNumber,
   NText,
-  NRadioGroup,
-  NRadioButton,
   NModal,
   NCheckbox,
   NTooltip,
@@ -19,7 +17,7 @@ import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import ScReclassifyBlinkVirtualTable from "../components/ScReclassifyBlinkVirtualTable.vue";
-import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
+import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
 import { create } from "@bufbuild/protobuf";
@@ -29,8 +27,8 @@ import {
   ReviewImageSchema,
   type ScSampleItem,
 } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import type { ScBoxRegion, ScMapMode } from "@/features/sc/api/boxFilter";
-import { fetchScDatasetBoxFilter } from "@/features/sc/api/boxFilter";
+import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
@@ -52,18 +50,6 @@ const containerStyle = computed(() => ({
 
 function goBack() {
   router.back();
-}
-
-/** Curried box-selection: bakes datasetId + reticleOptions, takes mode + region → defect IDs. */
-async function queryBoxSelection(mode: ScMapMode, region: ScBoxRegion): Promise<number[]> {
-  const result = await fetchScDatasetBoxFilter(
-    page.datasetId.value,
-    mode,
-    region,
-    page.reticleOptions.value,
-    page.globalFilter.value,
-  );
-  return result.defect_ids.map(Number);
 }
 
 const selectedDraftCount = computed(() => {
@@ -192,6 +178,38 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
   }
   return map;
 });
+
+const legendFilterFieldBySource: Record<ScLegendSource, string> = {
+  class: "class_number",
+  bin: "rough_bin",
+  annotation: "annotation_label",
+  prediction: "prediction_label",
+};
+
+function onLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
+  const field = legendFilterFieldBySource[payload.source];
+  const next: ScSampleTableFilter = { ...page.globalFilter.value };
+  if (payload.hiddenKeys.length === 0) {
+    delete next[field];
+  } else {
+    next[field] = {
+      operator: "not_in",
+      values: payload.hiddenKeys,
+    };
+  }
+  page.globalFilter.value = next;
+}
+
+function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
+  const local: ScSampleTableFilter = {};
+  for (const [field, value] of Object.entries(filter)) {
+    const globalValue = page.globalFilter.value[field];
+    if (JSON.stringify(value) !== JSON.stringify(globalValue)) {
+      local[field] = value;
+    }
+  }
+  page.sampleTableFilter.value = local;
+}
 </script>
 
 <template>
@@ -282,41 +300,59 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
           </div>
         </div>
 
-        <!-- Main area: tabs left, annotation sidebar right -->
+        <!-- Main area -->
         <div class="classify-layout">
-          <!-- Left: Tab container -->
-          <div class="classify-browser-shell">
-            <!-- Tab bar -->
-            <div class="sc-tab-bar">
-              <NRadioGroup v-model:value="page.activeTab.value" size="small">
-                <NRadioButton value="blink">Blink Table</NRadioButton>
-                <NRadioButton value="map">Map</NRadioButton>
-              </NRadioGroup>
-              <span v-if="page.activeFilterCount.value > 0" class="sc-filter-hint">
-                {{ page.activeFilterCount.value }} filter(s) active
-                <NButton text size="tiny" type="primary" @click="page.clearMapFilter()"
-                  >Clear</NButton
-                >
-              </span>
-              <NText
-                v-if="page.activeTab.value === 'map' && page.mapStreamMessage.value"
-                depth="3"
-                class="sc-stream-hint"
-              >
-                {{ page.mapStreamMessage.value }}
-              </NText>
-            </div>
-            <NSpin
-              :show="
-                page.activeTab.value === 'blink'
-                  ? page.isBlinkLoading.value
-                  : page.isMapLoading.value
-              "
-              class="sc-blink-spin"
-            >
-              <!-- Blink table tab (default) -->
+          <InspectionQuad
+            variant="reclassify"
+            :dataset-id="page.datasetId.value"
+            :samples="blinkSamples"
+            :samples-total="page.plotPointTotal.value"
+            :samples-loading="page.isBlinkLoading.value"
+            :samples-error="page.samplesError.value"
+            :inspection-time="page.inspectionContext.value?.inspectionTime ?? undefined"
+            :wafer-key="
+              page.inspectionContext.value?.waferKey
+                ? Number(page.inspectionContext.value.waferKey)
+                : undefined
+            "
+            :review-samples="page.reviewSamples.value"
+            :review-loading="page.reviewLoading.value"
+            :review-error="page.reviewError.value"
+            :map-loading="page.isMapLoading.value"
+            :map-error="page.reticleMapError.value"
+            :map-stream-message="page.mapStreamMessage.value"
+            :active-map-tab="page.activeMapTab.value"
+            :wafer-geometry="page.waferGeometry.value"
+            :wafer-display="page.waferDisplay.value"
+            :die-display="page.dieDisplay.value"
+            :reticle-display="page.reticleDisplay.value"
+            :legend-groups="page.classList.value"
+            :reticle-x-die-count="page.reticleXDieCount.value"
+            :reticle-y-die-count="page.reticleYDieCount.value"
+            :reticle-die-size-x="page.reticleDieSizeX.value"
+            :reticle-die-size-y="page.reticleDieSizeY.value"
+            :reticle-options="page.reticleOptions.value"
+            :zoom="page.mapZoom.value"
+            :selected-defect-ids="Array.from(page.selectedDefectIds.value)"
+            :table-filter="page.effectiveSampleTableFilter.value"
+            :map-sample-filter="page.globalFilter.value"
+            :legend-group-by="page.legendGroupBy.value"
+            :legend-sources="['class', 'bin', 'annotation', 'prediction']"
+            @update:active-map-tab="page.setActiveMapTab"
+            @update:reticle-options="page.updateReticleOptions"
+            @select-points="({ ids }) => page.handleBoxSelectionChange(ids)"
+            @zoom-in="page.setMapZoom"
+            @table-filter-change="onSampleTableFilterChange"
+            @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
+            @table-sort-change="() => {}"
+            @table-selection-change="(ids) => page.handleBoxSelectionChange(ids)"
+            @table-apply-selection="(ids) => page.selectDefectIds(ids.map(String), 'replace')"
+            @legend-group-change="page.handleLegendGroupByChange"
+            @legend-hidden-change="onLegendHiddenChange"
+            @retry="() => {}"
+          >
+            <template #blink>
               <ScReclassifyBlinkVirtualTable
-                v-show="page.activeTab.value === 'blink'"
                 :samples="blinkSamples"
                 :image-urls-by-defect-id="blinkImageUrlsByDefectId"
                 :initial-blink-enabled="true"
@@ -334,52 +370,23 @@ const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
                 @select-samples="onBlinkTableSelect"
                 :on-load-more="page.fetchMoreSamples"
               />
-              <!-- Map panel (handles wafer/die/reticle internally) -->
-              <ScMapPanel
-                v-show="page.activeTab.value === 'map'"
-                :active-map-tab="page.activeMapTab.value"
-                :wafer-points="page.waferDisplay.value"
-                :wafer-geometry="page.waferGeometry.value"
-                :wafer-radius-nm="page.waferGeometry.value?.waferRadiusNm"
-                :die-points="page.dieDisplay.value"
-                :reticle-points="page.reticleDisplay.value"
-                :reticle-x-die-count="page.reticleXDieCount.value"
-                :reticle-y-die-count="page.reticleYDieCount.value"
-                :reticle-die-size-x="page.reticleDieSizeX.value"
-                :reticle-die-size-y="page.reticleDieSizeY.value"
-                :reticle-options="page.reticleOptions.value"
-                :legend-group-by="page.legendGroupBy.value ?? 'class'"
-                :legend-groups="page.classList.value"
-                :legend-sources="['class', 'bin', 'annotation', 'prediction']"
-                :selected-ids="page.mapSelectedDefectIds.value"
-                :highlight-defects="page.highlightDefects.value"
-                :zoom="page.mapZoom.value"
-                :query-box-selection="queryBoxSelection"
-                @update:active-map-tab="page.setActiveMapTab"
-                @update:reticle-options="page.updateReticleOptions"
-                @select-points="({ ids }) => page.handleBoxSelectionChange(ids)"
-                @zoom-in="page.setMapZoom"
-                @filter-change="page.handleMapFilterChange"
-                @selection-change="page.handleBoxSelectionChange"
-                @update:legend-group-by="page.handleLegendGroupByChange"
-                @retry="() => {}"
+            </template>
+            <template #annotation>
+              <ReclassifyAnnotationSidebar
+                :selected-count="page.selectedCount.value"
+                :code-labels="page.codeLabels.value"
+                :annotation-draft="page.annotationDraft.value"
+                :draft-count="page.draftCount.value"
+                :selected-draft-count="selectedDraftCount"
+                :is-submitting="page.isSubmitting.value"
+                @apply-code="applyAnnotationCode"
+                @set-shortcut="page.setLabelShortcut"
+                @submit="page.submitAnnotations"
+                @clear-drafts="page.clearDrafts"
+                @clear-selected-drafts="clearSelectedDrafts"
               />
-            </NSpin>
-          </div>
-
-          <ReclassifyAnnotationSidebar
-            :selected-count="page.selectedCount.value"
-            :code-labels="page.codeLabels.value"
-            :annotation-draft="page.annotationDraft.value"
-            :draft-count="page.draftCount.value"
-            :selected-draft-count="selectedDraftCount"
-            :is-submitting="page.isSubmitting.value"
-            @apply-code="applyAnnotationCode"
-            @set-shortcut="page.setLabelShortcut"
-            @submit="page.submitAnnotations"
-            @clear-drafts="page.clearDrafts"
-            @clear-selected-drafts="clearSelectedDrafts"
-          />
+            </template>
+          </InspectionQuad>
         </div>
       </template>
     </div>

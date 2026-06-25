@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { NButton, NResult, NText } from "naive-ui";
+import { NButton, NResult, NSelect, NText } from "naive-ui";
 import ScMapPanel from "@/features/sc/presentation/components/ScMapPanel.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
 import type { DefectList, ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
 import {
+  createDatasetSampleTableDataSource,
+  createInspectionSampleTableDataSource,
+} from "@/features/sc/api/sampleTableDataSource";
+import {
+  fetchScDatasetBoxFilter,
   fetchScInspectionBoxFilter,
   type ScBoxRegion,
   type ScMapMode,
@@ -17,6 +23,8 @@ import {
 
 // ── Props / emits ────────────────────────────────
 const props = defineProps<{
+  variant?: "preview" | "reclassify";
+  datasetId?: string;
   samples: ScSampleItem[];
   samplesTotal: number;
   samplesLoading: boolean;
@@ -53,14 +61,17 @@ const props = defineProps<{
   unzoomedDieDisplay?: number[];
   unzoomedReticleDisplay?: number[];
   legendGroups?: Record<string, DefectList> | null;
+  legendGroupBy?: ScLegendSource | null;
+  legendSources?: ScLegendSource[];
   reticleXDieCount?: number;
   reticleYDieCount?: number;
   reticleDieSizeX?: number;
   reticleDieSizeY?: number;
   reticleOptions?: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
-  selectedDefectIds?: number[];
+  selectedDefectIds?: Array<number | string>;
   tableFilter?: ScSampleTableFilter;
+  mapSampleFilter?: ScSampleTableFilter;
   tableSort?: ScSampleTableSort | null;
 }>();
 
@@ -76,17 +87,22 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "table-filter-change", filter: ScSampleTableFilter): void;
+  (e: "table-apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
   (e: "table-apply-selection", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
+  (e: "legend-hidden-change", payload: { source: ScLegendSource; hiddenKeys: string[] }): void;
   (e: "retry"): void;
 }>();
 
-const DEFAULT_COLUMN_PCT = 52;
+const DEFAULT_COLUMN_PCT = 35;
+const RECLASSIFY_LEFT_COLUMN_PCT = 35;
+const RECLASSIFY_CENTER_COLUMN_PCT = 50;
 const MIN_COLUMN_PCT = 20;
 const MAX_COLUMN_PCT = 80;
 const DEFAULT_MAP_PCT = 55;
+const RECLASSIFY_MAP_PCT = 60;
 const MIN_MAP_PCT = 25;
 const MAX_MAP_PCT = 75;
 
@@ -98,12 +114,25 @@ const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
 
 const quadStyle = computed(() => ({
-  gridTemplateColumns: `${columnPct.value}fr 12px ${100 - columnPct.value}fr`,
+  gridTemplateColumns:
+    props.variant === "reclassify"
+      ? `${RECLASSIFY_LEFT_COLUMN_PCT}fr 12px ${RECLASSIFY_CENTER_COLUMN_PCT}fr 12px 15fr`
+      : `${columnPct.value}fr 12px ${100 - columnPct.value}fr`,
 }));
 
 const leftPanelStyle = computed(() => ({
-  gridTemplateRows: `${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
+  gridTemplateRows:
+    props.variant === "reclassify"
+      ? `${RECLASSIFY_MAP_PCT}fr 10px ${100 - RECLASSIFY_MAP_PCT}fr`
+      : `${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
 }));
+
+const isReclassify = computed(() => props.variant === "reclassify");
+const enabledLegendSources = computed<ScLegendSource[]>(
+  () =>
+    props.legendSources ??
+    (isReclassify.value ? ["class", "bin", "annotation", "prediction"] : ["class", "bin"]),
+);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -198,17 +227,45 @@ const legendSelectedIds = computed<ReadonlySet<number>>(() => new Set());
 
 // ── queryBoxSelection: curried API call for map wrapper box-selection ──
 async function queryBoxSelection(mode: ScMapMode, region: ScBoxRegion): Promise<number[]> {
-  if (!props.inspectionTime || props.waferKey === undefined) return [];
+  if (props.variant === "reclassify") {
+    const datasetId = props.datasetId;
+    if (!datasetId) {
+      throw new Error("datasetId is required for reclassify map box selection");
+    }
+    const result = await fetchScDatasetBoxFilter(
+      datasetId,
+      mode,
+      region,
+      reticleOptionsModel.value,
+      props.mapSampleFilter,
+    );
+    return result.defect_ids.map(Number);
+  }
+
+  const inspectionTime = props.inspectionTime;
+  const waferKey = props.waferKey;
+  if (!inspectionTime || waferKey === undefined) {
+    throw new Error("inspection identity is required for preview map box selection");
+  }
   const result = await fetchScInspectionBoxFilter(
-    props.inspectionTime,
-    props.waferKey,
+    inspectionTime,
+    waferKey,
     mode,
     region,
     reticleOptionsModel.value,
-    props.tableFilter,
+    props.mapSampleFilter,
   );
   return result.defect_ids.map(Number);
 }
+
+const sampleTableDataSource = computed(() => {
+  if (props.variant === "reclassify") {
+    return props.datasetId ? createDatasetSampleTableDataSource(props.datasetId) : undefined;
+  }
+  return props.inspectionTime && props.waferKey !== undefined
+    ? createInspectionSampleTableDataSource(props.inspectionTime, props.waferKey)
+    : undefined;
+});
 
 const reticleOptionsModel = computed<ReticleMapOptions>(() => ({
   xDieCount: props.reticleOptions?.xDieCount ?? props.reticleXDieCount ?? 2,
@@ -242,16 +299,24 @@ const effectiveReticlePoints = computed<number[] | undefined>(() => {
 
 const sampleTableRef = ref<InstanceType<typeof ScSampleTable> | null>(null);
 
+const selectedNumericIds = computed(
+  () => new Set((props.selectedDefectIds ?? []).map(Number).filter(Number.isFinite)),
+);
+
+const selectedStringIds = computed(() => new Set((props.selectedDefectIds ?? []).map(String)));
+
 const highlightDefects = computed<HighlightDefect[]>(() => {
   const ids = props.selectedDefectIds;
   if (!ids || ids.length === 0) return [];
 
   const result: HighlightDefect[] = [];
   for (const id of ids) {
-    const coords = sampleTableRef.value?.getDefectCoords?.(id);
+    const defectId = Number(id);
+    if (!Number.isFinite(defectId)) continue;
+    const coords = sampleTableRef.value?.getDefectCoords?.(defectId);
     if (!coords) continue;
     result.push({
-      defectId: id,
+      defectId,
       waferX: coords.waferX,
       waferY: coords.waferY,
       dieX: coords.dieX,
@@ -262,6 +327,47 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
   }
   return result;
 });
+
+const barChartItems = computed(() => {
+  const groups = props.legendGroups ?? {};
+  return Object.entries(groups)
+    .map(([key, group]) => ({
+      key,
+      count: Number(group.count ?? group.defectIds.length),
+      defectIds: group.defectIds.map(Number).filter(Number.isFinite),
+    }))
+    .sort((a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }));
+});
+
+const maxBarChartCount = computed(() =>
+  barChartItems.value.reduce((max, item) => Math.max(max, item.count), 0),
+);
+
+const barLegendSource = computed<ScLegendSource>({
+  get: () => props.legendGroupBy ?? enabledLegendSources.value[0] ?? "class",
+  set: (value) => emit("legend-group-change", value),
+});
+
+const legendSourceOptions = computed(() => {
+  const labels: Record<ScLegendSource, string> = {
+    class: "Class",
+    bin: "Rough Bin",
+    annotation: "Annotation",
+    prediction: "Prediction",
+  };
+  return enabledLegendSources.value.map((source) => ({
+    label: labels[source],
+    value: source,
+  }));
+});
+
+function selectBarChartGroup(defectIds: number[]): void {
+  mapSelectionIds.value = defectIds;
+  emit("select-points", {
+    ids: defectIds,
+    region: { x: 0, y: 0, w: 0, h: 0 },
+  });
+}
 </script>
 
 <template>
@@ -282,6 +388,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
     :class="{
       'iq-quad--column-resizing': isColumnResizing,
       'iq-quad--row-resizing': isRowResizing,
+      'iq-quad--reclassify': isReclassify,
     }"
     :style="quadStyle"
   >
@@ -304,6 +411,8 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
           :reticle-die-size-x="reticleDieSizeXModel"
           :reticle-die-size-y="reticleDieSizeYModel"
           :reticle-options="reticleOptionsModel"
+          :legend-group-by="legendGroupBy"
+          :legend-sources="enabledLegendSources"
           :selected-ids="legendSelectedIds"
           :highlight-defects="highlightDefects"
           :query-box-selection="queryBoxSelection"
@@ -317,6 +426,7 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
           @selection-change="(ids: number[]) => (mapSelectionIds = ids)"
           @select-points="(payload) => (mapSelectionIds = payload.ids)"
           @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
+          @legend-hidden-change="(payload) => emit('legend-hidden-change', payload)"
           @zoom-in="(vp) => emit('zoom-in', vp)"
           @retry="() => emit('retry')"
         />
@@ -332,20 +442,22 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
       />
       <ScSampleTable
         ref="sampleTableRef"
+        :data-source="sampleTableDataSource"
         :defect-ids="filteredDefectIds"
-        :inspection-time="inspectionTime"
-        :wafer-key="waferKey"
         :loading="false"
         :total="filteredTotal"
-        :selected-defect-ids="new Set(selectedDefectIds ?? [])"
+        :selected-defect-ids="selectedNumericIds"
         :filter="tableFilter"
         :sort="tableSort"
+        :show-reclassify-columns="isReclassify"
+        :show-global-filter-action="isReclassify"
         :reticle-x-die-count="reticleOptionsModel.xDieCount"
         :reticle-y-die-count="reticleOptionsModel.yDieCount"
         :reticle-x-die-shift="reticleOptionsModel.xDieShift"
         :reticle-y-die-shift="reticleOptionsModel.yDieShift"
         @selection-change="(ids) => emit('table-selection-change', ids)"
         @apply-selection="(ids) => emit('table-apply-selection', ids)"
+        @apply-filter-as-global="(filter) => emit('table-apply-filter-as-global', filter)"
         @filter-change="(filter) => emit('table-filter-change', filter)"
         @sort-change="(sort) => emit('table-sort-change', sort)"
       />
@@ -362,18 +474,60 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
     />
 
     <!-- Right column: Blink Table -->
-    <div class="iq-panel-right">
-      <ScPreviewBlinkVirtualTable
-        :samples="blinkSamples"
-        :review-samples="filteredReviewSamples"
-        :review-loading="reviewLoading"
-        :review-error="reviewError"
-        :blink-interval-ms="800"
-        :initial-blink-enabled="true"
-        :selected-defect-ids="new Set((selectedDefectIds ?? []).map(String))"
-        :inspection-time="inspectionTime"
-      />
+    <div class="iq-panel-right" :class="{ 'iq-panel-right--split': isReclassify }">
+      <div class="iq-blink-pane">
+        <slot name="blink">
+          <ScPreviewBlinkVirtualTable
+            :samples="blinkSamples"
+            :review-samples="filteredReviewSamples"
+            :review-loading="reviewLoading"
+            :review-error="reviewError"
+            :blink-interval-ms="800"
+            :initial-blink-enabled="true"
+            :selected-defect-ids="selectedStringIds"
+            :inspection-time="inspectionTime"
+          />
+        </slot>
+      </div>
+      <div v-if="isReclassify" class="iq-bar-pane">
+        <div class="iq-bar-header">
+          <div class="iq-bar-title">Group Distribution</div>
+          <NSelect
+            v-model:value="barLegendSource"
+            size="tiny"
+            :options="legendSourceOptions"
+            class="iq-bar-source"
+          />
+        </div>
+        <div class="iq-bar-list">
+          <button
+            v-for="item in barChartItems"
+            :key="item.key"
+            class="iq-bar-row"
+            type="button"
+            @click="selectBarChartGroup(item.defectIds)"
+          >
+            <span class="iq-bar-label">{{ item.key }}</span>
+            <span class="iq-bar-track">
+              <span
+                class="iq-bar-fill"
+                :style="{
+                  width: `${maxBarChartCount > 0 ? (item.count / maxBarChartCount) * 100 : 0}%`,
+                }"
+              />
+            </span>
+            <span class="iq-bar-count">{{ item.count }}</span>
+          </button>
+        </div>
+      </div>
     </div>
+
+    <template v-if="isReclassify">
+      <div class="iq-splitter iq-splitter--column" role="separator" aria-orientation="vertical" />
+      <div class="iq-panel-annotation">
+        <slot name="annotation" />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -474,9 +628,115 @@ const highlightDefects = computed<HighlightDefect[]>(() => {
   bottom: 4px;
 }
 
-.iq-panel-right > * {
+.iq-panel-right > *,
+.iq-blink-pane > * {
   flex: 1;
   min-height: 0;
+}
+
+.iq-panel-right--split {
+  display: grid;
+  grid-template-rows: minmax(0, 3fr) 10px minmax(0, 2fr);
+  gap: 0;
+}
+
+.iq-blink-pane {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.iq-bar-pane {
+  grid-row: 3;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
+  padding-top: 8px;
+}
+
+.iq-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.iq-bar-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.65));
+}
+
+.iq-bar-source {
+  width: 112px;
+  flex: 0 0 112px;
+}
+
+.iq-bar-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.iq-bar-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.iq-bar-row:hover .iq-bar-fill {
+  background: var(--cv-primary-hover, #5b8cff);
+}
+
+.iq-bar-label,
+.iq-bar-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.iq-bar-count {
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.55));
+  text-align: right;
+}
+
+.iq-bar-track {
+  height: 8px;
+  min-width: 0;
+  border-radius: 3px;
+  background: var(--cv-hover, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+
+.iq-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cv-primary, #4c80f0);
+}
+
+.iq-panel-annotation {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Tabs ───────────────────────────────────────────── */

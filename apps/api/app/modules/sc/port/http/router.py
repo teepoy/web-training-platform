@@ -55,6 +55,8 @@ from app.modules.sc.schemas import (
     ScImportResponse,
     ScInspectionListResponse,
     ScInspectionSummaryItem,
+    ScReclassifySampleTableRow,
+    ScReclassifySampleTableRowsResponse,
     ScReviewImageItem,
     ScReviewImagesByDefectItem,
     ScSampleTableRow,
@@ -575,6 +577,24 @@ async def stream_inspection_map_points_progress(
                     )
                 )
             await build_task
+            while not progress_queue.empty():
+                loaded = progress_queue.get_nowait()
+                loaded = min(max(loaded, 0), max(inspection.defects, 0))
+                if loaded <= last_loaded:
+                    continue
+                last_loaded = loaded
+                yield emit_sse(
+                    SSEEvent(
+                        ScProgressEvent(
+                            event_type="progress",
+                            operation="sc.map-points",
+                            status="loading",
+                            message="Preparing map points",
+                            loaded_count=loaded,
+                            total_count=inspection.defects,
+                        )
+                    )
+                )
         except Exception as exc:
             if not build_task.done():
                 build_task.cancel()
@@ -857,6 +877,46 @@ async def filter_sc_dataset_box(
     return ScBoxFilterResponse(defect_ids=defect_ids, total=len(defect_ids))
 
 
+@router.post(
+    "/datasets/{dataset_id}/sample-table-rows",
+    response_model=ScReclassifySampleTableRowsResponse,
+)
+async def get_sc_dataset_sample_table_rows(
+    dataset_id: str,
+    payload: ScSampleTableRowsRequest,
+    service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> ScReclassifySampleTableRowsResponse:
+    try:
+        rows, total, next_anchor = await service.build_dataset_sample_table_rows(
+            dataset_id,
+            org.id,
+            upstream_reader=upstream_reader,
+            defect_ids=payload.defect_ids,
+            anchor=payload.anchor,
+            page=payload.page,
+            page_size=payload.page_size,
+            limit=payload.limit,
+            filter_params=payload.filter,
+            sort_params=payload.sort,
+            reticle_x_die_count=payload.reticle_x_die_count,
+            reticle_y_die_count=payload.reticle_y_die_count,
+            reticle_x_die_shift=payload.reticle_x_die_shift,
+            reticle_y_die_shift=payload.reticle_y_die_shift,
+        )
+    except ScPlotPointsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScPlotPointsRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ScReclassifySampleTableRowsResponse(
+        items=[ScReclassifySampleTableRow.model_validate(row) for row in rows],
+        total=total,
+        next_anchor=next_anchor,
+    )
+
+
 @router.get(
     "/inspections/{inspection_time}/{wafer_key}/review-images",
     response_model=ScInspectionReviewImagesResponse,
@@ -970,15 +1030,18 @@ def _apply_sample_table_filter(
         col = _SAMPLE_TABLE_COLUMNS.get(field)
         if col is None or col not in samples_df.columns:
             continue
-        if filter_value.operator == "in":
+        if filter_value.operator in {"in", "not_in"}:
             values = [
                 str(value) if field == "defect_id" else value
                 for value in filter_value.values
             ]
-            samples_df = samples_df.filter(
+            predicate = (
                 pl.col(col).cast(pl.Utf8).is_in(values)
                 if field == "defect_id"
                 else pl.col(col).is_in(values)
+            )
+            samples_df = samples_df.filter(
+                predicate if filter_value.operator == "in" else ~predicate
             )
         else:
             samples_df = samples_df.filter(

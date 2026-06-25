@@ -603,15 +603,17 @@ class ScImportService:
             )
 
             if storage_mode == "file_shard_sparse":
+                dataset_meta: dict[str, Any] = {
+                    "source_inspection_time": source_inspection_time,
+                    "source_wafer_key": source_wafer_key,
+                }
                 insp_dt_geo = _parse_source_inspection_time(source_inspection_time)
                 inspection = await self._upstream.get_inspection(
                     insp_dt_geo, source_wafer_key
                 )
                 if inspection is not None:
-                    geometry = _geometry_from_inspection(inspection)
-                    await self._repo.update_dataset_meta(
-                        dataset.id, {"geometry": geometry}
-                    )
+                    dataset_meta["geometry"] = _geometry_from_inspection(inspection)
+                await self._repo.update_dataset_meta(dataset.id, dataset_meta)
 
             return dataset
         except Exception:

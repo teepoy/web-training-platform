@@ -20,4 +20,5 @@ test_ids?: number[] | null;
 adders?: number[] | null;
 cluster_ids?: number[] | null;
 legend_group_by?: 'class' | 'bin' | 'annotation' | 'prediction' | null;
+sample_filter?: string | null;
 };
