@@ -7470,21 +7470,26 @@ components:
       title: ScReviewImagesByDefectItem
     ScSampleTableRangeFilter:
       properties:
-        operator:
+        filterType:
           type: string
-          const: between
-          title: Operator
-        min:
+          const: number
+          title: Filtertype
+        type:
+          type: string
+          const: inRange
+          title: Type
+        filter:
           type: number
-          title: Min
-        max:
+          title: Filter
+        filterTo:
           type: number
-          title: Max
+          title: Filterto
       type: object
       required:
-        - operator
-        - min
-        - max
+        - filterType
+        - type
+        - filter
+        - filterTo
       title: ScSampleTableRangeFilter
     ScSampleTableRow:
       properties:
@@ -7661,12 +7666,10 @@ components:
       title: ScSampleTableRowsResponse
     ScSampleTableSetFilter:
       properties:
-        operator:
+        filterType:
           type: string
-          enum:
-            - in
-            - not_in
-          title: Operator
+          const: set
+          title: Filtertype
         values:
           items:
             anyOf:
@@ -7677,7 +7680,7 @@ components:
           title: Values
       type: object
       required:
-        - operator
+        - filterType
         - values
       title: ScSampleTableSetFilter
     ScSampleTableSort:

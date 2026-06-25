@@ -6,7 +6,7 @@ export function sampleTableFilterToMapFilter(filter?: ScSampleTableFilter): ScMa
   if (!filter) return mapFilter;
 
   for (const [field, value] of Object.entries(filter)) {
-    if (value?.operator !== "in") continue;
+    if (value?.filterType !== "set") continue;
     const numbers = value.values
       .map((item) => Number(item))
       .filter((item) => Number.isFinite(item));

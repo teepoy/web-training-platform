@@ -132,9 +132,10 @@ def test_plot_points_forwards_reticle_options() -> None:
                     "sample_filter": json.dumps(
                         {
                             "wafer_x": {
-                                "operator": "between",
-                                "min": 10,
-                                "max": 20,
+                                "filterType": "number",
+                                "type": "inRange",
+                                "filter": 10,
+                                "filterTo": 20,
                             }
                         }
                     ),
@@ -163,9 +164,10 @@ def test_plot_points_forwards_reticle_options() -> None:
         filter_params = mock_svc.build_plot_points_response.await_args.kwargs[
             "filter_params"
         ]
-        assert filter_params["wafer_x"].operator == "between"
-        assert filter_params["wafer_x"].min == 10
-        assert filter_params["wafer_x"].max == 20
+        assert filter_params["wafer_x"].filter_type == "number"
+        assert filter_params["wafer_x"].type == "inRange"
+        assert filter_params["wafer_x"].filter == 10
+        assert filter_params["wafer_x"].filter_to == 20
     finally:
         app.dependency_overrides.pop(get_sc_plot_points_service, None)
 

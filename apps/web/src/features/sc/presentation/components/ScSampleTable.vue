@@ -169,9 +169,10 @@ function applyRangeFilter(field: string): void {
   emit("filter-change", {
     ...(props.filter ?? {}),
     [field]: {
-      operator: "between",
-      min: state.min,
-      max: state.max,
+      filterType: "number",
+      type: "inRange",
+      filter: state.min,
+      filterTo: state.max,
     },
   });
 }
@@ -206,14 +207,16 @@ function handleSorter(sortState: DataTableSortState | null): void {
 
 function getSetFilterValues(field: string): Array<string | number> {
   const filter = props.filter?.[field];
-  return filter?.operator === "in"
+  return filter?.filterType === "set"
     ? filter.values.map((value) => normalizeFilterValue(field, value))
     : [];
 }
 
 function getRangeFilterValues(field: string): number[] {
   const filter = props.filter?.[field];
-  return filter?.operator === "between" ? [filter.min, filter.max] : [];
+  return filter?.filterType === "number" && filter.type === "inRange"
+    ? [filter.filter, filter.filterTo]
+    : [];
 }
 
 function getSetFilterOptions(definition: ColumnDefinition) {
@@ -244,7 +247,7 @@ function applySetFilter(field: string, values: Array<string | number>): void {
     delete next[field];
   } else {
     next[field] = {
-      operator: "in",
+      filterType: "set",
       values: values.map((value) => normalizeFilterValue(field, value)),
     };
   }
@@ -434,7 +437,10 @@ function handleFilters(
   if (values.length === 0) {
     delete next[field];
   } else {
-    next[field] = { operator: "in", values };
+    next[field] = {
+      filterType: "set",
+      values: values.map((value) => normalizeFilterValue(field, value)),
+    };
   }
   emit("filter-change", next);
 }
@@ -699,8 +705,8 @@ watch(
       const field = String(definition.key);
       const value = filter?.[field];
       filterState.value[field] =
-        value?.operator === "between"
-          ? { min: value.min, max: value.max }
+        value?.filterType === "number" && value.type === "inRange"
+          ? { min: value.filter, max: value.filterTo }
           : { min: null, max: null };
     }
   },

@@ -251,13 +251,14 @@ def test_sample_table_rows_filters_sorts_then_paginates(
                     "page_size": 5,
                     "filter": {
                         "rough_bin": {
-                            "operator": "in",
+                            "filterType": "set",
                             "values": [1, 2, 3],
                         },
                         "wafer_x": {
-                            "operator": "between",
-                            "min": -1_000_000,
-                            "max": 1_000_000,
+                            "filterType": "number",
+                            "type": "inRange",
+                            "filter": -1_000_000,
+                            "filterTo": 1_000_000,
                         },
                     },
                     "sort": {"field": "defect_id", "direction": "desc"},

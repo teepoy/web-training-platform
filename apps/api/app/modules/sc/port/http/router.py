@@ -1030,7 +1030,7 @@ def _apply_sample_table_filter(
         col = _SAMPLE_TABLE_COLUMNS.get(field)
         if col is None or col not in samples_df.columns:
             continue
-        if filter_value.operator in {"in", "not_in"}:
+        if filter_value.filter_type == "set":
             values = [
                 str(value) if field == "defect_id" else value
                 for value in filter_value.values
@@ -1040,12 +1040,11 @@ def _apply_sample_table_filter(
                 if field == "defect_id"
                 else pl.col(col).is_in(values)
             )
+            samples_df = samples_df.filter(predicate)
+        elif filter_value.filter_type == "number" and filter_value.type == "inRange":
             samples_df = samples_df.filter(
-                predicate if filter_value.operator == "in" else ~predicate
-            )
-        else:
-            samples_df = samples_df.filter(
-                (pl.col(col) >= filter_value.min) & (pl.col(col) <= filter_value.max)
+                (pl.col(col) >= filter_value.filter)
+                & (pl.col(col) <= filter_value.filter_to)
             )
     return samples_df
 

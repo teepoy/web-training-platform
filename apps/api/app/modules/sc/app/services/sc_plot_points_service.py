@@ -147,8 +147,8 @@ def apply_sample_table_filter(
         col = _SAMPLE_TABLE_FILTER_COLUMNS.get(field)
         if col is None or col not in columns:
             continue
-        operator = getattr(filter_value, "operator", None)
-        if operator in {"in", "not_in"}:
+        filter_type = getattr(filter_value, "filter_type", None)
+        if filter_type == "set":
             values = list(getattr(filter_value, "values", []) or [])
             if not values:
                 continue
@@ -157,12 +157,14 @@ def apply_sample_table_filter(
                 if field == "defect_id"
                 else pl.col(col).is_in(values)
             )
-            lf = lf.filter(predicate if operator == "in" else ~predicate)
-        elif operator == "between":
+            lf = lf.filter(predicate)
+        elif (
+            filter_type == "number" and getattr(filter_value, "type", None) == "inRange"
+        ):
             lf = lf.filter(
                 pl.col(col).is_between(
-                    getattr(filter_value, "min"),
-                    getattr(filter_value, "max"),
+                    getattr(filter_value, "filter"),
+                    getattr(filter_value, "filter_to"),
                     closed="both",
                 )
             )

@@ -51,14 +51,15 @@ class ScSampleTableSort(BaseModel):
 
 
 class ScSampleTableSetFilter(BaseModel):
-    operator: Literal["in", "not_in"]
+    filter_type: Literal["set"] = Field(alias="filterType")
     values: list[float | str] = Field(min_length=1)
 
 
 class ScSampleTableRangeFilter(BaseModel):
-    operator: Literal["between"]
-    min: float
-    max: float
+    filter_type: Literal["number"] = Field(alias="filterType")
+    type: Literal["inRange"]
+    filter: float
+    filter_to: float = Field(alias="filterTo")
 
 
 class ScSampleTableRowsRequest(BaseModel):

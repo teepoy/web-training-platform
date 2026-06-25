@@ -331,7 +331,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const activeFilterCount = computed(
     () =>
       Object.values(combinedMapFilter.value).filter((v) => v && v.length > 0).length +
-      Object.values(globalFilter.value).filter((value) => value?.operator === "between").length,
+      Object.values(globalFilter.value).filter((value) => value?.filterType === "number").length,
   );
 
   const reticleOptionsState = ref<ReticleMapOptions>({

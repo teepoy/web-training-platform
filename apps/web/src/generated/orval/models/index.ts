@@ -261,7 +261,6 @@ export * from './scSampleTableRowsRequestSort';
 export * from './scSampleTableRowsResponse';
 export * from './scSampleTableRowsResponseNextAnchor';
 export * from './scSampleTableSetFilter';
-export * from './scSampleTableSetFilterOperator';
 export * from './scSampleTableSetFilterValuesItem';
 export * from './scSampleTableSort';
 export * from './scSampleTableSortDirection';

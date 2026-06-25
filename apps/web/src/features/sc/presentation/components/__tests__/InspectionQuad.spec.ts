@@ -138,7 +138,7 @@ describe("InspectionQuad", () => {
         samplesError: null,
         activeMapTab: "wafer",
         tableFilter: {
-          rough_bin: { operator: "in", values: [1, 2] },
+          rough_bin: { filterType: "set", values: [1, 2] },
         },
         tableSort: { field: "defect_id", direction: "desc" },
         selectedDefectIds: [2],
@@ -154,7 +154,7 @@ describe("InspectionQuad", () => {
     const table = wrapper.findComponent({ name: "ScSampleTable" });
 
     expect(table.props("filter")).toEqual({
-      rough_bin: { operator: "in", values: [1, 2] },
+      rough_bin: { filterType: "set", values: [1, 2] },
     });
     expect(table.props("sort")).toEqual({
       field: "defect_id",
@@ -164,13 +164,13 @@ describe("InspectionQuad", () => {
     table.vm.$emit("selection-change", [1, 2]);
     table.vm.$emit("apply-selection", [2, 3]);
     table.vm.$emit("filter-change", {
-      rough_bin: { operator: "in", values: [2, 3] },
+      rough_bin: { filterType: "set", values: [2, 3] },
     });
     await wrapper.vm.$nextTick();
     expect(wrapper.emitted("table-selection-change")?.[0]).toEqual([[1, 2]]);
     expect(wrapper.emitted("table-apply-selection")?.[0]).toEqual([[2, 3]]);
     expect(wrapper.emitted("table-filter-change")?.[0]).toEqual([
-      { rough_bin: { operator: "in", values: [2, 3] } },
+      { rough_bin: { filterType: "set", values: [2, 3] } },
     ]);
   });
 });

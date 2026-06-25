@@ -52,8 +52,8 @@ describe("ScSampleTable", () => {
         loading: false,
         total: 10,
         filter: {
-          rough_bin: { operator: "in", values: [1, 5] },
-          wafer_x: { operator: "between", min: -100, max: 100 },
+          rough_bin: { filterType: "set", values: [1, 5] },
+          wafer_x: { filterType: "number", type: "inRange", filter: -100, filterTo: 100 },
         },
         sort: { field: "defect_id", direction: "desc" },
       },
@@ -70,8 +70,8 @@ describe("ScSampleTable", () => {
         anchor: "0",
         limit: 1000,
         filter: {
-          rough_bin: { operator: "in", values: [1, 5] },
-          wafer_x: { operator: "between", min: -100, max: 100 },
+          rough_bin: { filterType: "set", values: [1, 5] },
+          wafer_x: { filterType: "number", type: "inRange", filter: -100, filterTo: 100 },
         },
         sort: { field: "defect_id", direction: "desc" },
       }),
@@ -86,8 +86,8 @@ describe("ScSampleTable", () => {
         total: 2,
         selectedDefectIds: new Set([2]),
         filter: {
-          rough_bin: { operator: "in", values: [2] },
-          wafer_x: { operator: "between", min: 1, max: 2 },
+          rough_bin: { filterType: "set", values: [2] },
+          wafer_x: { filterType: "number", type: "inRange", filter: 1, filterTo: 2 },
         },
         sort: { field: "wafer_y", direction: "asc" },
       },
@@ -134,8 +134,8 @@ describe("ScSampleTable", () => {
     table.vm.$emit("update:filters", { rough_bin: [1, 2], wafer_x: [1, 2] }, roughBinColumn);
     await flushPromises();
     expect(wrapper.emitted("filter-change")?.at(-1)?.[0]).toEqual({
-      rough_bin: { operator: "in", values: [1, 2] },
-      wafer_x: { operator: "between", min: 1, max: 2 },
+      rough_bin: { filterType: "set", values: [1, 2] },
+      wafer_x: { filterType: "number", type: "inRange", filter: 1, filterTo: 2 },
     });
 
     table.vm.$emit("update:sorter", {
