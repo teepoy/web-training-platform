@@ -16,8 +16,8 @@ class ArtifactORM(Base):
     __tablename__ = "artifacts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    job_id: Mapped[str] = mapped_column(
-        ForeignKey("training_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_jobs.id", ondelete="SET NULL"), nullable=True, index=True
     )
     uri: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

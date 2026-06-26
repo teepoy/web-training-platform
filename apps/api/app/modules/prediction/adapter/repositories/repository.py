@@ -32,6 +32,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _assert_not_none(value: str | None) -> str:
+    assert value is not None
+    return value
+
+
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
     if not org_id:
         return ""
@@ -108,7 +113,7 @@ class PredictionRepository:
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 model_id=row.model_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -136,7 +141,7 @@ class PredictionRepository:
                     id=row.id,
                     org_id=row.org_id,
                     org_name=await _org_name_for(session, row.org_id),
-                    dataset_id=row.dataset_id,
+                    dataset_id=_assert_not_none(row.dataset_id),
                     model_id=row.model_id,
                     status=cast(JobStatus, row.status),
                     created_by=row.created_by,

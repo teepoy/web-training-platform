@@ -23,19 +23,14 @@ from app.shared.api.utils import make_ls_image_url
 from app.shared.db.registry import (
     AnnotationORM,
     AnnotationVersionORM,
-    ArtifactORM,
     DatasetORM,
-    JobUserStateORM,
     PlatformPredictionORM,
     PredictionCollectionItemORM,
     PredictionCollectionORM,
-    PredictionEventORM,
     PredictionJobORM,
     PredictionReviewActionORM,
     SampleFeatureORM,
     SampleORM,
-    TrainingEventORM,
-    TrainingJobORM,
 )
 from app.shared.db.sql_repository import SqlRepository
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
@@ -1084,13 +1079,6 @@ class DbFullDatasetStorage:
         async with self._session_factory() as session:
             did = self._dataset_id
 
-            # Subqueries for cascading
-            training_job_ids = select(TrainingJobORM.id).where(
-                TrainingJobORM.dataset_id == did
-            )
-            prediction_job_ids = select(PredictionJobORM.id).where(
-                PredictionJobORM.dataset_id == did
-            )
             sample_ids = select(SampleORM.id).where(SampleORM.dataset_id == did)
             annotation_ids = select(AnnotationORM.id).where(
                 AnnotationORM.sample_id.in_(sample_ids)
@@ -1099,81 +1087,41 @@ class DbFullDatasetStorage:
                 PredictionCollectionORM.dataset_id == did
             )
 
-            # 1. Training events
-            await session.execute(
-                delete(TrainingEventORM).where(
-                    TrainingEventORM.job_id.in_(training_job_ids)
-                )
-            )
-            # 2. Job user states
-            await session.execute(
-                delete(JobUserStateORM).where(
-                    JobUserStateORM.job_id.in_(training_job_ids)
-                )
-            )
-            # 3. Artifacts
-            await session.execute(
-                delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids))
-            )
-            # 4. Prediction events
-            await session.execute(
-                delete(PredictionEventORM).where(
-                    PredictionEventORM.job_id.in_(prediction_job_ids)
-                )
-            )
-            # 5. Prediction collection items
             await session.execute(
                 delete(PredictionCollectionItemORM).where(
                     PredictionCollectionItemORM.collection_id.in_(collection_ids)
                 )
             )
-            # 6. Annotation versions
             await session.execute(
                 delete(AnnotationVersionORM).where(
                     AnnotationVersionORM.annotation_id.in_(annotation_ids)
                 )
             )
-            # 7. Prediction collections
             await session.execute(
                 delete(PredictionCollectionORM).where(
                     PredictionCollectionORM.dataset_id == did
                 )
             )
-            # 8. Platform predictions
             await session.execute(
                 delete(PlatformPredictionORM).where(
                     PlatformPredictionORM.dataset_id == did
                 )
             )
-            # 9. Prediction jobs
-            await session.execute(
-                delete(PredictionJobORM).where(PredictionJobORM.dataset_id == did)
-            )
-            # 10. Training jobs
-            await session.execute(
-                delete(TrainingJobORM).where(TrainingJobORM.dataset_id == did)
-            )
-            # 11. Sample features
             await session.execute(
                 delete(SampleFeatureORM).where(
                     SampleFeatureORM.sample_id.in_(sample_ids)
                 )
             )
-            # 12. Annotations
             await session.execute(
                 delete(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids))
             )
-            # 13. Samples
             await session.execute(delete(SampleORM).where(SampleORM.dataset_id == did))
-            # 14. Prediction review actions (ONCE, not twice — bugfix)
             await session.execute(
                 delete(PredictionReviewActionORM).where(
                     PredictionReviewActionORM.dataset_id == did
                 )
             )
-            # 15. Dataset row
             dataset_orm = await session.get(DatasetORM, did)
             if dataset_orm is not None:
                 await session.delete(dataset_orm)
-            # 16. Commit
             await session.commit()

@@ -50,6 +50,11 @@ from app.shared.api.schemas import (
 from app.shared.api.schemas import DatasetStorageMode, JobStatus
 
 
+def _assert_not_none(value: str | None) -> str:
+    assert value is not None
+    return value
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -244,12 +249,6 @@ class SqlRepository:
             if org_id is not None and dataset.org_id != org_id:
                 return False
 
-            training_job_ids = select(TrainingJobORM.id).where(
-                TrainingJobORM.dataset_id == dataset_id
-            )
-            prediction_job_ids = select(PredictionJobORM.id).where(
-                PredictionJobORM.dataset_id == dataset_id
-            )
             sample_ids = select(SampleORM.id).where(SampleORM.dataset_id == dataset_id)
             annotation_ids = select(AnnotationORM.id).where(
                 AnnotationORM.sample_id.in_(sample_ids)
@@ -264,24 +263,6 @@ class SqlRepository:
                 PredictionReviewActionORM.dataset_id == dataset_id
             )
 
-            await session.execute(
-                delete(TrainingEventORM).where(
-                    TrainingEventORM.job_id.in_(training_job_ids)
-                )
-            )
-            await session.execute(
-                delete(JobUserStateORM).where(
-                    JobUserStateORM.job_id.in_(training_job_ids)
-                )
-            )
-            await session.execute(
-                delete(ArtifactORM).where(ArtifactORM.job_id.in_(training_job_ids))
-            )
-            await session.execute(
-                delete(PredictionEventORM).where(
-                    PredictionEventORM.job_id.in_(prediction_job_ids)
-                )
-            )
             await session.execute(
                 delete(PredictionCollectionItemORM).where(
                     PredictionCollectionItemORM.collection_id.in_(collection_ids)
@@ -308,14 +289,6 @@ class SqlRepository:
                 )
             )
             await session.execute(
-                delete(PredictionJobORM).where(
-                    PredictionJobORM.dataset_id == dataset_id
-                )
-            )
-            await session.execute(
-                delete(TrainingJobORM).where(TrainingJobORM.dataset_id == dataset_id)
-            )
-            await session.execute(
                 delete(SampleFeatureORM).where(
                     SampleFeatureORM.sample_id.in_(sample_ids)
                 )
@@ -325,11 +298,6 @@ class SqlRepository:
             )
             await session.execute(
                 delete(SampleORM).where(SampleORM.dataset_id == dataset_id)
-            )
-            await session.execute(
-                delete(PredictionReviewActionORM).where(
-                    PredictionReviewActionORM.dataset_id == dataset_id
-                )
             )
             await session.delete(dataset)
             await session.commit()
@@ -828,13 +796,14 @@ class SqlRepository:
             rows = (await session.execute(stmt)).scalars().all()
             jobs: list[TrainingJob] = []
             for row in rows:
+                assert row.dataset_id is not None
                 arts = await self._list_artifacts_by_job_in_session(session, row.id)
                 jobs.append(
                     TrainingJob(
                         id=row.id,
                         org_id=row.org_id,
                         org_name=await _org_name_for(session, row.org_id),
-                        dataset_id=row.dataset_id,
+                        dataset_id=_assert_not_none(row.dataset_id),
                         trainer_id=row.trainer_id,
                         status=cast(JobStatus, row.status),
                         created_by=row.created_by,
@@ -856,12 +825,13 @@ class SqlRepository:
                 return None
             if org_id is not None and row.org_id != org_id and not row.is_public:
                 return None
+            assert row.dataset_id is not None
             arts = await self._list_artifacts_by_job_in_session(session, row.id)
             return TrainingJob(
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 trainer_id=row.trainer_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -1004,11 +974,12 @@ class SqlRepository:
                 return None
             if org_id is not None and row.org_id != org_id:
                 return None
+            assert row.dataset_id is not None
             return PredictionJob(
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
-                dataset_id=row.dataset_id,
+                dataset_id=_assert_not_none(row.dataset_id),
                 model_id=row.model_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -1036,7 +1007,7 @@ class SqlRepository:
                     id=row.id,
                     org_id=row.org_id,
                     org_name=await _org_name_for(session, row.org_id),
-                    dataset_id=row.dataset_id,
+                    dataset_id=_assert_not_none(row.dataset_id),
                     model_id=row.model_id,
                     status=cast(JobStatus, row.status),
                     created_by=row.created_by,
