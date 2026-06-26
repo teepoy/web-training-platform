@@ -63,6 +63,18 @@ const overlayRef = ref<HTMLCanvasElement | null>(null);
 
 const waferRadiusNm = computed(() => props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM);
 const pointCount = computed(() => Math.floor((props.points?.length ?? 0) / STRIDE));
+const hasWaferGeometry = computed(() => {
+  const geometry = props.geometry;
+  return Boolean(
+    geometry &&
+    Number.isFinite(geometry.centerX) &&
+    Number.isFinite(geometry.centerY) &&
+    Number.isFinite(geometry.originX) &&
+    Number.isFinite(geometry.originY) &&
+    Number.isFinite(geometry.dieSizeX) &&
+    Number.isFinite(geometry.dieSizeY),
+  );
+});
 
 const simplePoints = computed<SimpleMapPoint[]>(() => {
   const pts = props.points;
@@ -100,10 +112,10 @@ let transform: ScMapTransform = buildMapTransform(
 
 function recalcTransform() {
   const size = measureMapElement(containerRef.value);
-  if (!size) return;
+  if (!size || !hasWaferGeometry.value) return;
   mapSize = size;
-  const cx = props.geometry?.centerX ?? 0;
-  const cy = props.geometry?.centerY ?? 0;
+  const cx = props.geometry!.centerX;
+  const cy = props.geometry!.centerY;
   if (props.zoom) {
     transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 1.0);
   } else {
@@ -279,13 +291,7 @@ function scheduleOverlayRefresh(): void {
 
 watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
 
-watch(
-  () => props.zoom,
-  () => {
-    recalcTransform();
-    drawOverlay();
-  },
-);
+watch(() => props.zoom, scheduleOverlayRefresh);
 
 watch(
   () => props.highlightDefects,
@@ -307,6 +313,7 @@ watch(
 <template>
   <div ref="containerRef" class="swm-wrap">
     <SimpleWaferMap
+      v-if="hasWaferGeometry"
       :points="simplePoints"
       :colorMap="props.colorMap ?? {}"
       :zoom="props.zoom ?? undefined"
@@ -318,7 +325,7 @@ watch(
       :die-size-y="props.geometry?.dieSizeY"
     />
     <canvas
-      v-if="pointCount > 0"
+      v-if="hasWaferGeometry && pointCount > 0"
       ref="overlayRef"
       class="swm-ol"
       @pointerdown="onPointerDown"

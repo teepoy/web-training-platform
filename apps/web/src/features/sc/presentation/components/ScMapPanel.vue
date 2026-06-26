@@ -11,7 +11,6 @@ import {
   NProgress,
   NText,
 } from "naive-ui";
-import { MenuOutline } from "@vicons/ionicons5";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
 import ScWaferMap from "./ScWaferMap.vue";
@@ -174,7 +173,6 @@ watch(
   },
 );
 
-const toolbarVisible = ref<boolean>(!loadPersistedState("sc_map_panel.toolbar_collapsed", false));
 const drawerVisible = ref<boolean>(!loadPersistedState("sc_map_panel.drawer_collapsed", false));
 const mapAreaRef = ref<HTMLElement | null>(null);
 const canvasTopPx = ref(36);
@@ -220,10 +218,6 @@ watch(legendSource, (newSource) => {
   emit("legend-group-change", newSource || null);
   selectedClassNumber.value = null;
   selectedIds.value = new Set();
-});
-
-watch(toolbarVisible, (val) => {
-  savePersistedState("sc_map_panel.toolbar_collapsed", !val);
 });
 
 watch(drawerVisible, (val) => {
@@ -551,20 +545,9 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               </NTabPane>
             </NTabs>
           </div>
-          <div class="floating-toolbar">
-            <NButton
-              data-testid="sc-map-toolbar-toggle"
-              size="small"
-              quaternary
-              @click="toolbarVisible = !toolbarVisible"
-              style="margin-bottom: 4px"
-            >
-              <template #icon
-                ><NIcon><MenuOutline /></NIcon
-              ></template>
-            </NButton>
-            <div v-show="toolbarVisible" class="floating-toolbar-actions">
-              <NTooltip placement="right">
+          <div class="map-toolbar">
+            <div class="map-toolbar-actions">
+              <NTooltip placement="bottom">
                 <template #trigger>
                   <NButton
                     data-testid="sc-map-select-tool"
@@ -581,7 +564,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
                 </template>
                 Box selection
               </NTooltip>
-              <NTooltip placement="right">
+              <NTooltip placement="bottom">
                 <template #trigger>
                   <NButton
                     data-testid="sc-map-zoom-tool"
@@ -846,20 +829,23 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
   border-radius: var(--n-border-radius);
 }
 
-.floating-toolbar {
+.map-toolbar {
   position: absolute;
-  top: calc(var(--sc-map-canvas-top) + 4px);
-  left: 12px;
+  top: 2px;
+  right: 8px;
   z-index: 10;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  min-height: calc(var(--sc-map-canvas-top) - 2px);
+  pointer-events: none;
 }
 
-.floating-toolbar-actions {
+.map-toolbar-actions {
   display: flex;
   flex-direction: row;
   gap: 4px;
+  pointer-events: auto;
 }
 
 .zoom-in-icon {

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from "vue";
+import { computed, h, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage, NButton } from "naive-ui";
 import { FlowModal, FlowTypeSelector, SampleDetailDrawer, type FlowCard } from "@/shared";
-import { getDataset, getAnnotationStats, buildExportDownloadUrl } from "@/shared/api/datasets";
-import type { DatasetAnnotationStats } from "@/generated/orval/models";
+import { getDataset, buildExportDownloadUrl } from "@/shared/api/datasets";
 import type { Dataset } from "@/generated/orval/models";
 import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
 import ManualDatasetImporter from "@/features/datasets/presentation/components/ManualDatasetImporter.vue";
@@ -15,8 +14,6 @@ import ParquetExportPlugin from "@/features/datasets/presentation/components/Par
 import PreviewExportPlugin from "@/features/datasets/presentation/components/PreviewExportPlugin.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
-import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
-import { getDatasetSchema } from "./schema-registry";
 
 const route = useRoute();
 const router = useRouter();
@@ -24,7 +21,7 @@ const message = useMessage();
 const qc = useQueryClient();
 
 const id = computed(() => String(route.params.id));
-const activeTab = ref("samples");
+const activeTab = ref("train");
 const selectedSampleId = ref<string | null>(null);
 const showImportFlow = ref(false);
 const exportStep = ref<"select" | "execute">("select");
@@ -40,61 +37,8 @@ const dataset = computed(
   () => datasetQuery.data.value as Dataset & { ls_project_url?: string | null },
 );
 
-// ---- View selector ----
-const viewTypeLabels: Record<string, string> = {
-  image_input_v1: "Image Input",
-  labeled_image_v1: "Labeled Image",
-  box_detection_v1: "Box Detection",
-  qa_input_v1: "QA Input",
-};
-
-const compatibleViewOptions = computed(() => {
-  const datasetType = dataset.value?.dataset_type;
-  if (!datasetType) return [];
-  const schema = getDatasetSchema(datasetType);
-  if (!schema?.viewTypes?.length) return [];
-  return schema.viewTypes.map((vt) => ({
-    label: viewTypeLabels[vt] ?? vt,
-    value: vt,
-  }));
-});
-
-const currentViewType = ref("");
-
-function handleViewChange(viewType: string) {
-  currentViewType.value = viewType;
-}
-
-watch(
-  () => [dataset.value?.dataset_type, compatibleViewOptions.value] as const,
-  ([dsType, options]) => {
-    if (!dsType || !options.length) return;
-    if (!currentViewType.value || !options.some((o) => o.value === currentViewType.value)) {
-      currentViewType.value = options[0].value as string;
-    }
-  },
-  { immediate: true },
-);
 const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_sparse");
 const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
-
-const annotationStatsQuery = useQuery({
-  queryKey: computed(() => ["annotation-stats", id.value]),
-  queryFn: () => getAnnotationStats(id.value),
-  retry: false,
-});
-
-const annotationStats = computed(
-  () => annotationStatsQuery.data.value as DatasetAnnotationStats | undefined,
-);
-
-const labelEntries = computed(() => {
-  const counts = annotationStats.value?.label_counts ?? {};
-  return Object.entries(counts)
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
-});
 
 const importerFlows: FlowCard[] = [
   {
@@ -149,10 +93,6 @@ function handleImporterComplete() {
   showImportFlow.value = false;
   qc.invalidateQueries({ queryKey: ["view-samples", id.value] });
   qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
-}
-
-function openSampleDetail(sampleId: string) {
-  selectedSampleId.value = sampleId;
 }
 
 function handleExportSelect(flow: FlowCard) {
@@ -227,24 +167,7 @@ function openScClassify() {
         <n-divider vertical />
         <div>
           <n-h2 style="margin: 0">{{ dataset.name }}</n-h2>
-          <n-text depth="3" style="font-size: 12px"
-            >Task: {{ dataset.task_spec?.task_type }} &nbsp;|&nbsp; ID: {{ dataset.id
-            }}<template v-if="isSparse">
-              &nbsp;|&nbsp; <n-tag type="info" size="small">Sparse Storage</n-tag></template
-            ></n-text
-          >
-          <div v-if="dataset.ls_project_id" style="margin-top: 4px">
-            <n-tag type="success" size="small"
-              ><a
-                v-if="dataset.ls_project_url"
-                :href="dataset.ls_project_url"
-                target="_blank"
-                rel="noreferrer"
-                style="color: inherit; text-decoration: none"
-                >Label Studio Project #{{ dataset.ls_project_id }} ↗</a
-              ><span v-else>Label Studio Project #{{ dataset.ls_project_id }}</span></n-tag
-            >
-          </div>
+          <n-text depth="3" style="font-size: 12px">ID: {{ dataset.id }}</n-text>
         </div>
         <n-button
           v-if="dataset.task_spec?.task_type === 'sc'"
@@ -256,17 +179,6 @@ function openScClassify() {
       </div>
 
       <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
-        <!-- Temp Disable View Switch -->
-        <!-- <n-text depth="3" style="font-size: 12px; white-space: nowrap">View:</n-text> -->
-        <n-select
-          v-if="false"
-          data-testid="view-type-selector"
-          :value="currentViewType"
-          :options="compatibleViewOptions"
-          size="small"
-          style="width: 200px"
-          @update:value="handleViewChange"
-        />
         <n-button
           v-if="!isSparse"
           size="small"
@@ -277,65 +189,6 @@ function openScClassify() {
         >
       </div>
       <n-tabs v-model:value="activeTab" type="line" animated>
-        <n-tab-pane name="samples" tab="Samples">
-          <div
-            v-if="annotationStats"
-            data-testid="dataset-sample-stats"
-            style="
-              display: flex;
-              gap: 24px;
-              flex-wrap: wrap;
-              align-items: center;
-              margin-bottom: 16px;
-              padding: 12px 16px;
-              background: var(--n-color-target);
-              border: 1px solid var(--n-border-color);
-              border-radius: 8px;
-            "
-          >
-            <div style="display: flex; flex-direction: column; align-items: center">
-              <n-text depth="3" style="font-size: 11px; text-transform: uppercase">Total</n-text>
-              <n-text strong style="font-size: 20px">{{
-                (annotationStats.total_samples ?? 0).toLocaleString()
-              }}</n-text>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: center">
-              <n-text depth="3" style="font-size: 11px; text-transform: uppercase"
-                >Annotated</n-text
-              >
-              <n-text strong style="font-size: 20px; color: var(--n-color-success)">{{
-                (annotationStats.annotated_samples ?? 0).toLocaleString()
-              }}</n-text>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: center">
-              <n-text depth="3" style="font-size: 11px; text-transform: uppercase"
-                >Unlabeled</n-text
-              >
-              <n-text strong style="font-size: 20px; color: var(--n-text-color-3)">{{
-                (annotationStats.unlabeled_samples ?? 0).toLocaleString()
-              }}</n-text>
-            </div>
-            <div
-              v-if="labelEntries.length"
-              style="
-                display: flex;
-                gap: 6px;
-                align-items: center;
-                flex-wrap: wrap;
-                margin-left: auto;
-              "
-            >
-              <n-text depth="3" style="font-size: 11px">Labels:</n-text>
-              <n-tag v-for="(entry, idx) in labelEntries" :key="idx" size="small" type="info" round>
-                {{ entry.label }}&nbsp;{{ entry.count }}
-              </n-tag>
-            </div>
-          </div>
-          <div data-testid="dataset-view-router">
-            <DatasetViewPage :dataset-id="id" :view-type="currentViewType" />
-          </div>
-        </n-tab-pane>
-
         <n-tab-pane name="train" tab="Train"><DatasetTrainTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane v-if="false" name="export" tab="Export">

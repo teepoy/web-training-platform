@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
 
 const DEFAULT_DIE_COUNT = 10;
@@ -236,6 +236,13 @@ function onResize() {
   draw();
 }
 
+function scheduleFullRender() {
+  void nextTick(() => {
+    fullRender();
+    window.requestAnimationFrame(fullRender);
+  });
+}
+
 watch(
   () => props.points,
   (pts) => {
@@ -255,9 +262,7 @@ watch(
 
 watch(
   () => [props.zoom, props.xDieCount, props.yDieCount, props.dieSizeX, props.dieSizeY],
-  () => {
-    fullRender();
-  },
+  scheduleFullRender,
   { deep: true },
 );
 

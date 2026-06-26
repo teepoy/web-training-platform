@@ -103,7 +103,7 @@ describe("ScSampleTable", () => {
     const columns = table.props("columns") as Array<Record<string, unknown>>;
     expect(columns.some((column) => column.type === "selection")).toBe(false);
     const dataColumns = columns.filter((column) => column.type !== "selection");
-    expect(dataColumns).toHaveLength(19);
+    expect(dataColumns).toHaveLength(20);
     expect(dataColumns.every((column) => column.sorter === true)).toBe(true);
 
     const defectIdColumn = dataColumns.find((column) => column.key === "defect_id");

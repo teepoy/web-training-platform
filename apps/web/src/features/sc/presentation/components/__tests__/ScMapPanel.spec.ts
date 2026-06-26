@@ -315,25 +315,22 @@ describe("ScMapPanel", () => {
     expect(wrapper.findComponent({ name: "ScLegend" }).exists()).toBe(true);
   });
 
-  it("floating toolbar starts visible", async () => {
+  it("map toolbar starts expanded", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS },
     });
     const container = wrapper.find('[data-testid="sc-map-toolbar-container"]');
     expect(container.exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-select-tool"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-zoom-tool"]').exists()).toBe(true);
   });
 
-  it("toolbar toggle button hides/shows mode buttons", async () => {
+  it("map toolbar has no collapse toggle", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS },
     });
-    const toggle = wrapper.find('[data-testid="sc-map-toolbar-toggle"]');
-    expect(toggle.exists()).toBe(true);
-    // Click toggle — the component should still be rendered (v-show hides, not v-if removes)
-    await toggle.trigger("click");
-    await nextTick();
-    // toolbar is still in DOM, just hidden by v-show on child div
-    expect(wrapper.find('[data-testid="sc-map-toolbar-container"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-toolbar-toggle"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="sc-map-select-tool"]').exists()).toBe(true);
   });
 
   it("drawer toggle button exists and is clickable", async () => {
@@ -445,28 +442,22 @@ describe("ScMapPanel", () => {
     ]);
   });
 
-  it("persists toolbar collapsed state to localStorage", async () => {
+  it("does not persist toolbar collapsed state", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS },
     });
-    // First visit: nothing in localStorage
     expect(localStorage.getItem("sc_map_panel.toolbar_collapsed")).toBeNull();
-    // Collapse toolbar
-    const toggle = wrapper.find('[data-testid="sc-map-toolbar-toggle"]');
-    await toggle.trigger("click");
-    await nextTick();
-    // Should persist collapsed=true (toolbarVisible=false → !false = true in storage)
-    expect(localStorage.getItem("sc_map_panel.toolbar_collapsed")).toBe("true");
+    await wrapper.find('[data-testid="sc-map-zoom-tool"]').trigger("click");
+    expect(localStorage.getItem("sc_map_panel.toolbar_collapsed")).toBeNull();
   });
 
-  it("starts with toolbar collapsed when localStorage says so", async () => {
+  it("ignores legacy toolbar collapsed localStorage", async () => {
     localStorage.setItem("sc_map_panel.toolbar_collapsed", "true");
     const { wrapper } = await mountWithProviders(ScMapPanel, {
       props: { waferPoints: MIXED_CLASS_POINTS },
     });
-    // toolbarVisible should be false → !loadPersistedState(..., false) → key="true" → load returns true → !true = false
-    // Since we can't directly read toolbarVisible, verify the drawer still renders
-    expect(wrapper.find('[data-testid="sc-map-toolbar-toggle"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-select-tool"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-zoom-tool"]').exists()).toBe(true);
   });
 
   it("defaults to expanded on corrupted localStorage value", async () => {

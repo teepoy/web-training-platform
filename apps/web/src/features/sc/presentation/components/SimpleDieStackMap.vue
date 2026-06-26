@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { SimpleMapPoint } from "./SimpleMapPoint";
 
 const props = defineProps<{
@@ -207,6 +207,13 @@ function onResize() {
   draw();
 }
 
+function scheduleFullRender() {
+  void nextTick(() => {
+    fullRender();
+    window.requestAnimationFrame(fullRender);
+  });
+}
+
 watch(
   () => props.points,
   (pts) => {
@@ -224,13 +231,7 @@ watch(
   },
 );
 
-watch(
-  () => [props.zoom, props.dieSizeX, props.dieSizeY],
-  () => {
-    fullRender();
-  },
-  { deep: true },
-);
+watch(() => [props.zoom, props.dieSizeX, props.dieSizeY], scheduleFullRender, { deep: true });
 
 onMounted(() => {
   bgCanvas = document.createElement("canvas");

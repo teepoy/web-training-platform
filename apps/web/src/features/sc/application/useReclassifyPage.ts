@@ -159,10 +159,12 @@ export interface ReclassifyPageState {
   handleMapFilterChange: (filter: Record<string, (number | string)[]>) => void;
   handleLegendGroupByChange: (source: LegendColorSource | null) => void;
   applySampleTableFilterAsGlobal: () => void;
+  clearGlobalFilter: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
   sampleTableSelectedIds: Ref<Set<string>>;
   setSampleTableSelectedIds: (ids: number[]) => void;
+  filterBlinkTableSamples: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
   highlightDefects: ComputedRef<HighlightDefect[]>;
   selectedDefectIds: ComputedRef<Set<string>>;
@@ -437,13 +439,22 @@ export function useReclassifyPage(): ReclassifyPageState {
   function handleBoxSelectionChange(ids: number[]): void {
     mapFilteredIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
+    selectedDefectFilterIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
   const sampleTableSelectedIds = ref<Set<string>>(new Set());
+  const selectedDefectFilterIds = ref<Set<string>>(new Set());
 
   function setSampleTableSelectedIds(ids: number[]): void {
     sampleTableSelectedIds.value = new Set(ids.map(String));
+  }
+
+  function filterBlinkTableSamples(ids: number[]): void {
+    selectedDefectFilterIds.value = new Set(ids.map(String));
+    sampledIds.value = new Set();
+    mapFilteredIds.value = new Set();
+    mapFilterVersion.value += 1;
   }
 
   const selectedDefectIds = computed(
@@ -503,6 +514,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   });
 
   const explicitBlinkSourceDefectIds = computed<string[] | null>(() => {
+    if (selectedDefectFilterIds.value.size > 0) return [...selectedDefectFilterIds.value];
     if (sampledIds.value.size > 0) return [...sampledIds.value];
     if (mapFilteredIds.value.size > 0) return [...mapFilteredIds.value];
     return null;
@@ -548,6 +560,14 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (explicitIds) return explicitIds;
     return realDefectIds.value.length > 0 ? realDefectIds.value : null;
   });
+
+  const reviewImageDefectIds = computed<string[] | null>(() => {
+    return explicitBlinkSourceDefectIds.value;
+  });
+
+  const reviewImageSampleFilter = computed<ScSampleTableFilter | null>(() =>
+    hasEffectiveSampleTableFilter() ? effectiveSampleTableFilter.value : null,
+  );
 
   const shouldUseOffsetSamples = computed<boolean>(() => {
     if (hasEffectiveSampleTableFilter()) return false;
@@ -911,11 +931,17 @@ export function useReclassifyPage(): ReclassifyPageState {
     void plotPointsQuery.refetch();
   }
 
+  function clearGlobalFilter(): void {
+    globalFilter.value = {};
+    void plotPointsQuery.refetch();
+  }
+
   function clearMapFilter(): void {
     mapFilter.value = {};
     globalFilter.value = {};
     sampleTableFilter.value = {};
     sampleTableSelectedIds.value = new Set();
+    selectedDefectFilterIds.value = new Set();
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
     mapFilterVersion.value += 1;
@@ -1303,6 +1329,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (sampled.length === 0) return;
 
     sampledIds.value = new Set(sampled);
+    selectedDefectFilterIds.value = new Set();
 
     if (assignDefaultDraftLabel.value) {
       const next: Record<string, string> = {};
@@ -1550,10 +1577,34 @@ export function useReclassifyPage(): ReclassifyPageState {
     reviewLoading.value = true;
     reviewError.value = null;
     try {
+      const defectIds = reviewImageDefectIds.value;
+      if (defectIds && defectIds.length === 0) {
+        reviewSamples.value = [];
+        return;
+      }
+      const params: {
+        defect_ids?: string[];
+        sample_filter?: string;
+        reticle_x_die_count?: number;
+        reticle_y_die_count?: number;
+        reticle_x_die_shift?: number;
+        reticle_y_die_shift?: number;
+      } = {};
+      if (defectIds && defectIds.length > 0) {
+        params.defect_ids = defectIds;
+      }
+      if (reviewImageSampleFilter.value) {
+        params.sample_filter = JSON.stringify(reviewImageSampleFilter.value);
+        params.reticle_x_die_count = reticleOptions.value.xDieCount;
+        params.reticle_y_die_count = reticleOptions.value.yDieCount;
+        params.reticle_x_die_shift = reticleOptions.value.xDieShift;
+        params.reticle_y_die_shift = reticleOptions.value.yDieShift;
+      }
       const data =
         await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
           ctx.inspectionTime,
           Number(ctx.waferKey),
+          params,
         );
       const { create } = await import("@bufbuild/protobuf");
       const { ScSampleItemSchema, ReviewImageSchema } =
@@ -1595,7 +1646,13 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   watch(
-    () => [inspectionContext.value?.inspectionTime, inspectionContext.value?.waferKey],
+    () => [
+      inspectionContext.value?.inspectionTime,
+      inspectionContext.value?.waferKey,
+      JSON.stringify(reviewImageDefectIds.value ?? null),
+      JSON.stringify(reviewImageSampleFilter.value ?? null),
+      JSON.stringify(reticleOptions.value),
+    ],
     () => {
       fetchReviewImages();
     },
@@ -1644,10 +1701,12 @@ export function useReclassifyPage(): ReclassifyPageState {
     handleMapFilterChange,
     handleLegendGroupByChange,
     applySampleTableFilterAsGlobal,
+    clearGlobalFilter,
     clearMapFilter,
     handleBoxSelectionChange,
     sampleTableSelectedIds,
     setSampleTableSelectedIds,
+    filterBlinkTableSamples,
     mapFilteredIds,
     highlightDefects,
     selectedDefectIds,

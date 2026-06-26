@@ -79,6 +79,7 @@ _SAMPLE_TABLE_COLUMNS = {
     "defect_id": "defect_id",
     "rough_bin": "rough_bin",
     "class_number": "class_number",
+    "images": "images",
     "test_id": "test_id",
     "wafer_x": "wafer_x",
     "wafer_y": "wafer_y",
@@ -715,6 +716,7 @@ async def filter_inspection_box(
 async def get_sc_dataset_plot_points(
     dataset_id: str,
     service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
     request: Request,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -730,6 +732,7 @@ async def get_sc_dataset_plot_points(
         yield await service.build_plot_points_response(
             dataset_id,
             org.id,
+            upstream_reader=upstream_reader,
             sampled=sampled,
             target_resolution=target_resolution,
             reticle_x_die_count=reticle_x_die_count,
@@ -760,6 +763,7 @@ async def get_sc_dataset_plot_points(
 async def stream_sc_dataset_plot_points_progress(
     dataset_id: str,
     service: ScPlotPointsServiceDep,
+    upstream_reader: ScUpstreamReaderDep,
     request: Request,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -796,6 +800,7 @@ async def stream_sc_dataset_plot_points_progress(
             payload = await service.build_plot_points_response(
                 dataset_id,
                 org.id,
+                upstream_reader=upstream_reader,
                 sampled=sampled,
                 target_resolution=target_resolution,
                 reticle_x_die_count=reticle_x_die_count,
@@ -925,6 +930,12 @@ async def get_inspection_review_images(
     upstream_reader: ScUpstreamReaderDep,
     inspection_time: str,
     wafer_key: int,
+    defect_ids: Annotated[list[str] | None, Query()] = None,
+    sample_filter: Annotated[str | None, Query()] = None,
+    reticle_x_die_count: Annotated[int, Query(ge=1)] = 10,
+    reticle_y_die_count: Annotated[int, Query(ge=1)] = 10,
+    reticle_x_die_shift: int = 0,
+    reticle_y_die_shift: int = 0,
 ) -> ScInspectionReviewImagesResponse:
     insp_dt = _parse_inspection_time(inspection_time)
     inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
@@ -934,7 +945,39 @@ async def get_inspection_review_images(
             detail=f"Inspection not found: {inspection_time}/{wafer_key}",
         )
 
+    requested = {str(defect_id) for defect_id in defect_ids or []}
+    if sample_filter:
+        try:
+            parsed = json.loads(sample_filter)
+            parsed_sample_filter = ScSampleTableRowsRequest.model_validate(
+                {"filter": parsed}
+            ).filter
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid sample_filter: {exc}",
+            ) from exc
+        samples_df = await _load_or_build_sample_table_df(
+            upstream_reader=upstream_reader,
+            inspection_time=insp_dt,
+            wafer_key=wafer_key,
+            row_count=inspection.defects,
+            reticle_size_x=reticle_x_die_count,
+            reticle_size_y=reticle_y_die_count,
+            reticle_offset_x=reticle_x_die_shift,
+            reticle_offset_y=reticle_y_die_shift,
+        )
+        samples_df = _apply_sample_table_filter(samples_df, parsed_sample_filter)
+        filtered_ids = {
+            str(defect_id) for defect_id in samples_df["defect_id"].to_list()
+        }
+        requested = requested & filtered_ids if requested else filtered_ids
+
     review_lf = await upstream_reader.list_review_images(insp_dt, wafer_key)
+    if requested:
+        review_lf = review_lf.filter(pl.col("defect_id").cast(pl.Utf8).is_in(requested))
+    elif defect_ids or sample_filter:
+        review_lf = review_lf.filter(pl.lit(False))
     review_df = await review_lf.collect_async()
     items: list[ScReviewImagesByDefectItem] = []
     if len(review_df) > 0:
@@ -1096,6 +1139,7 @@ def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
         defect_id=str(row["defect_id"]),
         rough_bin=int_or_zero(row["rough_bin"]),
         class_number=int_or_zero(row["class_number"]),
+        images=int_or_zero(row["images"]),
         test_id=int_or_zero(row["test_id"]),
         wafer_x=int_or_zero(row["wafer_x"]),
         wafer_y=int_or_zero(row["wafer_y"]),

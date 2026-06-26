@@ -2,11 +2,7 @@
 import { computed, h, ref, watch } from "vue";
 import {
   NButton,
-  NCheckbox,
   NDataTable,
-  NInput,
-  NInputNumber,
-  NSpace,
   NText,
   type DataTableBaseColumn,
   type DataTableColumns,
@@ -20,6 +16,8 @@ import type {
   ScSampleTableDataSource,
   ScSampleTableDisplayRow,
 } from "@/features/sc/domain/workbenchInteraction";
+import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
+import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 
 const props = defineProps<{
   /** @deprecated Use defectIds plus inspection identity. */
@@ -65,6 +63,7 @@ const columnDefinitions: ColumnDefinition[] = [
     filter: "set",
     render: (row) => String(Number(row.defect_id)),
   },
+  { key: "images", title: "Images", width: 110, filter: "range" },
   { key: "test_id", title: "Test ID", width: 120, filter: "set" },
   { key: "index_x", title: "Index X", width: 120, filter: "range" },
   { key: "index_y", title: "Index Y", width: 120, filter: "range" },
@@ -99,7 +98,7 @@ const reclassifyColumnDefinitions: ColumnDefinition[] = [
 const PAGE_SIZE = 1000;
 const SELECT_ALL_LIMIT = 50_000;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
-const SCROLL_X = computed(() => (props.showReclassifyColumns ? 1870 : 1590));
+const SCROLL_X = computed(() => (props.showReclassifyColumns ? 1980 : 1700));
 const activeColumnDefinitions = computed(() =>
   props.showReclassifyColumns
     ? [...columnDefinitions, ...reclassifyColumnDefinitions]
@@ -256,167 +255,43 @@ function applySetFilter(field: string, values: Array<string | number>): void {
 
 function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
   const field = String(definition.key);
-  const search = (setFilterSearch.value[field] ?? "").trim().toLowerCase();
-  const isSearching = search.length > 0;
   const appliedValues = new Set(getSetFilterValues(field).map(String));
 
   if (!setFilterDraft.value[field]) {
     setFilterDraft.value[field] = new Set(appliedValues);
   }
-  function draftForField(): Set<string> {
-    return setFilterDraft.value[field] ?? new Set<string>();
-  }
-
   const allOptions = getSetFilterOptions(definition);
-  const options = isSearching
-    ? allOptions.filter((option) => option.label.toLowerCase().includes(search))
-    : allOptions.filter((option) => appliedValues.has(String(option.value)));
-
-  function commitDraft() {
-    const valuesByKey = new Map<string, string | number>();
-    for (const item of allOptions) valuesByKey.set(String(item.value), item.value);
-    const vals = Array.from(draftForField())
-      .map((key) => valuesByKey.get(key))
-      .filter(
-        (value): value is string | number => typeof value === "string" || typeof value === "number",
-      );
-    applySetFilter(field, vals);
-    hide();
-  }
-
-  function resetDraft() {
-    setFilterSearch.value[field] = "";
-    setFilterDraft.value[field] = new Set(appliedValues);
-  }
-
-  function clearDraft() {
-    setFilterDraft.value[field] = new Set();
-  }
-
-  return h("div", { class: "sst-filter-popover sst-filter-popover--set" }, [
-    h(NInput, {
-      value: setFilterSearch.value[field] ?? "",
-      placeholder: "Search",
-      size: "small",
-      clearable: true,
-      "onUpdate:value": (value: string) => {
-        setFilterSearch.value[field] = value;
-      },
-    }),
-    h(
-      "div",
-      { class: "sst-set-filter-options" },
-      options.length > 0
-        ? options.map((option) =>
-            h(
-              NCheckbox,
-              {
-                key: String(option.value),
-                class: "sst-set-filter-option",
-                checked: draftForField().has(String(option.value)),
-                "onUpdate:checked": (checked: boolean) => {
-                  const next = new Set(draftForField());
-                  const optionKey = String(option.value);
-                  if (checked) next.add(optionKey);
-                  else next.delete(optionKey);
-                  setFilterDraft.value[field] = next;
-                },
-              },
-              () => option.label,
-            ),
-          )
-        : isSearching
-          ? [h(NText, { depth: 3, class: "sst-set-filter-empty" }, () => "No matches")]
-          : appliedValues.size > 0
-            ? []
-            : [
-                h(
-                  NText,
-                  { depth: 3, class: "sst-set-filter-empty" },
-                  () => "Type to search for options",
-                ),
-              ],
-    ),
-    h(NSpace, { size: 4 }, () => [
-      h(
-        NButton,
-        {
-          size: "tiny",
-          quaternary: true,
-          onClick: resetDraft,
-        },
-        () => "Reset",
-      ),
-      h(
-        NButton,
-        {
-          size: "tiny",
-          quaternary: true,
-          onClick: clearDraft,
-        },
-        () => "Clear",
-      ),
-      h(
-        NButton,
-        {
-          size: "tiny",
-          type: "primary",
-          onClick: commitDraft,
-        },
-        () => "Apply",
-      ),
-    ]),
-  ]);
+  return h(ScSetFilterMenu, {
+    search: setFilterSearch.value[field] ?? "",
+    appliedValues: Array.from(appliedValues),
+    draftValues: Array.from(setFilterDraft.value[field] ?? []),
+    options: allOptions,
+    "onUpdate:search": (value: string) => {
+      setFilterSearch.value[field] = value;
+    },
+    "onUpdate:draftValues": (values: string[]) => {
+      setFilterDraft.value[field] = new Set(values);
+    },
+    onApply: (values: Array<string | number>) => applySetFilter(field, values),
+    onClose: hide,
+  });
 }
 
 function renderRangeFilterMenu(field: string, hide: () => void) {
-  return h("div", { class: "sst-filter-popover" }, [
-    h(NSpace, { wrap: false }, () => [
-      h(NInputNumber, {
-        value: getFilterState(field).min,
-        placeholder: "Min",
-        size: "small",
-        style: { width: "100px" },
-        "onUpdate:value": (value: number | null) => {
-          getFilterState(field).min = value;
-        },
-      }),
-      h(NInputNumber, {
-        value: getFilterState(field).max,
-        placeholder: "Max",
-        size: "small",
-        style: { width: "100px" },
-        "onUpdate:value": (value: number | null) => {
-          getFilterState(field).max = value;
-        },
-      }),
-    ]),
-    h(NSpace, { size: 4 }, () => [
-      h(
-        NButton,
-        {
-          size: "tiny",
-          onClick: () => {
-            applyRangeFilter(field);
-            hide();
-          },
-        },
-        () => "Apply",
-      ),
-      h(
-        NButton,
-        {
-          size: "tiny",
-          quaternary: true,
-          onClick: () => {
-            clearFilter(field);
-            hide();
-          },
-        },
-        () => "Clear",
-      ),
-    ]),
-  ]);
+  const state = getFilterState(field);
+  return h(ScRangeFilterMenu, {
+    min: state.min,
+    max: state.max,
+    "onUpdate:min": (value: number | null) => {
+      state.min = value;
+    },
+    "onUpdate:max": (value: number | null) => {
+      state.max = value;
+    },
+    onApply: () => applyRangeFilter(field),
+    onClear: () => clearFilter(field),
+    onClose: hide,
+  });
 }
 
 function handleFilters(
@@ -779,7 +654,7 @@ defineExpose({
           type="primary"
           @click="applySelectionAsDefects"
         >
-          Set as Selected Defects
+          Filter BlinkTable Samples
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded
@@ -882,47 +757,5 @@ defineExpose({
 
 :deep(.sst-row--selected td) {
   background: rgba(76, 128, 240, 0.15) !important;
-}
-
-.sst-filter-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  max-width: min(320px, calc(100vw - 48px));
-  min-width: 0;
-}
-
-.sst-filter-popover--set {
-  width: 260px;
-}
-
-.sst-set-filter-options {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-:deep(.sst-set-filter-option) {
-  min-width: 0;
-  max-width: 100%;
-}
-
-:deep(.sst-set-filter-option .n-checkbox__label) {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sst-set-filter-empty {
-  font-size: 12px;
-  padding: 4px 0;
 }
 </style>

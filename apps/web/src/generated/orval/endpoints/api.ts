@@ -67,6 +67,7 @@ import type {
   ExportReviewVersionApiV1PredictionReviewsActionIdExportGetParams,
   ExtractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams,
   GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams,
+  GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams,
   GetInspectionsApiV1ScInspectionsGetParams,
   GetJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams,
   GetRunLogsApiV1RunsRunIdLogsGetParams,
@@ -11460,16 +11461,25 @@ export type getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyRev
 }
 
 export const getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetUrl = (inspectionTime: string,
-    waferKey: number,) => {
+    waferKey: number,
+    params?: GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
-  return `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/review-images`
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/review-images?${normalizedParams.toString()}` : `/api/v1/sc/inspections/${inspectionTime}/${waferKey}/review-images`
 }
 
 export const getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet = async (inspectionTime: string,
-    waferKey: number, options?: RequestInit): Promise<getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetResponse> => {
+    waferKey: number,
+    params?: GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams, options?: RequestInit): Promise<getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetResponse> => {
 
-  return orvalFetcher<getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetResponse>(getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetUrl(inspectionTime,waferKey),
+  return orvalFetcher<getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetResponse>(getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetUrl(inspectionTime,waferKey,params),
   {
     ...options,
     method: 'GET'
@@ -11481,22 +11491,24 @@ export const getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyRe
 
 
 export const getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryKey = (inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>,) => {
-    return ['api','v1','sc','inspections',inspectionTime,waferKey,'review-images'] as const;
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams>,) => {
+    return ['api','v1','sc','inspections',inspectionTime,waferKey,'review-images', ...(params ? [params]: [])] as const;
     }
 
 
 export const getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryOptions = <TData = Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryKey(inspectionTime,waferKey);
+  const queryKey =  getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryKey(inspectionTime,waferKey,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>> = ({ signal }) => getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(unref(inspectionTime),unref(waferKey), { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>> = ({ signal }) => getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(unref(inspectionTime),unref(waferKey),unref(params), { signal, ...requestOptions });
 
 
 
@@ -11515,11 +11527,12 @@ export type GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyRev
 
 export function useGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet<TData = Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError = HTTPValidationError>(
  inspectionTime: MaybeRef<string>,
-    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+    waferKey: MaybeRef<number>,
+    params?: MaybeRef<GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryOptions(inspectionTime,waferKey,options)
+  const queryOptions = getGetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetQueryOptions(inspectionTime,waferKey,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

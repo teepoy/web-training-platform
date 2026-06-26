@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -435,6 +436,32 @@ def test_inspection_split_preview_endpoints_success(
                 "image_id",
                 "image_type",
             }
+            first_review_defect_id = review_body["items"][0]["defect_id"]
+            filtered_review_resp = client.get(
+                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/review-images",
+                params={"defect_ids": first_review_defect_id},
+            )
+            assert filtered_review_resp.status_code == 200, filtered_review_resp.text
+            filtered_review_body = filtered_review_resp.json()
+            assert filtered_review_body["total"] == 1
+            assert filtered_review_body["items"][0]["defect_id"] == first_review_defect_id
+            filter_only_review_resp = client.get(
+                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/review-images",
+                params={
+                    "sample_filter": json.dumps(
+                        {
+                            "defect_id": {
+                                "filterType": "set",
+                                "values": [first_review_defect_id],
+                            }
+                        }
+                    )
+                },
+            )
+            assert filter_only_review_resp.status_code == 200, filter_only_review_resp.text
+            filter_only_review_body = filter_only_review_resp.json()
+            assert filter_only_review_body["total"] == 1
+            assert filter_only_review_body["items"][0]["defect_id"] == first_review_defect_id
 
             table_resp = client.post(
                 f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/sample-table-rows",
@@ -449,6 +476,7 @@ def test_inspection_split_preview_endpoints_success(
                 "defect_id",
                 "rough_bin",
                 "class_number",
+                "images",
                 "test_id",
                 "wafer_x",
                 "wafer_y",

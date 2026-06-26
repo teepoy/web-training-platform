@@ -58,6 +58,7 @@ const selectedDraftCount = computed(() => {
   }
   return count;
 });
+const hasGlobalSampleTableFilter = computed(() => Object.keys(page.globalFilter.value).length > 0);
 
 function clearSelectedDrafts(): void {
   if (selectedDraftCount.value === 0) return;
@@ -277,6 +278,14 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
               Sampling
             </NButton>
+            <NButton
+              v-if="hasGlobalSampleTableFilter"
+              size="small"
+              quaternary
+              @click="page.clearGlobalFilter"
+            >
+              Clear Global Filter
+            </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
             </NButton>
@@ -330,7 +339,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
             @table-sort-change="() => {}"
             @table-selection-change="page.setSampleTableSelectedIds"
-            @table-apply-selection="(ids) => page.selectDefectIds(ids.map(String), 'replace')"
+            @table-apply-selection="page.filterBlinkTableSamples"
             @legend-group-change="page.handleLegendGroupByChange"
             @retry="() => {}"
           >

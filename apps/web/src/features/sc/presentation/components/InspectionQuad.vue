@@ -387,32 +387,31 @@ const barChartItems = computed(() => {
 
 const barChartOption = computed<EChartsOption>(() => ({
   animation: false,
-  grid: { left: 80, right: 32, top: 8, bottom: 18 },
+  grid: { left: 42, right: 18, top: 12, bottom: 42 },
   tooltip: {
     trigger: "axis",
     axisPointer: { type: "shadow" },
   },
   xAxis: {
-    type: "value",
-    axisLabel: { color: "rgba(120, 120, 120, 0.8)", fontSize: 10 },
-    splitLine: { lineStyle: { color: "rgba(128, 128, 128, 0.15)" } },
-  },
-  yAxis: {
     type: "category",
-    inverse: true,
     data: barChartItems.value.map((item) => item.key),
     axisLabel: { color: "rgba(120, 120, 120, 0.9)", fontSize: 10 },
     axisTick: { show: false },
     axisLine: { show: false },
   },
+  yAxis: {
+    type: "value",
+    axisLabel: { color: "rgba(120, 120, 120, 0.8)", fontSize: 10 },
+    splitLine: { lineStyle: { color: "rgba(128, 128, 128, 0.15)" } },
+  },
   series: [
     {
       type: "bar",
       data: barChartItems.value.map((item) => item.count),
-      barMaxWidth: 12,
+      barMaxWidth: 18,
       itemStyle: {
         color: "#4c80f0",
-        borderRadius: [0, 3, 3, 0],
+        borderRadius: [3, 3, 0, 0],
       },
     },
   ],

@@ -95,6 +95,7 @@ export * from './exportReviewVersionApiV1PredictionReviewsActionIdExportGet200';
 export * from './exportReviewVersionApiV1PredictionReviewsActionIdExportGetParams';
 export * from './extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPostParams';
 export * from './getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams';
+export * from './getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams';
 export * from './getInspectionsApiV1ScInspectionsGetParams';
 export * from './getJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams';
 export * from './getRunLogsApiV1RunsRunIdLogsGetParams';

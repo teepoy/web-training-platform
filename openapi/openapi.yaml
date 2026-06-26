@@ -4858,6 +4858,54 @@ paths:
           schema:
             type: integer
             title: Wafer Key
+        - name: defect_ids
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: array
+                items:
+                  type: string
+              - type: "null"
+            title: Defect Ids
+        - name: sample_filter
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: "null"
+            title: Sample Filter
+        - name: reticle_x_die_count
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+            title: Reticle X Die Count
+        - name: reticle_y_die_count
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+            title: Reticle Y Die Count
+        - name: reticle_x_die_shift
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            title: Reticle X Die Shift
+        - name: reticle_y_die_shift
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            title: Reticle Y Die Shift
       responses:
         "200":
           description: Successful Response
@@ -7321,6 +7369,9 @@ components:
         class_number:
           type: integer
           title: Class Number
+        images:
+          type: integer
+          title: Images
         test_id:
           type: integer
           title: Test Id
@@ -7399,6 +7450,7 @@ components:
         - defect_id
         - rough_bin
         - class_number
+        - images
         - test_id
         - wafer_x
         - wafer_y
@@ -7502,6 +7554,9 @@ components:
         class_number:
           type: integer
           title: Class Number
+        images:
+          type: integer
+          title: Images
         test_id:
           type: integer
           title: Test Id
@@ -7565,6 +7620,7 @@ components:
         - defect_id
         - rough_bin
         - class_number
+        - images
         - test_id
         - wafer_x
         - wafer_y

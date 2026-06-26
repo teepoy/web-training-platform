@@ -145,6 +145,7 @@ def test_plot_points_forwards_reticle_options() -> None:
         mock_svc.build_plot_points_response.assert_awaited_once_with(
             _DATASET_ID,
             "00000000-0000-0000-0000-000000000001",
+            upstream_reader=ANY,
             sampled=True,
             target_resolution=600,
             reticle_x_die_count=4,
@@ -467,6 +468,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
         dataset_meta={
             "task_type": "sc",
             "label_space": [],
+            "source_inspection_time": "2026-01-01T00:00:00+00:00",
+            "source_wafer_key": 1,
             "geometry": {
                 "center_x": 5000,
                 "center_y": 3000,
@@ -483,6 +486,15 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
 
     mock_repo = AsyncMock(spec=SqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
+    mock_upstream = AsyncMock()
+    mock_upstream.list_review_images = AsyncMock(
+        return_value=pl.DataFrame(
+            {
+                "defect_id": ["1", "1", "5"],
+                "image_id": [10, 11, 12],
+            }
+        ).lazy()
+    )
 
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
@@ -492,6 +504,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     pb_bytes = await svc.build_plot_points_response(
         dataset_id=_DATASET_ID,
         org_id="org",
+        upstream_reader=mock_upstream,
+        sampled=False,
     )
     msg = WaferMapResponse()
     msg.ParseFromString(pb_bytes)
@@ -503,6 +517,8 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     assert msg.geometry.die_size_x == 8000
     assert msg.geometry.die_size_y == 6000
     assert msg.geometry.wafer_radius_nm == 200_000_000
+    assert list(msg.wafer_points)[5] == 0
+    assert list(msg.wafer_points)[11] == 1
 
 
 @pytest.mark.asyncio
@@ -558,6 +574,7 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
+            upstream_reader=AsyncMock(),
         )
 
 
@@ -621,4 +638,5 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
+            upstream_reader=AsyncMock(),
         )

@@ -50,6 +50,7 @@ _SAMPLE_TABLE_FILTER_COLUMNS = {
     "defect_id": "defect_id",
     "rough_bin": "rough_bin",
     "class_number": "class_number",
+    "images": "images",
     "test_id": "test_id",
     "wafer_x": "wafer_x",
     "wafer_y": "wafer_y",
@@ -77,6 +78,7 @@ _SAMPLE_TABLE_OUTPUT_COLUMNS = frozenset(
         "defect_id",
         "rough_bin",
         "class_number",
+        "images",
         "test_id",
         "wafer_x",
         "wafer_y",
@@ -304,6 +306,28 @@ async def sorted_defect_ids_from_lazyframe(lf: pl.LazyFrame) -> list[int]:
     return defect_ids
 
 
+async def _join_upstream_image_counts(
+    lf: pl.LazyFrame,
+    *,
+    upstream_reader: Any,
+    inspection_time: datetime,
+    wafer_key: int,
+) -> pl.LazyFrame:
+    review_lf = await upstream_reader.list_review_images(inspection_time, wafer_key)
+    image_counts_lf = (
+        review_lf.with_columns(pl.col("defect_id").cast(pl.Utf8))
+        .group_by("defect_id")
+        .agg(pl.len().cast(pl.Int32).alias("images"))
+    )
+    if "images" in lf.collect_schema().names():
+        lf = lf.drop("images")
+    return (
+        lf.with_columns(pl.col("defect_id").cast(pl.Utf8))
+        .join(image_counts_lf, on="defect_id", how="left")
+        .with_columns(pl.col("images").fill_null(0).cast(pl.Int32))
+    )
+
+
 def _require_int(mapping: dict, key: str) -> int:
     value = mapping[key]
     if isinstance(value, bool):
@@ -382,6 +406,7 @@ class ScPlotPointsService:
         dataset_id: str,
         org_id: str,
         *,
+        upstream_reader: Any,
         sampled: bool = True,
         target_resolution: int = 600,
         reticle_x_die_count: int = 3,
@@ -410,6 +435,33 @@ class ScPlotPointsService:
                 "plot-points requires a file_shard_sparse dataset"
             )
 
+        geometry_raw = dataset.dataset_meta.get("geometry")
+        if not isinstance(geometry_raw, dict):
+            raise ScPlotPointsRejectedError("dataset_meta.geometry is required")
+        missing_geometry = _REQUIRED_GEOMETRY_KEYS - set(geometry_raw)
+        if missing_geometry:
+            raise ScPlotPointsRejectedError(
+                f"dataset_meta.geometry missing keys: {sorted(missing_geometry)}"
+            )
+        geometry = dict(geometry_raw)
+        center_x = _require_int(geometry, "center_x")
+        center_y = _require_int(geometry, "center_y")
+        origin_x = _require_int(geometry, "origin_x")
+        origin_y = _require_int(geometry, "origin_y")
+        die_size_x = _require_int(geometry, "die_size_x")
+        die_size_y = _require_int(geometry, "die_size_y")
+        origin_index_x = _require_int(geometry, "origin_index_x")
+        origin_index_y = _require_int(geometry, "origin_index_y")
+        wafer_radius_nm = (
+            _require_int(geometry, "wafer_radius_nm")
+            if "wafer_radius_nm" in geometry
+            else 150_000_000
+        )
+        if die_size_x <= 0 or die_size_y <= 0:
+            raise ScPlotPointsRejectedError(
+                "dataset_meta.geometry die sizes must be positive"
+            )
+
         filter_needs_labels, filter_needs_predictions = (
             sample_table_filter_requires_label_columns(filter_params)
         )
@@ -429,6 +481,15 @@ class ScPlotPointsService:
                 ),
             ),
         )
+        source_inspection_time, source_wafer_key = await _dataset_source_identity(
+            dataset.dataset_meta, lf
+        )
+        lf = await _join_upstream_image_counts(
+            lf,
+            upstream_reader=upstream_reader,
+            inspection_time=source_inspection_time,
+            wafer_key=source_wafer_key,
+        )
         lf = _apply_sample_filters(
             lf,
             class_number=class_numbers,
@@ -446,34 +507,6 @@ class ScPlotPointsService:
         if missing_columns:
             raise ScPlotPointsRejectedError(
                 f"plot-points requires SC shard columns: {sorted(missing_columns)}"
-            )
-
-        geometry_raw = dataset.dataset_meta.get("geometry")
-        if not isinstance(geometry_raw, dict):
-            raise ScPlotPointsRejectedError("dataset_meta.geometry is required")
-        missing_geometry = _REQUIRED_GEOMETRY_KEYS - set(geometry_raw)
-        if missing_geometry:
-            raise ScPlotPointsRejectedError(
-                f"dataset_meta.geometry missing keys: {sorted(missing_geometry)}"
-            )
-
-        geometry = dict(geometry_raw)
-        center_x = _require_int(geometry, "center_x")
-        center_y = _require_int(geometry, "center_y")
-        origin_x = _require_int(geometry, "origin_x")
-        origin_y = _require_int(geometry, "origin_y")
-        die_size_x = _require_int(geometry, "die_size_x")
-        die_size_y = _require_int(geometry, "die_size_y")
-        origin_index_x = _require_int(geometry, "origin_index_x")
-        origin_index_y = _require_int(geometry, "origin_index_y")
-        wafer_radius_nm = (
-            _require_int(geometry, "wafer_radius_nm")
-            if "wafer_radius_nm" in geometry
-            else 150_000_000
-        )
-        if die_size_x <= 0 or die_size_y <= 0:
-            raise ScPlotPointsRejectedError(
-                "dataset_meta.geometry die sizes must be positive"
             )
 
         # reticle_x/reticle_y are frame-local coordinates over a grid of dies.
@@ -506,8 +539,7 @@ class ScPlotPointsService:
             ).alias("reticle_y"),
         )
 
-        if "has_review" not in df.columns:
-            df = df.with_columns(pl.lit(0).cast(pl.Int32).alias("has_review"))
+        df = df.with_columns((pl.col("images") > 0).cast(pl.Int32).alias("has_review"))
 
         return make_wafer_map_response_pb(
             df,
@@ -702,6 +734,12 @@ class ScPlotPointsService:
             on="defect_id",
             how="inner",
         )
+        lf = await _join_upstream_image_counts(
+            lf,
+            upstream_reader=upstream_reader,
+            inspection_time=source_inspection_time,
+            wafer_key=source_wafer_key,
+        )
 
         missing = _SAMPLE_TABLE_OUTPUT_COLUMNS - set(lf.collect_schema().names())
         if missing:
@@ -727,6 +765,7 @@ class ScPlotPointsService:
                     "defect_id": str(row["defect_id"]),
                     "rough_bin": _int_value(row, "rough_bin"),
                     "class_number": _int_value(row, "class_number"),
+                    "images": _int_value(row, "images"),
                     "test_id": _int_value(row, "test_id"),
                     "wafer_x": _int_value(row, "wafer_x"),
                     "wafer_y": _int_value(row, "wafer_y"),

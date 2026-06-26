@@ -242,13 +242,7 @@ function scheduleOverlayRefresh(): void {
 
 watch([pointCount, overlayRef], scheduleOverlayRefresh, { immediate: true });
 
-watch(
-  () => props.zoom,
-  () => {
-    recalcTransform();
-    drawOverlay();
-  },
-);
+watch(() => props.zoom, scheduleOverlayRefresh);
 
 watch(
   () => props.selectedIds,

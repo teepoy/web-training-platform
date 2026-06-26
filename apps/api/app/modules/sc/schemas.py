@@ -80,6 +80,7 @@ class ScSampleTableRow(BaseModel):
     defect_id: str
     rough_bin: int
     class_number: int
+    images: int
     test_id: int
     wafer_x: int
     wafer_y: int

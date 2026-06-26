@@ -394,6 +394,13 @@ function onResize() {
   draw();
 }
 
+function scheduleFullRender() {
+  void nextTick(() => {
+    fullRender();
+    window.requestAnimationFrame(fullRender);
+  });
+}
+
 watch(
   () => props.points,
   async (pts) => {
@@ -419,16 +426,7 @@ watch(
   },
 );
 
-watch(
-  () => props.zoom,
-  () => {
-    recalcTransform();
-    buildDieGrid();
-    renderBackground();
-    renderPoints();
-    draw();
-  },
-);
+watch(() => props.zoom, scheduleFullRender);
 
 onMounted(() => {
   bgCanvas = document.createElement("canvas");
