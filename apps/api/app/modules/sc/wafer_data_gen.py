@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import io
-import math
 import random
 import sys
 from datetime import datetime, timezone
@@ -27,6 +26,10 @@ NUM_CLASSES: int = 100
 WAFER_RADIUS_NM: int = 150_000_000
 SAMPLES_PER_WAFER: int = 100_000
 RANDOM_SEED: int = 42
+DIE_SIZE_X_NM: int = 8_000_000
+DIE_SIZE_Y_NM: int = 5_000_000
+DIE_RANGE: int = 3
+DIE_CORNER_FRACTION: float = 0.3
 
 # Smoke-test labels (first 10 class digits mapped to defect names for training)
 LABELS: dict[int, str] = {
@@ -108,11 +111,23 @@ def review_image_for_class(class_idx: int) -> str:
 
 
 def wafer_coordinates(sample_idx: int, *, seed: int = RANDOM_SEED) -> tuple[int, int]:
-    """Uniform-area wafer coordinates (nanometers) inside the wafer disk."""
+    """Wafer coordinates (nanometers) in the lower-left corner of dies within
+    +/- DIE_RANGE from the wafer center die grid.
+
+    Picks a random die from the (2*DIE_RANGE+1)^2 grid centred at (0,0) and
+    places the defect in the lower-left corner (first DIE_CORNER_FRACTION of
+    the die in both X and Y).
+    """
     rng = random.Random(seed + sample_idx)
-    r = WAFER_RADIUS_NM * math.sqrt(rng.random())
-    theta = rng.random() * 2 * math.pi
-    return int(r * math.cos(theta)), int(r * math.sin(theta))
+    die_idx_x = rng.randint(-DIE_RANGE, DIE_RANGE)
+    die_idx_y = rng.randint(-DIE_RANGE, DIE_RANGE)
+    max_offset_x = int(DIE_SIZE_X_NM * DIE_CORNER_FRACTION)
+    max_offset_y = int(DIE_SIZE_Y_NM * DIE_CORNER_FRACTION)
+    offset_x = rng.randint(0, max_offset_x)
+    offset_y = rng.randint(0, max_offset_y)
+    wafer_x = die_idx_x * DIE_SIZE_X_NM + offset_x
+    wafer_y = die_idx_y * DIE_SIZE_Y_NM + offset_y
+    return wafer_x, wafer_y
 
 
 def build_patch_sample(

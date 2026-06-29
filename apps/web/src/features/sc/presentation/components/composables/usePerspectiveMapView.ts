@@ -86,9 +86,18 @@ function retireView(v: View | null): void {
   }, 1000);
 }
 
-function unzoomBinSize(mode: MapMode): number {
+const BIN_RESOLUTION: Record<MapMode, { large: number; small: number }> = {
+  wafer: { large: 600, small: 400 },
+  die: { large: 600, small: 400 },
+  reticle: { large: 600, small: 400 },
+};
+
+function unzoomBinSize(mode: MapMode, dims: { w: number; h: number }): number {
   const cfg = MODE_CONFIGS[mode];
-  return cfg.fullRangeNm / cfg.fullBins;
+  const res = BIN_RESOLUTION[mode];
+  const minDim = Math.min(dims.w, dims.h);
+  const bins = minDim < 500 ? res.small : res.large;
+  return cfg.fullRangeNm / bins;
 }
 
 export function usePerspectiveMapView(
@@ -259,7 +268,7 @@ export function usePerspectiveMapView(
         console.log(`[psp-map:${mode}] cache HIT (${(performance.now() - t0).toFixed(0)}ms)`);
         return;
       }
-      binSize = unzoomBinSize(mode);
+      binSize = unzoomBinSize(mode, canvasDims.value);
     }
 
     const allFilters = [...globalFilters.value, ...extraFilters];

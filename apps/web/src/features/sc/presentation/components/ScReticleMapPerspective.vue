@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
 import type { PerspectiveMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
+import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 import {
   boundsFromRegion,
   buildMapTransform,
@@ -17,16 +18,39 @@ import {
 } from "./scMapViewport";
 
 const STRIDE = 6;
-const DATA_RANGE = 400_000;
+const DEFAULT_RET_RANGE = 400_000;
 
 const props = defineProps<{
-  points?: number[];
+  points?: MapDisplayArray | number[];
+  xDieCount?: number;
+  yDieCount?: number;
+  dieSizeX?: number;
+  dieSizeY?: number;
   colorMap?: Record<string, string>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
   highlightDefects?: HighlightDefect[];
 }>();
+
+function resolveGridW(): number {
+  const cols = props.xDieCount ?? 0;
+  const dsx = props.dieSizeX ?? 0;
+  return cols > 0 && dsx > 0 ? cols * dsx : DEFAULT_RET_RANGE;
+}
+
+function resolveGridH(): number {
+  const rows = props.yDieCount ?? 0;
+  const dsy = props.dieSizeY ?? 0;
+  return rows > 0 && dsy > 0 ? rows * dsy : DEFAULT_RET_RANGE;
+}
+
+const dataBounds = computed(() => ({
+  minX: 0,
+  maxX: resolveGridW(),
+  minY: 0,
+  maxY: resolveGridH(),
+}));
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
@@ -42,6 +66,7 @@ const HIGHLIGHT_POINT_COLOR = "#A855F7";
 const CROSSHAIR_COLOR = "#000000";
 
 const containerRef = ref<HTMLDivElement | null>(null);
+const bgRef = ref<HTMLCanvasElement | null>(null);
 const overlayRef = ref<HTMLCanvasElement | null>(null);
 
 let mapSize: ScMapSize = { width: 600, height: 600 };
@@ -49,15 +74,15 @@ let transform: ScMapTransform = buildMapTransform(
   mapSize,
   {
     minX: 0,
-    maxX: DATA_RANGE,
+    maxX: DEFAULT_RET_RANGE,
     minY: 0,
-    maxY: DATA_RANGE,
+    maxY: DEFAULT_RET_RANGE,
   },
   1,
 );
 
-const centerX = computed(() => 0);
-const centerY = computed(() => 0);
+const centerX = computed(() => resolveGridW() / 2);
+const centerY = computed(() => resolveGridH() / 2);
 
 const perspectivePoints = computed<PerspectiveMapPoint[]>(() => {
   const pts = props.points;
@@ -84,17 +109,14 @@ function recalcTransform() {
   if (props.zoom) {
     transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 1.0);
   } else {
+    const b = dataBounds.value;
     transform = buildMapTransform(
       mapSize,
-      {
-        minX: 0,
-        maxX: DATA_RANGE,
-        minY: 0,
-        maxY: DATA_RANGE,
-      },
+      { minX: b.minX, maxX: b.maxX, minY: b.minY, maxY: b.maxY },
       1,
     );
   }
+  renderBackground();
 }
 
 function getPos(e: MouseEvent): [number, number] {
@@ -231,9 +253,51 @@ function drawOverlay() {
   ctx.strokeRect(r.x, r.y, r.w, r.h);
 }
 
+function renderBackground() {
+  const cvs = bgRef.value;
+  if (!cvs || mapSize.width <= 0 || mapSize.height <= 0) return;
+  const ctx = prepareOverlayCanvas(cvs, mapSize);
+  if (!ctx) return;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, mapSize.width, mapSize.height);
+
+  const b = dataBounds.value;
+  const [minSx, maxSy] = dataToScreen(transform, b.minX, b.minY);
+  const [maxSx, minSy] = dataToScreen(transform, b.maxX, b.maxY);
+
+  const cols = props.xDieCount ?? 0;
+  const rows = props.yDieCount ?? 0;
+  const dsx = props.dieSizeX ?? 0;
+  const dsy = props.dieSizeY ?? 0;
+
+  ctx.strokeStyle = "rgba(195, 200, 208, 0.7)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  if (cols > 0 && dsx > 0) {
+    for (let i = 0; i <= cols; i++) {
+      const x = i * dsx;
+      const [sx] = dataToScreen(transform, x, 0);
+      ctx.moveTo(sx, minSy);
+      ctx.lineTo(sx, maxSy);
+    }
+  }
+  if (rows > 0 && dsy > 0) {
+    for (let i = 0; i <= rows; i++) {
+      const y = i * dsy;
+      const [, sy] = dataToScreen(transform, 0, y);
+      ctx.moveTo(minSx, sy);
+      ctx.lineTo(maxSx, sy);
+    }
+  }
+  ctx.stroke();
+}
+
 let _ro: ResizeObserver | null = null;
 function onResize() {
   recalcTransform();
+  drawOverlay();
 }
 watch(
   containerRef,
@@ -250,10 +314,11 @@ watch(
 watch(
   () => props.points,
   () => {
+    recalcTransform();
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
-      drawOverlay();
     }
+    drawOverlay();
   },
 );
 watch(
@@ -269,13 +334,15 @@ watch(
 
 <template>
   <div ref="containerRef" class="sc-reticle-map-perspective" @dblclick="onDblClick">
+    <canvas ref="bgRef" class="sc-reticle-map-perspective__bg" />
     <SimplePerspectiveMap
       :points="perspectivePoints"
       :color-map="colorMap ?? {}"
       :zoom="zoom"
       :center-x="centerX"
       :center-y="centerY"
-      :data-range-nm="DATA_RANGE"
+      :data-range-nm="DEFAULT_RET_RANGE"
+      :data-bounds="dataBounds"
     />
     <canvas
       ref="overlayRef"
@@ -295,6 +362,15 @@ watch(
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+.sc-reticle-map-perspective__bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 .sc-reticle-map-perspective__overlay {
   position: absolute;

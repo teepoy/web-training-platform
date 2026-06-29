@@ -57,6 +57,7 @@ const props = withDefaults(
     showModeSwitch?: boolean;
     inspectionTime?: string;
     total?: number;
+    loadedOffset?: number;
   }>(),
   {
     patchSamplesPerRow: 4,
@@ -91,6 +92,7 @@ const emit = defineEmits<{
   scrollContainerChange: [element: HTMLElement | null];
   modeChange: [mode: "patch" | "review"];
   nearBottom: [];
+  visibleRangeChange: [range: { start: number; end: number }];
 }>();
 
 const mode = ref<"patch" | "review">("patch");
@@ -216,6 +218,8 @@ watch(
 const samplesRef = computed(() =>
   mode.value === "review" ? (props.reviewSamples ?? []) : props.samples,
 );
+const loadedOffsetRef = computed(() => (mode.value === "review" ? 0 : (props.loadedOffset ?? 0)));
+const totalSamplesRef = computed(() => (mode.value === "review" ? undefined : props.total));
 watch(
   samplesRef,
   (samples) => {
@@ -240,16 +244,43 @@ const {
   imageCellHeightPxStr,
   samplesForVirtualRow,
   effectiveSamplesPerRow,
+  virtualSampleCount,
 } = useBlinkVirtualScroll({
   samples: samplesRef,
   mode,
   patchPerRow,
   reviewPerRow,
+  totalSamples: totalSamplesRef,
+  sampleOffset: loadedOffsetRef,
   patchCellSize: patchCellSizeRef,
   reviewCellSize: reviewCellSizeRef,
   extraRowHeight,
   overscan: overscanRef,
 });
+
+const RANGE_CHANGE_DEBOUNCE_MS = 120;
+let rangeChangeTimer: number | undefined;
+
+function emitVisibleRange(): void {
+  if (mode.value === "review") return;
+  const items = virtualizer.value.getVirtualItems();
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) return;
+  const perRow = effectiveSamplesPerRow.value;
+  const start = Math.max(0, first.index * perRow);
+  const end = Math.min(virtualSampleCount.value, (last.index + 1) * perRow);
+  if (end <= start) return;
+  emit("visibleRangeChange", { start, end });
+}
+
+function queueVisibleRangeChange(): void {
+  if (rangeChangeTimer !== undefined) window.clearTimeout(rangeChangeTimer);
+  rangeChangeTimer = window.setTimeout(() => {
+    rangeChangeTimer = undefined;
+    emitVisibleRange();
+  }, RANGE_CHANGE_DEBOUNCE_MS);
+}
 
 const virtualItems = computed(() => {
   const t0 = performance.now();
@@ -711,6 +742,7 @@ watch(
 function handleScroll(): void {
   queueViewportImageLoad();
   syncScrollMetrics();
+  queueVisibleRangeChange();
   const el = scrollRef.value;
   if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
     emit("nearBottom");
@@ -751,6 +783,7 @@ function handleScrollbarDrag(event: MouseEvent): void {
     element.scrollLeft = dragState.startScroll + scrollDelta;
   }
   syncScrollMetrics();
+  queueVisibleRangeChange();
 }
 
 function endScrollbarDrag(): void {
@@ -782,6 +815,7 @@ function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
     }
   }
   syncScrollMetrics();
+  queueVisibleRangeChange();
 }
 
 const SETTINGS_STORAGE_KEY = "blink-table-settings";
@@ -841,6 +875,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (rangeChangeTimer !== undefined) window.clearTimeout(rangeChangeTimer);
   resizeObserver?.disconnect();
   document.removeEventListener("mousemove", handleScrollbarDrag);
   window.removeEventListener("resize", syncScrollMetrics);
@@ -1074,7 +1109,7 @@ defineExpose({ scrollRef });
 
                   <!-- Base patch cells -->
                   <div
-                    v-for="col in basePatchColumns"
+                    v-for="(col, colIdx) in basePatchColumns"
                     :key="'base_' + col.spriteIndex"
                     class="sbt-img-cell"
                   >
@@ -1084,6 +1119,9 @@ defineExpose({ scrollRef });
                       :style="getSpriteStyle(sample, col.spriteIndex)"
                     ></div>
                     <div v-else class="sbt-img-placeholder"></div>
+                    <div v-if="!blinkEnabled && colIdx === 0" class="sbt-defect-id">
+                      {{ sample.defectId }}
+                    </div>
                   </div>
 
                   <!-- Review Cells -->

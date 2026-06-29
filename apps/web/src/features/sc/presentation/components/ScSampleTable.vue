@@ -42,7 +42,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
-  (e: "apply-selection", ids: number[]): void;
   (e: "apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "filter-change", filter: ScSampleTableFilter): void;
   (e: "sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
@@ -115,7 +114,6 @@ const reclassifyColumnDefinitions: ColumnDefinition[] = [
 ];
 
 const PAGE_SIZE = 1000;
-const SELECT_ALL_LIMIT = 50_000;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
 const SCROLL_X = computed(() => (props.showReclassifyColumns ? 2110 : 1700));
 const activeColumnDefinitions = computed(() =>
@@ -144,7 +142,6 @@ const rows = ref<ScSampleTableDisplayRow[]>([]);
 const serverTotal = ref(props.total);
 const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
-const isSelectingAll = ref(false);
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
@@ -551,70 +548,6 @@ async function fetchNextPage(): Promise<void> {
   }
 }
 
-async function selectAllMatching(): Promise<void> {
-  if (!selectionEnabled.value) return;
-  if (!queryEnabled.value || isSelectingAll.value) return;
-  if (serverTotal.value > SELECT_ALL_LIMIT) {
-    pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
-    return;
-  }
-  const hasFilter = props.filter && Object.keys(props.filter).length > 0;
-  if (!hasFilter && resolvedDefectIds.value.length > 0) {
-    if (resolvedDefectIds.value.length > SELECT_ALL_LIMIT) {
-      pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
-      return;
-    }
-    const ids = resolvedDefectIds.value.map(Number).filter(Number.isFinite);
-    selectedIds.value = new Set(ids);
-    emit("selection-change", ids);
-    return;
-  }
-
-  const version = requestVersion;
-  isSelectingAll.value = true;
-  pageError.value = null;
-  try {
-    const ids: number[] = [];
-    let anchor: string | null = "0";
-    while (anchor !== null) {
-      const response = await props.dataSource!.loadRows({
-        defectIds: resolvedDefectIds.value,
-        anchor,
-        limit: SELECT_ALL_LIMIT,
-        filter: props.filter,
-        sort: props.sort,
-        reticleOptions:
-          props.reticleXDieCount !== undefined &&
-          props.reticleYDieCount !== undefined &&
-          props.reticleXDieShift !== undefined &&
-          props.reticleYDieShift !== undefined
-            ? {
-                xDieCount: props.reticleXDieCount,
-                yDieCount: props.reticleYDieCount,
-                xDieShift: props.reticleXDieShift,
-                yDieShift: props.reticleYDieShift,
-              }
-            : undefined,
-      });
-      ids.push(...response.items.map((row) => Number(row.defect_id)).filter(Number.isFinite));
-      anchor = response.nextAnchor;
-      if (version !== requestVersion) return;
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    }
-    selectedIds.value = new Set(ids);
-    emit("selection-change", ids);
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : "Failed to select all rows";
-  } finally {
-    if (version === requestVersion) isSelectingAll.value = false;
-  }
-}
-
-function applySelectionAsDefects(): void {
-  if (!selectionEnabled.value) return;
-  emit("apply-selection", Array.from(selectedIds.value));
-}
-
 function applyFilterAsGlobal(): void {
   emit("apply-filter-as-global", { ...(props.filter ?? {}) });
 }
@@ -728,15 +661,6 @@ defineExpose({
       <NText depth="2" class="sst-header-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-header-actions">
         <NButton
-          v-if="selectionEnabled && serverTotal > 0"
-          size="tiny"
-          quaternary
-          :loading="isSelectingAll"
-          @click="selectAllMatching"
-        >
-          Select All ({{ serverTotal }})
-        </NButton>
-        <NButton
           v-if="selectionEnabled && selectedIds.size > 0"
           size="tiny"
           quaternary
@@ -755,15 +679,6 @@ defineExpose({
         </NButton>
         <NButton v-if="clearFilterActionEnabled" size="tiny" quaternary @click="clearAllFilters">
           {{ showGlobalFilterAction ? "Clear Table Filter" : "Clear All Filters" }}
-        </NButton>
-        <NButton
-          v-if="selectionEnabled && selectedIds.size > 0"
-          size="tiny"
-          quaternary
-          type="primary"
-          @click="applySelectionAsDefects"
-        >
-          Filter BlinkTable Samples
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded

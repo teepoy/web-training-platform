@@ -1,8 +1,10 @@
 import type { MapBinRow } from "../composables/usePerspectiveMapView";
 
-export function binsToDisplayArray(bins: MapBinRow[], _legendCol: string): number[] {
+export type MapDisplayArray = Float32Array;
+
+export function binsToDisplayArray(bins: MapBinRow[], _legendCol: string): MapDisplayArray {
   const n = bins.length;
-  const out = new Array<number>(n * 6);
+  const out = new Float32Array(n * 6);
 
   for (let i = 0; i < n; i++) {
     const bin = bins[i];

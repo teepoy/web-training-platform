@@ -9,6 +9,7 @@ const props = defineProps<{
   centerX: number;
   centerY: number;
   dataRangeNm: number;
+  dataBounds?: { minX: number; maxX: number; minY: number; maxY: number };
 }>();
 
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -60,6 +61,13 @@ function recalcTransform() {
     scale = Math.min(scaleX, scaleY);
     offsetX = -(z.x + z.w / 2);
     offsetY = -(z.y + z.h / 2);
+  } else if (props.dataBounds) {
+    const b = props.dataBounds;
+    const spanX = b.maxX - b.minX || 1;
+    const spanY = b.maxY - b.minY || 1;
+    scale = Math.min(canvasW / spanX, canvasH / spanY);
+    offsetX = -(b.minX + b.maxX) / 2;
+    offsetY = -(b.minY + b.maxY) / 2;
   } else {
     const range = props.dataRangeNm;
     scale = Math.min(canvasW, canvasH) / range;
@@ -198,7 +206,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" style="width: 100%; height: 100%; position: relative">
+  <div
+    ref="containerRef"
+    style="width: 100%; height: 100%; position: relative; background: #e8e8e8"
+  >
     <canvas ref="canvasRef" style="width: 100%; height: 100%; display: block" />
   </div>
 </template>

@@ -75,6 +75,7 @@ const GALLERY_COLUMNS = [
 ];
 
 const GALLERY_PAGE_SIZE = 1000;
+const EMPTY_MAP_DISPLAY = new Float32Array(0);
 const LARGE_SELECTION_THRESHOLD = 100;
 const HIGHLIGHT_COLUMNS = [
   "defect_id",
@@ -535,6 +536,7 @@ export function usePerspectiveInspectionModel(args: {
     | ComputedRef<ScSampleTableSort | null | undefined>;
   zoom: Ref<MapViewport | null | undefined> | ComputedRef<MapViewport | null | undefined>;
   activeMapMode: Ref<"wafer" | "die" | "reticle"> | ComputedRef<"wafer" | "die" | "reticle">;
+  galleryRandomSamplingFilter?: ComputedRef<Filter[]>;
 }) {
   const hiddenLegendKeys = ref<string[]>([]);
   const canvasDims = ref({ w: 600, h: 600 });
@@ -552,7 +554,10 @@ export function usePerspectiveInspectionModel(args: {
     gallery: null,
   });
   const galleryLimit = ref(GALLERY_PAGE_SIZE);
+  const galleryWindowStart = ref(0);
+  const galleryLoadedOffset = ref(0);
   const galleryFetching = ref(false);
+  let pendingGalleryRange: { start: number; end: number } | null = null;
   const tableRowRecord = ref<SampleRowRecord>({});
   const tableRows = computed(() => Object.values(tableRowRecord.value));
   const galleryRows = computed(() => {
@@ -573,15 +578,18 @@ export function usePerspectiveInspectionModel(args: {
   const reviewModeFilters = computed<Filter[]>(() =>
     reviewMode.value ? [REVIEW_MODE_FILTER] : [],
   );
+  const samplesFilter = computed<Filter[]>(() => args.galleryRandomSamplingFilter?.value ?? []);
 
   // Simplified tableBaseFilters — no longer includes map selection;
   // map/table/gallery selections are handled by persistent views.
   const tableBaseFilters = computed<Filter[]>(() => [
     ...globalFilters.value,
+    ...samplesFilter.value,
     ...reviewModeFilters.value,
   ]);
   const legendFilters = computed<Filter[]>(() => [
     ...globalFilters.value,
+    ...samplesFilter.value,
     ...reviewModeFilters.value,
   ]);
   const legendCol = computed(() => legendColumn(args.legendGroupBy.value));
@@ -629,9 +637,15 @@ export function usePerspectiveInspectionModel(args: {
         filter:
           tableHeaderFilters.value.length +
             globalFilters.value.length +
+            samplesFilter.value.length +
             reviewModeFilters.value.length >
           0
-            ? [...tableHeaderFilters.value, ...globalFilters.value, ...reviewModeFilters.value]
+            ? [
+                ...tableHeaderFilters.value,
+                ...globalFilters.value,
+                ...samplesFilter.value,
+                ...reviewModeFilters.value,
+              ]
             : undefined,
         sort: tableSort.value,
       }) as ViewConfigUpdate,
@@ -651,8 +665,8 @@ export function usePerspectiveInspectionModel(args: {
       ({
         columns: GALLERY_COLUMNS,
         filter:
-          [...globalFilters.value, ...reviewModeFilters.value].length > 0
-            ? [...globalFilters.value, ...reviewModeFilters.value]
+          [...globalFilters.value, ...samplesFilter.value, ...reviewModeFilters.value].length > 0
+            ? [...globalFilters.value, ...samplesFilter.value, ...reviewModeFilters.value]
             : undefined,
         sort: [["defect_id", "asc"]] as [string, string][],
       }) as ViewConfigUpdate,
@@ -769,6 +783,7 @@ export function usePerspectiveInspectionModel(args: {
         limit: galleryLimit.value,
       });
       galleryRowRecord.value = rowsToRecord(rows.slice(0, galleryLimit.value));
+      galleryLoadedOffset.value = 0;
       selectionLog("table select -> gallery records", {
         selectedIds: tableSelection.value.ids.length,
         loadedRows: rows.length,
@@ -789,6 +804,7 @@ export function usePerspectiveInspectionModel(args: {
           updateSmallGalleryHighlightsFromLoadedRows();
           return;
         }
+        const startRow = Math.min(galleryWindowStart.value, Math.max(rowCount - 1, 0));
         const rows = rowsFromJson(
           await jsonRowsForIds(
             table,
@@ -796,15 +812,21 @@ export function usePerspectiveInspectionModel(args: {
             GALLERY_COLUMNS,
             filters,
             galleryBaseConfig.value.sort,
-            galleryLimit.value,
+            startRow + galleryLimit.value,
           ),
           { includeReviewImages: true },
-        );
-        galleryRowRecord.value = rowsToRecord(rows.slice(0, galleryLimit.value));
+        ).slice(startRow, startRow + galleryLimit.value);
+        galleryRowRecord.value = rowsToRecord(rows);
+        galleryLoadedOffset.value = startRow;
         updateSmallGalleryHighlightsFromLoadedRows();
         return;
       } finally {
         galleryFetching.value = false;
+        if (pendingGalleryRange) {
+          const pending = pendingGalleryRange;
+          pendingGalleryRange = null;
+          loadGalleryRange(pending);
+        }
       }
     }
 
@@ -835,14 +857,21 @@ export function usePerspectiveInspectionModel(args: {
         updateSmallGalleryHighlightsFromLoadedRows();
         return;
       }
+      const startRow = Math.min(galleryWindowStart.value, Math.max(rowCount - 1, 0));
       const data = (await activeView.to_columns({
-        start_row: 0,
-        end_row: Math.min(rowCount, galleryLimit.value),
+        start_row: startRow,
+        end_row: Math.min(rowCount, startRow + galleryLimit.value),
       })) as Record<string, unknown[]>;
       galleryRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
+      galleryLoadedOffset.value = startRow;
       updateSmallGalleryHighlightsFromLoadedRows();
     } finally {
       galleryFetching.value = false;
+      if (pendingGalleryRange) {
+        const pending = pendingGalleryRange;
+        pendingGalleryRange = null;
+        loadGalleryRange(pending);
+      }
     }
   }
 
@@ -906,7 +935,7 @@ export function usePerspectiveInspectionModel(args: {
       smallGalleryHighlights.value,
       "wafer",
     );
-    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
     selectionLog("wafer display computed", {
       bins: rows?.length ?? 0,
       points: display.length,
@@ -922,7 +951,7 @@ export function usePerspectiveInspectionModel(args: {
       smallGalleryHighlights.value,
       "die",
     );
-    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
     selectionLog("die display computed", {
       bins: rows?.length ?? 0,
       points: display.length,
@@ -938,7 +967,7 @@ export function usePerspectiveInspectionModel(args: {
       smallGalleryHighlights.value,
       "reticle",
     );
-    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
     selectionLog("reticle display computed", {
       bins: rows?.length ?? 0,
       points: display.length,
@@ -947,6 +976,18 @@ export function usePerspectiveInspectionModel(args: {
     });
     return display;
   });
+  const activeMapRowsReady = computed(() => {
+    switch (args.activeMapMode.value) {
+      case "wafer":
+        return map.waferRows.value !== null;
+      case "die":
+        return map.dieRows.value !== null;
+      case "reticle":
+        return map.reticleRows.value !== null;
+    }
+    return false;
+  });
+  const activeMapLoading = computed(() => map.pending.value && !activeMapRowsReady.value);
 
   // Histogram watcher — unchanged logic, lock-free.
   watch(
@@ -1003,6 +1044,8 @@ export function usePerspectiveInspectionModel(args: {
   watch(
     [() => globalFilters.value, () => reviewMode.value],
     () => {
+      galleryWindowStart.value = 0;
+      galleryLoadedOffset.value = 0;
       galleryLimit.value = GALLERY_PAGE_SIZE;
       void refreshSmallGalleryHighlights();
     },
@@ -1180,7 +1223,29 @@ export function usePerspectiveInspectionModel(args: {
 
   function loadMoreGalleryRows(): void {
     if (!galleryHasMore.value || galleryFetching.value) return;
-    galleryLimit.value = Math.min(galleryLimit.value + GALLERY_PAGE_SIZE, galleryTotal.value);
+    galleryWindowStart.value = Math.min(
+      galleryWindowStart.value + GALLERY_PAGE_SIZE,
+      Math.max(galleryTotal.value - GALLERY_PAGE_SIZE, 0),
+    );
+    galleryLimit.value = GALLERY_PAGE_SIZE;
+    refreshGalleryData();
+  }
+
+  function loadGalleryRange(range: { start: number; end: number }): void {
+    if (galleryFetching.value) {
+      pendingGalleryRange = range;
+      return;
+    }
+    const pageStart = Math.max(0, Math.floor(range.start / GALLERY_PAGE_SIZE) * GALLERY_PAGE_SIZE);
+    if (
+      range.start >= galleryLoadedOffset.value &&
+      range.end <= galleryLoadedOffset.value + galleryLimit.value
+    ) {
+      return;
+    }
+    galleryWindowStart.value = pageStart;
+    galleryLimit.value = GALLERY_PAGE_SIZE;
+    refreshGalleryData();
   }
 
   async function loadGlobalDistinctValues(
@@ -1233,6 +1298,7 @@ export function usePerspectiveInspectionModel(args: {
     samples: tableRows,
     galleryRows,
     galleryTotal,
+    galleryLoadedOffset,
     galleryHasMore,
     galleryFetching,
     tableBaseFilters,
@@ -1240,6 +1306,7 @@ export function usePerspectiveInspectionModel(args: {
     sampleTableActiveViewVersion: tableMapView.version,
     total,
     mapLoading: map.pending,
+    activeMapLoading,
     mapError: map.error,
     tableLoading: tableGlobalView.pending,
     galleryLoading: galleryGlobalView.pending,
@@ -1248,6 +1315,7 @@ export function usePerspectiveInspectionModel(args: {
     predictionConfidences,
     annotationLabels,
     loadMoreGalleryRows,
+    loadGalleryRange,
     loadGlobalDistinctValues,
     setTableSelectedDefectIds,
     setGallerySelectedDefectIds,

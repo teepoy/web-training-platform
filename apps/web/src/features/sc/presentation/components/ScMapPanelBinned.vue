@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
-import { NTabs, NTabPane, NResult, NButton, NSelect, NIcon, NTooltip } from "naive-ui";
+import {
+  NTabs,
+  NTabPane,
+  NResult,
+  NButton,
+  NSelect,
+  NIcon,
+  NTooltip,
+  NSpin,
+  NText,
+} from "naive-ui";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
 import ScWaferMap from "./ScWaferMapPerspective.vue";
@@ -11,6 +21,7 @@ import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 import type { HighlightDefect } from "./types";
+import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
@@ -18,9 +29,9 @@ type LegendKey = number | string;
 const props = defineProps<{
   activeMapTab?: "wafer" | "die" | "reticle";
 
-  waferPoints?: number[];
-  diePoints?: number[];
-  reticlePoints?: number[];
+  waferPoints?: MapDisplayArray | number[];
+  diePoints?: MapDisplayArray | number[];
+  reticlePoints?: MapDisplayArray | number[];
 
   waferGeometry?: {
     centerX: number;
@@ -378,6 +389,12 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
 
       <div class="sc-map-body" data-testid="sc-map-toolbar-container">
         <div class="map-area">
+          <div v-if="mapLoading" class="map-loading-overlay">
+            <NSpin size="small" />
+            <NText depth="3" class="map-loading-text">
+              {{ mapProgressMessage ?? "Loading map..." }}
+            </NText>
+          </div>
           <ScWaferMap
             v-if="internalTab === 'wafer'"
             :points="waferPoints"
@@ -395,6 +412,8 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           <ScDieStackMap
             v-else-if="internalTab === 'die'"
             :points="diePoints"
+            :die-size-x="waferGeometry?.dieSizeX"
+            :die-size-y="waferGeometry?.dieSizeY"
             :color-map="colorMap"
             :zoom="zoom"
             :mode="mapMode.die"
@@ -402,10 +421,15 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :highlightDefects="highlightDefects"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
+            @box-select="onBoxSelect"
           />
           <ScReticleMap
             v-else-if="internalTab === 'reticle'"
             :points="reticlePoints"
+            :x-die-count="reticleXDieCount"
+            :y-die-count="reticleYDieCount"
+            :die-size-x="reticleDieSizeX"
+            :die-size-y="reticleDieSizeY"
             :color-map="colorMap"
             :zoom="zoom"
             :mode="mapMode.reticle"
@@ -413,6 +437,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :highlightDefects="highlightDefects"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
+            @box-select="onBoxSelect"
           />
           <div v-else-if="internalTab === 'reticle'" class="reticle-map-placeholder">
             Missing reticle configuration
@@ -537,9 +562,25 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
 }
 
 .map-area {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--n-color), transparent 18%);
+}
+
+.map-loading-text {
+  font-size: 12px;
 }
 
 .legend-drawer {

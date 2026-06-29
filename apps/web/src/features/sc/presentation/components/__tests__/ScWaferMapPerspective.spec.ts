@@ -126,7 +126,7 @@ async function simulateDrag(
   endX: number,
   endY: number,
 ) {
-  const canvas = wrapper.find("canvas");
+  const canvas = wrapper.find(".sc-wafer-map-perspective__overlay");
   await canvas.trigger("pointerdown", { button: 0, clientX: startX, clientY: startY });
   await canvas.trigger("pointermove", { clientX: endX, clientY: endY });
   await canvas.trigger("pointerup", { clientX: endX, clientY: endY });
@@ -141,8 +141,13 @@ describe("ScWaferMapPerspective", () => {
 
   beforeEach(() => {
     ctxSpy = createCtxSpy();
-    vi.spyOn(scMapViewport, "prepareOverlayCanvas").mockReturnValue(
-      ctxSpy as unknown as CanvasRenderingContext2D,
+    vi.spyOn(scMapViewport, "prepareOverlayCanvas").mockImplementation(
+      (cvs: HTMLCanvasElement, _size: unknown) => {
+        if (cvs.classList.contains("sc-wafer-map-perspective__overlay")) {
+          return ctxSpy as unknown as CanvasRenderingContext2D;
+        }
+        return null;
+      },
     );
   });
 
@@ -164,7 +169,7 @@ describe("ScWaferMapPerspective", () => {
       },
     });
 
-    const canvas = wrapper.find("canvas");
+    const canvas = wrapper.find(".sc-wafer-map-perspective__overlay");
     await canvas.trigger("pointerdown", { button: 0, clientX: 10, clientY: 10 });
     await nextTick();
 
@@ -274,7 +279,7 @@ describe("ScWaferMapPerspective", () => {
       },
     });
 
-    const canvas = wrapper.find("canvas");
+    const canvas = wrapper.find(".sc-wafer-map-perspective__overlay");
     await canvas.trigger("pointerdown", { button: 0, clientX: 10, clientY: 10 });
     await nextTick();
 

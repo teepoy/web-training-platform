@@ -50,6 +50,94 @@ def _empty_overlay_df() -> pl.DataFrame:
     )
 
 
+_PERSPECTIVE_TABLE_COLUMNS = (
+    "defect_id",
+    "sample_id",
+    "inspection_time",
+    "wafer_key",
+    "wafer_x",
+    "wafer_y",
+    "die_x",
+    "die_y",
+    "reticle_x",
+    "reticle_y",
+    "rough_bin",
+    "class_number",
+    "images",
+    "test_id",
+    "index_x",
+    "index_y",
+    "adder",
+    "cluster_id",
+    "size_x",
+    "size_y",
+    "size_d",
+    "area",
+    "final_bin",
+    "manual_bin",
+    "kill_ratio",
+    "annotation_label",
+    "prediction_label",
+    "prediction_confidence",
+    "final_class",
+    "review_image_ids_json",
+    "map_in_selection",
+    "table_in_selection",
+    "gallery_in_selection",
+)
+
+_PERSPECTIVE_COLUMN_DTYPES = {
+    "defect_id": pl.Int32,
+    "sample_id": pl.Utf8,
+    "inspection_time": pl.Utf8,
+    "wafer_key": pl.Int64,
+    "wafer_x": pl.Int64,
+    "wafer_y": pl.Int64,
+    "die_x": pl.Int64,
+    "die_y": pl.Int64,
+    "reticle_x": pl.Int64,
+    "reticle_y": pl.Int64,
+    "rough_bin": pl.Int64,
+    "class_number": pl.Int64,
+    "images": pl.Int32,
+    "test_id": pl.Int64,
+    "index_x": pl.Int64,
+    "index_y": pl.Int64,
+    "adder": pl.Int64,
+    "cluster_id": pl.Utf8,
+    "size_x": pl.Int64,
+    "size_y": pl.Int64,
+    "size_d": pl.Int64,
+    "area": pl.Int64,
+    "final_bin": pl.Int64,
+    "manual_bin": pl.Int64,
+    "kill_ratio": pl.Float64,
+    "annotation_label": pl.Utf8,
+    "prediction_label": pl.Utf8,
+    "prediction_confidence": pl.Float64,
+    "final_class": pl.Utf8,
+    "review_image_ids_json": pl.Utf8,
+    "map_in_selection": pl.Int32,
+    "table_in_selection": pl.Int32,
+    "gallery_in_selection": pl.Int32,
+}
+
+
+def _empty_samples_df() -> pl.DataFrame:
+    return _select_perspective_columns(
+        _normalize_samples_df(
+            pl.DataFrame({"defect_id": pl.Series([], dtype=pl.Int32)})
+        )
+    )
+
+
+def _select_perspective_columns(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns(
+        pl.col(col).cast(dtype, strict=False)
+        for col, dtype in _PERSPECTIVE_COLUMN_DTYPES.items()
+    ).select(*_PERSPECTIVE_TABLE_COLUMNS)
+
+
 def overlay_df_from_samples(samples_df: pl.DataFrame) -> pl.DataFrame:
     df = samples_df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
     exprs: list[pl.Expr] = [
@@ -310,8 +398,32 @@ async def _build_dataset_df(
 
 def _init_tables(server: Server, samples_df: pl.DataFrame) -> Table:
     client = server.new_local_client()
-    joined = client.table(samples_df, name="joined_samples", index="defect_id")
+    joined = client.table(
+        _select_perspective_columns(samples_df),
+        name="joined_samples",
+        index="defect_id",
+    )
     return joined
+
+
+async def _load_initial_samples(
+    *,
+    websocket: WebSocket,
+    joined_table: Table,
+    samples_df_factory: Callable[[], Awaitable[pl.DataFrame]],
+) -> None:
+    try:
+        samples_df = await samples_df_factory()
+        _logger.info("sc perspective initial samples loaded rows=%d", len(samples_df))
+        joined_table.update(_select_perspective_columns(samples_df))
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _logger.exception("sc perspective initial samples load failed")
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
 
 
 async def _redis_listener(
@@ -369,17 +481,22 @@ async def run_sc_perspective_ws(
 ) -> None:
     server = Server()
     joined: Table | None = None
+    initial_load_task: asyncio.Task[None] | None = None
+    listener_task: asyncio.Task[None] | None = None
     stop_event = asyncio.Event()
 
     async def _noop_overlay() -> pl.DataFrame | None:
         return None
 
     try:
-        samples_df = await samples_df_factory()
-        import logging
-
-        logging.info(f"{samples_df.get_column('images').min() = }")
-        joined = _init_tables(server, samples_df)
+        joined = _init_tables(server, _empty_samples_df())
+        initial_load_task = asyncio.create_task(
+            _load_initial_samples(
+                websocket=websocket,
+                joined_table=joined,
+                samples_df_factory=samples_df_factory,
+            )
+        )
         listener_task = asyncio.create_task(
             _redis_listener(
                 redis_client=redis_client,
@@ -398,11 +515,14 @@ async def run_sc_perspective_ws(
             await handler.run()
         finally:
             stop_event.set()
-            listener_task.cancel()
-            try:
-                await listener_task
-            except asyncio.CancelledError:
-                pass
+            for task in (initial_load_task, listener_task):
+                if task is None:
+                    continue
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
     finally:
         if joined is not None:
             try:

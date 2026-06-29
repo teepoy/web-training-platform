@@ -190,6 +190,9 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
       local[field] = value;
     }
   }
+  if (Object.keys(local).length > 0) {
+    page.clearGalleryRandomSamplingDefectIds();
+  }
   page.sampleTableFilter.value = local;
 }
 </script>
@@ -298,6 +301,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :gallery-selected-defect-ids="Array.from(page.selectedDefectIds.value)"
             :table-filter="page.sampleTableFilter.value"
             :global-filter-action-enabled="hasLocalSampleTableFilter"
+            :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
             :legend-group-by="page.legendGroupBy.value"
             :legend-sources="['class', 'bin', 'annotation', 'prediction', 'final_class']"
             @update:active-map-tab="page.setActiveMapTab"
@@ -307,8 +311,10 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @table-filter-change="onSampleTableFilterChange"
             @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
             @table-sort-change="() => {}"
-            @table-selection-change="page.setSampleTableSelectedIds"
-            @table-apply-selection="() => {}"
+            @table-selection-change="
+              (ids: number[]) => page.selectDefectIds(ids.map(String), 'replace')
+            "
+            @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
             @legend-group-change="page.handleLegendGroupByChange"
             @retry="() => {}"
           >

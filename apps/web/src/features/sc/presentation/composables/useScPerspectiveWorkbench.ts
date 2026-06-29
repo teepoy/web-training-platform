@@ -38,6 +38,9 @@ export interface ScPerspectiveWorkbenchState {
 }
 
 let initialized = false;
+const JOINED_SAMPLES_TABLE = "joined_samples";
+const TABLE_READY_TIMEOUT_MS = 60_000;
+const TABLE_READY_RETRY_MS = 500;
 
 async function initPerspectiveClient(): Promise<void> {
   if (initialized) return;
@@ -75,13 +78,41 @@ function buildWsUrl(options: ScPerspectiveWorkbenchOptions): string {
   return `${wsBaseUrl()}/perspective/datasets/${encodeURIComponent(options.datasetId)}/ws?${params}`;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function openJoinedSamplesTable(client: Client, isCurrent: () => boolean): Promise<Table> {
+  const startedAt = Date.now();
+  let lastError: unknown = null;
+
+  while (isCurrent()) {
+    try {
+      return await client.open_table(JOINED_SAMPLES_TABLE);
+    } catch (err) {
+      lastError = err;
+      if (Date.now() - startedAt >= TABLE_READY_TIMEOUT_MS) break;
+      await sleep(TABLE_READY_RETRY_MS);
+    }
+  }
+
+  if (!isCurrent()) {
+    throw new Error("Perspective connection was replaced before table became ready");
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Perspective table "${JOINED_SAMPLES_TABLE}" was not ready`);
+}
+
 export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
   const table = ref<Table | null>(null);
   const connected = ref(false);
   const error = ref<string | null>(null);
   let client: Client | null = null;
+  let connectionSeq = 0;
 
   function disconnect(): void {
+    connectionSeq += 1;
     if (table.value) {
       try {
         table.value.delete();
@@ -103,15 +134,32 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
 
   async function connect(options: ScPerspectiveWorkbenchOptions): Promise<void> {
     disconnect();
+    const seq = connectionSeq;
     error.value = null;
     try {
       await initPerspectiveClient();
-      client = await perspective.websocket(buildWsUrl(options));
-      table.value = await client.open_table("joined_samples");
+      const nextClient = await perspective.websocket(buildWsUrl(options));
+      if (seq !== connectionSeq) {
+        nextClient.terminate();
+        return;
+      }
+      client = nextClient;
+      const openedTable = await openJoinedSamplesTable(nextClient, () => seq === connectionSeq);
+      if (seq !== connectionSeq) {
+        try {
+          openedTable.delete();
+        } catch {
+          /* best effort */
+        }
+        return;
+      }
+      table.value = openedTable;
       connected.value = true;
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
-      disconnect();
+      if (seq === connectionSeq) {
+        error.value = err instanceof Error ? err.message : String(err);
+        disconnect();
+      }
     }
   }
 

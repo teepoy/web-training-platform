@@ -20,7 +20,9 @@ const props = withDefaults(
     hasNextPage?: boolean;
     isFetchingNextPage?: boolean;
     onLoadMore?: () => void;
+    onVisibleRangeChange?: (range: { start: number; end: number }) => void;
     total?: number;
+    loadedOffset?: number;
   }>(),
   {
     samples: () => [],
@@ -142,10 +144,12 @@ onBeforeUnmount(() => {
       :overscan="props.overscan"
       :inspection-time="props.inspectionTime"
       :total="props.total"
+      :loaded-offset="props.loadedOffset"
       @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
       @scroll-container-change="handleScrollContainerChange"
       @mode-change="emit('modeChange', $event)"
       @near-bottom="maybeLoadMore"
+      @visible-range-change="props.onVisibleRangeChange?.($event)"
     />
     <Teleport v-if="scrollContainer" :to="scrollContainer">
       <div

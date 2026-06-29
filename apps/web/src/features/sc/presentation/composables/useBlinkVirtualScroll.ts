@@ -12,6 +12,8 @@ export interface UseBlinkVirtualScrollParams {
   mode: Ref<"patch" | "review">;
   patchPerRow: Ref<number>;
   reviewPerRow: Ref<number>;
+  totalSamples?: Ref<number | undefined>;
+  sampleOffset?: Ref<number>;
   patchCellSize?: Ref<number>;
   reviewCellSize?: Ref<number>;
   extraRowHeight?: Ref<number>;
@@ -34,6 +36,7 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
   const reviewCellSize = params.reviewCellSize;
   const extraRowHeight = params.extraRowHeight;
   const overscan = params.overscan;
+  const sampleOffset = params.sampleOffset;
 
   const effectiveSamplesPerRow = computed(() =>
     mode.value === "patch" ? patchPerRow.value : reviewPerRow.value,
@@ -87,15 +90,24 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
 
   const virtualRowHeightStr = computed(() => `${virtualRowHeight.value}px`);
 
+  const virtualSampleCount = computed(() => {
+    if (mode.value === "review") return visibleSamples.value.length;
+    return Math.max(params.totalSamples?.value ?? visibleSamples.value.length, visibleSamples.value.length);
+  });
+
   const virtualRowCount = computed(() =>
-    Math.ceil(Math.max(visibleSamples.value.length, 1) / effectiveSamplesPerRow.value),
+    Math.ceil(Math.max(virtualSampleCount.value, 1) / effectiveSamplesPerRow.value),
   );
 
   function samplesForVirtualRow(rowIdx: number): ScSampleItem[] {
     const t0 = performance.now();
     const perRow = effectiveSamplesPerRow.value;
-    const start = rowIdx * perRow;
-    const rows = visibleSamples.value.slice(start, start + perRow);
+    const globalStart = rowIdx * perRow;
+    const localStart = mode.value === "review" ? globalStart : globalStart - (sampleOffset?.value ?? 0);
+    const rows =
+      localStart >= 0 && localStart < visibleSamples.value.length
+        ? visibleSamples.value.slice(localStart, localStart + perRow)
+        : [];
     const ms = performance.now() - t0;
     if (ms > 1) {
       selectionLog("blink virtual row samples slow", {
@@ -113,7 +125,7 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
 
   const virtualizer = useVirtualizer({
     get count() {
-      if (visibleSamples.value.length === 0) return 0;
+      if (virtualSampleCount.value === 0) return 0;
       return virtualRowCount.value;
     },
     getScrollElement: () => scrollRef.value,
@@ -142,6 +154,8 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
       virtualRowHeight,
       effectiveSamplesPerRow,
       () => visibleSamples.value.length,
+      () => virtualSampleCount.value,
+      () => sampleOffset?.value ?? 0,
     ],
     () => {
       const scheduledAt = performance.now();
@@ -177,6 +191,7 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
     queueViewportImageLoad,
     scrollRef,
     visibleSamples,
+    virtualSampleCount,
     maxReviewImages,
     reviewColumnIndices,
     imageCellHeightPx,

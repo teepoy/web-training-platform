@@ -32,7 +32,8 @@ describe("binsToDisplayArray (Perspective 6-int format)", () => {
 
     const x = 1 * 10 + 5; // gx * binSize + binSize/2 = 15
     const y = 2 * 10 + 5; // = 25
-    expect(result).toEqual([x, y, 3, 0, 1, 0]);
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(Array.from(result)).toEqual([x, y, 3, 0, 1, 0]);
   });
 
   it("encodes map_in_selection flag", () => {
@@ -54,7 +55,9 @@ describe("binsToDisplayArray (Perspective 6-int format)", () => {
   });
 
   it("returns empty array for empty bins", () => {
-    expect(binsToDisplayArray([], "class_number")).toEqual([]);
+    const result = binsToDisplayArray([], "class_number");
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(result.length).toBe(0);
   });
 
   it("produces correct stride (6 per point)", () => {

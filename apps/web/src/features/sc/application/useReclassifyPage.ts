@@ -151,8 +151,6 @@ export interface ReclassifyPageState {
   clearGlobalFilter: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
-  sampleTableSelectedIds: Ref<Set<string>>;
-  setSampleTableSelectedIds: (ids: number[]) => void;
   filterBlinkTableSamples: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
   highlightDefects: ComputedRef<HighlightDefect[]>;
@@ -200,6 +198,8 @@ export interface ReclassifyPageState {
   samplingCount: Ref<number>;
   assignDefaultDraftLabel: Ref<boolean>;
   applySampling: () => void;
+  galleryRandomSamplingDefectIds: Ref<Set<string>>;
+  clearGalleryRandomSamplingDefectIds: () => void;
 
   selectedTrainerId: Ref<string | null>;
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
@@ -289,6 +289,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const mapFilter = ref<Record<string, (number | string)[]>>({});
   const globalFilter = ref<ScSampleTableFilter>({});
   const sampleTableFilter = ref<ScSampleTableFilter>({});
+  const galleryRandomSamplingDefectIds = ref<Set<string>>(new Set());
   const effectiveSampleTableFilter = computed<ScSampleTableFilter>(() => ({
     ...globalFilter.value,
     ...sampleTableFilter.value,
@@ -325,20 +326,17 @@ export function useReclassifyPage(): ReclassifyPageState {
     mapFilteredIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
     selectedDefectFilterIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
-  const sampleTableSelectedIds = ref<Set<string>>(new Set());
   const selectedDefectFilterIds = ref<Set<string>>(new Set());
-
-  function setSampleTableSelectedIds(ids: number[]): void {
-    sampleTableSelectedIds.value = new Set(ids.map(String));
-  }
 
   function filterBlinkTableSamples(ids: number[]): void {
     selectedDefectFilterIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
     mapFilteredIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
@@ -535,7 +533,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         imageId: img.image_id,
         url: scImageUrlForRole(r, img),
       })),
-      currentLabel: r.label || null,
+      currentLabel: r.label ?? null,
       predictedLabel: r.predicted_label || null,
       confidence: r.confidence ?? null,
     }));
@@ -693,6 +691,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function handleMapFilterChange(filter: Record<string, (number | string)[]>): void {
     mapFilter.value = filter;
+    galleryRandomSamplingDefectIds.value = new Set();
   }
 
   function handleLegendGroupByChange(source: LegendColorSource | null): void {
@@ -701,22 +700,26 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   function applySampleTableFilterAsGlobal(): void {
+    if (Object.keys(sampleTableFilter.value).length > 0) {
+      galleryRandomSamplingDefectIds.value = new Set();
+    }
     globalFilter.value = { ...globalFilter.value, ...sampleTableFilter.value };
     sampleTableFilter.value = {};
   }
 
   function clearGlobalFilter(): void {
     globalFilter.value = {};
+    galleryRandomSamplingDefectIds.value = new Set();
   }
 
   function clearMapFilter(): void {
     mapFilter.value = {};
     globalFilter.value = {};
     sampleTableFilter.value = {};
-    sampleTableSelectedIds.value = new Set();
     selectedDefectFilterIds.value = new Set();
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
@@ -881,16 +884,6 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   function setAnnotationDraft(defectId: string, label: string): void {
-    if (label === "0") {
-      const next = { ...annotationDraft.value };
-      delete next[defectId];
-      const sample = scSamples.value.find((item) => item.defectId === defectId);
-      if (sample?.currentLabel) {
-        next[defectId] = "0";
-      }
-      annotationDraft.value = next;
-      return;
-    }
     annotationDraft.value = { ...annotationDraft.value, [defectId]: label };
   }
 
@@ -995,7 +988,7 @@ export function useReclassifyPage(): ReclassifyPageState {
                     if (newLabel !== undefined) {
                       return {
                         ...item,
-                        label: newLabel === "0" ? null : newLabel,
+                        label: newLabel,
                       };
                     }
                     return item;
@@ -1069,6 +1062,11 @@ export function useReclassifyPage(): ReclassifyPageState {
   const showSamplingModal = ref(false);
   const samplingCount = ref(200);
   const assignDefaultDraftLabel = ref(false);
+
+  function clearGalleryRandomSamplingDefectIds(): void {
+    galleryRandomSamplingDefectIds.value = new Set();
+  }
+
   async function applySampling(): Promise<void> {
     const count = samplingCount.value;
     if (count <= 0) return;
@@ -1096,6 +1094,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     sampledIds.value = new Set(sampled);
     selectedDefectFilterIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set(sampled);
 
     if (assignDefaultDraftLabel.value) {
       const next: Record<string, string> = {};
@@ -1457,8 +1456,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     clearGlobalFilter,
     clearMapFilter,
     handleBoxSelectionChange,
-    sampleTableSelectedIds,
-    setSampleTableSelectedIds,
     filterBlinkTableSamples,
     mapFilteredIds,
     highlightDefects,
@@ -1500,6 +1497,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     samplingCount,
     assignDefaultDraftLabel,
     applySampling,
+    galleryRandomSamplingDefectIds,
+    clearGalleryRandomSamplingDefectIds,
 
     selectedTrainerId,
     trainerOptions,

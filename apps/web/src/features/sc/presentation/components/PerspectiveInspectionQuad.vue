@@ -18,6 +18,8 @@ import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domai
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
+import type { MapDisplayArray } from "@/features/sc/presentation/components/transforms/binsToDisplayArrays";
+import type { Filter } from "@perspective-dev/client";
 import { useScPerspectiveWorkbench } from "@/features/sc/presentation/composables/useScPerspectiveWorkbench";
 import { usePerspectiveSampleTableDataSource } from "@/features/sc/presentation/composables/usePerspectiveSampleTableDataSource";
 import { usePerspectiveInspectionModel } from "@/features/sc/presentation/composables/usePerspectiveInspectionModel";
@@ -51,12 +53,12 @@ const props = defineProps<{
     dieSizeX: number;
     dieSizeY: number;
   } | null;
-  waferDisplay?: number[];
-  dieDisplay?: number[];
-  reticleDisplay?: number[];
-  unzoomedWaferDisplay?: number[];
-  unzoomedDieDisplay?: number[];
-  unzoomedReticleDisplay?: number[];
+  waferDisplay?: MapDisplayArray | number[];
+  dieDisplay?: MapDisplayArray | number[];
+  reticleDisplay?: MapDisplayArray | number[];
+  unzoomedWaferDisplay?: MapDisplayArray | number[];
+  unzoomedDieDisplay?: MapDisplayArray | number[];
+  unzoomedReticleDisplay?: MapDisplayArray | number[];
   legendGroups?: Record<string, DefectList> | null;
   legendGroupBy?: ScLegendSource | null;
   legendSources?: ScLegendSource[];
@@ -70,6 +72,7 @@ const props = defineProps<{
   tableFilter?: ScSampleTableFilter;
   globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
+  galleryRandomSamplingDefectIds?: Set<string>;
 }>();
 
 const emit = defineEmits<{
@@ -88,9 +91,9 @@ const emit = defineEmits<{
   (e: "table-apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
-  (e: "table-apply-selection", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "legend-hidden-change", payload: { source: ScLegendSource; hiddenKeys: string[] }): void;
+  (e: "clear-gallery-random-sampling"): void;
   (
     e: "select-samples",
     ids: string[],
@@ -151,6 +154,12 @@ const perspectiveScopeKey = computed(() => {
   if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
   return `perspective:inspection:${props.inspectionTime ?? ""}:${props.waferKey ?? ""}`;
 });
+const galleryRandomSamplingFilter = computed<Filter[]>(() => {
+  const ids = props.galleryRandomSamplingDefectIds;
+  if (!ids || ids.size === 0) return [];
+  return [["defect_id", "in", [...ids]] as Filter];
+});
+
 const model = usePerspectiveInspectionModel({
   table: perspective.table,
   legendGroupBy: computed(() => props.legendGroupBy),
@@ -159,6 +168,7 @@ const model = usePerspectiveInspectionModel({
   tableSort: computed(() => props.tableSort),
   zoom: computed(() => props.zoom),
   activeMapMode: computed(() => props.activeMapTab),
+  galleryRandomSamplingFilter,
 });
 const tableDataSource = usePerspectiveSampleTableDataSource(
   perspective.table,
@@ -218,7 +228,7 @@ const tableHighlightIds = computed(
 const blinkHighlightIds = computed(
   () => new Set((props.gallerySelectedDefectIds ?? []).map(String)),
 );
-const EMPTY_MAP_DISPLAY: number[] = [];
+const EMPTY_MAP_DISPLAY = new Float32Array(0);
 const activeWaferDisplay = computed(() =>
   props.activeMapTab === "wafer" ? model.waferDisplay.value : EMPTY_MAP_DISPLAY,
 );
@@ -451,9 +461,9 @@ async function handleMapSelectionChange(ids: number[]): Promise<void> {
   if (ids.length === 0) await model.clearMapSelection();
   emit("select-points", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
 }
-async function handleTableSelectionChange(ids: number[]): Promise<void> {
+function handleTableSelectionChange(ids: number[]): void {
   selectionLog("table selection-change event", { ids: ids.length });
-  await model.setTableSelectedDefectIds(ids);
+  void model.setTableSelectedDefectIds(ids);
   selectionLog("table selection-change emit", { ids: ids.length });
   emit("table-selection-change", ids);
 }
@@ -493,7 +503,12 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
       <ScGlobalFilterBar
         :filter="globalFilter"
         :distinct-values="globalDistinctValues"
-        @update:filter="globalFilter = $event"
+        @update:filter="
+          globalFilter = $event;
+          if (galleryRandomSamplingDefectIds && galleryRandomSamplingDefectIds.size > 0) {
+            emit('clear-gallery-random-sampling');
+          }
+        "
         @search-options="searchGlobalFilterOptions"
       />
       <div class="iq-wafer">
@@ -513,7 +528,7 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
           :legend-group-by="legendGroupBy"
           :zoom="zoom"
           :highlightDefects="highlightDefects"
-          :map-loading="model.mapLoading.value || !perspectiveReady"
+          :map-loading="model.activeMapLoading.value || !perspectiveReady"
           :map-error="model.mapError.value ?? perspective.error.value"
           :map-progress-message="perspectiveReady ? undefined : 'Connecting Perspective data...'"
           :map-progress-percent="perspectiveReady ? undefined : 0"
@@ -553,7 +568,6 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
         :reticle-x-die-shift="reticleOptionsModel.xDieShift"
         :reticle-y-die-shift="reticleOptionsModel.yDieShift"
         @selection-change="handleTableSelectionChange"
-        @apply-selection="() => undefined"
         @apply-filter-as-global="(filter) => emit('table-apply-filter-as-global', filter)"
         @filter-change="(filter) => emit('table-filter-change', filter)"
         @sort-change="(sort) => emit('table-sort-change', sort)"
@@ -582,9 +596,11 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
           :prediction-confidences="model.predictionConfidences.value"
           :annotation-labels="model.annotationLabels.value"
           :gallery-total="model.galleryTotal.value"
+          :gallery-loaded-offset="model.galleryLoadedOffset.value"
           :has-next-page="model.galleryHasMore.value"
           :is-fetching-next-page="model.galleryFetching.value"
           :on-load-more="model.loadMoreGalleryRows"
+          :on-visible-range-change="model.loadGalleryRange"
           :on-review-mode-change="model.setReviewMode"
           ><ScPreviewBlinkVirtualTable
             :samples="blinkSamples"
@@ -595,6 +611,8 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
             :is-fetching-next-page="model.galleryFetching.value"
             :on-load-more="model.loadMoreGalleryRows"
             :total="model.galleryTotal.value"
+            :loaded-offset="model.galleryLoadedOffset.value"
+            :on-visible-range-change="model.loadGalleryRange"
             :blink-interval-ms="800"
             :initial-blink-enabled="true"
             :selected-defect-ids="blinkHighlightIds"

@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
 import type { PerspectiveMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
+import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 import {
   boundsFromRegion,
   buildMapTransform,
@@ -17,7 +18,7 @@ import {
 } from "./scMapViewport";
 
 const STRIDE = 6;
-const DATA_RANGE = 200_000;
+const DEFAULT_DIE_RANGE = 200_000;
 
 interface DieGeometry {
   centerX: number;
@@ -27,7 +28,9 @@ interface DieGeometry {
 }
 
 const props = defineProps<{
-  points?: number[];
+  points?: MapDisplayArray | number[];
+  dieSizeX?: number;
+  dieSizeY?: number;
   geometry?: DieGeometry | null;
   colorMap?: Record<string, string>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
@@ -35,6 +38,20 @@ const props = defineProps<{
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
   highlightDefects?: HighlightDefect[];
 }>();
+
+function resolveDieSizeX(): number {
+  return props.dieSizeX ?? props.geometry?.dieSizeX ?? DEFAULT_DIE_RANGE;
+}
+
+function resolveDieSizeY(): number {
+  return props.dieSizeY ?? props.geometry?.dieSizeY ?? DEFAULT_DIE_RANGE;
+}
+
+const dataBounds = computed(() => {
+  const dsx = resolveDieSizeX();
+  const dsy = resolveDieSizeY();
+  return { minX: 0, maxX: dsx, minY: 0, maxY: dsy };
+});
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
@@ -50,6 +67,7 @@ const HIGHLIGHT_POINT_COLOR = "#A855F7";
 const CROSSHAIR_COLOR = "#000000";
 
 const containerRef = ref<HTMLDivElement | null>(null);
+const bgRef = ref<HTMLCanvasElement | null>(null);
 const overlayRef = ref<HTMLCanvasElement | null>(null);
 
 let mapSize: ScMapSize = { width: 600, height: 600 };
@@ -57,15 +75,15 @@ let transform: ScMapTransform = buildMapTransform(
   mapSize,
   {
     minX: 0,
-    maxX: DATA_RANGE,
+    maxX: DEFAULT_DIE_RANGE,
     minY: 0,
-    maxY: DATA_RANGE,
+    maxY: DEFAULT_DIE_RANGE,
   },
   1,
 );
 
-const centerX = computed(() => 0);
-const centerY = computed(() => 0);
+const centerX = computed(() => resolveDieSizeX() / 2);
+const centerY = computed(() => resolveDieSizeY() / 2);
 
 const perspectivePoints = computed<PerspectiveMapPoint[]>(() => {
   const pts = props.points;
@@ -92,17 +110,14 @@ function recalcTransform() {
   if (props.zoom) {
     transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 1.0);
   } else {
+    const b = dataBounds.value;
     transform = buildMapTransform(
       mapSize,
-      {
-        minX: 0,
-        maxX: DATA_RANGE,
-        minY: 0,
-        maxY: DATA_RANGE,
-      },
+      { minX: b.minX, maxX: b.maxX, minY: b.minY, maxY: b.maxY },
       1,
     );
   }
+  renderBackground();
 }
 
 function getPos(e: MouseEvent): [number, number] {
@@ -240,9 +255,30 @@ function drawOverlay() {
   ctx.strokeRect(r.x, r.y, r.w, r.h);
 }
 
+function renderBackground() {
+  const cvs = bgRef.value;
+  if (!cvs || mapSize.width <= 0 || mapSize.height <= 0) return;
+  const ctx = prepareOverlayCanvas(cvs, mapSize);
+  if (!ctx) return;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, mapSize.width, mapSize.height);
+
+  const dsx = resolveDieSizeX();
+  const dsy = resolveDieSizeY();
+  if (dsx > 0 && dsy > 0) {
+    const [left, bottom] = dataToScreen(transform, 0, 0);
+    const [right, top] = dataToScreen(transform, dsx, dsy);
+    ctx.strokeStyle = "#9ca3af";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(left, top, right - left, bottom - top);
+  }
+}
+
 let _ro: ResizeObserver | null = null;
 function onResize() {
   recalcTransform();
+  drawOverlay();
 }
 watch(
   containerRef,
@@ -259,10 +295,11 @@ watch(
 watch(
   () => props.points,
   () => {
+    recalcTransform();
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
-      drawOverlay();
     }
+    drawOverlay();
   },
 );
 watch(
@@ -278,13 +315,15 @@ watch(
 
 <template>
   <div ref="containerRef" class="sc-die-map-perspective" @dblclick="onDblClick">
+    <canvas ref="bgRef" class="sc-die-map-perspective__bg" />
     <SimplePerspectiveMap
       :points="perspectivePoints"
       :color-map="colorMap ?? {}"
       :zoom="zoom"
       :center-x="centerX"
       :center-y="centerY"
-      :data-range-nm="DATA_RANGE"
+      :data-range-nm="DEFAULT_DIE_RANGE"
+      :data-bounds="dataBounds"
     />
     <canvas
       ref="overlayRef"
@@ -304,6 +343,15 @@ watch(
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+.sc-die-map-perspective__bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 .sc-die-map-perspective__overlay {
   position: absolute;

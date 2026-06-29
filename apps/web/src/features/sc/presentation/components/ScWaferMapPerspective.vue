@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
 import type { PerspectiveMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
+import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 import {
   boundsFromRegion,
   buildMapTransform,
@@ -18,7 +19,9 @@ import {
 
 const STRIDE = 6;
 const DEFAULT_WAFER_RADIUS_NM = 150_000_000;
-const DATA_RANGE = 300_000_000;
+
+const DIE_LINE_COLOR = "#9ca3af";
+const WAFER_EDGE_COLOR = "#333333";
 
 interface WaferGeometry {
   centerX: number;
@@ -30,7 +33,7 @@ interface WaferGeometry {
 }
 
 const props = defineProps<{
-  points?: number[];
+  points?: MapDisplayArray | number[];
   waferRadiusNm?: number;
   geometry?: WaferGeometry | null;
   colorMap?: Record<string, string>;
@@ -56,6 +59,7 @@ const HIGHLIGHT_POINT_COLOR = "#A855F7";
 const CROSSHAIR_COLOR = "#000000";
 
 const containerRef = ref<HTMLDivElement | null>(null);
+const bgRef = ref<HTMLCanvasElement | null>(null);
 const overlayRef = ref<HTMLCanvasElement | null>(null);
 
 let mapSize: ScMapSize = { width: 600, height: 600 };
@@ -70,9 +74,226 @@ let transform: ScMapTransform = buildMapTransform(
   1,
 );
 
+let dieGridData: { x: number; y: number; valid: boolean }[] = [];
+let gridExtent = 0;
+
+function buildDieGrid(
+  radiusNm: number,
+  gCenterX: number,
+  gCenterY: number,
+  gOriginX: number,
+  gOriginY: number,
+  dieSX: number,
+  dieSY: number,
+) {
+  dieGridData = [];
+  const dw = Math.max(1, dieSX);
+  const dh = Math.max(1, dieSY);
+  const screenDieW = dw * transform.scale;
+  const screenDieH = dh * transform.scale;
+  if (screenDieW < 0.5 && screenDieH < 0.5) return;
+
+  const z = props.zoom;
+  const minX = z ? z.x : gCenterX - radiusNm;
+  const maxX = z ? z.x + z.w : gCenterX + radiusNm;
+  const minY = z ? z.y : gCenterY - radiusNm;
+  const maxY = z ? z.y + z.h : gCenterY + radiusNm;
+
+  const ixStart = Math.floor((minX - gOriginX) / dw) - 1;
+  const ixEnd = Math.ceil((maxX - gOriginX) / dw) + 1;
+  const iyStart = Math.floor((minY - gOriginY) / dh) - 1;
+  const iyEnd = Math.ceil((maxY - gOriginY) / dh) + 1;
+
+  gridExtent = Math.max(Math.abs(ixStart), Math.abs(ixEnd), Math.abs(iyStart), Math.abs(iyEnd));
+
+  const totalCells = (ixEnd - ixStart + 1) * (iyEnd - iyStart + 1);
+  if (totalCells > 50_000) return;
+
+  const r = radiusNm;
+  for (let ix = ixStart; ix <= ixEnd; ix++) {
+    for (let iy = iyStart; iy <= iyEnd; iy++) {
+      const left = gOriginX + ix * dw;
+      const top = gOriginY + iy * dh;
+      const right = left + dw;
+      const bottom = top + dh;
+
+      if (z && (right < z.x || left > z.x + z.w || bottom < z.y || top > z.y + z.h)) continue;
+
+      const clampX = Math.max(left, Math.min(gCenterX, right));
+      const clampY = Math.max(top, Math.min(gCenterY, bottom));
+      const distToCenter = Math.hypot(clampX - gCenterX, clampY - gCenterY);
+      if (distToCenter > r) continue;
+
+      const d1 = Math.hypot(left - gCenterX, top - gCenterY);
+      const d2 = Math.hypot(right - gCenterX, top - gCenterY);
+      const d3 = Math.hypot(left - gCenterX, bottom - gCenterY);
+      const d4 = Math.hypot(right - gCenterX, bottom - gCenterY);
+      const maxDist = Math.max(d1, d2, d3, d4);
+
+      dieGridData.push({ x: left, y: top, valid: maxDist <= r });
+    }
+  }
+}
+
+function buildWaferPath(ex: number, ey: number, r: number): Path2D {
+  const notchDepth = 6;
+  const notchWidth = 12;
+  const notchAngle = Math.asin(Math.min(notchWidth / 2 / r, 1));
+  const startAngle = Math.PI / 2 + notchAngle;
+  const endAngle = Math.PI / 2 - notchAngle;
+
+  const path = new Path2D();
+  path.arc(ex, ey, r, startAngle, endAngle, false);
+  path.lineTo(ex, ey + r - notchDepth);
+  path.closePath();
+  return path;
+}
+
+function renderBackground() {
+  const cvs = bgRef.value;
+  if (!cvs || mapSize.width <= 0 || mapSize.height <= 0) return;
+  const ctx = prepareOverlayCanvas(cvs, mapSize);
+  if (!ctx) return;
+
+  const g = props.geometry;
+  if (!g || !hasGeometry.value) return;
+  const radiusNm = props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM;
+  const gCx = g.centerX;
+  const gCy = g.centerY;
+  const gOx = g.originX;
+  const gOy = g.originY;
+  const dieSX = g.dieSizeX;
+  const dieSY = g.dieSizeY;
+
+  const z = props.zoom;
+  const zMinX = z ? z.x : gCx - radiusNm;
+  const zMaxX = z ? z.x + z.w : gCx + radiusNm;
+  const zMinY = z ? z.y : gCy - radiusNm;
+  const zMaxY = z ? z.y + z.h : gCy + radiusNm;
+
+  if (z) {
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, mapSize.width, mapSize.height);
+
+    for (const die of dieGridData) {
+      const [dx, dy] = dataToScreen(transform, die.x, die.y);
+      const dw = dieSX * transform.scale;
+      const dh = dieSY * transform.scale;
+      ctx.fillStyle = die.valid ? "#ffffff" : "#9ca3af";
+      const left = Math.round(dx);
+      const right = Math.round(dx + dw);
+      const top = Math.round(dy - dh);
+      const bottom = Math.round(dy);
+      ctx.fillRect(left, top, right - left, bottom - top);
+    }
+
+    ctx.beginPath();
+    ctx.strokeStyle = DIE_LINE_COLOR;
+    ctx.lineWidth = 1;
+
+    const ixMin = Math.floor((zMinX - gOx) / dieSX);
+    const ixMax = Math.ceil((zMaxX - gOx) / dieSX);
+    const iyMin = Math.floor((zMinY - gOy) / dieSY);
+    const iyMax = Math.ceil((zMaxY - gOy) / dieSY);
+
+    for (let ix = ixMin; ix <= ixMax + 1; ix++) {
+      const dataX = gOx + ix * dieSX;
+      const [sx] = dataToScreen(transform, dataX, 0);
+      const [, sy1] = dataToScreen(transform, 0, zMinY);
+      const [, sy2] = dataToScreen(transform, 0, zMaxY);
+      ctx.moveTo(Math.round(sx) + 0.5, sy1);
+      ctx.lineTo(Math.round(sx) + 0.5, sy2);
+    }
+    for (let iy = iyMin; iy <= iyMax + 1; iy++) {
+      const dataY = gOy + iy * dieSY;
+      const [sx1] = dataToScreen(transform, zMinX, 0);
+      const [sx2] = dataToScreen(transform, zMaxX, 0);
+      const [, sy] = dataToScreen(transform, 0, dataY);
+      ctx.moveTo(sx1, Math.round(sy) + 0.5);
+      ctx.lineTo(sx2, Math.round(sy) + 0.5);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = WAFER_EDGE_COLOR;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, mapSize.width - 2, mapSize.height - 2);
+  } else {
+    const [ex, ey] = dataToScreen(transform, gCx, gCy);
+    const r = radiusNm * transform.scale;
+
+    const waferPath = buildWaferPath(ex, ey, r);
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.12)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+    ctx.fillStyle = "#ffffff";
+    ctx.fill(waferPath);
+    ctx.restore();
+
+    ctx.save();
+    ctx.clip(waferPath);
+
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, mapSize.width, mapSize.height);
+
+    for (const die of dieGridData) {
+      const [dx, dy] = dataToScreen(transform, die.x, die.y);
+      const dw = dieSX * transform.scale;
+      const dh = dieSY * transform.scale;
+      ctx.fillStyle = die.valid ? "#ffffff" : "#9ca3af";
+      const left = Math.round(dx);
+      const right = Math.round(dx + dw);
+      const top = Math.round(dy - dh);
+      const bottom = Math.round(dy);
+      ctx.fillRect(left, top, right - left, bottom - top);
+    }
+
+    ctx.beginPath();
+    ctx.strokeStyle = DIE_LINE_COLOR;
+    ctx.lineWidth = 1;
+
+    for (let ix = -gridExtent; ix <= gridExtent + 1; ix++) {
+      const dataX = gOx + ix * dieSX;
+      const [sx] = dataToScreen(transform, dataX, 0);
+      const [, sy1] = dataToScreen(transform, 0, zMinY);
+      const [, sy2] = dataToScreen(transform, 0, zMaxY);
+      ctx.moveTo(Math.round(sx) + 0.5, sy1);
+      ctx.lineTo(Math.round(sx) + 0.5, sy2);
+    }
+    for (let iy = -gridExtent; iy <= gridExtent + 1; iy++) {
+      const dataY = gOy + iy * dieSY;
+      const [sx1] = dataToScreen(transform, zMinX, 0);
+      const [sx2] = dataToScreen(transform, zMaxX, 0);
+      const [, sy] = dataToScreen(transform, 0, dataY);
+      ctx.moveTo(sx1, Math.round(sy) + 0.5);
+      ctx.lineTo(sx2, Math.round(sy) + 0.5);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = WAFER_EDGE_COLOR;
+    ctx.stroke(waferPath);
+  }
+}
+
 const hasGeometry = computed(() => {
   const g = props.geometry;
   return Boolean(g && Number.isFinite(g.centerX) && Number.isFinite(g.centerY));
+});
+
+const dataBounds = computed(() => {
+  const g = props.geometry;
+  if (!g || !hasGeometry.value) return undefined;
+  const radius = props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM;
+  return {
+    minX: g.centerX - radius,
+    maxX: g.centerX + radius,
+    minY: g.centerY - radius,
+    maxY: g.centerY + radius,
+  };
 });
 
 const centerX = computed(() => props.geometry?.centerX ?? 0);
@@ -102,10 +323,11 @@ function recalcTransform() {
   mapSize = size;
   const cx = centerX.value;
   const cy = centerY.value;
+  const g = props.geometry;
+  const radius = props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM;
   if (props.zoom) {
     transform = buildMapTransform(mapSize, boundsFromRegion(props.zoom), 1.0);
   } else {
-    const radius = props.waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM;
     transform = buildMapTransform(
       mapSize,
       {
@@ -117,6 +339,10 @@ function recalcTransform() {
       1,
     );
   }
+  if (g) {
+    buildDieGrid(radius, g.centerX, g.centerY, g.originX, g.originY, g.dieSizeX, g.dieSizeY);
+  }
+  renderBackground();
 }
 
 function getPos(e: MouseEvent): [number, number] {
@@ -262,6 +488,7 @@ function drawOverlay() {
 let _ro: ResizeObserver | null = null;
 function onResize() {
   recalcTransform();
+  drawOverlay();
 }
 watch(
   containerRef,
@@ -279,10 +506,11 @@ watch(
 watch(
   () => props.points,
   () => {
+    recalcTransform();
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
-      drawOverlay();
     }
+    drawOverlay();
   },
 );
 
@@ -300,13 +528,15 @@ watch(
 
 <template>
   <div ref="containerRef" class="sc-wafer-map-perspective" @dblclick="onDblClick">
+    <canvas ref="bgRef" class="sc-wafer-map-perspective__bg" />
     <SimplePerspectiveMap
       :points="perspectivePoints"
       :color-map="colorMap ?? {}"
       :zoom="zoom"
       :center-x="centerX"
       :center-y="centerY"
-      :data-range-nm="DATA_RANGE"
+      :data-range-nm="(waferRadiusNm ?? DEFAULT_WAFER_RADIUS_NM) * 2"
+      :data-bounds="dataBounds"
     />
     <canvas
       ref="overlayRef"
@@ -326,6 +556,15 @@ watch(
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+.sc-wafer-map-perspective__bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 .sc-wafer-map-perspective__overlay {
   position: absolute;

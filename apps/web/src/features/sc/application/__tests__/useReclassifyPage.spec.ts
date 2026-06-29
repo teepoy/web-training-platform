@@ -259,14 +259,14 @@ describe("useReclassifyPage - addLabel", () => {
     expect(state.codeLabels.value.find((label) => label.code === "10")?.shortcut).toBe("1");
   });
 
-  it("treats code 0 as clearing a draft annotation", async () => {
+  it("treats code 0 as a valid annotation draft", async () => {
     const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
 
     state.setAnnotationDraft("D001", "5");
     expect(state.annotationDraft.value.D001).toBe("5");
 
     state.setAnnotationDraft("D001", "0");
-    expect(state.annotationDraft.value.D001).toBeUndefined();
+    expect(state.annotationDraft.value.D001).toBe("0");
   });
 });
 
