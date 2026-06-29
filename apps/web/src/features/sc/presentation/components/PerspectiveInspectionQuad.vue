@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
 import { NButton, NResult, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
@@ -218,6 +218,16 @@ const tableHighlightIds = computed(
 const blinkHighlightIds = computed(
   () => new Set((props.gallerySelectedDefectIds ?? []).map(String)),
 );
+const EMPTY_MAP_DISPLAY: number[] = [];
+const activeWaferDisplay = computed(() =>
+  props.activeMapTab === "wafer" ? model.waferDisplay.value : EMPTY_MAP_DISPLAY,
+);
+const activeDieDisplay = computed(() =>
+  props.activeMapTab === "die" ? model.dieDisplay.value : EMPTY_MAP_DISPLAY,
+);
+const activeReticleDisplay = computed(() =>
+  props.activeMapTab === "reticle" ? model.reticleDisplay.value : EMPTY_MAP_DISPLAY,
+);
 
 function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
   console.log(
@@ -228,6 +238,29 @@ function selectionLog(step: string, detail: Record<string, unknown> = {}): void 
     detail,
   );
 }
+
+let quadRenderStart = 0;
+onBeforeUpdate(() => {
+  quadRenderStart = performance.now();
+  selectionLog("quad beforeUpdate", {
+    galleryRows: model.galleryRows.value.length,
+    tableSelected: tableHighlightIds.value.size,
+    gallerySelected: blinkHighlightIds.value.size,
+  });
+});
+onUpdated(() => {
+  const updatedAt = performance.now();
+  selectionLog("quad updated", {
+    ms: Number((updatedAt - quadRenderStart).toFixed(2)),
+    galleryRows: model.galleryRows.value.length,
+    highlights: highlightDefects.value.length,
+  });
+  void nextTick(() => {
+    selectionLog("quad nextTick", {
+      ms: Number((performance.now() - updatedAt).toFixed(2)),
+    });
+  });
+});
 
 watch(
   () => props.gallerySelectedDefectIds,
@@ -243,7 +276,7 @@ let _highlightSeq = 0;
 
 watch(
   () => ({ ids: blinkHighlightIds.value, tab: props.activeMapTab }),
-  async ({ ids, tab }) => {
+  ({ ids, tab }) => {
     const seq = ++_highlightSeq;
     const numericIds = [...ids].map(Number).filter(Number.isFinite);
     selectionLog("gallery select -> map highlight input", { ids: numericIds.length, tab });
@@ -255,7 +288,7 @@ watch(
       });
       return;
     }
-    const result = await model.highlightDefectsForIds(numericIds);
+    const result = model.highlightDefectsForIds(numericIds);
     if (seq !== _highlightSeq) return;
     if (tab !== props.activeMapTab) return;
     highlightDefects.value = result;
@@ -466,9 +499,9 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
       <div class="iq-wafer">
         <ScMapPanelBinned
           :active-map-tab="activeMapTab"
-          :wafer-points="model.waferDisplay.value"
-          :die-points="model.dieDisplay.value"
-          :reticle-points="model.reticleDisplay.value"
+          :wafer-points="activeWaferDisplay"
+          :die-points="activeDieDisplay"
+          :reticle-points="activeReticleDisplay"
           :legend-groups="model.legendGroups.value"
           :wafer-geometry="waferGeometry"
           :wafer-radius-nm="waferGeometry?.waferRadiusNm ?? undefined"

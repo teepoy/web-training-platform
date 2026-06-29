@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  onBeforeUpdate,
+  onUpdated,
+} from "vue";
 import type { CSSProperties } from "vue";
 import {
   NSwitch,
@@ -95,6 +104,8 @@ function selectionLog(step: string, detail: Record<string, unknown> = {}): void 
     detail,
   );
 }
+
+let sharedRenderStart = 0;
 
 watch(mode, (value) => emit("modeChange", value), { immediate: true });
 const settingsOpen = ref(false);
@@ -238,6 +249,47 @@ const {
   reviewCellSize: reviewCellSizeRef,
   extraRowHeight,
   overscan: overscanRef,
+});
+
+const virtualItems = computed(() => {
+  const t0 = performance.now();
+  const items = virtualizer.value.getVirtualItems();
+  selectionLog("shared blink virtual items", {
+    items: items.length,
+    visibleSamples: visibleSamples.value.length,
+    totalSize: virtualizer.value.getTotalSize(),
+    ms: Number((performance.now() - t0).toFixed(2)),
+  });
+  return items;
+});
+
+onBeforeUpdate(() => {
+  sharedRenderStart = performance.now();
+  selectionLog("shared blink beforeUpdate", {
+    propsSamples: props.samples.length,
+    visibleSamples: visibleSamples.value.length,
+    virtualItems: virtualItems.value.length,
+    selected:
+      props.selectedDefectIds instanceof Set
+        ? props.selectedDefectIds.size
+        : props.selectedDefectIds.length,
+    mode: mode.value,
+  });
+});
+onUpdated(() => {
+  const updatedAt = performance.now();
+  selectionLog("shared blink updated", {
+    ms: Number((updatedAt - sharedRenderStart).toFixed(2)),
+    propsSamples: props.samples.length,
+    visibleSamples: visibleSamples.value.length,
+    virtualItems: virtualItems.value.length,
+    mode: mode.value,
+  });
+  void nextTick(() => {
+    selectionLog("shared blink nextTick", {
+      ms: Number((performance.now() - updatedAt).toFixed(2)),
+    });
+  });
 });
 
 watch(scrollRef, (element) => emit("scrollContainerChange", element), {
@@ -955,7 +1007,7 @@ defineExpose({ scrollRef });
         >
           <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
           <div
-            v-for="virtualRow in virtualizer.getVirtualItems()"
+            v-for="virtualRow in virtualItems"
             :key="virtualRow.index"
             class="sbt-row-wrapper"
             :class="{ 'sbt-vrow--odd': virtualRow.index % 2 === 1 }"

@@ -18,6 +18,16 @@ export interface UseBlinkVirtualScrollParams {
   overscan?: Ref<number>;
 }
 
+function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
+  console.log(
+    "[sc-selection]",
+    new Date().toISOString(),
+    `${performance.now().toFixed(1)}ms`,
+    step,
+    detail,
+  );
+}
+
 export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
   const { samples, mode, patchPerRow, reviewPerRow } = params;
   const patchCellSize = params.patchCellSize;
@@ -30,10 +40,20 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
   );
 
   const visibleSamples = computed<ScSampleItem[]>(() => {
+    const t0 = performance.now();
+    let rows: ScSampleItem[];
     if (mode.value === "review") {
-      return samples.value.filter((s) => s.reviewImages.length > 0);
+      rows = samples.value.filter((s) => s.reviewImages.length > 0);
+    } else {
+      rows = samples.value;
     }
-    return samples.value;
+    selectionLog("blink virtual visibleSamples", {
+      mode: mode.value,
+      inputRows: samples.value.length,
+      visibleRows: rows.length,
+      ms: Number((performance.now() - t0).toFixed(2)),
+    });
+    return rows;
   });
 
   const maxReviewImages = computed<number>(() => {
@@ -72,9 +92,19 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
   );
 
   function samplesForVirtualRow(rowIdx: number): ScSampleItem[] {
+    const t0 = performance.now();
     const perRow = effectiveSamplesPerRow.value;
     const start = rowIdx * perRow;
-    return visibleSamples.value.slice(start, start + perRow);
+    const rows = visibleSamples.value.slice(start, start + perRow);
+    const ms = performance.now() - t0;
+    if (ms > 1) {
+      selectionLog("blink virtual row samples slow", {
+        rowIdx,
+        rows: rows.length,
+        ms: Number(ms.toFixed(2)),
+      });
+    }
+    return rows;
   }
 
   const scrollRef = ref<HTMLElement | null>(null);
@@ -114,7 +144,19 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
       () => visibleSamples.value.length,
     ],
     () => {
-      void nextTick(() => virtualizer.value.measure());
+      const scheduledAt = performance.now();
+      selectionLog("blink virtual measure scheduled", {
+        rows: visibleSamples.value.length,
+        rowHeight: virtualRowHeight.value,
+      });
+      void nextTick(() => {
+        const beforeMeasure = performance.now();
+        virtualizer.value.measure();
+        selectionLog("blink virtual measure done", {
+          waitMs: Number((beforeMeasure - scheduledAt).toFixed(2)),
+          measureMs: Number((performance.now() - beforeMeasure).toFixed(2)),
+        });
+      });
     },
     { flush: "post" },
   );

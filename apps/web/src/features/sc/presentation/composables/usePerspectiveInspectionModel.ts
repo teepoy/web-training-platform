@@ -692,20 +692,46 @@ export function usePerspectiveInspectionModel(args: {
       }) as ViewConfigUpdate,
   );
 
+  function sameHighlights(left: HighlightDefect[], right: HighlightDefect[]): boolean {
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i += 1) {
+      const a = left[i];
+      const b = right[i];
+      if (
+        a.defectId !== b.defectId ||
+        a.waferX !== b.waferX ||
+        a.waferY !== b.waferY ||
+        a.dieX !== b.dieX ||
+        a.dieY !== b.dieY ||
+        a.reticleX !== b.reticleX ||
+        a.reticleY !== b.reticleY
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function setSmallGalleryHighlights(next: HighlightDefect[]): void {
+    if (sameHighlights(smallGalleryHighlights.value, next)) return;
+    smallGalleryHighlights.value = next;
+  }
+
   function updateSmallGalleryHighlightsFromLoadedRows(): void {
     if (gallerySelection.value.mode !== "small") {
-      smallGalleryHighlights.value = [];
+      setSmallGalleryHighlights([]);
       selectionLog("gallery highlight cleared", {
         gallerySelectionMode: gallerySelection.value.mode,
       });
       return;
     }
     const rows = loadedRowsForIds(galleryRowRecord.value, gallerySelection.value.ids);
-    smallGalleryHighlights.value = highlightsFromSamples(rows);
+    const highlights = highlightsFromSamples(rows);
+    setSmallGalleryHighlights(highlights);
     selectionLog("gallery select -> map highlight", {
       selectedIds: gallerySelection.value.ids.length,
       loadedRows: rows.length,
-      highlights: smallGalleryHighlights.value.length,
+      highlights: highlights.length,
     });
   }
 
@@ -874,28 +900,52 @@ export function usePerspectiveInspectionModel(args: {
   }
 
   const waferDisplay = computed(() => {
+    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.waferRows.value,
       smallGalleryHighlights.value,
       "wafer",
     );
-    return rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    selectionLog("wafer display computed", {
+      bins: rows?.length ?? 0,
+      points: display.length,
+      highlights: smallGalleryHighlights.value.length,
+      ms: Number((performance.now() - t0).toFixed(2)),
+    });
+    return display;
   });
   const dieDisplay = computed(() => {
+    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.dieRows.value,
       smallGalleryHighlights.value,
       "die",
     );
-    return rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    selectionLog("die display computed", {
+      bins: rows?.length ?? 0,
+      points: display.length,
+      highlights: smallGalleryHighlights.value.length,
+      ms: Number((performance.now() - t0).toFixed(2)),
+    });
+    return display;
   });
   const reticleDisplay = computed(() => {
+    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.reticleRows.value,
       smallGalleryHighlights.value,
       "reticle",
     );
-    return rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : [];
+    selectionLog("reticle display computed", {
+      bins: rows?.length ?? 0,
+      points: display.length,
+      highlights: smallGalleryHighlights.value.length,
+      ms: Number((performance.now() - t0).toFixed(2)),
+    });
+    return display;
   });
 
   // Histogram watcher — unchanged logic, lock-free.
@@ -942,7 +992,7 @@ export function usePerspectiveInspectionModel(args: {
         refreshTableData();
         refreshGalleryData();
       } else {
-        smallGalleryHighlights.value = [];
+        setSmallGalleryHighlights([]);
         selectionPortTable = null;
         selectionUpdatePorts.value = { map: null, table: null, gallery: null };
       }
@@ -1055,7 +1105,7 @@ export function usePerspectiveInspectionModel(args: {
     if (!table) {
       gallerySelectedDefectIds.value = numericIds;
       gallerySelection.value = selectionStateFor(numericIds);
-      smallGalleryHighlights.value = [];
+      setSmallGalleryHighlights([]);
       return;
     }
     const next = selectionStateFor(numericIds);
@@ -1068,7 +1118,7 @@ export function usePerspectiveInspectionModel(args: {
     gallerySelectedDefectIds.value = next.ids;
     selectionLog("gallery selection state", { mode: next.mode, ids: next.ids.length });
     if (next.mode === "large") {
-      smallGalleryHighlights.value = [];
+      setSmallGalleryHighlights([]);
       await updateGallerySelection(table, next.ids, 1, ports?.gallery);
     } else {
       await refreshSmallGalleryHighlights();
@@ -1171,7 +1221,7 @@ export function usePerspectiveInspectionModel(args: {
     }
   }
 
-  async function highlightDefectsForIds(ids: number[]): Promise<HighlightDefect[]> {
+  function highlightDefectsForIds(ids: number[]): HighlightDefect[] {
     return highlightsFromSamples(loadedRowsForIds(galleryRowRecord.value, sortedUniqueIds(ids)));
   }
 

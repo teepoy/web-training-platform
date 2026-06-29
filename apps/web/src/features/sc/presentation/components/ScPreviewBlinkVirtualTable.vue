@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch, watchEffect } from "vue";
+import { nextTick, onBeforeUnmount, onBeforeUpdate, onUpdated, ref, watch, watchEffect } from "vue";
 import { NSpin } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import BlinkVirtualTableWithSelectionAndPreviewResultDisplay from "@/shared/components/blink-virtual-table/BlinkVirtualTableWithSelectionAndPreviewResultDisplay.vue";
@@ -61,6 +61,30 @@ function selectionLog(step: string, detail: Record<string, unknown> = {}): void 
     detail,
   );
 }
+
+let previewRenderStart = 0;
+onBeforeUpdate(() => {
+  previewRenderStart = performance.now();
+  selectionLog("preview blink beforeUpdate", {
+    samples: props.samples.length,
+    selected:
+      props.selectedDefectIds instanceof Set
+        ? props.selectedDefectIds.size
+        : (props.selectedDefectIds?.length ?? 0),
+  });
+});
+onUpdated(() => {
+  const updatedAt = performance.now();
+  selectionLog("preview blink updated", {
+    ms: Number((updatedAt - previewRenderStart).toFixed(2)),
+    samples: props.samples.length,
+  });
+  void nextTick(() => {
+    selectionLog("preview blink nextTick", {
+      ms: Number((performance.now() - updatedAt).toFixed(2)),
+    });
+  });
+});
 
 function maybeLoadMore(): void {
   if (props.hasNextPage && !props.isFetchingNextPage) props.onLoadMore?.();

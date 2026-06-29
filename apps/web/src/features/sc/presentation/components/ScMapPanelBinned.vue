@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
 import { NTabs, NTabPane, NResult, NButton, NSelect, NIcon, NTooltip } from "naive-ui";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
@@ -54,6 +54,41 @@ const props = defineProps<{
   /** Highlight defects from gallery selection (purple dots on overlay canvas). */
   highlightDefects?: HighlightDefect[];
 }>();
+
+function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
+  console.log(
+    "[sc-selection]",
+    new Date().toISOString(),
+    `${performance.now().toFixed(1)}ms`,
+    step,
+    detail,
+  );
+}
+
+let mapPanelRenderStart = 0;
+onBeforeUpdate(() => {
+  mapPanelRenderStart = performance.now();
+  selectionLog("map panel beforeUpdate", {
+    tab: props.activeMapTab,
+    waferPoints: props.waferPoints?.length ?? 0,
+    diePoints: props.diePoints?.length ?? 0,
+    reticlePoints: props.reticlePoints?.length ?? 0,
+    highlights: props.highlightDefects?.length ?? 0,
+  });
+});
+onUpdated(() => {
+  const updatedAt = performance.now();
+  selectionLog("map panel updated", {
+    ms: Number((updatedAt - mapPanelRenderStart).toFixed(2)),
+    tab: props.activeMapTab,
+    highlights: props.highlightDefects?.length ?? 0,
+  });
+  void nextTick(() => {
+    selectionLog("map panel nextTick", {
+      ms: Number((performance.now() - updatedAt).toFixed(2)),
+    });
+  });
+});
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
