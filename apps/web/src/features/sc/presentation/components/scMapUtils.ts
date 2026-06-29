@@ -6,7 +6,6 @@
  */
 
 export const STRIDE = 6;
-export const MAX_RENDERED_POINTS = 50000;
 
 const GOLDEN_RATIO_CONJUGATE = 0.618033988749895;
 
@@ -19,7 +18,7 @@ export interface ScatterPoint {
   hasReview: boolean;
 }
 
-export type LegendColorSource = "class" | "bin" | "annotation" | "prediction";
+export type LegendColorSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 
 const STRING_COLOR_MULTIPLIER = 31;
 const MISSING_LEGEND_COLORS = new Set(["__unlabeled__", "__no_prediction__"]);
@@ -43,11 +42,7 @@ export function classColor(classId: number): string {
   return hslToHex(hue, 65, 50);
 }
 
-function hslToHex(
-  hue: number,
-  saturationPercent: number,
-  lightnessPercent: number,
-): string {
+function hslToHex(hue: number, saturationPercent: number, lightnessPercent: number): string {
   const saturation = saturationPercent / 100;
   const lightness = lightnessPercent / 100;
   const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
@@ -112,9 +107,7 @@ export function parsePoints(flat: number[]): ScatterPoint[] {
 /**
  * Group scatter points by their classNumber.
  */
-export function groupByClass(
-  points: ScatterPoint[],
-): Map<number, ScatterPoint[]> {
+export function groupByClass(points: ScatterPoint[]): Map<number, ScatterPoint[]> {
   const groups = new Map<number, ScatterPoint[]>();
 
   for (const p of points) {
@@ -133,19 +126,14 @@ export function groupByClass(
 /**
  * Extract defect IDs for all points belonging to a given class number.
  */
-export function getDefectIdsByClass(
-  points: ScatterPoint[],
-  classId: number,
-): number[] {
+export function getDefectIdsByClass(points: ScatterPoint[], classId: number): number[] {
   return points.filter((p) => p.classNumber === classId).map((p) => p.defectId);
 }
 
 /**
  * Group scatter points by their roughBin.
  */
-export function groupByBin(
-  points: ScatterPoint[],
-): Map<number, ScatterPoint[]> {
+export function groupByBin(points: ScatterPoint[]): Map<number, ScatterPoint[]> {
   const groups = new Map<number, ScatterPoint[]>();
 
   for (const p of points) {
@@ -164,10 +152,7 @@ export function groupByBin(
 /**
  * Extract defect IDs for all points belonging to a given rough bin.
  */
-export function getDefectIdsByBin(
-  points: ScatterPoint[],
-  bin: number,
-): number[] {
+export function getDefectIdsByBin(points: ScatterPoint[], bin: number): number[] {
   return points.filter((p) => p.roughBin === bin).map((p) => p.defectId);
 }
 
@@ -256,9 +241,7 @@ export function createRafThrottle(): ((fn: () => void) => void) & {
 /**
  * Build an O(1) defectId → ScatterPoint lookup map from a point array.
  */
-export function buildPointLookup(
-  points: ScatterPoint[],
-): Map<number, ScatterPoint> {
+export function buildPointLookup(points: ScatterPoint[]): Map<number, ScatterPoint> {
   const map = new Map<number, ScatterPoint>();
   for (const p of points) {
     map.set(p.defectId, p);
@@ -269,9 +252,7 @@ export function buildPointLookup(
 /**
  * Build an O(1) defectId → {x, y} coordinate lookup from a packed STRIDE=6 array.
  */
-export function buildPackedCoordMap(
-  packed: number[],
-): Map<number, { x: number; y: number }> {
+export function buildPackedCoordMap(packed: number[]): Map<number, { x: number; y: number }> {
   const map = new Map<number, { x: number; y: number }>();
   for (let i = 0; i + STRIDE - 1 < packed.length; i += STRIDE) {
     map.set(packed[i + 2], { x: packed[i], y: packed[i + 1] });

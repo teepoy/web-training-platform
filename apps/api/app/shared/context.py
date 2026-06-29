@@ -28,6 +28,7 @@ class SharedInfra:
     prefect_client: Any  # PrefectClient
     notification_sink: Any  # WebhookNotificationSink
     surface_store: Any  # SurfaceStore
+    redis_event_publisher: Any | None = None  # RedisEventPublisher
 
 
 @dataclass

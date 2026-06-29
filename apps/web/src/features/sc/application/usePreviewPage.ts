@@ -2,23 +2,10 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue
 import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import {
-  useGetInspectionsApiV1ScInspectionsGet,
-  getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
-} from "@/generated/orval/endpoints/api";
+import { useGetInspectionsApiV1ScInspectionsGet } from "@/generated/orval/endpoints/api";
 import { streamApiSse } from "@/shared/api/sse";
 import { create } from "@bufbuild/protobuf";
-import {
-  type DefectList,
-  ReviewImageSchema,
-  ScSampleItemSchema,
-} from "../generated/proto/sc/v1/sample_pb";
-import {
-  fetchScInspectionMapPoints,
-  warmupScInspectionMapPoints,
-  type ScMapFilter,
-} from "../api/plotPoints";
-import { defaultDefectIds, fetchInspectionDefectIds } from "../api/defectIds";
+import { type DefectList, ScSampleItemSchema } from "../generated/proto/sc/v1/sample_pb";
 import type { ScSampleItem } from "../generated/proto/sc/v1/sample_pb";
 import type {
   InspectionSummaryItem,
@@ -33,7 +20,6 @@ import {
   normalizeReticleMapOptions,
   type ReticleMapOptions,
 } from "./reticleMapOptions";
-import { sampleTableFilterToMapFilter } from "./globalFilter";
 
 // ── Tab type ──────────────────────────────────────────────────────────
 
@@ -52,9 +38,6 @@ export interface PreviewTab {
   samplesLoading: boolean;
   samplesError: string | null;
   patchSamples: ScSampleItem[];
-  reviewSamples: ScSampleItem[];
-  reviewLoading: boolean;
-  reviewError: string | null;
   mapLoading: boolean;
   mapError: string | null;
   mapStreamMessage: string;
@@ -401,9 +384,6 @@ export function usePreviewPage(): PreviewPageState {
       samplesLoading: false,
       samplesError: null,
       patchSamples: [],
-      reviewSamples: [],
-      reviewLoading: false,
-      reviewError: null,
       mapLoading: false,
       mapError: null,
       mapStreamMessage: "",
@@ -448,9 +428,6 @@ export function usePreviewPage(): PreviewPageState {
       samplesLoading: false,
       samplesError: null,
       patchSamples: makePatchSamples(row),
-      reviewSamples: [],
-      reviewLoading: true,
-      reviewError: null,
       mapLoading: true,
       mapError: null,
       mapStreamMessage: "Loading 0%",
@@ -495,279 +472,20 @@ export function usePreviewPage(): PreviewPageState {
   }
 
   function makePatchSamples(row: InspectionSummaryItem): ScSampleItem[] {
-    const defectIds = defaultDefectIds(row.defects ?? 0);
-    return makePatchSamplesForDefectIds(row, defectIds);
-  }
-
-  function makePatchSamplesForDefectIds(
-    row: InspectionSummaryItem,
-    defectIds: number[],
-  ): ScSampleItem[] {
     const inspectionTime = inspectionTimeEpochSeconds(row.inspection_time);
-    return defectIds.map((defectId) =>
+    return [
       create(ScSampleItemSchema, {
-        defectId,
+        defectId: 0,
         inspectionTime,
         waferKey: row.wafer_key,
         reviewImages: [],
       }),
-    );
+    ];
   }
 
   async function fetchPreviewDataForTab(tab: PreviewTab): Promise<void> {
-    await Promise.allSettled([
-      fetchDefectIdsForTab(tab),
-      fetchMapPointsForTab(tab),
-      fetchReviewImagesForTab(tab),
-    ]);
-  }
-
-  async function fetchDefectIdsForTab(tab: PreviewTab): Promise<void> {
-    const tabId = tab.id;
-    if (!tab.inspectionTime || tab.waferKey === undefined || !tab.inspectionItem) return;
-    try {
-      const defectIds = await fetchInspectionDefectIds(tab.inspectionTime, tab.waferKey);
-      const idx = tabs.value.findIndex((t) => t.id === tabId);
-      if (idx === -1 || tabs.value[idx].type !== "inspection") return;
-      tabs.value[idx] = {
-        ...tabs.value[idx],
-        samplesTotal: defectIds.length,
-        patchSamples: makePatchSamplesForDefectIds(tab.inspectionItem, defectIds),
-      };
-    } catch {
-      // Keep the immediate 1..summary.defects fallback if the optional id list fails.
-    }
-  }
-
-  async function fetchMapPointsForTab(
-    tab: PreviewTab,
-    modes: MapMode[] = ["wafer", "die", "reticle"],
-  ): Promise<void> {
-    const tabId = tab.id;
-    if (!tab.inspectionTime || tab.waferKey === undefined) return;
-    const idx = tabs.value.findIndex((t) => t.id === tabId);
-    if (idx === -1) return;
-    tabs.value[idx] = {
-      ...tabs.value[idx],
-      mapLoading: true,
-      mapError: null,
-      mapStreamMessage: "Loading 0%",
-      mapProgressPercent: 0,
-    };
-
-    const opts = normalizeReticleMapOptions(tab.reticleOptions);
-    const globalMapFilter = sampleTableFilterToMapFilter(tab.tableFilter);
-    try {
-      const allThree = modes.length === 3;
-      const results: {
-        mode: MapMode;
-        result: Awaited<ReturnType<typeof _fetchMapData>>;
-      }[] = [];
-
-      if (allThree && !tab.zoom) {
-        const combined = await _fetchMapData(
-          tab,
-          undefined,
-          opts,
-          globalMapFilter,
-          tab.legendGroupBy ?? undefined,
-        );
-        results.push(
-          { mode: "wafer", result: combined },
-          { mode: "die", result: combined },
-          { mode: "reticle", result: combined },
-        );
-      } else {
-        const perMode = await Promise.all(
-          modes.map(async (mode) => ({
-            mode,
-            result: await _fetchMapData(
-              tab,
-              mode,
-              opts,
-              globalMapFilter,
-              tab.legendGroupBy ?? undefined,
-            ),
-          })),
-        );
-        results.push(...perMode);
-      }
-
-      const idx2 = tabs.value.findIndex((t) => t.id === tabId);
-      if (idx2 === -1) return;
-
-      const current = tabs.value[idx2];
-      const firstResult = results[0]?.result;
-      const geo = firstResult?.geometry;
-      const baseUpdate: Partial<PreviewTab> = {
-        mapLoading: false,
-        mapStreamMessage: "",
-        mapProgressPercent: 100,
-        waferGeometry: geo
-          ? {
-              waferRadiusNm: geo.waferRadiusNm,
-              centerX: geo.centerX,
-              centerY: geo.centerY,
-              originX: geo.originX,
-              originY: geo.originY,
-              dieSizeX: geo.dieSizeX,
-              dieSizeY: geo.dieSizeY,
-            }
-          : tabs.value[idx2].waferGeometry,
-        reticleXDieCount: firstResult?.reticleXDieCount || opts.xDieCount,
-        reticleYDieCount: firstResult?.reticleYDieCount || opts.yDieCount,
-        reticleDieSizeX: geo?.dieSizeX ?? tabs.value[idx2].reticleDieSizeX,
-        reticleDieSizeY: geo?.dieSizeY ?? tabs.value[idx2].reticleDieSizeY,
-        reticleOptions: {
-          xDieCount: firstResult?.reticleXDieCount || opts.xDieCount,
-          yDieCount: firstResult?.reticleYDieCount || opts.yDieCount,
-          xDieShift: opts.xDieShift,
-          yDieShift: opts.yDieShift,
-        },
-        legendGroups:
-          (firstResult?.legendGroupBy || "class") === (tab.legendGroupBy ?? "class")
-            ? (firstResult?.legendGroups ?? null)
-            : null,
-      };
-      for (const { mode, result } of results) {
-        if (mode === "wafer") baseUpdate.waferDisplay = result.waferPoints;
-        if (mode === "die") baseUpdate.dieDisplay = result.diePoints;
-        if (mode === "reticle") baseUpdate.reticleDisplay = result.reticlePoints;
-      }
-      tabs.value[idx2] = {
-        ...current,
-        ...baseUpdate,
-        unzoomedWaferDisplay: current.zoom
-          ? current.unzoomedWaferDisplay
-          : (baseUpdate.waferDisplay ?? current.unzoomedWaferDisplay),
-        unzoomedDieDisplay: current.zoom
-          ? current.unzoomedDieDisplay
-          : (baseUpdate.dieDisplay ?? current.unzoomedDieDisplay),
-        unzoomedReticleDisplay: current.zoom
-          ? current.unzoomedReticleDisplay
-          : (baseUpdate.reticleDisplay ?? current.unzoomedReticleDisplay),
-      };
-    } catch (err) {
-      const idx2 = tabs.value.findIndex((t) => t.id === tabId);
-      if (idx2 !== -1) {
-        tabs.value[idx2] = {
-          ...tabs.value[idx2],
-          mapLoading: false,
-          mapStreamMessage: "",
-          mapProgressPercent: 0,
-          mapError: err instanceof Error ? err.message : "Failed to fetch map points",
-        };
-      }
-    }
-  }
-
-  async function _fetchMapData(
-    tab: PreviewTab,
-    mode: MapMode | undefined,
-    opts: ReturnType<typeof normalizeReticleMapOptions>,
-    filter?: ScMapFilter,
-    legendGroupBy?: string,
-  ) {
-    const inspectionTime = tab.inspectionTime;
-    const waferKey = tab.waferKey;
-    if (!inspectionTime || waferKey === undefined) {
-      throw new Error("Missing inspectionTime or waferKey on tab");
-    }
-    const updateProgress = (
-      status: "warmup" | "headers" | "bytes" | "decode",
-      loaded: number,
-      _message?: string,
-      total?: number,
-    ) => {
-      const idx = tabs.value.findIndex((t) => t.id === tab.id);
-      if (idx === -1) return;
-      const boundedTotal = total && total > 0 ? total : 0;
-      const percent =
-        status === "decode"
-          ? 100
-          : boundedTotal > 0
-            ? Math.max(0, Math.min(99, Math.round((loaded / boundedTotal) * 100)))
-            : 0;
-      const label = status === "warmup" ? "Loading" : "Streaming";
-      tabs.value[idx] = {
-        ...tabs.value[idx],
-        mapStreamMessage: `${label} ${percent}%`,
-        mapProgressPercent: percent,
-      };
-    };
-    await warmupScInspectionMapPoints(
-      inspectionTime,
-      waferKey,
-      opts,
-      filter,
-      legendGroupBy,
-      mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
-      tab.tableFilter,
-      updateProgress,
-    );
-    return fetchScInspectionMapPoints(
-      inspectionTime,
-      waferKey,
-      opts,
-      filter,
-      legendGroupBy,
-      mode ? { mode, zoom: tab.zoom } : { zoom: tab.zoom },
-      tab.tableFilter,
-      updateProgress,
-    );
-  }
-
-  async function fetchReviewImagesForTab(tab: PreviewTab): Promise<void> {
-    const tabId = tab.id;
-    if (!tab.inspectionTime || tab.waferKey === undefined) return;
-    const idx = tabs.value.findIndex((t) => t.id === tabId);
-    if (idx === -1) return;
-    tabs.value[idx] = {
-      ...tabs.value[idx],
-      reviewLoading: true,
-      reviewError: null,
-    };
-    try {
-      const { data } =
-        await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
-          tab.inspectionTime,
-          tab.waferKey,
-        );
-      if (!data || !("items" in data)) throw new Error("Invalid review images response");
-      const inspectionTime = inspectionTimeEpochSeconds(tab.inspectionTime);
-      const reviewSamples = data.items.map((item) =>
-        create(ScSampleItemSchema, {
-          defectId: Number(item.defect_id),
-          inspectionTime,
-          waferKey: tab.waferKey,
-          reviewImages: item.review_images.map((image) =>
-            create(ReviewImageSchema, {
-              imageName: image.image_name,
-              imageId: image.image_id,
-              imageType: image.image_type,
-            }),
-          ),
-        }),
-      );
-      const idx2 = tabs.value.findIndex((t) => t.id === tabId);
-      if (idx2 !== -1) {
-        tabs.value[idx2] = {
-          ...tabs.value[idx2],
-          reviewSamples,
-          reviewLoading: false,
-        };
-      }
-    } catch (err) {
-      const idx2 = tabs.value.findIndex((t) => t.id === tabId);
-      if (idx2 !== -1) {
-        tabs.value[idx2] = {
-          ...tabs.value[idx2],
-          reviewSamples: [],
-          reviewLoading: false,
-          reviewError: err instanceof Error ? err.message : "Failed to fetch review images",
-        };
-      }
-    }
+    const idx = tabs.value.findIndex((t) => t.id === tab.id);
+    if (idx !== -1) tabs.value[idx] = { ...tabs.value[idx], mapLoading: false };
   }
 
   /** @deprecated Use fetchPreviewDataForTab. */
@@ -828,12 +546,11 @@ export function usePreviewPage(): PreviewPageState {
     tabs.value[idx] = {
       ...tab,
       zoom: vp,
-      mapLoading: true,
+      mapLoading: false,
       mapError: null,
-      mapStreamMessage: "Streaming 0%",
+      mapStreamMessage: "",
       mapProgressPercent: 0,
     };
-    await fetchMapPointsForTab(tabs.value[idx], [tab.activeMapTab]);
   }
 
   async function updateReticleOptions(tabId: string, options: ReticleMapOptions): Promise<void> {
@@ -848,10 +565,9 @@ export function usePreviewPage(): PreviewPageState {
       reticleDisplay: [],
       unzoomedReticleDisplay: [],
       mapError: null,
-      mapStreamMessage: "Streaming 0%",
+      mapStreamMessage: "",
       mapProgressPercent: 0,
     };
-    await fetchMapPointsForTab(tabs.value[idx], ["reticle"]);
   }
 
   function setSelectedDefectIds(tabId: string, ids: number[]): void {
@@ -871,7 +587,6 @@ export function usePreviewPage(): PreviewPageState {
       tableFilter: filter,
       zoom: null,
     };
-    void fetchMapPointsForTab(tabs.value[idx]);
   }
 
   function handleTableSortChange(
@@ -898,7 +613,6 @@ export function usePreviewPage(): PreviewPageState {
       dieDisplay: tabs.value[idx].unzoomedDieDisplay,
       reticleDisplay: tabs.value[idx].unzoomedReticleDisplay,
     };
-    void fetchMapPointsForTab(tabs.value[idx]);
   }
 
   function rowKey(row: InspectionSummaryItem): string {

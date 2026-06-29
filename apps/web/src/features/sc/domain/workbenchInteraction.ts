@@ -5,7 +5,7 @@ import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOpti
 
 export type ScWorkbenchVariant = "preview" | "reclassify";
 export type ScMapTab = "wafer" | "die" | "reticle";
-export type ScLegendSource = "class" | "bin" | "annotation" | "prediction";
+export type ScLegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 export type ScSelectionSource =
   | "sample-table"
   | "map-box"
@@ -56,9 +56,18 @@ export interface ScSampleTableRowsPage {
   nextAnchor: string | null;
 }
 
+export interface ScSampleTableDistinctValuesQuery {
+  field: string;
+  search: string;
+  limit: number;
+  filter?: ScSampleTableFilter;
+  sort?: ScSampleTableSort | null;
+}
+
 export interface ScSampleTableDataSource {
   scopeKey: string;
   loadRows: (query: ScSampleTableRowsQuery) => Promise<ScSampleTableRowsPage>;
+  loadDistinctValues?: (query: ScSampleTableDistinctValuesQuery) => Promise<Array<string | number>>;
 }
 
 export function buildScSampleTableRowsRequest(

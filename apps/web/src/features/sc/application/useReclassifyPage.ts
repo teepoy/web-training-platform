@@ -14,7 +14,6 @@ import {
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
-  getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
@@ -23,11 +22,7 @@ import type {
   PredictionJobResponse,
   TrainingJob,
 } from "@/generated/orval/models";
-import { fetchScPlotPoints, warmupScPlotPoints } from "../api/plotPoints";
-import { fetchDatasetDefectIds } from "../api/defectIds";
-import type { DefectList } from "../generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter } from "../domain/sampleTable";
-import { createDatasetSampleTableDataSource } from "../api/sampleTableDataSource";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
@@ -127,29 +122,22 @@ export interface ReclassifyPageState {
   errorMessage: ComputedRef<string>;
   scSamples: ComputedRef<ReclassifySample[]>;
   isBlinkLoading: ComputedRef<boolean>;
-  isMapLoading: ComputedRef<boolean>;
-  mapStreamMessage: Ref<string>;
   samplesError: ComputedRef<string | null>;
   fetchMoreSamples: () => Promise<unknown>;
   hasMoreSamples: ComputedRef<boolean>;
   isFetchingMoreSamples: ComputedRef<boolean>;
-  plotPointTotal: ComputedRef<number>;
   samplingAvailableCount: ComputedRef<number>;
   annotatedCount: ComputedRef<number>;
   labelSpace: ComputedRef<string[]>;
   effectiveLabels: ComputedRef<string[]>;
-  labelOptions: ComputedRef<string[]>;
   codeLabels: ComputedRef<ReclassifyCodeLabel[]>;
   shortcutCodeByKey: ComputedRef<Record<string, string>>;
   setLabelShortcut: (code: string, shortcut: string) => void;
-  classNumberOptions: ComputedRef<string[]>;
-  classList: ComputedRef<Record<string, DefectList> | null>;
 
   activeMapTab: Ref<MapMode>;
   mapZoom: ComputedRef<MapViewport | null>;
   setActiveMapTab: (mode: MapMode) => void;
   setMapZoom: (viewport: MapViewport | null) => void;
-  waferDisplay: ComputedRef<number[]>;
   mapFilter: Ref<Record<string, (number | string)[]>>;
   globalFilter: Ref<ScSampleTableFilter>;
   sampleTableFilter: Ref<ScSampleTableFilter>;
@@ -162,8 +150,6 @@ export interface ReclassifyPageState {
   clearGlobalFilter: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
-  sampleTableSelectedIds: Ref<Set<string>>;
-  setSampleTableSelectedIds: (ids: number[]) => void;
   filterBlinkTableSamples: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
   highlightDefects: ComputedRef<HighlightDefect[]>;
@@ -175,10 +161,6 @@ export interface ReclassifyPageState {
   filteredScSamples: ComputedRef<ReclassifySample[]>;
 
   waferGeometry: ComputedRef<WaferGeometryView | null>;
-  dieDisplay: ComputedRef<number[]>;
-  dieFullPoints: ComputedRef<Array<[number, number, number]>>;
-  dieRenderPoints: ComputedRef<Array<[number, number]>>;
-  reticleDisplay: ComputedRef<number[]>;
   reticleXDieCount: ComputedRef<number>;
   reticleYDieCount: ComputedRef<number>;
   reticleDieSizeX: ComputedRef<number>;
@@ -186,7 +168,6 @@ export interface ReclassifyPageState {
   reticleOptions: ComputedRef<ReticleMapOptions>;
   updateReticleOptions: (options: ReticleMapOptions) => void;
   isReticleMapLoading: ComputedRef<boolean>;
-  reticleMapError: ComputedRef<string | null>;
 
   blinkTableData: ComputedRef<{
     rows: import("@/shared/types/blink-table").BlinkRow[];
@@ -205,7 +186,6 @@ export interface ReclassifyPageState {
 
   predictionLabels: ComputedRef<Record<string, string>>;
   predictionConfidences: ComputedRef<Record<string, number | null>>;
-  isPredictionsLoading: ComputedRef<boolean>;
 
   activeTab: Ref<"blink" | "map">;
   inspectionContext: ComputedRef<{
@@ -217,6 +197,8 @@ export interface ReclassifyPageState {
   samplingCount: Ref<number>;
   assignDefaultDraftLabel: Ref<boolean>;
   applySampling: () => void;
+  galleryRandomSamplingDefectIds: Ref<Set<string>>;
+  clearGalleryRandomSamplingDefectIds: () => void;
 
   selectedTrainerId: Ref<string | null>;
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
@@ -230,10 +212,6 @@ export interface ReclassifyPageState {
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
   trainAndPredict: () => Promise<void>;
-
-  reviewSamples: Ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>;
-  reviewLoading: Ref<boolean>;
-  reviewError: Ref<string | null>;
 }
 
 function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
@@ -252,20 +230,6 @@ function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
     return scPatchUrl(row.inspection_time, row.wafer_key, row.defect_id, patchRole);
   }
   return "";
-}
-
-function packedPointCount(points: number[]): number {
-  return Math.floor(points.length / 6);
-}
-
-function packedPointOptions(points: number[], fieldOffset: 3 | 4): string[] {
-  const values = new Set<number>();
-  const count = packedPointCount(points);
-  for (let i = 0; i < count; i += 1) {
-    const value = points[i * 6 + fieldOffset];
-    if (Number.isFinite(value)) values.add(value);
-  }
-  return [...values].sort((a, b) => a - b).map(String);
 }
 
 export function useReclassifyPage(): ReclassifyPageState {
@@ -320,6 +284,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const mapFilter = ref<Record<string, (number | string)[]>>({});
   const globalFilter = ref<ScSampleTableFilter>({});
   const sampleTableFilter = ref<ScSampleTableFilter>({});
+  const galleryRandomSamplingDefectIds = ref<Set<string>>(new Set());
   const effectiveSampleTableFilter = computed<ScSampleTableFilter>(() => ({
     ...globalFilter.value,
     ...sampleTableFilter.value,
@@ -343,95 +308,11 @@ export function useReclassifyPage(): ReclassifyPageState {
     normalizeReticleMapOptions(reticleOptionsState.value),
   );
 
-  const mapStreamMessage = ref("");
-  const plotPointsWarmupQuery = useQuery({
-    queryKey: computed(() => [
-      "sc",
-      "plot-points-warmup",
-      datasetId.value,
-      reticleOptions.value,
-      mapFilter.value,
-      globalFilter.value,
-      legendGroupBy.value,
-    ]),
-    queryFn: async () => {
-      mapStreamMessage.value = "Preparing map data...";
-      try {
-        await warmupScPlotPoints(
-          datasetId.value,
-          reticleOptions.value,
-          combinedMapFilter.value,
-          legendGroupBy.value ?? undefined,
-          globalFilter.value,
-          (status, loaded, message) => {
-            mapStreamMessage.value =
-              status === "warmup"
-                ? loaded > 0
-                  ? `Prepared ${loaded} samples map data...`
-                  : (message ?? "Preparing map data...")
-                : `Prepared ${loaded} samples map data...`;
-          },
-        );
-        return true;
-      } finally {
-        mapStreamMessage.value = "";
-      }
-    },
-    enabled: computed(() => !!selectedDataset.value),
-    retry: false,
-  });
-  const isMapWarm = computed(() => plotPointsWarmupQuery.isSuccess.value);
-
   const datasetDefectIdsQuery = useQuery({
     queryKey: computed(() => ["sc", "defect-ids", datasetId.value]),
-    queryFn: () => fetchDatasetDefectIds(datasetId.value),
-    enabled: computed(() => !!selectedDataset.value && isMapWarm.value),
+    queryFn: () => [] as string[],
+    enabled: false,
     retry: false,
-  });
-
-  const plotPointsQuery = useQuery({
-    queryKey: computed(() => [
-      "sc",
-      "plot-points",
-      datasetId.value,
-      reticleOptions.value,
-      combinedMapFilter.value,
-      globalFilter.value,
-      legendGroupBy.value,
-    ]),
-    queryFn: async () => {
-      mapStreamMessage.value = "Opening map stream...";
-      try {
-        return await fetchScPlotPoints(
-          datasetId.value,
-          reticleOptions.value,
-          combinedMapFilter.value,
-          legendGroupBy.value ?? undefined,
-          globalFilter.value,
-          (status, loaded, message) => {
-            mapStreamMessage.value =
-              status === "headers"
-                ? "Map stream connected..."
-                : status === "decode"
-                  ? loaded > 0
-                    ? `Received ${loaded} samples map data...`
-                    : (message ?? "Processing map data...")
-                  : (message ?? "Receiving map data...");
-          },
-        );
-      } finally {
-        mapStreamMessage.value = "";
-      }
-    },
-    enabled: computed(() => !!selectedDataset.value && isMapWarm.value),
-    retry: false,
-  });
-  const classList = computed(() => {
-    const data = plotPointsQuery.data.value;
-    if (!data) return null;
-    const responseGroupBy = data.legendGroupBy || "class";
-    const requestedGroupBy = legendGroupBy.value ?? "class";
-    return responseGroupBy === requestedGroupBy ? data.legendGroups : null;
   });
 
   // ── Selection state (Blink table box-selection, separate from filter) ─
@@ -440,20 +321,17 @@ export function useReclassifyPage(): ReclassifyPageState {
     mapFilteredIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
     selectedDefectFilterIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
-  const sampleTableSelectedIds = ref<Set<string>>(new Set());
   const selectedDefectFilterIds = ref<Set<string>>(new Set());
-
-  function setSampleTableSelectedIds(ids: number[]): void {
-    sampleTableSelectedIds.value = new Set(ids.map(String));
-  }
 
   function filterBlinkTableSamples(ids: number[]): void {
     selectedDefectFilterIds.value = new Set(ids.map(String));
     sampledIds.value = new Set();
     mapFilteredIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
   }
 
@@ -538,17 +416,9 @@ export function useReclassifyPage(): ReclassifyPageState {
       reticleOptions.value,
     ]),
     queryFn: async () => {
-      const dataSource = createDatasetSampleTableDataSource(datasetId.value);
-      const response = await dataSource.loadRows({
-        defectIds: explicitBlinkSourceDefectIds.value ?? [],
-        anchor: "0",
-        limit: 50_000,
-        filter: effectiveSampleTableFilter.value,
-        reticleOptions: reticleOptions.value,
-      });
-      return response.items.map((row) => String(row.defect_id));
+      return [] as string[];
     },
-    enabled: computed(() => !!selectedDataset.value && hasEffectiveSampleTableFilter()),
+    enabled: false,
     retry: false,
   });
 
@@ -560,14 +430,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (explicitIds) return explicitIds;
     return realDefectIds.value.length > 0 ? realDefectIds.value : null;
   });
-
-  const reviewImageDefectIds = computed<string[] | null>(() => {
-    return explicitBlinkSourceDefectIds.value;
-  });
-
-  const reviewImageSampleFilter = computed<ScSampleTableFilter | null>(() =>
-    hasEffectiveSampleTableFilter() ? effectiveSampleTableFilter.value : null,
-  );
 
   const shouldUseOffsetSamples = computed<boolean>(() => {
     if (hasEffectiveSampleTableFilter()) return false;
@@ -629,12 +491,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       if (sourceIds) return loaded < sourceIds.length ? loaded : undefined;
       return loaded < lastPage.total ? loaded : undefined;
     },
-    enabled: computed(
-      () =>
-        !!selectedDataset.value &&
-        isMapWarm.value &&
-        (blinkSourceDefectIds.value !== null || shouldUseOffsetSamples.value),
-    ),
+    enabled: false,
     retry: false,
   });
 
@@ -663,7 +520,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         imageId: img.image_id,
         url: scImageUrlForRole(r, img),
       })),
-      currentLabel: r.label || null,
+      currentLabel: r.label ?? null,
       predictedLabel: r.predicted_label || null,
       confidence: r.confidence ?? null,
     }));
@@ -698,30 +555,10 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const isBlinkLoading = computed(() => sampleRowsInfiniteQuery.isLoading.value);
 
-  const isMapLoading = computed(
-    () =>
-      plotPointsWarmupQuery.isLoading.value ||
-      plotPointsWarmupQuery.isFetching.value ||
-      plotPointsQuery.isLoading.value ||
-      plotPointsQuery.isFetching.value,
-  );
-  const samplesError = computed<string | null>(
-    () =>
-      (plotPointsWarmupQuery.error.value as Error)?.message ??
-      (plotPointsQuery.error.value as Error)?.message ??
-      (sampleTableFilteredDefectIdsQuery.error.value as Error)?.message ??
-      (sampleRowsInfiniteQuery.error.value as Error)?.message ??
-      null,
-  );
+  const samplesError = computed<string | null>(() => null);
 
   const hasMoreSamples = computed(() => sampleRowsInfiniteQuery.hasNextPage.value ?? false);
   const isFetchingMoreSamples = computed(() => sampleRowsInfiniteQuery.isFetchingNextPage.value);
-
-  const plotPointTotal = computed<number>(
-    () =>
-      datasetSampleTotal.value ||
-      (sampleRowsInfiniteQuery.data.value?.pages?.[0]?.total ?? scSamples.value.length),
-  );
 
   const annotatedCount = computed<number>(() => {
     const statusAnnotated = datasetStatusQuery.data.value?.annotated_samples;
@@ -733,7 +570,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const samplingAvailableCount = computed<number>(() => {
     if (mapFilteredIds.value.size > 0) return mapFilteredIds.value.size;
-    return plotPointTotal.value;
+    return datasetSampleTotal.value || scSamples.value.length;
   });
 
   async function fetchMoreSamples(): Promise<unknown> {
@@ -749,63 +586,28 @@ export function useReclassifyPage(): ReclassifyPageState {
     return undefined;
   }
 
-  // ── Inspection context (derived from first sample, display-only) ───
-
   const inspectionContext = computed<{
     inspectionTime: string;
     waferKey: string;
   } | null>(() => {
-    const first = loadedRows.value[0];
-    if (!first) {
-      const plot = plotPointsQuery.data.value;
-      if (!plot) return null;
-      return {
-        inspectionTime: "",
-        waferKey: String(plot.waferKey),
-      };
+    const meta = selectedDataset.value?.dataset_meta;
+    const sourceTime = meta?.source_inspection_time;
+    const sourceWafer = meta?.source_wafer_key;
+    if (
+      typeof sourceTime !== "string" ||
+      sourceTime.length === 0 ||
+      (typeof sourceWafer !== "number" && typeof sourceWafer !== "string")
+    ) {
+      return null;
     }
     return {
-      inspectionTime: first.inspection_time,
-      waferKey: String(first.wafer_key),
+      inspectionTime: sourceTime,
+      waferKey: String(sourceWafer),
     };
-  });
-
-  // ── Label options ───────────────────────────────────────────────────
-
-  const roughBinOptions = computed(() => {
-    const values = legendGroupBy.value === "bin" ? Object.keys(classList.value ?? {}) : [];
-    if (values.length > 0) return values.sort((a, b) => Number(a) - Number(b));
-    return packedPointOptions(plotPointsQuery.data.value?.waferPoints ?? [], 4);
-  });
-
-  const labelOptions = computed(() => {
-    if (labelSpace.value.length > 0) return labelSpace.value;
-    return roughBinOptions.value;
-  });
-
-  const classNumberOptions = computed(() => {
-    const values =
-      legendGroupBy.value === "class"
-        ? Object.keys(classList.value ?? {}).sort((a, b) => Number(a) - Number(b))
-        : [];
-    if (values.length === 0) {
-      const pointValues = packedPointOptions(plotPointsQuery.data.value?.waferPoints ?? [], 3);
-      return pointValues.length > 0 ? pointValues : labelOptions.value;
-    }
-    return values.length > 0 ? values : labelOptions.value;
   });
 
   const predictionLabels = computed<Record<string, string>>(() => {
     const map: Record<string, string> = {};
-    if (legendGroupBy.value === "prediction") {
-      for (const [label, group] of Object.entries(classList.value ?? {})) {
-        if (label === "__unlabeled__") continue;
-        for (const defectId of group.defectIds) {
-          map[String(defectId)] = label;
-        }
-      }
-      if (Object.keys(map).length > 0) return map;
-    }
     for (const s of scSamples.value) {
       if (s.predictedLabel) map[s.defectId] = s.predictedLabel;
     }
@@ -819,8 +621,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
     return map;
   });
-
-  const isPredictionsLoading = computed(() => false);
 
   // ── Flat display arrays ─────────────────────────────────────────────
 
@@ -843,51 +643,23 @@ export function useReclassifyPage(): ReclassifyPageState {
     };
   }
 
-  const waferDisplay = computed(() => plotPointsQuery.data.value?.waferPoints ?? []);
-
-  const dieDisplay = computed(() => plotPointsQuery.data.value?.diePoints ?? []);
-
-  const dieFullPoints = computed<Array<[number, number, number]>>(() => {
-    const src = plotPointsQuery.data.value?.diePoints ?? [];
-    const out: Array<[number, number, number]> = [];
-    for (let i = 0; i + 5 < src.length; i += 6) {
-      out.push([src[i], src[i + 1], src[i + 2]]);
-    }
-    return out;
-  });
-
-  const dieRenderPoints = computed<Array<[number, number]>>(() => {
-    const full = dieFullPoints.value;
-    const limit = Math.min(full.length, 10000);
-    const out: Array<[number, number]> = new Array(limit);
-    for (let i = 0; i < limit; i += 1) out[i] = [full[i][0], full[i][1]];
-    return out;
-  });
-
   const waferGeometry = computed<WaferGeometryView | null>(() => {
-    const geometry = plotPointsQuery.data.value?.geometry;
-    if (!geometry) return null;
+    const geometry = selectedDataset.value?.dataset_meta?.geometry;
+    if (!geometry || typeof geometry !== "object") return null;
+    const g = geometry as Record<string, unknown>;
     return {
-      waferRadiusNm: geometry.waferRadiusNm,
-      centerX: geometry.centerX,
-      centerY: geometry.centerY,
-      originX: geometry.originX,
-      originY: geometry.originY,
-      dieSizeX: geometry.dieSizeX,
-      dieSizeY: geometry.dieSizeY,
+      waferRadiusNm: (g.wafer_radius_nm as number) ?? 150_000_000,
+      centerX: (g.center_x as number) ?? 0,
+      centerY: (g.center_y as number) ?? 0,
+      originX: (g.origin_x as number) ?? 0,
+      originY: (g.origin_y as number) ?? 0,
+      dieSizeX: (g.die_size_x as number) ?? 0,
+      dieSizeY: (g.die_size_y as number) ?? 0,
     };
   });
 
-  const inferredReticleDieSizeX = computed(() => {
-    let maxDieX = 0;
-    for (const point of dieFullPoints.value) maxDieX = Math.max(maxDieX, point[0]);
-    return Math.max(1, Math.ceil(maxDieX || 100000));
-  });
-  const inferredReticleDieSizeY = computed(() => {
-    let maxDieY = 0;
-    for (const point of dieFullPoints.value) maxDieY = Math.max(maxDieY, point[1]);
-    return Math.max(1, Math.ceil(maxDieY || 100000));
-  });
+  const inferredReticleDieSizeX = computed(() => 100000);
+  const inferredReticleDieSizeY = computed(() => 100000);
 
   // ── Tab state ──────────────────────────────────────────────────────
 
@@ -904,11 +676,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function updateReticleOptions(options: ReticleMapOptions): void {
     reticleOptionsState.value = normalizeReticleMapOptions(options);
-    void plotPointsQuery.refetch();
   }
-
-  const reticleDisplay = computed(() => plotPointsQuery.data.value?.reticlePoints ?? []);
-  const reticleMapError = computed<string | null>(() => null);
 
   // ── Map filter + selection state ─────────────────────────────────────
 
@@ -916,36 +684,36 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function handleMapFilterChange(filter: Record<string, (number | string)[]>): void {
     mapFilter.value = filter;
-    void plotPointsQuery.refetch();
+    galleryRandomSamplingDefectIds.value = new Set();
   }
 
   function handleLegendGroupByChange(source: LegendColorSource | null): void {
     if (legendGroupBy.value === source) return;
     legendGroupBy.value = source;
-    void plotPointsQuery.refetch();
   }
 
   function applySampleTableFilterAsGlobal(): void {
+    if (Object.keys(sampleTableFilter.value).length > 0) {
+      galleryRandomSamplingDefectIds.value = new Set();
+    }
     globalFilter.value = { ...globalFilter.value, ...sampleTableFilter.value };
     sampleTableFilter.value = {};
-    void plotPointsQuery.refetch();
   }
 
   function clearGlobalFilter(): void {
     globalFilter.value = {};
-    void plotPointsQuery.refetch();
+    galleryRandomSamplingDefectIds.value = new Set();
   }
 
   function clearMapFilter(): void {
     mapFilter.value = {};
     globalFilter.value = {};
     sampleTableFilter.value = {};
-    sampleTableSelectedIds.value = new Set();
     selectedDefectFilterIds.value = new Set();
     mapFilteredIds.value = new Set();
     sampledIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set();
     mapFilterVersion.value += 1;
-    void plotPointsQuery.refetch();
   }
 
   // ── Annotation draft state (keyed by defectId) ──────────────────────
@@ -1109,16 +877,6 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   function setAnnotationDraft(defectId: string, label: string): void {
-    if (label === "0") {
-      const next = { ...annotationDraft.value };
-      delete next[defectId];
-      const sample = scSamples.value.find((item) => item.defectId === defectId);
-      if (sample?.currentLabel) {
-        next[defectId] = "0";
-      }
-      annotationDraft.value = next;
-      return;
-    }
     annotationDraft.value = { ...annotationDraft.value, [defectId]: label };
   }
 
@@ -1223,7 +981,7 @@ export function useReclassifyPage(): ReclassifyPageState {
                     if (newLabel !== undefined) {
                       return {
                         ...item,
-                        label: newLabel === "0" ? null : newLabel,
+                        label: newLabel,
                       };
                     }
                     return item;
@@ -1233,12 +991,6 @@ export function useReclassifyPage(): ReclassifyPageState {
             });
           }
 
-          void queryClient.invalidateQueries({
-            queryKey: ["sc", "plot-points-warmup", datasetId.value],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["sc", "plot-points", datasetId.value],
-          });
           void queryClient.invalidateQueries({
             queryKey: ["sc", "class-list", datasetId.value],
           });
@@ -1303,6 +1055,11 @@ export function useReclassifyPage(): ReclassifyPageState {
   const showSamplingModal = ref(false);
   const samplingCount = ref(200);
   const assignDefaultDraftLabel = ref(false);
+
+  function clearGalleryRandomSamplingDefectIds(): void {
+    galleryRandomSamplingDefectIds.value = new Set();
+  }
+
   async function applySampling(): Promise<void> {
     const count = samplingCount.value;
     if (count <= 0) return;
@@ -1330,6 +1087,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     sampledIds.value = new Set(sampled);
     selectedDefectFilterIds.value = new Set();
+    galleryRandomSamplingDefectIds.value = new Set(sampled);
 
     if (assignDefaultDraftLabel.value) {
       const next: Record<string, string> = {};
@@ -1459,12 +1217,6 @@ export function useReclassifyPage(): ReclassifyPageState {
       queryKey: ["sc", "view-samples-paged", datasetId.value],
     });
     void queryClient.invalidateQueries({
-      queryKey: ["sc", "plot-points-warmup", datasetId.value],
-    });
-    void queryClient.invalidateQueries({
-      queryKey: ["sc", "plot-points", datasetId.value],
-    });
-    void queryClient.invalidateQueries({
       queryKey: ["sc", "class-list", datasetId.value],
     });
   }
@@ -1558,107 +1310,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
   }
 
-  // ── Review images (fetched via /sc/inspections/.../review-images) ──
-
-  const reviewSamples = ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>(
-    [],
-  );
-  const reviewLoading = ref(false);
-  const reviewError = ref<string | null>(null);
-
-  async function fetchReviewImages(): Promise<void> {
-    const ctx = inspectionContext.value;
-    if (!ctx || !ctx.inspectionTime || !ctx.waferKey) {
-      reviewSamples.value = [];
-      reviewLoading.value = false;
-      reviewError.value = null;
-      return;
-    }
-    reviewLoading.value = true;
-    reviewError.value = null;
-    try {
-      const defectIds = reviewImageDefectIds.value;
-      if (defectIds && defectIds.length === 0) {
-        reviewSamples.value = [];
-        return;
-      }
-      const params: {
-        defect_ids?: string[];
-        sample_filter?: string;
-        reticle_x_die_count?: number;
-        reticle_y_die_count?: number;
-        reticle_x_die_shift?: number;
-        reticle_y_die_shift?: number;
-      } = {};
-      if (defectIds && defectIds.length > 0) {
-        params.defect_ids = defectIds;
-      }
-      if (reviewImageSampleFilter.value) {
-        params.sample_filter = JSON.stringify(reviewImageSampleFilter.value);
-        params.reticle_x_die_count = reticleOptions.value.xDieCount;
-        params.reticle_y_die_count = reticleOptions.value.yDieCount;
-        params.reticle_x_die_shift = reticleOptions.value.xDieShift;
-        params.reticle_y_die_shift = reticleOptions.value.yDieShift;
-      }
-      const data =
-        await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
-          ctx.inspectionTime,
-          Number(ctx.waferKey),
-          params,
-        );
-      const { create } = await import("@bufbuild/protobuf");
-      const { ScSampleItemSchema, ReviewImageSchema } =
-        await import("@/features/sc/generated/proto/sc/v1/sample_pb");
-      const inspTimeBigInt = BigInt(Date.parse(ctx.inspectionTime)) * BigInt(1_000_000);
-      const resp = data.data;
-      if (!("items" in resp)) {
-        throw new Error("Failed to load review images");
-      }
-      reviewSamples.value = resp.items.map(
-        (item: {
-          defect_id: string;
-          review_images: Array<{
-            image_name: string;
-            image_id: number;
-            image_type: string;
-          }>;
-        }) =>
-          create(ScSampleItemSchema, {
-            defectId: Number(item.defect_id),
-            inspectionTime: inspTimeBigInt,
-            waferKey: Number(ctx.waferKey),
-            reviewImages: item.review_images.map(
-              (image: { image_name: string; image_id: number; image_type: string }) =>
-                create(ReviewImageSchema, {
-                  imageName: image.image_name,
-                  imageId: image.image_id,
-                  imageType: image.image_type,
-                }),
-            ),
-          }),
-      );
-    } catch (err: unknown) {
-      reviewError.value = (err as Error)?.message ?? "Failed to load review images";
-      reviewSamples.value = [];
-    } finally {
-      reviewLoading.value = false;
-    }
-  }
-
-  watch(
-    () => [
-      inspectionContext.value?.inspectionTime,
-      inspectionContext.value?.waferKey,
-      JSON.stringify(reviewImageDefectIds.value ?? null),
-      JSON.stringify(reviewImageSampleFilter.value ?? null),
-      JSON.stringify(reticleOptions.value),
-    ],
-    () => {
-      fetchReviewImages();
-    },
-    { immediate: true },
-  );
-
   // ── Return ─────────────────────────────────────────────────────────
 
   return {
@@ -1669,29 +1320,22 @@ export function useReclassifyPage(): ReclassifyPageState {
     errorMessage,
     scSamples,
     isBlinkLoading,
-    isMapLoading,
-    mapStreamMessage,
     samplesError,
     fetchMoreSamples,
     hasMoreSamples,
     isFetchingMoreSamples,
-    plotPointTotal,
     samplingAvailableCount,
     annotatedCount,
     labelSpace,
     effectiveLabels,
-    labelOptions,
     codeLabels,
     shortcutCodeByKey,
     setLabelShortcut,
-    classNumberOptions,
-    classList,
 
     activeMapTab,
     mapZoom,
     setActiveMapTab,
     setMapZoom,
-    waferDisplay,
     mapFilter,
     globalFilter,
     sampleTableFilter,
@@ -1704,8 +1348,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     clearGlobalFilter,
     clearMapFilter,
     handleBoxSelectionChange,
-    sampleTableSelectedIds,
-    setSampleTableSelectedIds,
     filterBlinkTableSamples,
     mapFilteredIds,
     highlightDefects,
@@ -1717,10 +1359,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     filteredScSamples,
 
     waferGeometry,
-    dieDisplay,
-    dieFullPoints,
-    dieRenderPoints,
-    reticleDisplay,
     reticleXDieCount,
     reticleYDieCount,
     reticleDieSizeX,
@@ -1728,7 +1366,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     reticleOptions,
     updateReticleOptions,
     isReticleMapLoading: computed(() => false),
-    reticleMapError,
 
     blinkTableData,
 
@@ -1744,7 +1381,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     predictionLabels,
     predictionConfidences,
-    isPredictionsLoading,
 
     activeTab,
     inspectionContext,
@@ -1753,6 +1389,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     samplingCount,
     assignDefaultDraftLabel,
     applySampling,
+    galleryRandomSamplingDefectIds,
+    clearGalleryRandomSamplingDefectIds,
 
     selectedTrainerId,
     trainerOptions,
@@ -1766,8 +1404,5 @@ export function useReclassifyPage(): ReclassifyPageState {
     trainPredictPredictionProgressLabel,
     trainPredictPredictionProcessing,
     trainAndPredict,
-    reviewSamples,
-    reviewLoading,
-    reviewError,
   };
 }

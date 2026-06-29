@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
@@ -10,6 +10,7 @@ import polars as pl
 import pyarrow.flight as flight  # pyright: ignore[reportPrivateImportUsage]
 from grpc import aio as grpc_aio
 
+from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
@@ -20,18 +21,7 @@ if TYPE_CHECKING:
 
 def _parse_upstream_datetime(value: str) -> datetime:
     dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        return datetime(
-            dt.year,
-            dt.month,
-            dt.day,
-            dt.hour,
-            dt.minute,
-            dt.second,
-            dt.microsecond,
-            tzinfo=timezone.utc,
-        )
-    return dt.astimezone(timezone.utc)
+    return _coerce_naive_to_upstream_tz(dt)
 
 
 class GrpcScUpstream:
@@ -188,6 +178,9 @@ class GrpcScUpstream:
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
         if "die_x" not in df.columns:
+            assert "die_size_x" in df.columns, (
+                "die_size_x column is required to compute die_x"
+            )
             die_size_x: int = int(df["die_size_x"].max())  # type: ignore[index]
             die_size_y: int = int(df["die_size_y"].max())  # type: ignore[index]
             origin_x: int = int(df["origin_x"].max())  # type: ignore[index]

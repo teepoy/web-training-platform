@@ -74,7 +74,9 @@ class InspectDefectORM(Base):
     __tablename__ = "inspect_defect"
 
     wafer_key: Mapped[int] = mapped_column(Integer, primary_key=True)
-    inspection_time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    inspection_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
     defect_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     test_id: Mapped[int] = mapped_column(Integer, nullable=False)
     class_number: Mapped[int] = mapped_column(Integer, nullable=False)

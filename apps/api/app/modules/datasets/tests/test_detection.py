@@ -83,7 +83,7 @@ def test_create_detection_dataset_list_contains_it() -> None:
         dataset_id = _create_detection_dataset(c, name="detection-list-test")
         resp = c.get("/api/v1/datasets")
         assert resp.status_code == 200
-        ids = [d["id"] for d in resp.json()]
+        ids = [d["id"] for d in resp.json()["items"]]
         assert dataset_id in ids
 
 

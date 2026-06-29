@@ -9,8 +9,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
+
+_SC_UPSTREAM_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _coerce_naive_to_upstream_tz(dt: datetime) -> datetime:
+    """If dt has no tzinfo, assume Asia/Shanghai. Does NOT convert to UTC — preserves wall clock values."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_SC_UPSTREAM_TZ)
+    return dt
 
 
 class ScImageError(Exception):
@@ -30,13 +40,19 @@ class ScImageCacheError(ScImageError):
 
 
 def parse_inspection_time(raw: object) -> datetime | None:
+    """Parse an inspection time value into a UTC datetime.
+
+    Naive datetime values (no timezone) are assumed to be in Asia/Shanghai
+    (the source upstream timezone) and then converted to UTC.
+    """
     if raw is None:
         return None
     if isinstance(raw, datetime):
-        return raw
+        return _coerce_naive_to_upstream_tz(raw)
     if isinstance(raw, str):
         try:
-            return datetime.fromisoformat(raw)
+            dt = datetime.fromisoformat(raw)
+            return _coerce_naive_to_upstream_tz(dt)
         except ValueError:
             return None
     return None

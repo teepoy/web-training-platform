@@ -13,7 +13,13 @@ class ModelRepository(Protocol):
         job_id: str | None = None,
     ) -> list[Model]: ...
 
-    async def get_model(self, artifact_id: str, org_id: str) -> Model | None: ...
+    async def get_model(
+        self,
+        artifact_id: str,
+        org_id: str,
+        *,
+        include_public: bool = True,
+    ) -> Model | None: ...
 
     async def rename_model(
         self, artifact_id: str, org_id: str, name: str

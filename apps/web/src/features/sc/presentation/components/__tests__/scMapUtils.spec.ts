@@ -10,7 +10,6 @@ import {
   buildPointLookup,
   getPackedPointIdsInRegion,
   truncatePoints,
-  MAX_RENDERED_POINTS,
 } from "../scMapUtils";
 
 describe("STRIDE", () => {
@@ -205,20 +204,10 @@ describe("padStride3to6", () => {
   });
 });
 
-describe("MAX_RENDERED_POINTS", () => {
-  it("is 50000", () => {
-    expect(MAX_RENDERED_POINTS).toBe(50000);
-  });
-});
-
 describe("getPackedPointIdsInRegion", () => {
   it("returns only points inside the inclusive box", () => {
-    const points = [
-      10, 20, 101, 1, 0, 0, 30, 40, 102, 1, 0, 0, 50, 60, 103, 1, 0, 0,
-    ];
-    expect(
-      getPackedPointIdsInRegion(points, { x: 10, y: 20, w: 20, h: 20 }),
-    ).toEqual([101, 102]);
+    const points = [10, 20, 101, 1, 0, 0, 30, 40, 102, 1, 0, 0, 50, 60, 103, 1, 0, 0];
+    expect(getPackedPointIdsInRegion(points, { x: 10, y: 20, w: 20, h: 20 })).toEqual([101, 102]);
   });
 });
 
@@ -239,12 +228,10 @@ describe("createRafThrottle", () => {
     const fn1 = vi.fn();
 
     const state: { queued: (() => void) | null } = { queued: null };
-    const rafSpy = vi
-      .spyOn(window, "requestAnimationFrame")
-      .mockImplementation((cb) => {
-        state.queued = cb as () => void;
-        return 1;
-      });
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      state.queued = cb as () => void;
+      return 1;
+    });
 
     try {
       const schedule = createRafThrottle();

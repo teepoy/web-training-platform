@@ -129,6 +129,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
           row,
           isSuperadmin: options.isSuperadmin,
           isOwnOrg: row.org_id === options.currentOrgId,
+          canRename: isDatasetCreator(row, options.currentUserId),
           canDelete: isDatasetCreator(row, options.currentUserId),
           onView: (id: string) => {
             options.onViewDataset(id);
@@ -197,6 +198,7 @@ export function useDatasetListSurface<
       row,
       isSuperadmin: permissions.value.isSuperadmin,
       isOwnOrg: row.org_id === resolvedCurrentOrgId.value,
+      canRename: isDatasetCreator(row, resolvedUser.value?.id),
       canDelete: isDatasetCreator(row, resolvedUser.value?.id),
     };
   }

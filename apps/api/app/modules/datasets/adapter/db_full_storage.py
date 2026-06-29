@@ -954,6 +954,60 @@ class DbFullDatasetStorage:
             return await self._repo.list_annotations_for_dataset(dataset_id)
         return []
 
+    async def list_annotations_by_sample_ids(
+        self, sample_ids: list[str]
+    ) -> list[Annotation]:
+        if not sample_ids:
+            return []
+        async with self._session_factory() as session:
+            stmt = select(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [
+                Annotation(
+                    id=r.id,
+                    sample_id=r.sample_id,
+                    label=r.label,
+                    annotation_value=r.annotation_value,
+                    created_by=r.created_by,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    async def replace_annotations_for_samples(
+        self, items: list[tuple[str, str | None]], *, created_by: str = ""
+    ) -> int:
+        if not items:
+            return 0
+        seen: dict[str, str | None] = {}
+        for sample_id, label in items:
+            seen[sample_id] = label
+
+        sample_ids = list(seen.keys())
+        async with self._session_factory() as session:
+            await session.execute(
+                delete(AnnotationORM).where(AnnotationORM.sample_id.in_(sample_ids))
+            )
+
+            to_create: list[str] = [
+                sid for sid, label in seen.items() if label is not None
+            ]
+            if to_create:
+                session.add_all(
+                    [
+                        AnnotationORM(
+                            id=str(uuid4()),
+                            sample_id=sid,
+                            label=seen[sid],
+                            created_by=created_by,
+                            created_at=datetime.now(timezone.utc),
+                        )
+                        for sid in to_create
+                    ]
+                )
+            await session.commit()
+        return len(to_create)
+
     async def write_predictions(
         self,
         results: AsyncIterator[PredictionResult],

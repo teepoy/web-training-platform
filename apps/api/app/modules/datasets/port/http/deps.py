@@ -18,6 +18,9 @@ from app.shared.domain.protocols import (
     ArtifactStorage,
     LabelStudioClient,
 )
+from app.shared.infrastructure.redis.event_publisher import (
+    RedisEventPublisher,
+)
 
 
 def get_repository(request: Request) -> DatasetRepository:
@@ -67,6 +70,15 @@ def get_dataset_service(
 
 DatasetServiceDep = Annotated[DatasetService, Depends(get_dataset_service)]
 LabelStudioClientDep = Annotated[LabelStudioClient, Depends(get_label_studio_client)]
+
+
+def get_redis_event_publisher(request: Request) -> RedisEventPublisher:
+    return request.app.state.app_context.shared.redis_event_publisher
+
+
+RedisEventPublisherDep = Annotated[
+    RedisEventPublisher, Depends(get_redis_event_publisher)
+]
 
 
 def get_session_factory(request: Request) -> async_sessionmaker:

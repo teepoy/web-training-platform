@@ -9,6 +9,8 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from app.modules.sc.domain.models import parse_inspection_time
+
 
 DEFAULT_PATCH_IMAGE_TYPES = ["patch_template", "patch_defective"]
 
@@ -81,7 +83,9 @@ class ScInspectionMaterializer:
             out = {
                 "sample_id": str(row.get("sample_id", "")),
                 "defect_id": defect_id,
-                "inspection_time": str(row.get("inspection_time", "")),
+                "inspection_time": _normalize_inspection_time(
+                    row.get("inspection_time")
+                ),
                 "wafer_key": int(row.get("wafer_key", 0) or 0),
             }
             for column in columns:
@@ -110,6 +114,13 @@ class ScInspectionMaterializer:
             row_count=len(rows),
             errors=errors,
         )
+
+
+def _normalize_inspection_time(raw: object) -> str:
+    dt = parse_inspection_time(raw)
+    if dt is None:
+        return ""
+    return dt.isoformat()
 
 
 def _materialized_column_name(image_type: str) -> str:

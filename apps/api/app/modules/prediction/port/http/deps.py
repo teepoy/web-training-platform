@@ -25,6 +25,9 @@ from app.shared.domain.protocols import (
     LlmClient,
     PrefectClient,
 )
+from app.shared.infrastructure.redis.event_publisher import (
+    RedisEventPublisher,
+)
 
 
 def get_config(request: Request) -> DictConfig:
@@ -108,6 +111,15 @@ def get_batch_prediction_service(request: Request) -> BatchPredictionService:
 def get_dataset_service(request: Request) -> DatasetService:
     return request.app.state.app_context.datasets.dataset_service
 
+
+def get_redis_event_publisher(request: Request) -> RedisEventPublisher:
+    return request.app.state.app_context.shared.redis_event_publisher
+
+
+RedisEventPublisherDep = Annotated[
+    RedisEventPublisher,
+    Depends(get_redis_event_publisher),
+]
 
 ConfigDep = Annotated[DictConfig, Depends(get_config)]
 PredictionRepositoryDep = Annotated[

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick, ref } from "vue";
 import { mockTanstackVirtual } from "@/testing/mocks/tanstack-virtual";
 import { useBlinkVirtualScroll } from "./useBlinkVirtualScroll";
-import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 
 mockTanstackVirtual();
 
@@ -14,7 +13,7 @@ describe("useBlinkVirtualScroll", () => {
 
     scope.run(() => {
       const { virtualizer } = useBlinkVirtualScroll({
-        samples: ref([{ defectId: 1, reviewImages: [] }] as unknown as ScSampleItem[]),
+        samples: ref([{ defectId: 1, reviewImages: [] }]),
         mode: ref("patch"),
         patchPerRow: ref(1),
         reviewPerRow: ref(1),

@@ -22,6 +22,25 @@ SC_PATCH_ZIP_DEFECTS ?= 200000
 SC_PATCH_ZIP_BUCKET ?= sc-patch-images
 SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
 
+DEV_API_HOST_ENV := \
+	APP_CONFIG_PROFILE=dev \
+	DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/finetune \
+	PREFECT_API_URL=http://localhost:4200/api \
+	PREFECT_UI_URL=http://localhost:4200 \
+	LABEL_STUDIO_URL=http://localhost:8080 \
+	LABEL_STUDIO_EXTERNAL_URL=http://localhost:8080 \
+	LABEL_STUDIO_API_KEY=ls-smoke-token-for-local-dev \
+	LABEL_STUDIO_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/labelstudio \
+	MINIO_ENDPOINT=localhost:9000 \
+	MINIO_ACCESS_KEY=minioadmin \
+	MINIO_SECRET_KEY=minioadmin \
+	MINIO_BUCKET=finetune-artifacts \
+	REDIS_HOST=localhost \
+	REDIS_PORT=6379 \
+	SC_UPSTREAM_ADDR=127.0.0.1:9091 \
+	SC_UPSTREAM_FLIGHT_ADDR=grpc://127.0.0.1:9093 \
+	IMAGE_PARSER_GRPC_ADDR=127.0.0.1:9092
+
 # ──────────────────────────────────────────────
 # Production split-stack (infra/compose/production/)
 # ──────────────────────────────────────────────
@@ -67,7 +86,11 @@ dev: ## [DEPRECATED] Use `make up-dev` instead. Redirects to compose dev mode.
 
 .PHONY: dev-api
 dev-api: ## Start API dev server (default: 8000)
-	cd $(API_DIR) && uv run uvicorn app.main:app --reload --port $(API_PORT)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
+
+.PHONY: dev-api-host
+dev-api-host: up-dev-host-api ## Start compose dependencies, then run API on host
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run alembic upgrade head && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
 
 .PHONY: dev-web
 dev-web: ## Start frontend dev server (default: 5173)
@@ -334,6 +357,10 @@ e2e-live-report: ## Open Playwright HTML report
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
 	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
+
+.PHONY: up-dev-host-api
+up-dev-host-api: ensure-fixtures ## Start compose dev dependencies without Docker API/Web
+	docker compose -f $(COMPOSE_DEV) up -d --scale api=0 --scale web=0 $(ARGS)
 
 .PHONY: up-prod
 up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-compose.prod.yaml)

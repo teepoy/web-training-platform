@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from "vue";
+import { computed, h, onUpdated, ref, watch } from "vue";
 import {
   NButton,
   NDataTable,
@@ -10,7 +10,6 @@ import {
   type DataTableRowKey,
   type DataTableSortState,
 } from "naive-ui";
-import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type {
   ScSampleTableDataSource,
@@ -18,10 +17,9 @@ import type {
 } from "@/features/sc/domain/workbenchInteraction";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
+import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 
 const props = defineProps<{
-  /** @deprecated Use defectIds plus inspection identity. */
-  samples?: ScSampleItem[];
   dataSource?: ScSampleTableDataSource;
   defectIds?: string[];
   loading: boolean;
@@ -41,7 +39,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
-  (e: "apply-selection", ids: number[]): void;
   (e: "apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "filter-change", filter: ScSampleTableFilter): void;
   (e: "sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
@@ -93,21 +90,26 @@ const columnDefinitions: ColumnDefinition[] = [
 const reclassifyColumnDefinitions: ColumnDefinition[] = [
   { key: "annotation_label", title: "Annotation", width: 140, filter: "set" },
   { key: "prediction_label", title: "Prediction", width: 140, filter: "set" },
+  {
+    key: "prediction_confidence",
+    title: "Confidence",
+    width: 130,
+    filter: "range",
+    render: (row) =>
+      row.prediction_confidence != null ? row.prediction_confidence.toFixed(3) : "-",
+  },
 ];
 
 const PAGE_SIZE = 1000;
-const SELECT_ALL_LIMIT = 50_000;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
-const SCROLL_X = computed(() => (props.showReclassifyColumns ? 1980 : 1700));
+const SCROLL_X = computed(() => (props.showReclassifyColumns ? 2110 : 1700));
 const activeColumnDefinitions = computed(() =>
   props.showReclassifyColumns
     ? [...columnDefinitions, ...reclassifyColumnDefinitions]
     : columnDefinitions,
 );
 
-const resolvedDefectIds = computed(
-  () => props.defectIds ?? (props.samples ?? []).map((sample) => String(sample.defectId)),
-);
+const resolvedDefectIds = computed(() => props.defectIds ?? []);
 const queryEnabled = computed(() => Boolean(props.dataSource));
 const tableQueryKey = computed(() =>
   [
@@ -125,7 +127,6 @@ const rows = ref<ScSampleTableDisplayRow[]>([]);
 const serverTotal = ref(props.total);
 const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
-const isSelectingAll = ref(false);
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const selectedIds = ref<Set<number>>(new Set());
@@ -133,6 +134,8 @@ const filterState = ref<Record<string, { min: number | null; max: number | null 
 const setFilterSearch = ref<Record<string, string>>({});
 const setFilterDraft = ref<Record<string, Set<string>>>({});
 const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
+const searchedSetFilterValues = ref<Record<string, Array<string | number>>>({});
+const setFilterSearchLoading = ref<Record<string, boolean>>({});
 let requestVersion = 0;
 
 const hasMore = computed(() => nextAnchor.value !== null);
@@ -221,6 +224,10 @@ function getRangeFilterValues(field: string): number[] {
 function getSetFilterOptions(definition: ColumnDefinition) {
   const field = definition.key;
   const values = new Map<string, string | number>();
+  for (const value of searchedSetFilterValues.value[String(field)] ?? []) {
+    const normalized = normalizeFilterValue(String(field), value);
+    values.set(String(normalized), normalized);
+  }
   for (const value of discoveredSetFilterValues.value[String(field)] ?? []) {
     const normalized = normalizeFilterValue(String(field), value);
     values.set(String(normalized), normalized);
@@ -238,6 +245,35 @@ function getSetFilterOptions(definition: ColumnDefinition) {
           }),
     )
     .map((value) => ({ label: String(value), value }));
+}
+
+function filterWithoutField(field: string): ScSampleTableFilter | undefined {
+  const source = props.filter ?? {};
+  const next = { ...source };
+  delete next[field];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+async function searchSetFilterOptions(field: string): Promise<void> {
+  const search = setFilterSearch.value[field] ?? "";
+  if (!props.dataSource?.loadDistinctValues) return;
+
+  setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: true };
+  try {
+    const values = await props.dataSource.loadDistinctValues({
+      field,
+      search,
+      limit: 200,
+      filter: filterWithoutField(field),
+      sort: props.sort,
+    });
+    searchedSetFilterValues.value = {
+      ...searchedSetFilterValues.value,
+      [field]: values,
+    };
+  } finally {
+    setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: false };
+  }
 }
 
 function applySetFilter(field: string, values: Array<string | number>): void {
@@ -272,6 +308,9 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
     "onUpdate:draftValues": (values: string[]) => {
       setFilterDraft.value[field] = new Set(values);
     },
+    onSearchOptions: () => {
+      void searchSetFilterOptions(field);
+    },
     onApply: (values: Array<string | number>) => applySetFilter(field, values),
     onClose: hide,
   });
@@ -290,6 +329,14 @@ function renderRangeFilterMenu(field: string, hide: () => void) {
     },
     onApply: () => applyRangeFilter(field),
     onClear: () => clearFilter(field),
+    onClose: hide,
+  });
+}
+
+function renderTextFilterMenu(hide: () => void) {
+  return h(ScTextFilterMenu, {
+    appliedValues: getSetFilterValues("defect_id"),
+    onApply: (values: Array<string | number>) => applySetFilter("defect_id", values),
     onClose: hide,
   });
 }
@@ -352,11 +399,13 @@ const columns = computed<DataTableColumns<ScSampleTableDisplayRow>>(() => [
         filterOptions: definition.filter === "set" ? getSetFilterOptions(definition) : undefined,
         filterMultiple: definition.filter === "set",
         renderFilterMenu:
-          definition.filter === "set"
-            ? ({ hide }: { hide: () => void }) => renderSetFilterMenu(definition, hide)
-            : definition.filter === "range"
-              ? ({ hide }: { hide: () => void }) => renderRangeFilterMenu(field, hide)
-              : undefined,
+          field === "defect_id"
+            ? ({ hide }: { hide: () => void }) => renderTextFilterMenu(hide)
+            : definition.filter === "set"
+              ? ({ hide }: { hide: () => void }) => renderSetFilterMenu(definition, hide)
+              : definition.filter === "range"
+                ? ({ hide }: { hide: () => void }) => renderRangeFilterMenu(field, hide)
+                : undefined,
         render: definition.render
           ? (row: ScSampleTableDisplayRow) => definition.render?.(row) ?? ""
           : undefined,
@@ -460,70 +509,6 @@ async function fetchNextPage(): Promise<void> {
   }
 }
 
-async function selectAllMatching(): Promise<void> {
-  if (!selectionEnabled.value) return;
-  if (!queryEnabled.value || isSelectingAll.value) return;
-  if (serverTotal.value > SELECT_ALL_LIMIT) {
-    pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
-    return;
-  }
-  const hasFilter = props.filter && Object.keys(props.filter).length > 0;
-  if (!hasFilter && resolvedDefectIds.value.length > 0) {
-    if (resolvedDefectIds.value.length > SELECT_ALL_LIMIT) {
-      pageError.value = `Select All supports up to ${SELECT_ALL_LIMIT.toLocaleString()} rows. Narrow the selection by map location or filters first.`;
-      return;
-    }
-    const ids = resolvedDefectIds.value.map(Number).filter(Number.isFinite);
-    selectedIds.value = new Set(ids);
-    emit("selection-change", ids);
-    return;
-  }
-
-  const version = requestVersion;
-  isSelectingAll.value = true;
-  pageError.value = null;
-  try {
-    const ids: number[] = [];
-    let anchor: string | null = "0";
-    while (anchor !== null) {
-      const response = await props.dataSource!.loadRows({
-        defectIds: resolvedDefectIds.value,
-        anchor,
-        limit: SELECT_ALL_LIMIT,
-        filter: props.filter,
-        sort: props.sort,
-        reticleOptions:
-          props.reticleXDieCount !== undefined &&
-          props.reticleYDieCount !== undefined &&
-          props.reticleXDieShift !== undefined &&
-          props.reticleYDieShift !== undefined
-            ? {
-                xDieCount: props.reticleXDieCount,
-                yDieCount: props.reticleYDieCount,
-                xDieShift: props.reticleXDieShift,
-                yDieShift: props.reticleYDieShift,
-              }
-            : undefined,
-      });
-      ids.push(...response.items.map((row) => Number(row.defect_id)).filter(Number.isFinite));
-      anchor = response.nextAnchor;
-      if (version !== requestVersion) return;
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    }
-    selectedIds.value = new Set(ids);
-    emit("selection-change", ids);
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : "Failed to select all rows";
-  } finally {
-    if (version === requestVersion) isSelectingAll.value = false;
-  }
-}
-
-function applySelectionAsDefects(): void {
-  if (!selectionEnabled.value) return;
-  emit("apply-selection", Array.from(selectedIds.value));
-}
-
 function applyFilterAsGlobal(): void {
   emit("apply-filter-as-global", { ...(props.filter ?? {}) });
 }
@@ -547,6 +532,7 @@ watch(
   filterOptionsScopeKey,
   () => {
     discoveredSetFilterValues.value = {};
+    searchedSetFilterValues.value = {};
   },
   { immediate: true },
 );
@@ -563,6 +549,23 @@ watch(
     if (queryEnabled.value) void fetchNextPage();
   },
   { immediate: true },
+);
+
+watch(
+  () => props.dataSource,
+  () => {
+    if (!props.dataSource || !queryEnabled.value) return;
+    requestVersion += 1;
+    rows.value = [];
+    serverTotal.value = resolvedDefectIds.value.length || props.total;
+    nextAnchor.value = "0";
+    isFetching.value = false;
+    pageError.value = null;
+    streamStatus.value = "";
+    discoveredSetFilterValues.value = {};
+    searchedSetFilterValues.value = {};
+    void fetchNextPage();
+  },
 );
 
 watch(
@@ -611,6 +614,8 @@ defineExpose({
     };
   },
 });
+
+onUpdated(() => console.debug("[render] ScSampleTable"));
 </script>
 
 <template>
@@ -618,15 +623,6 @@ defineExpose({
     <div class="sst-header">
       <NText depth="2" class="sst-header-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-header-actions">
-        <NButton
-          v-if="selectionEnabled && serverTotal > 0"
-          size="tiny"
-          quaternary
-          :loading="isSelectingAll"
-          @click="selectAllMatching"
-        >
-          Select All ({{ serverTotal }})
-        </NButton>
         <NButton
           v-if="selectionEnabled && selectedIds.size > 0"
           size="tiny"
@@ -646,15 +642,6 @@ defineExpose({
         </NButton>
         <NButton v-if="clearFilterActionEnabled" size="tiny" quaternary @click="clearAllFilters">
           {{ showGlobalFilterAction ? "Clear Table Filter" : "Clear All Filters" }}
-        </NButton>
-        <NButton
-          v-if="selectionEnabled && selectedIds.size > 0"
-          size="tiny"
-          quaternary
-          type="primary"
-          @click="applySelectionAsDefects"
-        >
-          Filter BlinkTable Samples
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded

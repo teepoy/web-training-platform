@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
     LabelStudioClientDep,
+    RedisEventPublisherDep,
     get_artifact_storage,
     get_dataset_payload_store,
     get_dataset_storage_factory,
@@ -257,15 +258,19 @@ async def create_dataset(
     return service.to_response(dataset)
 
 
-@router.get("/datasets", response_model=list[Dataset])
+@router.get("/datasets", response_model=PaginatedResponse[Dataset])
 async def list_datasets(
     service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
-) -> list[Dataset]:
-    datasets = await repo.list_datasets(org_id=org.id)
-    return await service.to_list_responses(datasets)
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedResponse[Dataset]:
+    datasets = await repo.list_datasets(org_id=org.id, limit=limit, offset=offset)
+    total = await repo.count_datasets(org_id=org.id)
+    items = await service.to_list_responses(datasets)
+    return PaginatedResponse(items=items, total=total)
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -375,6 +380,8 @@ async def delete_dataset(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
     if dataset.created_by != current_user.id:
         raise HTTPException(
             status_code=403,
@@ -413,6 +420,13 @@ async def update_dataset(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the dataset creator can rename this dataset",
+        )
     updated = await repo.rename_dataset(dataset_id, name=payload.name, org_id=org.id)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -1164,6 +1178,7 @@ async def create_annotation(
     ls_client: LabelStudioClientDep,
     dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
+    event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> Annotation:
@@ -1196,6 +1211,11 @@ async def create_annotation(
         created_by=current_user.id,
     )
     await storage.create_annotations([ann])
+    await event_publisher.publish_annotation_created(
+        annotation_id=ann.id,
+        sample_id=payload.sample_id,
+        dataset_id=payload.dataset_id,
+    )
     # ── Auto-expand label_space with newly introduced labels ──────────
     await dataset_service.merge_label_space(payload.dataset_id, {payload.label})
     return ann
@@ -1243,6 +1263,7 @@ async def update_annotation(
     payload: UpdateAnnotationRequest,
     dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
+    event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> Annotation:
@@ -1250,6 +1271,11 @@ async def update_annotation(
     updated = await storage.update_annotations([(annotation_id, payload.label)])
     if not updated:
         raise HTTPException(status_code=404, detail="annotation not found")
+    await event_publisher.publish_annotation_updated(
+        annotation_id=annotation_id,
+        sample_id="",
+        dataset_id=payload.dataset_id,
+    )
     # Auto-expand label space if the label is new
     await dataset_service.merge_label_space(payload.dataset_id, {payload.label})
     return Annotation(
@@ -1264,6 +1290,7 @@ async def update_annotation(
 async def delete_annotation(
     annotation_id: str,
     factory: DatasetStorageFactoryDep,
+    event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     dataset_id: str = Query(description="Dataset ID for storage-mode dispatch"),
@@ -1272,6 +1299,11 @@ async def delete_annotation(
     deleted = await storage.delete_annotations([annotation_id])
     if not deleted:
         raise HTTPException(status_code=404, detail="annotation not found")
+    await event_publisher.publish_annotation_deleted(
+        annotation_id=annotation_id,
+        sample_id="",
+        dataset_id=dataset_id,
+    )
     return Response(status_code=204)
 
 
@@ -1284,6 +1316,7 @@ async def bulk_create_annotations(
     payload: BulkAnnotationRequest,
     dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
+    event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> BulkAnnotationResponse:
@@ -1298,6 +1331,13 @@ async def bulk_create_annotations(
         for item in payload.annotations
     ]
     created = await storage.create_annotations(ann_list)
+
+    for ann in ann_list:
+        await event_publisher.publish_annotation_created(
+            annotation_id=ann.id,
+            sample_id=ann.sample_id,
+            dataset_id=dataset_id,
+        )
 
     # ── Auto-expand label_space with newly introduced labels ──────────
     incoming_labels = {a.label for a in payload.annotations}

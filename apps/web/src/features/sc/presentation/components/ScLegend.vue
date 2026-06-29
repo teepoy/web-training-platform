@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onUpdated } from "vue";
 import { NButton, NIcon, NTag, NTooltip } from "naive-ui";
 import { EyeOffOutline, EyeOutline } from "@vicons/ionicons5";
 import {
@@ -16,7 +16,7 @@ import {
   DEFAULT_ROUGH_BIN_CODE_NAMES,
 } from "@/features/sc/application/reclassifyCodeNames";
 
-type LegendSource = "class" | "bin" | "annotation" | "prediction";
+type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
 const UNLABELED_KEY = "__unlabeled__";
 const NO_PREDICTION_KEY = "__no_prediction__";
@@ -30,6 +30,7 @@ const props = defineProps<{
   roughBins?: Record<string, DefectList>;
   annotations?: Record<string, DefectList>;
   predictions?: Record<string, DefectList>;
+  finalClass?: Record<string, DefectList>;
   colorMap?: Record<string, string>;
   hiddenKeys?: string[];
 }>();
@@ -85,6 +86,7 @@ const legendData = computed(() => {
     bin: props.roughBins,
     annotation: props.annotations,
     prediction: props.predictions,
+    final_class: props.finalClass,
   }[source];
   const isNumericSource = source === "class" || source === "bin";
   const colorFn = source === "bin" ? binColor : classColor;
@@ -166,6 +168,8 @@ const handleVisibleToggle = (rawKey: string) => {
   else next.add(rawKey);
   emit("update:hiddenKeys", Array.from(next));
 };
+
+onUpdated(() => console.debug("[render] ScLegend"));
 </script>
 
 <template>

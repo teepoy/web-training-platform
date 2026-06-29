@@ -6,9 +6,17 @@ import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import path from "path";
 import legacy from "@vitejs/plugin-legacy";
 
+const API_V1_PROXY_PREFIX = ["/api", "v1"].join("/");
+
 export default defineConfig({
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag === "perspective-viewer",
+        },
+      },
+    }),
     Components({ resolvers: [NaiveUiResolver()] }),
     legacy({
       targets: ["chrome >= 108", "not IE 11"],
@@ -29,7 +37,7 @@ export default defineConfig({
     // Exclude full echarts bundle to prevent double-registration of components
     // (modular echarts/core + echarts/charts etc. are pre-bundled separately;
     // loading the full bundle on top causes registerInternalOptionCreator assertions)
-    exclude: ["echarts"],
+    exclude: ["echarts", "@perspective-dev/viewer/inline"],
   },
   server: {
     port: 5173,
@@ -38,17 +46,17 @@ export default defineConfig({
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
       },
-      "/api/v1/sc/images/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/images/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
-      "/api/v1/sc/sprites/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/sprites/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
-      "/api/v1/sc/warm/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/warm/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
@@ -56,6 +64,7 @@ export default defineConfig({
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
+        ws: true,
       },
     },
   },

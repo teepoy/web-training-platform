@@ -7,6 +7,7 @@
         :current-org-id="orgStore.currentOrgId"
         :current-user-id="authStore.user?.id ?? null"
         :is-superadmin="authStore.user?.is_superadmin ?? false"
+        :pagination="pagination"
         @view="handleViewDataset"
         @toggle-public="handleTogglePublic"
         @delete="handleDeleteDataset"
@@ -36,14 +37,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
-import { useMessage, NModal, NInput } from "naive-ui";
+import { useMessage, NModal, NInput, type PaginationProps } from "naive-ui";
 import { DatasetPageShell } from "@/shared";
 import {
   deleteDataset,
-  listDatasets,
+  listDatasetPage,
   renameDataset,
   toggleDatasetPublic,
 } from "@/shared/api/datasets";
@@ -52,7 +53,7 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { useDatasetListSurface } from "@/features/datasets/application/surface";
 import { resolveDatasetShim } from "./schema-registry";
 import { resolveDatasetTaskType } from "./registry";
-import { getActiveDatasetTaskType, getActiveDatasetType, getActiveViewTypes } from "./selection";
+import { getActiveDatasetType, getActiveViewTypes } from "./selection";
 import type { UserResponse as User } from "@/generated/orval/models";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
@@ -62,15 +63,49 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
 
+const pagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onUpdatePage: (page: number) => {
+    pagination.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    pagination.pageSize = pageSize;
+    pagination.page = 1;
+  },
+});
+
 const {
-  data: datasets,
+  data: datasetPage,
   isLoading,
   error,
 } = useQuery({
-  queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
-  queryFn: listDatasets,
+  queryKey: computed(() => [
+    "datasets",
+    orgStore.currentOrgId,
+    pagination.page,
+    pagination.pageSize,
+  ]),
+  queryFn: () =>
+    listDatasetPage({
+      limit: pagination.pageSize ?? 20,
+      offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
+    }),
   enabled: computed(() => !!orgStore.currentOrgId),
 });
+
+const datasets = computed(() => datasetPage.value?.items ?? []);
+
+watch(
+  () => datasetPage.value?.total ?? 0,
+  (total) => {
+    pagination.itemCount = total;
+  },
+  { immediate: true },
+);
 
 const toggleDatasetPublicMut = useMutation({
   mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
@@ -136,6 +171,10 @@ function handleDeleteDataset(row: DatasetListItem) {
 }
 
 function handleRenameDataset(row: DatasetListItem) {
+  if (row.created_by !== authStore.user?.id) {
+    message.error("Only the dataset creator can rename this dataset");
+    return;
+  }
   renameTarget.value = { id: row.id, name: row.name };
   renameName.value = row.name;
   renameVisible.value = true;
@@ -161,7 +200,6 @@ const surface = useDatasetListSurface<DatasetListItem, User>({
   onDeleteDataset: handleDeleteDataset,
 });
 
-const activeTaskType = computed(() => getActiveDatasetTaskType(datasets.value));
 const activeDatasetType = computed(() => getActiveDatasetType(datasets.value));
 const activeViewTypes = computed(() => getActiveViewTypes(datasets.value));
 

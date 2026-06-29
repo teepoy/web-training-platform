@@ -1275,6 +1275,7 @@ dependencies = [
     { name = "minio" },
     { name = "nest-asyncio" },
     { name = "omegaconf" },
+    { name = "perspective-python" },
     { name = "pgvector" },
     { name = "pillow" },
     { name = "platform-runtime" },
@@ -1332,6 +1333,7 @@ requires-dist = [
     { name = "minio", specifier = "==7.2.20" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
     { name = "omegaconf", specifier = "==2.3.0" },
+    { name = "perspective-python", specifier = "==4.5.1" },
     { name = "pgvector", specifier = "==0.4.2" },
     { name = "pillow", specifier = "==12.2.0" },
     { name = "platform-runtime", editable = "libs/platform-runtime" },
@@ -3399,6 +3401,18 @@ wheels = [
     { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/a0/9e/567376582da58f5fe8e4f579db2bcfbf243cf619a5825bdf1023ad1436b3/pendulum-3.2.0-cp314-cp314-win_amd64.whl", hash = "sha256:e5bbb92b155cd5018b3cf70ee49ed3b9c94398caaaa7ed97fe41e5bb5a968418", size = 258817, upload-time = "2026-01-30T11:21:53.074Z" },
     { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/95/67/dfffd7eb50d67fa821cd4d92cf71575ead6162930202bc40dfcedf78c38c/pendulum-3.2.0-cp314-cp314-win_arm64.whl", hash = "sha256:d53134418e04335c3029a32e9341cccc9b085a28744fb5ee4e6a8f5039363b1a", size = 253292, upload-time = "2026-01-30T11:21:54.484Z" },
     { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/02/fb/d65db067a67df7252f18b0cb7420dda84078b9e8bfb375215469c14a50be/pendulum-3.2.0-py3-none-any.whl", hash = "sha256:f3a9c18a89b4d9ef39c5fa6a78722aaff8d5be2597c129a3b16b9f40a561acf3", size = 114111, upload-time = "2026-01-30T11:22:22.361Z" },
+]
+
+[[package]]
+name = "perspective-python"
+version = "4.5.1"
+source = { registry = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/" }
+sdist = { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/41/0e/ad9edd3f1b27b67027a0640a259776b45707ef2c99e67669627bbfc2a416/perspective_python-4.5.1.tar.gz", hash = "sha256:7d94f63d24648c91be339ff1b268319b3e5ed14d3c37cd3fb82389f1ee991138", size = 3800737, upload-time = "2026-05-31T00:20:15.091Z" }
+wheels = [
+    { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/7b/d2/e44f9cc3b59f02516e2bc20f69d550736c997b9bbe73e1052cbf59eef08d/perspective_python-4.5.1-cp311-abi3-macosx_14_0_arm64.whl", hash = "sha256:ab921f3ae8a096c6515943f9e80cea4b1cbe1635762b4151db62f17a1151b2af", size = 8523742, upload-time = "2026-05-31T00:20:04.434Z" },
+    { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/68/1e/8da44bc9f2fb1f4e36f684e86c8022563236b28e24b8b1ed46526067fdf8/perspective_python-4.5.1-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:bf339c4b7ea8380dc54b904afd204abdaa2d2b0c57495a7f454a6f7b1ecc3321", size = 6253979, upload-time = "2026-05-31T00:20:07.437Z" },
+    { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/64/4a/faac68f6ec590379001d4a57c757325a3895e788e4d4a16e25983b0c8d88/perspective_python-4.5.1-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:e9aa71d2bda00d0b4d4fecd284f2164857851d8fae42bde12a43793ff68e09f2", size = 10015151, upload-time = "2026-05-31T00:20:10.052Z" },
+    { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/91/da/589392454e11a18ca8ef2dccd1799604e6c01e6d9eece709189eed77ffc3/perspective_python-4.5.1-cp311-abi3-win_amd64.whl", hash = "sha256:4d5c0aa18903830408bf78eeb8e37227e35e41d3cd69ec047ee2f98ced6c8115", size = 8181330, upload-time = "2026-05-31T00:20:12.933Z" },
 ]
 
 [[package]]

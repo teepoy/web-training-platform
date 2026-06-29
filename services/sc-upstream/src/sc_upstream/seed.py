@@ -153,6 +153,10 @@ def _make_summary(
     )
 
 
+DIE_RANGE: int = 3
+DIE_CORNER_FRACTION: float = 0.3
+
+
 def _make_defect(
     wafer_key: int,
     inspection_time: datetime,
@@ -161,16 +165,19 @@ def _make_defect(
     origin_y: int,
     die_size_x: int,
     die_size_y: int,
-    wafer_radius: int,
     images: int = 0,
     center_x: int = 150_000_000,
     center_y: int = 150_000_000,
 ) -> InspectDefectORM:
     class_number = _generate_class()
-    angle = random.uniform(0, 2 * math.pi)
-    r = random.uniform(0, wafer_radius * 0.95)
-    wafer_x = center_x + int(r * math.cos(angle))
-    wafer_y = center_y + int(r * math.sin(angle))
+    die_idx_x = random.randint(-DIE_RANGE, DIE_RANGE)
+    die_idx_y = random.randint(-DIE_RANGE, DIE_RANGE)
+    max_offset_x = int(die_size_x * DIE_CORNER_FRACTION)
+    max_offset_y = int(die_size_y * DIE_CORNER_FRACTION)
+    offset_x = random.randint(0, max_offset_x)
+    offset_y = random.randint(0, max_offset_y)
+    wafer_x = center_x + die_idx_x * die_size_x + offset_x
+    wafer_y = center_y + die_idx_y * die_size_y + offset_y
     index_x = int((wafer_x - origin_x) / die_size_x)
     index_y = int((wafer_y - origin_y) / die_size_y)
     size_x = random.randint(50, 500)
@@ -232,8 +239,6 @@ def seed_single_summary_mass(
 ) -> None:
     die_size_x = 8_000_000
     die_size_y = 5_000_000
-    wafer_die_count_x = 37
-    wafer_radius = wafer_die_count_x * die_size_x // 2
     origin_x = 145_000_000
     origin_y = 145_000_000
 
@@ -279,7 +284,6 @@ def seed_single_summary_mass(
                     origin_y,
                     die_size_x,
                     die_size_y,
-                    wafer_radius,
                     images=images,
                 )
             )

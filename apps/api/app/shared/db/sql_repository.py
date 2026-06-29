@@ -112,11 +112,17 @@ class SqlRepository:
             }
         )
 
-    async def list_datasets(self, org_id: str | None = None) -> list[Dataset]:
+    async def list_datasets(
+        self,
+        org_id: str | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Dataset]:
         async with self.session_factory() as session:
             stmt = (
                 select(DatasetORM, OrganizationORM.name, UserORM.name, UserORM.email)
-                .join(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .outerjoin(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
                 .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
                 .order_by(DatasetORM.created_at.desc())
             )
@@ -124,6 +130,10 @@ class SqlRepository:
                 stmt = stmt.where(
                     or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
                 )  # noqa: E712
+            if offset:
+                stmt = stmt.offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).all()
             return [
                 Dataset(
@@ -145,6 +155,15 @@ class SqlRepository:
                 )
                 for r, org_name, user_name, user_email in rows
             ]
+
+    async def count_datasets(self, org_id: str | None = None) -> int:
+        async with self.session_factory() as session:
+            stmt = select(func.count(DatasetORM.id))
+            if org_id is not None:
+                stmt = stmt.where(
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
+                )  # noqa: E712
+            return int((await session.execute(stmt)).scalar_one())
 
     async def count_samples_by_dataset(self, dataset_ids: list[str]) -> dict[str, int]:
         if not dataset_ids:

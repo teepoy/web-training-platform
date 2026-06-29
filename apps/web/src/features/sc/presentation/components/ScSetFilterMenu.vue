@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { NButton, NCheckbox, NInput, NSpace, NText } from "naive-ui";
 
 const props = defineProps<{
@@ -12,9 +12,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:search", value: string): void;
   (e: "update:draftValues", value: string[]): void;
+  (e: "search-options", value: string): void;
   (e: "apply", value: Array<string | number>): void;
   (e: "close"): void;
 }>();
+
+onMounted(() => {
+  emit("search-options", "");
+});
 
 const searchText = computed(() => props.search.trim().toLowerCase());
 const isSearching = computed(() => searchText.value.length > 0);
@@ -23,7 +28,7 @@ const draftKeys = computed(() => new Set(props.draftValues));
 const visibleOptions = computed(() =>
   isSearching.value
     ? props.options.filter((option) => option.label.toLowerCase().includes(searchText.value))
-    : props.options.filter((option) => appliedKeys.value.has(String(option.value))),
+    : props.options,
 );
 
 function updateDraft(option: string | number, checked: boolean): void {
@@ -60,13 +65,15 @@ function applyDraft(): void {
 
 <template>
   <div class="sst-filter-popover sst-filter-popover--set">
-    <NInput
-      :value="search"
-      placeholder="Search"
-      size="small"
-      clearable
-      @update:value="emit('update:search', $event)"
-    />
+    <div class="sst-filter-search-row">
+      <NInput
+        :value="search"
+        placeholder="Search"
+        size="small"
+        clearable
+        @update:value="emit('update:search', $event)"
+      />
+    </div>
     <div class="sst-set-filter-options">
       <template v-if="visibleOptions.length > 0">
         <NCheckbox
@@ -80,8 +87,12 @@ function applyDraft(): void {
         </NCheckbox>
       </template>
       <NText v-else-if="isSearching" depth="3" class="sst-set-filter-empty">No matches</NText>
-      <NText v-else-if="appliedKeys.size === 0" depth="3" class="sst-set-filter-empty">
-        Type to search for options
+      <NText
+        v-else-if="appliedKeys.size === 0 && visibleOptions.length === 0"
+        depth="3"
+        class="sst-set-filter-empty"
+      >
+        Loading...
       </NText>
     </div>
     <NSpace :size="4">
@@ -115,6 +126,16 @@ function applyDraft(): void {
   max-width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.sst-filter-search-row {
+  display: flex;
+  gap: 6px;
+}
+
+.sst-filter-search-row :deep(.n-input) {
+  flex: 1;
+  min-width: 0;
 }
 
 .sst-set-filter-option {

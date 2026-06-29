@@ -12,7 +12,15 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> Dataset: ...
 
-    async def list_datasets(self, org_id: str | None = None) -> list[Dataset]: ...
+    async def list_datasets(
+        self,
+        org_id: str | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Dataset]: ...
+
+    async def count_datasets(self, org_id: str | None = None) -> int: ...
 
     async def count_samples_by_dataset(
         self,

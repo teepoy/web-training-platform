@@ -12,12 +12,13 @@ from typing import Annotated, Any, Literal
 
 import polars as pl
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
+    RedisEventPublisherDep,
     get_dataset_storage_factory,
 )
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
@@ -30,6 +31,14 @@ from app.modules.sc.port.http.deps import (
     ScPlotPointsServiceDep,
     ScUpstreamReaderDep,
 )
+from app.modules.auth.port.http.deps import get_current_org as resolve_current_org
+from app.modules.auth.port.http.deps import get_current_user as resolve_current_user
+from app.modules.sc.port.http.perspective_ws import (
+    _build_dataset_df,
+    _build_inspection_df,
+    overlay_df_from_samples,
+    run_sc_perspective_ws,
+)
 from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
@@ -39,6 +48,7 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     filter_box_defect_ids,
     sorted_defect_ids_from_lazyframe,
 )
+from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.proto_adapter import (
@@ -63,7 +73,7 @@ from app.modules.sc.schemas import (
     ScSampleTableRowsRequest,
     ScSampleTableRowsResponse,
 )
-from app.shared.api.schemas import Annotation, Organization, User
+from app.shared.api.schemas import Organization, User
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import (
     DoneEvent,
@@ -72,6 +82,7 @@ from app.shared.sse.events import (
     ScProgressEvent,
     SSEEvent,
 )
+import starlette.websockets
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -101,6 +112,93 @@ _SAMPLE_TABLE_COLUMNS = {
 _SAMPLE_TABLE_CACHE_DIR = (
     Path(tempfile.gettempdir()) / "web-training-platform" / "sc-sample-table-cache"
 )
+
+
+def _redis_client_from_request(request_or_websocket: Request | WebSocket) -> Any | None:
+    publisher = getattr(
+        request_or_websocket.app.state.app_context.shared,
+        "redis_event_publisher",
+        None,
+    )
+    return getattr(publisher, "_redis", None)
+
+
+@router.websocket("/perspective/inspections/{inspection_time}/{wafer_key}/ws")
+async def sc_inspection_perspective_ws(
+    websocket: WebSocket,
+    inspection_time: str,
+    wafer_key: int,
+    reticle_x_die_count: int = Query(default=10, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=10, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+) -> None:
+    upstream_reader = websocket.app.state.app_context.sc.upstream_reader
+
+    async def samples_df_factory() -> pl.DataFrame:
+        return await _build_inspection_df(
+            upstream_reader=upstream_reader,
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            reticle_x_die_count=reticle_x_die_count,
+            reticle_y_die_count=reticle_y_die_count,
+            reticle_x_die_shift=reticle_x_die_shift,
+            reticle_y_die_shift=reticle_y_die_shift,
+        )
+
+    await run_sc_perspective_ws(
+        websocket=websocket,
+        dataset_id=None,
+        samples_df_factory=samples_df_factory,
+        redis_client=_redis_client_from_request(websocket),
+    )
+
+
+@router.websocket("/perspective/datasets/{dataset_id}/ws")
+async def sc_dataset_perspective_ws(
+    websocket: WebSocket,
+    dataset_id: str,
+    reticle_x_die_count: int = Query(default=3, alias="reticleXDieCount", ge=1),
+    reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
+    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
+    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+) -> None:
+    app_context = websocket.app.state.app_context
+    current_user = await resolve_current_user(websocket)  # type: ignore[arg-type]
+    org = await resolve_current_org(websocket, current_user)  # type: ignore[arg-type]
+    upstream_reader = app_context.sc.upstream_reader
+    storage_factory = app_context.datasets.dataset_storage_factory
+
+    async def build_dataset_df() -> pl.DataFrame:
+        return await _build_dataset_df(
+            dataset_id=dataset_id,
+            org_id=org.id,
+            storage_factory=storage_factory,
+            upstream_reader=upstream_reader,
+            reticle_x_die_count=reticle_x_die_count,
+            reticle_y_die_count=reticle_y_die_count,
+            reticle_x_die_shift=reticle_x_die_shift,
+            reticle_y_die_shift=reticle_y_die_shift,
+        )
+
+    async def samples_df_factory() -> pl.DataFrame:
+        return await build_dataset_df()
+
+    async def refresh_overlay() -> pl.DataFrame:
+        return overlay_df_from_samples(await build_dataset_df())
+
+    try:
+        await run_sc_perspective_ws(
+            websocket=websocket,
+            dataset_id=dataset_id,
+            samples_df_factory=samples_df_factory,
+            redis_client=_redis_client_from_request(websocket),
+            refresh_overlay=refresh_overlay,
+        )
+    except starlette.websockets.WebSocketDisconnect:
+        # Ignore disconnects, they are expected when the client closes the connection
+        pass
+
 
 _TOP_LEVEL_FILTER_COLUMNS = {
     "lot_id": "lot_id",
@@ -221,6 +319,38 @@ async def get_inspections(
     return resp
 
 
+@router.get(
+    "/inspections/{inspection_time}/{wafer_key}",
+    response_model=ScInspectionSummaryItem,
+)
+async def get_inspection(
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> ScInspectionSummaryItem:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    return ScInspectionSummaryItem(
+        inspection_time=insp_dt.isoformat(),
+        wafer_key=inspection.wafer_key,
+        lot_id=inspection.lot_id,
+        wafer_id=inspection.wafer_id,
+        center_x=inspection.center_x,
+        center_y=inspection.center_y,
+        origin_x=inspection.origin_x,
+        origin_y=inspection.origin_y,
+        die_size_x=inspection.die_size_x,
+        die_size_y=inspection.die_size_y,
+        layer_id=getattr(inspection, "layer_id", None) or "",
+        eqp_id=getattr(inspection, "eqp_id", None) or "",
+        recipe_id=getattr(inspection, "recipe_id", ""),
+        defects=inspection.defects,
+        images=inspection.images,
+        device=getattr(inspection, "device", ""),
+    )
+
+
 def _parse_top_level_condition(value: str | None) -> list[str] | None:
     if value is None:
         return None
@@ -278,18 +408,7 @@ def _normalize_inspection_time(value: str) -> datetime:
     # 1. Try ISO 8601 first
     try:
         dt = datetime.fromisoformat(value)
-        if dt.tzinfo is None:
-            return datetime(
-                dt.year,
-                dt.month,
-                dt.day,
-                dt.hour,
-                dt.minute,
-                dt.second,
-                dt.microsecond,
-                tzinfo=timezone.utc,
-            )
-        return dt.astimezone(timezone.utc)
+        return _coerce_naive_to_upstream_tz(dt)
     except ValueError:
         pass
 
@@ -1515,6 +1634,7 @@ async def sc_bulk_create_annotations(
     storage_factory: Annotated[
         DatasetStorageFactory, Depends(get_dataset_storage_factory)
     ],
+    event_publisher: RedisEventPublisherDep,
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
 ) -> ScBulkAnnotationResponse:
@@ -1529,33 +1649,23 @@ async def sc_bulk_create_annotations(
         dataset_reader, dataset_id, defect_ids, org_id=org.id
     )
 
-    created = 0
     created_labels: set[str] = set()
-    annotations_to_create: list[Annotation] = []
-    annotation_ids_to_delete: list[str] = []
+    items: list[tuple[str, str | None]] = []
     storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
         if sample_id is None:
             continue
-        existing = await storage.list_annotations(sample_id=sample_id)
-        if existing:
-            annotation_ids_to_delete.extend(ann.id for ann in existing if ann.id)
-        if item.label == "0":
-            continue
-        annotations_to_create.append(
-            Annotation(
-                sample_id=sample_id,
-                label=item.label,
-                created_by=current_user.id,
-            )
-        )
-        created_labels.add(item.label)
+        label = None if item.label == "0" else item.label
+        items.append((sample_id, label))
+        if label is not None:
+            created_labels.add(label)
 
-    if annotation_ids_to_delete:
-        await storage.delete_annotations(annotation_ids_to_delete)
-    if annotations_to_create:
-        created = await storage.create_annotations(annotations_to_create)
+    created = await storage.replace_annotations_for_samples(
+        items, created_by=current_user.id
+    )
+    if items:
+        await event_publisher.publish_annotation_refresh(dataset_id=dataset_id)
 
     if created_labels:
         await dataset_service.merge_label_space(dataset_id, created_labels)

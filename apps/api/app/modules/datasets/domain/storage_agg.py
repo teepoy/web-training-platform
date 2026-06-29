@@ -94,6 +94,14 @@ class DatasetStorageAgg(Protocol):
         limit: int | None = None,
     ) -> list[Any]: ...
 
+    async def list_annotations_by_sample_ids(
+        self, sample_ids: list[str]
+    ) -> list[Any]: ...
+
+    async def replace_annotations_for_samples(
+        self, items: list[tuple[str, str | None]], *, created_by: str = ""
+    ) -> int: ...
+
     async def write_predictions(
         self,
         results: Any,

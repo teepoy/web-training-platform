@@ -41,19 +41,51 @@ class ModelService:
             raise HTTPException(status_code=404, detail="Model not found")
         return model
 
-    async def rename_model(self, artifact_id: str, org_id: str, name: str) -> Model:
+    async def rename_model(
+        self,
+        artifact_id: str,
+        org_id: str,
+        name: str,
+        current_user_id: str,
+    ) -> Model:
         normalized_name = name.strip()
         if not normalized_name:
             raise HTTPException(status_code=422, detail="Model name is required")
+        existing = await self.repository.get_model(
+            artifact_id,
+            org_id,
+            include_public=False,
+        )
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        if existing.created_by != current_user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only the model creator can rename this model",
+            )
         model = await self.repository.rename_model(artifact_id, org_id, normalized_name)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         return model
 
-    async def delete_model(self, artifact_id: str, org_id: str) -> None:
-        model = await self.repository.get_model(artifact_id, org_id)
+    async def delete_model(
+        self,
+        artifact_id: str,
+        org_id: str,
+        current_user_id: str,
+    ) -> None:
+        model = await self.repository.get_model(
+            artifact_id,
+            org_id,
+            include_public=False,
+        )
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
+        if model.created_by != current_user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only the model creator can delete this model",
+            )
 
         job_artifacts = await self.repository.list_artifact_uris_by_job(model.job_id)
 
