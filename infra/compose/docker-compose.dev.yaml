@@ -171,8 +171,17 @@ services:
     expose:
       - "9091"
       - "9093"
+    ports:
+      - "9091:9091"
+      - "9093:9093"
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 9091), timeout=2); s.close()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('127.0.0.1', 9091), timeout=2); s.close()",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -274,9 +283,9 @@ services:
     entrypoint: [""]
     command: >
       sh -c "
-        uv run --no-dev --directory apps/api prefect work-pool create default-cpu --type process || true;
-        uv run --no-dev --directory apps/api prefect work-pool create default-gpu --type process || true;
-        uv run --no-dev --directory apps/api ftapi deployments apply
+        uv run --no-dev --frozen --directory apps/api prefect work-pool create default-cpu --type process || true;
+        uv run --no-dev --frozen --directory apps/api prefect work-pool create default-gpu --type process || true;
+        uv run --no-dev --frozen --directory apps/api ftapi deployments apply
       "
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api

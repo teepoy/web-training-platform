@@ -5,7 +5,7 @@ import gc
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from time import perf_counter
 from typing import Any, Protocol, cast
 
@@ -16,6 +16,7 @@ from app.modules.datasets.app.services.sparse_import_operator import (
 )
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
+from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
@@ -49,19 +50,7 @@ ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
 
 def _parse_source_inspection_time(value: str) -> datetime:
-    dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        return datetime(
-            dt.year,
-            dt.month,
-            dt.day,
-            dt.hour,
-            dt.minute,
-            dt.second,
-            dt.microsecond,
-            tzinfo=timezone.utc,
-        )
-    return dt.astimezone(timezone.utc)
+    return _coerce_naive_to_upstream_tz(datetime.fromisoformat(value))
 
 
 def _patch_sample_to_parquet_row(
@@ -69,7 +58,9 @@ def _patch_sample_to_parquet_row(
 ) -> dict[str, Any]:
     inspection_time_str = ""
     if ps.inspection_time is not None:
-        inspection_time_str = ps.inspection_time.isoformat()
+        dt = ps.inspection_time
+        dt = _coerce_naive_to_upstream_tz(dt)
+        inspection_time_str = dt.isoformat()
 
     review_images = getattr(ps, "review_images", []) or []
     has_review = 1 if review_images else 0

@@ -17,7 +17,7 @@ import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import ScReclassifyBlinkVirtualTable from "../components/ScReclassifyBlinkVirtualTable.vue";
-import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
+import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
 import { create } from "@bufbuild/protobuf";
@@ -58,7 +58,6 @@ const selectedDraftCount = computed(() => {
   }
   return count;
 });
-const hasGlobalSampleTableFilter = computed(() => Object.keys(page.globalFilter.value).length > 0);
 
 function clearSelectedDrafts(): void {
   if (selectedDraftCount.value === 0) return;
@@ -215,19 +214,6 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
         <NSpin size="large" />
       </div>
 
-      <!-- Empty state -->
-      <div
-        v-else-if="
-          !page.isBlinkLoading.value &&
-          !page.isMapLoading.value &&
-          page.scSamples.value.length === 0 &&
-          Object.keys(page.globalFilter.value).length === 0
-        "
-        class="sc-state"
-      >
-        <NEmpty description="No samples available" />
-      </div>
-
       <!-- Main content -->
       <template v-else>
         <!-- Header -->
@@ -278,14 +264,6 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
               Sampling
             </NButton>
-            <NButton
-              v-if="hasGlobalSampleTableFilter"
-              size="small"
-              quaternary
-              @click="page.clearGlobalFilter"
-            >
-              Clear Global Filter
-            </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
             </NButton>
@@ -298,7 +276,6 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             variant="reclassify"
             :dataset-id="page.datasetId.value"
             :samples="blinkSamples"
-            :samples-total="page.plotPointTotal.value"
             :samples-loading="page.isBlinkLoading.value"
             :samples-error="page.samplesError.value"
             :inspection-time="page.inspectionContext.value?.inspectionTime ?? undefined"
@@ -310,27 +287,19 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :review-samples="page.reviewSamples.value"
             :review-loading="page.reviewLoading.value"
             :review-error="page.reviewError.value"
-            :map-loading="page.isMapLoading.value"
-            :map-error="page.reticleMapError.value"
-            :map-stream-message="page.mapStreamMessage.value"
             :active-map-tab="page.activeMapTab.value"
             :wafer-geometry="page.waferGeometry.value"
-            :wafer-display="page.waferDisplay.value"
-            :die-display="page.dieDisplay.value"
-            :reticle-display="page.reticleDisplay.value"
-            :legend-groups="page.classList.value"
             :reticle-x-die-count="page.reticleXDieCount.value"
             :reticle-y-die-count="page.reticleYDieCount.value"
             :reticle-die-size-x="page.reticleDieSizeX.value"
             :reticle-die-size-y="page.reticleDieSizeY.value"
             :reticle-options="page.reticleOptions.value"
             :zoom="page.mapZoom.value"
-            :selected-defect-ids="Array.from(page.sampleTableSelectedIds.value)"
-            :table-filter="page.effectiveSampleTableFilter.value"
-            :map-sample-filter="page.globalFilter.value"
+            :gallery-selected-defect-ids="Array.from(page.selectedDefectIds.value)"
+            :table-filter="page.sampleTableFilter.value"
             :global-filter-action-enabled="hasLocalSampleTableFilter"
             :legend-group-by="page.legendGroupBy.value"
-            :legend-sources="['class', 'bin', 'annotation', 'prediction']"
+            :legend-sources="['class', 'bin', 'annotation', 'prediction', 'final_class']"
             @update:active-map-tab="page.setActiveMapTab"
             @update:reticle-options="page.updateReticleOptions"
             @select-points="({ ids }) => page.handleBoxSelectionChange(ids)"
@@ -339,28 +308,42 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
             @table-sort-change="() => {}"
             @table-selection-change="page.setSampleTableSelectedIds"
-            @table-apply-selection="page.filterBlinkTableSamples"
+            @table-apply-selection="() => {}"
             @legend-group-change="page.handleLegendGroupByChange"
             @retry="() => {}"
           >
-            <template #blink>
+            <template
+              #blink="{
+                samples: perspectiveSamples,
+                predictionLabels: perspectivePredictionLabels,
+                predictionConfidences: perspectivePredictionConfidences,
+                annotationLabels: perspectiveAnnotationLabels,
+                hasNextPage: perspectiveHasNextPage,
+                isFetchingNextPage: perspectiveIsFetchingNextPage,
+                onLoadMore: perspectiveLoadMore,
+                onReviewModeChange: perspectiveSetReviewMode,
+                galleryTotal: perspectiveTotal,
+              }"
+            >
               <ScReclassifyBlinkVirtualTable
-                :samples="blinkSamples"
+                :samples="perspectiveSamples"
+                :total="perspectiveTotal"
                 :image-urls-by-defect-id="blinkImageUrlsByDefectId"
                 :initial-blink-enabled="true"
                 :selected-defect-ids="page.selectedDefectIds.value"
-                :prediction-labels="page.predictionLabels.value"
-                :prediction-confidences="page.predictionConfidences.value"
-                :annotation-labels="annotationLabelsByDefectId"
+                :prediction-labels="perspectivePredictionLabels"
+                :prediction-confidences="perspectivePredictionConfidences"
+                :annotation-labels="perspectiveAnnotationLabels"
                 :annotation-drafts="page.annotationDraft.value"
-                :has-next-page="page.hasMoreSamples.value"
-                :is-fetching-next-page="page.isFetchingMoreSamples.value"
-                :inspection-time="page.inspectionContext.value?.inspectionTime ?? ''"
+                :has-next-page="perspectiveHasNextPage"
+                :is-fetching-next-page="perspectiveIsFetchingNextPage"
+                :inspection-time="page.inspectionContext.value?.inspectionTime || undefined"
                 :review-samples="page.reviewSamples.value"
                 :review-loading="page.reviewLoading.value"
                 :review-error="page.reviewError.value"
                 @select-samples="onBlinkTableSelect"
-                :on-load-more="page.fetchMoreSamples"
+                :on-load-more="perspectiveLoadMore"
+                @mode-change="perspectiveSetReviewMode($event === 'review')"
               />
             </template>
             <template #annotation>

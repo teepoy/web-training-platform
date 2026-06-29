@@ -26,6 +26,7 @@ from app.core.config import load_config
 from app.core.logger import init_logging
 from app.shared.db.session import init_db
 from app.shared.infrastructure.metrics import online_jwt_users
+from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 from app.shared.api.schemas import Organization, User
 from app.modules.registry import EXTENSION_ROUTERS, MODULE_ROUTERS
 import app.registrations as _registrations  # noqa: F401
@@ -147,7 +148,7 @@ async def lifespan(api: FastAPI):
         _logger.error("Readiness check failed: postgres unreachable", exc_info=True)
         sys.exit(1)
 
-    # 2. Redis-backed metrics (best effort)
+    # 2. Redis-backed metrics + event publishing (best effort)
     import redis.asyncio as redis_client  # type: ignore[import-untyped]
 
     metrics_redis: Any | None = None
@@ -162,11 +163,14 @@ async def lifespan(api: FastAPI):
         )
         await metrics_redis.ping()  # type: ignore[awaitable]
         online_jwt_users.configure_redis(metrics_redis)
-        _logger.info("Metrics Redis configured")
+
+        ctx.shared.redis_event_publisher = RedisEventPublisher(metrics_redis)
+        _logger.info("Metrics Redis + event publisher configured")
     except Exception:
         if metrics_redis is not None:
             await metrics_redis.aclose()
         online_jwt_users.configure_redis(None)
+        ctx.shared.redis_event_publisher = RedisEventPublisher(None)
         _logger.warning(
             "Metrics Redis unavailable; falling back to per-process counters"
         )

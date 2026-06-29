@@ -6,11 +6,14 @@ import { truncatePoints, STRIDE } from "../scMapUtils";
 import ScWaferMap from "../ScWaferMap.vue";
 import SimpleWaferMap from "../SimpleWaferMap.vue";
 
-vi.stubGlobal("ResizeObserver", class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-});
+vi.stubGlobal(
+  "ResizeObserver",
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+);
 
 Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, value: 600 });
 Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 600 });
@@ -39,9 +42,7 @@ const offsetGeometry = {
 
 const smallRadius = 5000;
 
-function makeFixedPoints(
-  entries: { id: number; classNumber: number }[],
-): number[] {
+function makeFixedPoints(entries: { id: number; classNumber: number }[]): number[] {
   const result: number[] = [];
   for (let i = 0; i < entries.length; i++) {
     const x = 100 + i * 200;
@@ -144,7 +145,7 @@ describe("ScWaferMap", () => {
     }
   });
 
-  it("truncatePoints truncates correctly above MAX_RENDERED_POINTS", () => {
+  it("truncatePoints truncates correctly when above max", () => {
     const points = makeStride6Points(10);
     const { truncated, wasTruncated } = truncatePoints(points, 3);
 
@@ -342,9 +343,10 @@ describe("ScWaferMap selection state", () => {
   it("emits sampled hits before the backend selection resolves", async () => {
     let resolveBackend: ((ids: number[]) => void) | undefined;
     const queryBoxSelection = vi.fn(
-      () => new Promise<number[]>((resolve) => {
-        resolveBackend = resolve;
-      }),
+      () =>
+        new Promise<number[]>((resolve) => {
+          resolveBackend = resolve;
+        }),
     );
     const points = makeFixedPoints([{ id: 101, classNumber: 1 }]);
     const { wrapper } = await mountWithProviders(ScWaferMap, {
@@ -366,9 +368,7 @@ describe("ScWaferMap selection state", () => {
 
     resolveBackend?.([201]);
     await drag;
-    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual(
-      expect.arrayContaining([201]),
-    );
+    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual(expect.arrayContaining([201]));
   });
 
   it("renders selected points from prop without internal state", async () => {
@@ -442,9 +442,10 @@ describe("ScWaferMap selection state", () => {
   it("discards stale backend results when double-click clears during in-flight query", async () => {
     let resolveBackend: ((ids: number[]) => void) | undefined;
     const queryBoxSelection = vi.fn(
-      () => new Promise<number[]>((resolve) => {
-        resolveBackend = resolve;
-      }),
+      () =>
+        new Promise<number[]>((resolve) => {
+          resolveBackend = resolve;
+        }),
     );
     const points = makeFixedPoints([{ id: 101, classNumber: 1 }]);
     const { wrapper } = await mountWithProviders(ScWaferMap, {
@@ -512,14 +513,15 @@ describe("ScWaferMap selection state", () => {
     let resolveFast: ((ids: number[]) => void) | undefined;
     let callCount = 0;
     const queryBoxSelection = vi.fn(
-      () => new Promise<number[]>((resolve) => {
-        callCount++;
-        if (callCount === 1) {
-          resolveSlow = resolve;
-        } else {
-          resolveFast = resolve;
-        }
-      }),
+      () =>
+        new Promise<number[]>((resolve) => {
+          callCount++;
+          if (callCount === 1) {
+            resolveSlow = resolve;
+          } else {
+            resolveFast = resolve;
+          }
+        }),
     );
     const points = makeFixedPoints([{ id: 101, classNumber: 1 }]);
     const { wrapper } = await mountWithProviders(ScWaferMap, {
@@ -548,9 +550,7 @@ describe("ScWaferMap selection state", () => {
     resolveFast?.([202]);
     await dragB;
     await nextTick();
-    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual(
-      expect.arrayContaining([202]),
-    );
+    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual(expect.arrayContaining([202]));
 
     const emitCountBefore = wrapper.emitted("selection-change")?.length ?? 0;
     resolveSlow?.([999]);

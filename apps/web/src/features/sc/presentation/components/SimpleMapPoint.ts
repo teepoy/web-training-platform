@@ -7,3 +7,13 @@ export interface SimpleMapPoint {
   hasImageFlag: boolean;
   isSelectedFlag: boolean;
 }
+
+/** Point type for Perspective-binned map with 4-pass overlay rendering. */
+export interface PerspectiveMapPoint {
+  x: number;
+  y: number;
+  label: string;
+  mapInSelection: boolean;
+  hasImages: boolean;
+  galleryInSelection: boolean;
+}

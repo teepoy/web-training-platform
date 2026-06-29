@@ -47,6 +47,7 @@ const props = withDefaults(
     initialBlinkEnabled?: boolean;
     showModeSwitch?: boolean;
     inspectionTime?: string;
+    total?: number;
   }>(),
   {
     patchSamplesPerRow: 4,
@@ -79,9 +80,23 @@ const emit = defineEmits<{
     },
   ];
   scrollContainerChange: [element: HTMLElement | null];
+  modeChange: [mode: "patch" | "review"];
+  nearBottom: [];
 }>();
 
 const mode = ref<"patch" | "review">("patch");
+
+function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
+  console.log(
+    "[sc-selection]",
+    new Date().toISOString(),
+    `${performance.now().toFixed(1)}ms`,
+    step,
+    detail,
+  );
+}
+
+watch(mode, (value) => emit("modeChange", value), { immediate: true });
 const settingsOpen = ref(false);
 const MAX_SAMPLES_PER_ROW = 30;
 const clampSamplesPerRow = (value: number): number =>
@@ -190,6 +205,13 @@ watch(
 const samplesRef = computed(() =>
   mode.value === "review" ? (props.reviewSamples ?? []) : props.samples,
 );
+watch(
+  samplesRef,
+  (samples) => {
+    selectionLog("shared blink samplesRef", { rows: samples.length, mode: mode.value });
+  },
+  { immediate: true },
+);
 const patchCellSizeRef = patchImageSize;
 const reviewCellSizeRef = reviewImageSize;
 const overscanRef = computed(() => props.overscan);
@@ -260,6 +282,7 @@ function syncPatchSwitchesFromInput() {
 syncPatchSwitchesFromInput();
 
 const inferredReviewImageIds = computed<number[]>(() => {
+  const t0 = performance.now();
   const seen = new Set<number>();
   const samples = props.reviewSamples?.length ? props.reviewSamples : props.samples;
   for (const sample of samples) {
@@ -270,7 +293,13 @@ const inferredReviewImageIds = computed<number[]>(() => {
       }
     }
   }
-  return [...seen].sort((a, b) => a - b);
+  const ids = [...seen].sort((a, b) => a - b);
+  selectionLog("shared blink inferred review images", {
+    samples: samples.length,
+    imageIds: ids.length,
+    ms: Number((performance.now() - t0).toFixed(2)),
+  });
+  return ids;
 });
 
 watch(
@@ -630,6 +659,10 @@ watch(
 function handleScroll(): void {
   queueViewportImageLoad();
   syncScrollMetrics();
+  const el = scrollRef.value;
+  if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+    emit("nearBottom");
+  }
 }
 
 function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
@@ -793,7 +826,9 @@ defineExpose({ scrollRef });
         <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
       </div>
       <div class="sbt-toolbar-right">
-        <n-text class="sbt-row-count" depth="3"> {{ visibleSamples.length }} samples </n-text>
+        <n-text class="sbt-row-count" depth="3">
+          {{ (total ?? visibleSamples.length).toLocaleString() }} samples
+        </n-text>
       </div>
     </div>
 

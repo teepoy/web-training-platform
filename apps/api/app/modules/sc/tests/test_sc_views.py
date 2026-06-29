@@ -91,7 +91,7 @@ def test_patch_image_v1_view_exists():
         assert len(data["items"]) >= 1
         item = data["items"][0]
         assert "sample_id" in item
-        assert item["inspection_time"] == "2024-01-15T08:30:00"
+        assert item["inspection_time"] == "2024-01-15T00:30:00+00:00"
         assert item["wafer_key"] == 1
         assert item["defect_id"] == "D001"
 

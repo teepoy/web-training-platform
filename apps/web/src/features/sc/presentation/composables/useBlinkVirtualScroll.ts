@@ -38,10 +38,7 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
 
   const maxReviewImages = computed<number>(() => {
     if (mode.value !== "review") return 0;
-    return visibleSamples.value.reduce(
-      (max, s) => Math.max(max, s.reviewImages.length),
-      0,
-    );
+    return visibleSamples.value.reduce((max, s) => Math.max(max, s.reviewImages.length), 0);
   });
 
   const reviewColumnIndices = computed<number[]>(() =>
@@ -71,9 +68,7 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
   const virtualRowHeightStr = computed(() => `${virtualRowHeight.value}px`);
 
   const virtualRowCount = computed(() =>
-    Math.ceil(
-      Math.max(visibleSamples.value.length, 1) / effectiveSamplesPerRow.value,
-    ),
+    Math.ceil(Math.max(visibleSamples.value.length, 1) / effectiveSamplesPerRow.value),
   );
 
   function samplesForVirtualRow(rowIdx: number): ScSampleItem[] {
@@ -109,9 +104,20 @@ export function useBlinkVirtualScroll(params: UseBlinkVirtualScrollParams) {
     }, IMAGE_LOAD_DEBOUNCE_MS);
   }
 
-  watch([mode, patchPerRow, reviewPerRow, virtualRowHeight], () => {
-    void nextTick(() => virtualizer.value.measure());
-  }, { flush: "post" });
+  watch(
+    [
+      mode,
+      patchPerRow,
+      reviewPerRow,
+      virtualRowHeight,
+      effectiveSamplesPerRow,
+      () => visibleSamples.value.length,
+    ],
+    () => {
+      void nextTick(() => virtualizer.value.measure());
+    },
+    { flush: "post" },
+  );
 
   onBeforeUnmount(() => {
     if (imageLoadDebounceTimer !== undefined) {

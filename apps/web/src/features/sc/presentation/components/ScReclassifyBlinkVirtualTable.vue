@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount, watch, nextTick } from "vue";
+import { ref, onBeforeUnmount, watch, watchEffect } from "vue";
 import { NSpin } from "naive-ui";
 import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { BlinkVirtualTableWithSelectionAndPreviewResultDisplay } from "@/shared/components/blink-virtual-table";
@@ -23,6 +23,7 @@ const props = withDefaults(
     reviewSamples?: ScSampleItem[];
     reviewLoading?: boolean;
     reviewError?: string | null;
+    total?: number;
   }>(),
   {
     patchSamplesPerRow: 3,
@@ -47,6 +48,7 @@ const emit = defineEmits<{
       selectionMode?: "replace" | "add" | "toggle";
     },
   ];
+  modeChange: [mode: "patch" | "review"];
 }>();
 
 const sentinelRef = ref<HTMLElement | null>(null);
@@ -54,6 +56,16 @@ const scrollContainer = ref<HTMLElement | null>(null);
 
 let observer: IntersectionObserver | null = null;
 let lastIntersecting = false;
+
+function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
+  console.log(
+    "[sc-selection]",
+    new Date().toISOString(),
+    `${performance.now().toFixed(1)}ms`,
+    step,
+    detail,
+  );
+}
 
 function setupIntersectionObserver() {
   if (observer) observer.disconnect();
@@ -85,13 +97,18 @@ function handleScrollContainerChange(element: HTMLElement | null): void {
   scrollContainer.value = element;
 }
 
-watch(
-  [scrollContainer, sentinelRef],
-  async () => {
-    await nextTick();
+watchEffect(() => {
+  if (scrollContainer.value && sentinelRef.value) {
     setupIntersectionObserver();
+  }
+});
+
+watch(
+  () => props.samples,
+  (samples) => {
+    selectionLog("reclassify blink samples prop", { rows: samples.length });
   },
-  { flush: "post" },
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -118,8 +135,11 @@ onBeforeUnmount(() => {
       :review-error="reviewError"
       :overscan="overscan"
       :inspection-time="inspectionTime"
+      :total="total"
       @select-samples="(ids, mods) => emit('selectSamples', ids, mods)"
       @scroll-container-change="handleScrollContainerChange"
+      @mode-change="emit('modeChange', $event)"
+      @near-bottom="onLoadMore?.()"
     />
     <Teleport v-if="scrollContainer" :to="scrollContainer">
       <div

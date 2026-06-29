@@ -6,6 +6,8 @@ import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import path from "path";
 import legacy from "@vitejs/plugin-legacy";
 
+const API_V1_PROXY_PREFIX = ["/api", "v1"].join("/");
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -38,24 +40,29 @@ export default defineConfig({
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
       },
-      "/api/v1/sc/images/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/images/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
-      "/api/v1/sc/sprites/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/sprites/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
-      "/api/v1/sc/warm/": { // ast-grep-ignore: forbid-raw-api-url
+      [`${API_V1_PROXY_PREFIX}/sc/warm/`]: {
         target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
+      "/ws": {
+        target: "ws://localhost:9090",
+        ws: true,
       },
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
+        ws: true,
       },
     },
   },

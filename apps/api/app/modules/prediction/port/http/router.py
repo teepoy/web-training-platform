@@ -18,6 +18,7 @@ from app.modules.prediction.port.http.deps import (
     PredictionOrchestratorDep,
     PredictionRepositoryDep,
     PredictionServiceDep,
+    RedisEventPublisherDep,
 )
 from app.modules.prediction.port.http.schemas import (
     CreateReviewActionRequest,
@@ -539,6 +540,7 @@ async def save_review_annotations(
     factory: DatasetStorageFactoryDep,
     prediction_service: PredictionServiceDep,
     dataset_service: DatasetServiceDep,
+    event_publisher: RedisEventPublisherDep,
 ) -> SaveReviewAnnotationsResponse:
     action = await repo.get_review_action(action_id)
     if action is None:
@@ -555,7 +557,7 @@ async def save_review_annotations(
     try:
         items = [item.model_dump() for item in payload.items]
         (
-            _annotations,
+            annotations,
             versions,
         ) = await prediction_service.save_review_annotations(
             review_action_id=action_id,
@@ -568,6 +570,12 @@ async def save_review_annotations(
         }
         if incoming_labels:
             await dataset_service.merge_label_space(dataset.id, incoming_labels)
+
+        if annotations or versions:
+            await event_publisher.publish_prediction_refresh(
+                dataset_id=dataset.id,
+                job_id="",
+            )
         return SaveReviewAnnotationsResponse(
             review_action_id=action_id,
             created_count=len(versions),

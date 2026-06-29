@@ -18,6 +18,7 @@ import type {
 } from "@/features/sc/domain/workbenchInteraction";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
+import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 
 const props = defineProps<{
   /** @deprecated Use defectIds plus inspection identity. */
@@ -93,12 +94,20 @@ const columnDefinitions: ColumnDefinition[] = [
 const reclassifyColumnDefinitions: ColumnDefinition[] = [
   { key: "annotation_label", title: "Annotation", width: 140, filter: "set" },
   { key: "prediction_label", title: "Prediction", width: 140, filter: "set" },
+  {
+    key: "prediction_confidence",
+    title: "Confidence",
+    width: 130,
+    filter: "range",
+    render: (row) =>
+      row.prediction_confidence != null ? row.prediction_confidence.toFixed(3) : "-",
+  },
 ];
 
 const PAGE_SIZE = 1000;
 const SELECT_ALL_LIMIT = 50_000;
 const SCROLL_LOAD_THRESHOLD_PX = 240;
-const SCROLL_X = computed(() => (props.showReclassifyColumns ? 1980 : 1700));
+const SCROLL_X = computed(() => (props.showReclassifyColumns ? 2110 : 1700));
 const activeColumnDefinitions = computed(() =>
   props.showReclassifyColumns
     ? [...columnDefinitions, ...reclassifyColumnDefinitions]
@@ -133,6 +142,8 @@ const filterState = ref<Record<string, { min: number | null; max: number | null 
 const setFilterSearch = ref<Record<string, string>>({});
 const setFilterDraft = ref<Record<string, Set<string>>>({});
 const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
+const searchedSetFilterValues = ref<Record<string, Array<string | number>>>({});
+const setFilterSearchLoading = ref<Record<string, boolean>>({});
 let requestVersion = 0;
 
 const hasMore = computed(() => nextAnchor.value !== null);
@@ -221,6 +232,10 @@ function getRangeFilterValues(field: string): number[] {
 function getSetFilterOptions(definition: ColumnDefinition) {
   const field = definition.key;
   const values = new Map<string, string | number>();
+  for (const value of searchedSetFilterValues.value[String(field)] ?? []) {
+    const normalized = normalizeFilterValue(String(field), value);
+    values.set(String(normalized), normalized);
+  }
   for (const value of discoveredSetFilterValues.value[String(field)] ?? []) {
     const normalized = normalizeFilterValue(String(field), value);
     values.set(String(normalized), normalized);
@@ -238,6 +253,35 @@ function getSetFilterOptions(definition: ColumnDefinition) {
           }),
     )
     .map((value) => ({ label: String(value), value }));
+}
+
+function filterWithoutField(field: string): ScSampleTableFilter | undefined {
+  const source = props.filter ?? {};
+  const next = { ...source };
+  delete next[field];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+async function searchSetFilterOptions(field: string): Promise<void> {
+  const search = setFilterSearch.value[field] ?? "";
+  if (!props.dataSource?.loadDistinctValues) return;
+
+  setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: true };
+  try {
+    const values = await props.dataSource.loadDistinctValues({
+      field,
+      search,
+      limit: 200,
+      filter: filterWithoutField(field),
+      sort: props.sort,
+    });
+    searchedSetFilterValues.value = {
+      ...searchedSetFilterValues.value,
+      [field]: values,
+    };
+  } finally {
+    setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: false };
+  }
 }
 
 function applySetFilter(field: string, values: Array<string | number>): void {
@@ -272,6 +316,9 @@ function renderSetFilterMenu(definition: ColumnDefinition, hide: () => void) {
     "onUpdate:draftValues": (values: string[]) => {
       setFilterDraft.value[field] = new Set(values);
     },
+    onSearchOptions: () => {
+      void searchSetFilterOptions(field);
+    },
     onApply: (values: Array<string | number>) => applySetFilter(field, values),
     onClose: hide,
   });
@@ -290,6 +337,14 @@ function renderRangeFilterMenu(field: string, hide: () => void) {
     },
     onApply: () => applyRangeFilter(field),
     onClear: () => clearFilter(field),
+    onClose: hide,
+  });
+}
+
+function renderTextFilterMenu(hide: () => void) {
+  return h(ScTextFilterMenu, {
+    appliedValues: getSetFilterValues("defect_id"),
+    onApply: (values: Array<string | number>) => applySetFilter("defect_id", values),
     onClose: hide,
   });
 }
@@ -352,11 +407,13 @@ const columns = computed<DataTableColumns<ScSampleTableDisplayRow>>(() => [
         filterOptions: definition.filter === "set" ? getSetFilterOptions(definition) : undefined,
         filterMultiple: definition.filter === "set",
         renderFilterMenu:
-          definition.filter === "set"
-            ? ({ hide }: { hide: () => void }) => renderSetFilterMenu(definition, hide)
-            : definition.filter === "range"
-              ? ({ hide }: { hide: () => void }) => renderRangeFilterMenu(field, hide)
-              : undefined,
+          field === "defect_id"
+            ? ({ hide }: { hide: () => void }) => renderTextFilterMenu(hide)
+            : definition.filter === "set"
+              ? ({ hide }: { hide: () => void }) => renderSetFilterMenu(definition, hide)
+              : definition.filter === "range"
+                ? ({ hide }: { hide: () => void }) => renderRangeFilterMenu(field, hide)
+                : undefined,
         render: definition.render
           ? (row: ScSampleTableDisplayRow) => definition.render?.(row) ?? ""
           : undefined,
@@ -547,6 +604,7 @@ watch(
   filterOptionsScopeKey,
   () => {
     discoveredSetFilterValues.value = {};
+    searchedSetFilterValues.value = {};
   },
   { immediate: true },
 );
@@ -563,6 +621,23 @@ watch(
     if (queryEnabled.value) void fetchNextPage();
   },
   { immediate: true },
+);
+
+watch(
+  () => props.dataSource,
+  () => {
+    if (!props.dataSource || !queryEnabled.value) return;
+    requestVersion += 1;
+    rows.value = [];
+    serverTotal.value = resolvedDefectIds.value.length || props.total;
+    nextAnchor.value = "0";
+    isFetching.value = false;
+    pageError.value = null;
+    streamStatus.value = "";
+    discoveredSetFilterValues.value = {};
+    searchedSetFilterValues.value = {};
+    void fetchNextPage();
+  },
 );
 
 watch(

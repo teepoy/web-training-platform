@@ -6,6 +6,7 @@ from typing import Any, Literal, cast
 import polars as pl
 
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from app.shared.api.schemas import DatasetStorageMode
 from app.shared.db.sql_repository import SqlRepository
@@ -188,7 +189,8 @@ def _parse_dataset_source_inspection_time(raw: Any) -> datetime:
             "dataset_meta.source_inspection_time is required"
         )
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(raw)
+        return _coerce_naive_to_upstream_tz(dt)
     except ValueError as exc:
         raise ScPlotPointsRejectedError(
             f"Invalid dataset_meta.source_inspection_time: {raw!r}"
@@ -317,7 +319,7 @@ async def _join_upstream_image_counts(
     image_counts_lf = (
         review_lf.with_columns(pl.col("defect_id").cast(pl.Utf8))
         .group_by("defect_id")
-        .agg(pl.len().cast(pl.Int32).alias("images"))
+        .agg(pl.lit(1).cast(pl.Int32).alias("images"))
     )
     if "images" in lf.collect_schema().names():
         lf = lf.drop("images")

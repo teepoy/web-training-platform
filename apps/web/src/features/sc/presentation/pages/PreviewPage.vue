@@ -11,7 +11,7 @@ import {
   NText,
   useThemeVars,
 } from "naive-ui";
-import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
+import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
@@ -131,29 +131,24 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     reticleDieSizeY: tab.reticleDieSizeY,
     reticleOptions: tab.reticleOptions,
     zoom: tab.zoom,
-    selectedDefectIds: tab.selectedDefectIds,
+    gallerySelectedDefectIds: tab.selectedDefectIds,
     tableFilter: tab.tableFilter,
     tableSort: tab.tableSort,
-    "onUpdate:activeMapTab": (v: "wafer" | "die" | "reticle") =>
-      page.setMapTab(tab.id, v),
-    "onUpdate:reticleOptions": (
-      v: Parameters<typeof page.updateReticleOptions>[1],
-    ) => page.updateReticleOptions(tab.id, v),
-    onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) =>
-      page.setZoom(tab.id, vp),
-    onTableSelectionChange: (ids: number[]) =>
-      page.setSelectedDefectIds(tab.id, ids),
-    onTableApplySelection: (ids: number[]) =>
-      page.setSelectedDefectIds(tab.id, ids),
-    onTableFilterChange: (
-      filter: Parameters<typeof page.handleTableFilterChange>[1],
-    ) => page.handleTableFilterChange(tab.id, filter),
-    onTableSortChange: (sort: {
-      field: string;
-      direction: "asc" | "desc" | null;
-    }) => page.handleTableSortChange(tab.id, sort),
+    "onUpdate:activeMapTab": (v: "wafer" | "die" | "reticle") => page.setMapTab(tab.id, v),
+    "onUpdate:reticleOptions": (v: Parameters<typeof page.updateReticleOptions>[1]) =>
+      page.updateReticleOptions(tab.id, v),
+    onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) => page.setZoom(tab.id, vp),
+    onTableSelectionChange: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
+    onTableApplySelection: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
+    onTableFilterChange: (filter: Parameters<typeof page.handleTableFilterChange>[1]) =>
+      page.handleTableFilterChange(tab.id, filter),
+    onTableSortChange: (sort: { field: string; direction: "asc" | "desc" | null }) =>
+      page.handleTableSortChange(tab.id, sort),
     onLegendGroupChange: (groupBy: string | null) =>
       page.handleLegendGroupByChange(tab.id, groupBy),
+    onSelectPoints: () => {},
+    onLegendHiddenChange: () => {},
+    onSelectSamples: (ids: string[]) => page.setSelectedDefectIds(tab.id, ids.map(Number)),
     onRetry: () => page.fetchPreviewDataForTab(tab),
   };
 });
@@ -186,11 +181,7 @@ const activeComponentProps = computed((): Record<string, unknown> => {
             </button>
           </div>
           <div class="sc-preview-toolbar">
-            <NButton
-              size="small"
-              quaternary
-              @click="router.push('/sc/handbook')"
-            >
+            <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
             </NButton>
             <NButton
@@ -295,18 +286,14 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       </div>
     </div>
     <template #footer>
-      <NButton
-        @click="page.showImportModal.value = false"
-        :disabled="page.isImporting.value"
-      >
+      <NButton @click="page.showImportModal.value = false" :disabled="page.isImporting.value">
         Cancel
       </NButton>
       <NButton
         type="primary"
         :loading="page.isImporting.value"
         :disabled="
-          !page.importSourceInspectionTime.value.trim() ||
-          !page.importDatasetName.value.trim()
+          !page.importSourceInspectionTime.value.trim() || !page.importDatasetName.value.trim()
         "
         @click="page.handleImport()"
       >

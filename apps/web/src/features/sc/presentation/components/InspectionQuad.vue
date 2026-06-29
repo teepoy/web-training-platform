@@ -444,6 +444,7 @@ const legendSourceOptions = computed(() => {
     bin: "Rough Bin",
     annotation: "Annotation",
     prediction: "Prediction",
+    final_class: "Final Class",
   };
   return enabledLegendSources.value.map((source) => ({
     label: labels[source],
@@ -744,10 +745,6 @@ function handleBarChartClick(event: ECElementEvent): void {
   display: flex;
   min-height: 0;
   overflow: hidden;
-  background: var(--cv-card-bg, #1a1a2e);
-  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  padding: 8px 10px;
 }
 
 .iq-bar-pane {

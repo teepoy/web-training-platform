@@ -12,6 +12,8 @@ from __future__ import annotations
 import base64
 import inspect
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
@@ -56,9 +58,34 @@ from app.shared.db.models import (
 )
 from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 
 PREDICTION_PROGRESS_FLUSH_EVERY = 50
 PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
+
+
+@asynccontextmanager
+async def _flow_redis_event_publisher(
+    container: AppContainer,
+) -> AsyncIterator[RedisEventPublisher]:
+    import redis.asyncio as redis_client  # type: ignore[import-untyped]
+
+    cfg = container.config
+    redis = redis_client.Redis(
+        host=str(cfg.redis.host),
+        port=int(cfg.redis.port),
+        password=str(cfg.redis.password) if cfg.redis.password else None,
+        db=int(cfg.redis.db),
+        socket_connect_timeout=1,
+        socket_timeout=1,
+    )
+    try:
+        await redis.ping()  # type: ignore[awaitable]
+        yield RedisEventPublisher(cast(Any, redis))
+    except Exception:
+        yield RedisEventPublisher(None)
+    finally:
+        await redis.aclose()
 
 
 @dataclass
@@ -790,6 +817,10 @@ async def _run_prediction_job_with_container(
         model_id=model.id,
         model_version=summary["model_version"],
     )
+    async with _flow_redis_event_publisher(container) as event_publisher:
+        await event_publisher.publish_prediction_refresh(
+            dataset_id=dataset_id, job_id=job_id
+        )
 
     summary["completed_at"] = datetime.now(UTC).isoformat()
     await flush_prediction_progress(force=True)

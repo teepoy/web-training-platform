@@ -22,7 +22,7 @@ import { legendColor, parsePoints, STRIDE } from "./scMapUtils";
 import type { HighlightDefect } from "./types";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 
-type LegendSource = "class" | "bin" | "annotation" | "prediction";
+type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
 
 const props = defineProps<{
@@ -90,7 +90,11 @@ const emit = defineEmits<{
   ): void;
   (
     e: "select-points",
-    payload: { ids: number[]; region: { x: number; y: number; w: number; h: number } },
+    payload: {
+      ids: number[];
+      region: { x: number; y: number; w: number; h: number };
+      key?: LegendKey | null;
+    },
   ): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
@@ -141,6 +145,7 @@ const hiddenLegendKeysBySource = ref<Record<LegendSource, string[]>>({
   bin: [],
   annotation: [],
   prediction: [],
+  final_class: [],
 });
 const colorMap = ref<Record<string, string>>({});
 const previousDefaultColorMap = ref<Record<string, string>>({});
@@ -151,6 +156,7 @@ const legendSourceOptions = computed(() => {
     bin: "Rough Bin",
     annotation: "Annotation",
     prediction: "Prediction (Latest)",
+    final_class: "Final Class",
   };
   return enabled.map((value) => ({ value, label: labels[value] }));
 });
@@ -408,6 +414,9 @@ const annotationGroups = computed(() =>
 const predictionGroups = computed(() =>
   legendSource.value === "prediction" ? (props.legendGroups ?? undefined) : undefined,
 );
+const finalClassGroups = computed(() =>
+  legendSource.value === "final_class" ? (props.legendGroups ?? undefined) : undefined,
+);
 
 const showMapProgress = computed(
   () => Boolean(props.mapLoading) && Boolean(props.mapProgressMessage) && !initialLoadDone.value,
@@ -419,7 +428,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
   if (key === null) {
     selectedClassNumber.value = null;
     selectedIds.value = new Set();
-    emit("select-points", { ids: [], region: ZERO_REGION });
+    emit("select-points", { ids: [], region: ZERO_REGION, key });
   } else {
     selectedClassNumber.value = key;
     const compactGroup = props.legendGroups?.[String(key)];
@@ -432,7 +441,7 @@ const handleLegendSelect = (key: LegendKey | null) => {
         : []);
     const visibleIds = filterVisibleIds(ids);
     selectedIds.value = new Set(visibleIds);
-    emit("select-points", { ids: visibleIds, region: ZERO_REGION });
+    emit("select-points", { ids: visibleIds, region: ZERO_REGION, key });
   }
 };
 
@@ -654,6 +663,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
                   :rough-bins="legendSource === 'bin' ? (legendGroups ?? undefined) : undefined"
                   :annotations="annotationGroups"
                   :predictions="predictionGroups"
+                  :final-class="finalClassGroups"
                   :color-map="colorMap"
                   :selectedClassNumber="selectedClassNumber"
                   :legendSource="legendSource"
