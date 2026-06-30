@@ -106,6 +106,7 @@ export function usePerspectiveSampleTableDataSource(
   baseFilters?: Ref<Filter[]>,
   activeView?: Ref<View | null>,
   activeViewVersion?: Ref<number>,
+  onRecoverableError?: (reason: string, err: unknown) => void,
 ) {
   return computed<ScSampleTableDataSource | undefined>(() => {
     const tbl = table.value;
@@ -115,83 +116,93 @@ export function usePerspectiveSampleTableDataSource(
     return {
       scopeKey: `${scopeKey.value}:${baseFilterKey}:${viewKey}`,
       async loadRows(query) {
-        const prebuiltView = activeView?.value;
-        if (prebuiltView) {
-          const total = await prebuiltView.num_rows();
-          const offset = Number.parseInt(query.anchor, 10) || 0;
-          const endRow = Math.min(offset + query.limit, total);
-          if (endRow <= offset) return { items: [], total, nextAnchor: null };
-          const data = asRecord(
-            await prebuiltView.to_columns({ start_row: offset, end_row: endRow }),
-          );
-          return {
-            items: makeRows(data),
-            total,
-            nextAnchor: endRow < total ? String(endRow) : null,
-          };
-        }
-
-        const filter = [...(baseFilters?.value ?? []), ...filtersFromSampleTable(query.filter)];
-        const sort = query.sort?.direction
-          ? ([[perspectiveField(query.sort.field), query.sort.direction]] as [string, string][])
-          : undefined;
-        const v: View = await tbl.view({
-          filter: filter.length ? filter : undefined,
-          sort,
-        } as never);
         try {
-          const total = await v.num_rows();
-          const offset = Number.parseInt(query.anchor, 10) || 0;
-          const endRow = Math.min(offset + query.limit, total);
-          if (endRow <= offset) return { items: [], total, nextAnchor: null };
-          const data = asRecord(await v.to_columns({ start_row: offset, end_row: endRow }));
-          return {
-            items: makeRows(data),
-            total,
-            nextAnchor: endRow < total ? String(endRow) : null,
-          };
-        } finally {
-          try {
-            v.delete();
-          } catch {
-            /* best effort */
+          const prebuiltView = activeView?.value;
+          if (prebuiltView) {
+            const total = await prebuiltView.num_rows();
+            const offset = Number.parseInt(query.anchor, 10) || 0;
+            const endRow = Math.min(offset + query.limit, total);
+            if (endRow <= offset) return { items: [], total, nextAnchor: null };
+            const data = asRecord(
+              await prebuiltView.to_columns({ start_row: offset, end_row: endRow }),
+            );
+            return {
+              items: makeRows(data),
+              total,
+              nextAnchor: endRow < total ? String(endRow) : null,
+            };
           }
+
+          const filter = [...(baseFilters?.value ?? []), ...filtersFromSampleTable(query.filter)];
+          const sort = query.sort?.direction
+            ? ([[perspectiveField(query.sort.field), query.sort.direction]] as [string, string][])
+            : undefined;
+          const v: View = await tbl.view({
+            filter: filter.length ? filter : undefined,
+            sort,
+          } as never);
+          try {
+            const total = await v.num_rows();
+            const offset = Number.parseInt(query.anchor, 10) || 0;
+            const endRow = Math.min(offset + query.limit, total);
+            if (endRow <= offset) return { items: [], total, nextAnchor: null };
+            const data = asRecord(await v.to_columns({ start_row: offset, end_row: endRow }));
+            return {
+              items: makeRows(data),
+              total,
+              nextAnchor: endRow < total ? String(endRow) : null,
+            };
+          } finally {
+            try {
+              v.delete();
+            } catch {
+              /* best effort */
+            }
+          }
+        } catch (err) {
+          onRecoverableError?.("sample table rows load failed", err);
+          throw err;
         }
       },
       async loadDistinctValues(query) {
-        const field = perspectiveField(query.field);
-        const searchFilters = numericSearchFilter(field, query.search);
-        if (searchFilters === null) return [];
-        const filter = [
-          ...(baseFilters?.value ?? []),
-          ...filtersFromSampleTable(query.filter, query.field),
-          ...searchFilters,
-        ];
-        const v: View = await tbl.view({
-          columns: [field],
-          group_by: [field],
-          aggregates: { [field]: "count" },
-          filter: filter.length ? filter : undefined,
-        } as never);
         try {
-          const total = await v.num_rows();
-          if (total === 0) return [];
-          const data = asRecord(
-            await v.to_columns({ start_row: 0, end_row: Math.min(total, query.limit) }),
-          );
-          const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
-          return (rowPaths ?? [])
-            .map((path) => path?.[0])
-            .filter(
-              (value): value is string | number =>
-                typeof value === "string" || typeof value === "number",
-            );
-        } finally {
+          const field = perspectiveField(query.field);
+          const searchFilters = numericSearchFilter(field, query.search);
+          if (searchFilters === null) return [];
+          const filter = [
+            ...(baseFilters?.value ?? []),
+            ...filtersFromSampleTable(query.filter, query.field),
+            ...searchFilters,
+          ];
+          const v: View = await tbl.view({
+            columns: [field],
+            group_by: [field],
+            aggregates: { [field]: "count" },
+            filter: filter.length ? filter : undefined,
+          } as never);
           try {
-            v.delete();
-          } catch {
-            /* best effort */
+            const total = await v.num_rows();
+            if (total === 0) return [];
+            const data = asRecord(
+              await v.to_columns({ start_row: 0, end_row: Math.min(total, query.limit) }),
+            );
+            const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
+            return (rowPaths ?? [])
+              .map((path) => path?.[0])
+              .filter(
+                (value): value is string | number =>
+                  typeof value === "string" || typeof value === "number",
+              );
+          } finally {
+            try {
+              v.delete();
+            } catch {
+              /* best effort */
+            }
           }
+        } catch (err) {
+          onRecoverableError?.("sample table distinct values load failed", err);
+          throw err;
         }
       },
     };

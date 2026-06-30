@@ -29,7 +29,7 @@ function onPerspectiveUpdate(v: View, cb: (evt: unknown) => void): void {
 export function usePerspectiveViewRef(
   table: Ref<Table | null>,
   config: Ref<ViewConfig>,
-  opts?: { onChange?: () => void },
+  opts?: { onChange?: () => void; onRecoverableError?: (reason: string, err: unknown) => void },
 ): {
   view: Ref<View | null>;
   pending: Ref<boolean>;
@@ -43,6 +43,7 @@ export function usePerspectiveViewRef(
   const version = ref(0);
   const onChange = opts?.onChange;
   const latestTiming = ref<PerspectiveViewTiming | null>(null);
+  const onRecoverableError = opts?.onRecoverableError;
 
   const configKey = computed(() => viewConfigKey(config.value));
   let rebuildSeq = 0;
@@ -118,6 +119,7 @@ export function usePerspectiveViewRef(
       if (seq !== rebuildSeq) return;
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;
+      onRecoverableError?.("view rebuild failed", e);
     } finally {
       if (seq === rebuildSeq) pending.value = false;
     }

@@ -104,6 +104,7 @@ export function usePerspectiveMapView(
   enabledModes: MapMode[] = ["wafer", "die", "reticle"],
   activeMapMode?: Ref<MapMode> | ComputedRef<MapMode>,
   ignoredUpdatePorts?: Ref<readonly number[]> | ComputedRef<readonly number[]>,
+  onRecoverableError?: (reason: string, err: unknown) => void,
 ): PerspectiveMapViewState {
   const waferRows = ref<MapBinRow[] | null>(null);
   const dieRows = ref<MapBinRow[] | null>(null);
@@ -138,6 +139,29 @@ export function usePerspectiveMapView(
   let _uzCacheKey = "";
 
   let _rebuildSeq = 0;
+  let _activeTable: Table | null = null;
+
+  function deleteViewNow(v: View | null): void {
+    if (!v) return;
+    try {
+      v.delete();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearViews(): void {
+    for (const mode of MODES) {
+      deleteViewNow(views[mode]);
+      views[mode] = null;
+      if (_uzCache[mode]) {
+        deleteViewNow(_uzCache[mode]!.view);
+        _uzCache[mode] = null;
+      }
+      modeContexts[mode] = { view: null, binSize: 0, isZoom: false, col: "", xCol: "" };
+    }
+    _uzCacheKey = "";
+  }
 
   function _computeRowData(
     data: Record<string, unknown[]>,
@@ -377,6 +401,7 @@ export function usePerspectiveMapView(
           };
       } catch (e) {
         console.error("[psp-map:wafer] on_update ERROR:", e);
+        onRecoverableError?.("wafer map update failed", e);
       }
     },
   );
@@ -421,6 +446,7 @@ export function usePerspectiveMapView(
           };
       } catch (e) {
         console.error("[psp-map:die] on_update ERROR:", e);
+        onRecoverableError?.("die map update failed", e);
       }
     },
   );
@@ -464,11 +490,17 @@ export function usePerspectiveMapView(
           };
       } catch (e) {
         console.error("[psp-map:reticle] on_update ERROR:", e);
+        onRecoverableError?.("reticle map update failed", e);
       }
     },
   );
 
   async function rebuildAll(): Promise<void> {
+    if (table.value !== _activeTable) {
+      _activeTable = table.value;
+      clearViews();
+    }
+
     if (!table.value) {
       waferRows.value = null;
       dieRows.value = null;
@@ -508,6 +540,7 @@ export function usePerspectiveMapView(
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[psp-map:${mode}] ERROR:`, msg);
         error.value = `[${mode}] ${msg}`;
+        onRecoverableError?.(`${mode} map rebuild failed`, e);
       }
     }
 
@@ -532,24 +565,7 @@ export function usePerspectiveMapView(
   );
 
   onUnmounted(() => {
-    for (const mode of MODES) {
-      if (views[mode]) {
-        try {
-          views[mode].delete();
-        } catch {
-          /* ignore */
-        }
-        views[mode] = null;
-      }
-      if (_uzCache[mode]) {
-        try {
-          _uzCache[mode]!.view.delete();
-        } catch {
-          /* ignore */
-        }
-        _uzCache[mode] = null;
-      }
-    }
+    clearViews();
   });
 
   return { waferRows, dieRows, reticleRows, pending, error };

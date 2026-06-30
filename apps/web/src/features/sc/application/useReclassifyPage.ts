@@ -14,7 +14,6 @@ import {
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
-  getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
@@ -213,10 +212,6 @@ export interface ReclassifyPageState {
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
   trainAndPredict: () => Promise<void>;
-
-  reviewSamples: Ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>;
-  reviewLoading: Ref<boolean>;
-  reviewError: Ref<string | null>;
 }
 
 function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
@@ -435,14 +430,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (explicitIds) return explicitIds;
     return realDefectIds.value.length > 0 ? realDefectIds.value : null;
   });
-
-  const reviewImageDefectIds = computed<string[] | null>(() => {
-    return explicitBlinkSourceDefectIds.value;
-  });
-
-  const reviewImageSampleFilter = computed<ScSampleTableFilter | null>(() =>
-    hasEffectiveSampleTableFilter() ? effectiveSampleTableFilter.value : null,
-  );
 
   const shouldUseOffsetSamples = computed<boolean>(() => {
     if (hasEffectiveSampleTableFilter()) return false;
@@ -1323,107 +1310,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
   }
 
-  // ── Review images (fetched via /sc/inspections/.../review-images) ──
-
-  const reviewSamples = ref<import("@/features/sc/generated/proto/sc/v1/sample_pb").ScSampleItem[]>(
-    [],
-  );
-  const reviewLoading = ref(false);
-  const reviewError = ref<string | null>(null);
-
-  async function fetchReviewImages(): Promise<void> {
-    const ctx = inspectionContext.value;
-    if (!ctx || !ctx.inspectionTime || !ctx.waferKey) {
-      reviewSamples.value = [];
-      reviewLoading.value = false;
-      reviewError.value = null;
-      return;
-    }
-    reviewLoading.value = true;
-    reviewError.value = null;
-    try {
-      const defectIds = reviewImageDefectIds.value;
-      if (defectIds && defectIds.length === 0) {
-        reviewSamples.value = [];
-        return;
-      }
-      const params: {
-        defect_ids?: string[];
-        sample_filter?: string;
-        reticle_x_die_count?: number;
-        reticle_y_die_count?: number;
-        reticle_x_die_shift?: number;
-        reticle_y_die_shift?: number;
-      } = {};
-      if (defectIds && defectIds.length > 0) {
-        params.defect_ids = defectIds;
-      }
-      if (reviewImageSampleFilter.value) {
-        params.sample_filter = JSON.stringify(reviewImageSampleFilter.value);
-        params.reticle_x_die_count = reticleOptions.value.xDieCount;
-        params.reticle_y_die_count = reticleOptions.value.yDieCount;
-        params.reticle_x_die_shift = reticleOptions.value.xDieShift;
-        params.reticle_y_die_shift = reticleOptions.value.yDieShift;
-      }
-      const data =
-        await getInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGet(
-          ctx.inspectionTime,
-          Number(ctx.waferKey),
-          params,
-        );
-      const { create } = await import("@bufbuild/protobuf");
-      const { ScSampleItemSchema, ReviewImageSchema } =
-        await import("@/features/sc/generated/proto/sc/v1/sample_pb");
-      const inspTimeBigInt = BigInt(Date.parse(ctx.inspectionTime)) * BigInt(1_000_000);
-      const resp = data.data;
-      if (!("items" in resp)) {
-        throw new Error("Failed to load review images");
-      }
-      reviewSamples.value = resp.items.map(
-        (item: {
-          defect_id: string;
-          review_images: Array<{
-            image_name: string;
-            image_id: number;
-            image_type: string;
-          }>;
-        }) =>
-          create(ScSampleItemSchema, {
-            defectId: Number(item.defect_id),
-            inspectionTime: inspTimeBigInt,
-            waferKey: Number(ctx.waferKey),
-            reviewImages: item.review_images.map(
-              (image: { image_name: string; image_id: number; image_type: string }) =>
-                create(ReviewImageSchema, {
-                  imageName: image.image_name,
-                  imageId: image.image_id,
-                  imageType: image.image_type,
-                }),
-            ),
-          }),
-      );
-    } catch (err: unknown) {
-      reviewError.value = (err as Error)?.message ?? "Failed to load review images";
-      reviewSamples.value = [];
-    } finally {
-      reviewLoading.value = false;
-    }
-  }
-
-  watch(
-    () => [
-      inspectionContext.value?.inspectionTime,
-      inspectionContext.value?.waferKey,
-      JSON.stringify(reviewImageDefectIds.value ?? null),
-      JSON.stringify(reviewImageSampleFilter.value ?? null),
-      JSON.stringify(reticleOptions.value),
-    ],
-    () => {
-      fetchReviewImages();
-    },
-    { immediate: true },
-  );
-
   // ── Return ─────────────────────────────────────────────────────────
 
   return {
@@ -1518,8 +1404,5 @@ export function useReclassifyPage(): ReclassifyPageState {
     trainPredictPredictionProgressLabel,
     trainPredictPredictionProcessing,
     trainAndPredict,
-    reviewSamples,
-    reviewLoading,
-    reviewError,
   };
 }

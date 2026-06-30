@@ -51,4 +51,33 @@ describe("usePerspectiveSampleTableDataSource", () => {
     expect(page.total).toBe(2);
     expect(page.items.map((row) => row.defect_id)).toEqual(["11", "12"]);
   });
+
+  it("reports recoverable Perspective failures from row loading", async () => {
+    const err = new WebAssembly.RuntimeError("memory access out of bounds");
+    const onRecoverableError = vi.fn();
+    const table = ref({
+      view: vi.fn(async () => {
+        throw err;
+      }),
+    } as unknown as Table);
+    const scopeKey = ref("scope");
+    const dataSource = usePerspectiveSampleTableDataSource(
+      table,
+      scopeKey,
+      undefined,
+      undefined,
+      undefined,
+      onRecoverableError,
+    );
+
+    await expect(
+      dataSource.value!.loadRows({
+        defectIds: [],
+        anchor: "0",
+        limit: 1000,
+      }),
+    ).rejects.toBe(err);
+
+    expect(onRecoverableError).toHaveBeenCalledWith("sample table rows load failed", err);
+  });
 });

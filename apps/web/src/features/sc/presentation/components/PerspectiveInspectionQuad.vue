@@ -132,6 +132,9 @@ const reticleDieSizeYModel = computed(
 
 const perspective = useScPerspectiveWorkbench();
 const perspectiveReady = computed(() => perspective.dataReady.value);
+function recoverPerspective(reason: string, err: unknown): void {
+  void perspective.recover(reason, err);
+}
 const perspectiveScopeKey = computed(() => {
   if (!perspectiveReady.value) return "perspective:disconnected";
   if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
@@ -154,6 +157,7 @@ const model = usePerspectiveInspectionModel({
   zoom: computed(() => props.zoom),
   activeMapMode: computed(() => props.activeMapTab),
   galleryRandomSamplingFilter,
+  onRecoverableError: recoverPerspective,
 });
 const tableDataSource = usePerspectiveSampleTableDataSource(
   perspective.table,
@@ -161,6 +165,7 @@ const tableDataSource = usePerspectiveSampleTableDataSource(
   model.tableBaseFilters,
   model.sampleTableActiveView,
   model.sampleTableActiveViewVersion,
+  recoverPerspective,
 );
 
 watch(
@@ -556,6 +561,7 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
           :review-view="model.reviewBlinkView.value"
           :review-view-version="model.reviewBlinkViewVersion.value"
           :loading="model.blinkFetching.value"
+          :dataset-id="datasetId"
           :selected-defect-ids="blinkHighlightIds"
           :inspection-time="inspectionTime"
           :wafer-key="waferKey"

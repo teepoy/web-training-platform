@@ -56,13 +56,18 @@ const TABLE_COLUMNS = [
 
 const PATCH_BLINK_COLUMNS = [
   "defect_id",
-  "inspection_time",
-  "wafer_key",
   "annotation_label",
   "prediction_label",
   "prediction_confidence",
 ];
-const REVIEW_BLINK_COLUMNS = ["defect_id", "inspection_time", "wafer_key", "review_image_ids_json"];
+const REVIEW_BLINK_COLUMNS = [
+  "sample_id",
+  "defect_id",
+  "review_image_ids_json",
+  "annotation_label",
+  "prediction_label",
+  "prediction_confidence",
+];
 
 const EMPTY_MAP_DISPLAY = new Float32Array(0);
 const LARGE_SELECTION_THRESHOLD = 100;
@@ -480,6 +485,7 @@ export function usePerspectiveInspectionModel(args: {
   zoom: Ref<MapViewport | null | undefined> | ComputedRef<MapViewport | null | undefined>;
   activeMapMode: Ref<"wafer" | "die" | "reticle"> | ComputedRef<"wafer" | "die" | "reticle">;
   galleryRandomSamplingFilter?: ComputedRef<Filter[]>;
+  onRecoverableError?: (reason: string, err: unknown) => void;
 }) {
   const hiddenLegendKeys = ref<string[]>([]);
   const canvasDims = ref({ w: 600, h: 600 });
@@ -684,38 +690,51 @@ export function usePerspectiveInspectionModel(args: {
   }
 
   async function refreshTableData() {
-    const mapView = mapSelection.value.mode !== "none" ? tableMapView.view.value : null;
-    const globalView = tableGlobalView.view.value;
-    const activeView = mapSelection.value.mode !== "none" ? mapView : globalView;
-    if (!activeView) {
-      total.value = 0;
+    try {
+      const mapView = mapSelection.value.mode !== "none" ? tableMapView.view.value : null;
+      const globalView = tableGlobalView.view.value;
+      const activeView = mapSelection.value.mode !== "none" ? mapView : globalView;
+      if (!activeView) {
+        total.value = 0;
+        tableRowRecord.value = {};
+        return;
+      }
+      const rowCount = await activeView.num_rows();
+      total.value = rowCount;
+      if (rowCount === 0) {
+        tableRowRecord.value = {};
+        return;
+      }
+      const data = (await activeView.to_columns({
+        start_row: 0,
+        end_row: Math.min(rowCount, 500),
+      })) as Record<string, unknown[]>;
+      tableRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
+    } catch (e) {
       tableRowRecord.value = {};
-      return;
+      args.onRecoverableError?.("table data refresh failed", e);
     }
-    const rowCount = await activeView.num_rows();
-    total.value = rowCount;
-    if (rowCount === 0) {
-      tableRowRecord.value = {};
-      return;
-    }
-    const data = (await activeView.to_columns({
-      start_row: 0,
-      end_row: Math.min(rowCount, 500),
-    })) as Record<string, unknown[]>;
-    tableRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
   }
 
   // Persistent views live for the lifetime of the table and use selection flags
   // for large table/map selections.
   const tableGlobalView = usePerspectiveViewRef(args.table, tableBaseConfig, {
     onChange: refreshTableData,
+    onRecoverableError: args.onRecoverableError,
   });
   const tableMapView = usePerspectiveViewRef(args.table, tableMapConfig, {
     onChange: refreshTableData,
+    onRecoverableError: args.onRecoverableError,
   });
-  const patchBlinkView = usePerspectiveViewRef(args.table, patchBlinkConfig);
-  const reviewBlinkView = usePerspectiveViewRef(args.table, reviewBlinkConfig);
-  const histView = usePerspectiveViewRef(args.table, histConfig);
+  const patchBlinkView = usePerspectiveViewRef(args.table, patchBlinkConfig, {
+    onRecoverableError: args.onRecoverableError,
+  });
+  const reviewBlinkView = usePerspectiveViewRef(args.table, reviewBlinkConfig, {
+    onRecoverableError: args.onRecoverableError,
+  });
+  const histView = usePerspectiveViewRef(args.table, histConfig, {
+    onRecoverableError: args.onRecoverableError,
+  });
   const sampleTableActiveView = computed<View | null>(() =>
     mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
       ? tableMapView.view.value
@@ -742,6 +761,7 @@ export function usePerspectiveInspectionModel(args: {
     ["wafer", "die", "reticle"],
     args.activeMapMode,
     mapIgnoredUpdatePorts,
+    args.onRecoverableError,
   );
 
   async function syncLargeSelectionFlags(table: Table): Promise<void> {

@@ -22,12 +22,11 @@ import {
   MINI_HEADER_HEIGHT,
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
-import { scReviewUrl } from "@/features/sc/domain/models";
+import { scSampleImageUrl } from "@/features/sc/domain/models";
 
 interface BlinkSample {
+  sampleId: string | null;
   defectId: number;
-  inspectionTime: string;
-  waferKey: number;
   reviewImages: number[];
   annotationLabel: string | null;
   predictionLabel: string | null;
@@ -41,7 +40,7 @@ const props = withDefaults(
     reviewView?: View | null;
     reviewViewVersion?: number;
     loading?: boolean;
-    reviewError?: string | null;
+    datasetId?: string | null;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
     patchCellSize?: number;
@@ -175,7 +174,6 @@ function adjustSamplesPerRow(delta: number): void {
 const currentLoading = computed(
   () => props.loading || (mode.value === "review" ? reviewLoading.value : patchLoading.value),
 );
-const reviewDisabled = computed(() => !!props.reviewError);
 
 function numeric(value: unknown): number {
   const n = Number(value);
@@ -184,13 +182,6 @@ function numeric(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   if (value == null || value === "") return null;
-  return String(value);
-}
-
-function inspectionTimeString(value: unknown): string {
-  if (typeof value === "bigint") return String(value);
-  if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
-  if (value == null || value === "") return props.inspectionTime ?? "";
   return String(value);
 }
 
@@ -209,9 +200,8 @@ function parseReviewImages(value: unknown): number[] {
 function patchSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
   const ids = data.defect_id ?? [];
   return ids.map((id, i) => ({
+    sampleId: null,
     defectId: numeric(id),
-    inspectionTime: props.inspectionTime,
-    waferKey: numeric(props.waferKey),
     reviewImages: [],
     annotationLabel: stringOrNull(data.annotation_label?.[i]),
     predictionLabel: stringOrNull(data.prediction_label?.[i]),
@@ -223,13 +213,13 @@ function patchSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[]
 function reviewSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
   const ids = data.defect_id ?? [];
   return ids.map((id, i) => ({
+    sampleId: stringOrNull(data.sample_id?.[i]),
     defectId: numeric(id),
-    inspectionTime: props.inspectionTime,
-    waferKey: numeric(props.waferKey),
     reviewImages: parseReviewImages(data.review_image_ids_json?.[i]),
-    annotationLabel: null,
-    predictionLabel: null,
-    predictionConfidence: null,
+    annotationLabel: stringOrNull(data.annotation_label?.[i]),
+    predictionLabel: stringOrNull(data.prediction_label?.[i]),
+    predictionConfidence:
+      data.prediction_confidence?.[i] == null ? null : numeric(data.prediction_confidence[i]),
   }));
 }
 
@@ -276,12 +266,7 @@ async function readReviewView(view: View | null | undefined): Promise<void> {
 }
 
 watch(
-  [
-    () => props.patchView,
-    () => props.patchViewVersion,
-    () => props.inspectionTime,
-    () => props.waferKey,
-  ],
+  [() => props.patchView, () => props.patchViewVersion],
   ([view]) => {
     void readPatchView(view);
   },
@@ -566,8 +551,8 @@ const previewImageSrc = ref<string | null>(null);
 const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
 
 function handleReviewPreview(sample: BlinkSample, imageId: number) {
-  const t = props.inspectionTime ?? String(sample.inspectionTime);
-  previewImageSrc.value = scReviewUrl(t, sample.waferKey, sample.defectId, imageId);
+  if (!props.datasetId || !sample.sampleId) return;
+  previewImageSrc.value = scSampleImageUrl(props.datasetId, sample.sampleId, imageId);
   void nextTick(() => {
     const el = hiddenImageRef.value?.$el;
     if (el instanceof HTMLElement) {
@@ -579,14 +564,15 @@ function handleReviewPreview(sample: BlinkSample, imageId: number) {
 function getSpriteUrl(sample: BlinkSample): string {
   const isPatch = mode.value === "patch";
   const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
-  const t = props.inspectionTime ?? String(sample.inspectionTime);
   const params = new URLSearchParams();
   params.set("cell_size", String(cs));
   for (const type of spriteImageTypesForSample(sample)) {
     params.append("image_types", type);
   }
   const spriteMode = isPatch ? "patch" : "review";
-  return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
+  return `/api/v1/sc/sprites/${spriteMode}/${props.inspectionTime}/${props.waferKey}/${
+    sample.defectId
+  }?${params.toString()}`;
 }
 
 function shouldRenderSprite(sample: BlinkSample): boolean {
@@ -913,14 +899,10 @@ defineExpose({ scrollRef });
           class="sbt-mode-radio"
         >
           <n-radio-button value="patch">Patch</n-radio-button>
-          <n-radio-button value="review" :disabled="reviewDisabled">Review</n-radio-button>
+          <n-radio-button value="review">Review</n-radio-button>
         </n-radio-group>
 
         <n-text v-if="currentLoading" depth="3" class="sbt-review-status"> Loading... </n-text>
-        <n-text v-else-if="reviewError" type="error" class="sbt-review-status">
-          Review unavailable
-        </n-text>
-
         <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
       </div>
       <div class="sbt-toolbar-right">

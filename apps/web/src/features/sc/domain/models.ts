@@ -64,6 +64,17 @@ export function reviewImageUrl(
   return `/api/v1/sc/images/${encodeURIComponent(it)}/${waferKey}/${encodeURIComponent(did)}/review?review_image_id=${imageId}`;
 }
 
+/** Construct a dataset-owned SC sample image serving URL (raw, no auth params). */
+export function scDatasetSampleImageUrl(
+  datasetId: string,
+  sampleId: string | number,
+  imageId: string | number,
+): string {
+  return `/api/v1/sc/datasets/${encodeURIComponent(datasetId)}/samples/${encodeURIComponent(
+    String(sampleId),
+  )}/images/${encodeURIComponent(String(imageId))}`;
+}
+
 // ── Canonical authenticated image URL types & helpers ─────────────────────
 
 /** Patch image roles recognized by the canonical helpers. */
@@ -95,6 +106,15 @@ export function scReviewUrl(
   imageId: number,
 ): string {
   return withAuthQueryParams(reviewImageUrl(inspectionTime, waferKey, defectId, imageId));
+}
+
+/** Return an auth-wrapped dataset-owned SC sample image URL. */
+export function scSampleImageUrl(
+  datasetId: string,
+  sampleId: string | number,
+  imageId: string | number,
+): string {
+  return withAuthQueryParams(scDatasetSampleImageUrl(datasetId, sampleId, imageId));
 }
 
 /**
