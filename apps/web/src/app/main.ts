@@ -5,11 +5,15 @@ import { configureTransport } from "@/shared/api/client";
 import { configureOrvalFetcher } from "@/shared/api/orval-fetcher";
 
 import "../style.css";
+import "vxe-pc-ui/lib/style.css";
+import "vxe-table/lib/style.css";
+import VxeUITable from "vxe-table";
+import VxeUI from "vxe-pc-ui";
 import "./registrations";
 import App from "./App.vue";
 import { router } from "./router";
-import { useAuthStore, getStoredToken } from '@/features/auth/application/store';
-import { useOrgStore } from '@/features/auth/application/org';
+import { useAuthStore, getStoredToken } from "@/features/auth/application/store";
+import { useOrgStore } from "@/features/auth/application/org";
 
 configureTransport({
   getToken: () => {
@@ -91,6 +95,8 @@ async function bootstrap(): Promise<void> {
   const authStore = useAuthStore(pinia);
   authStore.hydrateFromStorage();
   app.use(router);
+  app.use(VxeUI);
+  app.use(VxeUITable);
   app.use(VueQueryPlugin, { queryClient });
   app.mount("#app");
 }

@@ -73,7 +73,7 @@ from app.modules.sc.schemas import (
     ScSampleTableRowsRequest,
     ScSampleTableRowsResponse,
 )
-from app.shared.api.schemas import Annotation, Organization, User
+from app.shared.api.schemas import Organization, User
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import (
     DoneEvent,
@@ -82,6 +82,7 @@ from app.shared.sse.events import (
     ScProgressEvent,
     SSEEvent,
 )
+import starlette.websockets
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -186,13 +187,17 @@ async def sc_dataset_perspective_ws(
     async def refresh_overlay() -> pl.DataFrame:
         return overlay_df_from_samples(await build_dataset_df())
 
-    await run_sc_perspective_ws(
-        websocket=websocket,
-        dataset_id=dataset_id,
-        samples_df_factory=samples_df_factory,
-        redis_client=_redis_client_from_request(websocket),
-        refresh_overlay=refresh_overlay,
-    )
+    try:
+        await run_sc_perspective_ws(
+            websocket=websocket,
+            dataset_id=dataset_id,
+            samples_df_factory=samples_df_factory,
+            redis_client=_redis_client_from_request(websocket),
+            refresh_overlay=refresh_overlay,
+        )
+    except starlette.websockets.WebSocketDisconnect:
+        # Ignore disconnects, they are expected when the client closes the connection
+        pass
 
 
 _TOP_LEVEL_FILTER_COLUMNS = {
@@ -312,6 +317,38 @@ async def get_inspections(
 
     resp = ScInspectionListResponse(items=items, total=len(items))
     return resp
+
+
+@router.get(
+    "/inspections/{inspection_time}/{wafer_key}",
+    response_model=ScInspectionSummaryItem,
+)
+async def get_inspection(
+    upstream_reader: ScUpstreamReaderDep,
+    inspection_time: str,
+    wafer_key: int,
+) -> ScInspectionSummaryItem:
+    insp_dt, inspection = await _resolve_inspection_or_404(
+        upstream_reader, inspection_time, wafer_key
+    )
+    return ScInspectionSummaryItem(
+        inspection_time=insp_dt.isoformat(),
+        wafer_key=inspection.wafer_key,
+        lot_id=inspection.lot_id,
+        wafer_id=inspection.wafer_id,
+        center_x=inspection.center_x,
+        center_y=inspection.center_y,
+        origin_x=inspection.origin_x,
+        origin_y=inspection.origin_y,
+        die_size_x=inspection.die_size_x,
+        die_size_y=inspection.die_size_y,
+        layer_id=getattr(inspection, "layer_id", None) or "",
+        eqp_id=getattr(inspection, "eqp_id", None) or "",
+        recipe_id=getattr(inspection, "recipe_id", ""),
+        defects=inspection.defects,
+        images=inspection.images,
+        device=getattr(inspection, "device", ""),
+    )
 
 
 def _parse_top_level_condition(value: str | None) -> list[str] | None:
@@ -1612,34 +1649,22 @@ async def sc_bulk_create_annotations(
         dataset_reader, dataset_id, defect_ids, org_id=org.id
     )
 
-    created = 0
     created_labels: set[str] = set()
-    annotations_to_create: list[Annotation] = []
-    annotation_ids_to_delete: list[str] = []
+    items: list[tuple[str, str | None]] = []
     storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
         if sample_id is None:
             continue
-        existing = await storage.list_annotations(sample_id=sample_id)
-        if existing:
-            annotation_ids_to_delete.extend(ann.id for ann in existing if ann.id)
-        if item.label == "0":
-            continue
-        annotations_to_create.append(
-            Annotation(
-                sample_id=sample_id,
-                label=item.label,
-                created_by=current_user.id,
-            )
-        )
-        created_labels.add(item.label)
+        label = None if item.label == "0" else item.label
+        items.append((sample_id, label))
+        if label is not None:
+            created_labels.add(label)
 
-    if annotation_ids_to_delete:
-        await storage.delete_annotations(annotation_ids_to_delete)
-    if annotations_to_create:
-        created = await storage.create_annotations(annotations_to_create)
-    if annotation_ids_to_delete or annotations_to_create:
+    created = await storage.replace_annotations_for_samples(
+        items, created_by=current_user.id
+    )
+    if items:
         await event_publisher.publish_annotation_refresh(dataset_id=dataset_id)
 
     if created_labels:

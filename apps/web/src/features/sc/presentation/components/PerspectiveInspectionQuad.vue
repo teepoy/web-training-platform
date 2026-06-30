@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { NButton, NResult, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
@@ -11,14 +11,13 @@ import type { ECElementEvent } from "echarts/core";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterBar from "@/features/sc/presentation/components/ScGlobalFilterBar.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
-import ScPreviewBlinkVirtualTable from "@/features/sc/presentation/components/ScPreviewBlinkVirtualTable.vue";
-import type { DefectList, ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
+import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
-import type { MapDisplayArray } from "@/features/sc/presentation/components/transforms/binsToDisplayArrays";
 import type { Filter } from "@perspective-dev/client";
 import { useScPerspectiveWorkbench } from "@/features/sc/presentation/composables/useScPerspectiveWorkbench";
 import { usePerspectiveSampleTableDataSource } from "@/features/sc/presentation/composables/usePerspectiveSampleTableDataSource";
@@ -29,20 +28,12 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 const props = defineProps<{
   variant?: "preview" | "reclassify";
   datasetId?: string;
-  samples: ScSampleItem[];
-  samplesTotal?: number;
-  samplesLoading: boolean;
   samplesError: string | null;
-  inspectionTime?: string;
-  waferKey?: number;
-  reviewSamples?: ScSampleItem[];
-  reviewLoading?: boolean;
-  reviewError?: string | null;
-  mapLoading?: boolean;
-  mapError?: string | null;
-  mapStreamMessage?: string;
-  mapProgressPercent?: number;
+  inspectionTime: string;
+  waferKey: number;
   inspectionItem?: InspectionSummaryItem;
+  showPredictionBadges?: boolean;
+  annotationDrafts?: Record<string, string>;
   activeMapTab: "wafer" | "die" | "reticle";
   waferGeometry?: {
     waferRadiusNm: number;
@@ -53,13 +44,6 @@ const props = defineProps<{
     dieSizeX: number;
     dieSizeY: number;
   } | null;
-  waferDisplay?: MapDisplayArray | number[];
-  dieDisplay?: MapDisplayArray | number[];
-  reticleDisplay?: MapDisplayArray | number[];
-  unzoomedWaferDisplay?: MapDisplayArray | number[];
-  unzoomedDieDisplay?: MapDisplayArray | number[];
-  unzoomedReticleDisplay?: MapDisplayArray | number[];
-  legendGroups?: Record<string, DefectList> | null;
   legendGroupBy?: ScLegendSource | null;
   legendSources?: ScLegendSource[];
   reticleXDieCount?: number;
@@ -73,6 +57,7 @@ const props = defineProps<{
   globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
   galleryRandomSamplingDefectIds?: Set<string>;
+  syncGallerySelection?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -92,7 +77,6 @@ const emit = defineEmits<{
   (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
-  (e: "legend-hidden-change", payload: { source: ScLegendSource; hiddenKeys: string[] }): void;
   (e: "clear-gallery-random-sampling"): void;
   (
     e: "select-samples",
@@ -108,6 +92,7 @@ const emit = defineEmits<{
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
+const USE_VXE_SAMPLE_TABLE = false;
 const RECLASSIFY_ANNOTATION_PCT = 15;
 const DEFAULT_MAP_PCT = 55;
 const DEFAULT_BAR_PCT = 60;
@@ -146,9 +131,7 @@ const reticleDieSizeYModel = computed(
 );
 
 const perspective = useScPerspectiveWorkbench();
-const perspectiveReady = computed(
-  () => perspective.connected.value && Boolean(perspective.table.value),
-);
+const perspectiveReady = computed(() => perspective.dataReady.value);
 const perspectiveScopeKey = computed(() => {
   if (!perspectiveReady.value) return "perspective:disconnected";
   if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
@@ -162,6 +145,8 @@ const galleryRandomSamplingFilter = computed<Filter[]>(() => {
 
 const model = usePerspectiveInspectionModel({
   table: perspective.table,
+  inspectionTime: computed(() => props.inspectionTime),
+  waferKey: computed(() => props.waferKey),
   legendGroupBy: computed(() => props.legendGroupBy),
   tableFilter: computed(() => props.tableFilter),
   globalFilter,
@@ -214,13 +199,6 @@ watch(
   { immediate: true },
 );
 
-const blinkSamples = computed<ScSampleItem[]>(() => model.galleryRows.value);
-const filteredReviewSamples = computed<ScSampleItem[]>(() => {
-  const samples = props.reviewSamples ?? [];
-  return samples.length > 0
-    ? samples
-    : model.galleryRows.value.filter((s) => s.reviewImages.length > 0);
-});
 const sampleTableTotal = computed(() => model.total.value);
 const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),
@@ -239,77 +217,48 @@ const activeReticleDisplay = computed(() =>
   props.activeMapTab === "reticle" ? model.reticleDisplay.value : EMPTY_MAP_DISPLAY,
 );
 
-function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
-  console.log(
-    "[sc-selection]",
-    new Date().toISOString(),
-    `${performance.now().toFixed(1)}ms`,
-    step,
-    detail,
-  );
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-let quadRenderStart = 0;
-onBeforeUpdate(() => {
-  quadRenderStart = performance.now();
-  selectionLog("quad beforeUpdate", {
-    galleryRows: model.galleryRows.value.length,
-    tableSelected: tableHighlightIds.value.size,
-    gallerySelected: blinkHighlightIds.value.size,
-  });
-});
-onUpdated(() => {
-  const updatedAt = performance.now();
-  selectionLog("quad updated", {
-    ms: Number((updatedAt - quadRenderStart).toFixed(2)),
-    galleryRows: model.galleryRows.value.length,
-    highlights: highlightDefects.value.length,
-  });
-  void nextTick(() => {
-    selectionLog("quad nextTick", {
-      ms: Number((performance.now() - updatedAt).toFixed(2)),
-    });
-  });
-});
+const highlightDefects = ref<HighlightDefect[]>([]);
+let _highlightTimer: ReturnType<typeof setTimeout> | null = null;
+const HIGHLIGHT_DEBOUNCE_MS = 250;
 
 watch(
   () => props.gallerySelectedDefectIds,
   (ids) => {
-    selectionLog("gallery selected prop -> model", { ids: ids?.length ?? 0 });
+    if (!props.syncGallerySelection) return;
     void model.setGallerySelectedDefectIds(ids ?? []);
   },
   { immediate: true },
 );
 
-const highlightDefects = ref<HighlightDefect[]>([]);
-let _highlightSeq = 0;
+function scheduleHighlightUpdate(ids: Set<string>, tab: string): void {
+  if (_highlightTimer !== null) clearTimeout(_highlightTimer);
+  _highlightTimer = setTimeout(async () => {
+    _highlightTimer = null;
+    const numericIds = [...ids].map(Number).filter(Number.isFinite);
+    if (numericIds.length > HIGHLIGHT_MAX_DEFECTS) {
+      highlightDefects.value = [];
+      return;
+    }
+    if (tab !== props.activeMapTab) return;
+    const result = await model.highlightDefectsForIds(numericIds);
+    if (tab !== props.activeMapTab) return;
+    highlightDefects.value = result;
+  }, HIGHLIGHT_DEBOUNCE_MS);
+}
 
 watch(
   () => ({ ids: blinkHighlightIds.value, tab: props.activeMapTab }),
-  ({ ids, tab }) => {
-    const seq = ++_highlightSeq;
-    const numericIds = [...ids].map(Number).filter(Number.isFinite);
-    selectionLog("gallery select -> map highlight input", { ids: numericIds.length, tab });
-    if (numericIds.length > HIGHLIGHT_MAX_DEFECTS) {
-      highlightDefects.value = [];
-      selectionLog("gallery select -> map highlight skipped", {
-        ids: numericIds.length,
-        limit: HIGHLIGHT_MAX_DEFECTS,
-      });
-      return;
-    }
-    const result = model.highlightDefectsForIds(numericIds);
-    if (seq !== _highlightSeq) return;
-    if (tab !== props.activeMapTab) return;
-    highlightDefects.value = result;
-    selectionLog("gallery select -> map highlight applied", {
-      ids: numericIds.length,
-      highlights: result.length,
-      tab,
-    });
-  },
+  ({ ids, tab }) => scheduleHighlightUpdate(ids, tab),
   { immediate: true },
 );
+
+onUnmounted(() => {
+  if (_highlightTimer !== null) clearTimeout(_highlightTimer);
+});
 
 const barChartItems = computed(() => {
   const groups = model.legendGroups.value ?? {};
@@ -382,9 +331,6 @@ async function searchGlobalFilterOptions(payload: {
   globalDistinctValues.value = { ...globalDistinctValues.value, [payload.field]: values };
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 function onColumnResizeStart(e: PointerEvent): void {
   e.preventDefault();
   if (e.currentTarget instanceof Element) e.currentTarget.setPointerCapture(e.pointerId);
@@ -445,8 +391,8 @@ async function handleBoxSelect(region: {
   h: number;
 }): Promise<void> {
   const ids = await model.queryBoxSelection(props.activeMapTab, region);
-  await model.applyMapSelection(ids);
-  emit("select-points", { ids, region });
+  const nextIds = await model.appendMapSelection(ids);
+  emit("select-points", { ids: nextIds, region });
 }
 async function handleMapSelectPoints(payload: {
   ids: number[];
@@ -462,14 +408,11 @@ async function handleMapSelectionChange(ids: number[]): Promise<void> {
   emit("select-points", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
 }
 function handleTableSelectionChange(ids: number[]): void {
-  selectionLog("table selection-change event", { ids: ids.length });
   void model.setTableSelectedDefectIds(ids);
-  selectionLog("table selection-change emit", { ids: ids.length });
   emit("table-selection-change", ids);
 }
 function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
   model.setHiddenLegendKeys(payload.hiddenKeys);
-  emit("legend-hidden-change", payload);
 }
 async function selectBarChartGroup(defectIds: number[]): Promise<void> {
   await model.applyMapSelection(defectIds);
@@ -526,11 +469,12 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
           :reticle-die-size-y="reticleDieSizeYModel"
           :reticle-options="reticleOptionsModel"
           :legend-group-by="legendGroupBy"
+          :legend-sources="enabledLegendSources"
           :zoom="zoom"
           :highlightDefects="highlightDefects"
           :map-loading="model.activeMapLoading.value || !perspectiveReady"
           :map-error="model.mapError.value ?? perspective.error.value"
-          :map-progress-message="perspectiveReady ? undefined : 'Connecting Perspective data...'"
+          :map-progress-message="perspectiveReady ? undefined : 'Loading data...'"
           :map-progress-percent="perspectiveReady ? undefined : 0"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
@@ -552,7 +496,24 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
         @pointerup="onRowResizeEnd"
         @pointercancel="onRowResizeEnd"
       />
+      <ScSampleTableVxe
+        v-if="USE_VXE_SAMPLE_TABLE && perspective.table.value"
+        :table="perspective.table.value"
+        :view-config="model.sampleTableActiveViewConfig.value"
+        :source-version="model.sampleTableActiveViewConfigVersion.value"
+        :selected-defect-ids="tableHighlightIds"
+        :show-reclassify-columns="isReclassify"
+        @selection-change="handleTableSelectionChange"
+      />
+      <!--
+        Vxe sample table currently lacks these legacy hooks:
+        - apply-filter-as-global
+        - external filter-change/sort-change emits
+        - reticle die count/shift derived display fields
+        Keep the legacy table branch as the complete behavior until those are added.
+      -->
       <ScSampleTable
+        v-else
         :data-source="tableDataSource"
         :loading="!perspectiveReady || model.tableLoading.value"
         :total="sampleTableTotal"
@@ -589,37 +550,20 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
       :style="rightPanelStyle"
     >
       <div class="iq-blink-pane">
-        <slot
-          name="blink"
-          :samples="blinkSamples"
-          :prediction-labels="model.predictionLabels.value"
-          :prediction-confidences="model.predictionConfidences.value"
-          :annotation-labels="model.annotationLabels.value"
-          :gallery-total="model.galleryTotal.value"
-          :gallery-loaded-offset="model.galleryLoadedOffset.value"
-          :has-next-page="model.galleryHasMore.value"
-          :is-fetching-next-page="model.galleryFetching.value"
-          :on-load-more="model.loadMoreGalleryRows"
-          :on-visible-range-change="model.loadGalleryRange"
-          :on-review-mode-change="model.setReviewMode"
-          ><ScPreviewBlinkVirtualTable
-            :samples="blinkSamples"
-            :review-samples="filteredReviewSamples"
-            :review-loading="reviewLoading"
-            :review-error="reviewError"
-            :has-next-page="model.galleryHasMore.value"
-            :is-fetching-next-page="model.galleryFetching.value"
-            :on-load-more="model.loadMoreGalleryRows"
-            :total="model.galleryTotal.value"
-            :loaded-offset="model.galleryLoadedOffset.value"
-            :on-visible-range-change="model.loadGalleryRange"
-            :blink-interval-ms="800"
-            :initial-blink-enabled="true"
-            :selected-defect-ids="blinkHighlightIds"
-            :inspection-time="inspectionTime"
-            @mode-change="model.setReviewMode($event === 'review')"
-            @select-samples="(ids, mods) => emit('select-samples', ids, mods)"
-        /></slot>
+        <ScBlinkVirtualTable
+          :patch-view="model.patchBlinkView.value"
+          :patch-view-version="model.patchBlinkViewVersion.value"
+          :review-view="model.reviewBlinkView.value"
+          :review-view-version="model.reviewBlinkViewVersion.value"
+          :loading="model.blinkFetching.value"
+          :selected-defect-ids="blinkHighlightIds"
+          :inspection-time="inspectionTime"
+          :wafer-key="waferKey"
+          :show-prediction-badges="showPredictionBadges"
+          :annotation-drafts="annotationDrafts"
+          @mode-change="model.setReviewMode($event === 'review')"
+          @select-samples="(ids, mods) => emit('select-samples', ids, mods)"
+        />
       </div>
       <div
         v-if="isReclassify"

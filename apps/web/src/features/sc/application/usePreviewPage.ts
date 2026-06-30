@@ -38,9 +38,6 @@ export interface PreviewTab {
   samplesLoading: boolean;
   samplesError: string | null;
   patchSamples: ScSampleItem[];
-  reviewSamples: ScSampleItem[];
-  reviewLoading: boolean;
-  reviewError: string | null;
   mapLoading: boolean;
   mapError: string | null;
   mapStreamMessage: string;
@@ -387,9 +384,6 @@ export function usePreviewPage(): PreviewPageState {
       samplesLoading: false,
       samplesError: null,
       patchSamples: [],
-      reviewSamples: [],
-      reviewLoading: false,
-      reviewError: null,
       mapLoading: false,
       mapError: null,
       mapStreamMessage: "",
@@ -434,9 +428,6 @@ export function usePreviewPage(): PreviewPageState {
       samplesLoading: false,
       samplesError: null,
       patchSamples: makePatchSamples(row),
-      reviewSamples: [],
-      reviewLoading: false,
-      reviewError: null,
       mapLoading: true,
       mapError: null,
       mapStreamMessage: "Loading 0%",

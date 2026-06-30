@@ -16,17 +16,9 @@ import {
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
-import ScReclassifyBlinkVirtualTable from "../components/ScReclassifyBlinkVirtualTable.vue";
 import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
-import { create } from "@bufbuild/protobuf";
-import type { ScBlinkImageUrls } from "@/features/sc/domain/models";
-import {
-  ScSampleItemSchema,
-  ReviewImageSchema,
-  type ScSampleItem,
-} from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 
 const page = useReclassifyPage();
@@ -125,59 +117,6 @@ function handleKeydown(e: KeyboardEvent): void {
 onMounted(() => document.addEventListener("keydown", handleKeydown));
 onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
-const blinkSamples = computed<ScSampleItem[]>(() =>
-  page.filteredScSamples.value.map((s) => {
-    const epochMs = Date.parse(s.inspectionTime);
-    const inspectionTime = Number.isFinite(epochMs) ? BigInt(epochMs) : 0n;
-    return create(ScSampleItemSchema, {
-      inspectionTime,
-      waferKey: s.waferKey,
-      defectId: Number(s.defectId),
-      reviewImages: s.reviewImageIds.map((imageId) =>
-        create(ReviewImageSchema, {
-          imageId,
-          imageName: "",
-          imageType: "",
-        }),
-      ),
-      waferX: s.waferX,
-      waferY: s.waferY,
-      roughBin: s.roughBin,
-      classNumber: s.classNumber,
-    });
-  }),
-);
-
-const blinkImageUrlsByDefectId = computed<Record<string, ScBlinkImageUrls>>(() => {
-  const urlsByDefectId: Record<string, ScBlinkImageUrls> = {};
-  for (const sample of page.scSamples.value) {
-    const urls: ScBlinkImageUrls = {
-      template: "",
-      defective: "",
-      difference: "",
-      review: [],
-    };
-    for (const image of sample.images) {
-      const role = image.role.toLowerCase();
-      if (role.includes("template")) urls.template = image.url;
-      else if (role.includes("defective")) urls.defective = image.url;
-      else if (role.includes("difference")) urls.difference = image.url;
-      else if (role === "review") urls.review.push(image.url);
-    }
-    urlsByDefectId[sample.defectId] = urls;
-  }
-  return urlsByDefectId;
-});
-
-/** Saved annotation labels keyed by defectId (matches BlinkTable lookup). */
-const annotationLabelsByDefectId = computed<Record<string, string>>(() => {
-  const map: Record<string, string> = {};
-  for (const s of page.scSamples.value) {
-    if (s.currentLabel && s.currentLabel !== "__unlabeled__") map[s.defectId] = s.currentLabel;
-  }
-  return map;
-});
-
 const hasLocalSampleTableFilter = computed(
   () => Object.keys(page.sampleTableFilter.value).length > 0,
 );
@@ -275,21 +214,17 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
 
         <!-- Main area -->
         <div class="classify-layout">
+          <NEmpty
+            v-if="!page.inspectionContext.value"
+            description="Inspection metadata not available for this dataset"
+          />
           <InspectionQuad
+            v-else
             variant="reclassify"
             :dataset-id="page.datasetId.value"
-            :samples="blinkSamples"
-            :samples-loading="page.isBlinkLoading.value"
             :samples-error="page.samplesError.value"
-            :inspection-time="page.inspectionContext.value?.inspectionTime ?? undefined"
-            :wafer-key="
-              page.inspectionContext.value?.waferKey
-                ? Number(page.inspectionContext.value.waferKey)
-                : undefined
-            "
-            :review-samples="page.reviewSamples.value"
-            :review-loading="page.reviewLoading.value"
-            :review-error="page.reviewError.value"
+            :inspection-time="page.inspectionContext.value.inspectionTime"
+            :wafer-key="Number(page.inspectionContext.value.waferKey)"
             :active-map-tab="page.activeMapTab.value"
             :wafer-geometry="page.waferGeometry.value"
             :reticle-x-die-count="page.reticleXDieCount.value"
@@ -304,6 +239,8 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
             :legend-group-by="page.legendGroupBy.value"
             :legend-sources="['class', 'bin', 'annotation', 'prediction', 'final_class']"
+            :show-prediction-badges="true"
+            :annotation-drafts="page.annotationDraft.value"
             @update:active-map-tab="page.setActiveMapTab"
             @update:reticle-options="page.updateReticleOptions"
             @select-points="({ ids }) => page.handleBoxSelectionChange(ids)"
@@ -317,41 +254,8 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
             @legend-group-change="page.handleLegendGroupByChange"
             @retry="() => {}"
+            @select-samples="(ids, mods) => onBlinkTableSelect(ids, mods)"
           >
-            <template
-              #blink="{
-                samples: perspectiveSamples,
-                predictionLabels: perspectivePredictionLabels,
-                predictionConfidences: perspectivePredictionConfidences,
-                annotationLabels: perspectiveAnnotationLabels,
-                hasNextPage: perspectiveHasNextPage,
-                isFetchingNextPage: perspectiveIsFetchingNextPage,
-                onLoadMore: perspectiveLoadMore,
-                onReviewModeChange: perspectiveSetReviewMode,
-                galleryTotal: perspectiveTotal,
-              }"
-            >
-              <ScReclassifyBlinkVirtualTable
-                :samples="perspectiveSamples"
-                :total="perspectiveTotal"
-                :image-urls-by-defect-id="blinkImageUrlsByDefectId"
-                :initial-blink-enabled="true"
-                :selected-defect-ids="page.selectedDefectIds.value"
-                :prediction-labels="perspectivePredictionLabels"
-                :prediction-confidences="perspectivePredictionConfidences"
-                :annotation-labels="perspectiveAnnotationLabels"
-                :annotation-drafts="page.annotationDraft.value"
-                :has-next-page="perspectiveHasNextPage"
-                :is-fetching-next-page="perspectiveIsFetchingNextPage"
-                :inspection-time="page.inspectionContext.value?.inspectionTime || undefined"
-                :review-samples="page.reviewSamples.value"
-                :review-loading="page.reviewLoading.value"
-                :review-error="page.reviewError.value"
-                @select-samples="onBlinkTableSelect"
-                :on-load-more="perspectiveLoadMore"
-                @mode-change="perspectiveSetReviewMode($event === 'review')"
-              />
-            </template>
             <template #annotation>
               <ReclassifyAnnotationSidebar
                 :selected-count="page.selectedCount.value"

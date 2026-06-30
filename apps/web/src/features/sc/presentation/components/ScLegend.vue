@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onUpdated } from "vue";
 import { NButton, NIcon, NTag, NTooltip } from "naive-ui";
 import { EyeOffOutline, EyeOutline } from "@vicons/ionicons5";
 import {
@@ -168,6 +168,8 @@ const handleVisibleToggle = (rawKey: string) => {
   else next.add(rawKey);
   emit("update:hiddenKeys", Array.from(next));
 };
+
+onUpdated(() => console.debug("[render] ScLegend"));
 </script>
 
 <template>

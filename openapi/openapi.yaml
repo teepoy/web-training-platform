@@ -3911,6 +3911,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/sc/inspections/{inspection_time}/{wafer_key}:
+    get:
+      tags:
+        - sc
+      summary: Get Inspection
+      operationId: get_inspection_api_v1_sc_inspections__inspection_time___wafer_key__get
+      parameters:
+        - name: inspection_time
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Inspection Time
+        - name: wafer_key
+          in: path
+          required: true
+          schema:
+            type: integer
+            title: Wafer Key
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScInspectionSummaryItem"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/sc/inspections/{inspection_time}/{wafer_key}/defect-ids.bin:
     get:
       tags:

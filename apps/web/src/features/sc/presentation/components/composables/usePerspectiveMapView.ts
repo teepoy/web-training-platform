@@ -59,12 +59,6 @@ interface ModeUpdateContext {
   xCol: string;
 }
 
-const _modeContexts: Record<MapMode, ModeUpdateContext> = {
-  wafer: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
-  die: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
-  reticle: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
-};
-
 function onPerspectiveUpdate(v: View, cb: (evt: unknown) => void): void {
   v.on_update(cb);
 }
@@ -128,10 +122,18 @@ export function usePerspectiveMapView(
   };
 
   // Cache unzoomed (zoom=null) views per mode — keyed by filter/col/dims hash
-  const _uzCache: Record<MapMode, { rows: MapBinRow[]; view: View } | null> = {
+  const _uzCache: Record<
+    MapMode,
+    { rows: MapBinRow[]; view: View; binSize: number; col: string; xCol: string } | null
+  > = {
     wafer: null,
     die: null,
     reticle: null,
+  };
+  const modeContexts: Record<MapMode, ModeUpdateContext> = {
+    wafer: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
+    die: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
+    reticle: { view: null, binSize: 0, isZoom: false, col: "", xCol: "" },
   };
   let _uzCacheKey = "";
 
@@ -176,36 +178,6 @@ export function usePerspectiveMapView(
     return resultRows;
   }
 
-  function _logRowStats(
-    rows: MapBinRow[],
-    mode: string,
-    binSize: number,
-    isZoom: boolean,
-    col: string,
-  ): void {
-    let gxMin = Infinity;
-    let gxMax = -Infinity;
-    let gyMin = Infinity;
-    let gyMax = -Infinity;
-    let misMin = Infinity;
-    let misMax = -Infinity;
-    for (const r of rows) {
-      if (r.gx < gxMin) gxMin = r.gx;
-      if (r.gx > gxMax) gxMax = r.gx;
-      if (r.gy < gyMin) gyMin = r.gy;
-      if (r.gy > gyMax) gyMax = r.gy;
-      if (r.map_in_selection < misMin) misMin = r.map_in_selection;
-      if (r.map_in_selection > misMax) misMax = r.map_in_selection;
-    }
-    const sample = rows
-      .slice(0, 3)
-      .map((r) => `[gx=${r.gx} gy=${r.gy} ${col}=${r[col]} mis=${r.map_in_selection}]`)
-      .join(" ");
-    console.log(
-      `[psp-map:${mode}] DONE ${rows.length} bins (binSize=${binSize}${isZoom ? " ZOOM" : ""}) gx=[${gxMin}..${gxMax}] gy=[${gyMin}..${gyMax}] mis=[${misMin}..${misMax}] sample: ${sample}`,
-    );
-  }
-
   function shouldProcessUpdate(mode: MapMode, evt: unknown): boolean {
     if (activeMapMode && activeMapMode.value !== mode) return false;
     const portId = eventPortId(evt);
@@ -225,6 +197,12 @@ export function usePerspectiveMapView(
         reticleVersion.value++;
         break;
     }
+    console.debug("[map-view] incrementModeVersion", {
+      mode,
+      waferVersion: waferVersion.value,
+      dieVersion: dieVersion.value,
+      reticleVersion: reticleVersion.value,
+    });
   }
 
   async function rebuildMode(mode: MapMode): Promise<void> {
@@ -250,10 +228,21 @@ export function usePerspectiveMapView(
         [cfg.yCol, "<=", zoomVp.y + zoomVp.h] as Filter,
       );
     } else {
+      binSize = unzoomBinSize(mode, canvasDims.value);
+
       // Unzoomed — check cache
       if (_uzCache[mode]) {
-        const t0 = performance.now();
         const cached = _uzCache[mode]!;
+        const previous = views[mode];
+        views[mode] = null;
+        retireView(previous);
+        modeContexts[mode] = {
+          view: cached.view,
+          binSize: cached.binSize,
+          isZoom: false,
+          col: cached.col,
+          xCol: cached.xCol,
+        };
         switch (mode) {
           case "wafer":
             waferRows.value = cached.rows;
@@ -265,10 +254,8 @@ export function usePerspectiveMapView(
             reticleRows.value = cached.rows;
             break;
         }
-        console.log(`[psp-map:${mode}] cache HIT (${(performance.now() - t0).toFixed(0)}ms)`);
         return;
       }
-      binSize = unzoomBinSize(mode, canvasDims.value);
     }
 
     const allFilters = [...globalFilters.value, ...extraFilters];
@@ -292,19 +279,13 @@ export function usePerspectiveMapView(
       filter: allFilters.length > 0 ? allFilters : undefined,
     };
 
-    const t0 = performance.now();
-    const exprSummary = `gx=floor("${cfg.xCol}"/${binSize.toFixed(0)}) gy=floor("${cfg.yCol}"/${binSize.toFixed(0)})`;
-    console.log(
-      `[psp-map:${mode}] rebuild start, isZoom=${isZoom}, binSize=${binSize.toFixed(0)}, filters=${allFilters.length}, ${exprSummary}`,
-    );
-
     const v = (await tbl.view(vCfg as AnyViewConfig)) as View;
 
-    _modeContexts[mode] = { view: v, binSize, isZoom, col, xCol: cfg.xCol };
+    modeContexts[mode] = { view: v, binSize, isZoom, col, xCol: cfg.xCol };
 
     onPerspectiveUpdate(v, (evt: unknown) => {
+      console.debug("[map-view] onPerspectiveUpdate", { mode, portId: eventPortId(evt) });
       if (!shouldProcessUpdate(mode, evt)) return;
-      console.log(`[psp-map:${mode}] view data updated`);
       incrementModeVersion(mode);
     });
 
@@ -315,7 +296,6 @@ export function usePerspectiveMapView(
       retireView(previous);
     }
 
-    const t1 = performance.now();
     const nr = await v.num_rows();
     if ((isZoom && views[mode] !== v) || (!isZoom && _rebuildSeq !== buildSeq)) return;
     if (nr === 0) {
@@ -331,9 +311,8 @@ export function usePerspectiveMapView(
           break;
       }
       if (!isZoom) {
-        _uzCache[mode] = { rows: [], view: v };
+        _uzCache[mode] = { rows: [], view: v, binSize, col, xCol: cfg.xCol };
       }
-      console.log(`[psp-map:${mode}] EMPTY (${(performance.now() - t1).toFixed(0)}ms)`);
       return;
     }
     const data = (await v.to_columns()) as Record<string, unknown[]>;
@@ -355,22 +334,28 @@ export function usePerspectiveMapView(
 
     // Save unzoomed result to cache
     if (!isZoom) {
-      _uzCache[mode] = { rows: resultRows, view: v };
+      _uzCache[mode] = { rows: resultRows, view: v, binSize, col, xCol: cfg.xCol };
     }
-
-    _logRowStats(resultRows, mode, binSize, isZoom, col);
   }
 
   watch(
     () => waferVersion.value,
     async () => {
-      const ctx = _modeContexts.wafer;
+      console.debug("[map-view] wafer version watcher", { version: waferVersion.value });
+      const ctx = modeContexts.wafer;
       if (!ctx.view) return;
       try {
         const nr = await ctx.view.num_rows();
         if (nr === 0) {
           waferRows.value = [];
-          if (!ctx.isZoom) _uzCache.wafer = { rows: [], view: ctx.view };
+          if (!ctx.isZoom)
+            _uzCache.wafer = {
+              rows: [],
+              view: ctx.view,
+              binSize: ctx.binSize,
+              col: ctx.col,
+              xCol: ctx.xCol,
+            };
           return;
         }
         const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
@@ -382,8 +367,14 @@ export function usePerspectiveMapView(
           ctx.col,
           ctx.xCol,
         );
-        if (!ctx.isZoom) _uzCache.wafer = { rows: waferRows.value!, view: ctx.view };
-        _logRowStats(waferRows.value!, "wafer", ctx.binSize, ctx.isZoom, ctx.col);
+        if (!ctx.isZoom)
+          _uzCache.wafer = {
+            rows: waferRows.value!,
+            view: ctx.view,
+            binSize: ctx.binSize,
+            col: ctx.col,
+            xCol: ctx.xCol,
+          };
       } catch (e) {
         console.error("[psp-map:wafer] on_update ERROR:", e);
       }
@@ -401,19 +392,33 @@ export function usePerspectiveMapView(
   watch(
     () => dieVersion.value,
     async () => {
-      const ctx = _modeContexts.die;
+      console.debug("[map-view] die version watcher", { version: dieVersion.value });
+      const ctx = modeContexts.die;
       if (!ctx.view) return;
       try {
         const nr = await ctx.view.num_rows();
         if (nr === 0) {
           dieRows.value = [];
-          if (!ctx.isZoom) _uzCache.die = { rows: [], view: ctx.view };
+          if (!ctx.isZoom)
+            _uzCache.die = {
+              rows: [],
+              view: ctx.view,
+              binSize: ctx.binSize,
+              col: ctx.col,
+              xCol: ctx.xCol,
+            };
           return;
         }
         const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
         dieRows.value = _computeRowData(data, ctx.binSize, ctx.isZoom, "die", ctx.col, ctx.xCol);
-        if (!ctx.isZoom) _uzCache.die = { rows: dieRows.value!, view: ctx.view };
-        _logRowStats(dieRows.value!, "die", ctx.binSize, ctx.isZoom, ctx.col);
+        if (!ctx.isZoom)
+          _uzCache.die = {
+            rows: dieRows.value!,
+            view: ctx.view,
+            binSize: ctx.binSize,
+            col: ctx.col,
+            xCol: ctx.xCol,
+          };
       } catch (e) {
         console.error("[psp-map:die] on_update ERROR:", e);
       }
@@ -423,13 +428,21 @@ export function usePerspectiveMapView(
   watch(
     () => reticleVersion.value,
     async () => {
-      const ctx = _modeContexts.reticle;
+      console.debug("[map-view] reticle version watcher", { version: reticleVersion.value });
+      const ctx = modeContexts.reticle;
       if (!ctx.view) return;
       try {
         const nr = await ctx.view.num_rows();
         if (nr === 0) {
           reticleRows.value = [];
-          if (!ctx.isZoom) _uzCache.reticle = { rows: [], view: ctx.view };
+          if (!ctx.isZoom)
+            _uzCache.reticle = {
+              rows: [],
+              view: ctx.view,
+              binSize: ctx.binSize,
+              col: ctx.col,
+              xCol: ctx.xCol,
+            };
           return;
         }
         const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
@@ -441,8 +454,14 @@ export function usePerspectiveMapView(
           ctx.col,
           ctx.xCol,
         );
-        if (!ctx.isZoom) _uzCache.reticle = { rows: reticleRows.value!, view: ctx.view };
-        _logRowStats(reticleRows.value!, "reticle", ctx.binSize, ctx.isZoom, ctx.col);
+        if (!ctx.isZoom)
+          _uzCache.reticle = {
+            rows: reticleRows.value!,
+            view: ctx.view,
+            binSize: ctx.binSize,
+            col: ctx.col,
+            xCol: ctx.xCol,
+          };
       } catch (e) {
         console.error("[psp-map:reticle] on_update ERROR:", e);
       }
@@ -459,7 +478,6 @@ export function usePerspectiveMapView(
     }
 
     const seq = ++_rebuildSeq;
-    console.log(`[psp-map:rebuildAll] seq=${seq} START`);
 
     // Invalidate unzoomed cache when filter/legend state changes
     const cacheKey = JSON.stringify({
@@ -494,7 +512,6 @@ export function usePerspectiveMapView(
     }
 
     if (_rebuildSeq === seq) {
-      console.log(`[psp-map:rebuildAll] seq=${seq} DONE`);
       pending.value = false;
     }
   }

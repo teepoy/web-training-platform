@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
-import type { PerspectiveMapPoint } from "./SimpleMapPoint";
+import { nextTick, onUnmounted, onUpdated, ref, watch } from "vue";
+
+const STRIDE = 6;
 
 const props = defineProps<{
-  points: PerspectiveMapPoint[];
+  points: number[] | Float32Array;
   colorMap: Record<string, string>;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   centerX: number;
@@ -15,8 +16,10 @@ const props = defineProps<{
 const containerRef = ref<HTMLDivElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-let ptCanvas: HTMLCanvasElement | null = null;
-let ptCtx: CanvasRenderingContext2D | null = null;
+let ptBaseCanvas: HTMLCanvasElement | null = null;
+let ptBaseCtx: CanvasRenderingContext2D | null = null;
+let ptOverlayCanvas: HTMLCanvasElement | null = null;
+let ptOverlayCtx: CanvasRenderingContext2D | null = null;
 let resizeObserver: ResizeObserver | null = null;
 
 let canvasW = 600;
@@ -80,44 +83,64 @@ function dataToScreen(x: number, y: number): [number, number] {
   return [cx + (x + offsetX) * scale, cy - (y + offsetY) * scale];
 }
 
-function renderPoints() {
-  if (!ptCtx || !ptCanvas) return;
-  const ctx = ptCtx;
-  prepareCanvas(ptCanvas, ctx);
+function clearCanvas(canvas: HTMLCanvasElement | null, ctx: CanvasRenderingContext2D | null): void {
+  if (!canvas || !ctx) return;
+  prepareCanvas(canvas, ctx);
   ctx.clearRect(0, 0, canvasW, canvasH);
+}
+
+function renderBase() {
+  if (!ptBaseCtx || !ptBaseCanvas) return;
+  console.debug("[canvas] SimplePerspectiveMap.renderBase", {
+    pointCount: Math.floor(props.points.length / STRIDE),
+  });
+  clearCanvas(ptBaseCanvas, ptBaseCtx);
 
   const pts = props.points;
-  if (pts.length === 0) return;
+  const count = Math.floor(pts.length / STRIDE);
+  if (count === 0) return;
 
-  const groups = new Map<string, PerspectiveMapPoint[]>();
-  for (const p of pts) {
-    const arr = groups.get(p.label);
-    if (arr) arr.push(p);
-    else groups.set(p.label, [p]);
+  const ctx = ptBaseCtx;
+
+  // Pass 1 — coloured rects (2x2 fill)
+  for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+    ctx.fillStyle = props.colorMap[String(pts[i + 2])] ?? "rgb(255, 0, 0)";
+    const [sx, sy] = dataToScreen(pts[i], pts[i + 1]);
+    const [cxVal, cyVal] = screenPixel(sx, sy);
+    ctx.fillRect(cxVal - 1, cyVal, 2, 2);
   }
 
-  // ── Pass 1 ── defect coloured rects: 2x2 fill by class
-  const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
-    left.localeCompare(right, undefined, { numeric: true }),
-  );
-  for (const [label, group] of sortedGroups) {
-    ctx.fillStyle = props.colorMap[label] ?? "rgb(255, 0, 0)";
-    ctx.beginPath();
-    for (const p of group) {
-      const [sx, sy] = dataToScreen(p.x, p.y);
-      const [cxVal, cyVal] = screenPixel(sx, sy);
-      ctx.rect(cxVal - 1, cyVal, 2, 2);
-    }
-    ctx.fill();
+  // Pass 2 — has_images black stroke rect (6x6)
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 1;
+  for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+    if (pts[i + 4] === 0) continue;
+    const [sx, sy] = dataToScreen(pts[i], pts[i + 1]);
+    const [cxVal, cyVal] = screenPixel(sx, sy);
+    ctx.strokeRect(cxVal - 3, cyVal - 3, 6, 6);
   }
+}
 
-  // ── Pass 2 ── map_in_selection: 5x5 black crosshair
+function renderOverlays() {
+  if (!ptOverlayCtx || !ptOverlayCanvas) return;
+  console.debug("[canvas] SimplePerspectiveMap.renderOverlays", {
+    pointCount: Math.floor(props.points.length / STRIDE),
+  });
+  clearCanvas(ptOverlayCanvas, ptOverlayCtx);
+
+  const pts = props.points;
+  const count = Math.floor(pts.length / STRIDE);
+  if (count === 0) return;
+
+  const ctx = ptOverlayCtx;
+
+  // Pass 1 — map_in_selection black crosshair (5x5)
   ctx.strokeStyle = "#000000";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const p of pts) {
-    if (!p.mapInSelection) continue;
-    const [sx, sy] = dataToScreen(p.x, p.y);
+  for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+    if (pts[i + 3] === 0) continue;
+    const [sx, sy] = dataToScreen(pts[i], pts[i + 1]);
     const [cxVal, cyVal] = screenPixel(sx, sy);
     ctx.moveTo(cxVal - 3, cyVal);
     ctx.lineTo(cxVal + 3, cyVal);
@@ -126,23 +149,13 @@ function renderPoints() {
   }
   ctx.stroke();
 
-  // ── Pass 3 ── has_images: 6x6 black stroke rect
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 1;
-  for (const p of pts) {
-    if (!p.hasImages) continue;
-    const [sx, sy] = dataToScreen(p.x, p.y);
-    const [cxVal, cyVal] = screenPixel(sx, sy);
-    ctx.strokeRect(cxVal - 3, cyVal - 3, 6, 6);
-  }
-
-  // ── Pass 4 ── gallery_in_selection: 5x5 purple crosshair
+  // Pass 2 — gallery_in_selection purple crosshair (5x5)
   ctx.strokeStyle = "#A855F7";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const p of pts) {
-    if (!p.galleryInSelection) continue;
-    const [sx, sy] = dataToScreen(p.x, p.y);
+  for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+    if (pts[i + 5] === 0) continue;
+    const [sx, sy] = dataToScreen(pts[i], pts[i + 1]);
     const [cxVal, cyVal] = screenPixel(sx, sy);
     ctx.moveTo(cxVal - 3, cyVal);
     ctx.lineTo(cxVal + 3, cyVal);
@@ -159,13 +172,37 @@ function draw() {
   if (!ctx) return;
   prepareCanvas(canvas, ctx);
   ctx.clearRect(0, 0, canvasW, canvasH);
-  if (ptCanvas)
-    ctx.drawImage(ptCanvas, 0, 0, ptCanvas.width, ptCanvas.height, 0, 0, canvasW, canvasH);
+  if (ptBaseCanvas)
+    ctx.drawImage(
+      ptBaseCanvas,
+      0,
+      0,
+      ptBaseCanvas.width,
+      ptBaseCanvas.height,
+      0,
+      0,
+      canvasW,
+      canvasH,
+    );
+  if (ptOverlayCanvas)
+    ctx.drawImage(
+      ptOverlayCanvas,
+      0,
+      0,
+      ptOverlayCanvas.width,
+      ptOverlayCanvas.height,
+      0,
+      0,
+      canvasW,
+      canvasH,
+    );
 }
 
 function fullRender() {
+  console.debug("[canvas] SimplePerspectiveMap.fullRender");
   recalcTransform();
-  renderPoints();
+  renderBase();
+  renderOverlays();
   draw();
 }
 
@@ -173,14 +210,22 @@ function onResize() {
   fullRender();
 }
 
+function initOffscreenCanvases() {
+  if (!ptBaseCanvas) {
+    ptBaseCanvas = document.createElement("canvas");
+    ptBaseCtx = ptBaseCanvas.getContext("2d");
+  }
+  if (!ptOverlayCanvas) {
+    ptOverlayCanvas = document.createElement("canvas");
+    ptOverlayCtx = ptOverlayCanvas.getContext("2d");
+  }
+}
+
 watch(
   containerRef,
   (el) => {
     if (el) {
-      if (!ptCanvas) {
-        ptCanvas = document.createElement("canvas");
-        ptCtx = ptCanvas.getContext("2d");
-      }
+      initOffscreenCanvases();
       resizeObserver?.disconnect();
       resizeObserver = new ResizeObserver(onResize);
       resizeObserver.observe(el);
@@ -190,26 +235,47 @@ watch(
   { immediate: true },
 );
 
+// TODO: remove points from this watch once selection flags are split into a separate data channel.
+// Currently legend hidden / global filter changes produce a new points array, requiring base re-render.
 watch(
-  () => [props.points, props.colorMap, props.zoom],
+  () => [props.points, props.colorMap, props.zoom] as const,
   () => {
-    void nextTick(fullRender);
+    console.debug("[canvas] SimplePerspectiveMap watch points/colorMap/zoom → renderBase");
+    void nextTick(() => {
+      recalcTransform();
+      renderBase();
+      draw();
+    });
   },
-  { deep: true },
+  { immediate: true },
+);
+
+watch(
+  () => [props.points, props.zoom] as const,
+  () => {
+    console.debug("[canvas] SimplePerspectiveMap watch points/zoom → renderOverlays");
+    void nextTick(() => {
+      recalcTransform();
+      renderOverlays();
+      draw();
+    });
+  },
+  { immediate: true },
 );
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
-  ptCanvas = null;
-  ptCtx = null;
+  ptBaseCanvas = null;
+  ptBaseCtx = null;
+  ptOverlayCanvas = null;
+  ptOverlayCtx = null;
 });
+
+onUpdated(() => console.debug("[render] SimplePerspectiveMap"));
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    style="width: 100%; height: 100%; position: relative; background: #e8e8e8"
-  >
+  <div ref="containerRef" style="width: 100%; height: 100%; position: relative">
     <canvas ref="canvasRef" style="width: 100%; height: 100%; display: block" />
   </div>
 </template>

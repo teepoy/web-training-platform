@@ -32,6 +32,7 @@ export type ScPerspectiveWorkbenchOptions =
 export interface ScPerspectiveWorkbenchState {
   table: Ref<Table | null>;
   connected: Ref<boolean>;
+  dataReady: Ref<boolean>;
   error: Ref<string | null>;
   connect: (options: ScPerspectiveWorkbenchOptions) => Promise<void>;
   disconnect: () => void;
@@ -41,6 +42,8 @@ let initialized = false;
 const JOINED_SAMPLES_TABLE = "joined_samples";
 const TABLE_READY_TIMEOUT_MS = 60_000;
 const TABLE_READY_RETRY_MS = 500;
+const DATA_READY_POLL_MS = 500;
+const DATA_READY_DEADLINE_MS = 60_000;
 
 async function initPerspectiveClient(): Promise<void> {
   if (initialized) return;
@@ -107,12 +110,61 @@ async function openJoinedSamplesTable(client: Client, isCurrent: () => boolean):
 export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
   const table = ref<Table | null>(null);
   const connected = ref(false);
+  const dataReady = ref(false);
   const error = ref<string | null>(null);
   let client: Client | null = null;
   let connectionSeq = 0;
+  let _dataReadyPollTimer: ReturnType<typeof setTimeout> | undefined;
+  let _dataReadyDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function _clearDataReadyTimers(): void {
+    if (_dataReadyPollTimer !== undefined) {
+      clearTimeout(_dataReadyPollTimer);
+      _dataReadyPollTimer = undefined;
+    }
+    if (_dataReadyDeadlineTimer !== undefined) {
+      clearTimeout(_dataReadyDeadlineTimer);
+      _dataReadyDeadlineTimer = undefined;
+    }
+  }
+
+  async function _pollDataReady(seq: number): Promise<void> {
+    const tbl = table.value;
+    if (!tbl || seq !== connectionSeq) return;
+
+    let rowCount = 0;
+    try {
+      const v = await tbl.view({});
+      try {
+        rowCount = await v.num_rows();
+      } finally {
+        try {
+          v.delete();
+        } catch {
+          /* best effort */
+        }
+      }
+    } catch {
+      /* view / num_rows can fail transiently; retry on next poll */
+    }
+
+    if (seq !== connectionSeq || dataReady.value) return;
+
+    if (rowCount > 0) {
+      dataReady.value = true;
+      _clearDataReadyTimers();
+      return;
+    }
+
+    _dataReadyPollTimer = setTimeout(() => {
+      void _pollDataReady(seq);
+    }, DATA_READY_POLL_MS);
+  }
 
   function disconnect(): void {
     connectionSeq += 1;
+    _clearDataReadyTimers();
+    dataReady.value = false;
     if (table.value) {
       try {
         table.value.delete();
@@ -155,6 +207,15 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
       }
       table.value = openedTable;
       connected.value = true;
+      dataReady.value = false;
+      _clearDataReadyTimers();
+      _dataReadyDeadlineTimer = setTimeout(() => {
+        if (seq === connectionSeq && !dataReady.value) {
+          dataReady.value = true;
+          _clearDataReadyTimers();
+        }
+      }, DATA_READY_DEADLINE_MS);
+      void _pollDataReady(seq);
     } catch (err) {
       if (seq === connectionSeq) {
         error.value = err instanceof Error ? err.message : String(err);
@@ -165,5 +226,5 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
 
   onUnmounted(disconnect);
 
-  return { table, connected, error, connect, disconnect };
+  return { table, connected, dataReady, error, connect, disconnect };
 }

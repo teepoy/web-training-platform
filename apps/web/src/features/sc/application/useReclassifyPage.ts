@@ -599,17 +599,23 @@ export function useReclassifyPage(): ReclassifyPageState {
     return undefined;
   }
 
-  // ── Inspection context (derived from first sample, display-only) ───
-
   const inspectionContext = computed<{
     inspectionTime: string;
     waferKey: string;
   } | null>(() => {
-    const first = loadedRows.value[0];
-    if (!first) return null;
+    const meta = selectedDataset.value?.dataset_meta;
+    const sourceTime = meta?.source_inspection_time;
+    const sourceWafer = meta?.source_wafer_key;
+    if (
+      typeof sourceTime !== "string" ||
+      sourceTime.length === 0 ||
+      (typeof sourceWafer !== "number" && typeof sourceWafer !== "string")
+    ) {
+      return null;
+    }
     return {
-      inspectionTime: first.inspection_time,
-      waferKey: String(first.wafer_key),
+      inspectionTime: sourceTime,
+      waferKey: String(sourceWafer),
     };
   });
 

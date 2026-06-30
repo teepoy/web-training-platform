@@ -55,6 +55,7 @@ export function usePerspectiveViewRef(
     queueMicrotask(() => {
       notifyQueued = false;
       version.value += 1;
+      console.debug("[view] version bump", { version: version.value });
       onChange?.();
     });
   }
@@ -101,8 +102,10 @@ export function usePerspectiveViewRef(
       retireView(previousView);
       onPerspectiveUpdate(v, (_evt: unknown) => {
         if (view.value !== v) return;
+        console.log("[view] onPerspectiveUpdate → notifyChanged, delta:", (_evt as any).delta);
         notifyChanged();
       });
+      console.log("[view] rebuild done", { viewMs, rowsMs, nr, cfg });
       notifyChanged();
       latestTiming.value = {
         label: `cols=${cfg.columns?.length ?? "all"} filter=${cfg.filter?.length ?? 0} gb=${cfg.group_by?.length ?? 0}`,

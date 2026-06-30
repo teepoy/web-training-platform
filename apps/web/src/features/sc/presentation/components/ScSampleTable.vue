@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
+import { computed, h, onUpdated, ref, watch } from "vue";
 import {
   NButton,
   NDataTable,
@@ -10,7 +10,6 @@ import {
   type DataTableRowKey,
   type DataTableSortState,
 } from "naive-ui";
-import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type {
   ScSampleTableDataSource,
@@ -21,8 +20,6 @@ import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 
 const props = defineProps<{
-  /** @deprecated Use defectIds plus inspection identity. */
-  samples?: ScSampleItem[];
   dataSource?: ScSampleTableDataSource;
   defectIds?: string[];
   loading: boolean;
@@ -46,16 +43,6 @@ const emit = defineEmits<{
   (e: "filter-change", filter: ScSampleTableFilter): void;
   (e: "sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
 }>();
-
-function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
-  console.log(
-    "[sc-selection]",
-    new Date().toISOString(),
-    `${performance.now().toFixed(1)}ms`,
-    step,
-    detail,
-  );
-}
 
 interface ColumnDefinition {
   key: keyof ScSampleTableDisplayRow;
@@ -122,9 +109,7 @@ const activeColumnDefinitions = computed(() =>
     : columnDefinitions,
 );
 
-const resolvedDefectIds = computed(
-  () => props.defectIds ?? (props.samples ?? []).map((sample) => String(sample.defectId)),
-);
+const resolvedDefectIds = computed(() => props.defectIds ?? []);
 const queryEnabled = computed(() => Boolean(props.dataSource));
 const tableQueryKey = computed(() =>
   [
@@ -161,30 +146,6 @@ const clearFilterActionEnabled = computed(() =>
   props.showGlobalFilterAction ? globalFilterActionEnabled.value : hasAnyFilter.value,
 );
 const selectionEnabled = computed(() => props.enableSelection === true);
-
-let sampleTableRenderStart = 0;
-onBeforeUpdate(() => {
-  sampleTableRenderStart = performance.now();
-  selectionLog("sample table beforeUpdate", {
-    rows: rows.value.length,
-    checked: checkedRowKeys.value.length,
-    selectedProp: props.selectedDefectIds?.size ?? 0,
-    loading: props.loading,
-  });
-});
-onUpdated(() => {
-  const updatedAt = performance.now();
-  selectionLog("sample table updated", {
-    ms: Number((updatedAt - sampleTableRenderStart).toFixed(2)),
-    rows: rows.value.length,
-    checked: checkedRowKeys.value.length,
-  });
-  void nextTick(() => {
-    selectionLog("sample table nextTick", {
-      ms: Number((performance.now() - updatedAt).toFixed(2)),
-    });
-  });
-});
 
 function normalizeFilterValue(field: string, value: string | number): string | number {
   if (field !== "defect_id") return value;
@@ -653,6 +614,8 @@ defineExpose({
     };
   },
 });
+
+onUpdated(() => console.debug("[render] ScSampleTable"));
 </script>
 
 <template>

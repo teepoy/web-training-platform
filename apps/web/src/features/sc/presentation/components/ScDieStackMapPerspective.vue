@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onUpdated, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
-import type { PerspectiveMapPoint } from "./SimpleMapPoint";
 import type { HighlightDefect } from "./types";
 import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 import {
@@ -85,24 +84,6 @@ let transform: ScMapTransform = buildMapTransform(
 const centerX = computed(() => resolveDieSizeX() / 2);
 const centerY = computed(() => resolveDieSizeY() / 2);
 
-const perspectivePoints = computed<PerspectiveMapPoint[]>(() => {
-  const pts = props.points;
-  if (!pts || pts.length === 0) return [];
-  const count = Math.floor(pts.length / STRIDE);
-  const result: PerspectiveMapPoint[] = new Array(count);
-  for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
-    result[pi] = {
-      x: pts[i],
-      y: pts[i + 1],
-      label: String(pts[i + 2]),
-      mapInSelection: pts[i + 3] !== 0,
-      hasImages: pts[i + 4] !== 0,
-      galleryInSelection: pts[i + 5] !== 0,
-    };
-  }
-  return result;
-});
-
 function recalcTransform() {
   const size = measureMapElement(containerRef.value);
   if (!size) return;
@@ -179,14 +160,24 @@ function onPointerUp(e: PointerEvent) {
   if (mode.value === "zoomin") {
     emit("zoom-in", region);
   } else {
-    const inRegion = perspectivePoints.value.filter(
-      (p) =>
-        p.x >= region.x &&
-        p.x <= region.x + region.w &&
-        p.y >= region.y &&
-        p.y <= region.y + region.h,
-    );
-    immediateCrosshairPoints.value = inRegion.map((p) => ({ x: p.x, y: p.y }));
+    const pts = props.points;
+    const inRegion: { x: number; y: number }[] = [];
+    if (pts && pts.length > 0) {
+      const count = Math.floor(pts.length / STRIDE);
+      for (let i = 0, pi = 0; pi < count; i += STRIDE, pi++) {
+        const x = pts[i],
+          y = pts[i + 1];
+        if (
+          x >= region.x &&
+          x <= region.x + region.w &&
+          y >= region.y &&
+          y <= region.y + region.h
+        ) {
+          inRegion.push({ x, y });
+        }
+      }
+    }
+    immediateCrosshairPoints.value = inRegion;
     console.debug("[ScDieStackMapPerspective] immediateCrosshair", {
       count: inRegion.length,
       region,
@@ -215,18 +206,27 @@ function onDblClick() {
   else if (mode.value === "select") emit("selection-change", []);
 }
 
+onUpdated(() => console.debug("[render] ScDieStackMapPerspective"));
+
 function drawOverlay() {
+  console.debug("[map] ScDieStackMap drawOverlay");
   const cvs = overlayRef.value;
   if (!cvs || mapSize.width <= 0 || mapSize.height <= 0) return;
   const ctx = prepareOverlayCanvas(cvs, mapSize);
   if (!ctx) return;
 
   if (props.highlightDefects && props.highlightDefects.length > 0) {
-    ctx.fillStyle = HIGHLIGHT_POINT_COLOR;
+    ctx.strokeStyle = HIGHLIGHT_POINT_COLOR;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
     for (const hd of props.highlightDefects) {
-      const [sx, sy] = dataToScreen(transform, hd.dieX, hd.dieY);
-      ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+      const [cx, cy] = dataToScreen(transform, hd.dieX, hd.dieY);
+      ctx.moveTo(cx - 3, cy);
+      ctx.lineTo(cx + 3, cy);
+      ctx.moveTo(cx, cy - 3);
+      ctx.lineTo(cx, cy + 3);
     }
+    ctx.stroke();
   }
 
   const crosshairs = immediateCrosshairPoints.value;
@@ -295,6 +295,7 @@ watch(
 watch(
   () => props.points,
   () => {
+    console.debug("[map] ScDieStackMap watch(points) → redraw");
     recalcTransform();
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
@@ -311,13 +312,18 @@ watch(
     }
   },
 );
+
+watch(
+  () => props.highlightDefects,
+  () => drawOverlay(),
+);
 </script>
 
 <template>
   <div ref="containerRef" class="sc-die-map-perspective" @dblclick="onDblClick">
     <canvas ref="bgRef" class="sc-die-map-perspective__bg" />
     <SimplePerspectiveMap
-      :points="perspectivePoints"
+      :points="props.points ?? []"
       :color-map="colorMap ?? {}"
       :zoom="zoom"
       :center-x="centerX"

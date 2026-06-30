@@ -92,6 +92,34 @@ def test_list_inspections_returns_items_and_total(
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
+def test_get_inspection_returns_summary_item(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            list_resp = client.get(
+                "/api/v1/sc/inspections",
+                params={
+                    "start_time": SAFE_START,
+                    "end_time": SAFE_END,
+                },
+            )
+            assert list_resp.status_code == 200, list_resp.text
+            first = _parse_summary_resp(list_resp.content)["items"][0]
+
+            resp = client.get(
+                f"/api/v1/sc/inspections/{first['inspection_time']}/{first['wafer_key']}",
+            )
+            assert resp.status_code == 200, resp.text
+            item = _parse_summary_resp(resp.content)
+            assert item["wafer_key"] == first["wafer_key"]
+            assert item["defects"] == first["defects"]
+            assert item["images"] == first["images"]
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
 def test_list_inspections_empty_time_range(
     mock_wafer_db_reader,
 ):

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch } from "vue";
+import { computed, onUpdated, ref, watch } from "vue";
 import {
   NTabs,
   NTabPane,
@@ -60,46 +60,9 @@ const props = defineProps<{
 
   zoom?: { x: number; y: number; w: number; h: number } | null;
 
-  queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
-
   /** Highlight defects from gallery selection (purple dots on overlay canvas). */
   highlightDefects?: HighlightDefect[];
 }>();
-
-function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
-  console.log(
-    "[sc-selection]",
-    new Date().toISOString(),
-    `${performance.now().toFixed(1)}ms`,
-    step,
-    detail,
-  );
-}
-
-let mapPanelRenderStart = 0;
-onBeforeUpdate(() => {
-  mapPanelRenderStart = performance.now();
-  selectionLog("map panel beforeUpdate", {
-    tab: props.activeMapTab,
-    waferPoints: props.waferPoints?.length ?? 0,
-    diePoints: props.diePoints?.length ?? 0,
-    reticlePoints: props.reticlePoints?.length ?? 0,
-    highlights: props.highlightDefects?.length ?? 0,
-  });
-});
-onUpdated(() => {
-  const updatedAt = performance.now();
-  selectionLog("map panel updated", {
-    ms: Number((updatedAt - mapPanelRenderStart).toFixed(2)),
-    tab: props.activeMapTab,
-    highlights: props.highlightDefects?.length ?? 0,
-  });
-  void nextTick(() => {
-    selectionLog("map panel nextTick", {
-      ms: Number((performance.now() - updatedAt).toFixed(2)),
-    });
-  });
-});
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
@@ -118,7 +81,6 @@ const emit = defineEmits<{
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
   (e: "selection-change", ids: number[]): void;
-  (e: "update:legendGroupBy", groupBy: LegendSource | null): void;
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
@@ -195,7 +157,6 @@ function savePersistedState(key: string, value: boolean): void {
 }
 
 watch(legendSource, (newSource) => {
-  emit("update:legendGroupBy", newSource);
   emit("legend-group-change", newSource || null);
   selectedClassNumber.value = null;
 });
@@ -269,6 +230,7 @@ const defaultColorMap = computed<Record<string, string>>(() => {
 watch(
   defaultColorMap,
   (defaults) => {
+    console.debug("[panel] ScMapPanelBinned defaultColorMap watcher → colorMap rebuild");
     const previous = previousDefaultColorMap.value;
     const next: Record<string, string> = {};
     for (const [key, defaultColor] of Object.entries(defaults)) {
@@ -313,6 +275,8 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
   };
   emit("legend-hidden-change", { source, hiddenKeys: keys });
 }
+
+onUpdated(() => console.debug("[render] ScMapPanelBinned"));
 </script>
 
 <template>
@@ -403,7 +367,6 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :color-map="colorMap"
             :zoom="zoom"
             :mode="mapMode.wafer"
-            :query-box-selection="queryBoxSelection"
             :highlightDefects="highlightDefects"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
@@ -417,7 +380,6 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :color-map="colorMap"
             :zoom="zoom"
             :mode="mapMode.die"
-            :query-box-selection="queryBoxSelection"
             :highlightDefects="highlightDefects"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
@@ -433,7 +395,6 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :color-map="colorMap"
             :zoom="zoom"
             :mode="mapMode.reticle"
-            :query-box-selection="queryBoxSelection"
             :highlightDefects="highlightDefects"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"

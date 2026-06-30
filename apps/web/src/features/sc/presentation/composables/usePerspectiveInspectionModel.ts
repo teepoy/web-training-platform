@@ -54,27 +54,16 @@ const TABLE_COLUMNS = [
   "gallery_in_selection",
 ];
 
-const GALLERY_COLUMNS = [
+const PATCH_BLINK_COLUMNS = [
   "defect_id",
   "inspection_time",
   "wafer_key",
-  "wafer_x",
-  "wafer_y",
-  "die_x",
-  "die_y",
-  "reticle_x",
-  "reticle_y",
-  "rough_bin",
-  "class_number",
   "annotation_label",
   "prediction_label",
   "prediction_confidence",
-  "final_class",
-  "review_image_ids_json",
-  "map_in_selection",
 ];
+const REVIEW_BLINK_COLUMNS = ["defect_id", "inspection_time", "wafer_key", "review_image_ids_json"];
 
-const GALLERY_PAGE_SIZE = 1000;
 const EMPTY_MAP_DISPLAY = new Float32Array(0);
 const LARGE_SELECTION_THRESHOLD = 100;
 const HIGHLIGHT_COLUMNS = [
@@ -218,10 +207,6 @@ function selectionStateFor(ids: number[]): SelectionState {
   };
 }
 
-function viewFilters(filters: ViewConfigUpdate["filter"]): Filter[] {
-  return Array.isArray(filters) ? ([...filters] as Filter[]) : [];
-}
-
 async function idsForFilter(table: Table, filters: Filter[]): Promise<number[]> {
   const v = await table.view({
     columns: ["defect_id"],
@@ -352,36 +337,6 @@ function rowsFromColumns(
   }));
 }
 
-function rowsFromJson(
-  rows: Array<Record<string, unknown>>,
-  options: { includeReviewImages: boolean },
-): PerspectiveScSampleItem[] {
-  return rows.map((row) => ({
-    ...create(ScSampleItemSchema, {
-      defectId: numeric(row.defect_id),
-      inspectionTime: inspectionTimeToEpochMs(row.inspection_time),
-      waferX: numeric(row.wafer_x),
-      waferY: numeric(row.wafer_y),
-      roughBin: numeric(row.rough_bin),
-      classNumber: numeric(row.class_number),
-      waferKey: numeric(row.wafer_key),
-      reviewImages: options.includeReviewImages
-        ? parseReviewImages(row.review_image_ids_json).map((imageId) =>
-            create(ReviewImageSchema, { imageId }),
-          )
-        : [],
-    }),
-    dieX: numeric(row.die_x),
-    dieY: numeric(row.die_y),
-    reticleX: numeric(row.reticle_x),
-    reticleY: numeric(row.reticle_y),
-    annotationLabel: stringOrNull(row.annotation_label),
-    predictionLabel: stringOrNull(row.prediction_label),
-    predictionConfidence:
-      row.prediction_confidence == null ? null : numeric(row.prediction_confidence),
-  }));
-}
-
 async function jsonRowsForIds(
   table: Table,
   ids: number[],
@@ -412,21 +367,17 @@ async function jsonRowsForIds(
   }
 }
 
-async function rowCountForIds(table: Table, ids: number[], filters: Filter[]): Promise<number> {
-  if (ids.length === 0) return 0;
-  const v = await table.view({
-    columns: ["defect_id"],
-    filter: [...filters, ["defect_id", "in", ids] as Filter],
-  } as never);
-  try {
-    return await v.num_rows();
-  } finally {
-    try {
-      await v.delete();
-    } catch {
-      /* best effort */
-    }
-  }
+async function highlightsForIds(table: Table, ids: number[]): Promise<HighlightDefect[]> {
+  const defectIds = sortedUniqueIds(ids);
+  if (defectIds.length === 0) return [];
+  const rows = await jsonRowsForIds(
+    table,
+    defectIds,
+    HIGHLIGHT_COLUMNS,
+    [],
+    [["defect_id", "asc"]],
+  );
+  return highlightsFromRows(rows);
 }
 
 function highlightsFromRows(rows: Array<Record<string, unknown>>): HighlightDefect[] {
@@ -473,16 +424,6 @@ function rowsToRecord(rows: PerspectiveScSampleItem[]): SampleRowRecord {
   return byId;
 }
 
-function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
-  console.log(
-    "[sc-selection]",
-    new Date().toISOString(),
-    `${performance.now().toFixed(1)}ms`,
-    step,
-    detail,
-  );
-}
-
 function coordForMode(row: HighlightDefect, mode: MapMode): { x: number; y: number } {
   switch (mode) {
     case "wafer":
@@ -524,6 +465,8 @@ function overlayGallerySelectionOnBins(
 
 export function usePerspectiveInspectionModel(args: {
   table: Ref<Table | null>;
+  inspectionTime?: Ref<string | undefined> | ComputedRef<string | undefined>;
+  waferKey?: Ref<number | undefined> | ComputedRef<number | undefined>;
   legendGroupBy:
     | Ref<ScLegendSource | null | undefined>
     | ComputedRef<ScLegendSource | null | undefined>;
@@ -544,34 +487,17 @@ export function usePerspectiveInspectionModel(args: {
   const tableSelection = ref<SelectionState>(emptySelection());
   const gallerySelection = ref<SelectionState>(emptySelection());
   const tableSelectedDefectIds = ref<number[]>([]);
-  const gallerySelectedDefectIds = ref<number[]>([]);
   const reviewMode = ref(false);
-  const galleryRowRecord = ref<SampleRowRecord>({});
   const smallGalleryHighlights = ref<HighlightDefect[]>([]);
   const selectionUpdatePorts = ref<SelectionUpdatePorts>({
     map: null,
     table: null,
     gallery: null,
   });
-  const galleryLimit = ref(GALLERY_PAGE_SIZE);
-  const galleryWindowStart = ref(0);
-  const galleryLoadedOffset = ref(0);
-  const galleryFetching = ref(false);
-  let pendingGalleryRange: { start: number; end: number } | null = null;
   const tableRowRecord = ref<SampleRowRecord>({});
   const tableRows = computed(() => Object.values(tableRowRecord.value));
-  const galleryRows = computed(() => {
-    const t0 = performance.now();
-    const rows = Object.values(galleryRowRecord.value);
-    selectionLog("gallery records -> list", {
-      rows: rows.length,
-      ms: Number((performance.now() - t0).toFixed(2)),
-    });
-    return rows;
-  });
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const total = ref(0);
-  const galleryTotal = ref(0);
 
   const tableHeaderFilters = computed(() => sampleFilterToPerspective(args.tableFilter.value));
   const globalFilters = computed(() => sampleFilterToPerspective(args.globalFilter?.value));
@@ -660,39 +586,52 @@ export function usePerspectiveInspectionModel(args: {
       }) as ViewConfigUpdate,
   );
 
-  const galleryBaseConfig = computed(
+  const blinkBaseFilters = computed<Filter[]>(() => [
+    ...globalFilters.value,
+    ...samplesFilter.value,
+    ...reviewModeFilters.value,
+  ]);
+  const blinkSort = [["defect_id", "asc"]] as [string, string][];
+
+  const blinkSelectionFilters = computed<Filter[]>(() => {
+    if (tableSelection.value.mode === "small") {
+      return [["defect_id", "in", tableSelection.value.ids] as Filter];
+    }
+    if (tableSelection.value.mode === "large") {
+      return [["table_in_selection", "==", 1] as Filter];
+    }
+    if (mapSelection.value.mode === "small") {
+      return [["defect_id", "in", mapSelection.value.ids] as Filter];
+    }
+    if (mapSelection.value.mode === "large") {
+      return [["map_in_selection", "==", 1] as Filter];
+    }
+    return [];
+  });
+
+  const patchBlinkConfig = computed(
     () =>
       ({
-        columns: GALLERY_COLUMNS,
-        filter:
-          [...globalFilters.value, ...samplesFilter.value, ...reviewModeFilters.value].length > 0
-            ? [...globalFilters.value, ...samplesFilter.value, ...reviewModeFilters.value]
-            : undefined,
-        sort: [["defect_id", "asc"]] as [string, string][],
+        columns: PATCH_BLINK_COLUMNS,
+        filter: [...blinkBaseFilters.value, ...blinkSelectionFilters.value].length
+          ? [...blinkBaseFilters.value, ...blinkSelectionFilters.value]
+          : undefined,
+        sort: blinkSort,
       }) as ViewConfigUpdate,
   );
 
-  const galleryMapConfig = computed(
-    () =>
-      ({
-        columns: GALLERY_COLUMNS,
-        filter: [
-          ...(galleryBaseConfig.value.filter ?? []),
-          ["map_in_selection", "==", 1] as Filter,
-        ],
-        sort: [["defect_id", "asc"]] as [string, string][],
-      }) as ViewConfigUpdate,
-  );
+  const reviewBlinkBaseFilter = computed<Filter[]>(() => [
+    ...globalFilters.value,
+    ...samplesFilter.value,
+    REVIEW_MODE_FILTER,
+  ]);
 
-  const galleryTableConfig = computed(
+  const reviewBlinkConfig = computed(
     () =>
       ({
-        columns: GALLERY_COLUMNS,
-        filter: [
-          ...(galleryBaseConfig.value.filter ?? []),
-          ["table_in_selection", "==", 1] as Filter,
-        ],
-        sort: [["defect_id", "asc"]] as [string, string][],
+        columns: REVIEW_BLINK_COLUMNS,
+        filter: [...reviewBlinkBaseFilter.value, ...blinkSelectionFilters.value],
+        sort: blinkSort,
       }) as ViewConfigUpdate,
   );
 
@@ -731,22 +670,17 @@ export function usePerspectiveInspectionModel(args: {
     smallGalleryHighlights.value = next;
   }
 
-  function updateSmallGalleryHighlightsFromLoadedRows(): void {
+  async function refreshSmallGalleryHighlights(): Promise<void> {
     if (gallerySelection.value.mode !== "small") {
       setSmallGalleryHighlights([]);
-      selectionLog("gallery highlight cleared", {
-        gallerySelectionMode: gallerySelection.value.mode,
-      });
       return;
     }
-    const rows = loadedRowsForIds(galleryRowRecord.value, gallerySelection.value.ids);
-    const highlights = highlightsFromSamples(rows);
-    setSmallGalleryHighlights(highlights);
-    selectionLog("gallery select -> map highlight", {
-      selectedIds: gallerySelection.value.ids.length,
-      loadedRows: rows.length,
-      highlights: highlights.length,
-    });
+    const table = args.table.value;
+    if (!table) {
+      setSmallGalleryHighlights([]);
+      return;
+    }
+    setSmallGalleryHighlights(await highlightsForIds(table, gallerySelection.value.ids));
   }
 
   async function refreshTableData() {
@@ -769,134 +703,33 @@ export function usePerspectiveInspectionModel(args: {
       end_row: Math.min(rowCount, 500),
     })) as Record<string, unknown[]>;
     tableRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
-    if (tableSelection.value.mode === "small") refreshGalleryData();
   }
 
-  async function refreshGalleryData() {
-    const table = args.table.value;
-    if (tableSelection.value.mode === "small") {
-      const rows = loadedRowsForIds(tableRowRecord.value, tableSelection.value.ids);
-      galleryTotal.value = rows.length;
-      selectionLog("table select -> gallery records before set", {
-        selectedIds: tableSelection.value.ids.length,
-        loadedRows: rows.length,
-        limit: galleryLimit.value,
-      });
-      galleryRowRecord.value = rowsToRecord(rows.slice(0, galleryLimit.value));
-      galleryLoadedOffset.value = 0;
-      selectionLog("table select -> gallery records", {
-        selectedIds: tableSelection.value.ids.length,
-        loadedRows: rows.length,
-        galleryRows: Object.keys(galleryRowRecord.value).length,
-      });
-      updateSmallGalleryHighlightsFromLoadedRows();
-      return;
-    }
-
-    if (table && mapSelection.value.mode === "small") {
-      galleryFetching.value = true;
-      try {
-        const filters = viewFilters(galleryBaseConfig.value.filter);
-        const rowCount = await rowCountForIds(table, mapSelection.value.ids, filters);
-        galleryTotal.value = rowCount;
-        if (rowCount === 0) {
-          galleryRowRecord.value = {};
-          updateSmallGalleryHighlightsFromLoadedRows();
-          return;
-        }
-        const startRow = Math.min(galleryWindowStart.value, Math.max(rowCount - 1, 0));
-        const rows = rowsFromJson(
-          await jsonRowsForIds(
-            table,
-            mapSelection.value.ids,
-            GALLERY_COLUMNS,
-            filters,
-            galleryBaseConfig.value.sort,
-            startRow + galleryLimit.value,
-          ),
-          { includeReviewImages: true },
-        ).slice(startRow, startRow + galleryLimit.value);
-        galleryRowRecord.value = rowsToRecord(rows);
-        galleryLoadedOffset.value = startRow;
-        updateSmallGalleryHighlightsFromLoadedRows();
-        return;
-      } finally {
-        galleryFetching.value = false;
-        if (pendingGalleryRange) {
-          const pending = pendingGalleryRange;
-          pendingGalleryRange = null;
-          loadGalleryRange(pending);
-        }
-      }
-    }
-
-    const tableV = tableSelection.value.mode === "large" ? galleryTableView.view.value : null;
-    const mapV = mapSelection.value.mode === "large" ? galleryMapView.view.value : null;
-    const globalV = galleryGlobalView.view.value;
-    if (!globalV && !mapV && !tableV) {
-      galleryRowRecord.value = {};
-      galleryTotal.value = 0;
-      updateSmallGalleryHighlightsFromLoadedRows();
-      return;
-    }
-    galleryFetching.value = true;
-    try {
-      const tableCount = tableV ? await tableV.num_rows() : 0;
-      const mapCount = tableCount === 0 && mapV ? await mapV.num_rows() : 0;
-      const activeView = tableCount > 0 && tableV ? tableV : mapCount > 0 && mapV ? mapV : globalV;
-      if (!activeView) {
-        galleryRowRecord.value = {};
-        galleryTotal.value = 0;
-        updateSmallGalleryHighlightsFromLoadedRows();
-        return;
-      }
-      const rowCount = await activeView.num_rows();
-      galleryTotal.value = rowCount;
-      if (rowCount === 0) {
-        galleryRowRecord.value = {};
-        updateSmallGalleryHighlightsFromLoadedRows();
-        return;
-      }
-      const startRow = Math.min(galleryWindowStart.value, Math.max(rowCount - 1, 0));
-      const data = (await activeView.to_columns({
-        start_row: startRow,
-        end_row: Math.min(rowCount, startRow + galleryLimit.value),
-      })) as Record<string, unknown[]>;
-      galleryRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
-      galleryLoadedOffset.value = startRow;
-      updateSmallGalleryHighlightsFromLoadedRows();
-    } finally {
-      galleryFetching.value = false;
-      if (pendingGalleryRange) {
-        const pending = pendingGalleryRange;
-        pendingGalleryRange = null;
-        loadGalleryRange(pending);
-      }
-    }
-  }
-
-  // 5 persistent views — each lives for the lifetime of the table and
-  // uses cascade logic: map (if selection active) or global/base.
+  // Persistent views live for the lifetime of the table and use selection flags
+  // for large table/map selections.
   const tableGlobalView = usePerspectiveViewRef(args.table, tableBaseConfig, {
     onChange: refreshTableData,
   });
   const tableMapView = usePerspectiveViewRef(args.table, tableMapConfig, {
     onChange: refreshTableData,
   });
-  const galleryGlobalView = usePerspectiveViewRef(args.table, galleryBaseConfig, {
-    onChange: refreshGalleryData,
-  });
-  const galleryMapView = usePerspectiveViewRef(args.table, galleryMapConfig, {
-    onChange: refreshGalleryData,
-  });
-  const galleryTableView = usePerspectiveViewRef(args.table, galleryTableConfig, {
-    onChange: refreshGalleryData,
-  });
+  const patchBlinkView = usePerspectiveViewRef(args.table, patchBlinkConfig);
+  const reviewBlinkView = usePerspectiveViewRef(args.table, reviewBlinkConfig);
   const histView = usePerspectiveViewRef(args.table, histConfig);
   const sampleTableActiveView = computed<View | null>(() =>
     mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
       ? tableMapView.view.value
       : null,
+  );
+  const sampleTableActiveViewConfig = computed<ViewConfigUpdate>(() =>
+    mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
+      ? tableMapConfig.value
+      : tableBaseConfig.value,
+  );
+  const sampleTableActiveViewConfigVersion = computed(() =>
+    mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
+      ? tableMapView.version.value
+      : tableGlobalView.version.value,
   );
 
   const map = usePerspectiveMapView(
@@ -910,10 +743,6 @@ export function usePerspectiveInspectionModel(args: {
     args.activeMapMode,
     mapIgnoredUpdatePorts,
   );
-
-  async function refreshSmallGalleryHighlights(): Promise<void> {
-    updateSmallGalleryHighlightsFromLoadedRows();
-  }
 
   async function syncLargeSelectionFlags(table: Table): Promise<void> {
     const ports = await ensureSelectionUpdatePorts(table);
@@ -929,51 +758,30 @@ export function usePerspectiveInspectionModel(args: {
   }
 
   const waferDisplay = computed(() => {
-    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.waferRows.value,
       smallGalleryHighlights.value,
       "wafer",
     );
     const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
-    selectionLog("wafer display computed", {
-      bins: rows?.length ?? 0,
-      points: display.length,
-      highlights: smallGalleryHighlights.value.length,
-      ms: Number((performance.now() - t0).toFixed(2)),
-    });
     return display;
   });
   const dieDisplay = computed(() => {
-    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.dieRows.value,
       smallGalleryHighlights.value,
       "die",
     );
     const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
-    selectionLog("die display computed", {
-      bins: rows?.length ?? 0,
-      points: display.length,
-      highlights: smallGalleryHighlights.value.length,
-      ms: Number((performance.now() - t0).toFixed(2)),
-    });
     return display;
   });
   const reticleDisplay = computed(() => {
-    const t0 = performance.now();
     const rows = overlayGallerySelectionOnBins(
       map.reticleRows.value,
       smallGalleryHighlights.value,
       "reticle",
     );
     const display = rows?.length ? binsToDisplayArray(rows, legendCol.value) : EMPTY_MAP_DISPLAY;
-    selectionLog("reticle display computed", {
-      bins: rows?.length ?? 0,
-      points: display.length,
-      highlights: smallGalleryHighlights.value.length,
-      ms: Number((performance.now() - t0).toFixed(2)),
-    });
     return display;
   });
   const activeMapRowsReady = computed(() => {
@@ -1031,7 +839,6 @@ export function usePerspectiveInspectionModel(args: {
         await syncLargeSelectionFlags(tbl);
         await refreshSmallGalleryHighlights();
         refreshTableData();
-        refreshGalleryData();
       } else {
         setSmallGalleryHighlights([]);
         selectionPortTable = null;
@@ -1040,24 +847,12 @@ export function usePerspectiveInspectionModel(args: {
     },
   );
 
-  // Reset galleryLimit when filters change
   watch(
     [() => globalFilters.value, () => reviewMode.value],
     () => {
-      galleryWindowStart.value = 0;
-      galleryLoadedOffset.value = 0;
-      galleryLimit.value = GALLERY_PAGE_SIZE;
       void refreshSmallGalleryHighlights();
     },
     { deep: true },
-  );
-
-  // Load more: refresh when galleryLimit increases
-  watch(
-    () => galleryLimit.value,
-    (next, prev) => {
-      if (next > prev) refreshGalleryData();
-    },
   );
 
   async function queryBoxSelection(
@@ -1101,12 +896,13 @@ export function usePerspectiveInspectionModel(args: {
     if (needsTableUpdate) {
       await replaceMapSelection(table, previous.ids, next.ids, ports?.map);
     }
-    if (next.mode === "none") {
-      refreshTableData();
-      refreshGalleryData();
-    } else if (next.mode === "small") {
-      refreshGalleryData();
-    }
+    if (next.mode === "none") refreshTableData();
+  }
+
+  async function appendMapSelection(ids: number[]): Promise<number[]> {
+    const nextIds = sortedUniqueIds([...mapSelection.value.ids, ...ids]);
+    await applyMapSelection(nextIds);
+    return nextIds;
   }
 
   async function clearMapSelection(): Promise<void> {
@@ -1118,7 +914,6 @@ export function usePerspectiveInspectionModel(args: {
   }
 
   async function setTableSelectedDefectIds(ids: number[]): Promise<void> {
-    selectionLog("table select input", { ids: ids.length });
     const table = args.table.value;
     const nextIds = sortedUniqueIds(ids);
     if (!table) {
@@ -1134,19 +929,15 @@ export function usePerspectiveInspectionModel(args: {
     }
     tableSelection.value = next;
     tableSelectedDefectIds.value = next.ids;
-    selectionLog("table selection state", { mode: next.mode, ids: next.ids.length });
     if (next.mode === "large") {
       await updateTableSelection(table, next.ids, 1, ports?.table);
     }
-    refreshGalleryData();
   }
 
   async function setGallerySelectedDefectIds(ids: Array<number | string>): Promise<void> {
-    selectionLog("gallery select input", { ids: ids.length });
     const numericIds = sortedUniqueIds(ids);
     const table = args.table.value;
     if (!table) {
-      gallerySelectedDefectIds.value = numericIds;
       gallerySelection.value = selectionStateFor(numericIds);
       setSmallGalleryHighlights([]);
       return;
@@ -1158,8 +949,6 @@ export function usePerspectiveInspectionModel(args: {
       await updateGallerySelection(table, gallerySelection.value.ids, 0, ports?.gallery);
     }
     gallerySelection.value = next;
-    gallerySelectedDefectIds.value = next.ids;
-    selectionLog("gallery selection state", { mode: next.mode, ids: next.ids.length });
     if (next.mode === "large") {
       setSmallGalleryHighlights([]);
       await updateGallerySelection(table, next.ids, 1, ports?.gallery);
@@ -1176,9 +965,7 @@ export function usePerspectiveInspectionModel(args: {
     const table = args.table.value;
     if (!table) return [];
     if (gallerySelection.value.mode === "small") {
-      return highlightsFromSamples(
-        loadedRowsForIds(galleryRowRecord.value, gallerySelection.value.ids),
-      );
+      return highlightsForIds(table, gallerySelection.value.ids);
     }
     const v = await table.view({
       columns: HIGHLIGHT_COLUMNS,
@@ -1198,55 +985,9 @@ export function usePerspectiveInspectionModel(args: {
     }
   }
 
-  const predictionLabels = computed<Record<string, string>>(() => {
-    const out: Record<string, string> = {};
-    for (const sample of galleryRows.value) {
-      if (sample.predictionLabel) out[String(sample.defectId)] = sample.predictionLabel;
-    }
-    return out;
-  });
-  const predictionConfidences = computed<Record<string, number | null>>(() => {
-    const out: Record<string, number | null> = {};
-    for (const sample of galleryRows.value)
-      out[String(sample.defectId)] = sample.predictionConfidence;
-    return out;
-  });
-  const annotationLabels = computed<Record<string, string>>(() => {
-    const out: Record<string, string> = {};
-    for (const sample of galleryRows.value) {
-      if (sample.annotationLabel) out[String(sample.defectId)] = sample.annotationLabel;
-    }
-    return out;
-  });
-
-  const galleryHasMore = computed(() => galleryRows.value.length < galleryTotal.value);
-
-  function loadMoreGalleryRows(): void {
-    if (!galleryHasMore.value || galleryFetching.value) return;
-    galleryWindowStart.value = Math.min(
-      galleryWindowStart.value + GALLERY_PAGE_SIZE,
-      Math.max(galleryTotal.value - GALLERY_PAGE_SIZE, 0),
-    );
-    galleryLimit.value = GALLERY_PAGE_SIZE;
-    refreshGalleryData();
-  }
-
-  function loadGalleryRange(range: { start: number; end: number }): void {
-    if (galleryFetching.value) {
-      pendingGalleryRange = range;
-      return;
-    }
-    const pageStart = Math.max(0, Math.floor(range.start / GALLERY_PAGE_SIZE) * GALLERY_PAGE_SIZE);
-    if (
-      range.start >= galleryLoadedOffset.value &&
-      range.end <= galleryLoadedOffset.value + galleryLimit.value
-    ) {
-      return;
-    }
-    galleryWindowStart.value = pageStart;
-    galleryLimit.value = GALLERY_PAGE_SIZE;
-    refreshGalleryData();
-  }
+  const blinkFetching = computed(
+    () => patchBlinkView.pending.value || reviewBlinkView.pending.value,
+  );
 
   async function loadGlobalDistinctValues(
     field: string,
@@ -1286,8 +1027,10 @@ export function usePerspectiveInspectionModel(args: {
     }
   }
 
-  function highlightDefectsForIds(ids: number[]): HighlightDefect[] {
-    return highlightsFromSamples(loadedRowsForIds(galleryRowRecord.value, sortedUniqueIds(ids)));
+  async function highlightDefectsForIds(ids: number[]): Promise<HighlightDefect[]> {
+    const table = args.table.value;
+    if (!table) return [];
+    return highlightsForIds(table, ids);
   }
 
   return {
@@ -1296,26 +1039,22 @@ export function usePerspectiveInspectionModel(args: {
     reticleDisplay,
     legendGroups,
     samples: tableRows,
-    galleryRows,
-    galleryTotal,
-    galleryLoadedOffset,
-    galleryHasMore,
-    galleryFetching,
+    patchBlinkView: patchBlinkView.view,
+    patchBlinkViewVersion: patchBlinkView.version,
+    reviewBlinkView: reviewBlinkView.view,
+    reviewBlinkViewVersion: reviewBlinkView.version,
+    blinkFetching,
     tableBaseFilters,
     sampleTableActiveView,
     sampleTableActiveViewVersion: tableMapView.version,
+    sampleTableActiveViewConfig,
+    sampleTableActiveViewConfigVersion,
     total,
     mapLoading: map.pending,
     activeMapLoading,
     mapError: map.error,
     tableLoading: tableGlobalView.pending,
-    galleryLoading: galleryGlobalView.pending,
     tableSelectedDefectIds,
-    predictionLabels,
-    predictionConfidences,
-    annotationLabels,
-    loadMoreGalleryRows,
-    loadGalleryRange,
     loadGlobalDistinctValues,
     setTableSelectedDefectIds,
     setGallerySelectedDefectIds,
@@ -1323,6 +1062,7 @@ export function usePerspectiveInspectionModel(args: {
     queryBoxSelection,
     queryLegendSelection,
     applyMapSelection,
+    appendMapSelection,
     clearMapSelection,
     setHiddenLegendKeys,
     highlightDefectsFor,

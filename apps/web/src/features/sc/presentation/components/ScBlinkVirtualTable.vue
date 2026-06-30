@@ -1,15 +1,7 @@
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onBeforeUnmount,
-  nextTick,
-  onBeforeUpdate,
-  onUpdated,
-} from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import type { CSSProperties } from "vue";
+import type { View } from "@perspective-dev/client";
 import {
   NSwitch,
   NText,
@@ -22,9 +14,8 @@ import {
   NModal,
   NImage,
 } from "naive-ui";
-import type { ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { withAuthQueryParams } from "@/shared/api/client";
-import { useBlinkController } from "../../composables/useBlinkController";
+import { useBlinkController } from "@/shared/composables/useBlinkController";
 import {
   useBlinkVirtualScroll,
   ROW_PADDING_Y,
@@ -33,11 +24,23 @@ import {
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scReviewUrl } from "@/features/sc/domain/models";
 
+interface BlinkSample {
+  defectId: number;
+  inspectionTime: string;
+  waferKey: number;
+  reviewImages: number[];
+  annotationLabel: string | null;
+  predictionLabel: string | null;
+  predictionConfidence: number | null;
+}
+
 const props = withDefaults(
   defineProps<{
-    samples: ScSampleItem[];
-    reviewSamples?: ScSampleItem[];
-    reviewLoading?: boolean;
+    patchView?: View | null;
+    patchViewVersion?: number;
+    reviewView?: View | null;
+    reviewViewVersion?: number;
+    loading?: boolean;
     reviewError?: string | null;
     patchSamplesPerRow?: number;
     reviewSamplesPerRow?: number;
@@ -46,18 +49,14 @@ const props = withDefaults(
     cellGap?: number;
     rowGap?: number;
     selectedDefectIds?: Set<string> | string[];
-    predictionLabels?: Record<string, string>;
-    predictionConfidences?: Record<string, number | null>;
-    annotationLabels?: Record<string, string>;
     annotationDrafts?: Record<string, string>;
     showPredictionBadges?: boolean;
     overscan?: number;
     blinkIntervalMs?: number;
     initialBlinkEnabled?: boolean;
     showModeSwitch?: boolean;
-    inspectionTime?: string;
-    total?: number;
-    loadedOffset?: number;
+    inspectionTime: string;
+    waferKey: number;
   }>(),
   {
     patchSamplesPerRow: 4,
@@ -67,9 +66,6 @@ const props = withDefaults(
     cellGap: 4,
     rowGap: 12,
     selectedDefectIds: () => new Set<string>(),
-    predictionLabels: () => ({}),
-    predictionConfidences: () => ({}),
-    annotationLabels: () => ({}),
     annotationDrafts: () => ({}),
     showPredictionBadges: false,
     overscan: 10,
@@ -89,25 +85,16 @@ const emit = defineEmits<{
       selectionMode?: "replace" | "add" | "toggle";
     },
   ];
-  scrollContainerChange: [element: HTMLElement | null];
   modeChange: [mode: "patch" | "review"];
-  nearBottom: [];
-  visibleRangeChange: [range: { start: number; end: number }];
 }>();
 
+const patchSamples = ref<BlinkSample[]>([]);
+const reviewSamples = ref<BlinkSample[]>([]);
+const patchLoading = ref(false);
+const reviewLoading = ref(false);
+
+const showDefectIdLabel = ref(true);
 const mode = ref<"patch" | "review">("patch");
-
-function selectionLog(step: string, detail: Record<string, unknown> = {}): void {
-  console.log(
-    "[sc-selection]",
-    new Date().toISOString(),
-    `${performance.now().toFixed(1)}ms`,
-    step,
-    detail,
-  );
-}
-
-let sharedRenderStart = 0;
 
 watch(mode, (value) => emit("modeChange", value), { immediate: true });
 const settingsOpen = ref(false);
@@ -185,7 +172,129 @@ function adjustSamplesPerRow(delta: number): void {
   samplesPerRow.value += delta;
 }
 
+const currentLoading = computed(
+  () => props.loading || (mode.value === "review" ? reviewLoading.value : patchLoading.value),
+);
 const reviewDisabled = computed(() => !!props.reviewError);
+
+function numeric(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  return String(value);
+}
+
+function inspectionTimeString(value: unknown): string {
+  if (typeof value === "bigint") return String(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
+  if (value == null || value === "") return props.inspectionTime ?? "";
+  return String(value);
+}
+
+function parseReviewImages(value: unknown): number[] {
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  if (typeof value !== "string" || value.length === 0) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(Number).filter(Number.isFinite);
+  } catch {
+    return [];
+  }
+}
+
+function patchSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
+  const ids = data.defect_id ?? [];
+  return ids.map((id, i) => ({
+    defectId: numeric(id),
+    inspectionTime: props.inspectionTime,
+    waferKey: numeric(props.waferKey),
+    reviewImages: [],
+    annotationLabel: stringOrNull(data.annotation_label?.[i]),
+    predictionLabel: stringOrNull(data.prediction_label?.[i]),
+    predictionConfidence:
+      data.prediction_confidence?.[i] == null ? null : numeric(data.prediction_confidence[i]),
+  }));
+}
+
+function reviewSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
+  const ids = data.defect_id ?? [];
+  return ids.map((id, i) => ({
+    defectId: numeric(id),
+    inspectionTime: props.inspectionTime,
+    waferKey: numeric(props.waferKey),
+    reviewImages: parseReviewImages(data.review_image_ids_json?.[i]),
+    annotationLabel: null,
+    predictionLabel: null,
+    predictionConfidence: null,
+  }));
+}
+
+async function readPatchView(view: View | null | undefined): Promise<void> {
+  if (!view) {
+    patchSamples.value = [];
+    return;
+  }
+  patchLoading.value = true;
+  try {
+    const rowCount = await view.num_rows();
+    if (props.patchView !== view) return;
+    if (rowCount === 0) {
+      patchSamples.value = [];
+      return;
+    }
+    const data = (await view.to_columns()) as Record<string, unknown[]>;
+    if (props.patchView !== view) return;
+    patchSamples.value = patchSamplesFromColumns(data);
+  } finally {
+    if (props.patchView === view) patchLoading.value = false;
+  }
+}
+
+async function readReviewView(view: View | null | undefined): Promise<void> {
+  if (!view) {
+    reviewSamples.value = [];
+    return;
+  }
+  reviewLoading.value = true;
+  try {
+    const rowCount = await view.num_rows();
+    if (props.reviewView !== view) return;
+    if (rowCount === 0) {
+      reviewSamples.value = [];
+      return;
+    }
+    const data = (await view.to_columns()) as Record<string, unknown[]>;
+    if (props.reviewView !== view) return;
+    reviewSamples.value = reviewSamplesFromColumns(data);
+  } finally {
+    if (props.reviewView === view) reviewLoading.value = false;
+  }
+}
+
+watch(
+  [
+    () => props.patchView,
+    () => props.patchViewVersion,
+    () => props.inspectionTime,
+    () => props.waferKey,
+  ],
+  ([view]) => {
+    void readPatchView(view);
+  },
+  { immediate: true },
+);
+
+watch(
+  [() => props.reviewView, () => props.reviewViewVersion],
+  ([view]) => {
+    void readReviewView(view);
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.patchSamplesPerRow,
@@ -216,16 +325,7 @@ watch(
   },
 );
 const samplesRef = computed(() =>
-  mode.value === "review" ? (props.reviewSamples ?? []) : props.samples,
-);
-const loadedOffsetRef = computed(() => (mode.value === "review" ? 0 : (props.loadedOffset ?? 0)));
-const totalSamplesRef = computed(() => (mode.value === "review" ? undefined : props.total));
-watch(
-  samplesRef,
-  (samples) => {
-    selectionLog("shared blink samplesRef", { rows: samples.length, mode: mode.value });
-  },
-  { immediate: true },
+  mode.value === "review" ? reviewSamples.value : patchSamples.value,
 );
 const patchCellSizeRef = patchImageSize;
 const reviewCellSizeRef = reviewImageSize;
@@ -244,89 +344,18 @@ const {
   imageCellHeightPxStr,
   samplesForVirtualRow,
   effectiveSamplesPerRow,
-  virtualSampleCount,
 } = useBlinkVirtualScroll({
   samples: samplesRef,
   mode,
   patchPerRow,
   reviewPerRow,
-  totalSamples: totalSamplesRef,
-  sampleOffset: loadedOffsetRef,
   patchCellSize: patchCellSizeRef,
   reviewCellSize: reviewCellSizeRef,
   extraRowHeight,
   overscan: overscanRef,
 });
 
-const RANGE_CHANGE_DEBOUNCE_MS = 120;
-let rangeChangeTimer: number | undefined;
-
-function emitVisibleRange(): void {
-  if (mode.value === "review") return;
-  const items = virtualizer.value.getVirtualItems();
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (!first || !last) return;
-  const perRow = effectiveSamplesPerRow.value;
-  const start = Math.max(0, first.index * perRow);
-  const end = Math.min(virtualSampleCount.value, (last.index + 1) * perRow);
-  if (end <= start) return;
-  emit("visibleRangeChange", { start, end });
-}
-
-function queueVisibleRangeChange(): void {
-  if (rangeChangeTimer !== undefined) window.clearTimeout(rangeChangeTimer);
-  rangeChangeTimer = window.setTimeout(() => {
-    rangeChangeTimer = undefined;
-    emitVisibleRange();
-  }, RANGE_CHANGE_DEBOUNCE_MS);
-}
-
-const virtualItems = computed(() => {
-  const t0 = performance.now();
-  const items = virtualizer.value.getVirtualItems();
-  selectionLog("shared blink virtual items", {
-    items: items.length,
-    visibleSamples: visibleSamples.value.length,
-    totalSize: virtualizer.value.getTotalSize(),
-    ms: Number((performance.now() - t0).toFixed(2)),
-  });
-  return items;
-});
-
-onBeforeUpdate(() => {
-  sharedRenderStart = performance.now();
-  selectionLog("shared blink beforeUpdate", {
-    propsSamples: props.samples.length,
-    visibleSamples: visibleSamples.value.length,
-    virtualItems: virtualItems.value.length,
-    selected:
-      props.selectedDefectIds instanceof Set
-        ? props.selectedDefectIds.size
-        : props.selectedDefectIds.length,
-    mode: mode.value,
-  });
-});
-onUpdated(() => {
-  const updatedAt = performance.now();
-  selectionLog("shared blink updated", {
-    ms: Number((updatedAt - sharedRenderStart).toFixed(2)),
-    propsSamples: props.samples.length,
-    visibleSamples: visibleSamples.value.length,
-    virtualItems: virtualItems.value.length,
-    mode: mode.value,
-  });
-  void nextTick(() => {
-    selectionLog("shared blink nextTick", {
-      ms: Number((performance.now() - updatedAt).toFixed(2)),
-    });
-  });
-});
-
-watch(scrollRef, (element) => emit("scrollContainerChange", element), {
-  immediate: true,
-  flush: "post",
-});
+const virtualItems = computed(() => virtualizer.value.getVirtualItems());
 
 const cellSize = computed(() =>
   mode.value === "patch" ? patchImageSize.value : reviewImageSize.value,
@@ -365,23 +394,15 @@ function syncPatchSwitchesFromInput() {
 syncPatchSwitchesFromInput();
 
 const inferredReviewImageIds = computed<number[]>(() => {
-  const t0 = performance.now();
   const seen = new Set<number>();
-  const samples = props.reviewSamples?.length ? props.reviewSamples : props.samples;
-  for (const sample of samples) {
-    for (const image of sample.reviewImages ?? []) {
-      const imageId = Number(image.imageId);
+  for (const sample of reviewSamples.value) {
+    for (const imageId of sample.reviewImages) {
       if (Number.isInteger(imageId) && imageId > 0) {
         seen.add(imageId);
       }
     }
   }
   const ids = [...seen].sort((a, b) => a - b);
-  selectionLog("shared blink inferred review images", {
-    samples: samples.length,
-    imageIds: ids.length,
-    ms: Number((performance.now() - t0).toFixed(2)),
-  });
   return ids;
 });
 
@@ -429,16 +450,12 @@ const basePatchColumns = computed(() =>
     .filter((column) => column.spriteIndex >= 0),
 );
 
-function reviewColumnsForSample(sample: ScSampleItem): number[] {
-  const available = new Set(
-    (sample.reviewImages ?? [])
-      .map((image) => Number(image.imageId))
-      .filter((imageId) => Number.isInteger(imageId) && imageId > 0),
-  );
+function reviewColumnsForSample(sample: BlinkSample): number[] {
+  const available = new Set(sample.reviewImages);
   return selectedReviewImageIds.value.filter((imageId) => available.has(imageId));
 }
 
-function spriteImageTypesForSample(sample: ScSampleItem): string[] {
+function spriteImageTypesForSample(sample: BlinkSample): string[] {
   const imageTypes = patchImageTypesForSprite.value.map((type) => PATCH_IMAGE_SPRITE_TOKENS[type]);
   if (mode.value === "review") {
     for (const imageId of reviewColumnsForSample(sample)) {
@@ -448,7 +465,7 @@ function spriteImageTypesForSample(sample: ScSampleItem): string[] {
   return imageTypes;
 }
 
-function cellsForSample(sample: ScSampleItem): number {
+function cellsForSample(sample: BlinkSample): number {
   const imageCells =
     basePatchColumns.value.length +
     (mode.value === "review" ? reviewColumnsForSample(sample).length : 0);
@@ -464,7 +481,7 @@ const maxCellsPerSample = computed(
 
 const SAMPLE_BLOCK_PADDING_X = 4;
 
-function sampleBlockWidthPx(sample: ScSampleItem): number {
+function sampleBlockWidthPx(sample: BlinkSample): number {
   const cells = cellsForSample(sample);
   return cells * cellSize.value + Math.max(0, cells - 1) * props.cellGap + SAMPLE_BLOCK_PADDING_X;
 }
@@ -483,7 +500,7 @@ const rowMinWidthPx = computed(
     24 /* left+right row padding */,
 );
 const cellSizePx = computed(() => `${cellSize.value}px`);
-function sampleBlockWidthStr(sample: ScSampleItem): string {
+function sampleBlockWidthStr(sample: BlinkSample): string {
   return `${sampleBlockWidthPx(sample)}px`;
 }
 const rowMinWidthStr = computed(() => `${rowMinWidthPx.value}px`);
@@ -522,7 +539,7 @@ function rangeBetween(anchorId: string, targetId: string): string[] {
   return ids.slice(start, end + 1);
 }
 
-function handleSampleClick(sample: ScSampleItem, event: MouseEvent): void {
+function handleSampleClick(sample: BlinkSample, event: MouseEvent): void {
   const targetId = defectIdKey(sample.defectId);
   const ctrlOrMeta = event.ctrlKey || event.metaKey;
   if (event.shiftKey) {
@@ -548,7 +565,7 @@ function handleSampleClick(sample: ScSampleItem, event: MouseEvent): void {
 const previewImageSrc = ref<string | null>(null);
 const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
 
-function handleReviewPreview(sample: ScSampleItem, imageId: number) {
+function handleReviewPreview(sample: BlinkSample, imageId: number) {
   const t = props.inspectionTime ?? String(sample.inspectionTime);
   previewImageSrc.value = scReviewUrl(t, sample.waferKey, sample.defectId, imageId);
   void nextTick(() => {
@@ -559,7 +576,7 @@ function handleReviewPreview(sample: ScSampleItem, imageId: number) {
   });
 }
 
-function getSpriteUrl(sample: ScSampleItem): string {
+function getSpriteUrl(sample: BlinkSample): string {
   const isPatch = mode.value === "patch";
   const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
   const t = props.inspectionTime ?? String(sample.inspectionTime);
@@ -572,7 +589,7 @@ function getSpriteUrl(sample: ScSampleItem): string {
   return `/api/v1/sc/sprites/${spriteMode}/${t}/${sample.waferKey}/${sample.defectId}?${params.toString()}`;
 }
 
-function shouldRenderSprite(sample: ScSampleItem): boolean {
+function shouldRenderSprite(sample: BlinkSample): boolean {
   const url = getSpriteUrl(sample);
   if (shouldLoadImages.value) {
     requestedSpriteUrls.value.add(url);
@@ -581,7 +598,7 @@ function shouldRenderSprite(sample: ScSampleItem): boolean {
   return requestedSpriteUrls.value.has(url);
 }
 
-function getSpriteStyle(sample: ScSampleItem, colIndex: number) {
+function getSpriteStyle(sample: BlinkSample, colIndex: number) {
   const cols = spriteImageTypesForSample(sample).length;
   const url = getSpriteUrl(sample);
 
@@ -606,7 +623,7 @@ function blinkOverlaySpriteIndex(): number {
   return defectiveIndex >= 0 ? defectiveIndex : 0;
 }
 
-function reviewSpriteIndex(sample: ScSampleItem, imageId: number): number {
+function reviewSpriteIndex(sample: BlinkSample, imageId: number): number {
   const selectedIndex = reviewColumnsForSample(sample).indexOf(imageId);
   return patchImageTypesForSprite.value.length + Math.max(0, selectedIndex);
 }
@@ -742,11 +759,6 @@ watch(
 function handleScroll(): void {
   queueViewportImageLoad();
   syncScrollMetrics();
-  queueVisibleRangeChange();
-  const el = scrollRef.value;
-  if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
-    emit("nearBottom");
-  }
 }
 
 function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
@@ -783,7 +795,6 @@ function handleScrollbarDrag(event: MouseEvent): void {
     element.scrollLeft = dragState.startScroll + scrollDelta;
   }
   syncScrollMetrics();
-  queueVisibleRangeChange();
 }
 
 function endScrollbarDrag(): void {
@@ -815,13 +826,13 @@ function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
     }
   }
   syncScrollMetrics();
-  queueVisibleRangeChange();
 }
 
 const SETTINGS_STORAGE_KEY = "blink-table-settings";
 
 interface PersistedSettings {
   blinkEnabled?: boolean;
+  showDefectIdLabel?: boolean;
   patchPerRow?: number;
   reviewPerRow?: number;
   patchImageSize?: number;
@@ -837,6 +848,8 @@ function loadSettings() {
     if (typeof saved.blinkEnabled === "boolean" && blinkEnabled.value !== saved.blinkEnabled) {
       toggleBlink();
     }
+    if (typeof saved.showDefectIdLabel === "boolean")
+      showDefectIdLabel.value = saved.showDefectIdLabel;
     if (typeof saved.patchPerRow === "number")
       patchPerRow.value = clampSamplesPerRow(saved.patchPerRow);
     if (typeof saved.reviewPerRow === "number")
@@ -855,6 +868,7 @@ function loadSettings() {
 function saveSettings() {
   const data: PersistedSettings = {
     blinkEnabled: blinkEnabled.value,
+    showDefectIdLabel: showDefectIdLabel.value,
     patchPerRow: patchPerRow.value,
     reviewPerRow: reviewPerRow.value,
     patchImageSize: patchImageSize.value,
@@ -875,7 +889,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (rangeChangeTimer !== undefined) window.clearTimeout(rangeChangeTimer);
   resizeObserver?.disconnect();
   document.removeEventListener("mousemove", handleScrollbarDrag);
   window.removeEventListener("resize", syncScrollMetrics);
@@ -903,9 +916,7 @@ defineExpose({ scrollRef });
           <n-radio-button value="review" :disabled="reviewDisabled">Review</n-radio-button>
         </n-radio-group>
 
-        <n-text v-if="reviewLoading" depth="3" class="sbt-review-status">
-          Loading review...
-        </n-text>
+        <n-text v-if="currentLoading" depth="3" class="sbt-review-status"> Loading... </n-text>
         <n-text v-else-if="reviewError" type="error" class="sbt-review-status">
           Review unavailable
         </n-text>
@@ -914,7 +925,7 @@ defineExpose({ scrollRef });
       </div>
       <div class="sbt-toolbar-right">
         <n-text class="sbt-row-count" depth="3">
-          {{ (total ?? visibleSamples.length).toLocaleString() }} samples
+          {{ visibleSamples.length.toLocaleString() }} samples
         </n-text>
       </div>
     </div>
@@ -972,6 +983,10 @@ defineExpose({ scrollRef });
           <div class="sbt-setting-row">
             <n-text class="sbt-control-label">Blink</n-text>
             <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
+          </div>
+          <div class="sbt-setting-row">
+            <n-text class="sbt-control-label">ID Label</n-text>
+            <n-switch v-model:value="showDefectIdLabel" size="small" />
           </div>
           <div class="sbt-setting-row">
             <n-text class="sbt-control-label">Defective</n-text>
@@ -1104,7 +1119,7 @@ defineExpose({ scrollRef });
                       ></div>
                     </template>
                     <div v-else class="sbt-img-placeholder"></div>
-                    <div class="sbt-defect-id">{{ sample.defectId }}</div>
+                    <div v-if="showDefectIdLabel" class="sbt-defect-id">{{ sample.defectId }}</div>
                   </div>
 
                   <!-- Base patch cells -->
@@ -1119,7 +1134,10 @@ defineExpose({ scrollRef });
                       :style="getSpriteStyle(sample, col.spriteIndex)"
                     ></div>
                     <div v-else class="sbt-img-placeholder"></div>
-                    <div v-if="!blinkEnabled && colIdx === 0" class="sbt-defect-id">
+                    <div
+                      v-if="showDefectIdLabel && !blinkEnabled && colIdx === 0"
+                      class="sbt-defect-id"
+                    >
                       {{ sample.defectId }}
                     </div>
                   </div>
@@ -1154,25 +1172,25 @@ defineExpose({ scrollRef });
                     D: {{ annotationDrafts[defectIdKey(sample.defectId)] }}
                   </n-tag>
                   <n-tag
-                    v-if="annotationLabels[defectIdKey(sample.defectId)]"
+                    v-if="sample.annotationLabel"
                     type="success"
                     size="small"
                     class="sbt-prediction-badge"
                     title="Annotation (saved)"
                   >
-                    A: {{ annotationLabels[defectIdKey(sample.defectId)] }}
+                    A: {{ sample.annotationLabel }}
                   </n-tag>
                   <n-tag
-                    v-if="predictionLabels[defectIdKey(sample.defectId)]"
+                    v-if="sample.predictionLabel"
                     type="info"
                     size="small"
                     class="sbt-prediction-badge"
                     title="Latest prediction"
                   >
-                    P: {{ predictionLabels[defectIdKey(sample.defectId)]
+                    P: {{ sample.predictionLabel
                     }}{{
-                      predictionConfidences[defectIdKey(sample.defectId)] != null
-                        ? ` (${(predictionConfidences[defectIdKey(sample.defectId)]! * 100).toFixed(0)}%)`
+                      sample.predictionConfidence != null
+                        ? ` (${(sample.predictionConfidence * 100).toFixed(0)}%)`
                         : ""
                     }}
                   </n-tag>

@@ -178,6 +178,9 @@ class GrpcScUpstream:
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
         if "die_x" not in df.columns:
+            assert "die_size_x" in df.columns, (
+                "die_size_x column is required to compute die_x"
+            )
             die_size_x: int = int(df["die_size_x"].max())  # type: ignore[index]
             die_size_y: int = int(df["die_size_y"].max())  # type: ignore[index]
             origin_x: int = int(df["origin_x"].max())  # type: ignore[index]

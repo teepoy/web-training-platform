@@ -102,29 +102,12 @@ const activeComponentProps = computed((): Record<string, unknown> => {
     };
   }
   return {
-    samples: tab.patchSamples,
-    samplesTotal: tab.inspectionItem?.defects ?? tab.samplesTotal,
-    samplesLoading: tab.samplesLoading,
     samplesError: tab.samplesError,
     inspectionItem: tab.inspectionItem,
     inspectionTime: tab.inspectionTime,
     waferKey: tab.waferKey,
-    reviewSamples: tab.reviewSamples,
-    reviewLoading: tab.reviewLoading,
-    reviewError: tab.reviewError,
-    mapLoading: tab.mapLoading,
-    mapError: tab.mapError,
-    mapStreamMessage: tab.mapStreamMessage,
-    mapProgressPercent: tab.mapProgressPercent,
     activeMapTab: tab.activeMapTab,
     waferGeometry: tab.waferGeometry,
-    waferDisplay: tab.waferDisplay,
-    dieDisplay: tab.dieDisplay,
-    reticleDisplay: tab.reticleDisplay,
-    unzoomedWaferDisplay: tab.unzoomedWaferDisplay,
-    unzoomedDieDisplay: tab.unzoomedDieDisplay,
-    unzoomedReticleDisplay: tab.unzoomedReticleDisplay,
-    legendGroups: tab.legendGroups,
     reticleXDieCount: tab.reticleXDieCount,
     reticleYDieCount: tab.reticleYDieCount,
     reticleDieSizeX: tab.reticleDieSizeX,
@@ -139,7 +122,6 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       page.updateReticleOptions(tab.id, v),
     onZoomIn: (vp: Parameters<typeof page.setZoom>[1]) => page.setZoom(tab.id, vp),
     onTableSelectionChange: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
-    onTableApplySelection: (ids: number[]) => page.setSelectedDefectIds(tab.id, ids),
     onTableFilterChange: (filter: Parameters<typeof page.handleTableFilterChange>[1]) =>
       page.handleTableFilterChange(tab.id, filter),
     onTableSortChange: (sort: { field: string; direction: "asc" | "desc" | null }) =>

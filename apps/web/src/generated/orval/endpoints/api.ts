@@ -136,6 +136,7 @@ import type {
   ScImportResponse,
   ScInspectionListResponse,
   ScInspectionReviewImagesResponse,
+  ScInspectionSummaryItem,
   ScReclassifySampleTableRowsResponse,
   ScSampleTableRowsRequest,
   ScSampleTableRowsResponse,
@@ -10682,6 +10683,87 @@ export function useGetInspectionsApiV1ScInspectionsGet<TData = Awaited<ReturnTyp
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetInspectionsApiV1ScInspectionsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Get Inspection
+ */
+export type getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetResponse = {
+  data: ScInspectionSummaryItem | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetUrl = (inspectionTime: string,
+    waferKey: number,) => {
+
+
+  return `/api/v1/sc/inspections/${inspectionTime}/${waferKey}`
+}
+
+export const getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet = async (inspectionTime: string,
+    waferKey: number, options?: RequestInit): Promise<getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetResponse> => {
+
+  return orvalFetcher<getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetResponse>(getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetUrl(inspectionTime,waferKey),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryKey = (inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>,) => {
+    return ['api','v1','sc','inspections',inspectionTime,waferKey] as const;
+    }
+
+
+export const getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryOptions = <TData = Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryKey(inspectionTime,waferKey);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>> = ({ signal }) => getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet(unref(inspectionTime),unref(waferKey), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(inspectionTime) && unref(waferKey))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>, TError, TData>
+}
+
+export type GetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryResult = NonNullable<Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>>
+export type GetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary Get Inspection
+ */
+
+export function useGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet<TData = Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>, TError = HTTPValidationError>(
+ inspectionTime: MaybeRef<string>,
+    waferKey: MaybeRef<number>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGetQueryOptions(inspectionTime,waferKey,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -79,6 +79,12 @@ importers:
       vue-router:
         specifier: ^4.5.0
         version: 4.6.4(vue@3.5.31(typescript@5.7.3))
+      vxe-pc-ui:
+        specifier: ^4.15.14
+        version: 4.15.14(vue@3.5.31(typescript@5.7.3))
+      vxe-table:
+        specifier: ^4.19.21
+        version: 4.19.21(vue@3.5.31(typescript@5.7.3))
     devDependencies:
       "@bufbuild/protoc-gen-es":
         specifier: ^2.12.0
@@ -3505,6 +3511,14 @@ packages:
     peerDependencies:
       vue: ^3.5.0
 
+  "@vxe-ui/core@4.4.15":
+    resolution:
+      {
+        integrity: sha512-DPNPnjSnypg8XO44ApcHw/nJNNJUYF85k1IVFJU8nyKj3qvYBFP96m4ZLOhc6tlMmMJWmhbzXCWZOb37dUNctQ==,
+      }
+    peerDependencies:
+      vue: ^3.2.0
+
   abbrev@2.0.0:
     resolution:
       {
@@ -4674,6 +4688,12 @@ packages:
     resolution:
       {
         integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==,
+      }
+
+  dom-zindex@1.0.7:
+    resolution:
+      {
+        integrity: sha512-cKU/h8v8IPBgdZOTPbPmq3Ib+Ac5C+kKoh9I4LbGR9BM3GwbmB16KYWKJcj5M2BavnA66EbgYzxYDLd1IytnlQ==,
       }
 
   dotenv@17.4.2:
@@ -8372,6 +8392,18 @@ packages:
     peerDependencies:
       vue: ^3.0.11
 
+  vxe-pc-ui@4.15.14:
+    resolution:
+      {
+        integrity: sha512-14LJ9UGH58sJnLptDc7S5GKk1ytR1YX2Swh1/T5c/uuuD2UEij0QqWMNdV4fm9I/f6c0jHdjEi9cEF8Nv9Lu+A==,
+      }
+
+  vxe-table@4.19.21:
+    resolution:
+      {
+        integrity: sha512-k+jZ4zcoxeizjBORk5/S8toQgfPBAN9aPJfshspf3XS54x5+ybGZjZfVXEalwNpIlEalSmShonWsQzwhNkv1zg==,
+      }
+
   w3c-xmlserializer@5.0.0:
     resolution:
       {
@@ -8512,6 +8544,12 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  xe-utils@4.0.10:
+    resolution:
+      {
+        integrity: sha512-HLj9r+EjCh6e0J1vfZhDKPwaTtONMl0GNK0OYR6b3KU4QHHpOXNFzEhgwe35KFy8dqsK2sm2WFRzHRafqkYgMA==,
+      }
 
   xml-name-validator@5.0.0:
     resolution:
@@ -10957,6 +10995,12 @@ snapshots:
     dependencies:
       vue: 3.5.31(typescript@5.7.3)
 
+  "@vxe-ui/core@4.4.15(vue@3.5.31(typescript@5.7.3))":
+    dependencies:
+      dom-zindex: 1.0.7
+      vue: 3.5.31(typescript@5.7.3)
+      xe-utils: 4.0.10
+
   abbrev@2.0.0: {}
 
   abort-controller@3.0.0:
@@ -11646,6 +11690,8 @@ snapshots:
   dom-accessibility-api@0.5.16: {}
 
   dom-accessibility-api@0.6.3: {}
+
+  dom-zindex@1.0.7: {}
 
   dotenv@17.4.2:
     optional: true
@@ -14002,6 +14048,18 @@ snapshots:
       vooks: 0.2.12(vue@3.5.31(typescript@5.7.3))
       vue: 3.5.31(typescript@5.7.3)
 
+  vxe-pc-ui@4.15.14(vue@3.5.31(typescript@5.7.3)):
+    dependencies:
+      "@vxe-ui/core": 4.4.15(vue@3.5.31(typescript@5.7.3))
+    transitivePeerDependencies:
+      - vue
+
+  vxe-table@4.19.21(vue@3.5.31(typescript@5.7.3)):
+    dependencies:
+      vxe-pc-ui: 4.15.14(vue@3.5.31(typescript@5.7.3))
+    transitivePeerDependencies:
+      - vue
+
   w3c-xmlserializer@5.0.0:
     dependencies:
       xml-name-validator: 5.0.0
@@ -14107,6 +14165,8 @@ snapshots:
       strip-ansi: 7.2.0
 
   ws@8.20.0: {}
+
+  xe-utils@4.0.10: {}
 
   xml-name-validator@5.0.0:
     optional: true

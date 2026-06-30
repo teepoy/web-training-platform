@@ -52,10 +52,6 @@ interface PerformanceWithMemory extends Performance {
   };
 }
 
-function ptLog(msg: string, ...args: unknown[]) {
-  console.log(`[psp-table] ${msg}`, ...args);
-}
-
 function readHeapMb(): number | null {
   const memory = (performance as PerformanceWithMemory).memory;
   if (!memory) return null;
@@ -91,19 +87,13 @@ export function usePerspectiveTable(
 
   onMounted(async () => {
     try {
-      const t0 = performance.now();
       await perspective.init_client(fetch(clientWasmUrl));
-      ptLog(`init_client done (${(performance.now() - t0).toFixed(0)}ms)`);
       perspective.init_server(fetch(serverWasmUrl));
 
-      const t1 = performance.now();
       client = await perspective.websocket(wsUrl);
-      ptLog(`websocket connected (${(performance.now() - t1).toFixed(0)}ms)`);
 
-      const t2 = performance.now();
       const sTbl: Table = await client.open_table(SAMPLES_TABLE_NAME);
       serverSourceTable = sTbl;
-      ptLog(`open_table "${SAMPLES_TABLE_NAME}" done (${(performance.now() - t2).toFixed(0)}ms)`);
 
       let baseTable = sTbl;
       if (mode === "client-clone") {
@@ -124,10 +114,6 @@ export function usePerspectiveTable(
           cloneDownloadMs,
           heapAfterArrowMb: readHeapMb(),
         };
-        ptLog(
-          `clone: Arrow ${(arrowBuf.byteLength / 1024 / 1024).toFixed(2)} MB (${cloneDownloadMs.toFixed(0)}ms)`,
-        );
-
         const tClone = performance.now();
         workerClient = await perspective.worker();
         baseTable = await workerClient.table(arrowBuf, { index: "defect_id" });
@@ -137,18 +123,15 @@ export function usePerspectiveTable(
           cloneBuildMs,
           heapAfterCloneMb: readHeapMb(),
         };
-        ptLog(`clone: client worker table ready (${cloneBuildMs.toFixed(0)}ms)`);
       }
 
       const tableClient = mode === "client-clone" ? workerClient : client;
       if (!tableClient) throw new Error("Perspective client not initialized");
 
-      const t3 = performance.now();
       const selTbl: Table = await tableClient.table(
         { defect_id: "integer", map_in_selection: "integer", table_in_selection: "integer" },
         { index: "defect_id" },
       );
-      ptLog(`selections table created (${(performance.now() - t3).toFixed(0)}ms)`);
 
       const t4 = performance.now();
       for (let i = 1; i <= TOTAL_ROWS; i += INIT_CHUNK) {
@@ -161,25 +144,20 @@ export function usePerspectiveTable(
           table_in_selection: ids.map(() => 0),
         });
       }
-      ptLog(`selections table filled (${(performance.now() - t4).toFixed(0)}ms)`);
-
       const t5 = performance.now();
       const jTbl: Table = await tableClient.join(baseTable, selTbl, "defect_id", {
         join_type: "inner",
       });
       const sz = await jTbl.size();
-      ptLog(`joined table ready: ${sz} rows (${(performance.now() - t5).toFixed(0)}ms)`);
 
       samplesTable.value = baseTable;
       selectionsTable.value = selTbl;
       joinedTable.value = jTbl;
       connected.value = true;
-      ptLog(`all tables ready (${(performance.now() - t0).toFixed(0)}ms total)`);
       void pollServerStats();
       pollStats = setInterval(() => void pollServerStats(), 2000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      ptLog("ERROR:", msg);
       error.value = msg;
     }
   });

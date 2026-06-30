@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onUpdated, ref } from "vue";
 import { NButton, NPopover, NSpace, NTag, NText } from "naive-ui";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
@@ -93,6 +93,8 @@ function clearAll(): void {
   rangeDraft.value.prediction_confidence = { min: null, max: null };
   emit("update:filter", {});
 }
+
+onUpdated(() => console.debug("[render] ScGlobalFilterBar"));
 </script>
 
 <template>

@@ -242,9 +242,6 @@ class _MockUpstreamDB:
         ORDER BY d.defect_id
         """
         for df in self._read_batches(query, batch_size=batch_size):
-            import time
-
-            time.sleep(0.3)
             yield df.with_columns(
                 [
                     (

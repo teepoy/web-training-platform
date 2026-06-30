@@ -1114,6 +1114,63 @@ class SparseDatasetStorage:
             for item in items
         ]
 
+    # ── list_annotations_by_sample_ids ──────────────────────────────
+
+    async def list_annotations_by_sample_ids(
+        self, sample_ids: list[str]
+    ) -> list[Annotation]:
+        if not sample_ids:
+            return []
+        sids = set(sample_ids)
+        latest_by_sample = await self._annotations.latest_by_sample(
+            dataset_id=self._dataset_id, org_id=self._org_id
+        )
+        return [
+            Annotation(
+                id=item.annotation_id,
+                sample_id=item.sample_id,
+                label=item.label,
+                annotation_value=(
+                    _json.loads(item.annotation_value)
+                    if item.annotation_value
+                    else None
+                ),
+                created_by=item.created_by,
+                created_at=datetime.fromisoformat(item.created_at)
+                if item.created_at
+                else datetime.now(timezone.utc),
+            )
+            for item in latest_by_sample.values()
+            if item.sample_id in sids
+        ]
+
+    # ── replace_annotations_for_samples ─────────────────────────────
+
+    async def replace_annotations_for_samples(
+        self, items: list[tuple[str, str | None]], *, created_by: str = ""
+    ) -> int:
+        if not items:
+            return 0
+        seen: dict[str, str | None] = {}
+        for sample_id, label in items:
+            seen[sample_id] = label
+
+        records: list[SparseAnnotationRecord] = []
+        for sample_id, label in seen.items():
+            records.append(
+                build_annotation_record(
+                    sample_id=sample_id,
+                    label=label if label is not None else "",
+                    created_by=created_by,
+                )
+            )
+        await self._annotations.append(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            items=records,
+        )
+        return sum(1 for label in seen.values() if label is not None)
+
     # ── write_predictions ───────────────────────────────────────────
 
     async def write_predictions(

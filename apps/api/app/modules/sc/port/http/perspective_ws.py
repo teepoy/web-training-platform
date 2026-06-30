@@ -10,25 +10,18 @@ from datetime import datetime
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from typing import Any, cast
 
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 import polars as pl
 from fastapi import WebSocket
 from perspective import Server, Table
 from perspective.handlers.starlette import PerspectiveStarletteHandler
 
-from app.modules.sc.app.services.sc_plot_points_service import (
-    _join_upstream_image_counts,
-)
 from app.shared.infrastructure.redis.event_publisher import (
     ANNOTATION_CHANNEL,
     PREDICTION_CHANNEL,
 )
 
 _logger = logging.getLogger(__name__)
-
-_PERSPECTIVE_EXECUTOR = ThreadPoolExecutor(
-    max_workers=4,
-    thread_name_prefix="sc-perspective-handler",
-)
 
 
 class _RedisLike:
@@ -169,38 +162,14 @@ def _normalize_samples_df(df: pl.DataFrame) -> pl.DataFrame:
         exprs.append(pl.lit(0).cast(pl.Int32).alias("table_in_selection"))
     if "gallery_in_selection" not in df.columns:
         exprs.append(pl.lit(0).cast(pl.Int32).alias("gallery_in_selection"))
-    import logging
 
-    logging.info(f"{df.columns = }")
-    _images_is_list = "images" in df.columns and isinstance(
-        df.schema["images"], pl.List
-    )
-    if _images_is_list:
-        exprs.append(
-            (pl.col("images").list.len() > 0)
-            .cast(pl.Int32)
-            .fill_null(0)
-            .alias("images")
-        )
-        if "review_image_ids_json" not in df.columns:
-            exprs.append(
-                pl.col("images")
-                .list.eval(
-                    pl.element()
-                    .filter(pl.element().struct.field("role") == "review")
-                    .struct.field("review_image_id")
-                )
-                .map_elements(
-                    lambda ids: json.dumps([int(x) for x in ids if x is not None]),
-                    return_dtype=pl.Utf8,
-                )
-                .fill_null("[]")
-                .alias("review_image_ids_json"),
-            )
-    elif "images" not in df.columns:
+    if "images" not in df.columns:
         exprs.append(pl.lit(0).cast(pl.Int32).alias("images"))
     else:
         exprs.append(pl.col("images").fill_null(0).cast(pl.Int32).alias("images"))
+
+    if "review_image_ids_json" not in df.columns:
+        exprs.append(pl.lit("[]").cast(pl.Utf8).alias("review_image_ids_json"))
 
     for col in (
         "sample_id",
@@ -249,8 +218,6 @@ def _normalize_samples_df(df: pl.DataFrame) -> pl.DataFrame:
         )
     elif "prediction_confidence" not in df.columns:
         exprs.append(pl.lit(None).cast(pl.Float64).alias("prediction_confidence"))
-    if not _images_is_list and "review_image_ids_json" not in df.columns:
-        exprs.append(pl.lit("[]").cast(pl.Utf8).alias("review_image_ids_json"))
     df = df.with_columns(exprs)
     return df.with_columns(
         pl.when(
@@ -262,6 +229,62 @@ def _normalize_samples_df(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.col("prediction_label"))
         .cast(pl.Utf8)
         .alias("final_class")
+    )
+
+
+async def _fetch_upstream_samples_df(
+    *,
+    upstream_reader: ScUpstreamReader,
+    inspection_time: datetime,
+    wafer_key: int,
+    count: int | None = None,
+    reticle_x_die_count: int,
+    reticle_y_die_count: int,
+    reticle_x_die_shift: int,
+    reticle_y_die_shift: int,
+) -> pl.DataFrame:
+    lf = await upstream_reader.list_samples(
+        inspection_time,
+        wafer_key,
+        offset=0,
+        count=count,
+        reticle_size_x=reticle_x_die_count,
+        reticle_size_y=reticle_y_die_count,
+        reticle_offset_x=reticle_x_die_shift,
+        reticle_offset_y=reticle_y_die_shift,
+    )
+    df = await lf.collect_async()
+    review_lf = await upstream_reader.list_review_images(inspection_time, wafer_key)
+    review_df = await review_lf.collect_async()
+    if not review_df.is_empty():
+        review_df = (
+            review_df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
+            .group_by("defect_id")
+            .agg(
+                pl.len().cast(pl.Int32).alias("images"),
+                pl.col("image_id")
+                .cast(pl.Int64)
+                .implode()
+                .map_elements(lambda ids: json.dumps(list(ids)), return_dtype=pl.Utf8)
+                .alias("review_image_ids_json"),
+            )
+        )
+    else:
+        review_df = None
+    df = df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
+
+    if review_df is not None:
+        if "images" in df.columns:
+            df = df.drop("images")
+        df = df.join(review_df, on="defect_id", how="left")
+    else:
+        df = df.with_columns(
+            pl.lit(0).cast(pl.Int32).alias("images"),
+        )
+
+    return df.with_columns(
+        pl.col("images").fill_null(0).cast(pl.Int32),
+        pl.col("review_image_ids_json").fill_null("[]").cast(pl.Utf8),
     )
 
 
@@ -281,40 +304,17 @@ async def _build_inspection_df(
     inspection = await upstream_reader.get_inspection(insp_dt, wafer_key)
     if inspection is None:
         raise ValueError(f"Inspection not found: {inspection_time}/{wafer_key}")
-    lf = await upstream_reader.list_samples(
-        insp_dt,
-        wafer_key,
-        offset=0,
+    df = await _fetch_upstream_samples_df(
+        upstream_reader=upstream_reader,
+        inspection_time=insp_dt,
+        wafer_key=wafer_key,
         count=inspection.defects,
-        reticle_size_x=reticle_x_die_count,
-        reticle_size_y=reticle_y_die_count,
-        reticle_offset_x=reticle_x_die_shift,
-        reticle_offset_y=reticle_y_die_shift,
+        reticle_x_die_count=reticle_x_die_count,
+        reticle_y_die_count=reticle_y_die_count,
+        reticle_x_die_shift=reticle_x_die_shift,
+        reticle_y_die_shift=reticle_y_die_shift,
     )
-    df = await lf.collect_async()
-    review_lf = await upstream_reader.list_review_images(insp_dt, wafer_key)
-    review_df = await (
-        review_lf.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
-        .group_by("defect_id")
-        .agg(
-            pl.len().cast(pl.Int32).alias("images"),
-            pl.col("image_id")
-            .cast(pl.Int64)
-            .implode()
-            .map_elements(lambda ids: json.dumps(list(ids)), return_dtype=pl.Utf8)
-            .alias("review_image_ids_json"),
-        )
-        .collect_async()
-    )
-    _df = df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
-    if "images" in _df.columns:
-        _df = _df.drop("images")
-    return _normalize_samples_df(
-        _df.join(review_df, on="defect_id", how="left")
-    ).with_columns(
-        pl.col("images").fill_null(0).cast(pl.Int32),
-        pl.col("review_image_ids_json").fill_null("[]").cast(pl.Utf8),
-    )
+    return _normalize_samples_df(df)
 
 
 async def _build_dataset_df(
@@ -340,14 +340,6 @@ async def _build_dataset_df(
     sparse_df = await sparse_lf.collect_async()
     if "defect_id" not in sparse_df.columns:
         raise ValueError("SC dataset sparse rows must include defect_id")
-    # if {"wafer_x", "wafer_y", "die_x", "die_y"}.issubset(set(sparse_df.columns)):
-    #     return _normalize_samples_df(sparse_df)
-
-    # if (
-    #     "inspection_time" not in sparse_df.columns
-    #     or "wafer_key" not in sparse_df.columns
-    # ):
-    #     return _normalize_samples_df(sparse_df)
     meta = (
         sparse_df.select("inspection_time", "wafer_key").drop_nulls().head(1).to_dicts()
     )
@@ -361,32 +353,23 @@ async def _build_dataset_df(
             datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
         )
     source_wafer_key = int(meta[0]["wafer_key"])
-    upstream_lf = await upstream_reader.list_samples(
-        source_time,
-        source_wafer_key,
-        count=None,
-        reticle_size_x=reticle_x_die_count,
-        reticle_size_y=reticle_y_die_count,
-        reticle_offset_x=reticle_x_die_shift,
-        reticle_offset_y=reticle_y_die_shift,
-    )
-    upstream_lf = await _join_upstream_image_counts(
-        upstream_lf,
+    df = await _fetch_upstream_samples_df(
         upstream_reader=upstream_reader,
         inspection_time=source_time,
         wafer_key=source_wafer_key,
+        count=None,
+        reticle_x_die_count=reticle_x_die_count,
+        reticle_y_die_count=reticle_y_die_count,
+        reticle_x_die_shift=reticle_x_die_shift,
+        reticle_y_die_shift=reticle_y_die_shift,
     )
-    upstream_df = await upstream_lf.collect_async()
-    import logging
-
-    logging.info(f"{upstream_df.columns = }")
     sparse_cols = [
         col
         for col in ("defect_id", "label", "predicted_label", "confidence")
         if col in sparse_df.columns
     ]
     return _normalize_samples_df(
-        upstream_df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False)).join(
+        df.join(
             sparse_df.select(sparse_cols).with_columns(
                 pl.col("defect_id").cast(pl.Int32, strict=False)
             ),
@@ -411,19 +394,25 @@ async def _load_initial_samples(
     websocket: WebSocket,
     joined_table: Table,
     samples_df_factory: Callable[[], Awaitable[pl.DataFrame]],
+    stop_event: asyncio.Event,
+    update_lock: asyncio.Lock,
 ) -> None:
     try:
         samples_df = await samples_df_factory()
         _logger.info("sc perspective initial samples loaded rows=%d", len(samples_df))
-        joined_table.update(_select_perspective_columns(samples_df))
+        if stop_event.is_set():
+            return
+        async with update_lock:
+            joined_table.update(_select_perspective_columns(samples_df))
     except asyncio.CancelledError:
         raise
     except Exception:
         _logger.exception("sc perspective initial samples load failed")
-        try:
-            await websocket.close(code=1011)
-        except Exception:
-            pass
+        if not stop_event.is_set():
+            try:
+                await websocket.close(code=1011)
+            except Exception:
+                pass
 
 
 async def _redis_listener(
@@ -433,6 +422,7 @@ async def _redis_listener(
     joined_table: Table,
     refresh_dataset_overlay: Callable[[], Awaitable[pl.DataFrame | None]],
     stop_event: asyncio.Event,
+    update_lock: asyncio.Lock,
 ) -> None:
     if redis_client is None:
         await stop_event.wait()
@@ -461,8 +451,11 @@ async def _redis_listener(
             ):
                 continue
             df = await refresh_dataset_overlay()
+            if stop_event.is_set():
+                return
             if df is not None and len(df) > 0:
-                joined_table.update(df)
+                async with update_lock:
+                    joined_table.update(df)
     finally:
         try:
             await pubsub.unsubscribe(ANNOTATION_CHANNEL, PREDICTION_CHANNEL)
@@ -479,6 +472,11 @@ async def run_sc_perspective_ws(
     redis_client: Any | None,
     refresh_overlay: Callable[[], Awaitable[pl.DataFrame | None]] | None = None,
 ) -> None:
+    executor = ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="sc-perspective-handler",
+    )
+    update_lock = asyncio.Lock()
     server = Server()
     joined: Table | None = None
     initial_load_task: asyncio.Task[None] | None = None
@@ -495,6 +493,8 @@ async def run_sc_perspective_ws(
                 websocket=websocket,
                 joined_table=joined,
                 samples_df_factory=samples_df_factory,
+                stop_event=stop_event,
+                update_lock=update_lock,
             )
         )
         listener_task = asyncio.create_task(
@@ -504,12 +504,13 @@ async def run_sc_perspective_ws(
                 joined_table=joined,
                 refresh_dataset_overlay=refresh_overlay or _noop_overlay,
                 stop_event=stop_event,
+                update_lock=update_lock,
             )
         )
         handler = PerspectiveStarletteHandler(
             perspective_server=server,
             websocket=websocket,
-            executor=_PERSPECTIVE_EXECUTOR,
+            executor=executor,
         )
         try:
             await handler.run()
@@ -524,6 +525,7 @@ async def run_sc_perspective_ws(
                 except asyncio.CancelledError:
                     pass
     finally:
+        executor.shutdown(wait=True)
         if joined is not None:
             try:
                 joined.delete()

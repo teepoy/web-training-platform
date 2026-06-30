@@ -89,3 +89,40 @@ describe("ScMapPanelBinned — highlightDefects prop", () => {
     expect(wrapper.exists()).toBe(true);
   });
 });
+
+describe("ScMapPanelBinned — box selection", () => {
+  it("forwards die map box-select events", async () => {
+    const region = { x: 1, y: 2, w: 3, h: 4 };
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: {
+        activeMapTab: "die",
+        waferGeometry: {
+          centerX: 0,
+          centerY: 0,
+          originX: -1000,
+          originY: -1000,
+          dieSizeX: 100,
+          dieSizeY: 100,
+        },
+      },
+    });
+
+    wrapper.findComponent({ name: "ScDieStackMapPerspective" }).vm.$emit("box-select", region);
+
+    expect(wrapper.emitted("box-select")).toEqual([[region]]);
+  });
+
+  it("forwards reticle map box-select events", async () => {
+    const region = { x: 5, y: 6, w: 7, h: 8 };
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: {
+        activeMapTab: "reticle",
+        reticleOptions: { xDieCount: 2, yDieCount: 6, xDieShift: 0, yDieShift: 0 },
+      },
+    });
+
+    wrapper.findComponent({ name: "ScReticleMapPerspective" }).vm.$emit("box-select", region);
+
+    expect(wrapper.emitted("box-select")).toEqual([[region]]);
+  });
+});
