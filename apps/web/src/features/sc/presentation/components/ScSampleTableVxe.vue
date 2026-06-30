@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NButton, NPopover, NText } from "naive-ui";
-import type { Filter, Table, ViewConfigUpdate } from "@perspective-dev/client";
+import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type {
-  ScSampleTableDisplayRow,
-  ScSampleTableRowsPage,
-} from "@/features/sc/domain/workbenchInteraction";
+import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
@@ -30,7 +27,13 @@ interface ColumnDefinition {
   title: string;
   width: number;
   filter: "set" | "range";
-  render?: (row: ScSampleTableDisplayRow) => string;
+  render?: (row: VxeSampleTableRow) => string;
+}
+
+interface VxeRowsPage {
+  items: VxeSampleTableRow[];
+  total: number;
+  nextAnchor: string | null;
 }
 
 interface VxeGridRef {
@@ -42,7 +45,10 @@ interface VxeGridRef {
   setCheckboxRowKey: (key: string | number, checked: boolean) => Promise<unknown> | void;
 }
 
-type VxeSampleTableRow = ScSampleTableDisplayRow & { _isSkeleton?: boolean };
+type VxeSampleTableRow = Partial<ScSampleTableDisplayRow> & {
+  defect_id: string;
+  _isHydrated?: boolean;
+};
 
 const columnDefinitions: ColumnDefinition[] = [
   {
@@ -124,6 +130,8 @@ let requestVersion = 0;
 let rawRows: VxeSampleTableRow[] = [];
 const loadedPages = new Set<number>();
 const loadingPages = new Set<number>();
+const loadedDefectIds = new Set<number>();
+let activeView: View | null = null;
 
 const scrollYConfig = {
   enabled: true,
@@ -156,7 +164,7 @@ const checkboxConfig: VxeTablePropTypes.CheckboxConfig<VxeSampleTableRow> = {
   trigger: "cell",
   checkStrictly: true,
   highlight: true,
-  checkMethod: ({ row }) => !row._isSkeleton,
+  checkMethod: ({ row }) => rowDefectId(row) !== null,
 };
 
 function asRecord(data: unknown): Record<string, unknown[]> {
@@ -197,39 +205,16 @@ function makeRows(data: Record<string, unknown[]>): VxeSampleTableRow[] {
       annotation_label: rowAt(data, "annotation_label", i, null),
       prediction_label: rowAt(data, "prediction_label", i, null),
       prediction_confidence: rowAt(data, "prediction_confidence", i, null),
+      _isHydrated: true,
     });
   }
   return out;
 }
 
-function makeSkeletonRow(index: number): VxeSampleTableRow {
+function makeDefectIdRow(value: unknown, index: number): VxeSampleTableRow {
   return {
-    _isSkeleton: true,
-    defect_id: `__loading_${index}`,
-    rough_bin: 0,
-    class_number: 0,
-    images: 0,
-    test_id: 0,
-    wafer_x: 0,
-    wafer_y: 0,
-    index_x: 0,
-    index_y: 0,
-    adder: 0,
-    cluster_id: null,
-    die_x: 0,
-    die_y: 0,
-    reticle_x: 0,
-    reticle_y: 0,
-    size_x: 0,
-    size_y: 0,
-    size_d: 0,
-    area: 0,
-    final_bin: 0,
-    manual_bin: 0,
-    kill_ratio: null,
-    annotation_label: null,
-    prediction_label: null,
-    prediction_confidence: null,
+    defect_id: value == null || value === "" ? `__row_${index}` : String(value),
+    _isHydrated: false,
   };
 }
 
@@ -339,8 +324,26 @@ function getSetFilterOptions(definition: ColumnDefinition) {
     .map((value) => ({ label: String(value), value }));
 }
 
-async function loadWindow(start: number, end: number): Promise<ScSampleTableRowsPage> {
+async function disposeActiveView(): Promise<void> {
+  const view = activeView;
+  activeView = null;
+  if (view) await view.delete();
+}
+
+async function getActiveView(version: number): Promise<View | null> {
+  if (activeView) return activeView;
   const view = await props.table.view(getViewConfig());
+  if (version !== requestVersion) {
+    await view.delete();
+    return null;
+  }
+  activeView = view;
+  return view;
+}
+
+async function loadWindow(start: number, end: number, version: number): Promise<VxeRowsPage> {
+  const view = await getActiveView(version);
+  if (!view) return { items: [], total: DEFAULT_TOTAL, nextAnchor: null };
   try {
     const total = await view.num_rows();
     const safeStart = Math.max(0, Math.min(start, total));
@@ -352,9 +355,33 @@ async function loadWindow(start: number, end: number): Promise<ScSampleTableRows
       total,
       nextAnchor: safeEnd < total ? String(safeEnd) : null,
     };
-  } finally {
-    await view.delete();
+  } catch (error) {
+    if (version === requestVersion) {
+      await disposeActiveView();
+    }
+    throw error;
   }
+}
+
+async function loadDefectIdRows(view: View, total: number, version: number): Promise<boolean> {
+  const columnPaths = (await view.column_paths()) as string[];
+  const defectIdColumnIndex = columnPaths.findIndex((path) => path === "defect_id");
+  if (defectIdColumnIndex < 0) {
+    rawRows = Array.from({ length: total }, (_, index) => makeDefectIdRow(null, index));
+    return true;
+  }
+  const data = asRecord(
+    await view.to_columns({
+      start_row: 0,
+      end_row: total,
+      start_col: defectIdColumnIndex,
+      end_col: defectIdColumnIndex + 1,
+    }),
+  );
+  if (version !== requestVersion) return false;
+  const defectIds = data.defect_id ?? data[columnPaths[defectIdColumnIndex]] ?? [];
+  rawRows = Array.from({ length: total }, (_, index) => makeDefectIdRow(defectIds[index], index));
+  return true;
 }
 
 async function waitForGridRef(): Promise<VxeGridRef | null> {
@@ -382,17 +409,24 @@ async function loadPage(pageIndex: number): Promise<void> {
   isFetching.value = true;
   streamStatus.value = pageIndex === 0 && rawRows.length === 0 ? "Loading sample rows..." : "";
   try {
-    const page = await loadWindow(start, end);
+    const page = await loadWindow(start, end, version);
     if (version !== requestVersion) return;
     serverTotal.value = page.total;
-    const isInitialLoad = rawRows.length !== page.total;
-    if (isInitialLoad) {
-      rawRows = Array.from({ length: page.total }, (_, index) => makeSkeletonRow(index));
+    const view = await getActiveView(version);
+    if (!view) return;
+    const shouldResetTable = rawRows.length !== page.total;
+    if (shouldResetTable) {
+      const loadedIds = await loadDefectIdRows(view, page.total, version);
+      if (!loadedIds) return;
+      loadedDefectIds.clear();
     }
     for (let i = 0; i < page.items.length; i += 1) {
-      Object.assign(rawRows[start + i], page.items[i], { _isSkeleton: false });
+      const row = page.items[i];
+      rawRows[start + i] = row;
+      const id = rowDefectId(row);
+      if (id !== null) loadedDefectIds.add(id);
     }
-    await syncRawRowsToTable(isInitialLoad);
+    await syncRawRowsToTable(shouldResetTable);
     loadedPages.add(pageIndex);
     accumulateDiscoveredSetFilterValues(page.items);
     void nextTick(() => {
@@ -417,7 +451,7 @@ async function loadPage(pageIndex: number): Promise<void> {
   }
 }
 
-function accumulateDiscoveredSetFilterValues(items: ScSampleTableDisplayRow[]): void {
+function accumulateDiscoveredSetFilterValues(items: VxeSampleTableRow[]): void {
   for (const definition of activeColumnDefinitions.value) {
     if (definition.filter !== "set") continue;
     const field = String(definition.key);
@@ -481,7 +515,9 @@ function resetRows(): void {
   requestVersion += 1;
   loadedPages.clear();
   loadingPages.clear();
+  loadedDefectIds.clear();
   rawRows = [];
+  void disposeActiveView();
   void syncRawRowsToTable(true);
   serverTotal.value = DEFAULT_TOTAL;
   void loadPage(0);
@@ -552,8 +588,8 @@ function handleSortChange(event: VxeTableDefines.SortChangeEventParams<VxeSample
   resetRows();
 }
 
-function rowDefectId(row: VxeSampleTableRow): number | null {
-  if (row._isSkeleton) return null;
+function rowDefectId(row: VxeSampleTableRow | undefined): number | null {
+  if (!row) return null;
   const id = Number(row.defect_id);
   return Number.isFinite(id) ? id : null;
 }
@@ -577,9 +613,7 @@ function handleCheckboxChange(
 
 function handleCheckboxAll(event: VxeTableDefines.CheckboxAllEventParams<VxeSampleTableRow>): void {
   const next = new Set(selectedIds.value);
-  for (const row of rawRows) {
-    const id = rowDefectId(row);
-    if (id === null) continue;
+  for (const id of loadedDefectIds) {
     if (event.checked) next.add(id);
     else next.delete(id);
   }
@@ -601,11 +635,8 @@ function handleCellClick(event: VxeTableDefines.CellClickEventParams<VxeSampleTa
 }
 
 function syncCurrentPageSelection(): void {
-  for (const row of rawRows) {
-    const id = rowDefectId(row);
-    if (id !== null) {
-      void gridRef.value?.setCheckboxRowKey(id, selectedIds.value.has(id));
-    }
+  for (const id of loadedDefectIds) {
+    void gridRef.value?.setCheckboxRowKey(id, selectedIds.value.has(id));
   }
 }
 
@@ -615,8 +646,9 @@ function clearSelection(): void {
   emitSelection();
 }
 
-function renderCell(definition: ColumnDefinition, row: VxeSampleTableRow): string {
-  if (row._isSkeleton) return "";
+function renderCell(definition: ColumnDefinition, row: VxeSampleTableRow | undefined): string {
+  if (!row) return "";
+  if (definition.key !== "defect_id" && !row._isHydrated) return "";
   if (definition.render) return definition.render(row);
   const value = row[definition.key];
   return value == null || value === "" ? "-" : String(value);
@@ -680,6 +712,11 @@ onMounted(() => {
   void refreshGridLayout();
 });
 
+onBeforeUnmount(() => {
+  requestVersion += 1;
+  void disposeActiveView();
+});
+
 watch(
   () => serverTotal.value,
   () => {
@@ -698,8 +735,18 @@ defineExpose({
         reticleY: number;
       }
     | undefined {
-    const row = rawRows.find((r) => Number(r.defect_id) === defectId);
-    if (!row || row._isSkeleton) return undefined;
+    const row = rawRows.find((r) => Number(r?.defect_id) === defectId);
+    if (
+      !row?._isHydrated ||
+      row.wafer_x == null ||
+      row.wafer_y == null ||
+      row.die_x == null ||
+      row.die_y == null ||
+      row.reticle_x == null ||
+      row.reticle_y == null
+    ) {
+      return undefined;
+    }
     return {
       waferX: row.wafer_x,
       waferY: row.wafer_y,
