@@ -50,7 +50,7 @@ describe("ScReticleMapPerspective", () => {
     expect(wrapper.exists()).toBe(true);
   });
 
-  it("clears immediateCrosshairPoints on pointerDown", async () => {
+  it("keeps immediateCrosshairPoints on pointerDown", async () => {
     const { packed } = makePerspectiveStride6Points({ count: 3 });
     const { wrapper } = await mountWithProviders(ScReticleMapPerspective, {
       props: { points: packed, mode: "select" },
@@ -59,7 +59,7 @@ describe("ScReticleMapPerspective", () => {
     vm.immediateCrosshairPoints = [{ x: 100, y: 200 }];
     const overlay = wrapper.find(".sc-reticle-map-perspective__overlay");
     await overlay.trigger("pointerdown", { clientX: 50, clientY: 50, button: 0 });
-    expect(vm.immediateCrosshairPoints).toEqual([]);
+    expect(vm.immediateCrosshairPoints).toEqual([{ x: 100, y: 200 }]);
   });
 
   it("emits box-select in select mode on drag release", async () => {
@@ -97,7 +97,7 @@ describe("ScReticleMapPerspective", () => {
     expect(vm.immediateCrosshairPoints).toEqual([]);
   });
 
-  it("clears immediateCrosshairPoints when points change", async () => {
+  it("keeps immediateCrosshairPoints when points change", async () => {
     const { packed } = makePerspectiveStride6Points({ count: 3 });
     const { wrapper } = await mountWithProviders(ScReticleMapPerspective, {
       props: { points: packed, mode: "select" },
@@ -106,16 +106,19 @@ describe("ScReticleMapPerspective", () => {
     vm.immediateCrosshairPoints = [{ x: 100, y: 200 }];
     const { packed: newPacked } = makePerspectiveStride6Points({ count: 5 });
     await wrapper.setProps({ points: newPacked });
-    expect(vm.immediateCrosshairPoints).toEqual([]);
+    expect(vm.immediateCrosshairPoints).toEqual([{ x: 100, y: 200 }]);
   });
 
   it("emits empty selection-change on dblclick in select mode", async () => {
     const { wrapper } = await mountWithProviders(ScReticleMapPerspective, {
       props: { mode: "select" },
     });
+    const vm = wrapper.vm as unknown as { immediateCrosshairPoints: { x: number; y: number }[] };
+    vm.immediateCrosshairPoints = [{ x: 100, y: 200 }];
     const container = wrapper.find(".sc-reticle-map-perspective");
     await container.trigger("dblclick");
     expect(wrapper.emitted("selection-change")).toBeTruthy();
     expect(wrapper.emitted("selection-change")?.[0]).toEqual([[]]);
+    expect(vm.immediateCrosshairPoints).toEqual([]);
   });
 });

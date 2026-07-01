@@ -128,7 +128,7 @@ const activeComponentProps = computed((): Record<string, unknown> => {
       page.handleTableSortChange(tab.id, sort),
     onLegendGroupChange: (groupBy: string | null) =>
       page.handleLegendGroupByChange(tab.id, groupBy),
-    onSelectPoints: () => {},
+    onSelectPoints: ({ ids }: { ids: number[] }) => page.setSelectedDefectIds(tab.id, ids),
     onLegendHiddenChange: () => {},
     onSelectSamples: (ids: string[]) => page.setSelectedDefectIds(tab.id, ids.map(Number)),
     onRetry: () => page.fetchPreviewDataForTab(tab),
@@ -200,13 +200,11 @@ const activeComponentProps = computed((): Record<string, unknown> => {
         </div>
 
         <div class="sc-preview-tab-content">
-          <KeepAlive :max="3">
-            <component
-              :is="activeComponent"
-              :key="page.activeTabId.value ?? 'summary'"
-              v-bind="activeComponentProps"
-            />
-          </KeepAlive>
+          <component
+            :is="activeComponent"
+            :key="page.activeTabId.value ?? 'summary'"
+            v-bind="activeComponentProps"
+          />
         </div>
       </div>
     </div>

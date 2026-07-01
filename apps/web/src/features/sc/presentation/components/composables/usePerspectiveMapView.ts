@@ -1,5 +1,10 @@
 import { ref, watch, onUnmounted, type ComputedRef, type Ref } from "vue";
 import type { Table, View, Filter } from "@perspective-dev/client";
+import {
+  managePerspectiveTable,
+  managePerspectiveView,
+  retirePerspectiveView,
+} from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewConfig = any;
@@ -59,10 +64,6 @@ interface ModeUpdateContext {
   xCol: string;
 }
 
-function onPerspectiveUpdate(v: View, cb: (evt: unknown) => void): void {
-  v.on_update(cb);
-}
-
 function eventPortId(evt: unknown): number | null {
   if (!evt || typeof evt !== "object") return null;
   const portId = (evt as PerspectiveUpdateEvent).port_id;
@@ -71,13 +72,7 @@ function eventPortId(evt: unknown): number | null {
 
 function retireView(v: View | null): void {
   if (!v) return;
-  window.setTimeout(() => {
-    try {
-      v.delete();
-    } catch {
-      /* ignore */
-    }
-  }, 1000);
+  window.setTimeout(() => retirePerspectiveView(v), 1000);
 }
 
 const BIN_RESOLUTION: Record<MapMode, { large: number; small: number }> = {
@@ -112,20 +107,28 @@ export function usePerspectiveMapView(
   const pending = ref(false);
   const error = ref<string | null>(null);
 
+  function rowsRefForMode(mode: MapMode): Ref<MapBinRow[] | null> {
+    switch (mode) {
+      case "wafer":
+        return waferRows;
+      case "die":
+        return dieRows;
+      case "reticle":
+        return reticleRows;
+    }
+  }
+
   const waferVersion = ref(0);
   const dieVersion = ref(0);
   const reticleVersion = ref(0);
 
-  const views: Record<MapMode, View | null> = {
-    wafer: null,
-    die: null,
-    reticle: null,
-  };
+  let activeView: View | null = null;
+  let activeViewMode: MapMode | null = null;
 
   // Cache unzoomed (zoom=null) views per mode — keyed by filter/col/dims hash
   const _uzCache: Record<
     MapMode,
-    { rows: MapBinRow[]; view: View; binSize: number; col: string; xCol: string } | null
+    { rows: MapBinRow[]; binSize: number; col: string; xCol: string } | null
   > = {
     wafer: null,
     die: null,
@@ -141,23 +144,13 @@ export function usePerspectiveMapView(
   let _rebuildSeq = 0;
   let _activeTable: Table | null = null;
 
-  function deleteViewNow(v: View | null): void {
-    if (!v) return;
-    try {
-      v.delete();
-    } catch {
-      /* ignore */
-    }
-  }
-
   function clearViews(): void {
+    _rebuildSeq += 1;
+    retirePerspectiveView(activeView);
+    activeView = null;
+    activeViewMode = null;
     for (const mode of MODES) {
-      deleteViewNow(views[mode]);
-      views[mode] = null;
-      if (_uzCache[mode]) {
-        deleteViewNow(_uzCache[mode]!.view);
-        _uzCache[mode] = null;
-      }
+      _uzCache[mode] = null;
       modeContexts[mode] = { view: null, binSize: 0, isZoom: false, col: "", xCol: "" };
     }
     _uzCacheKey = "";
@@ -240,6 +233,7 @@ export function usePerspectiveMapView(
 
     let binSize: number;
     let isZoom = false;
+    let hasDisplayCache = false;
     const extraFilters: Filter[] = [];
 
     if (zoomVp && canvasDims.value.w > 0) {
@@ -254,32 +248,16 @@ export function usePerspectiveMapView(
     } else {
       binSize = unzoomBinSize(mode, canvasDims.value);
 
-      // Unzoomed — check cache
+      // Unzoomed cache is display-only. The active mode still rebuilds one live
+      // view so on_update remains attached only to the visible map.
       if (_uzCache[mode]) {
         const cached = _uzCache[mode]!;
-        const previous = views[mode];
-        views[mode] = null;
-        retireView(previous);
-        modeContexts[mode] = {
-          view: cached.view,
-          binSize: cached.binSize,
-          isZoom: false,
-          col: cached.col,
-          xCol: cached.xCol,
-        };
-        switch (mode) {
-          case "wafer":
-            waferRows.value = cached.rows;
-            break;
-          case "die":
-            dieRows.value = cached.rows;
-            break;
-          case "reticle":
-            reticleRows.value = cached.rows;
-            break;
-        }
-        return;
+        rowsRefForMode(mode).value = cached.rows;
+        hasDisplayCache = true;
       }
+    }
+    if (!hasDisplayCache) {
+      rowsRefForMode(mode).value = null;
     }
 
     const allFilters = [...globalFilters.value, ...extraFilters];
@@ -303,62 +281,55 @@ export function usePerspectiveMapView(
       filter: allFilters.length > 0 ? allFilters : undefined,
     };
 
-    const v = (await tbl.view(vCfg as AnyViewConfig)) as View;
+    const managedTable = managePerspectiveTable(tbl);
+    const v = (await managedTable.view(vCfg as AnyViewConfig)) as View;
+    const managed = managePerspectiveView(v, managedTable);
+    if (_rebuildSeq !== buildSeq || (activeMapMode && activeMapMode.value !== mode)) {
+      managed.retire();
+      return;
+    }
+    const previousActiveView = activeView;
+    activeView = v;
+    activeViewMode = mode;
+    retireView(previousActiveView);
 
     modeContexts[mode] = { view: v, binSize, isZoom, col, xCol: cfg.xCol };
 
-    onPerspectiveUpdate(v, (evt: unknown) => {
-      console.debug("[map-view] onPerspectiveUpdate", { mode, portId: eventPortId(evt) });
-      if (!shouldProcessUpdate(mode, evt)) return;
-      incrementModeVersion(mode);
-    });
+    managed.onUpdateDebounced(
+      (evt: unknown) => {
+        incrementModeVersion(mode);
+      },
+      {
+        shouldRun: (evt) => shouldProcessUpdate(mode, evt),
+      },
+    );
 
-    // Only store non-zoomed views in the persistent slot; zoomed views replace the old zoomed one
-    if (isZoom) {
-      const previous = views[mode];
-      views[mode] = v;
-      retireView(previous);
+    const nr = await managed.num_rows();
+    if (activeView !== v || activeViewMode !== mode || _rebuildSeq !== buildSeq) {
+      managed.retire();
+      return;
     }
-
-    const nr = await v.num_rows();
-    if ((isZoom && views[mode] !== v) || (!isZoom && _rebuildSeq !== buildSeq)) return;
     if (nr === 0) {
-      switch (mode) {
-        case "wafer":
-          waferRows.value = [];
-          break;
-        case "die":
-          dieRows.value = [];
-          break;
-        case "reticle":
-          reticleRows.value = [];
-          break;
-      }
+      rowsRefForMode(mode).value = [];
       if (!isZoom) {
-        _uzCache[mode] = { rows: [], view: v, binSize, col, xCol: cfg.xCol };
+        _uzCache[mode] = { rows: [], binSize, col, xCol: cfg.xCol };
       }
       return;
     }
-    const data = (await v.to_columns()) as Record<string, unknown[]>;
-    if ((isZoom && views[mode] !== v) || (!isZoom && _rebuildSeq !== buildSeq)) return;
+    console.time("view.to_columns:rebuild");
+    const data = (await managed.to_columns()) as Record<string, unknown[]>;
+    console.timeEnd("view.to_columns:rebuild");
+    if (activeView !== v || activeViewMode !== mode || _rebuildSeq !== buildSeq) {
+      managed.retire();
+      return;
+    }
 
     const resultRows = _computeRowData(data, binSize, isZoom, mode, col, cfg.xCol);
-
-    switch (mode) {
-      case "wafer":
-        waferRows.value = resultRows;
-        break;
-      case "die":
-        dieRows.value = resultRows;
-        break;
-      case "reticle":
-        reticleRows.value = resultRows;
-        break;
-    }
+    rowsRefForMode(mode).value = resultRows;
 
     // Save unzoomed result to cache
     if (!isZoom) {
-      _uzCache[mode] = { rows: resultRows, view: v, binSize, col, xCol: cfg.xCol };
+      _uzCache[mode] = { rows: resultRows, binSize, col, xCol: cfg.xCol };
     }
   }
 
@@ -368,21 +339,26 @@ export function usePerspectiveMapView(
       console.debug("[map-view] wafer version watcher", { version: waferVersion.value });
       const ctx = modeContexts.wafer;
       if (!ctx.view) return;
+      const managed = managePerspectiveView(ctx.view);
       try {
-        const nr = await ctx.view.num_rows();
+        const nr = await managed.num_rows();
         if (nr === 0) {
           waferRows.value = [];
           if (!ctx.isZoom)
             _uzCache.wafer = {
               rows: [],
-              view: ctx.view,
               binSize: ctx.binSize,
               col: ctx.col,
               xCol: ctx.xCol,
             };
           return;
         }
-        const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
+        // console.time("view.to_columns:wafer1");
+        // const data0 = await managed.to_arrow();
+        // console.timeEnd("view.to_columns:wafer1");
+
+        console.time("view.to_columns:wafer");
+        const data = (await managed.to_columns()) as Record<string, unknown[]>;
         waferRows.value = _computeRowData(
           data,
           ctx.binSize,
@@ -391,10 +367,11 @@ export function usePerspectiveMapView(
           ctx.col,
           ctx.xCol,
         );
+        console.timeEnd("view.to_columns:wafer");
+
         if (!ctx.isZoom)
           _uzCache.wafer = {
             rows: waferRows.value!,
-            view: ctx.view,
             binSize: ctx.binSize,
             col: ctx.col,
             xCol: ctx.xCol,
@@ -407,39 +384,32 @@ export function usePerspectiveMapView(
   );
 
   watch(
-    () => activeMapMode?.value,
-    (mode) => {
-      if (!mode) return;
-      incrementModeVersion(mode);
-    },
-  );
-
-  watch(
     () => dieVersion.value,
     async () => {
       console.debug("[map-view] die version watcher", { version: dieVersion.value });
       const ctx = modeContexts.die;
       if (!ctx.view) return;
+      const managed = managePerspectiveView(ctx.view);
       try {
-        const nr = await ctx.view.num_rows();
+        const nr = await managed.num_rows();
         if (nr === 0) {
           dieRows.value = [];
           if (!ctx.isZoom)
             _uzCache.die = {
               rows: [],
-              view: ctx.view,
               binSize: ctx.binSize,
               col: ctx.col,
               xCol: ctx.xCol,
             };
           return;
         }
-        const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
+        console.time("view.to_columns:die");
+        const data = (await managed.to_columns()) as Record<string, unknown[]>;
+        console.timeEnd("view.to_columns:die");
         dieRows.value = _computeRowData(data, ctx.binSize, ctx.isZoom, "die", ctx.col, ctx.xCol);
         if (!ctx.isZoom)
           _uzCache.die = {
             rows: dieRows.value!,
-            view: ctx.view,
             binSize: ctx.binSize,
             col: ctx.col,
             xCol: ctx.xCol,
@@ -457,21 +427,23 @@ export function usePerspectiveMapView(
       console.debug("[map-view] reticle version watcher", { version: reticleVersion.value });
       const ctx = modeContexts.reticle;
       if (!ctx.view) return;
+      const managed = managePerspectiveView(ctx.view);
       try {
-        const nr = await ctx.view.num_rows();
+        const nr = await managed.num_rows();
         if (nr === 0) {
           reticleRows.value = [];
           if (!ctx.isZoom)
             _uzCache.reticle = {
               rows: [],
-              view: ctx.view,
               binSize: ctx.binSize,
               col: ctx.col,
               xCol: ctx.xCol,
             };
           return;
         }
-        const data = (await ctx.view.to_columns()) as Record<string, unknown[]>;
+        console.time("view.to_columns:reticle");
+        const data = (await managed.to_columns()) as Record<string, unknown[]>;
+        console.timeEnd("view.to_columns:reticle");
         reticleRows.value = _computeRowData(
           data,
           ctx.binSize,
@@ -483,7 +455,6 @@ export function usePerspectiveMapView(
         if (!ctx.isZoom)
           _uzCache.reticle = {
             rows: reticleRows.value!,
-            view: ctx.view,
             binSize: ctx.binSize,
             col: ctx.col,
             xCol: ctx.xCol,
@@ -521,27 +492,24 @@ export function usePerspectiveMapView(
     if (cacheKey !== _uzCacheKey) {
       _uzCacheKey = cacheKey;
       for (const m of MODES) {
-        if (_uzCache[m]) {
-          retireView(_uzCache[m]!.view);
-          _uzCache[m] = null;
-        }
+        _uzCache[m] = null;
       }
     }
 
     pending.value = true;
 
-    for (const mode of enabledModes) {
-      if (_rebuildSeq !== seq) {
-        return;
-      }
-      try {
-        await rebuildMode(mode);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[psp-map:${mode}] ERROR:`, msg);
-        error.value = `[${mode}] ${msg}`;
-        onRecoverableError?.(`${mode} map rebuild failed`, e);
-      }
+    const mode = activeMapMode?.value ?? enabledModes[0];
+    if (!enabledModes.includes(mode)) {
+      pending.value = false;
+      return;
+    }
+    try {
+      await rebuildMode(mode);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[psp-map:${mode}] ERROR:`, msg);
+      error.value = `[${mode}] ${msg}`;
+      onRecoverableError?.(`${mode} map rebuild failed`, e);
     }
 
     if (_rebuildSeq === seq) {
@@ -557,6 +525,7 @@ export function usePerspectiveMapView(
       () => legendCol.value,
       () => zoomByMode.value,
       () => canvasDims.value,
+      () => activeMapMode?.value,
     ],
     () => {
       rebuildAll();

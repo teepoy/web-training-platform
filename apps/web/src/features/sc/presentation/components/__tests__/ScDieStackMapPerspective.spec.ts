@@ -147,6 +147,8 @@ describe("ScDieStackMapPerspective", () => {
     });
 
     await nextTick();
+    const vm = wrapper.vm as unknown as { immediateCrosshairPoints: { x: number; y: number }[] };
+    vm.immediateCrosshairPoints = [{ x: 1, y: 2 }];
 
     const canvas = wrapper.find(".sc-die-map-perspective__overlay");
     await canvas.trigger("dblclick");
@@ -155,6 +157,7 @@ describe("ScDieStackMapPerspective", () => {
     const events = wrapper.emitted("selection-change");
     expect(events).toBeTruthy();
     expect(events![events!.length - 1][0]).toEqual([]);
+    expect(vm.immediateCrosshairPoints).toEqual([]);
   });
 
   it("emits box-select in select mode", async () => {
@@ -211,6 +214,7 @@ describe("ScDieStackMapPerspective", () => {
     await nextTick();
 
     expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toBeNull();
+    expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual([]);
   });
 });
 
@@ -253,7 +257,7 @@ describe("ScDieStackMapPerspective highlight and crosshair", () => {
     expect(wrapper.find(".sc-die-map-perspective").exists()).toBe(true);
   });
 
-  it("computes crosshair points on box-select in select mode", async () => {
+  it("emits immediate crosshair points on box-select in select mode", async () => {
     const points = makeFixedPoints([
       { id: 101, classNumber: 1 },
       { id: 201, classNumber: 2 },
@@ -273,12 +277,13 @@ describe("ScDieStackMapPerspective highlight and crosshair", () => {
     await simulateBoxDrag(wrapper, 100, 100, 200, 200);
     await nextTick();
 
-    // Box select event was emitted
     expect(wrapper.emitted("box-select")).toBeTruthy();
     expect(wrapper.emitted("box-select")!.length).toBeGreaterThanOrEqual(1);
+    expect(wrapper.emitted("immediate-crosshair-points")).toBeTruthy();
+    expect(wrapper.emitted("immediate-crosshair-points")!.at(-1)?.[0]).not.toEqual([]);
   });
 
-  it("clears crosshair on subsequent pointerDown", async () => {
+  it("keeps appending crosshair selections across subsequent drags", async () => {
     const points = makeFixedPoints([
       { id: 101, classNumber: 1 },
       { id: 201, classNumber: 2 },
@@ -300,12 +305,12 @@ describe("ScDieStackMapPerspective highlight and crosshair", () => {
     await simulateBoxDrag(wrapper, 100, 100, 200, 200);
     expect(wrapper.emitted("box-select")).toBeTruthy();
 
-    // Second box select — crosshair should have been cleared before new computation
+    // Second box select keeps the previous immediate crosshair visible while adding the new one.
     await simulateBoxDrag(wrapper, 300, 288, 312, 300);
     expect(wrapper.emitted("box-select")!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("clears crosshair when points change", async () => {
+  it("keeps crosshair when points change", async () => {
     const points = makeFixedPoints([
       { id: 101, classNumber: 1 },
       { id: 201, classNumber: 2 },

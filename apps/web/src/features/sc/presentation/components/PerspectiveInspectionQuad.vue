@@ -108,6 +108,13 @@ const isRowResizing = ref(false);
 const isBarResizing = ref(false);
 const globalFilter = ref<ScSampleTableFilter>({});
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
+type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
+type QueuedBoxSelection = {
+  mode: "wafer" | "die" | "reticle";
+  region: BoxSelectionRegion;
+};
+let queuedBoxSelections: QueuedBoxSelection[] = [];
+let boxSelectionInFlight = false;
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const enabledLegendSources = computed<ScLegendSource[]>(
@@ -132,7 +139,9 @@ const reticleDieSizeYModel = computed(
 
 const perspective = useScPerspectiveWorkbench();
 const perspectiveReady = computed(() => perspective.dataReady.value);
+let quadDisposed = false;
 function recoverPerspective(reason: string, err: unknown): void {
+  if (quadDisposed) return;
   void perspective.recover(reason, err);
 }
 const perspectiveScopeKey = computed(() => {
@@ -163,8 +172,6 @@ const tableDataSource = usePerspectiveSampleTableDataSource(
   perspective.table,
   perspectiveScopeKey,
   model.tableBaseFilters,
-  model.sampleTableActiveView,
-  model.sampleTableActiveViewVersion,
   recoverPerspective,
 );
 
@@ -204,7 +211,7 @@ watch(
   { immediate: true },
 );
 
-const sampleTableTotal = computed(() => model.total.value);
+const sampleTableTotal = 0;
 const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),
 );
@@ -226,7 +233,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-const highlightDefects = ref<HighlightDefect[]>([]);
+const galleryHighlightDefects = ref<HighlightDefect[]>([]);
+const highlightDefects = computed<HighlightDefect[]>(() => galleryHighlightDefects.value);
+const mapImmediateCrosshairDefects = ref<HighlightDefect[]>([]);
+const mapImmediateCrosshairVersion = ref(0);
+let mapImmediateCrosshairSeq = 0;
 let _highlightTimer: ReturnType<typeof setTimeout> | null = null;
 const HIGHLIGHT_DEBOUNCE_MS = 250;
 
@@ -245,14 +256,26 @@ function scheduleHighlightUpdate(ids: Set<string>, tab: string): void {
     _highlightTimer = null;
     const numericIds = [...ids].map(Number).filter(Number.isFinite);
     if (numericIds.length > HIGHLIGHT_MAX_DEFECTS) {
-      highlightDefects.value = [];
+      galleryHighlightDefects.value = [];
       return;
     }
     if (tab !== props.activeMapTab) return;
     const result = await model.highlightDefectsForIds(numericIds);
     if (tab !== props.activeMapTab) return;
-    highlightDefects.value = result;
+    galleryHighlightDefects.value = result;
   }, HIGHLIGHT_DEBOUNCE_MS);
+}
+
+async function refreshImmediateCrosshairFromMapSelection(): Promise<void> {
+  const seq = ++mapImmediateCrosshairSeq;
+  mapImmediateCrosshairDefects.value = [];
+  mapImmediateCrosshairVersion.value += 1;
+  const ids = model.mapSelectedDefectIds.value;
+  if (ids.length === 0 || ids.length > HIGHLIGHT_MAX_DEFECTS) return;
+  const result = await model.highlightDefectsForIds(ids);
+  if (seq !== mapImmediateCrosshairSeq) return;
+  mapImmediateCrosshairDefects.value = result;
+  mapImmediateCrosshairVersion.value += 1;
 }
 
 watch(
@@ -261,8 +284,17 @@ watch(
   { immediate: true },
 );
 
+watch(
+  [() => props.activeMapTab, () => props.zoom],
+  () => {
+    void refreshImmediateCrosshairFromMapSelection();
+  },
+);
+
 onUnmounted(() => {
+  quadDisposed = true;
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
+  queuedBoxSelections = [];
 });
 
 const barChartItems = computed(() => {
@@ -389,15 +421,30 @@ function onBarResizeEnd(e: PointerEvent): void {
   if (e.currentTarget instanceof Element) e.currentTarget.releasePointerCapture(e.pointerId);
 }
 
-async function handleBoxSelect(region: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}): Promise<void> {
-  const ids = await model.queryBoxSelection(props.activeMapTab, region);
-  const nextIds = await model.appendMapSelection(ids);
-  emit("select-points", { ids: nextIds, region });
+function handleBoxSelect(region: BoxSelectionRegion): void {
+  mapImmediateCrosshairDefects.value = [];
+  queuedBoxSelections.push({ mode: props.activeMapTab, region });
+  void drainBoxSelectionQueue();
+}
+async function drainBoxSelectionQueue(): Promise<void> {
+  if (boxSelectionInFlight) return;
+  boxSelectionInFlight = true;
+  try {
+    while (queuedBoxSelections.length > 0) {
+      const selection = queuedBoxSelections.shift();
+      if (!selection) continue;
+      try {
+        const ids = await model.queryBoxSelection(selection.mode, selection.region);
+        const nextIds = await model.appendMapSelection(ids);
+        emit("select-points", { ids: nextIds, region: selection.region });
+      } catch (err) {
+        recoverPerspective("box selection update failed", err);
+      }
+    }
+  } finally {
+    boxSelectionInFlight = false;
+    if (queuedBoxSelections.length > 0) void drainBoxSelectionQueue();
+  }
 }
 async function handleMapSelectPoints(payload: {
   ids: number[];
@@ -405,10 +452,21 @@ async function handleMapSelectPoints(payload: {
   key?: string | number | null;
 }): Promise<void> {
   const ids = payload.key != null ? await model.queryLegendSelection(payload.key) : payload.ids;
+  if (payload.key != null && ids.length <= HIGHLIGHT_MAX_DEFECTS) {
+    mapImmediateCrosshairDefects.value = await model.highlightDefectsForIds(ids);
+  } else {
+    mapImmediateCrosshairDefects.value = [];
+  }
+  mapImmediateCrosshairVersion.value += 1;
   await model.applyMapSelection(ids);
   emit("select-points", { ...payload, ids });
 }
 async function handleMapSelectionChange(ids: number[]): Promise<void> {
+  if (ids.length === 0) {
+    mapImmediateCrosshairSeq += 1;
+    mapImmediateCrosshairDefects.value = [];
+    mapImmediateCrosshairVersion.value += 1;
+  }
   if (ids.length === 0) await model.clearMapSelection();
   emit("select-points", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
 }
@@ -477,6 +535,8 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
           :legend-sources="enabledLegendSources"
           :zoom="zoom"
           :highlightDefects="highlightDefects"
+          :immediate-crosshair-defects="mapImmediateCrosshairDefects"
+          :immediate-crosshair-version="mapImmediateCrosshairVersion"
           :map-loading="model.activeMapLoading.value || !perspectiveReady"
           :map-error="model.mapError.value ?? perspective.error.value"
           :map-progress-message="perspectiveReady ? undefined : 'Loading data...'"
@@ -520,7 +580,7 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
       <ScSampleTable
         v-else
         :data-source="tableDataSource"
-        :loading="!perspectiveReady || model.tableLoading.value"
+        :loading="!perspectiveReady"
         :total="sampleTableTotal"
         :selected-defect-ids="tableHighlightIds"
         :filter="tableFilter"

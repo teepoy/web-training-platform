@@ -1,12 +1,8 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { create } from "@bufbuild/protobuf";
 import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
-import type { DefectList, ScSampleItem } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import {
-  DefectListSchema,
-  ReviewImageSchema,
-  ScSampleItemSchema,
-} from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
+import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
@@ -17,42 +13,11 @@ import {
 } from "@/features/sc/presentation/components/composables/usePerspectiveMapView";
 import { usePerspectiveViewRef } from "@/features/sc/presentation/components/composables/usePerspectiveViewRef";
 import { binsToDisplayArray } from "@/features/sc/presentation/components/transforms/binsToDisplayArrays";
-
-const TABLE_COLUMNS = [
-  "defect_id",
-  "sample_id",
-  "inspection_time",
-  "wafer_key",
-  "wafer_x",
-  "wafer_y",
-  "die_x",
-  "die_y",
-  "reticle_x",
-  "reticle_y",
-  "rough_bin",
-  "class_number",
-  "images",
-  "test_id",
-  "index_x",
-  "index_y",
-  "adder",
-  "cluster_id",
-  "size_x",
-  "size_y",
-  "size_d",
-  "area",
-  "final_bin",
-  "manual_bin",
-  "kill_ratio",
-  "annotation_label",
-  "prediction_label",
-  "prediction_confidence",
-  "final_class",
-  "review_image_ids_json",
-  "map_in_selection",
-  "table_in_selection",
-  "gallery_in_selection",
-];
+import {
+  managePerspectiveTable,
+  managePerspectiveView,
+  retirePerspectiveView,
+} from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 const PATCH_BLINK_COLUMNS = [
   "defect_id",
@@ -98,18 +63,6 @@ interface SelectionUpdatePorts {
   gallery: number | null;
 }
 
-type SampleRowRecord = Record<string, PerspectiveScSampleItem>;
-
-export type PerspectiveScSampleItem = ScSampleItem & {
-  dieX: number;
-  dieY: number;
-  reticleX: number;
-  reticleY: number;
-  annotationLabel: string | null;
-  predictionLabel: string | null;
-  predictionConfidence: number | null;
-};
-
 function legendColumn(source: ScLegendSource | null | undefined): string {
   if (source === "bin") return "rough_bin";
   if (source === "annotation") return "annotation_label";
@@ -123,11 +76,6 @@ function numeric(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function stringOrNull(value: unknown): string | null {
-  if (value == null || value === "") return null;
-  return String(value);
-}
-
 function legendValue(value: unknown): string | number {
   if (value == null || value === "") return "__unlabeled__";
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -137,26 +85,6 @@ function legendValue(value: unknown): string | number {
 
 function legendKey(value: unknown): string {
   return String(legendValue(value));
-}
-
-function inspectionTimeToEpochMs(value: unknown): bigint {
-  if (typeof value === "bigint") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return BigInt(Math.trunc(value));
-  if (typeof value !== "string") return 0n;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? BigInt(parsed) : 0n;
-}
-
-function parseReviewImages(value: unknown): number[] {
-  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
-  if (typeof value !== "string" || value.length === 0) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(Number).filter(Number.isFinite);
-  } catch {
-    return [];
-  }
 }
 
 function perspectiveField(field: string): string {
@@ -212,26 +140,31 @@ function selectionStateFor(ids: number[]): SelectionState {
   };
 }
 
+function mapSelectionStateFor(ids: number[]): SelectionState {
+  if (ids.length === 0) return emptySelection();
+  return { mode: "large", ids };
+}
+
 async function idsForFilter(table: Table, filters: Filter[]): Promise<number[]> {
-  const v = await table.view({
+  const managedTable = managePerspectiveTable(table);
+  const v = await managedTable.view({
     columns: ["defect_id"],
     filter: filters.length ? filters : undefined,
   } as never);
+  const managed = managePerspectiveView(v, managedTable);
   try {
-    const total = await v.num_rows();
+    const total = await managed.num_rows();
     if (total === 0) return [];
-    const limit = Math.min(total, 50_000);
-    const data = (await v.to_columns({ start_row: 0, end_row: limit })) as Record<
+    const limit = total;
+    console.time("view.to_columns:getDefectIds");
+    const data = (await managed.to_columns({ start_row: 0, end_row: limit })) as Record<
       string,
       unknown[]
     >;
+    console.timeEnd("view.to_columns:getDefectIds");
     return sortedUniqueIds(data.defect_id ?? []);
   } finally {
-    try {
-      await v.delete();
-    } catch {
-      /* best effort */
-    }
+    managed.retire();
   }
 }
 
@@ -242,7 +175,7 @@ async function updateMapSelection(
   portId?: number | null,
 ): Promise<void> {
   if (defectIds.length === 0) return;
-  await table.update(
+  await managePerspectiveTable(table).update(
     {
       defect_id: defectIds,
       map_in_selection: defectIds.map(() => mapVal),
@@ -270,7 +203,7 @@ async function replaceMapSelection(
     mapValues.push(1);
   }
   if (defectIds.length === 0) return;
-  await table.update(
+  await managePerspectiveTable(table).update(
     {
       defect_id: defectIds,
       map_in_selection: mapValues,
@@ -286,7 +219,7 @@ async function updateTableSelection(
   portId?: number | null,
 ): Promise<void> {
   if (defectIds.length === 0) return;
-  await table.update(
+  await managePerspectiveTable(table).update(
     {
       defect_id: defectIds,
       table_in_selection: defectIds.map(() => val),
@@ -302,44 +235,13 @@ async function updateGallerySelection(
   portId?: number | null,
 ): Promise<void> {
   if (defectIds.length === 0) return;
-  await table.update(
+  await managePerspectiveTable(table).update(
     {
       defect_id: defectIds,
       gallery_in_selection: defectIds.map(() => val),
     },
     portId == null ? undefined : { port_id: portId, format: null },
   );
-}
-
-function rowsFromColumns(
-  data: Record<string, unknown[]>,
-  options: { includeReviewImages: boolean },
-): PerspectiveScSampleItem[] {
-  const ids = data.defect_id ?? [];
-  return ids.map((id, i) => ({
-    ...create(ScSampleItemSchema, {
-      defectId: numeric(id),
-      inspectionTime: inspectionTimeToEpochMs(data.inspection_time?.[i]),
-      waferX: numeric(data.wafer_x?.[i]),
-      waferY: numeric(data.wafer_y?.[i]),
-      roughBin: numeric(data.rough_bin?.[i]),
-      classNumber: numeric(data.class_number?.[i]),
-      waferKey: numeric(data.wafer_key?.[i]),
-      reviewImages: options.includeReviewImages
-        ? parseReviewImages(data.review_image_ids_json?.[i]).map((imageId) =>
-            create(ReviewImageSchema, { imageId }),
-          )
-        : [],
-    }),
-    dieX: numeric(data.die_x?.[i]),
-    dieY: numeric(data.die_y?.[i]),
-    reticleX: numeric(data.reticle_x?.[i]),
-    reticleY: numeric(data.reticle_y?.[i]),
-    annotationLabel: stringOrNull(data.annotation_label?.[i]),
-    predictionLabel: stringOrNull(data.prediction_label?.[i]),
-    predictionConfidence:
-      data.prediction_confidence?.[i] == null ? null : numeric(data.prediction_confidence[i]),
-  }));
 }
 
 async function jsonRowsForIds(
@@ -351,24 +253,22 @@ async function jsonRowsForIds(
   limit?: number,
 ): Promise<Array<Record<string, unknown>>> {
   if (ids.length === 0) return [];
-  const v = await table.view({
+  const managedTable = managePerspectiveTable(table);
+  const v = await managedTable.view({
     columns,
     filter: [...filters, ["defect_id", "in", ids] as Filter],
     sort,
   } as never);
+  const managed = managePerspectiveView(v, managedTable);
   try {
-    const rowCount = await v.num_rows();
+    const rowCount = await managed.num_rows();
     if (rowCount === 0) return [];
-    return (await v.to_json({
+    return (await managed.to_json({
       start_row: 0,
       end_row: limit == null ? rowCount : Math.min(rowCount, limit),
     })) as Array<Record<string, unknown>>;
   } finally {
-    try {
-      await v.delete();
-    } catch {
-      /* best effort */
-    }
+    managed.retire();
   }
 }
 
@@ -395,38 +295,6 @@ function highlightsFromRows(rows: Array<Record<string, unknown>>): HighlightDefe
     reticleX: numeric(row.reticle_x),
     reticleY: numeric(row.reticle_y),
   }));
-}
-
-function highlightsFromSamples(rows: PerspectiveScSampleItem[]): HighlightDefect[] {
-  return rows.map((row) => ({
-    defectId: Number(row.defectId),
-    waferX: row.waferX,
-    waferY: row.waferY,
-    dieX: row.dieX,
-    dieY: row.dieY,
-    reticleX: row.reticleX,
-    reticleY: row.reticleY,
-  }));
-}
-
-function loadedRowsForIds(byId: SampleRowRecord, ids: number[]): PerspectiveScSampleItem[] {
-  if (ids.length === 0) return [];
-  return ids.flatMap((id) => {
-    const row = byId[rowRecordKey(id)];
-    return row ? [row] : [];
-  });
-}
-
-function rowRecordKey(defectId: number): string {
-  return `d:${defectId}`;
-}
-
-function rowsToRecord(rows: PerspectiveScSampleItem[]): SampleRowRecord {
-  const byId: SampleRowRecord = {};
-  for (const row of rows) {
-    byId[rowRecordKey(Number(row.defectId))] = row;
-  }
-  return byId;
 }
 
 function coordForMode(row: HighlightDefect, mode: MapMode): { x: number; y: number } {
@@ -493,6 +361,7 @@ export function usePerspectiveInspectionModel(args: {
   const tableSelection = ref<SelectionState>(emptySelection());
   const gallerySelection = ref<SelectionState>(emptySelection());
   const tableSelectedDefectIds = ref<number[]>([]);
+  const mapSelectedDefectIds = computed(() => mapSelection.value.ids);
   const reviewMode = ref(false);
   const smallGalleryHighlights = ref<HighlightDefect[]>([]);
   const selectionUpdatePorts = ref<SelectionUpdatePorts>({
@@ -500,10 +369,7 @@ export function usePerspectiveInspectionModel(args: {
     table: null,
     gallery: null,
   });
-  const tableRowRecord = ref<SampleRowRecord>({});
-  const tableRows = computed(() => Object.values(tableRowRecord.value));
   const legendGroups = ref<Record<string, DefectList> | null>(null);
-  const total = ref(0);
 
   const tableHeaderFilters = computed(() => sampleFilterToPerspective(args.tableFilter.value));
   const globalFilters = computed(() => sampleFilterToPerspective(args.globalFilter?.value));
@@ -512,13 +378,13 @@ export function usePerspectiveInspectionModel(args: {
   );
   const samplesFilter = computed<Filter[]>(() => args.galleryRandomSamplingFilter?.value ?? []);
 
-  // Simplified tableBaseFilters — no longer includes map selection;
-  // map/table/gallery selections are handled by persistent views.
-  const tableBaseFilters = computed<Filter[]>(() => [
-    ...globalFilters.value,
-    ...samplesFilter.value,
-    ...reviewModeFilters.value,
-  ]);
+  const tableBaseFilters = computed<Filter[]>(() => {
+    const filters = [...globalFilters.value, ...samplesFilter.value, ...reviewModeFilters.value];
+    if (mapSelection.value.mode === "large") {
+      filters.push(["map_in_selection", "==", 1] as Filter);
+    }
+    return filters;
+  });
   const legendFilters = computed<Filter[]>(() => [
     ...globalFilters.value,
     ...samplesFilter.value,
@@ -532,7 +398,9 @@ export function usePerspectiveInspectionModel(args: {
     reticle: args.zoom.value ?? null,
   }));
   const mapIgnoredUpdatePorts = computed<readonly number[]>(() =>
-    selectionUpdatePorts.value.table == null ? [] : [selectionUpdatePorts.value.table],
+    [selectionUpdatePorts.value.table, selectionUpdatePorts.value.map].filter(
+      (port): port is number => port != null,
+    ),
   );
 
   let selectionPortTable: Table | null = null;
@@ -547,10 +415,11 @@ export function usePerspectiveInspectionModel(args: {
       return selectionUpdatePorts.value;
     }
     selectionPortTable = table;
+    const managedTable = managePerspectiveTable(table);
     const [mapPort, tablePort, galleryPort] = await Promise.all([
-      table.make_port(),
-      table.make_port(),
-      table.make_port(),
+      managedTable.make_port(),
+      managedTable.make_port(),
+      managedTable.make_port(),
     ]);
     if (args.table.value !== table) {
       return selectionUpdatePorts.value;
@@ -560,36 +429,22 @@ export function usePerspectiveInspectionModel(args: {
     return ports;
   }
 
-  // Persistent view configs — each view has its own fixed filter set.
-  // Selection filtering is done via data columns, not config rebuilding.
-  const tableBaseConfig = computed(
+  const sampleTableActiveViewConfig = computed(
     () =>
       ({
-        columns: TABLE_COLUMNS,
-        filter:
-          tableHeaderFilters.value.length +
-            globalFilters.value.length +
-            samplesFilter.value.length +
-            reviewModeFilters.value.length >
-          0
-            ? [
-                ...tableHeaderFilters.value,
-                ...globalFilters.value,
-                ...samplesFilter.value,
-                ...reviewModeFilters.value,
-              ]
-            : undefined,
+        filter: [...tableBaseFilters.value, ...tableHeaderFilters.value].length
+          ? [...tableBaseFilters.value, ...tableHeaderFilters.value]
+          : undefined,
         sort: tableSort.value,
       }) as ViewConfigUpdate,
   );
-
-  const tableMapConfig = computed(
-    () =>
-      ({
-        columns: TABLE_COLUMNS,
-        filter: [...(tableBaseConfig.value.filter ?? []), ["map_in_selection", "==", 1] as Filter],
-        sort: tableSort.value,
-      }) as ViewConfigUpdate,
+  const sampleTableActiveViewConfigVersion = ref(0);
+  watch(
+    sampleTableActiveViewConfig,
+    () => {
+      sampleTableActiveViewConfigVersion.value += 1;
+    },
+    { deep: true, immediate: true },
   );
 
   const blinkBaseFilters = computed<Filter[]>(() => [
@@ -605,9 +460,6 @@ export function usePerspectiveInspectionModel(args: {
     }
     if (tableSelection.value.mode === "large") {
       return [["table_in_selection", "==", 1] as Filter];
-    }
-    if (mapSelection.value.mode === "small") {
-      return [["defect_id", "in", mapSelection.value.ids] as Filter];
     }
     if (mapSelection.value.mode === "large") {
       return [["map_in_selection", "==", 1] as Filter];
@@ -639,6 +491,12 @@ export function usePerspectiveInspectionModel(args: {
         filter: [...reviewBlinkBaseFilter.value, ...blinkSelectionFilters.value],
         sort: blinkSort,
       }) as ViewConfigUpdate,
+  );
+  const activeBlinkMode = computed<"patch" | "review">(() =>
+    reviewMode.value ? "review" : "patch",
+  );
+  const activeBlinkConfig = computed<ViewConfigUpdate>(() =>
+    activeBlinkMode.value === "review" ? reviewBlinkConfig.value : patchBlinkConfig.value,
   );
 
   const histConfig = computed(
@@ -689,68 +547,34 @@ export function usePerspectiveInspectionModel(args: {
     setSmallGalleryHighlights(await highlightsForIds(table, gallerySelection.value.ids));
   }
 
-  async function refreshTableData() {
-    try {
-      const mapView = mapSelection.value.mode !== "none" ? tableMapView.view.value : null;
-      const globalView = tableGlobalView.view.value;
-      const activeView = mapSelection.value.mode !== "none" ? mapView : globalView;
-      if (!activeView) {
-        total.value = 0;
-        tableRowRecord.value = {};
-        return;
-      }
-      const rowCount = await activeView.num_rows();
-      total.value = rowCount;
-      if (rowCount === 0) {
-        tableRowRecord.value = {};
-        return;
-      }
-      const data = (await activeView.to_columns({
-        start_row: 0,
-        end_row: Math.min(rowCount, 500),
-      })) as Record<string, unknown[]>;
-      tableRowRecord.value = rowsToRecord(rowsFromColumns(data, { includeReviewImages: true }));
-    } catch (e) {
-      tableRowRecord.value = {};
-      args.onRecoverableError?.("table data refresh failed", e);
-    }
-  }
-
-  // Persistent views live for the lifetime of the table and use selection flags
-  // for large table/map selections.
-  const tableGlobalView = usePerspectiveViewRef(args.table, tableBaseConfig, {
-    onChange: refreshTableData,
+  const blinkView = usePerspectiveViewRef(args.table, activeBlinkConfig, {
     onRecoverableError: args.onRecoverableError,
   });
-  const tableMapView = usePerspectiveViewRef(args.table, tableMapConfig, {
-    onChange: refreshTableData,
-    onRecoverableError: args.onRecoverableError,
+  const blinkViewMode = ref<"patch" | "review" | null>(null);
+  watch(activeBlinkMode, () => {
+    blinkViewMode.value = null;
   });
-  const patchBlinkView = usePerspectiveViewRef(args.table, patchBlinkConfig, {
-    onRecoverableError: args.onRecoverableError,
-  });
-  const reviewBlinkView = usePerspectiveViewRef(args.table, reviewBlinkConfig, {
-    onRecoverableError: args.onRecoverableError,
-  });
+  watch(
+    () => blinkView.version.value,
+    () => {
+      blinkViewMode.value = blinkView.view.value ? activeBlinkMode.value : null;
+    },
+  );
+  const patchBlinkView = computed<View | null>(() =>
+    blinkViewMode.value === "patch" ? blinkView.view.value : null,
+  );
+  const reviewBlinkView = computed<View | null>(() =>
+    blinkViewMode.value === "review" ? blinkView.view.value : null,
+  );
+  const patchBlinkViewVersion = computed(() =>
+    blinkViewMode.value === "patch" ? blinkView.version.value : 0,
+  );
+  const reviewBlinkViewVersion = computed(() =>
+    blinkViewMode.value === "review" ? blinkView.version.value : 0,
+  );
   const histView = usePerspectiveViewRef(args.table, histConfig, {
     onRecoverableError: args.onRecoverableError,
   });
-  const sampleTableActiveView = computed<View | null>(() =>
-    mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
-      ? tableMapView.view.value
-      : null,
-  );
-  const sampleTableActiveViewConfig = computed<ViewConfigUpdate>(() =>
-    mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
-      ? tableMapConfig.value
-      : tableBaseConfig.value,
-  );
-  const sampleTableActiveViewConfigVersion = computed(() =>
-    mapSelection.value.mode !== "none" && mapSelection.value.ids.length > 0
-      ? tableMapView.version.value
-      : tableGlobalView.version.value,
-  );
-
   const map = usePerspectiveMapView(
     args.table,
     zoomByMode,
@@ -816,37 +640,45 @@ export function usePerspectiveInspectionModel(args: {
     return false;
   });
   const activeMapLoading = computed(() => map.pending.value && !activeMapRowsReady.value);
+  const tableLoading = computed(() => false);
 
   // Histogram watcher — unchanged logic, lock-free.
   watch(
     [() => histView.view.value, () => histView.version.value],
     async ([view]) => {
-      if (!view) {
-        legendGroups.value = null;
-        return;
+      try {
+        if (!view) {
+          legendGroups.value = null;
+          return;
+        }
+        const current = view as View;
+        const managed = managePerspectiveView(current);
+        const totalRows = await managed.num_rows();
+        if (histView.view.value !== current) return;
+        if (totalRows === 0) {
+          legendGroups.value = {};
+          return;
+        }
+        console.time("view.to_columns:refreshHistogram");
+        const data = (await managed.to_columns()) as Record<string, unknown[]>;
+        console.timeEnd("view.to_columns:refreshHistogram");
+        if (histView.view.value !== current) return;
+        const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
+        const counts = data[legendCol.value] as number[] | undefined;
+        const groups: Record<string, DefectList> = {};
+        for (let i = 0; i < (rowPaths?.length ?? 0); i += 1) {
+          const path = rowPaths?.[i];
+          if (!path || path.length === 0) continue;
+          const key = legendKey(path[0]);
+          groups[key] = create(DefectListSchema, {
+            count: Number(counts?.[i] ?? 0),
+            defectIds: [],
+          });
+        }
+        legendGroups.value = groups;
+      } catch (err) {
+        args.onRecoverableError?.("histogram view update failed", err);
       }
-      const current = view as View;
-      const totalRows = await current.num_rows();
-      if (histView.view.value !== current) return;
-      if (totalRows === 0) {
-        legendGroups.value = {};
-        return;
-      }
-      const data = (await current.to_columns()) as Record<string, unknown[]>;
-      if (histView.view.value !== current) return;
-      const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
-      const counts = data[legendCol.value] as number[] | undefined;
-      const groups: Record<string, DefectList> = {};
-      for (let i = 0; i < (rowPaths?.length ?? 0); i += 1) {
-        const path = rowPaths?.[i];
-        if (!path || path.length === 0) continue;
-        const key = legendKey(path[0]);
-        groups[key] = create(DefectListSchema, {
-          count: Number(counts?.[i] ?? 0),
-          defectIds: [],
-        });
-      }
-      legendGroups.value = groups;
     },
     { immediate: true },
   );
@@ -858,7 +690,6 @@ export function usePerspectiveInspectionModel(args: {
       if (tbl) {
         await syncLargeSelectionFlags(tbl);
         await refreshSmallGalleryHighlights();
-        refreshTableData();
       } else {
         setSmallGalleryHighlights([]);
         selectionPortTable = null;
@@ -908,7 +739,7 @@ export function usePerspectiveInspectionModel(args: {
   async function applyMapSelection(ids: number[]): Promise<void> {
     const table = args.table.value;
     if (!table) return;
-    const next = selectionStateFor(sortedUniqueIds(ids));
+    const next = mapSelectionStateFor(sortedUniqueIds(ids));
     const needsTableUpdate = mapSelection.value.mode !== "none" || next.mode !== "none";
     const ports = needsTableUpdate ? await ensureSelectionUpdatePorts(table) : null;
     const previous = mapSelection.value;
@@ -916,7 +747,6 @@ export function usePerspectiveInspectionModel(args: {
     if (needsTableUpdate) {
       await replaceMapSelection(table, previous.ids, next.ids, ports?.map);
     }
-    if (next.mode === "none") refreshTableData();
   }
 
   async function appendMapSelection(ids: number[]): Promise<number[]> {
@@ -987,27 +817,23 @@ export function usePerspectiveInspectionModel(args: {
     if (gallerySelection.value.mode === "small") {
       return highlightsForIds(table, gallerySelection.value.ids);
     }
-    const v = await table.view({
+    const managedTable = managePerspectiveTable(table);
+    const v = await managedTable.view({
       columns: HIGHLIGHT_COLUMNS,
       filter: [GALLERY_SELECTION_FILTER],
     } as never);
+    const managed = managePerspectiveView(v, managedTable);
     try {
-      const totalRows = await v.num_rows();
+      const totalRows = await managed.num_rows();
       if (totalRows === 0) return [];
-      const data = (await v.to_json()) as Array<Record<string, unknown>>;
+      const data = (await managed.to_json()) as Array<Record<string, unknown>>;
       return highlightsFromRows(data);
     } finally {
-      try {
-        await v.delete();
-      } catch {
-        /* best effort */
-      }
+      managed.retire();
     }
   }
 
-  const blinkFetching = computed(
-    () => patchBlinkView.pending.value || reviewBlinkView.pending.value,
-  );
+  const blinkFetching = computed(() => blinkView.pending.value);
 
   async function loadGlobalDistinctValues(
     field: string,
@@ -1017,19 +843,23 @@ export function usePerspectiveInspectionModel(args: {
     if (!table) return [];
     const col = perspectiveField(field);
     const filters = search.trim() ? [[col, "contains", search.trim()] satisfies Filter] : [];
-    const v = await table.view({
+    const managedTable = managePerspectiveTable(table);
+    const v = await managedTable.view({
       columns: [col],
       group_by: [col],
       aggregates: { [col]: "count" },
       filter: filters.length ? filters : undefined,
     } as never);
+    const managed = managePerspectiveView(v, managedTable);
     try {
-      const totalRows = await v.num_rows();
+      const totalRows = await managed.num_rows();
       if (totalRows === 0) return [];
-      const data = (await v.to_columns({
+      console.time("view.to_columns:loadDistinctLegends");
+      const data = (await managed.to_columns({
         start_row: 0,
         end_row: Math.min(totalRows, 500),
       })) as Record<string, unknown[]>;
+      console.timeEnd("view.to_columns:loadDistinctLegends");
       const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
       return (rowPaths ?? [])
         .filter((path) => path && path.length > 0)
@@ -1039,11 +869,7 @@ export function usePerspectiveInspectionModel(args: {
             typeof value === "string" || typeof value === "number",
         );
     } finally {
-      try {
-        await v.delete();
-      } catch {
-        /* best effort */
-      }
+      managed.retire();
     }
   }
 
@@ -1058,22 +884,19 @@ export function usePerspectiveInspectionModel(args: {
     dieDisplay,
     reticleDisplay,
     legendGroups,
-    samples: tableRows,
-    patchBlinkView: patchBlinkView.view,
-    patchBlinkViewVersion: patchBlinkView.version,
-    reviewBlinkView: reviewBlinkView.view,
-    reviewBlinkViewVersion: reviewBlinkView.version,
+    patchBlinkView,
+    patchBlinkViewVersion,
+    reviewBlinkView,
+    reviewBlinkViewVersion,
     blinkFetching,
     tableBaseFilters,
-    sampleTableActiveView,
-    sampleTableActiveViewVersion: tableMapView.version,
     sampleTableActiveViewConfig,
     sampleTableActiveViewConfigVersion,
-    total,
     mapLoading: map.pending,
     activeMapLoading,
     mapError: map.error,
-    tableLoading: tableGlobalView.pending,
+    tableLoading,
+    mapSelectedDefectIds,
     tableSelectedDefectIds,
     loadGlobalDistinctValues,
     setTableSelectedDefectIds,

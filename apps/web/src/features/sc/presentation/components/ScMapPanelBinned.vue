@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUpdated, ref, watch } from "vue";
+import { computed, onUnmounted, onUpdated, ref, watch } from "vue";
 import {
   NTabs,
   NTabPane,
@@ -25,6 +25,12 @@ import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
+type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
+type CrosshairPoint = { x: number; y: number };
+type MapTab = "wafer" | "die" | "reticle";
+type QueuedBoxSelection = { tab: MapTab; region: BoxSelectionRegion };
+
+const BOX_SELECTION_DEBOUNCE_MS = 1000;
 
 const props = defineProps<{
   activeMapTab?: "wafer" | "die" | "reticle";
@@ -62,6 +68,8 @@ const props = defineProps<{
 
   /** Highlight defects from gallery selection (purple dots on overlay canvas). */
   highlightDefects?: HighlightDefect[];
+  immediateCrosshairDefects?: HighlightDefect[];
+  immediateCrosshairVersion?: number;
 }>();
 
 const emit = defineEmits<{
@@ -86,7 +94,7 @@ const emit = defineEmits<{
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
 }>();
 
-const internalTab = ref<"wafer" | "die" | "reticle">(props.activeMapTab ?? "wafer");
+const internalTab = ref<MapTab>(props.activeMapTab ?? "wafer");
 const mapMode = ref<Record<string, "select" | "zoomin">>({
   wafer: "select",
   die: "select",
@@ -104,7 +112,9 @@ watch(
 );
 
 const handleTabChange = (value: string | number) => {
-  const tab = value as "wafer" | "die" | "reticle";
+  const tab = value as MapTab;
+  clearQueuedBoxSelection();
+  clearLocalImmediateCrosshair();
   emit("zoom-in", null);
   internalTab.value = tab;
   selectedClassNumber.value = null;
@@ -167,10 +177,12 @@ watch(drawerVisible, (val) => {
 
 const handleSelectionChange = (ids: number[]) => {
   selectedClassNumber.value = null;
+  if (ids.length === 0) clearQueuedBoxSelection();
   emit("selection-change", ids);
 };
 
 const handleZoomIn = (vp: { x: number; y: number; w: number; h: number } | null) => {
+  clearLocalImmediateCrosshair();
   emit("zoom-in", vp);
 };
 
@@ -252,9 +264,87 @@ const predictionGroups = computed(() =>
 const finalClassGroups = computed(() =>
   legendSource.value === "final_class" ? (props.legendGroups ?? undefined) : undefined,
 );
+const localImmediateCrosshairPoints = ref<Record<MapTab, CrosshairPoint[]>>({
+  wafer: [],
+  die: [],
+  reticle: [],
+});
+const localImmediateCrosshairVersion = ref(0);
+const resolvedImmediateCrosshairVersion = computed(
+  () => (props.immediateCrosshairVersion ?? 0) + localImmediateCrosshairVersion.value * 1_000_000,
+);
 
-function onBoxSelect(region: { x: number; y: number; w: number; h: number }): void {
-  emit("box-select", region);
+function clearLocalImmediateCrosshair(): void {
+  localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
+  localImmediateCrosshairVersion.value += 1;
+}
+
+function handleImmediateCrosshairPoints(points: CrosshairPoint[]): void {
+  if (points.length === 0) {
+    localImmediateCrosshairPoints.value = {
+      ...localImmediateCrosshairPoints.value,
+      [internalTab.value]: [],
+    };
+  } else {
+    localImmediateCrosshairPoints.value = {
+      ...localImmediateCrosshairPoints.value,
+      [internalTab.value]: [...localImmediateCrosshairPoints.value[internalTab.value], ...points],
+    };
+  }
+  localImmediateCrosshairVersion.value += 1;
+}
+
+watch(
+  () => props.immediateCrosshairVersion,
+  () => {
+    localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
+  },
+);
+
+const waferImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
+  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({
+    x: defect.waferX,
+    y: defect.waferY,
+  })),
+  ...localImmediateCrosshairPoints.value.wafer,
+]);
+const dieImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
+  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({ x: defect.dieX, y: defect.dieY })),
+  ...localImmediateCrosshairPoints.value.die,
+]);
+const reticleImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
+  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({
+    x: defect.reticleX,
+    y: defect.reticleY,
+  })),
+  ...localImmediateCrosshairPoints.value.reticle,
+]);
+
+let queuedBoxSelections: QueuedBoxSelection[] = [];
+let boxSelectionTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearQueuedBoxSelection(): void {
+  queuedBoxSelections = [];
+  if (boxSelectionTimer !== null) {
+    clearTimeout(boxSelectionTimer);
+    boxSelectionTimer = null;
+  }
+}
+
+function flushQueuedBoxSelection(): void {
+  boxSelectionTimer = null;
+  const selections = queuedBoxSelections;
+  queuedBoxSelections = [];
+  for (const selection of selections) {
+    if (selection.tab === internalTab.value) emit("box-select", selection.region);
+  }
+}
+
+function onBoxSelect(region: BoxSelectionRegion): void {
+  queuedBoxSelections.push({ tab: internalTab.value, region });
+  if (boxSelectionTimer === null) {
+    boxSelectionTimer = window.setTimeout(flushQueuedBoxSelection, BOX_SELECTION_DEBOUNCE_MS);
+  }
 }
 
 const handleLegendSelect = (key: LegendKey | null) => {
@@ -277,6 +367,10 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
 }
 
 onUpdated(() => console.debug("[render] ScMapPanelBinned"));
+
+onUnmounted(() => {
+  clearQueuedBoxSelection();
+});
 </script>
 
 <template>
@@ -368,6 +462,9 @@ onUpdated(() => console.debug("[render] ScMapPanelBinned"));
             :zoom="zoom"
             :mode="mapMode.wafer"
             :highlightDefects="highlightDefects"
+            :immediate-crosshair-points="waferImmediateCrosshairPoints"
+            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
+            @immediate-crosshair-points="handleImmediateCrosshairPoints"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
             @box-select="onBoxSelect"
@@ -381,6 +478,9 @@ onUpdated(() => console.debug("[render] ScMapPanelBinned"));
             :zoom="zoom"
             :mode="mapMode.die"
             :highlightDefects="highlightDefects"
+            :immediate-crosshair-points="dieImmediateCrosshairPoints"
+            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
+            @immediate-crosshair-points="handleImmediateCrosshairPoints"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
             @box-select="onBoxSelect"
@@ -396,6 +496,9 @@ onUpdated(() => console.debug("[render] ScMapPanelBinned"));
             :zoom="zoom"
             :mode="mapMode.reticle"
             :highlightDefects="highlightDefects"
+            :immediate-crosshair-points="reticleImmediateCrosshairPoints"
+            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
+            @immediate-crosshair-points="handleImmediateCrosshairPoints"
             @selection-change="handleSelectionChange"
             @zoom-in="handleZoomIn"
             @box-select="onBoxSelect"

@@ -1,10 +1,16 @@
-import { computed, type Ref } from "vue";
-import type { Filter, View } from "@perspective-dev/client";
+import { computed, onUnmounted, type Ref } from "vue";
+import type { Filter, Table, View } from "@perspective-dev/client";
+import { tableFromIPC } from "apache-arrow";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 import type {
   ScSampleTableDataSource,
   ScSampleTableDisplayRow,
 } from "@/features/sc/domain/workbenchInteraction";
+import {
+  managePerspectiveTable,
+  managePerspectiveView,
+  retirePerspectiveView,
+} from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 const TABLE_TO_PERSPECTIVE_FIELD: Record<string, string> = {
   class_number: "class_number",
@@ -57,108 +63,157 @@ function numericSearchFilter(
   return values.length === 1 ? [[field, "==", values[0]]] : [[field, "in", values]];
 }
 
+type ArrowJsonRow = Record<string, unknown>;
+
 function asRecord(data: unknown): Record<string, unknown[]> {
   return data as Record<string, unknown[]>;
 }
 
-function rowAt<T>(data: Record<string, unknown[]>, key: string, index: number, fallback: T): T {
-  return (data[key]?.[index] as T | undefined) ?? fallback;
+function arrowRowToRecord(row: unknown): ArrowJsonRow {
+  if (row && typeof row === "object" && "toJSON" in row) {
+    const toJSON = (row as { toJSON: () => unknown }).toJSON;
+    return toJSON.call(row) as ArrowJsonRow;
+  }
+  return row as ArrowJsonRow;
 }
 
-function makeRows(data: Record<string, unknown[]>): ScSampleTableDisplayRow[] {
-  const defectIds = data.defect_id ?? [];
-  const rows: ScSampleTableDisplayRow[] = [];
-  for (let i = 0; i < defectIds.length; i += 1) {
-    rows.push({
-      defect_id: String(defectIds[i] ?? ""),
-      rough_bin: rowAt(data, "rough_bin", i, 0),
-      class_number: rowAt(data, "class_number", i, 0),
-      images: rowAt(data, "images", i, 0),
-      test_id: rowAt(data, "test_id", i, 0),
-      wafer_x: rowAt(data, "wafer_x", i, 0),
-      wafer_y: rowAt(data, "wafer_y", i, 0),
-      index_x: rowAt(data, "index_x", i, 0),
-      index_y: rowAt(data, "index_y", i, 0),
-      adder: rowAt(data, "adder", i, 0),
-      cluster_id: rowAt(data, "cluster_id", i, null),
-      die_x: rowAt(data, "die_x", i, 0),
-      die_y: rowAt(data, "die_y", i, 0),
-      reticle_x: rowAt(data, "reticle_x", i, 0),
-      reticle_y: rowAt(data, "reticle_y", i, 0),
-      size_x: rowAt(data, "size_x", i, 0),
-      size_y: rowAt(data, "size_y", i, 0),
-      size_d: rowAt(data, "size_d", i, 0),
-      area: rowAt(data, "area", i, 0),
-      final_bin: rowAt(data, "final_bin", i, 0),
-      manual_bin: rowAt(data, "manual_bin", i, 0),
-      kill_ratio: rowAt(data, "kill_ratio", i, null),
-      annotation_label: rowAt(data, "annotation_label", i, null),
-      prediction_label: rowAt(data, "prediction_label", i, null),
-      prediction_confidence: rowAt(data, "prediction_confidence", i, null),
-    });
-  }
-  return rows;
+function rowValue<T>(row: ArrowJsonRow, key: string, fallback: T): T {
+  return (row[key] as T | undefined) ?? fallback;
+}
+
+function makeRows(rows: ArrowJsonRow[]): ScSampleTableDisplayRow[] {
+  return rows.map((row) => ({
+    defect_id: String(row.defect_id ?? ""),
+    rough_bin: rowValue(row, "rough_bin", 0),
+    class_number: rowValue(row, "class_number", 0),
+    images: rowValue(row, "images", 0),
+    test_id: rowValue(row, "test_id", 0),
+    wafer_x: rowValue(row, "wafer_x", 0),
+    wafer_y: rowValue(row, "wafer_y", 0),
+    index_x: rowValue(row, "index_x", 0),
+    index_y: rowValue(row, "index_y", 0),
+    adder: rowValue(row, "adder", 0),
+    cluster_id: rowValue(row, "cluster_id", null),
+    die_x: rowValue(row, "die_x", 0),
+    die_y: rowValue(row, "die_y", 0),
+    reticle_x: rowValue(row, "reticle_x", 0),
+    reticle_y: rowValue(row, "reticle_y", 0),
+    size_x: rowValue(row, "size_x", 0),
+    size_y: rowValue(row, "size_y", 0),
+    size_d: rowValue(row, "size_d", 0),
+    area: rowValue(row, "area", 0),
+    final_bin: rowValue(row, "final_bin", 0),
+    manual_bin: rowValue(row, "manual_bin", 0),
+    kill_ratio: rowValue(row, "kill_ratio", null),
+    annotation_label: rowValue(row, "annotation_label", null),
+    prediction_label: rowValue(row, "prediction_label", null),
+    prediction_confidence: rowValue(row, "prediction_confidence", null),
+  }));
+}
+
+function rowsFromArrowTable(data: unknown): ArrowJsonRow[] {
+  return tableFromIPC(data as Uint8Array)
+    .toArray()
+    .map(arrowRowToRecord);
 }
 
 export function usePerspectiveSampleTableDataSource(
-  table: Ref<import("@perspective-dev/client").Table | null>,
+  table: Ref<Table | null>,
   scopeKey: Ref<string>,
   baseFilters?: Ref<Filter[]>,
-  activeView?: Ref<View | null>,
-  activeViewVersion?: Ref<number>,
   onRecoverableError?: (reason: string, err: unknown) => void,
 ) {
+  let activeTable: Table | null = null;
+  let cachedRowsView: { table: Table; key: string; view: View } | null = null;
+  let cachedRowsViewPromise: Promise<{ table: Table; key: string; view: View }> | null = null;
+
+  function clearCachedRowsView(): void {
+    if (cachedRowsView) {
+      retirePerspectiveView(cachedRowsView.view);
+      cachedRowsView = null;
+    }
+    cachedRowsViewPromise = null;
+  }
+
+  async function getRowsView(
+    tbl: Table,
+    key: string,
+    filter: Array<[string, string, unknown]>,
+    sort: [string, string][] | undefined,
+  ): Promise<View> {
+    if (cachedRowsView?.table === tbl && cachedRowsView.key === key) return cachedRowsView.view;
+    if (cachedRowsViewPromise) {
+      const pending = await cachedRowsViewPromise;
+      if (pending.table === tbl && pending.key === key && activeTable === tbl) {
+        return pending.view;
+      }
+    }
+
+    clearCachedRowsView();
+    const managedTable = managePerspectiveTable(tbl);
+    cachedRowsViewPromise = managedTable
+      .view({
+        filter: filter.length ? filter : undefined,
+        sort,
+      } as never)
+      .then((view) => ({ table: tbl, key, view }));
+
+    const next = await cachedRowsViewPromise;
+    cachedRowsViewPromise = null;
+    managePerspectiveView(next.view, managedTable);
+    if (activeTable !== tbl || next.table !== tbl || next.key !== key) {
+      retirePerspectiveView(next.view);
+      throw new Error("Perspective sample table view was replaced before it became ready");
+    }
+    cachedRowsView = next;
+    return next.view;
+  }
+
+  onUnmounted(clearCachedRowsView);
+
   return computed<ScSampleTableDataSource | undefined>(() => {
     const tbl = table.value;
-    if (!tbl) return undefined;
+    if (!tbl) {
+      clearCachedRowsView();
+      activeTable = null;
+      return undefined;
+    }
+    if (tbl !== activeTable) {
+      clearCachedRowsView();
+      activeTable = tbl;
+    }
     const baseFilterKey = JSON.stringify(baseFilters?.value ?? []);
-    const viewKey = activeView?.value ? `view:${activeViewVersion?.value ?? 0}` : "table";
     return {
-      scopeKey: `${scopeKey.value}:${baseFilterKey}:${viewKey}`,
+      scopeKey: `${scopeKey.value}:${baseFilterKey}:table`,
       async loadRows(query) {
         try {
-          const prebuiltView = activeView?.value;
-          if (prebuiltView) {
-            const total = await prebuiltView.num_rows();
-            const offset = Number.parseInt(query.anchor, 10) || 0;
-            const endRow = Math.min(offset + query.limit, total);
-            if (endRow <= offset) return { items: [], total, nextAnchor: null };
-            const data = asRecord(
-              await prebuiltView.to_columns({ start_row: offset, end_row: endRow }),
-            );
-            return {
-              items: makeRows(data),
-              total,
-              nextAnchor: endRow < total ? String(endRow) : null,
-            };
-          }
-
           const filter = [...(baseFilters?.value ?? []), ...filtersFromSampleTable(query.filter)];
           const sort = query.sort?.direction
             ? ([[perspectiveField(query.sort.field), query.sort.direction]] as [string, string][])
             : undefined;
-          const v: View = await tbl.view({
-            filter: filter.length ? filter : undefined,
-            sort,
-          } as never);
-          try {
-            const total = await v.num_rows();
-            const offset = Number.parseInt(query.anchor, 10) || 0;
-            const endRow = Math.min(offset + query.limit, total);
-            if (endRow <= offset) return { items: [], total, nextAnchor: null };
-            const data = asRecord(await v.to_columns({ start_row: offset, end_row: endRow }));
-            return {
-              items: makeRows(data),
-              total,
-              nextAnchor: endRow < total ? String(endRow) : null,
-            };
-          } finally {
-            try {
-              v.delete();
-            } catch {
-              /* best effort */
-            }
-          }
+          const rowsViewKey = JSON.stringify({ filter, sort });
+          const rowsView = await getRowsView(tbl, rowsViewKey, filter, sort);
+          const managedRowsView = managePerspectiveView(rowsView);
+          const total = await managedRowsView.num_rows();
+          const offset = Number.parseInt(query.anchor, 10) || 0;
+          const endRow = Math.min(offset + query.limit, total);
+          if (endRow <= offset) return { items: [], total, nextAnchor: null };
+          console.time("view.to_arrow:filteredView");
+          console.log("view.to_arrow:filteredView", {
+            start_row: offset,
+            end_row: endRow,
+            total,
+          });
+          const rows = rowsFromArrowTable(
+            await managedRowsView.to_arrow({ start_row: offset, end_row: endRow }),
+          );
+          const items = makeRows(rows);
+          console.timeEnd("view.to_arrow:filteredView");
+          return {
+            items,
+            total,
+            nextAnchor: endRow < total ? String(endRow) : null,
+          };
         } catch (err) {
           onRecoverableError?.("sample table rows load failed", err);
           throw err;
@@ -174,18 +229,22 @@ export function usePerspectiveSampleTableDataSource(
             ...filtersFromSampleTable(query.filter, query.field),
             ...searchFilters,
           ];
-          const v: View = await tbl.view({
+          const managedTable = managePerspectiveTable(tbl);
+          const v: View = await managedTable.view({
             columns: [field],
             group_by: [field],
             aggregates: { [field]: "count" },
             filter: filter.length ? filter : undefined,
           } as never);
+          const managed = managePerspectiveView(v, managedTable);
           try {
-            const total = await v.num_rows();
+            const total = await managed.num_rows();
             if (total === 0) return [];
+            console.time("view.to_columns:distinctValues");
             const data = asRecord(
-              await v.to_columns({ start_row: 0, end_row: Math.min(total, query.limit) }),
+              await managed.to_columns({ start_row: 0, end_row: Math.min(total, query.limit) }),
             );
+            console.timeEnd("view.to_columns:distinctValues");
             const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
             return (rowPaths ?? [])
               .map((path) => path?.[0])
@@ -194,11 +253,7 @@ export function usePerspectiveSampleTableDataSource(
                   typeof value === "string" || typeof value === "number",
               );
           } finally {
-            try {
-              v.delete();
-            } catch {
-              /* best effort */
-            }
+            managed.retire();
           }
         } catch (err) {
           onRecoverableError?.("sample table distinct values load failed", err);

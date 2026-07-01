@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { NButton, NPopover, NText } from "naive-ui";
 import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
+import { tableFromIPC } from "apache-arrow";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
@@ -171,44 +172,55 @@ function asRecord(data: unknown): Record<string, unknown[]> {
   return data as Record<string, unknown[]>;
 }
 
-function rowAt<T>(data: Record<string, unknown[]>, key: string, index: number, fallback: T): T {
-  return (data[key]?.[index] as T | undefined) ?? fallback;
+type ArrowJsonRow = Record<string, unknown>;
+
+function arrowRowToRecord(row: unknown): ArrowJsonRow {
+  if (row && typeof row === "object" && "toJSON" in row) {
+    const toJSON = (row as { toJSON: () => unknown }).toJSON;
+    return toJSON.call(row) as ArrowJsonRow;
+  }
+  return row as ArrowJsonRow;
 }
 
-function makeRows(data: Record<string, unknown[]>): VxeSampleTableRow[] {
-  const defectIds = data.defect_id ?? [];
-  const out: VxeSampleTableRow[] = [];
-  for (let i = 0; i < defectIds.length; i += 1) {
-    out.push({
-      defect_id: String(defectIds[i] ?? ""),
-      rough_bin: rowAt(data, "rough_bin", i, 0),
-      class_number: rowAt(data, "class_number", i, 0),
-      images: rowAt(data, "images", i, 0),
-      test_id: rowAt(data, "test_id", i, 0),
-      wafer_x: rowAt(data, "wafer_x", i, 0),
-      wafer_y: rowAt(data, "wafer_y", i, 0),
-      index_x: rowAt(data, "index_x", i, 0),
-      index_y: rowAt(data, "index_y", i, 0),
-      adder: rowAt(data, "adder", i, 0),
-      cluster_id: rowAt(data, "cluster_id", i, null),
-      die_x: rowAt(data, "die_x", i, 0),
-      die_y: rowAt(data, "die_y", i, 0),
-      reticle_x: rowAt(data, "reticle_x", i, 0),
-      reticle_y: rowAt(data, "reticle_y", i, 0),
-      size_x: rowAt(data, "size_x", i, 0),
-      size_y: rowAt(data, "size_y", i, 0),
-      size_d: rowAt(data, "size_d", i, 0),
-      area: rowAt(data, "area", i, 0),
-      final_bin: rowAt(data, "final_bin", i, 0),
-      manual_bin: rowAt(data, "manual_bin", i, 0),
-      kill_ratio: rowAt(data, "kill_ratio", i, null),
-      annotation_label: rowAt(data, "annotation_label", i, null),
-      prediction_label: rowAt(data, "prediction_label", i, null),
-      prediction_confidence: rowAt(data, "prediction_confidence", i, null),
-      _isHydrated: true,
-    });
-  }
-  return out;
+function rowsFromArrowTable(data: unknown): ArrowJsonRow[] {
+  return tableFromIPC(data as Uint8Array)
+    .toArray()
+    .map(arrowRowToRecord);
+}
+
+function rowValue<T>(row: ArrowJsonRow, key: string, fallback: T): T {
+  return (row[key] as T | undefined) ?? fallback;
+}
+
+function makeRows(rows: ArrowJsonRow[]): VxeSampleTableRow[] {
+  return rows.map((row) => ({
+    defect_id: String(row.defect_id ?? ""),
+    rough_bin: rowValue(row, "rough_bin", 0),
+    class_number: rowValue(row, "class_number", 0),
+    images: rowValue(row, "images", 0),
+    test_id: rowValue(row, "test_id", 0),
+    wafer_x: rowValue(row, "wafer_x", 0),
+    wafer_y: rowValue(row, "wafer_y", 0),
+    index_x: rowValue(row, "index_x", 0),
+    index_y: rowValue(row, "index_y", 0),
+    adder: rowValue(row, "adder", 0),
+    cluster_id: rowValue(row, "cluster_id", null),
+    die_x: rowValue(row, "die_x", 0),
+    die_y: rowValue(row, "die_y", 0),
+    reticle_x: rowValue(row, "reticle_x", 0),
+    reticle_y: rowValue(row, "reticle_y", 0),
+    size_x: rowValue(row, "size_x", 0),
+    size_y: rowValue(row, "size_y", 0),
+    size_d: rowValue(row, "size_d", 0),
+    area: rowValue(row, "area", 0),
+    final_bin: rowValue(row, "final_bin", 0),
+    manual_bin: rowValue(row, "manual_bin", 0),
+    kill_ratio: rowValue(row, "kill_ratio", null),
+    annotation_label: rowValue(row, "annotation_label", null),
+    prediction_label: rowValue(row, "prediction_label", null),
+    prediction_confidence: rowValue(row, "prediction_confidence", null),
+    _isHydrated: true,
+  }));
 }
 
 function makeDefectIdRow(value: unknown, index: number): VxeSampleTableRow {
@@ -349,9 +361,13 @@ async function loadWindow(start: number, end: number, version: number): Promise<
     const safeStart = Math.max(0, Math.min(start, total));
     const safeEnd = Math.max(safeStart, Math.min(end, total));
     if (safeEnd <= safeStart) return { items: [], total, nextAnchor: null };
-    const data = asRecord(await view.to_columns({ start_row: safeStart, end_row: safeEnd }));
+    console.time("view.to_arrow:loadData");
+    const rows = rowsFromArrowTable(
+      await view.to_arrow({ start_row: safeStart, end_row: safeEnd }),
+    );
+    console.timeEnd("view.to_arrow:loadData");
     return {
-      items: makeRows(data),
+      items: makeRows(rows),
       total,
       nextAnchor: safeEnd < total ? String(safeEnd) : null,
     };
@@ -370,17 +386,21 @@ async function loadDefectIdRows(view: View, total: number, version: number): Pro
     rawRows = Array.from({ length: total }, (_, index) => makeDefectIdRow(null, index));
     return true;
   }
-  const data = asRecord(
-    await view.to_columns({
+  console.time("view.to_arrow:loadDefectIdRows");
+  const rows = rowsFromArrowTable(
+    await view.to_arrow({
       start_row: 0,
       end_row: total,
       start_col: defectIdColumnIndex,
       end_col: defectIdColumnIndex + 1,
     }),
   );
+  console.timeEnd("view.to_arrow:loadDefectIdRows");
   if (version !== requestVersion) return false;
-  const defectIds = data.defect_id ?? data[columnPaths[defectIdColumnIndex]] ?? [];
-  rawRows = Array.from({ length: total }, (_, index) => makeDefectIdRow(defectIds[index], index));
+  const defectIdColumn = columnPaths[defectIdColumnIndex];
+  rawRows = rows.map((row, index) =>
+    makeDefectIdRow(row.defect_id ?? row[defectIdColumn], index),
+  );
   return true;
 }
 
@@ -492,7 +512,9 @@ async function searchSetFilterOptions(field: string): Promise<void> {
     });
     try {
       const total = await view.num_rows();
+      console.time("view.to_columns:loadDistinctValues");
       const data = asRecord(await view.to_columns({ start_row: 0, end_row: Math.min(total, 200) }));
+      console.timeEnd("view.to_columns:loadDistinctValues");
       const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
       searchedSetFilterValues.value = {
         ...searchedSetFilterValues.value,

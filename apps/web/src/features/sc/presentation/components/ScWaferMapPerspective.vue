@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUpdated, ref, watch } from "vue";
+import { computed, onUpdated, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
 import type { HighlightDefect } from "./types";
 import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
@@ -40,12 +40,15 @@ const props = defineProps<{
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
   highlightDefects?: HighlightDefect[];
+  immediateCrosshairPoints?: Array<{ x: number; y: number }>;
+  immediateCrosshairVersion?: number;
 }>();
 
 const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
   (e: "zoom-in", viewport: { x: number; y: number; w: number; h: number } | null): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
+  (e: "immediate-crosshair-points", points: Array<{ x: number; y: number }>): void;
 }>();
 
 type Mode = "select" | "zoomin";
@@ -337,7 +340,6 @@ const dragRect = ref<{ x: number; y: number; w: number; h: number } | null>(null
 
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
-  immediateCrosshairPoints.value = [];
   recalcTransform();
   drawOverlay();
   const [sx, sy] = getPos(e);
@@ -403,11 +405,11 @@ function onPointerUp(e: PointerEvent) {
         }
       }
     }
-    immediateCrosshairPoints.value = inRegion;
     console.debug("[ScWaferMapPerspective] immediateCrosshair", {
       count: inRegion.length,
       region,
     });
+    emit("immediate-crosshair-points", inRegion);
     emit("box-select", region);
     void handleBoxSelect(region);
   }
@@ -428,8 +430,13 @@ async function handleBoxSelect(region: { x: number; y: number; w: number; h: num
 }
 
 function onDblClick() {
+  selectionSeq += 1;
+  dragRect.value = null;
+  immediateCrosshairPoints.value = [];
   if (mode.value === "zoomin" && props.zoom) emit("zoom-in", null);
-  else if (mode.value === "select") emit("selection-change", []);
+  emit("immediate-crosshair-points", []);
+  emit("selection-change", []);
+  drawOverlay();
 }
 
 onUpdated(() => console.debug("[render] ScWaferMapPerspective"));
@@ -501,15 +508,11 @@ watch(
   { immediate: true },
 );
 
-// Clear immediate crosshairs when binned data updates (backend response)
 watch(
   () => props.points,
   () => {
     console.debug("[map] ScWaferMap watch(points) → redraw");
     recalcTransform();
-    if (immediateCrosshairPoints.value.length > 0) {
-      immediateCrosshairPoints.value = [];
-    }
     drawOverlay();
   },
 );
@@ -520,6 +523,7 @@ watch(
   () => {
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
+      emit("immediate-crosshair-points", []);
       drawOverlay();
     }
   },
@@ -529,6 +533,17 @@ watch(
 watch(
   () => props.highlightDefects,
   () => drawOverlay(),
+);
+
+watch(
+  [() => props.immediateCrosshairVersion, () => props.immediateCrosshairPoints],
+  ([version]) => {
+    if (version == null) return;
+    const points = props.immediateCrosshairPoints ?? [];
+    immediateCrosshairPoints.value = [...points];
+    drawOverlay();
+  },
+  { immediate: true },
 );
 </script>
 

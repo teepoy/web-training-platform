@@ -9,12 +9,11 @@ const modelMock = vi.hoisted(() => ({
   legendGroups: { value: null },
   activeMapLoading: { value: false },
   mapError: { value: null },
-  tableLoading: { value: false },
   tableBaseFilters: { value: [] },
-  sampleTableActiveView: { value: null },
-  sampleTableActiveViewVersion: { value: 0 },
+  sampleTableActiveViewConfig: { value: {} },
+  sampleTableActiveViewConfigVersion: { value: 0 },
+  mapSelectedDefectIds: { value: [] },
   tableSelectedDefectIds: { value: [] },
-  total: { value: 0 },
   blinkFetching: { value: false },
   patchBlinkView: { value: null },
   patchBlinkViewVersion: { value: 0 },
@@ -128,6 +127,42 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3]);
     expect(modelMock.applyMapSelection).not.toHaveBeenCalled();
     expect(wrapper.emitted("select-points")).toEqual([[{ ids: [1, 2, 3], region }]]);
+  });
+
+  it("drains every queued box selection instead of keeping only the latest", async () => {
+    const firstRegion = { x: 10, y: 20, w: 30, h: 40 };
+    const secondRegion = { x: 50, y: 60, w: 70, h: 80 };
+    modelMock.queryBoxSelection
+      .mockResolvedValueOnce([2, 3])
+      .mockResolvedValueOnce([4, 5]);
+    modelMock.appendMapSelection
+      .mockResolvedValueOnce([1, 2, 3])
+      .mockResolvedValueOnce([1, 2, 3, 4, 5]);
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        variant: "preview",
+        samples: [],
+        samplesLoading: false,
+        samplesError: null,
+        activeMapTab: "die",
+      },
+    });
+
+    const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    mapPanel.vm.$emit("box-select", firstRegion);
+    mapPanel.vm.$emit("box-select", secondRegion);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(1, "die", firstRegion);
+    expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
+    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(1, [2, 3]);
+    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(2, [4, 5]);
+    expect(wrapper.emitted("select-points")).toEqual([
+      [{ ids: [1, 2, 3], region: firstRegion }],
+      [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
+    ]);
   });
 
   it("keeps legend selection as replace semantics", async () => {

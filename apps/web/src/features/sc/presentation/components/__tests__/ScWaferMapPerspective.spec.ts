@@ -199,7 +199,7 @@ describe("ScWaferMapPerspective", () => {
     expect(ctxSpy.strokeStyle).toBe("#000000");
   });
 
-  it("clears crosshairs when binned points prop updates", async () => {
+  it("keeps immediate crosshairs when binned points prop updates", async () => {
     const points = makePoints([{ x: 100, y: 200 }]);
 
     const { wrapper } = await mountWithProviders(ScWaferMapPerspective, {
@@ -221,8 +221,8 @@ describe("ScWaferMapPerspective", () => {
     await wrapper.setProps({ points: newPoints });
     await nextTick();
 
-    expect(ctxSpy.stroke).not.toHaveBeenCalled();
-    expect(ctxSpy.beginPath).not.toHaveBeenCalled();
+    expect(ctxSpy.stroke).toHaveBeenCalled();
+    expect(ctxSpy.beginPath).toHaveBeenCalled();
   });
 
   it("does not compute crosshairs in zoom mode", async () => {

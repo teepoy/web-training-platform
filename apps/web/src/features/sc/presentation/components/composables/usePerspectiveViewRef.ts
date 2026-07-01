@@ -1,5 +1,10 @@
 import { computed, ref, shallowRef, watch, onUnmounted, type Ref } from "vue";
 import type { Table, View, ViewConfigUpdate } from "@perspective-dev/client";
+import {
+  managePerspectiveTable,
+  managePerspectiveView,
+  retirePerspectiveView,
+} from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 export type ViewConfig = ViewConfigUpdate;
 
@@ -20,10 +25,6 @@ function viewConfigKey(cfg: ViewConfig): string {
     gby: cfg.group_by,
     agg: cfg.aggregates,
   });
-}
-
-function onPerspectiveUpdate(v: View, cb: (evt: unknown) => void): void {
-  v.on_update(cb);
 }
 
 export function usePerspectiveViewRef(
@@ -65,13 +66,8 @@ export function usePerspectiveViewRef(
     if (!v || retiredViews.has(v)) return;
     retiredViews.add(v);
     window.setTimeout(() => {
-      try {
-        v.delete();
-      } catch {
-        /* best effort */
-      } finally {
-        retiredViews.delete(v);
-      }
+      retirePerspectiveView(v);
+      retiredViews.delete(v);
     }, 1000);
   }
 
@@ -84,29 +80,29 @@ export function usePerspectiveViewRef(
 
     try {
       const previousView = view.value;
-      const v = await tbl.view(cfg);
+      const managedTable = managePerspectiveTable(tbl);
+      const v = await managedTable.view(cfg);
+      const managed = managePerspectiveView(v, managedTable);
       const viewMs = performance.now() - t0;
       if (seq !== rebuildSeq) {
-        v.delete();
+        managed.retire();
         return;
       }
 
       const tRows = performance.now();
-      const nr = await v.num_rows();
+      const nr = await managed.num_rows();
       const rowsMs = performance.now() - tRows;
       if (seq !== rebuildSeq) {
-        v.delete();
+        managed.retire();
         return;
       }
 
       view.value = v;
       retireView(previousView);
-      onPerspectiveUpdate(v, (_evt: unknown) => {
+      managed.onUpdateDebounced((_evt: unknown) => {
         if (view.value !== v) return;
-        console.log("[view] onPerspectiveUpdate → notifyChanged, delta:", (_evt as any).delta);
         notifyChanged();
       });
-      console.log("[view] rebuild done", { viewMs, rowsMs, nr, cfg });
       notifyChanged();
       latestTiming.value = {
         label: `cols=${cfg.columns?.length ?? "all"} filter=${cfg.filter?.length ?? 0} gb=${cfg.group_by?.length ?? 0}`,
@@ -145,13 +141,7 @@ export function usePerspectiveViewRef(
     const activeView = view.value;
     view.value = null;
     for (const v of [activeView, ...retiredViews]) {
-      if (v) {
-        try {
-          v.delete();
-        } catch {
-          /* best effort */
-        }
-      }
+      retirePerspectiveView(v);
     }
     retiredViews.clear();
   });

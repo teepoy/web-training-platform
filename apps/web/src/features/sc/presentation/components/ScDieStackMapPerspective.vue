@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUpdated, ref, watch } from "vue";
+import { computed, onUpdated, ref, watch } from "vue";
 import SimplePerspectiveMap from "./SimplePerspectiveMap.vue";
 import type { HighlightDefect } from "./types";
 import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
@@ -36,6 +36,8 @@ const props = defineProps<{
   mode?: "select" | "zoomin";
   queryBoxSelection?: (region: { x: number; y: number; w: number; h: number }) => Promise<number[]>;
   highlightDefects?: HighlightDefect[];
+  immediateCrosshairPoints?: Array<{ x: number; y: number }>;
+  immediateCrosshairVersion?: number;
 }>();
 
 function resolveDieSizeX(): number {
@@ -56,6 +58,7 @@ const emit = defineEmits<{
   (e: "selection-change", ids: number[]): void;
   (e: "zoom-in", viewport: { x: number; y: number; w: number; h: number } | null): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
+  (e: "immediate-crosshair-points", points: Array<{ x: number; y: number }>): void;
 }>();
 
 const mode = computed(() => props.mode ?? "select");
@@ -114,7 +117,6 @@ function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
   recalcTransform();
   drawOverlay();
-  immediateCrosshairPoints.value = [];
   const [sx, sy] = getPos(e);
   dragStart.value = { x: sx, y: sy };
   dragEnd.value = { x: sx, y: sy };
@@ -177,11 +179,11 @@ function onPointerUp(e: PointerEvent) {
         }
       }
     }
-    immediateCrosshairPoints.value = inRegion;
     console.debug("[ScDieStackMapPerspective] immediateCrosshair", {
       count: inRegion.length,
       region,
     });
+    emit("immediate-crosshair-points", inRegion);
     emit("box-select", region);
     void handleBoxSelect(region);
   }
@@ -202,8 +204,13 @@ async function handleBoxSelect(region: { x: number; y: number; w: number; h: num
 }
 
 function onDblClick() {
+  selectionSeq += 1;
+  dragRect.value = null;
+  immediateCrosshairPoints.value = [];
   if (mode.value === "zoomin" && props.zoom) emit("zoom-in", null);
-  else if (mode.value === "select") emit("selection-change", []);
+  emit("immediate-crosshair-points", []);
+  emit("selection-change", []);
+  drawOverlay();
 }
 
 onUpdated(() => console.debug("[render] ScDieStackMapPerspective"));
@@ -297,9 +304,6 @@ watch(
   () => {
     console.debug("[map] ScDieStackMap watch(points) → redraw");
     recalcTransform();
-    if (immediateCrosshairPoints.value.length > 0) {
-      immediateCrosshairPoints.value = [];
-    }
     drawOverlay();
   },
 );
@@ -308,6 +312,7 @@ watch(
   () => {
     if (immediateCrosshairPoints.value.length > 0) {
       immediateCrosshairPoints.value = [];
+      emit("immediate-crosshair-points", []);
       drawOverlay();
     }
   },
@@ -316,6 +321,17 @@ watch(
 watch(
   () => props.highlightDefects,
   () => drawOverlay(),
+);
+
+watch(
+  [() => props.immediateCrosshairVersion, () => props.immediateCrosshairPoints],
+  ([version]) => {
+    if (version == null) return;
+    const points = props.immediateCrosshairPoints ?? [];
+    immediateCrosshairPoints.value = [...points];
+    drawOverlay();
+  },
+  { immediate: true },
 );
 </script>
 

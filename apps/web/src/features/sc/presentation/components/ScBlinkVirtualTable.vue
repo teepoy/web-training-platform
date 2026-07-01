@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import type { CSSProperties } from "vue";
 import type { View } from "@perspective-dev/client";
+import { tableFromIPC } from "apache-arrow";
 import {
   NSwitch,
   NText,
@@ -23,11 +24,12 @@ import {
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scSampleImageUrl } from "@/features/sc/domain/models";
+import { managePerspectiveView } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 interface BlinkSample {
-  sampleId: string | null;
+  sampleId?: string | null;
   defectId: number;
-  reviewImages: number[];
+  reviewImages?: number[];
   annotationLabel: string | null;
   predictionLabel: string | null;
   predictionConfidence: number | null;
@@ -70,7 +72,7 @@ const props = withDefaults(
     overscan: 10,
     blinkIntervalMs: 1000,
     initialBlinkEnabled: true,
-    showModeSwitch: false,
+    showModeSwitch: true,
   },
 );
 
@@ -197,29 +199,43 @@ function parseReviewImages(value: unknown): number[] {
   }
 }
 
-function patchSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
-  const ids = data.defect_id ?? [];
-  return ids.map((id, i) => ({
+type ArrowJsonRow = Record<string, unknown>;
+
+function arrowRowToRecord(row: unknown): ArrowJsonRow {
+  if (row && typeof row === "object" && "toJSON" in row) {
+    const toJSON = (row as { toJSON: () => unknown }).toJSON;
+    return toJSON.call(row) as ArrowJsonRow;
+  }
+  return row as ArrowJsonRow;
+}
+
+function rowsFromArrowTable(data: unknown): ArrowJsonRow[] {
+  return tableFromIPC(data as Uint8Array)
+    .toArray()
+    .map(arrowRowToRecord);
+}
+
+function patchSamplesFromRows(rows: ArrowJsonRow[]): BlinkSample[] {
+  return rows.map((row) => ({
     sampleId: null,
-    defectId: numeric(id),
+    defectId: numeric(row.defect_id),
     reviewImages: [],
-    annotationLabel: stringOrNull(data.annotation_label?.[i]),
-    predictionLabel: stringOrNull(data.prediction_label?.[i]),
+    annotationLabel: stringOrNull(row.annotation_label),
+    predictionLabel: stringOrNull(row.prediction_label),
     predictionConfidence:
-      data.prediction_confidence?.[i] == null ? null : numeric(data.prediction_confidence[i]),
+      row.prediction_confidence == null ? null : numeric(row.prediction_confidence),
   }));
 }
 
-function reviewSamplesFromColumns(data: Record<string, unknown[]>): BlinkSample[] {
-  const ids = data.defect_id ?? [];
-  return ids.map((id, i) => ({
-    sampleId: stringOrNull(data.sample_id?.[i]),
-    defectId: numeric(id),
-    reviewImages: parseReviewImages(data.review_image_ids_json?.[i]),
-    annotationLabel: stringOrNull(data.annotation_label?.[i]),
-    predictionLabel: stringOrNull(data.prediction_label?.[i]),
+function reviewSamplesFromRows(rows: ArrowJsonRow[]): BlinkSample[] {
+  return rows.map((row) => ({
+    sampleId: stringOrNull(row.sample_id),
+    defectId: numeric(row.defect_id),
+    reviewImages: parseReviewImages(row.review_image_ids_json),
+    annotationLabel: stringOrNull(row.annotation_label),
+    predictionLabel: stringOrNull(row.prediction_label),
     predictionConfidence:
-      data.prediction_confidence?.[i] == null ? null : numeric(data.prediction_confidence[i]),
+      row.prediction_confidence == null ? null : numeric(row.prediction_confidence),
   }));
 }
 
@@ -228,17 +244,22 @@ async function readPatchView(view: View | null | undefined): Promise<void> {
     patchSamples.value = [];
     return;
   }
+  const managed = managePerspectiveView(view);
   patchLoading.value = true;
   try {
-    const rowCount = await view.num_rows();
+    const rowCount = await managed.num_rows();
     if (props.patchView !== view) return;
     if (rowCount === 0) {
       patchSamples.value = [];
       return;
     }
-    const data = (await view.to_columns()) as Record<string, unknown[]>;
+    console.time("view.to_arrow:patch");
+    const rows = rowsFromArrowTable(await managed.to_arrow());
     if (props.patchView !== view) return;
-    patchSamples.value = patchSamplesFromColumns(data);
+    patchSamples.value = patchSamplesFromRows(rows);
+    console.timeEnd("view.to_arrow:patch");
+  } catch (err) {
+    if (props.patchView === view) console.warn("[blink] patch view read failed", err);
   } finally {
     if (props.patchView === view) patchLoading.value = false;
   }
@@ -249,17 +270,22 @@ async function readReviewView(view: View | null | undefined): Promise<void> {
     reviewSamples.value = [];
     return;
   }
+  const managed = managePerspectiveView(view);
   reviewLoading.value = true;
   try {
-    const rowCount = await view.num_rows();
+    const rowCount = await managed.num_rows();
     if (props.reviewView !== view) return;
     if (rowCount === 0) {
       reviewSamples.value = [];
       return;
     }
-    const data = (await view.to_columns()) as Record<string, unknown[]>;
+    console.time("view.to_arrow:review");
+    const rows = rowsFromArrowTable(await managed.to_arrow());
+    console.timeEnd("view.to_arrow:review");
     if (props.reviewView !== view) return;
-    reviewSamples.value = reviewSamplesFromColumns(data);
+    reviewSamples.value = reviewSamplesFromRows(rows);
+  } catch (err) {
+    if (props.reviewView === view) console.warn("[blink] review view read failed", err);
   } finally {
     if (props.reviewView === view) reviewLoading.value = false;
   }

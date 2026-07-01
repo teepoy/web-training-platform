@@ -114,6 +114,7 @@ describe("usePerspectiveViewRef", () => {
 
     first.resolve(oldView as unknown as View);
     await flushMicrotasks();
+    await new Promise((resolve) => setTimeout(resolve, 25));
 
     expect(state.view.value).toBe(newView);
     expect(oldView.delete).toHaveBeenCalledTimes(1);

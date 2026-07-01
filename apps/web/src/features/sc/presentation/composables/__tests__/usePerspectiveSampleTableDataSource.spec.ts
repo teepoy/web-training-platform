@@ -3,6 +3,16 @@ import { ref } from "vue";
 import type { Filter, Table, View } from "@perspective-dev/client";
 import { usePerspectiveSampleTableDataSource } from "../usePerspectiveSampleTableDataSource";
 
+const arrowMock = vi.hoisted(() => ({
+  rows: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock("apache-arrow", () => ({
+  tableFromIPC: vi.fn(() => ({
+    toArray: () => arrowMock.rows.map((row) => ({ toJSON: () => row })),
+  })),
+}));
+
 describe("usePerspectiveSampleTableDataSource", () => {
   it("changes scope key when base filters change", () => {
     const table = ref({} as Table);
@@ -17,38 +27,37 @@ describe("usePerspectiveSampleTableDataSource", () => {
     expect(dataSource.value?.scopeKey).toBe('scope:[["map_in_selection","==",1]]:table');
   });
 
-  it("loads rows from an active prebuilt view without rebuilding a table view", async () => {
-    const tableView = vi.fn();
+  it("reuses the current filtered rows view while paging the same config", async () => {
+    const rowsView = {
+      num_rows: vi.fn(async () => 2),
+      to_arrow: vi.fn(async () => new Uint8Array()),
+    } as unknown as View;
+    arrowMock.rows = [
+      { defect_id: 11, rough_bin: 1, class_number: 3 },
+      { defect_id: 12, rough_bin: 2, class_number: 4 },
+    ];
+    const tableView = vi.fn(async () => rowsView);
     const table = ref({ view: tableView } as unknown as Table);
     const scopeKey = ref("scope");
-    const baseFilters = ref<Filter[]>([]);
-    const activeView = ref({
-      num_rows: vi.fn(async () => 2),
-      to_columns: vi.fn(async () => ({
-        defect_id: [11, 12],
-        rough_bin: [1, 2],
-        class_number: [3, 4],
-      })),
-    } as unknown as View);
-    const activeViewVersion = ref(7);
-    const dataSource = usePerspectiveSampleTableDataSource(
-      table,
-      scopeKey,
-      baseFilters,
-      activeView,
-      activeViewVersion,
-    );
+    const baseFilters = ref<Filter[]>([["map_in_selection", "==", 1] as Filter]);
+    const dataSource = usePerspectiveSampleTableDataSource(table, scopeKey, baseFilters);
 
-    expect(dataSource.value?.scopeKey).toBe("scope:[]:view:7");
+    expect(dataSource.value?.scopeKey).toBe('scope:[["map_in_selection","==",1]]:table');
 
     const page = await dataSource.value!.loadRows({
       defectIds: [],
       anchor: "0",
       limit: 1000,
     });
+    const nextPage = await dataSource.value!.loadRows({
+      defectIds: [],
+      anchor: "1",
+      limit: 1000,
+    });
 
-    expect(tableView).not.toHaveBeenCalled();
+    expect(tableView).toHaveBeenCalledTimes(1);
     expect(page.total).toBe(2);
+    expect(nextPage.total).toBe(2);
     expect(page.items.map((row) => row.defect_id)).toEqual(["11", "12"]);
   });
 
@@ -64,8 +73,6 @@ describe("usePerspectiveSampleTableDataSource", () => {
     const dataSource = usePerspectiveSampleTableDataSource(
       table,
       scopeKey,
-      undefined,
-      undefined,
       undefined,
       onRecoverableError,
     );

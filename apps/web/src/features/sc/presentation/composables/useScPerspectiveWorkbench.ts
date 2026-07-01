@@ -5,10 +5,9 @@ import clientWasmUrl from "@perspective-dev/client/dist/wasm/perspective-js.wasm
 import { API_BASE, getAuthToken, getOrgId } from "@/shared/api/client";
 import {
   isRecoverablePerspectiveError,
-  logPerspectiveHeap,
   perspectiveErrorMessage,
-  readBrowserHeapSnapshot,
 } from "@/features/sc/presentation/composables/perspectiveRecovery";
+import { managePerspectiveTable } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 export type ScPerspectiveWorkbenchKind = "preview" | "reclassify";
 
@@ -93,6 +92,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function retirePerspectiveResources(tbl: Table | null, wsClient: Client | null): void {
+  const terminateClient = () => {
+    if (wsClient) {
+      try {
+        wsClient.terminate();
+      } catch {
+        /* best effort */
+      }
+    }
+  };
+
+  if (!tbl) {
+    terminateClient();
+    return;
+  }
+
+  managePerspectiveTable(tbl).retire({ onDeleted: terminateClient });
+}
+
 async function openJoinedSamplesTable(client: Client, isCurrent: () => boolean): Promise<Table> {
   const startedAt = Date.now();
   let lastError: unknown = null;
@@ -125,7 +143,6 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
   let lastOptions: ScPerspectiveWorkbenchOptions | null = null;
   let recovering = false;
   let disposed = false;
-  let heapLoggedForSeq = 0;
   let _dataReadyPollTimer: ReturnType<typeof setTimeout> | undefined;
   let _dataReadyDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -146,25 +163,15 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
 
     let rowCount = 0;
     try {
-      const v = await tbl.view({});
-      try {
-        rowCount = await v.num_rows();
-      } finally {
-        try {
-          v.delete();
-        } catch {
-          /* best effort */
-        }
-      }
+      rowCount = await managePerspectiveTable(tbl).size();
     } catch {
-      /* view / num_rows can fail transiently; retry on next poll */
+      /* size can fail transiently while Perspective is publishing the table; retry on next poll */
     }
 
     if (seq !== connectionSeq || dataReady.value) return;
 
     if (rowCount > 0) {
       dataReady.value = true;
-      void _logFinalHeap(seq, rowCount);
       _clearDataReadyTimers();
       return;
     }
@@ -174,54 +181,16 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
     }, DATA_READY_POLL_MS);
   }
 
-  async function _logFinalHeap(seq: number, knownRows?: number): Promise<void> {
-    const tbl = table.value;
-    if (!tbl || seq !== connectionSeq || heapLoggedForSeq === seq) return;
-    heapLoggedForSeq = seq;
-    let rows: number | null = knownRows ?? null;
-    let columns: number | null = null;
-    try {
-      if (rows == null) rows = await tbl.size();
-    } catch {
-      rows = knownRows ?? null;
-    }
-    try {
-      const schema = await tbl.schema();
-      columns = Object.keys(schema).length;
-    } catch {
-      columns = null;
-    }
-    if (seq !== connectionSeq) return;
-    logPerspectiveHeap({
-      scope: lastOptions ? buildWsUrl(lastOptions).replace(/\?.*$/, "") : JOINED_SAMPLES_TABLE,
-      rows,
-      columns,
-      heap: readBrowserHeapSnapshot(),
-    });
-  }
-
   function disconnect(): void {
     connectionSeq += 1;
-    heapLoggedForSeq = 0;
     _clearDataReadyTimers();
     dataReady.value = false;
-    if (table.value) {
-      try {
-        table.value.delete();
-      } catch {
-        /* best effort */
-      }
-      table.value = null;
-    }
-    if (client) {
-      try {
-        client.terminate();
-      } catch {
-        /* best effort */
-      }
-      client = null;
-    }
+    const previousTable = table.value;
+    const previousClient = client;
+    table.value = null;
+    client = null;
     connected.value = false;
+    retirePerspectiveResources(previousTable, previousClient);
   }
 
   async function connect(options: ScPerspectiveWorkbenchOptions): Promise<void> {
@@ -233,17 +202,13 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
       await initPerspectiveClient();
       const nextClient = await perspective.websocket(buildWsUrl(options));
       if (seq !== connectionSeq) {
-        nextClient.terminate();
+        retirePerspectiveResources(null, nextClient);
         return;
       }
       client = nextClient;
       const openedTable = await openJoinedSamplesTable(nextClient, () => seq === connectionSeq);
       if (seq !== connectionSeq) {
-        try {
-          openedTable.delete();
-        } catch {
-          /* best effort */
-        }
+        retirePerspectiveResources(openedTable, nextClient);
         return;
       }
       table.value = openedTable;
@@ -253,7 +218,6 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
       _dataReadyDeadlineTimer = setTimeout(() => {
         if (seq === connectionSeq && !dataReady.value) {
           dataReady.value = true;
-          void _logFinalHeap(seq);
           _clearDataReadyTimers();
         }
       }, DATA_READY_DEADLINE_MS);
