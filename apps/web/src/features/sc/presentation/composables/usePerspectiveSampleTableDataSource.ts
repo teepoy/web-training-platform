@@ -1,5 +1,5 @@
 import { computed, onUnmounted, type Ref } from "vue";
-import type { Filter, Table, View } from "@perspective-dev/client";
+import type { Filter, Table } from "@perspective-dev/client";
 import { tableFromIPC } from "apache-arrow";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 import type {
@@ -8,8 +8,7 @@ import type {
 } from "@/features/sc/domain/workbenchInteraction";
 import {
   managePerspectiveTable,
-  managePerspectiveView,
-  retirePerspectiveView,
+  type ManagedPerspectiveView,
 } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 const TABLE_TO_PERSPECTIVE_FIELD: Record<string, string> = {
@@ -124,12 +123,17 @@ export function usePerspectiveSampleTableDataSource(
   onRecoverableError?: (reason: string, err: unknown) => void,
 ) {
   let activeTable: Table | null = null;
-  let cachedRowsView: { table: Table; key: string; view: View } | null = null;
-  let cachedRowsViewPromise: Promise<{ table: Table; key: string; view: View }> | null = null;
+  let cachedRowsView: { table: Table; key: string; view: ManagedPerspectiveView } | null = null;
+  let cachedRowsViewPromise: Promise<{
+    table: Table;
+    key: string;
+    view: ManagedPerspectiveView;
+  }> | null = null;
+  let disposed = false;
 
   function clearCachedRowsView(): void {
     if (cachedRowsView) {
-      retirePerspectiveView(cachedRowsView.view);
+      cachedRowsView.view.retire();
       cachedRowsView = null;
     }
     cachedRowsViewPromise = null;
@@ -140,15 +144,20 @@ export function usePerspectiveSampleTableDataSource(
     key: string,
     filter: Array<[string, string, unknown]>,
     sort: [string, string][] | undefined,
-  ): Promise<View> {
+  ): Promise<ManagedPerspectiveView> {
     if (cachedRowsView?.table === tbl && cachedRowsView.key === key) return cachedRowsView.view;
     if (cachedRowsViewPromise) {
       const pending = await cachedRowsViewPromise;
-      if (pending.table === tbl && pending.key === key && activeTable === tbl) {
+      if (!disposed && pending.table === tbl && pending.key === key && activeTable === tbl) {
         return pending.view;
+      }
+      if (disposed) {
+        pending.view.retire();
+        throw new Error("Perspective sample table data source was disposed");
       }
     }
 
+    if (disposed) throw new Error("Perspective sample table data source was disposed");
     clearCachedRowsView();
     const managedTable = managePerspectiveTable(tbl);
     cachedRowsViewPromise = managedTable
@@ -160,16 +169,19 @@ export function usePerspectiveSampleTableDataSource(
 
     const next = await cachedRowsViewPromise;
     cachedRowsViewPromise = null;
-    managePerspectiveView(next.view, managedTable);
-    if (activeTable !== tbl || next.table !== tbl || next.key !== key) {
-      retirePerspectiveView(next.view);
+    if (disposed || activeTable !== tbl || next.table !== tbl || next.key !== key) {
+      next.view.retire();
       throw new Error("Perspective sample table view was replaced before it became ready");
     }
     cachedRowsView = next;
     return next.view;
   }
 
-  onUnmounted(clearCachedRowsView);
+  onUnmounted(() => {
+    disposed = true;
+    activeTable = null;
+    clearCachedRowsView();
+  });
 
   return computed<ScSampleTableDataSource | undefined>(() => {
     const tbl = table.value;
@@ -193,8 +205,7 @@ export function usePerspectiveSampleTableDataSource(
             : undefined;
           const rowsViewKey = JSON.stringify({ filter, sort });
           const rowsView = await getRowsView(tbl, rowsViewKey, filter, sort);
-          const managedRowsView = managePerspectiveView(rowsView);
-          const total = await managedRowsView.num_rows();
+          const total = await rowsView.num_rows();
           const offset = Number.parseInt(query.anchor, 10) || 0;
           const endRow = Math.min(offset + query.limit, total);
           if (endRow <= offset) return { items: [], total, nextAnchor: null };
@@ -205,7 +216,7 @@ export function usePerspectiveSampleTableDataSource(
             total,
           });
           const rows = rowsFromArrowTable(
-            await managedRowsView.to_arrow({ start_row: offset, end_row: endRow }),
+            await rowsView.to_arrow({ start_row: offset, end_row: endRow }),
           );
           const items = makeRows(rows);
           console.timeEnd("view.to_arrow:filteredView");
@@ -230,13 +241,12 @@ export function usePerspectiveSampleTableDataSource(
             ...searchFilters,
           ];
           const managedTable = managePerspectiveTable(tbl);
-          const v: View = await managedTable.view({
+          const managed = await managedTable.view({
             columns: [field],
             group_by: [field],
             aggregates: { [field]: "count" },
             filter: filter.length ? filter : undefined,
           } as never);
-          const managed = managePerspectiveView(v, managedTable);
           try {
             const total = await managed.num_rows();
             if (total === 0) return [];

@@ -23,7 +23,7 @@ export interface ManagedPerspectiveTable {
   readonly pendingOperations: number;
   readonly views: ReadonlySet<ManagedPerspectiveView>;
   size: () => Promise<number>;
-  view: (config?: unknown) => Promise<View>;
+  view: (config?: unknown) => Promise<ManagedPerspectiveView>;
   update: (data: unknown, options?: unknown) => Promise<void>;
   make_port: () => Promise<number>;
   retire: (options?: { onDeleted?: () => void }) => void;
@@ -169,15 +169,14 @@ class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
     return this.runWithLock((table) => table.size());
   }
 
-  async view(config?: unknown): Promise<View> {
+  async view(config?: unknown): Promise<ManagedPerspectiveView> {
     if (this._status === "deleted") {
       throw new Error("Perspective table has already been deleted");
     }
     this._pendingOperations += 1;
     try {
       const view = await this.table.view(config as never);
-      this.trackView(view);
-      return view;
+      return this.trackView(view);
     } finally {
       this._pendingOperations -= 1;
       if (this._status === "retiring") this.scheduleDelete();

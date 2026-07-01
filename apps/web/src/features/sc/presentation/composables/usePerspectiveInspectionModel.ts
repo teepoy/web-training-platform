@@ -1,9 +1,9 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { create } from "@bufbuild/protobuf";
-import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
+import type { Filter, Table, ViewConfigUpdate } from "@perspective-dev/client";
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
 import {
@@ -15,8 +15,7 @@ import { usePerspectiveViewRef } from "@/features/sc/presentation/components/com
 import { binsToDisplayArray } from "@/features/sc/presentation/components/transforms/binsToDisplayArrays";
 import {
   managePerspectiveTable,
-  managePerspectiveView,
-  retirePerspectiveView,
+  type ManagedPerspectiveView,
 } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 const PATCH_BLINK_COLUMNS = [
@@ -119,11 +118,6 @@ function sampleFilterToPerspective(filter: ScSampleTableFilter | undefined): Fil
   return out;
 }
 
-function sortToPerspective(sort: ScSampleTableSort | null | undefined): [string, string][] {
-  if (!sort?.direction) return [["defect_id", "asc"]];
-  return [[perspectiveField(sort.field), sort.direction]];
-}
-
 function sortedUniqueIds(ids: unknown[]): number[] {
   return Array.from(new Set(ids.map(Number).filter(Number.isFinite))).sort((a, b) => a - b);
 }
@@ -147,11 +141,10 @@ function mapSelectionStateFor(ids: number[]): SelectionState {
 
 async function idsForFilter(table: Table, filters: Filter[]): Promise<number[]> {
   const managedTable = managePerspectiveTable(table);
-  const v = await managedTable.view({
+  const managed = await managedTable.view({
     columns: ["defect_id"],
     filter: filters.length ? filters : undefined,
   } as never);
-  const managed = managePerspectiveView(v, managedTable);
   try {
     const total = await managed.num_rows();
     if (total === 0) return [];
@@ -254,12 +247,11 @@ async function jsonRowsForIds(
 ): Promise<Array<Record<string, unknown>>> {
   if (ids.length === 0) return [];
   const managedTable = managePerspectiveTable(table);
-  const v = await managedTable.view({
+  const managed = await managedTable.view({
     columns,
     filter: [...filters, ["defect_id", "in", ids] as Filter],
     sort,
   } as never);
-  const managed = managePerspectiveView(v, managedTable);
   try {
     const rowCount = await managed.num_rows();
     if (rowCount === 0) return [];
@@ -343,13 +335,9 @@ export function usePerspectiveInspectionModel(args: {
   legendGroupBy:
     | Ref<ScLegendSource | null | undefined>
     | ComputedRef<ScLegendSource | null | undefined>;
-  tableFilter: Ref<ScSampleTableFilter | undefined> | ComputedRef<ScSampleTableFilter | undefined>;
   globalFilter?:
     | Ref<ScSampleTableFilter | undefined>
     | ComputedRef<ScSampleTableFilter | undefined>;
-  tableSort?:
-    | Ref<ScSampleTableSort | null | undefined>
-    | ComputedRef<ScSampleTableSort | null | undefined>;
   zoom: Ref<MapViewport | null | undefined> | ComputedRef<MapViewport | null | undefined>;
   activeMapMode: Ref<"wafer" | "die" | "reticle"> | ComputedRef<"wafer" | "die" | "reticle">;
   galleryRandomSamplingFilter?: ComputedRef<Filter[]>;
@@ -371,7 +359,6 @@ export function usePerspectiveInspectionModel(args: {
   });
   const legendGroups = ref<Record<string, DefectList> | null>(null);
 
-  const tableHeaderFilters = computed(() => sampleFilterToPerspective(args.tableFilter.value));
   const globalFilters = computed(() => sampleFilterToPerspective(args.globalFilter?.value));
   const reviewModeFilters = computed<Filter[]>(() =>
     reviewMode.value ? [REVIEW_MODE_FILTER] : [],
@@ -391,7 +378,6 @@ export function usePerspectiveInspectionModel(args: {
     ...reviewModeFilters.value,
   ]);
   const legendCol = computed(() => legendColumn(args.legendGroupBy.value));
-  const tableSort = computed(() => sortToPerspective(args.tableSort?.value));
   const zoomByMode = computed<Record<"wafer" | "die" | "reticle", MapViewport | null>>(() => ({
     wafer: args.zoom.value ?? null,
     die: args.zoom.value ?? null,
@@ -428,24 +414,6 @@ export function usePerspectiveInspectionModel(args: {
     selectionUpdatePorts.value = ports;
     return ports;
   }
-
-  const sampleTableActiveViewConfig = computed(
-    () =>
-      ({
-        filter: [...tableBaseFilters.value, ...tableHeaderFilters.value].length
-          ? [...tableBaseFilters.value, ...tableHeaderFilters.value]
-          : undefined,
-        sort: tableSort.value,
-      }) as ViewConfigUpdate,
-  );
-  const sampleTableActiveViewConfigVersion = ref(0);
-  watch(
-    sampleTableActiveViewConfig,
-    () => {
-      sampleTableActiveViewConfigVersion.value += 1;
-    },
-    { deep: true, immediate: true },
-  );
 
   const blinkBaseFilters = computed<Filter[]>(() => [
     ...globalFilters.value,
@@ -560,10 +528,10 @@ export function usePerspectiveInspectionModel(args: {
       blinkViewMode.value = blinkView.view.value ? activeBlinkMode.value : null;
     },
   );
-  const patchBlinkView = computed<View | null>(() =>
+  const patchBlinkView = computed<ManagedPerspectiveView | null>(() =>
     blinkViewMode.value === "patch" ? blinkView.view.value : null,
   );
-  const reviewBlinkView = computed<View | null>(() =>
+  const reviewBlinkView = computed<ManagedPerspectiveView | null>(() =>
     blinkViewMode.value === "review" ? blinkView.view.value : null,
   );
   const patchBlinkViewVersion = computed(() =>
@@ -651,16 +619,15 @@ export function usePerspectiveInspectionModel(args: {
           legendGroups.value = null;
           return;
         }
-        const current = view as View;
-        const managed = managePerspectiveView(current);
-        const totalRows = await managed.num_rows();
+        const current = view;
+        const totalRows = await current.num_rows();
         if (histView.view.value !== current) return;
         if (totalRows === 0) {
           legendGroups.value = {};
           return;
         }
         console.time("view.to_columns:refreshHistogram");
-        const data = (await managed.to_columns()) as Record<string, unknown[]>;
+        const data = (await current.to_columns()) as Record<string, unknown[]>;
         console.timeEnd("view.to_columns:refreshHistogram");
         if (histView.view.value !== current) return;
         const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
@@ -743,10 +710,10 @@ export function usePerspectiveInspectionModel(args: {
     const needsTableUpdate = mapSelection.value.mode !== "none" || next.mode !== "none";
     const ports = needsTableUpdate ? await ensureSelectionUpdatePorts(table) : null;
     const previous = mapSelection.value;
-    mapSelection.value = next;
     if (needsTableUpdate) {
       await replaceMapSelection(table, previous.ids, next.ids, ports?.map);
     }
+    mapSelection.value = next;
   }
 
   async function appendMapSelection(ids: number[]): Promise<number[]> {
@@ -818,11 +785,10 @@ export function usePerspectiveInspectionModel(args: {
       return highlightsForIds(table, gallerySelection.value.ids);
     }
     const managedTable = managePerspectiveTable(table);
-    const v = await managedTable.view({
+    const managed = await managedTable.view({
       columns: HIGHLIGHT_COLUMNS,
       filter: [GALLERY_SELECTION_FILTER],
     } as never);
-    const managed = managePerspectiveView(v, managedTable);
     try {
       const totalRows = await managed.num_rows();
       if (totalRows === 0) return [];
@@ -844,13 +810,12 @@ export function usePerspectiveInspectionModel(args: {
     const col = perspectiveField(field);
     const filters = search.trim() ? [[col, "contains", search.trim()] satisfies Filter] : [];
     const managedTable = managePerspectiveTable(table);
-    const v = await managedTable.view({
+    const managed = await managedTable.view({
       columns: [col],
       group_by: [col],
       aggregates: { [col]: "count" },
       filter: filters.length ? filters : undefined,
     } as never);
-    const managed = managePerspectiveView(v, managedTable);
     try {
       const totalRows = await managed.num_rows();
       if (totalRows === 0) return [];
@@ -890,8 +855,6 @@ export function usePerspectiveInspectionModel(args: {
     reviewBlinkViewVersion,
     blinkFetching,
     tableBaseFilters,
-    sampleTableActiveViewConfig,
-    sampleTableActiveViewConfigVersion,
     mapLoading: map.pending,
     activeMapLoading,
     mapError: map.error,

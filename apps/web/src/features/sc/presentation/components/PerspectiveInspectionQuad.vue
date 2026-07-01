@@ -11,7 +11,6 @@ import type { ECElementEvent } from "echarts/core";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterBar from "@/features/sc/presentation/components/ScGlobalFilterBar.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
-import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
@@ -92,7 +91,6 @@ const emit = defineEmits<{
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
-const USE_VXE_SAMPLE_TABLE = false;
 const RECLASSIFY_ANNOTATION_PCT = 15;
 const DEFAULT_MAP_PCT = 55;
 const DEFAULT_BAR_PCT = 60;
@@ -160,9 +158,7 @@ const model = usePerspectiveInspectionModel({
   inspectionTime: computed(() => props.inspectionTime),
   waferKey: computed(() => props.waferKey),
   legendGroupBy: computed(() => props.legendGroupBy),
-  tableFilter: computed(() => props.tableFilter),
   globalFilter,
-  tableSort: computed(() => props.tableSort),
   zoom: computed(() => props.zoom),
   activeMapMode: computed(() => props.activeMapTab),
   galleryRandomSamplingFilter,
@@ -561,24 +557,7 @@ async function handleBarChartClick(event: ECElementEvent): Promise<void> {
         @pointerup="onRowResizeEnd"
         @pointercancel="onRowResizeEnd"
       />
-      <ScSampleTableVxe
-        v-if="USE_VXE_SAMPLE_TABLE && perspective.table.value"
-        :table="perspective.table.value"
-        :view-config="model.sampleTableActiveViewConfig.value"
-        :source-version="model.sampleTableActiveViewConfigVersion.value"
-        :selected-defect-ids="tableHighlightIds"
-        :show-reclassify-columns="isReclassify"
-        @selection-change="handleTableSelectionChange"
-      />
-      <!--
-        Vxe sample table currently lacks these legacy hooks:
-        - apply-filter-as-global
-        - external filter-change/sort-change emits
-        - reticle die count/shift derived display fields
-        Keep the legacy table branch as the complete behavior until those are added.
-      -->
       <ScSampleTable
-        v-else
         :data-source="tableDataSource"
         :loading="!perspectiveReady"
         :total="sampleTableTotal"

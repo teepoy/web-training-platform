@@ -10,8 +10,6 @@ const modelMock = vi.hoisted(() => ({
   activeMapLoading: { value: false },
   mapError: { value: null },
   tableBaseFilters: { value: [] },
-  sampleTableActiveViewConfig: { value: {} },
-  sampleTableActiveViewConfigVersion: { value: 0 },
   mapSelectedDefectIds: { value: [] },
   tableSelectedDefectIds: { value: [] },
   blinkFetching: { value: false },

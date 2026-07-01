@@ -2,7 +2,7 @@ import { computed, ref, shallowRef, watch, onUnmounted, type Ref } from "vue";
 import type { Table, View, ViewConfigUpdate } from "@perspective-dev/client";
 import {
   managePerspectiveTable,
-  managePerspectiveView,
+  type ManagedPerspectiveView,
   retirePerspectiveView,
 } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
@@ -32,13 +32,13 @@ export function usePerspectiveViewRef(
   config: Ref<ViewConfig>,
   opts?: { onChange?: () => void; onRecoverableError?: (reason: string, err: unknown) => void },
 ): {
-  view: Ref<View | null>;
+  view: Ref<ManagedPerspectiveView | null>;
   pending: Ref<boolean>;
   error: Ref<string | null>;
   version: Ref<number>;
   latestTiming: Ref<PerspectiveViewTiming | null>;
 } {
-  const view = shallowRef<View | null>(null);
+  const view = shallowRef<ManagedPerspectiveView | null>(null);
   const pending = ref(false);
   const error = ref<string | null>(null);
   const version = ref(0);
@@ -62,12 +62,12 @@ export function usePerspectiveViewRef(
     });
   }
 
-  function retireView(v: View | null): void {
-    if (!v || retiredViews.has(v)) return;
-    retiredViews.add(v);
+  function retireView(v: ManagedPerspectiveView | null): void {
+    if (!v || retiredViews.has(v.view)) return;
+    retiredViews.add(v.view);
     window.setTimeout(() => {
-      retirePerspectiveView(v);
-      retiredViews.delete(v);
+      v.retire();
+      retiredViews.delete(v.view);
     }, 1000);
   }
 
@@ -81,8 +81,7 @@ export function usePerspectiveViewRef(
     try {
       const previousView = view.value;
       const managedTable = managePerspectiveTable(tbl);
-      const v = await managedTable.view(cfg);
-      const managed = managePerspectiveView(v, managedTable);
+      const managed = await managedTable.view(cfg);
       const viewMs = performance.now() - t0;
       if (seq !== rebuildSeq) {
         managed.retire();
@@ -97,10 +96,10 @@ export function usePerspectiveViewRef(
         return;
       }
 
-      view.value = v;
+      view.value = managed;
       retireView(previousView);
       managed.onUpdateDebounced((_evt: unknown) => {
-        if (view.value !== v) return;
+        if (view.value !== managed) return;
         notifyChanged();
       });
       notifyChanged();
@@ -140,7 +139,8 @@ export function usePerspectiveViewRef(
     rebuildSeq += 1;
     const activeView = view.value;
     view.value = null;
-    for (const v of [activeView, ...retiredViews]) {
+    activeView?.retire();
+    for (const v of retiredViews) {
       retirePerspectiveView(v);
     }
     retiredViews.clear();

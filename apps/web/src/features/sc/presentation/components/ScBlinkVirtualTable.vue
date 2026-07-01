@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import type { CSSProperties } from "vue";
-import type { View } from "@perspective-dev/client";
 import { tableFromIPC } from "apache-arrow";
 import {
   NSwitch,
@@ -24,7 +23,7 @@ import {
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scSampleImageUrl } from "@/features/sc/domain/models";
-import { managePerspectiveView } from "@/features/sc/presentation/composables/managedPerspectiveView";
+import type { ManagedPerspectiveView } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 interface BlinkSample {
   sampleId?: string | null;
@@ -37,9 +36,9 @@ interface BlinkSample {
 
 const props = withDefaults(
   defineProps<{
-    patchView?: View | null;
+    patchView?: ManagedPerspectiveView | null;
     patchViewVersion?: number;
-    reviewView?: View | null;
+    reviewView?: ManagedPerspectiveView | null;
     reviewViewVersion?: number;
     loading?: boolean;
     datasetId?: string | null;
@@ -239,22 +238,21 @@ function reviewSamplesFromRows(rows: ArrowJsonRow[]): BlinkSample[] {
   }));
 }
 
-async function readPatchView(view: View | null | undefined): Promise<void> {
+async function readPatchView(view: ManagedPerspectiveView | null | undefined): Promise<void> {
   if (!view) {
     patchSamples.value = [];
     return;
   }
-  const managed = managePerspectiveView(view);
   patchLoading.value = true;
   try {
-    const rowCount = await managed.num_rows();
+    const rowCount = await view.num_rows();
     if (props.patchView !== view) return;
     if (rowCount === 0) {
       patchSamples.value = [];
       return;
     }
     console.time("view.to_arrow:patch");
-    const rows = rowsFromArrowTable(await managed.to_arrow());
+    const rows = rowsFromArrowTable(await view.to_arrow());
     if (props.patchView !== view) return;
     patchSamples.value = patchSamplesFromRows(rows);
     console.timeEnd("view.to_arrow:patch");
@@ -265,22 +263,21 @@ async function readPatchView(view: View | null | undefined): Promise<void> {
   }
 }
 
-async function readReviewView(view: View | null | undefined): Promise<void> {
+async function readReviewView(view: ManagedPerspectiveView | null | undefined): Promise<void> {
   if (!view) {
     reviewSamples.value = [];
     return;
   }
-  const managed = managePerspectiveView(view);
   reviewLoading.value = true;
   try {
-    const rowCount = await managed.num_rows();
+    const rowCount = await view.num_rows();
     if (props.reviewView !== view) return;
     if (rowCount === 0) {
       reviewSamples.value = [];
       return;
     }
     console.time("view.to_arrow:review");
-    const rows = rowsFromArrowTable(await managed.to_arrow());
+    const rows = rowsFromArrowTable(await view.to_arrow());
     console.timeEnd("view.to_arrow:review");
     if (props.reviewView !== view) return;
     reviewSamples.value = reviewSamplesFromRows(rows);

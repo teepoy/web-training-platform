@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NButton, NResult, NSpin, useThemeVars } from "naive-ui";
+import { NButton, NResult, NSpin, useMessage, useThemeVars } from "naive-ui";
 import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
@@ -12,11 +12,17 @@ import {
   normalizeReticleMapOptions,
 } from "@/features/sc/application/reticleMapOptions";
 import { useGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet } from "@/generated/orval/endpoints/api";
-import type { InspectionSummaryItem } from "@/features/sc/domain/models";
+import type {
+  InspectionSummaryItem,
+  ScImportPayload,
+  ScImportResponse,
+} from "@/features/sc/domain/models";
+import { streamApiSse } from "@/shared/api/sse";
 
 const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
+const message = useMessage();
 
 const inspectionTime = computed(() => String(route.params.inspectionTime ?? ""));
 const waferKey = computed(() => Number(route.params.waferKey));
@@ -27,6 +33,8 @@ const tableFilter = ref<ScSampleTableFilter>({});
 const tableSort = ref<ScSampleTableSort | null>(null);
 const legendGroupBy = ref<ScLegendSource | null>(null);
 const reticleOptions = ref<ReticleMapOptions>(normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS));
+const isImporting = ref(false);
+const importedDatasetId = ref<string | null>(null);
 
 const inspectionQuery = useGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet(
   inspectionTime,
@@ -94,6 +102,49 @@ function setLegendGroupBy(groupBy: string | null): void {
     legendGroupBy.value = groupBy;
   }
 }
+
+function sanitizeInspectionTime(value: string): string {
+  return value.replace(/[\s:]/g, "-");
+}
+
+function importDatasetName(item: InspectionSummaryItem): string {
+  return `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`;
+}
+
+async function startReclassifyImport(): Promise<void> {
+  const item = inspectionItem.value;
+  if (!item || isImporting.value) return;
+  isImporting.value = true;
+  try {
+    const req: ScImportPayload = {
+      source_inspection_time: item.inspection_time,
+      source_wafer_key: item.wafer_key,
+      dataset_name: importDatasetName(item),
+      storage_mode: "file_shard_sparse",
+    };
+    const dataEvent = await streamApiSse("/sc/import/stream", {
+      method: "POST",
+      body: req,
+    });
+    const payload = dataEvent?.payload ?? {};
+    const resp: ScImportResponse = {
+      status: typeof payload.status === "string" ? payload.status : "failed",
+      dataset_id: typeof payload.dataset_id === "string" ? payload.dataset_id : undefined,
+      imported_count: typeof payload.imported_count === "number" ? payload.imported_count : 0,
+      error: typeof payload.error === "string" ? payload.error : null,
+    };
+    if (resp.status === "completed" && resp.dataset_id) {
+      importedDatasetId.value = resp.dataset_id;
+      message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
+      return;
+    }
+    message.error(resp.error || "Import failed");
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : "Import failed");
+  } finally {
+    isImporting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -104,6 +155,26 @@ function setLegendGroupBy(groupBy: string | null): void {
         <div class="sc-inspection-actions">
           <NButton size="small" quaternary @click="router.push('/sc/preview')">Summary</NButton>
           <NButton size="small" quaternary @click="router.push('/sc/handbook')">Handbook</NButton>
+          <NButton
+            v-if="!importedDatasetId"
+            size="small"
+            type="primary"
+            :loading="isImporting"
+            :disabled="!inspectionItem"
+            @click="startReclassifyImport"
+          >
+            Reclassify
+          </NButton>
+          <NButton
+            v-else
+            tag="a"
+            size="small"
+            type="primary"
+            target="_blank"
+            :href="`/datasets/${importedDatasetId}/sc/classify`"
+          >
+            Open Dataset
+          </NButton>
         </div>
       </div>
 

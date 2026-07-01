@@ -81,7 +81,7 @@ describe("usePerspectiveViewRef", () => {
 
     await flushMicrotasks();
 
-    expect(state.view.value).toBe(view);
+    expect(state.view.value?.view).toBe(view);
     expect(state.version.value).toBe(1);
     expect(onChange).toHaveBeenCalledTimes(1);
 
@@ -109,14 +109,14 @@ describe("usePerspectiveViewRef", () => {
     second.resolve(newView as unknown as View);
     await flushMicrotasks();
 
-    expect(state.view.value).toBe(newView);
+    expect(state.view.value?.view).toBe(newView);
     expect(state.latestTiming.value?.rows).toBe(2);
 
     first.resolve(oldView as unknown as View);
     await flushMicrotasks();
     await new Promise((resolve) => setTimeout(resolve, 25));
 
-    expect(state.view.value).toBe(newView);
+    expect(state.view.value?.view).toBe(newView);
     expect(oldView.delete).toHaveBeenCalledTimes(1);
   });
 });
