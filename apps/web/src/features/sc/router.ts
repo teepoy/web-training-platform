@@ -20,7 +20,13 @@ export const scRoutes: RouteRecordRaw[] = [
   {
     path: "/sc/preview/:inspectionTime/:waferKey",
     name: "sc-preview-inspection",
-    component: () => import("./presentation/pages/PreviewPage.vue"),
+    component: () => import("./presentation/pages/InspectionPage.vue"),
+    meta: compactScWorkspaceMeta,
+  },
+  {
+    path: "/sc/inspections/:inspectionTime/:waferKey",
+    name: "sc-inspection",
+    component: () => import("./presentation/pages/InspectionPage.vue"),
     meta: compactScWorkspaceMeta,
   },
   {

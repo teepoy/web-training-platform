@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, type Component } from "vue";
-import { useRoute } from "vue-router";
+import { computed } from "vue";
 import {
   NInput,
   NInputNumber,
@@ -11,41 +10,15 @@ import {
   NText,
   useThemeVars,
 } from "naive-ui";
-import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { usePreviewPage } from "@/features/sc/application/usePreviewPage";
+import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 
 const page = usePreviewPage();
-const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
-
-onMounted(async () => {
-  const { inspectionTime, waferKey } = route.params;
-  if (!inspectionTime || !waferKey) return;
-
-  const inspDt = new Date(decodeURIComponent(inspectionTime as string));
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const fmtTs = (d: Date) =>
-    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
-
-  const dayBefore = new Date(inspDt.getTime() - 86400000);
-  const dayAfter = new Date(inspDt.getTime() + 86400000);
-  page.dateRange.value = [dayBefore.getTime(), dayAfter.getTime()];
-
-  await page.searchInspections();
-
-  const waferKeyNum = Number(waferKey);
-  const expectedTimeStr = fmtTs(inspDt);
-  const row = page.summaries.value.find(
-    (r) => r.inspection_time === expectedTimeStr && r.wafer_key === waferKeyNum,
-  );
-  if (row) {
-    page.openInspectionTab(row);
-  }
-});
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -60,9 +33,19 @@ const containerStyle = computed(() => ({
   "--cv-divider": themeVars.value.dividerColor,
 }));
 
-const activeComponent = computed<Component>(() =>
-  page.activeTab.value?.type === "inspection" ? InspectionQuad : ScSummaryTab,
-);
+const activeComponent = computed(() => ScSummaryTab);
+
+function openInspectionInNewTab(row: InspectionSummaryItem): void {
+  page.lastOpenedSummaryKey.value = page.rowKey(row);
+  const target = router.resolve({
+    name: "sc-inspection",
+    params: {
+      inspectionTime: row.inspection_time,
+      waferKey: String(row.wafer_key),
+    },
+  });
+  window.open(target.href, "_blank", "noopener");
+}
 
 const activeComponentProps = computed((): Record<string, unknown> => {
   const tab = page.activeTab.value;
@@ -97,8 +80,7 @@ const activeComponentProps = computed((): Record<string, unknown> => {
         page.deviceFilter.value = v;
       },
       onSearch: () => page.searchInspections(),
-      onRowClick: (row: Parameters<typeof page.openInspectionTab>[0]) =>
-        page.openInspectionTab(row),
+      onRowClick: openInspectionInNewTab,
     };
   }
   return {
