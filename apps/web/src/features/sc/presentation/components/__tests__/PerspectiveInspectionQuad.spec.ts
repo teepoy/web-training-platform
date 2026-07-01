@@ -127,15 +127,13 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(wrapper.emitted("select-points")).toEqual([[{ ids: [1, 2, 3], region }]]);
   });
 
-  it("drains every queued box selection instead of keeping only the latest", async () => {
+  it("batches queued box selection ids into one table update", async () => {
     const firstRegion = { x: 10, y: 20, w: 30, h: 40 };
     const secondRegion = { x: 50, y: 60, w: 70, h: 80 };
     modelMock.queryBoxSelection
       .mockResolvedValueOnce([2, 3])
       .mockResolvedValueOnce([4, 5]);
-    modelMock.appendMapSelection
-      .mockResolvedValueOnce([1, 2, 3])
-      .mockResolvedValueOnce([1, 2, 3, 4, 5]);
+    modelMock.appendMapSelection.mockResolvedValueOnce([1, 2, 3, 4, 5]);
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
         variant: "preview",
@@ -155,10 +153,9 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
 
     expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(1, "die", firstRegion);
     expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
-    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(1, [2, 3]);
-    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(2, [4, 5]);
+    expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
+    expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3, 4, 5]);
     expect(wrapper.emitted("select-points")).toEqual([
-      [{ ids: [1, 2, 3], region: firstRegion }],
       [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
     ]);
   });

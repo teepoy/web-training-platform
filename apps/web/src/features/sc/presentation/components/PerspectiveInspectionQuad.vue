@@ -111,8 +111,6 @@ type QueuedBoxSelection = {
   mode: "wafer" | "die" | "reticle";
   region: BoxSelectionRegion;
 };
-let queuedBoxSelections: QueuedBoxSelection[] = [];
-let boxSelectionInFlight = false;
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const enabledLegendSources = computed<ScLegendSource[]>(
@@ -135,77 +133,14 @@ const reticleDieSizeYModel = computed(
   () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 150_000_000,
 );
 
-const perspective = useScPerspectiveWorkbench();
-const perspectiveReady = computed(() => perspective.dataReady.value);
-let quadDisposed = false;
-function recoverPerspective(reason: string, err: unknown): void {
-  if (quadDisposed) return;
-  void perspective.recover(reason, err);
-}
-const perspectiveScopeKey = computed(() => {
-  if (!perspectiveReady.value) return "perspective:disconnected";
-  if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
-  return `perspective:inspection:${props.inspectionTime ?? ""}:${props.waferKey ?? ""}`;
-});
-const galleryRandomSamplingFilter = computed<Filter[]>(() => {
-  const ids = props.galleryRandomSamplingDefectIds;
-  if (!ids || ids.size === 0) return [];
-  return [["defect_id", "in", [...ids]] as Filter];
-});
-
-const model = usePerspectiveInspectionModel({
-  table: perspective.table,
-  inspectionTime: computed(() => props.inspectionTime),
-  waferKey: computed(() => props.waferKey),
-  legendGroupBy: computed(() => props.legendGroupBy),
-  globalFilter,
-  zoom: computed(() => props.zoom),
-  activeMapMode: computed(() => props.activeMapTab),
-  galleryRandomSamplingFilter,
-  onRecoverableError: recoverPerspective,
-});
-const tableDataSource = usePerspectiveSampleTableDataSource(
-  perspective.table,
-  perspectiveScopeKey,
-  model.tableBaseFilters,
+const {
+  perspective,
+  perspectiveReady,
+  model,
+  tableDataSource,
   recoverPerspective,
-);
-
-watch(
-  [
-    () => props.variant,
-    () => props.datasetId,
-    () => props.inspectionTime,
-    () => props.waferKey,
-    () => reticleOptionsModel.value,
-  ],
-  async () => {
-    const opts = reticleOptionsModel.value;
-    if (props.variant === "reclassify") {
-      if (!props.datasetId) return perspective.disconnect();
-      await perspective.connect({
-        kind: "reclassify",
-        datasetId: props.datasetId,
-        reticleXDieCount: opts.xDieCount,
-        reticleYDieCount: opts.yDieCount,
-        reticleXDieShift: opts.xDieShift,
-        reticleYDieShift: opts.yDieShift,
-      });
-      return;
-    }
-    if (!props.inspectionTime || props.waferKey === undefined) return perspective.disconnect();
-    await perspective.connect({
-      kind: "preview",
-      inspectionTime: props.inspectionTime,
-      waferKey: props.waferKey,
-      reticleXDieCount: opts.xDieCount,
-      reticleYDieCount: opts.yDieCount,
-      reticleXDieShift: opts.xDieShift,
-      reticleYDieShift: opts.yDieShift,
-    });
-  },
-  { immediate: true },
-);
+  dispose: disposePerspectiveQuadData,
+} = usePerspectiveQuadData();
 
 const sampleTableTotal = 0;
 const tableHighlightIds = computed(
@@ -236,6 +171,7 @@ const mapImmediateCrosshairVersion = ref(0);
 let mapImmediateCrosshairSeq = 0;
 let _highlightTimer: ReturnType<typeof setTimeout> | null = null;
 const HIGHLIGHT_DEBOUNCE_MS = 250;
+const boxSelectionQueue = useBoxSelectionQueue();
 
 watch(
   () => props.gallerySelectedDefectIds,
@@ -288,9 +224,9 @@ watch(
 );
 
 onUnmounted(() => {
-  quadDisposed = true;
+  disposePerspectiveQuadData();
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
-  queuedBoxSelections = [];
+  boxSelectionQueue.clear();
 });
 
 const barChartItems = computed(() => {
@@ -419,28 +355,7 @@ function onBarResizeEnd(e: PointerEvent): void {
 
 function handleBoxSelect(region: BoxSelectionRegion): void {
   mapImmediateCrosshairDefects.value = [];
-  queuedBoxSelections.push({ mode: props.activeMapTab, region });
-  void drainBoxSelectionQueue();
-}
-async function drainBoxSelectionQueue(): Promise<void> {
-  if (boxSelectionInFlight) return;
-  boxSelectionInFlight = true;
-  try {
-    while (queuedBoxSelections.length > 0) {
-      const selection = queuedBoxSelections.shift();
-      if (!selection) continue;
-      try {
-        const ids = await model.queryBoxSelection(selection.mode, selection.region);
-        const nextIds = await model.appendMapSelection(ids);
-        emit("select-points", { ids: nextIds, region: selection.region });
-      } catch (err) {
-        recoverPerspective("box selection update failed", err);
-      }
-    }
-  } finally {
-    boxSelectionInFlight = false;
-    if (queuedBoxSelections.length > 0) void drainBoxSelectionQueue();
-  }
+  boxSelectionQueue.enqueue({ mode: props.activeMapTab, region });
 }
 async function handleMapSelectPoints(payload: {
   ids: number[];
@@ -480,6 +395,151 @@ async function selectBarChartGroup(defectIds: number[]): Promise<void> {
 async function handleBarChartClick(event: ECElementEvent): Promise<void> {
   const item = barChartItems.value[typeof event.dataIndex === "number" ? event.dataIndex : -1];
   if (item) await selectBarChartGroup(item.defectIds);
+}
+
+function useBoxSelectionQueue() {
+  let queuedSelections: QueuedBoxSelection[] = [];
+  let drainInFlight = false;
+  let drainScheduled = false;
+
+  function clear(): void {
+    queuedSelections = [];
+    drainScheduled = false;
+  }
+
+  function enqueue(selection: QueuedBoxSelection): void {
+    queuedSelections.push(selection);
+    scheduleDrain();
+  }
+
+  function scheduleDrain(): void {
+    if (drainScheduled || drainInFlight) return;
+    drainScheduled = true;
+    queueMicrotask(() => {
+      drainScheduled = false;
+      void drain();
+    });
+  }
+
+  async function drain(): Promise<void> {
+    if (drainInFlight) return;
+    drainInFlight = true;
+    try {
+      while (queuedSelections.length > 0) {
+        const batch = queuedSelections;
+        queuedSelections = [];
+        await applyBatch(batch);
+      }
+    } finally {
+      drainInFlight = false;
+      if (queuedSelections.length > 0) scheduleDrain();
+    }
+  }
+
+  async function applyBatch(batch: QueuedBoxSelection[]): Promise<void> {
+    const ids = new Set<number>();
+    const lastRegion = batch[batch.length - 1]?.region;
+    for (const selection of batch) {
+      try {
+        const selectedIds = await model.queryBoxSelection(selection.mode, selection.region);
+        for (const id of selectedIds) ids.add(id);
+      } catch (err) {
+        recoverPerspective("box selection query failed", err);
+      }
+    }
+    if (ids.size === 0 || !lastRegion) return;
+
+    try {
+      const nextIds = await model.appendMapSelection([...ids]);
+      emit("select-points", { ids: nextIds, region: lastRegion });
+    } catch (err) {
+      recoverPerspective("box selection update failed", err);
+    }
+  }
+
+  return { clear, enqueue };
+}
+
+function usePerspectiveQuadData() {
+  const perspective = useScPerspectiveWorkbench();
+  const perspectiveReady = computed(() => perspective.dataReady.value);
+  let disposed = false;
+
+  function recoverPerspective(reason: string, err: unknown): void {
+    if (disposed) return;
+    void perspective.recover(reason, err);
+  }
+
+  const perspectiveScopeKey = computed(() => {
+    if (!perspectiveReady.value) return "perspective:disconnected";
+    if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
+    return `perspective:inspection:${props.inspectionTime ?? ""}:${props.waferKey ?? ""}`;
+  });
+  const galleryRandomSamplingFilter = computed<Filter[]>(() => {
+    const ids = props.galleryRandomSamplingDefectIds;
+    if (!ids || ids.size === 0) return [];
+    return [["defect_id", "in", [...ids]] as Filter];
+  });
+
+  const model = usePerspectiveInspectionModel({
+    table: perspective.table,
+    inspectionTime: computed(() => props.inspectionTime),
+    waferKey: computed(() => props.waferKey),
+    legendGroupBy: computed(() => props.legendGroupBy),
+    globalFilter,
+    zoom: computed(() => props.zoom),
+    activeMapMode: computed(() => props.activeMapTab),
+    galleryRandomSamplingFilter,
+    onRecoverableError: recoverPerspective,
+  });
+  const tableDataSource = usePerspectiveSampleTableDataSource(
+    perspective.table,
+    perspectiveScopeKey,
+    model.tableBaseFilters,
+    recoverPerspective,
+  );
+
+  watch(
+    [
+      () => props.variant,
+      () => props.datasetId,
+      () => props.inspectionTime,
+      () => props.waferKey,
+      () => reticleOptionsModel.value,
+    ],
+    async () => {
+      const opts = reticleOptionsModel.value;
+      if (props.variant === "reclassify") {
+        if (!props.datasetId) return perspective.disconnect();
+        await perspective.connect({
+          kind: "reclassify",
+          datasetId: props.datasetId,
+          reticleXDieCount: opts.xDieCount,
+          reticleYDieCount: opts.yDieCount,
+          reticleXDieShift: opts.xDieShift,
+          reticleYDieShift: opts.yDieShift,
+        });
+        return;
+      }
+      if (!props.inspectionTime || props.waferKey === undefined) return perspective.disconnect();
+      await perspective.connect({
+        kind: "preview",
+        inspectionTime: props.inspectionTime,
+        waferKey: props.waferKey,
+        reticleXDieCount: opts.xDieCount,
+        reticleYDieCount: opts.yDieCount,
+        reticleXDieShift: opts.xDieShift,
+        reticleYDieShift: opts.yDieShift,
+      });
+    },
+    { immediate: true },
+  );
+
+  function dispose(): void {
+    disposed = true;
+  }
+
+  return { perspective, perspectiveReady, model, tableDataSource, recoverPerspective, dispose };
 }
 </script>
 
