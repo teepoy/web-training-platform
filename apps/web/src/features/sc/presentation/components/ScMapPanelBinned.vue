@@ -79,7 +79,7 @@ const emit = defineEmits<{
     v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number },
   ): void;
   (
-    e: "select-points",
+    e: "legend-select",
     payload: {
       ids: number[];
       region: { x: number; y: number; w: number; h: number };
@@ -350,10 +350,10 @@ function onBoxSelect(region: BoxSelectionRegion): void {
 const handleLegendSelect = (key: LegendKey | null) => {
   if (key === null) {
     selectedClassNumber.value = null;
-    emit("select-points", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
+    emit("legend-select", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
   } else {
     selectedClassNumber.value = key;
-    emit("select-points", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
+    emit("legend-select", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
   }
 };
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import "@perspective-dev/viewer/inline";
 import { NButton, NResult, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
@@ -51,7 +52,7 @@ const props = defineProps<{
   reticleDieSizeY?: number;
   reticleOptions?: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
-  gallerySelectedDefectIds?: Array<number | string>;
+  selectedGalleryDefectIds?: Array<number | string>;
   tableFilter?: ScSampleTableFilter;
   globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
@@ -64,7 +65,7 @@ const emit = defineEmits<{
   (e: "update:reticleOptions", v: ReticleMapOptions): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (
-    e: "select-points",
+    e: "map-filter-change",
     payload: {
       ids: number[];
       region: { x: number; y: number; w: number; h: number };
@@ -138,7 +139,7 @@ const {
   perspectiveReady,
   model,
   tableDataSource,
-  recoverPerspective,
+  reportPerspectiveError,
   dispose: disposePerspectiveQuadData,
 } = usePerspectiveQuadData();
 
@@ -147,7 +148,7 @@ const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),
 );
 const blinkHighlightIds = computed(
-  () => new Set((props.gallerySelectedDefectIds ?? []).map(String)),
+  () => new Set((props.selectedGalleryDefectIds ?? []).map(String)),
 );
 const EMPTY_MAP_DISPLAY = new Float32Array(0);
 const activeWaferDisplay = computed(() =>
@@ -174,7 +175,7 @@ const HIGHLIGHT_DEBOUNCE_MS = 250;
 const boxSelectionQueue = useBoxSelectionQueue();
 
 watch(
-  () => props.gallerySelectedDefectIds,
+  () => props.selectedGalleryDefectIds,
   (ids) => {
     if (!props.syncGallerySelection) return;
     void model.setGallerySelectedDefectIds(ids ?? []);
@@ -357,7 +358,7 @@ function handleBoxSelect(region: BoxSelectionRegion): void {
   mapImmediateCrosshairDefects.value = [];
   boxSelectionQueue.enqueue({ mode: props.activeMapTab, region });
 }
-async function handleMapSelectPoints(payload: {
+async function handleLegendFilterChange(payload: {
   ids: number[];
   region: { x: number; y: number; w: number; h: number };
   key?: string | number | null;
@@ -370,7 +371,7 @@ async function handleMapSelectPoints(payload: {
   }
   mapImmediateCrosshairVersion.value += 1;
   await model.applyMapSelection(ids);
-  emit("select-points", { ...payload, ids });
+  emit("map-filter-change", { ...payload, ids });
 }
 async function handleMapSelectionChange(ids: number[]): Promise<void> {
   if (ids.length === 0) {
@@ -379,7 +380,7 @@ async function handleMapSelectionChange(ids: number[]): Promise<void> {
     mapImmediateCrosshairVersion.value += 1;
   }
   if (ids.length === 0) await model.clearMapSelection();
-  emit("select-points", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
+  emit("map-filter-change", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
 }
 function handleTableSelectionChange(ids: number[]): void {
   void model.setTableSelectedDefectIds(ids);
@@ -390,7 +391,7 @@ function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys:
 }
 async function selectBarChartGroup(defectIds: number[]): Promise<void> {
   await model.applyMapSelection(defectIds);
-  emit("select-points", { ids: defectIds, region: { x: 0, y: 0, w: 0, h: 0 } });
+  emit("map-filter-change", { ids: defectIds, region: { x: 0, y: 0, w: 0, h: 0 } });
 }
 async function handleBarChartClick(event: ECElementEvent): Promise<void> {
   const item = barChartItems.value[typeof event.dataIndex === "number" ? event.dataIndex : -1];
@@ -444,16 +445,16 @@ function useBoxSelectionQueue() {
         const selectedIds = await model.queryBoxSelection(selection.mode, selection.region);
         for (const id of selectedIds) ids.add(id);
       } catch (err) {
-        recoverPerspective("box selection query failed", err);
+        reportPerspectiveError("box selection query failed", err);
       }
     }
     if (ids.size === 0 || !lastRegion) return;
 
     try {
       const nextIds = await model.appendMapSelection([...ids]);
-      emit("select-points", { ids: nextIds, region: lastRegion });
+      emit("map-filter-change", { ids: nextIds, region: lastRegion });
     } catch (err) {
-      recoverPerspective("box selection update failed", err);
+      reportPerspectiveError("box selection update failed", err);
     }
   }
 
@@ -464,10 +465,11 @@ function usePerspectiveQuadData() {
   const perspective = useScPerspectiveWorkbench();
   const perspectiveReady = computed(() => perspective.dataReady.value);
   let disposed = false;
+  let stopConnectWatch: (() => void) | null = null;
 
-  function recoverPerspective(reason: string, err: unknown): void {
+  function reportPerspectiveError(reason: string, err: unknown): void {
     if (disposed) return;
-    void perspective.recover(reason, err);
+    console.warn("[sc-perspective] operation failed", { reason, err });
   }
 
   const perspectiveScopeKey = computed(() => {
@@ -490,60 +492,65 @@ function usePerspectiveQuadData() {
     zoom: computed(() => props.zoom),
     activeMapMode: computed(() => props.activeMapTab),
     galleryRandomSamplingFilter,
-    onRecoverableError: recoverPerspective,
+    onRecoverableError: reportPerspectiveError,
   });
   const tableDataSource = usePerspectiveSampleTableDataSource(
     perspective.table,
     perspectiveScopeKey,
     model.tableBaseFilters,
-    recoverPerspective,
+    reportPerspectiveError,
   );
 
-  watch(
-    [
-      () => props.variant,
-      () => props.datasetId,
-      () => props.inspectionTime,
-      () => props.waferKey,
-      () => reticleOptionsModel.value,
-    ],
-    async () => {
-      const opts = reticleOptionsModel.value;
-      if (props.variant === "reclassify") {
-        if (!props.datasetId) return perspective.disconnect();
+  onMounted(() => {
+    stopConnectWatch = watch(
+      [
+        () => props.variant,
+        () => props.datasetId,
+        () => props.inspectionTime,
+        () => props.waferKey,
+        () => reticleOptionsModel.value,
+      ],
+      async () => {
+        const opts = reticleOptionsModel.value;
+        if (props.variant === "reclassify") {
+          if (!props.datasetId) return perspective.disconnect();
+          await perspective.connect({
+            kind: "reclassify",
+            datasetId: props.datasetId,
+            reticleXDieCount: opts.xDieCount,
+            reticleYDieCount: opts.yDieCount,
+            reticleXDieShift: opts.xDieShift,
+            reticleYDieShift: opts.yDieShift,
+          });
+          return;
+        }
+        if (!props.inspectionTime || props.waferKey === undefined) return perspective.disconnect();
         await perspective.connect({
-          kind: "reclassify",
-          datasetId: props.datasetId,
+          kind: "preview",
+          inspectionTime: props.inspectionTime,
+          waferKey: props.waferKey,
           reticleXDieCount: opts.xDieCount,
           reticleYDieCount: opts.yDieCount,
           reticleXDieShift: opts.xDieShift,
           reticleYDieShift: opts.yDieShift,
         });
-        return;
-      }
-      if (!props.inspectionTime || props.waferKey === undefined) return perspective.disconnect();
-      await perspective.connect({
-        kind: "preview",
-        inspectionTime: props.inspectionTime,
-        waferKey: props.waferKey,
-        reticleXDieCount: opts.xDieCount,
-        reticleYDieCount: opts.yDieCount,
-        reticleXDieShift: opts.xDieShift,
-        reticleYDieShift: opts.yDieShift,
-      });
-    },
-    { immediate: true },
-  );
+      },
+      { immediate: true },
+    );
+  });
 
   function dispose(): void {
     disposed = true;
+    stopConnectWatch?.();
+    stopConnectWatch = null;
   }
 
-  return { perspective, perspectiveReady, model, tableDataSource, recoverPerspective, dispose };
+  return { perspective, perspectiveReady, model, tableDataSource, reportPerspectiveError, dispose };
 }
 </script>
 
 <template>
+  <perspective-viewer class="iq-hidden-perspective-viewer" aria-hidden="true" />
   <div v-if="samplesError" class="iq-state">
     <NResult status="error" :title="samplesError" description="Failed to load inspection samples"
       ><template #footer><NButton @click="emit('retry')">Retry</NButton></template></NResult
@@ -590,7 +597,7 @@ function usePerspectiveQuadData() {
           :legend-group-by="legendGroupBy"
           :legend-sources="enabledLegendSources"
           :zoom="zoom"
-          :highlightDefects="highlightDefects"
+          :highlight-defects="highlightDefects"
           :immediate-crosshair-defects="mapImmediateCrosshairDefects"
           :immediate-crosshair-version="mapImmediateCrosshairVersion"
           :map-loading="model.activeMapLoading.value || !perspectiveReady"
@@ -600,7 +607,7 @@ function usePerspectiveQuadData() {
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
           @selection-change="handleMapSelectionChange"
-          @select-points="handleMapSelectPoints"
+          @legend-select="handleLegendFilterChange"
           @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
           @legend-hidden-change="handleLegendHiddenChange"
           @zoom-in="(vp) => emit('zoom-in', vp)"
@@ -706,6 +713,14 @@ function usePerspectiveQuadData() {
 </template>
 
 <style scoped>
+.iq-hidden-perspective-viewer {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
 .iq-state {
   display: flex;
   align-items: center;

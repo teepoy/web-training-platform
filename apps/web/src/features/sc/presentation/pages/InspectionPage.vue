@@ -28,7 +28,7 @@ const inspectionTime = computed(() => String(route.params.inspectionTime ?? ""))
 const waferKey = computed(() => Number(route.params.waferKey));
 const activeMapTab = ref<"wafer" | "die" | "reticle">("wafer");
 const zoom = ref<{ x: number; y: number; w: number; h: number } | null>(null);
-const selectedDefectIds = ref<number[]>([]);
+const selectedGalleryDefectIds = ref<number[]>([]);
 const tableFilter = ref<ScSampleTableFilter>({});
 const tableSort = ref<ScSampleTableSort | null>(null);
 const legendGroupBy = ref<ScLegendSource | null>(null);
@@ -198,20 +198,19 @@ async function startReclassifyImport(): Promise<void> {
         :reticle-die-size-y="inspectionItem?.die_size_y ?? 100000"
         :reticle-options="reticleOptions"
         :zoom="zoom"
-        :gallery-selected-defect-ids="selectedDefectIds"
+        :selected-gallery-defect-ids="selectedGalleryDefectIds"
         :table-filter="tableFilter"
         :table-sort="tableSort"
         :legend-group-by="legendGroupBy"
         @update:active-map-tab="setActiveMapTab"
         @update:reticle-options="reticleOptions = $event"
-        @select-points="({ ids }) => (selectedDefectIds = ids)"
         @zoom-in="zoom = $event"
         @table-filter-change="tableFilter = $event"
         @table-sort-change="tableSort = $event"
-        @table-selection-change="selectedDefectIds = $event"
+        @table-selection-change="selectedGalleryDefectIds = $event"
         @legend-group-change="setLegendGroupBy"
         @retry="inspectionQuery.refetch()"
-        @select-samples="(ids) => (selectedDefectIds = ids.map(Number))"
+        @select-samples="(ids) => (selectedGalleryDefectIds = ids.map(Number))"
       />
     </div>
   </FullScreenLayout>

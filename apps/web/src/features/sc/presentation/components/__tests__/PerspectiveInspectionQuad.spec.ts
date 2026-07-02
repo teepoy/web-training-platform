@@ -80,7 +80,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
         variant: "preview",
         samplesError: null,
         activeMapTab: "wafer",
-        gallerySelectedDefectIds: largeIds,
+        selectedGalleryDefectIds: largeIds,
       },
     });
     await vi.runAllTimersAsync();
@@ -96,7 +96,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
         samplesLoading: false,
         samplesError: null,
         activeMapTab: "wafer",
-        gallerySelectedDefectIds: [1, 2, 3],
+        selectedGalleryDefectIds: [1, 2, 3],
       },
     });
     await vi.runAllTimersAsync();
@@ -105,7 +105,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(mapPanel.exists()).toBe(true);
   });
 
-  it("appends box selection results before emitting selected points", async () => {
+  it("appends box selection results before emitting map filter ids", async () => {
     const region = { x: 10, y: 20, w: 30, h: 40 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
@@ -124,7 +124,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.queryBoxSelection).toHaveBeenCalledWith("die", region);
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3]);
     expect(modelMock.applyMapSelection).not.toHaveBeenCalled();
-    expect(wrapper.emitted("select-points")).toEqual([[{ ids: [1, 2, 3], region }]]);
+    expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [1, 2, 3], region }]]);
   });
 
   it("batches queued box selection ids into one table update", async () => {
@@ -155,7 +155,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
     expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3, 4, 5]);
-    expect(wrapper.emitted("select-points")).toEqual([
+    expect(wrapper.emitted("map-filter-change")).toEqual([
       [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
     ]);
   });
@@ -174,13 +174,13 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
 
     wrapper
       .findComponent({ name: "ScMapPanelBinned" })
-      .vm.$emit("select-points", { ids: [], region, key: 7 });
+      .vm.$emit("legend-select", { ids: [], region, key: 7 });
     await Promise.resolve();
     await Promise.resolve();
 
     expect(modelMock.queryLegendSelection).toHaveBeenCalledWith(7);
     expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
     expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
-    expect(wrapper.emitted("select-points")).toEqual([[{ ids: [8, 9], region, key: 7 }]]);
+    expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [8, 9], region, key: 7 }]]);
   });
 });
