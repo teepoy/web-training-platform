@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import text
+from sqlalchemy import select, text
 from starlette.routing import compile_path
 
 from app.composition import build_app_context
@@ -16,6 +16,7 @@ from app.modules.auth.app.services.auth_service import decode_access_token
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
+    require_superadmin,
     seed_dev_auth_context,
 )
 from app.modules.dashboard.port.http.deps import DashboardServiceDep
@@ -25,6 +26,7 @@ from app.shared.api.schemas import (
 from app.core.config import load_config
 from app.core.logger import init_logging
 from app.shared.db.session import init_db
+from app.shared.db.registry import UserORM
 from app.shared.infrastructure.metrics import online_jwt_users
 from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 from app.shared.api.schemas import Organization, User
@@ -244,7 +246,13 @@ async def collect_online_jwt_users(request: Request, call_next: Any) -> Response
             payload = decode_access_token(token)
             user_id = payload.get("sub")
             if isinstance(user_id, str):
-                await online_jwt_users.observe_user(user_id)
+                email = payload.get("email")
+                name = payload.get("name")
+                await online_jwt_users.observe_user(
+                    user_id,
+                    email=email if isinstance(email, str) else None,
+                    name=name if isinstance(name, str) else None,
+                )
         except Exception:
             pass
 
@@ -273,6 +281,38 @@ async def metrics() -> Response:
         content=await online_jwt_users.render_prometheus(),
         media_type=online_jwt_users.content_type,
     )
+
+
+@app.get("/api/v1/metrics/users/daily", include_in_schema=False)
+async def daily_user_metrics(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    await require_superadmin(current_user=current_user)
+    observed_users = await online_jwt_users.daily_users()
+    user_ids = [user.id for user in observed_users]
+    users_by_id: dict[str, UserORM] = {}
+    if user_ids:
+        session_factory = request.app.state.app_context.shared.session_factory
+        async with session_factory() as session:
+            result = await session.execute(
+                select(UserORM).where(UserORM.id.in_(user_ids))
+            )
+            users_by_id = {user.id: user for user in result.scalars().all()}
+
+    details: list[dict[str, str | None]] = []
+    for observed in observed_users:
+        user = users_by_id.get(observed.id)
+        details.append(
+            {
+                "id": observed.id,
+                "email": user.email if user is not None else observed.email,
+                "name": user.name if user is not None else observed.name,
+                "first_seen_at": observed.first_seen_at,
+                "last_seen_at": observed.last_seen_at,
+            }
+        )
+    return {"count": len(details), "users": details}
 
 
 @app.get(
