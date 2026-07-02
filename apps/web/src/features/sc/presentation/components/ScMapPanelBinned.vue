@@ -321,7 +321,7 @@ const reticleImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
 ]);
 
 let queuedBoxSelections: QueuedBoxSelection[] = [];
-let boxSelectionTimer: ReturnType<typeof setTimeout> | null = null;
+let boxSelectionTimer: number | null = null;
 
 function clearQueuedBoxSelection(): void {
   queuedBoxSelections = [];

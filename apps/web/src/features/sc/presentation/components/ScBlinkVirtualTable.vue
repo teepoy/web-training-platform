@@ -28,7 +28,7 @@ import type { ManagedPerspectiveView } from "@/features/sc/presentation/composab
 interface BlinkSample {
   sampleId?: string | null;
   defectId: number;
-  reviewImages?: number[];
+  reviewImages: number[];
   annotationLabel: string | null;
   predictionLabel: string | null;
   predictionConfidence: number | null;

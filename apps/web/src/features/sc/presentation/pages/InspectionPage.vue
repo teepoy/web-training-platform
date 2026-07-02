@@ -19,6 +19,15 @@ import type {
 } from "@/features/sc/domain/models";
 import { streamApiSse } from "@/shared/api/sse";
 
+function isInspectionSummaryItem(payload: unknown): payload is InspectionSummaryItem {
+  return (
+    !!payload &&
+    typeof payload === "object" &&
+    "inspection_time" in payload &&
+    "wafer_key" in payload
+  );
+}
+
 const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
@@ -32,7 +41,9 @@ const selectedGalleryDefectIds = ref<number[]>([]);
 const tableFilter = ref<ScSampleTableFilter>({});
 const tableSort = ref<ScSampleTableSort | null>(null);
 const legendGroupBy = ref<ScLegendSource | null>(null);
-const reticleOptions = ref<ReticleMapOptions>(normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS));
+const reticleOptions = ref<ReticleMapOptions>(
+  normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS),
+);
 const isImporting = ref(false);
 const importedDatasetId = ref<string | null>(null);
 
@@ -49,8 +60,7 @@ const inspectionFetching = computed(() => inspectionQuery.isFetching.value);
 
 const inspectionItem = computed<InspectionSummaryItem | null>(() => {
   const payload = inspectionQuery.data.value?.data;
-  if (!payload || "detail" in payload) return null;
-  return payload;
+  return isInspectionSummaryItem(payload) ? payload : null;
 });
 const samplesError = computed(() => {
   if (!Number.isFinite(waferKey.value)) return "Invalid wafer key";
