@@ -64,13 +64,18 @@ function extractActionsHandler(
   row: DatasetListItem,
   key: string,
 ): ((...args: unknown[]) => void) | undefined {
-  const col = (surface.columns.value as RenderableColumn[]).find((candidate) => candidate.key === "actions");
+  const col = (surface.columns.value as RenderableColumn[]).find(
+    (candidate) => candidate.key === "actions",
+  );
   if (!col?.render) {
     return undefined;
   }
 
   const child = col.render(row, 0);
-  const vnode = child !== null && typeof child === "object" && !Array.isArray(child) ? (child as VNode) : undefined;
+  const vnode =
+    child !== null && typeof child === "object" && !Array.isArray(child)
+      ? (child as VNode)
+      : undefined;
   const raw = vnode?.props?.[key];
   return typeof raw === "function" ? (raw as (...args: unknown[]) => void) : undefined;
 }
@@ -112,19 +117,23 @@ describe("useDatasetListSurface", () => {
   });
 
   describe("actions column permission gates", () => {
-    it("does not forward delete for a non-superadmin user", () => {
-      const { surface, onDeleteDataset } = buildSurface({ user: makeUser({ is_superadmin: false }) });
+    it("does not forward delete for a non-creator user", () => {
+      const { surface, onDeleteDataset } = buildSurface({
+        user: makeUser({ id: "other-user", is_superadmin: true }),
+      });
 
-      const row = makeDataset();
+      const row = makeDataset({ created_by: "creator-user" });
       extractActionsHandler(surface, row, "onDelete")?.(row);
 
       expect(onDeleteDataset).not.toHaveBeenCalled();
     });
 
-    it("forwards delete for a superadmin", () => {
-      const { surface, onDeleteDataset } = buildSurface({ user: makeUser({ is_superadmin: true }) });
+    it("forwards delete for the creator", () => {
+      const { surface, onDeleteDataset } = buildSurface({
+        user: makeUser({ id: "creator-user" }),
+      });
 
-      const row = makeDataset();
+      const row = makeDataset({ created_by: "creator-user" });
       extractActionsHandler(surface, row, "onDelete")?.(row);
 
       expect(onDeleteDataset).toHaveBeenCalledOnce();
@@ -132,7 +141,9 @@ describe("useDatasetListSurface", () => {
     });
 
     it("does not forward toggle-public for a non-superadmin user", () => {
-      const { surface, onTogglePublic } = buildSurface({ user: makeUser({ is_superadmin: false }) });
+      const { surface, onTogglePublic } = buildSurface({
+        user: makeUser({ is_superadmin: false }),
+      });
 
       const row = makeDataset();
       extractActionsHandler(surface, row, "onTogglePublic")?.({ id: row.id, isPublic: true });
@@ -156,7 +167,10 @@ describe("useDatasetListSurface", () => {
       const importer = { id: "stub-importer", label: "Stub Importer", component: {} };
       const preview = { id: "stub-preview", label: "Stub Preview", component: {} };
 
-      const { surface } = buildSurface({ importerFlows: [importer], previewLauncherFlows: [preview] });
+      const { surface } = buildSurface({
+        importerFlows: [importer],
+        previewLauncherFlows: [preview],
+      });
 
       expect(surface.toolbarProps.value.importerFlows).toEqual([importer]);
       expect(surface.toolbarProps.value.previewLauncherFlows).toEqual([preview]);

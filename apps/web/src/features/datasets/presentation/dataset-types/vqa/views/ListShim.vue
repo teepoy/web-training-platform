@@ -10,6 +10,7 @@
       :datasets="datasets"
       :columns="columns"
       :on-row-click="(row) => emit('view', row.id)"
+      :pagination="pagination"
     />
   </div>
 </template>
@@ -25,7 +26,9 @@ import type { DatasetListItem } from "@/shared/datasets/types";
 const props = defineProps<{
   datasets: DatasetListItem[];
   currentOrgId: string | null;
+  currentUserId?: string | null;
   isSuperadmin: boolean;
+  pagination?: false | import("naive-ui").PaginationProps;
 }>();
 
 const emit = defineEmits<{
@@ -39,6 +42,7 @@ const columns = computed(() =>
   buildDatasetColumns<DatasetListItem>({
     currentOrgId: props.currentOrgId,
     isSuperadmin: props.isSuperadmin,
+    currentUserId: props.currentUserId,
     taskTagType: "warning",
     resolveTaskType: resolveDatasetTaskType,
     onViewDataset: (id: string) => emit("view", id),

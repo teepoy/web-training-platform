@@ -50,11 +50,29 @@ import type {
 } from "./ui-helpers";
 
 export async function listDatasets(): Promise<Dataset[]> {
-  const res = await listDatasetsApiV1DatasetsGet();
+  const pageSize = 200;
+  let offset = 0;
+  const datasets: Dataset[] = [];
+
+  for (;;) {
+    const page = await listDatasetPage({ limit: pageSize, offset });
+    datasets.push(...page.items);
+    if (datasets.length >= page.total || page.items.length === 0) {
+      return datasets;
+    }
+    offset += page.items.length;
+  }
+}
+
+export async function listDatasetPage(params: {
+  limit: number;
+  offset: number;
+}): Promise<PaginatedResponse<Dataset>> {
+  const res = await listDatasetsApiV1DatasetsGet(params);
   if (res.status !== 200) {
     throw new Error(`Failed to list datasets: ${res.status}`);
   }
-  return res.data as Dataset[];
+  return res.data as PaginatedResponse<Dataset>;
 }
 
 export async function createDataset(body: CreateDatasetBody): Promise<Dataset> {

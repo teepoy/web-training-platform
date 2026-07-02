@@ -1,22 +1,27 @@
 <template>
-  <n-space vertical size="large" class="models-view">
-    <n-page-header title="Models" />
-    <n-input
-      v-model:value="keyword"
-      size="small"
-      clearable
-      placeholder="Search models"
-      class="models-search"
-    />
-    <n-data-table
-      :columns="columns"
-      :data="filteredModels"
-      :loading="isLoading"
-      :bordered="false"
-      :pagination="pagination"
-      :row-key="(row: ModelResponse) => row.id"
-      size="small"
-    />
+  <DatasetPageShell :is-loading="isLoading" :has-org="!!orgStore.currentOrgId" :error="error">
+    <div class="models-view">
+      <DatasetToolbar title="Models" />
+
+      <div class="models-list-filters">
+        <n-input
+          v-model:value="keyword"
+          size="small"
+          clearable
+          placeholder="Search models"
+          class="models-search"
+        />
+      </div>
+
+      <n-data-table
+        :columns="columns"
+        :data="filteredModels"
+        :bordered="false"
+        :pagination="pagination"
+        :row-key="(row: ModelResponse) => row.id"
+        size="small"
+      />
+    </div>
 
     <n-modal
       v-model:show="renameVisible"
@@ -28,14 +33,9 @@
       @positive-click="submitRename"
       @negative-click="resetRename"
     >
-      <n-input
-        v-model:value="renameName"
-        placeholder="Model name"
-        maxlength="255"
-        show-count
-      />
+      <n-input v-model:value="renameName" placeholder="Model name" maxlength="255" show-count />
     </n-modal>
-  </n-space>
+  </DatasetPageShell>
 </template>
 
 <script setup lang="ts">
@@ -47,7 +47,6 @@ import {
   NDataTable,
   NInput,
   NModal,
-  NPageHeader,
   NPopconfirm,
   NSpace,
   NText,
@@ -55,6 +54,9 @@ import {
 } from "naive-ui";
 import type { ModelResponse } from "@/generated/orval/models";
 import { deleteModel, listModels, renameModel } from "@/shared/api/models";
+import { DatasetPageShell, DatasetToolbar } from "@/shared";
+import { useAuthStore } from "@/features/auth/application/store";
+import { useOrgStore } from "@/features/auth/application/org";
 
 type ModelRow = ModelResponse & {
   created_by?: string | null;
@@ -63,6 +65,8 @@ type ModelRow = ModelResponse & {
 
 const message = useMessage();
 const queryClient = useQueryClient();
+const authStore = useAuthStore();
+const orgStore = useOrgStore();
 
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -79,13 +83,15 @@ const pagination = reactive<PaginationProps>({
 });
 
 const modelsQuery = useQuery({
-  queryKey: ["models", "list"],
+  queryKey: computed(() => ["models", "list", orgStore.currentOrgId]),
   queryFn: listModels,
+  enabled: computed(() => !!orgStore.currentOrgId),
   refetchInterval: 5000,
 });
 
 const models = computed(() => modelsQuery.data.value ?? []);
 const isLoading = computed(() => modelsQuery.isLoading.value);
+const error = computed(() => (modelsQuery.error.value as Error | null) ?? null);
 const keyword = ref("");
 const filteredModels = computed<ModelRow[]>(() => {
   const query = keyword.value.trim().toLowerCase();
@@ -149,6 +155,10 @@ function modelCreatorName(row: ModelRow): string {
 }
 
 function openRename(row: ModelRow): void {
+  if (row.created_by !== authStore.user?.id) {
+    message.error("Only the model creator can rename this model");
+    return;
+  }
   renameTarget.value = row;
   renameName.value = modelDisplayName(row);
   renameVisible.value = true;
@@ -174,11 +184,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     key: "name",
     sorter: "default",
     render: (row) =>
-      h(
-        NText,
-        { style: "font-weight: 500" },
-        { default: () => modelDisplayName(row) },
-      ),
+      h(NText, { style: "font-weight: 500" }, { default: () => modelDisplayName(row) }),
   },
   {
     title: "Dataset",
@@ -205,51 +211,58 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     key: "created_at",
     width: 180,
     sorter: (left, right) =>
-      new Date(left.created_at ?? 0).getTime() -
-      new Date(right.created_at ?? 0).getTime(),
-    render: (row) =>
-      row.created_at ? new Date(row.created_at).toLocaleString() : "-",
+      new Date(left.created_at ?? 0).getTime() - new Date(right.created_at ?? 0).getTime(),
+    render: (row) => (row.created_at ? new Date(row.created_at).toLocaleString() : "-"),
   },
   {
     title: "Actions",
     key: "actions",
     width: 160,
-    render: (row) =>
-      h(
+    render: (row) => {
+      const isCreator = row.created_by === authStore.user?.id;
+      return h(
         NSpace,
         { size: 6, wrap: false },
         {
           default: () => [
             h(
               NButton,
-              { size: "small", quaternary: true, onClick: () => openRename(row) },
+              {
+                size: "small",
+                quaternary: true,
+                disabled: !isCreator,
+                onClick: () => openRename(row),
+              },
               { default: () => "Rename" },
             ),
-            h(
-              NPopconfirm,
-              {
-                onPositiveClick: () => deleteMutation.mutate(row.id),
-              },
-              {
-                trigger: () =>
-                  h(
-                    NButton,
-                    {
-                      size: "small",
-                      quaternary: true,
-                      type: "error",
-                      loading:
-                        deleteMutation.isPending.value &&
-                        deleteMutation.variables.value === row.id,
-                    },
-                    { default: () => "Delete" },
-                  ),
-                default: () => `Delete model '${modelDisplayName(row)}'?`,
-              },
-            ),
+            isCreator
+              ? h(
+                  NPopconfirm,
+                  {
+                    onPositiveClick: () => deleteMutation.mutate(row.id),
+                  },
+                  {
+                    trigger: () =>
+                      h(
+                        NButton,
+                        {
+                          size: "small",
+                          quaternary: true,
+                          type: "error",
+                          loading:
+                            deleteMutation.isPending.value &&
+                            deleteMutation.variables.value === row.id,
+                        },
+                        { default: () => "Delete" },
+                      ),
+                    default: () => `Delete model '${modelDisplayName(row)}'?`,
+                  },
+                )
+              : null,
           ],
         },
-      ),
+      );
+    },
   },
 ]);
 </script>
@@ -259,7 +272,15 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   height: 100%;
 }
 
+.models-list-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 12px;
+}
+
 .models-search {
-  max-width: 320px;
+  width: min(280px, 100%);
 }
 </style>

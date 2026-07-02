@@ -8,17 +8,30 @@ Covers:
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import create_dataset, create_job, upload_model
+from app.modules.auth.port.http.deps import get_current_user
+from app.shared.api.schemas import User
+from tests.conftest import TRAINER_ID, create_job, upload_model
 
 
 def _setup(c: TestClient) -> tuple[str, str, str]:
     """Returns (dataset_id, job_id, model_id)."""
-    dataset_id = create_dataset(c)
-    job_id = create_job(c, dataset_id)
+    resp = c.post(
+        "/api/v1/datasets",
+        json={
+            "name": "test-sc-model-ds",
+            "dataset_type": "image_sc",
+            "task_spec": {"task_type": "sc", "label_space": ["defect", "clean"]},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    dataset_id = resp.json()["id"]
+    job_id = create_job(c, dataset_id, trainer_id=TRAINER_ID)
     model_id = upload_model(c, job_id)
     return dataset_id, job_id, model_id
 
@@ -51,3 +64,55 @@ def test_delete_model_not_found() -> None:
     with TestClient(app) as c:
         resp = c.delete("/api/v1/models/nonexistent")
         assert resp.status_code == 404
+
+
+def _as_user(user_id: str) -> User:
+    return User(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        name=user_id,
+        is_superadmin=False,
+        created_at=datetime(2024, 1, 1),
+    )
+
+
+def _with_current_user(user: User):
+    original = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: user
+    return original
+
+
+def _restore_current_user(original) -> None:
+    if original is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = original
+
+
+def test_rename_model_requires_creator() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+        original = _with_current_user(_as_user("other-user"))
+        try:
+            resp = c.patch(
+                f"/api/v1/models/{model_id}",
+                json={"name": "should-not-rename"},
+            )
+        finally:
+            _restore_current_user(original)
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Only the model creator can rename this model"
+
+
+def test_delete_model_requires_creator() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+        original = _with_current_user(_as_user("other-user"))
+        try:
+            resp = c.delete(f"/api/v1/models/{model_id}")
+        finally:
+            _restore_current_user(original)
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Only the model creator can delete this model"

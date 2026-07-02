@@ -44,7 +44,8 @@ class TestSeedRunner:
         """
         r = self._client.get("/api/v1/datasets")
         if r.status_code == 200:
-            existing = r.json()
+            body = r.json()
+            existing = body.get("items", body) if isinstance(body, dict) else body
             for ds in existing:
                 if ds.get("name") == self._config.dataset_name:
                     self._dataset_id = str(ds["id"])

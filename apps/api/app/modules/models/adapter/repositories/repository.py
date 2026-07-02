@@ -78,8 +78,20 @@ class ModelArtifactRepository:
                 for artifact, job, dataset, user_name, user_email in rows
             ]
 
-    async def get_model(self, artifact_id: str, org_id: str) -> Model | None:
+    async def get_model(
+        self,
+        artifact_id: str,
+        org_id: str,
+        *,
+        include_public: bool = True,
+    ) -> Model | None:
         async with self.session_factory() as session:
+            access_filter = TrainingJobORM.org_id == org_id
+            if include_public:
+                access_filter = or_(
+                    TrainingJobORM.org_id == org_id,
+                    TrainingJobORM.is_public.is_(True),
+                )  # noqa: E712
             stmt = (
                 select(
                     ArtifactORM, TrainingJobORM, DatasetORM, UserORM.name, UserORM.email
@@ -89,12 +101,7 @@ class ModelArtifactRepository:
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
-                .where(
-                    or_(
-                        TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public.is_(True),
-                    )
-                )  # noqa: E712
+                .where(access_filter)
             )
             row = (await session.execute(stmt)).first()
             if row is None:

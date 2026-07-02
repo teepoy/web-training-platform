@@ -101,6 +101,7 @@ async def update_model(
         model_id,
         org_id=org.id,
         name=payload.name,
+        current_user_id=current_user.id,
     )
     return _model_to_response(model)
 
@@ -112,7 +113,11 @@ async def delete_model(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
 ) -> Response:
-    await model_service.delete_model(model_id, org_id=org.id)
+    await model_service.delete_model(
+        model_id,
+        org_id=org.id,
+        current_user_id=current_user.id,
+    )
     return Response(status_code=204)
 
 

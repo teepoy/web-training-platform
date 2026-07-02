@@ -42,7 +42,7 @@ def test_create_sc_dataset_list_contains_it() -> None:
         dataset_id = resp.json()["id"]
         resp2 = c.get("/api/v1/datasets")
         assert resp2.status_code == 200
-        ids = [d["id"] for d in resp2.json()]
+        ids = [d["id"] for d in resp2.json()["items"]]
         assert dataset_id in ids
 
 

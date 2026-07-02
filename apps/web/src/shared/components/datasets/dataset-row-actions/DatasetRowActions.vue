@@ -3,12 +3,18 @@ import { NButton } from "naive-ui";
 
 import type { DatasetListItem } from "../../../datasets/types";
 
-const props = defineProps<{
-  row: DatasetListItem;
-  isSuperadmin: boolean;
-  isOwnOrg: boolean;
-  canDelete: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    row: DatasetListItem;
+    isSuperadmin: boolean;
+    isOwnOrg: boolean;
+    canDelete: boolean;
+    canRename?: boolean;
+  }>(),
+  {
+    canRename: true,
+  },
+);
 
 const emit = defineEmits<{
   view: [id: string];
@@ -35,7 +41,9 @@ function onDelete(e: MouseEvent): void {
 <template>
   <span>
     <NButton size="small" @click="onView">View</NButton>
-    <NButton size="small" style="margin-left: 6px" @click="onRename">Rename</NButton>
+    <NButton v-if="canRename" size="small" style="margin-left: 6px" @click="onRename">
+      Rename
+    </NButton>
     <template v-if="canDelete">
       <NButton size="small" type="error" style="margin-left: 6px" @click="onDelete">
         Delete

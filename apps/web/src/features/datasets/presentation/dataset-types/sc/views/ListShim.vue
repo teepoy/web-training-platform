@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, reactive, ref, watch } from "vue";
+import { computed, h, ref } from "vue";
 import type { DataTableColumns, PaginationProps } from "naive-ui";
 import { NButton, NDataTable, NInput, NSelect, NTag, NText, NSpace } from "naive-ui";
 import { DatasetToolbar } from "@/shared";
@@ -45,6 +45,7 @@ const props = withDefaults(
     currentOrgId: string | null;
     currentUserId?: string | null;
     isSuperadmin: boolean;
+    pagination?: false | PaginationProps;
   }>(),
   {
     currentUserId: null,
@@ -88,20 +89,6 @@ function formatCreateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-const pagination = reactive<PaginationProps>({
-  page: 1,
-  pageSize: 20,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (page: number) => {
-    pagination.page = page;
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize;
-    pagination.page = 1;
-  },
-});
-
 const keyword = ref("");
 const creatorFilter = ref<string | null>(null);
 
@@ -110,10 +97,6 @@ const creatorOptions = computed(() =>
     .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
     .map((creator) => ({ label: creator, value: creator })),
 );
-
-watch([keyword, creatorFilter], () => {
-  pagination.page = 1;
-});
 
 const filteredDatasets = computed(() => {
   const query = keyword.value.trim().toLowerCase();
@@ -220,6 +203,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
               {
                 size: "small",
                 quaternary: true,
+                disabled: row.created_by !== props.currentUserId,
                 onClick: () => emit("rename", row),
               },
               { default: () => "Rename" },

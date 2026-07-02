@@ -23,7 +23,8 @@ class SeedRunner:
     ) -> str:
         """Create a dataset (idempotent). Returns dataset_id."""
         r = self._client.get("/api/v1/datasets")
-        existing = r.json() if r.status_code == 200 else []
+        body = r.json() if r.status_code == 200 else []
+        existing = body.get("items", body) if isinstance(body, dict) else body
         for ds in existing:
             if ds.get("name") == name:
                 return str(ds["id"])

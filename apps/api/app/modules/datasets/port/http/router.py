@@ -258,15 +258,19 @@ async def create_dataset(
     return service.to_response(dataset)
 
 
-@router.get("/datasets", response_model=list[Dataset])
+@router.get("/datasets", response_model=PaginatedResponse[Dataset])
 async def list_datasets(
     service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
-) -> list[Dataset]:
-    datasets = await repo.list_datasets(org_id=org.id)
-    return await service.to_list_responses(datasets)
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedResponse[Dataset]:
+    datasets = await repo.list_datasets(org_id=org.id, limit=limit, offset=offset)
+    total = await repo.count_datasets(org_id=org.id)
+    items = await service.to_list_responses(datasets)
+    return PaginatedResponse(items=items, total=total)
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -376,6 +380,8 @@ async def delete_dataset(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
     if dataset.created_by != current_user.id:
         raise HTTPException(
             status_code=403,
@@ -414,6 +420,13 @@ async def update_dataset(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the dataset creator can rename this dataset",
+        )
     updated = await repo.rename_dataset(dataset_id, name=payload.name, org_id=org.id)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")

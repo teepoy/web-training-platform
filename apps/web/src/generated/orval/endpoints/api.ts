@@ -78,6 +78,7 @@ import type {
   HealthHealthGet200,
   ImportParquetApiV1PluginsImportParquetImportPostParams,
   ImportVqaJsonlResponse,
+  ListDatasetsApiV1DatasetsGetParams,
   ListJobsApiV1TrainingJobsGetParams,
   ListModelsApiV1ModelsGetParams,
   ListPredictionCollectionsApiV1PredictionCollectionsGetParams,
@@ -103,6 +104,7 @@ import type {
   OAuthRegisterRequest,
   OauthCallbackApiV1AuthOauthProviderCallbackGetParams,
   OrgResponse,
+  PaginatedResponseDataset,
   PaginatedResponseSample,
   PaginatedResponseSampleWithLabels,
   PaginatedResponseTrainingEvent,
@@ -601,82 +603,6 @@ export function useListLatestPredictionsApiV1DatasetsDatasetIdLatestPredictionsG
 
 
 /**
- * @summary List Datasets
- */
-export type listDatasetsApiV1DatasetsGetResponse = {
-  data: Dataset[];
-  status: number;
-  headers: Headers;
-}
-
-export const getListDatasetsApiV1DatasetsGetUrl = () => {
-
-
-  return `/api/v1/datasets`
-}
-
-export const listDatasetsApiV1DatasetsGet = async ( options?: RequestInit): Promise<listDatasetsApiV1DatasetsGetResponse> => {
-
-  return orvalFetcher<listDatasetsApiV1DatasetsGetResponse>(getListDatasetsApiV1DatasetsGetUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getListDatasetsApiV1DatasetsGetQueryKey = () => {
-    return ['api','v1','datasets'] as const;
-    }
-
-
-export const getListDatasetsApiV1DatasetsGetQueryOptions = <TData = Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getListDatasetsApiV1DatasetsGetQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>> = ({ signal }) => listDatasetsApiV1DatasetsGet({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>
-}
-
-export type ListDatasetsApiV1DatasetsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>>
-export type ListDatasetsApiV1DatasetsGetQueryError = unknown
-
-
-/**
- * @summary List Datasets
- */
-
-export function useListDatasetsApiV1DatasetsGet<TData = Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListDatasetsApiV1DatasetsGetQueryOptions(options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
  * @summary Create Dataset
  */
 export type createDatasetApiV1DatasetsPostResponse = {
@@ -751,6 +677,89 @@ export const useCreateDatasetApiV1DatasetsPost = <TError = HTTPValidationError,
 
       return useMutation(mutationOptions);
     }
+
+/**
+ * @summary List Datasets
+ */
+export type listDatasetsApiV1DatasetsGetResponse = {
+  data: PaginatedResponseDataset | HTTPValidationError;
+  status: number;
+  headers: Headers;
+}
+
+export const getListDatasetsApiV1DatasetsGetUrl = (params?: ListDatasetsApiV1DatasetsGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/datasets?${normalizedParams.toString()}` : `/api/v1/datasets`
+}
+
+export const listDatasetsApiV1DatasetsGet = async (params?: ListDatasetsApiV1DatasetsGetParams, options?: RequestInit): Promise<listDatasetsApiV1DatasetsGetResponse> => {
+
+  return orvalFetcher<listDatasetsApiV1DatasetsGetResponse>(getListDatasetsApiV1DatasetsGetUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListDatasetsApiV1DatasetsGetQueryKey = (params?: MaybeRef<ListDatasetsApiV1DatasetsGetParams>,) => {
+    return ['api','v1','datasets', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getListDatasetsApiV1DatasetsGetQueryOptions = <TData = Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError = HTTPValidationError>(params?: MaybeRef<ListDatasetsApiV1DatasetsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListDatasetsApiV1DatasetsGetQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>> = ({ signal }) => listDatasetsApiV1DatasetsGet(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>
+}
+
+export type ListDatasetsApiV1DatasetsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>>
+export type ListDatasetsApiV1DatasetsGetQueryError = HTTPValidationError
+
+
+/**
+ * @summary List Datasets
+ */
+
+export function useListDatasetsApiV1DatasetsGet<TData = Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError = HTTPValidationError>(
+ params?: MaybeRef<ListDatasetsApiV1DatasetsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetsApiV1DatasetsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDatasetsApiV1DatasetsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
 
 /**
  * @summary Get Dataset
