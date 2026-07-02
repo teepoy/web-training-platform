@@ -10,7 +10,13 @@ const API_V1_PROXY_PREFIX = ["/api", "v1"].join("/");
 
 export default defineConfig({
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag === "perspective-viewer",
+        },
+      },
+    }),
     Components({ resolvers: [NaiveUiResolver()] }),
     legacy({
       targets: ["chrome >= 108", "not IE 11"],
@@ -31,7 +37,7 @@ export default defineConfig({
     // Exclude full echarts bundle to prevent double-registration of components
     // (modular echarts/core + echarts/charts etc. are pre-bundled separately;
     // loading the full bundle on top causes registerInternalOptionCreator assertions)
-    exclude: ["echarts"],
+    exclude: ["echarts", "@perspective-dev/viewer/inline"],
   },
   server: {
     port: 5173,

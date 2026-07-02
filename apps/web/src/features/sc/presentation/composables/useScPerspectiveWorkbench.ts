@@ -1,12 +1,7 @@
 import { onUnmounted, ref, type Ref } from "vue";
 import perspective from "@perspective-dev/client";
 import type { Client, Table } from "@perspective-dev/client";
-import clientWasmUrl from "@perspective-dev/client/dist/wasm/perspective-js.wasm?url";
 import { API_BASE, getAuthToken, getOrgId } from "@/shared/api/client";
-import {
-  isRecoverablePerspectiveError,
-  perspectiveErrorMessage,
-} from "@/features/sc/presentation/composables/perspectiveRecovery";
 import { managePerspectiveTable } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
 export type ScPerspectiveWorkbenchKind = "preview" | "reclassify";
@@ -41,22 +36,13 @@ export interface ScPerspectiveWorkbenchState {
   error: Ref<string | null>;
   connect: (options: ScPerspectiveWorkbenchOptions) => Promise<void>;
   disconnect: () => void;
-  recover: (reason: string, err?: unknown) => Promise<boolean>;
 }
 
-let initialized = false;
 const JOINED_SAMPLES_TABLE = "joined_samples";
 const TABLE_READY_TIMEOUT_MS = 60_000;
 const TABLE_READY_RETRY_MS = 500;
 const DATA_READY_POLL_MS = 500;
 const DATA_READY_DEADLINE_MS = 60_000;
-const RECOVERY_DELAY_MS = 250;
-
-async function initPerspectiveClient(): Promise<void> {
-  if (initialized) return;
-  await perspective.init_client(fetch(clientWasmUrl));
-  initialized = true;
-}
 
 function addCommonParams(params: URLSearchParams): void {
   const token = getAuthToken();
@@ -140,9 +126,6 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
   const error = ref<string | null>(null);
   let client: Client | null = null;
   let connectionSeq = 0;
-  let lastOptions: ScPerspectiveWorkbenchOptions | null = null;
-  let recovering = false;
-  let disposed = false;
   let _dataReadyPollTimer: ReturnType<typeof setTimeout> | undefined;
   let _dataReadyDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -194,12 +177,10 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
   }
 
   async function connect(options: ScPerspectiveWorkbenchOptions): Promise<void> {
-    lastOptions = options;
     disconnect();
     const seq = connectionSeq;
     error.value = null;
     try {
-      await initPerspectiveClient();
       const nextClient = await perspective.websocket(buildWsUrl(options));
       if (seq !== connectionSeq) {
         retirePerspectiveResources(null, nextClient);
@@ -230,27 +211,9 @@ export function useScPerspectiveWorkbench(): ScPerspectiveWorkbenchState {
     }
   }
 
-  async function recover(reason: string, err?: unknown): Promise<boolean> {
-    if (disposed || recovering || !lastOptions) return false;
-    if (err !== undefined && !isRecoverablePerspectiveError(err)) return false;
-    recovering = true;
-    const message = err === undefined ? reason : perspectiveErrorMessage(err);
-    console.warn("[sc-perspective] recovering client", { reason, message });
-    try {
-      disconnect();
-      await sleep(RECOVERY_DELAY_MS);
-      if (disposed || !lastOptions) return false;
-      await connect(lastOptions);
-      return true;
-    } finally {
-      recovering = false;
-    }
-  }
-
   onUnmounted(() => {
-    disposed = true;
     disconnect();
   });
 
-  return { table, connected, dataReady, error, connect, disconnect, recover };
+  return { table, connected, dataReady, error, connect, disconnect };
 }
