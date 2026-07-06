@@ -16,8 +16,10 @@ import {
   getJobApiV1TrainingJobsJobIdGet,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
+import { getAnnotationStats } from "@/shared/api/datasets";
 import type { Trainer } from "@/shared/api/types";
 import type {
+  DatasetAnnotationStats,
   DatasetStatusResponse,
   PredictionJobResponse,
   TrainingJob,
@@ -128,6 +130,8 @@ export interface ReclassifyPageState {
   isFetchingMoreSamples: ComputedRef<boolean>;
   samplingAvailableCount: ComputedRef<number>;
   annotatedCount: ComputedRef<number>;
+  activeClassCount: ComputedRef<number>;
+  canTrainAndPredict: ComputedRef<boolean>;
   labelSpace: ComputedRef<string[]>;
   effectiveLabels: ComputedRef<string[]>;
   codeLabels: ComputedRef<ReclassifyCodeLabel[]>;
@@ -566,6 +570,19 @@ export function useReclassifyPage(): ReclassifyPageState {
       return Math.max(0, statusAnnotated);
     }
     return 0;
+  });
+
+  const annotationStatsQuery = useQuery({
+    queryKey: computed(() => ["api", "v1", "datasets", datasetId.value, "annotation-stats"]),
+    queryFn: () => getAnnotationStats(datasetId.value),
+    enabled: computed(() => !!selectedDataset.value),
+    retry: false,
+  });
+
+  const activeClassCount = computed<number>(() => {
+    const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
+    const counts = stats?.label_counts ?? {};
+    return Object.values(counts).filter((count) => Number(count) > 0).length;
   });
 
   const samplingAvailableCount = computed<number>(() => {
@@ -1124,6 +1141,16 @@ export function useReclassifyPage(): ReclassifyPageState {
       .map((t) => ({ label: t.name, value: t.id })),
   );
 
+  watch(
+    trainerOptions,
+    (options) => {
+      if (selectedTrainerId.value) return;
+      const first = options[0];
+      if (first) selectedTrainerId.value = first.value;
+    },
+    { immediate: true },
+  );
+
   const isTrainPredictRunning = ref(false);
   const trainPredictStatusMessage = ref("");
   const trainPredictTaskId = ref<string | null>(null);
@@ -1212,6 +1239,10 @@ export function useReclassifyPage(): ReclassifyPageState {
     return status === "running" || status === "waiting";
   });
 
+  const canTrainAndPredict = computed(
+    () => !!selectedTrainerId.value && !isTrainPredictRunning.value && activeClassCount.value >= 2,
+  );
+
   function invalidatePredictionViews(): void {
     void queryClient.invalidateQueries({
       queryKey: ["sc", "view-samples-paged", datasetId.value],
@@ -1279,6 +1310,10 @@ export function useReclassifyPage(): ReclassifyPageState {
       message.warning("Please select a trainer first");
       return;
     }
+    if (activeClassCount.value < 2) {
+      message.warning("At least two active classes are required to train");
+      return;
+    }
     if (isTrainPredictRunning.value) return;
 
     isTrainPredictRunning.value = true;
@@ -1326,6 +1361,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     isFetchingMoreSamples,
     samplingAvailableCount,
     annotatedCount,
+    activeClassCount,
+    canTrainAndPredict,
     labelSpace,
     effectiveLabels,
     codeLabels,

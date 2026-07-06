@@ -86,11 +86,11 @@ dev: ## [DEPRECATED] Use `make up-dev` instead. Redirects to compose dev mode.
 
 .PHONY: dev-api
 dev-api: ## Start API dev server (default: 8000)
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
 
 .PHONY: dev-api-host
 dev-api-host: up-dev-host-api ## Start compose dependencies, then run API on host
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run alembic upgrade head && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen alembic upgrade head && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
 
 .PHONY: dev-web
 dev-web: ## Start frontend dev server (default: 5173)
@@ -112,11 +112,11 @@ prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run con
 
 .PHONY: db-migrate
 db-migrate: ## Run Alembic migrations (upgrade head)
-	cd $(API_DIR) && uv run alembic upgrade head
+	cd $(API_DIR) && uv run --no-dev --frozen alembic upgrade head
 
 .PHONY: db-revision
 db-revision: ## Create a new Alembic revision (usage: make db-revision MSG="add users table")
-	cd $(API_DIR) && uv run alembic revision --autogenerate -m "$(MSG)"
+	cd $(API_DIR) && uv run --no-dev --frozen alembic revision --autogenerate -m "$(MSG)"
 
 # ──────────────────────────────────────────────
 # Tests & checks

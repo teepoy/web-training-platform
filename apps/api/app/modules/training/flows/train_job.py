@@ -27,14 +27,16 @@ def build_trained_model_metadata(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime_metadata = metadata.copy() if isinstance(metadata, dict) else {}
-    label_space = []
+    label_space = runtime_metadata.get("label_space")
+    if not isinstance(label_space, list):
+        label_space = []
     if dataset_meta and isinstance(dataset_meta, dict):
         ds_meta = (
             dataset_meta.get("dataset_meta") or dataset_meta.get("task_spec") or {}
         )
-        if isinstance(ds_meta, dict):
+        if not label_space and isinstance(ds_meta, dict):
             label_space = list(ds_meta.get("label_space", []))
-    elif dataset_meta and hasattr(dataset_meta, "dataset_meta"):
+    elif not label_space and dataset_meta and hasattr(dataset_meta, "dataset_meta"):
         label_space = list(
             getattr(dataset_meta, "dataset_meta", {}).get("label_space", [])
         )
@@ -46,87 +48,6 @@ def build_trained_model_metadata(
         if isinstance(dataset_meta, dict)
         else getattr(dataset_meta, "id", ""),
     }
-
-
-async def _build_label_map_from_annotations(
-    *,
-    records: dict[str, Any],
-    manifest: Any,
-    artifact_storage: Any,
-    label_map: dict[str, str],
-) -> None:
-    """[ORPHANED – dead code]
-
-    Was used by the old non-materialized SessionViewLoader code path to
-    build a label_map from SparseAnnotationStore records.  The current
-    pipeline embeds labels directly into materialized parquet rows via
-    RuntimeMaterializer, and the SC trainer falls through to row.label
-    when label_map is None.  This function and its sibling annotation
-    resolution logic are kept for historical reference only.
-
-    Populate *label_map* keyed by platform ``sample_id``.
-
-    Annotation records from :meth:`SparseAnnotationStore.latest_by_sample`
-    may have been stored with upstream ``defect_id`` values as their
-    ``sample_id`` key (legacy behaviour, TODO: remove — SC compat bridge).
-    This helper resolves any defect-id keys to platform sample ids and
-    builds a ``{platform_sample_id: label}`` map usable by
-    :class:`~app.modules.sc.training.dataset.ScTrainingDataset`.
-    """
-    from platform_runtime.sparse import SparseManifestReader
-
-    index = manifest.sample_index
-    if not index:
-        for sid, r in records.items():
-            label_map[str(sid)] = r.label
-        return
-
-    reader = SparseManifestReader()
-    to_resolve: dict[str, str] = {}
-    direct: dict[str, str] = {}
-
-    for sid, r in records.items():
-        sid_str = str(sid)
-        if sid_str in index:
-            to_resolve[sid_str] = r.label
-        else:
-            direct[sid_str] = r.label
-
-    label_map.update(direct)
-
-    if to_resolve:
-        by_shard: dict[int, list[tuple[str, int, str]]] = {}
-        for did, label in to_resolve.items():
-            locator = index[did]
-            by_shard.setdefault(locator.shard_index, []).append(
-                (did, locator.row_index, label)
-            )
-
-        for shard_index, entries in by_shard.items():
-            if shard_index < 0 or shard_index >= len(manifest.shards):
-                for did, _row_index, label in entries:
-                    label_map[did] = label
-                continue
-
-            shard_entry = manifest.shards[shard_index]
-            for did, row_index, label in entries:
-                try:
-                    rows = await reader.read_row_batch(
-                        shard_entry.uri,
-                        row_index,
-                        1,
-                        artifact_storage,
-                        columns=["sample_id"],
-                    )
-                except Exception:
-                    label_map[did] = label
-                    continue
-
-                if rows:
-                    platform_sid = str(rows[0].get("sample_id", did))
-                    label_map[platform_sid] = label
-                else:
-                    label_map[did] = label
 
 
 async def run_training_pipeline(

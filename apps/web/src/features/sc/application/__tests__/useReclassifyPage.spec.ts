@@ -46,8 +46,43 @@ async function mountPage(
   datasetId: string,
   dataset: ScDatasetInfo,
   extraQueries?: Array<{ key: unknown[]; data: unknown }>,
+  annotationStats: Record<string, number> = { Scratch: 1, Clean: 1 },
 ) {
   const qc = createTestQueryClient();
+
+  server.use(
+    http.get("/api/v1/trainers", () =>
+      HttpResponse.json([
+        {
+          id: "resnet50-sc-v1",
+          name: "ResNet-50 SC",
+          view_type: "patch_image_v1",
+          trainable: true,
+        },
+        {
+          id: "yolo-sc-v1",
+          name: "YOLO SC",
+          view_type: "patch_image_v1",
+          trainable: true,
+        },
+      ]),
+    ),
+    http.get(`/api/v1/datasets/${datasetId}/annotation-stats`, () =>
+      HttpResponse.json({
+        total_samples: 10,
+        annotated_samples: Object.values(annotationStats).reduce((sum, count) => sum + count, 0),
+        unlabeled_samples: 0,
+        label_counts: annotationStats,
+      }),
+    ),
+    http.get(`/api/v1/datasets/${datasetId}/status`, () =>
+      HttpResponse.json({
+        allow_train: true,
+        annotated_samples: Object.values(annotationStats).reduce((sum, count) => sum + count, 0),
+        total_samples: 10,
+      }),
+    ),
+  );
 
   // Seed dataset query (Orval query key)
   qc.setQueryData(["api", "v1", "datasets", datasetId], {
@@ -267,6 +302,30 @@ describe("useReclassifyPage - addLabel", () => {
 
     state.setAnnotationDraft("D001", "0");
     expect(state.annotationDraft.value.D001).toBe("0");
+  });
+});
+
+describe("useReclassifyPage - train defaults", () => {
+  it("selects the first SC trainer by default", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
+
+    await waitForCondition(() => state.selectedTrainerId.value === "resnet50-sc-v1");
+
+    expect(state.trainerOptions.value.map((option: { value: string }) => option.value)).toEqual([
+      "resnet50-sc-v1",
+      "yolo-sc-v1",
+    ]);
+  });
+
+  it("requires at least two active annotation classes before training", async () => {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, undefined, {
+      Scratch: 2,
+    });
+
+    await waitForCondition(() => state.selectedTrainerId.value === "resnet50-sc-v1");
+    await waitForCondition(() => state.activeClassCount.value === 1);
+
+    expect(state.canTrainAndPredict.value).toBe(false);
   });
 });
 

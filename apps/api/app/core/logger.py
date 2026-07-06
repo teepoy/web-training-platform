@@ -9,6 +9,18 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+_LOG_RECORD_BUILTINS = frozenset(
+    logging.LogRecord(
+        name="",
+        level=0,
+        pathname="",
+        lineno=0,
+        msg="",
+        args=(),
+        exc_info=None,
+    ).__dict__
+)
+
 
 class JsonLogFormatter(logging.Formatter):
     def __init__(self, *, env: str, service: str) -> None:
@@ -30,7 +42,19 @@ class JsonLogFormatter(logging.Formatter):
             if error_type is not None:
                 payload["error_type"] = error_type.__name__
             payload["exception"] = self.formatException(record.exc_info)
+        for key, value in record.__dict__.items():
+            if key not in _LOG_RECORD_BUILTINS and key not in payload:
+                payload[key] = self._json_safe(value)
         return json.dumps(payload, ensure_ascii=False)
+
+    def _json_safe(self, value: object) -> object:
+        if value is None or isinstance(value, str | int | float | bool):
+            return value
+        if isinstance(value, list | tuple):
+            return [self._json_safe(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        return str(value)
 
 
 def init_logging(cfg: DictConfig) -> None:

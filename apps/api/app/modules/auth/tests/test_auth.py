@@ -1,6 +1,12 @@
 """Tests for auth, PAT, and org management endpoints."""
 from __future__ import annotations
 
+import asyncio
+import logging
+from types import SimpleNamespace
+from typing import cast
+
+from fastapi import Request
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
@@ -90,6 +96,58 @@ def test_login_success_returns_token() -> None:
         body = resp.json()
         assert "access_token" in body
         assert body["user"]["email"] == "login_ok@test.com"
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    async def set(self, key: str, value: str, *, ex: int, nx: bool) -> bool:
+        if nx and key in self.values:
+            return False
+        self.values[key] = value
+        return True
+
+
+class _FailingRedis:
+    async def set(self, key: str, value: str, *, ex: int, nx: bool) -> bool:
+        raise RuntimeError("redis unavailable")
+
+
+def _request_with_redis(redis_client: object) -> Request:
+    publisher = SimpleNamespace(_redis=redis_client)
+    shared = SimpleNamespace(redis_event_publisher=publisher)
+    app_context = SimpleNamespace(shared=shared)
+    state = SimpleNamespace(app_context=app_context)
+    return cast(Request, SimpleNamespace(app=SimpleNamespace(state=state)))
+
+
+def test_jwt_decode_daily_login_event_is_deduped_by_redis(caplog) -> None:
+    from app.modules.auth.port.http.deps import _record_daily_jwt_login_seen
+
+    caplog.set_level(logging.INFO, logger="app.modules.auth.port.http.deps")
+    request = _request_with_redis(_FakeRedis())
+
+    asyncio.run(_record_daily_jwt_login_seen(request, "user-123"))
+    asyncio.run(_record_daily_jwt_login_seen(request, "user-123"))
+
+    records = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "auth.user_login"
+    ]
+    assert len(records) == 1
+    assert records[0].user_id == "user-123"
+    assert records[0].auth_method == "jwt"
+    assert records[0].login_date_utc
+
+
+def test_jwt_decode_daily_login_event_ignores_redis_failure() -> None:
+    from app.modules.auth.port.http.deps import _record_daily_jwt_login_seen
+
+    request = _request_with_redis(_FailingRedis())
+
+    asyncio.run(_record_daily_jwt_login_seen(request, "user-123"))
 
 
 def test_login_wrong_password_returns_401() -> None:

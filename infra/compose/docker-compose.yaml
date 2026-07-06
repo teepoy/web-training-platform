@@ -118,9 +118,10 @@ services:
       - "9092:9092"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 60s
 
   sc-upstream:
     build:
@@ -132,12 +133,14 @@ services:
     environment:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
+      - HEALTH_PORT=8091
       - CACHE_DIR=/data/cache
       - SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
       - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       - REDIS_URL=redis://redis:6379/0
       # Mock SQLite DB paths use sc-upstream service defaults.
     expose:
+      - "8091"
       - "9091"
       - "9093"
     volumes:
@@ -149,12 +152,12 @@ services:
           "CMD",
           "python",
           "-c",
-          "import socket; s=socket.create_connection(('localhost', 9091), 5); s.close()",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8091/health', timeout=20)",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 20s
       retries: 12
-      start_period: 10s
+      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════════
   # Observability Stack — --profile observability

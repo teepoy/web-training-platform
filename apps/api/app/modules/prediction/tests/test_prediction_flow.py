@@ -27,16 +27,14 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-
 import nest_asyncio
-nest_asyncio.apply()
 
-from platform_runtime.contracts import BatchPredictResult, PredictResult
-
-from app.shared.api.schemas import ArtifactRef, PredictionJob, TaskSpec
-from app.shared.api.schemas import JobStatus
 from app.main import app
+from app.shared.api.schemas import ArtifactRef, JobStatus, PredictionJob, TaskSpec
+from platform_runtime.contracts import BatchPredictResult, PredictResult
 from tests.conftest import DEFAULT_ORG_ID, TRAINER_ID
+
+nest_asyncio.apply()
 
 
 def _predict_flow_module() -> ModuleType:
@@ -458,7 +456,7 @@ def test_predict_sparse_materialized() -> None:
     Asserts the job completes and results are non-empty.
     """
 
-    with TestClient(app) as c:
+    with TestClient(app):
         _install_flow_worker_mocks()
 
         # Fix the mock predictor's _view_id attribute so it returns None

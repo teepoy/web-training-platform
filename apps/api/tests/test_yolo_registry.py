@@ -199,7 +199,10 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
         def collect(self) -> Any:
             return SimpleNamespace(iter_rows=lambda named: [])
 
-    model_ref = ModelRef(uri="memory://model.pt")
+    model_ref = ModelRef(
+        uri="memory://model.pt",
+        metadata={"label_space": ["defect", "clean"]},
+    )
     ctx = PredictContext(
         job_id="test-yolo-native-checkpoint",
         dataset_ref=DatasetRef(dataset_id="d1", label_space=["fallback"]),
@@ -207,7 +210,7 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     )
 
     predictions = list(
-        yolo_sc.yolo_sc_predictor(
+        yolo_sc.yolo_sc_predictor.func(
             artifact_storage=ArtifactStorage(),
             ctx=ctx,
             lazyframe=EmptyLazyFrame(),
@@ -217,6 +220,39 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
 
     assert predictions == []
     assert loaded_bytes == [checkpoint_bytes]
+
+
+def test_yolo_active_labels_are_compacted_from_training_rows() -> None:
+    from app.modules.training.flows._trainers import yolo_sc
+
+    rows = [
+        {"label": "a", "images": [{"role": "patch_defective"}, {"role": "patch_template"}]},
+        {"label": "c", "images": [{"role": "patch_defective"}, {"role": "patch_template"}]},
+    ]
+
+    assert yolo_sc._ordered_active_labels(rows, ["a", "b", "c"]) == ["a", "c"]
+
+
+def test_yolo_predictor_requires_model_metadata_label_space() -> None:
+    from app.modules.prediction.flows._predictors import yolo_sc
+
+    model_ref = ModelRef(metadata={})
+
+    with pytest.raises(ValueError, match="compact label_space"):
+        yolo_sc._resolve_labels(model_ref)
+
+
+def test_trained_model_metadata_preserves_trainer_label_space() -> None:
+    from app.modules.training.flows.train_job import build_trained_model_metadata
+
+    metadata = build_trained_model_metadata(
+        {"id": "dataset-1", "dataset_meta": {"label_space": ["a", "b", "c"]}},
+        "yolo-sc-v1",
+        {"label_space": ["a", "c"], "label_to_idx": {"a": 0, "c": 1}},
+    )
+
+    assert metadata["label_space"] == ["a", "c"]
+    assert metadata["label_to_idx"] == {"a": 0, "c": 1}
 
 
 @pytest.mark.skip(reason="Requires Prefect flow/task run context for get_run_logger()")

@@ -39,4 +39,7 @@ FROM deps AS prod
 
 WORKDIR /app/apps/api
 EXPOSE 8000
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+ENV UVICORN_TIMEOUT_KEEP_ALIVE=120
+ENV UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN=600
+ENV UVICORN_TIMEOUT_WORKER_HEALTHCHECK=60
+CMD ["sh", "-lc", "exec /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown ${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck ${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}"]

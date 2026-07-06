@@ -29,6 +29,25 @@ def _normalize_training_label(value: object) -> str | None:
     return label or None
 
 
+def _ordered_active_labels(
+    rows: list[dict[str, Any]], label_space: list[str]
+) -> list[str]:
+    active: set[str] = set()
+    for row in rows:
+        label = _normalize_training_label(row.get("label"))
+        if not label:
+            continue
+        images_list: list[dict[str, Any]] = row.get("images") or []
+        if not find_images_by_role(images_list, "patch_defective"):
+            continue
+        if not find_images_by_role(images_list, "patch_template"):
+            continue
+        active.add(label)
+    ordered = [label for label in label_space if label in active]
+    extras = sorted(active - set(ordered))
+    return ordered + extras
+
+
 def _collate_sc_tensor_batch(
     batch: list[dict[str, Any]],
     *,
@@ -57,10 +76,9 @@ class ScTrainingDataset(Dataset[tuple[Any, Any, int]]):
         lf: Any,
         transform: Any,
         *,
-        label_map: dict[str, int],
+        label_order: list[str],
     ) -> None:
         self._transform = transform
-        self._label_map = label_map
 
         df = lf.collect()
 
@@ -73,16 +91,23 @@ class ScTrainingDataset(Dataset[tuple[Any, Any, int]]):
                 continue
 
             label: str | None = row.get("label")
-            if not label or label not in label_map:
+            if not label:
                 continue
 
             valid_rows.append(row)
 
         self._rows = valid_rows
 
-        self.labels: list[str] = sorted(label_map.keys(), key=lambda k: label_map[k])
-        self.label_to_idx: dict[str, int] = label_map
-        self.num_classes: int = len(label_map)
+        self.labels = _ordered_active_labels(valid_rows, label_order)
+        if len(self.labels) < 2:
+            raise ValueError(
+                f"need at least 2 active labels for training, got: {self.labels}"
+            )
+        self.label_to_idx: dict[str, int] = {
+            label: idx for idx, label in enumerate(self.labels)
+        }
+        self._label_to_idx = self.label_to_idx
+        self.num_classes: int = len(self.label_to_idx)
 
     def __len__(self) -> int:
         return len(self._rows)
@@ -112,7 +137,7 @@ class ScTrainingDataset(Dataset[tuple[Any, Any, int]]):
         ref_img = Image.open(io.BytesIO(reference_bytes)).convert("RGB")
 
         label: str | None = row.get("label")
-        label_idx = self._label_map.get(label, 0) if label else 0
+        label_idx = self._label_to_idx.get(label, 0) if label else 0
 
         return (self._transform(def_img), self._transform(ref_img), label_idx)
 
@@ -143,9 +168,6 @@ async def resnet_sc_train(
     if artifact_storage is None:
         raise ValueError("artifact_storage is required for resnet50-sc-v1 training")
 
-    label_space: list[str] = list(ctx.dataset_ref.label_space)
-    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
-
     if image_fetcher is not None:
         df = lazyframe.collect() if lazyframe is not None else None
         if df is not None:
@@ -160,7 +182,7 @@ async def resnet_sc_train(
 
             for row in rows:
                 label: str | None = row.get("label")
-                if not label or label not in label_map:
+                if not label:
                     continue
 
                 images_list: list[dict[str, Any]] = row.get("images") or []
@@ -227,7 +249,7 @@ async def resnet_sc_train(
     dataset = ScTrainingDataset(
         lf=lazyframe,
         transform=train_transform,
-        label_map=label_map,
+        label_order=list(ctx.dataset_ref.label_space),
     )
 
     if len(dataset) == 0:
@@ -458,5 +480,7 @@ async def resnet_sc_train(
             "framework": "pytorch",
             "architecture": "dual-resnet50",
             "trained_samples": len(dataset),
+            "label_space": labels,
+            "label_to_idx": label_to_idx,
         },
     )

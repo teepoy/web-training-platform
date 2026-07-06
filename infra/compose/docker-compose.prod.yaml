@@ -58,10 +58,10 @@ services:
           "-c",
           "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 20s
       retries: 12
-      start_period: 20s
+      start_period: 60s
     restart: unless-stopped
 
   web:
@@ -161,6 +161,7 @@ services:
     environment:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
+      - HEALTH_PORT=8091
       - CACHE_DIR=/data/cache
       - SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
       - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
@@ -169,11 +170,24 @@ services:
     mem_limit: ${SC_UPSTREAM_MEMORY:-8g}
     shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
+      - "8091"
       - "9091"
       - "9093"
     volumes:
       - ${SC_UPSTREAM_DATA_DIR:-./data/sc-upstream}:/data
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8091/health', timeout=20)",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
 
   image-parser:
     build:
@@ -197,3 +211,9 @@ services:
     volumes:
       - ${IMAGE_PARSER_DATA_DIR:-./data/image-parser}:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 60s

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import functools
 import importlib
+import inspect
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from app.modules.types import catalog
 
@@ -31,7 +32,7 @@ _PREDICTOR_EXECUTABLE_MODULES: dict[str, str] = {
 }
 
 
-def _make_catalog_stub_trainer(trainer_id: str) -> Callable[..., Awaitable[Any]]:
+def _make_catalog_stub_trainer(trainer_id: str) -> Callable[..., Any]:
     """Create a catalog-backed trainer wrapper that lazily imports the executable module.
 
     When invoked, attempts to import the real executable module (if mapped in
@@ -94,10 +95,13 @@ class Trainer(Generic[T_co, R]):
     trainer_id: str
     name: str
     view_id: str
-    func: Callable[..., Awaitable[R]]
+    func: Callable[..., Any]
 
     async def __call__(self, *args: Any, **kwargs: Any) -> R:
-        return await self.func(*args, **kwargs)
+        result = self.func(*args, **kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
 
 @dataclass
@@ -107,8 +111,11 @@ class Predictor(Generic[T_co, R]):
     view_id: str
     func: Callable[..., Any]
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return self.func(*args, **kwargs)
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        result = self.func(*args, **kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
 
 @dataclass
@@ -274,7 +281,7 @@ class _Registry:
 
     def register_trainer(
         self,
-        func: Callable[..., Awaitable[Any]] | None = None,
+        func: Callable[..., Any] | None = None,
         *,
         id: str,
         name: str,

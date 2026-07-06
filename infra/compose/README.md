@@ -14,13 +14,15 @@ The deployable split manifests are:
 
 The compose stack now supports two modes via override files:
 
-| Mode | Command | Compose Files | Hot Reload | Volume Mounts |
-|------|---------|--------------|------------|---------------|
-| Dev | `make up-dev` | `docker-compose.yaml` + `docker-compose.dev.yaml` | ✅ fastapi dev + vite dev | ✅ All code mounted |
-| Prod | `make up-prod` | `docker-compose.yaml` + `docker-compose.prod.yaml` | ❌ | ❌ Baked images |
+| Mode | Command        | Compose Files                                      | Hot Reload                | Volume Mounts       |
+| ---- | -------------- | -------------------------------------------------- | ------------------------- | ------------------- |
+| Dev  | `make up-dev`  | `docker-compose.yaml` + `docker-compose.dev.yaml`  | ✅ fastapi dev + vite dev | ✅ All code mounted |
+| Prod | `make up-prod` | `docker-compose.yaml` + `docker-compose.prod.yaml` | ❌                        | ❌ Baked images     |
 
 ### Base Infrastructure (shared by both modes)
+
 `docker-compose.yaml` contains always-on infrastructure:
+
 - **postgres** (`:5432`): PostgreSQL with pgvector
 - **minio** (`:9000`, `:9001`): S3-compatible storage
 - **redis** (`:6379`): Redis cache/coordination dependency
@@ -36,7 +38,9 @@ The compose stack now supports two modes via override files:
 > (its DB lives in the stateful project's postgres).
 
 ### Dev Mode (`make up-dev`)
+
 Adds via `docker-compose.dev.yaml`:
+
 - **api** with bind mounts + `fastapi dev` hot reload
 - **web** with bind mount + Vite dev server hot reload
 - **prefect-worker-cpu** with bind mounts for flow code changes
@@ -45,7 +49,9 @@ Adds via `docker-compose.dev.yaml`:
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
 ### Prod Mode (`make up-prod`)
+
 Adds via `docker-compose.prod.yaml`:
+
 - **api** with `uvicorn --workers 4` (no hot reload, no bind mounts)
 - **web** served via nginx (built into image)
 - **prefect-worker-cpu** with baked image (no bind mounts)
@@ -54,17 +60,18 @@ Adds via `docker-compose.prod.yaml`:
 Prod mode does **not** include: pgadmin, deployments-bootstrap, automatic alembic migrations.
 
 ### Production Split-Stack (real deployment)
+
 For production use the split-stack manifests under `infra/compose/production/`:
 
-| Step | Command | Description |
-|------|---------|-------------|
-| 1. Network | `make create-prod-network` | Create shared `finetune-prod` network |
-| 2. Stateful | `make up-prod-stateful` | `postgres`, `minio`, `redis`, `label-studio` |
-| 3. Platform | `make up-prod-platform` | `prefect-server`, `api`, `web`, `workers` |
-| 4. Ops | `make db-migrate-prod` | Alembic migrations (one-shot) |
-| 5. Ops | `make deployments-prod` | Prefect work pools + deployments (one-shot) |
-| 6. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ... |
-| 7. All-in-one | `make up-prod-all` | Steps 2 + 3 + 6 with 60s sleep between stateful and platform |
+| Step             | Command                      | Description                                                  |
+| ---------------- | ---------------------------- | ------------------------------------------------------------ |
+| 1. Network       | `make create-prod-network`   | Create shared `finetune-prod` network                        |
+| 2. Stateful      | `make up-prod-stateful`      | `postgres`, `minio`, `redis`, `label-studio`                 |
+| 3. Platform      | `make up-prod-platform`      | `prefect-server`, `api`, `web`, `workers`                    |
+| 4. Ops           | `make db-migrate-prod`       | Alembic migrations (one-shot)                                |
+| 5. Ops           | `make deployments-prod`      | Prefect work pools + deployments (one-shot)                  |
+| 6. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ...                         |
+| 7. All-in-one    | `make up-prod-all`           | Steps 2 + 3 + 6 with 60s sleep between stateful and platform |
 
 The API performs startup readiness checks against `postgres`, `redis`, and `label-studio`.
 If any dependency is unreachable, the container exits with code 1 so the orchestrator
@@ -72,6 +79,7 @@ restarts it after a delay. This replaces cross-project `depends_on` which is sil
 ignored across separate Compose projects.
 
 ### Migration Notes
+
 - `make up` → now redirects to `make up-dev` (deprecated)
 - `make up-stack` → now redirects to `make up-dev --scale web=0` (deprecated)
 - `make updev` → unchanged (starts compose backend + local Vite on host)
@@ -152,16 +160,16 @@ This brings up everything in the base stack plus:
 
 | Service          | Port  | Purpose                                      |
 | ---------------- | ----- | -------------------------------------------- |
-| Prometheus       | :9090 | Operations metrics scrape target            |
-| Grafana          | :3000 | Dashboards (admin/admin)                    |
-| Loki             | :3100 | Log aggregation API                         |
-| Promtail         | —     | Docker-container log collector              |
+| Prometheus       | :9090 | Operations metrics scrape target             |
+| Grafana          | :3000 | Dashboards (admin/admin)                     |
+| Loki             | :3100 | Log aggregation API                          |
+| Promtail         | —     | Docker-container log collector               |
 | Alertmanager     | :9093 | Alert routing (dev-null receiver by default) |
-| cAdvisor         | —     | Container resource metrics (scraped :8080)  |
-| Node Exporter    | —     | Host-level metrics (scraped :9100)          |
-| Prefect Exporter | —     | Prefect server health (scraped :8000)       |
+| cAdvisor         | —     | Container resource metrics (scraped :8080)   |
+| Node Exporter    | —     | Host-level metrics (scraped :9100)           |
+| Prefect Exporter | —     | Prefect server health (scraped :8000)        |
 
-Prometheus scrape targets: `api`, `gpu-worker`, `prefect-exporter`, `alertmanager`, `cadvisor`, `node-exporter`, `dcgm-exporter`, and self.
+Prometheus scrape targets: `api`, `image-parser`, `gpu-worker`, `prefect-exporter`, `alertmanager`, `cadvisor`, `node-exporter`, `dcgm-exporter`, and self.
 
 ### GPU Monitoring (Linux / NVIDIA only)
 
@@ -181,14 +189,14 @@ The DCGM exporter (`nvidia/dcgm-exporter`) requires an NVIDIA GPU and the NVIDIA
 
 Six Prometheus alert rules are defined in `observability/prometheus/alert-rules.yml` and loaded by Prometheus at startup via `rule_files`. The file is bind-mounted into the Prometheus container alongside `prometheus.yml`. All alerts carry `severity` (critical/warning) and `group: finetune` labels.
 
-| Alert | Condition | For | Severity |
-|---|---|---|---|
-| `GPUWorkerDown` | `up{job="gpu-worker"} == 0` | 2m | critical |
-| `PrefectExporterDown` | `up{job="prefect-exporter"} == 0` | 2m | warning |
-| `QueueBacklogHigh` | `prefect_work_queue_depth > 100` | 5m | warning |
-| `GPUWorkerOOM` | GPU worker container restarts > 3 in 15m | 1m | critical |
-| `DcgmGpuMemoryHigh` | GPU FB memory > 90% (skipped if DCGM absent) | 5m | warning |
-| `ServiceRestartLoop` | Any platform service restarts > 5 in 10m | 1m | critical |
+| Alert                 | Condition                                    | For | Severity |
+| --------------------- | -------------------------------------------- | --- | -------- |
+| `GPUWorkerDown`       | `up{job="gpu-worker"} == 0`                  | 2m  | critical |
+| `PrefectExporterDown` | `up{job="prefect-exporter"} == 0`            | 2m  | warning  |
+| `QueueBacklogHigh`    | `prefect_work_queue_depth > 100`             | 5m  | warning  |
+| `GPUWorkerOOM`        | GPU worker container restarts > 3 in 15m     | 1m  | critical |
+| `DcgmGpuMemoryHigh`   | GPU FB memory > 90% (skipped if DCGM absent) | 5m  | warning  |
+| `ServiceRestartLoop`  | Any platform service restarts > 5 in 10m     | 1m  | critical |
 
 ### Silencing Alerts During Maintenance
 
@@ -221,12 +229,12 @@ Promtail discovers all Docker containers via the Docker socket and ships their l
 
 #### Loki labels applied to every log stream
 
-| Label       | Source                     | Example values                                      |
-| ----------- | -------------------------- | --------------------------------------------------- |
-| `service`   | Container name (normalized)| `api`, `gpu-worker`, `prefect-worker`, `prefect-exporter`, `loki`, `grafana` |
-| `container` | Container name (raw)       | `api`, `gpu-worker`                                 |
-| `env`       | Static (pipeline stage)    | `finetune`                                          |
-| `level`     | JSON field extraction      | `info`, `warn`, `error`, `debug`                    |
+| Label       | Source                      | Example values                                                               |
+| ----------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `service`   | Container name (normalized) | `api`, `gpu-worker`, `prefect-worker`, `prefect-exporter`, `loki`, `grafana` |
+| `container` | Container name (raw)        | `api`, `gpu-worker`                                                          |
+| `env`       | Static (pipeline stage)     | `finetune`                                                                   |
+| `level`     | JSON field extraction       | `info`, `warn`, `error`, `debug`                                             |
 
 #### Labels explicitly NOT promoted (high-cardinality)
 
@@ -259,10 +267,13 @@ The following values are **never** Loki stream labels. They remain searchable as
 ## Rollback & Migration
 
 ### Migration from Single Worker
+
 The platform has migrated from a single `training-worker` to a split `gpu-worker` (HTTP API) and `prefect-worker` (CPU orchestration) topology.
 
 ### Rollback Procedure
+
 If the split topology causes issues, roll back by:
+
 1. Reverting `docker-compose.yaml` to the previous version containing the unified `training-worker` service.
 2. Restarting the stack: `docker compose down && docker compose up -d`.
 3. The observability stack remains compatible but will stop receiving metrics for the new service names.

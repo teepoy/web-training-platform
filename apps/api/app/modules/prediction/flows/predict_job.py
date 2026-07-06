@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
 
+import asyncstdlib as a
 from prefect import flow, get_run_logger, task
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -760,51 +761,55 @@ async def _run_prediction_job_with_container(
                 predictor_kwargs["image_fetcher"] = image_fetcher
             if materialization is not None and supports_materialized_dataset:
                 predictor_kwargs["materialized_dataset"] = materialization.dataset
-            for pred in predictor_fn(**predictor_kwargs):
-                sample_id = str(pred.get("sample_id", ""))
-                confidence_raw = pred.get("confidence")
-                confidence = (
-                    float(confidence_raw)
-                    if isinstance(confidence_raw, int | float)
-                    else None
-                )
-                scores = pred.get("scores")
-                all_scores = (
-                    {str(k): float(v) for k, v in scores.items()}
-                    if isinstance(scores, dict)
-                    else None
-                )
-                result = StoragePredictionResult(
-                    sample_id=sample_id,
-                    predicted_label=str(pred.get("label", "")),
-                    confidence=confidence,
-                    all_scores=all_scores,
-                    model_id=model.id,
-                    target=target,
-                    model_version=summary["model_version"],
-                    job_id=job_id,
-                    error=pred.get("error"),
-                )
-                if result.error:
-                    summary["failed"] += 1
-                    logger.warning(
-                        "prediction failed for sample %s: %s",
-                        sample_id,
-                        result.error,
+            predictions = predictor_fn(**predictor_kwargs)
+            if inspect.isawaitable(predictions):
+                predictions = await predictions
+            async with a.scoped_iter(predictions) as prediction_iter:
+                async for pred in prediction_iter:
+                    sample_id = str(pred.get("sample_id", ""))
+                    confidence_raw = pred.get("confidence")
+                    confidence = (
+                        float(confidence_raw)
+                        if isinstance(confidence_raw, int | float)
+                        else None
                     )
-                else:
-                    summary["successful"] += 1
-                summary["processed"] += 1
-                if summary["processed"] % 50 == 0:
-                    logger.info(
-                        "prediction progress: %d/%d (ok=%d fail=%d)",
-                        summary["processed"],
-                        summary["total_samples"],
-                        summary["successful"],
-                        summary["failed"],
+                    scores = pred.get("scores")
+                    all_scores = (
+                        {str(k): float(v) for k, v in scores.items()}
+                        if isinstance(scores, dict)
+                        else None
                     )
-                yield result
-                await flush_prediction_progress()
+                    result = StoragePredictionResult(
+                        sample_id=sample_id,
+                        predicted_label=str(pred.get("label", "")),
+                        confidence=confidence,
+                        all_scores=all_scores,
+                        model_id=model.id,
+                        target=target,
+                        model_version=summary["model_version"],
+                        job_id=job_id,
+                        error=pred.get("error"),
+                    )
+                    if result.error:
+                        summary["failed"] += 1
+                        logger.warning(
+                            "prediction failed for sample %s: %s",
+                            sample_id,
+                            result.error,
+                        )
+                    else:
+                        summary["successful"] += 1
+                    summary["processed"] += 1
+                    if summary["processed"] % 50 == 0:
+                        logger.info(
+                            "prediction progress: %d/%d (ok=%d fail=%d)",
+                            summary["processed"],
+                            summary["total_samples"],
+                            summary["successful"],
+                            summary["failed"],
+                        )
+                    yield result
+                    await flush_prediction_progress()
         finally:
             if materialization is not None:
                 materialization.cleanup()

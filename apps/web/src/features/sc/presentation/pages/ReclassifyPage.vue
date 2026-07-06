@@ -182,11 +182,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             <NButton
               size="small"
               type="primary"
-              :disabled="
-                !page.selectedTrainerId.value ||
-                page.isTrainPredictRunning.value ||
-                page.annotatedCount.value === 0
-              "
+              :disabled="!page.canTrainAndPredict.value"
               :loading="page.isTrainPredictRunning.value"
               @click="handleTrainAndPredictClick"
             >

@@ -1,6 +1,9 @@
 from __future__ import annotations
 # pyright: reportMissingImports=false, reportMissingModuleSource=false
 
+import logging
+from datetime import UTC, datetime, timedelta
+
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy import select
@@ -23,6 +26,9 @@ from app.shared.db.registry import (
     PersonalAccessTokenORM,
     UserORM,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_repository(request: Request) -> SqlRepository:
@@ -64,6 +70,49 @@ def _get_session_factory(request: Request | None = None):
 def _auth_enabled() -> bool:
     cfg = load_config()
     return bool(getattr(cfg.auth, "enabled", True))
+
+
+async def _maybe_await(value: object) -> object:
+    if hasattr(value, "__await__"):
+        return await value  # type: ignore[misc]
+    return value
+
+
+async def _record_daily_jwt_login_seen(request: Request, user_id: str) -> None:
+    """Best-effort once-per-UTC-day JWT user log for Loki analysis."""
+    if not user_id:
+        return
+    try:
+        app_context = getattr(request.app.state, "app_context", None)
+        shared = getattr(app_context, "shared", None)
+        publisher = getattr(shared, "redis_event_publisher", None)
+        redis_client = getattr(publisher, "_redis", None)
+        if redis_client is None:
+            return
+
+        now = datetime.now(UTC)
+        login_date = now.date().isoformat()
+        key = f"finetune:auth:jwt-login-seen:{login_date}:{user_id}"
+        created = await _maybe_await(
+            redis_client.set(
+                key,
+                "1",
+                ex=int(timedelta(days=2).total_seconds()),
+                nx=True,
+            )
+        )
+        if created:
+            logger.info(
+                "jwt user observed for login day",
+                extra={
+                    "event": "auth.user_login",
+                    "user_id": user_id,
+                    "auth_method": "jwt",
+                    "login_date_utc": login_date,
+                },
+            )
+    except Exception:
+        logger.debug("failed to record daily JWT login event", exc_info=True)
 
 
 def _orm_to_user(orm: UserORM) -> User:
@@ -243,6 +292,7 @@ async def _verify_jwt(token: str, request: Request) -> User:
 
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    await _record_daily_jwt_login_seen(request, user_orm.id)
     return _orm_to_user(user_orm)
 
 

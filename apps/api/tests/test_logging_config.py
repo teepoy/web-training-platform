@@ -29,3 +29,26 @@ def test_prod_logging_uses_json_console_without_file_handler(
     assert payload["env"] == "prod"
     assert payload["logger"] == "test.prod.logging"
     assert payload["message"] == "ship this to loki"
+
+
+def test_prod_json_logging_includes_extra_fields(
+    capsys,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    init_logging(OmegaConf.create({"app": {"env": "prod"}}))
+
+    logging.getLogger("test.prod.auth").info(
+        "user logged in",
+        extra={
+            "event": "auth.user_login",
+            "user_id": "user-123",
+            "login_date_utc": "2026-07-05",
+        },
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err.strip())
+    assert payload["event"] == "auth.user_login"
+    assert payload["user_id"] == "user-123"
+    assert payload["login_date_utc"] == "2026-07-05"

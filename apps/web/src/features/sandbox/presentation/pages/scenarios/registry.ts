@@ -1,21 +1,27 @@
 export interface SandboxDemo {
-  id: string
-  name: string
-  description: string
-  route: string
+  id: string;
+  name: string;
+  description: string;
+  route: string;
 }
 
 export const sandboxDemos: SandboxDemo[] = [
   {
-    id: 'rchannel-denoise',
-    name: 'ImageNet-100 R-Channel Denoising',
-    description: 'Salt & pepper noise denoising demo on 100 ImageNet classes',
-    route: '/sandbox/rchannel-denoise'
+    id: "rchannel-denoise",
+    name: "ImageNet-100 R-Channel Denoising",
+    description: "Salt & pepper noise denoising demo on 100 ImageNet classes",
+    route: "/sandbox/rchannel-denoise",
   },
   {
-    id: 'classify',
-    name: 'Classify Sandbox',
-    description: 'Sandbox environment for the classify workflow',
-    route: '/sandbox/classify'
-  }
-]
+    id: "classify",
+    name: "Classify Sandbox",
+    description: "Sandbox environment for the classify workflow",
+    route: "/sandbox/classify",
+  },
+  {
+    id: "sc-perspective-reconnect",
+    name: "SC Perspective Reconnect",
+    description: "Mock websocket reconnect and active probe timeout demo",
+    route: "/sandbox/sc-perspective-reconnect",
+  },
+];
