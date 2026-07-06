@@ -11,6 +11,7 @@ import (
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/client"
 	"image-parser/internal/handler"
+	"image-parser/internal/metrics"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -67,7 +68,10 @@ func wire() *serverApp {
 		closeImageLoader()
 		log.Fatalf("failed to listen gRPC: %v", err)
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(metrics.GRPCUnaryInterceptor()),
+		grpc.StreamInterceptor(metrics.GRPCStreamInterceptor()),
+	)
 	imageparserv1.RegisterImageParserServer(grpcServer, grpcHandler)
 	go func() {
 		log.Printf("gRPC server starting on :%s", grpcPort)
@@ -77,8 +81,9 @@ func wire() *serverApp {
 	}()
 
 	r := gin.New()
-	r.Use(handler.CORSMiddleware(), handler.StableRecovery(), gin.Logger(), gin.Recovery())
+	r.Use(handler.CORSMiddleware(), handler.StableRecovery(), metrics.GinTrafficMiddleware(), gin.Logger(), gin.Recovery())
 	r.GET("/health", handler.Health)
+	r.GET("/metrics", metrics.Handler)
 	RegisterHandler(&r.RouterGroup, httpHandler)
 
 	return &serverApp{

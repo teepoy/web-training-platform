@@ -21,4 +21,10 @@ export const sandboxRoutes: RouteRecordRaw[] = [
     name: "sandbox-vxe-table",
     component: () => import("./presentation/pages/scenarios/vxe-table/VxeTableSandbox.vue"),
   },
+  {
+    path: "/sandbox/sc-perspective-reconnect",
+    name: "sandbox-sc-perspective-reconnect",
+    component: () =>
+      import("./presentation/pages/scenarios/sc-perspective-reconnect/ScPerspectiveReconnectSandbox.vue"),
+  },
 ];

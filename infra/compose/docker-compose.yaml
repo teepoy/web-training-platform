@@ -118,9 +118,10 @@ services:
       - "9092:9092"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 60s
 
   sc-upstream:
     build:
@@ -149,12 +150,12 @@ services:
           "CMD",
           "python",
           "-c",
-          "import socket; s=socket.create_connection(('localhost', 9091), 5); s.close()",
+          "import socket; s=socket.create_connection(('localhost', 9091), timeout=20); s.close()",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 20s
       retries: 12
-      start_period: 10s
+      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════════
   # Observability Stack — --profile observability

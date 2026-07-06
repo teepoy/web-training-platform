@@ -64,6 +64,8 @@ async def serve() -> None:
 
     await stop_event.wait()
     await gserver.stop(0)
+    flight_server.shutdown()
+    flight_thread.join(timeout=30)
 
 
 if __name__ == "__main__":

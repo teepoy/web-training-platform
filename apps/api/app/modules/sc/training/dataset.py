@@ -90,6 +90,12 @@ class ScTrainingDataset(Dataset):
         label_map: dict[str, str] | None = None,
         artifact_storage: Any = None,
     ) -> None:
+        """Create the legacy SC training dataset.
+
+        ``label_map`` is deprecated. Current flow-level trainers read labels
+        from the storage LazyFrame and build compact ``label_to_idx`` mappings
+        from active training rows.
+        """
         self._transform = transform
         self._artifact_storage = artifact_storage
         self._label_map = label_map

@@ -9,7 +9,7 @@ import io
 import time
 import tempfile
 from pathlib import Path
-from typing import Any, Generator, Mapping, Sequence, cast
+from typing import Any, Generator, Sequence, cast
 
 from PIL import Image
 from prefect import get_run_logger
@@ -23,16 +23,8 @@ from app.modules.prediction.flows._predictors import predictor
 
 
 def _resolve_labels(
-    model: Any,
     model_ref: ModelRef,
-    ctx: PredictContext,
 ) -> list[str]:
-    names = getattr(model, "names", None)
-    if isinstance(names, Mapping):
-        return [str(names[index]) for index in sorted(names)]
-    if isinstance(names, Sequence) and not isinstance(names, (str, bytes)):
-        return [str(name) for name in names]
-
     metadata_labels = model_ref.metadata.get("label_space", [])
     if isinstance(metadata_labels, Sequence) and not isinstance(
         metadata_labels, (str, bytes)
@@ -41,7 +33,7 @@ def _resolve_labels(
         if labels:
             return labels
 
-    return list(ctx.dataset_ref.label_space)
+    raise ValueError("YOLO model metadata must include compact label_space")
 
 
 @predictor(
@@ -92,9 +84,7 @@ def yolo_sc_predictor(
     try:
         model = YOLO(str(_tmp_path))
         model.to(device)
-        labels = _resolve_labels(model, model_ref, ctx)
-        if not labels:
-            raise ValueError("YOLO model has no class names")
+        labels = _resolve_labels(model_ref)
     except Exception:
         _tmp_dir.cleanup()
         raise
@@ -284,13 +274,20 @@ def yolo_sc_predictor(
                     }
                     continue
 
+                output_classes = int(probs.data.shape[0])
+                if output_classes != len(labels):
+                    raise ValueError(
+                        "YOLO prediction output class count does not match "
+                        f"model metadata label_space: output={output_classes} "
+                        f"labels={len(labels)}"
+                    )
                 scores: dict[str, float] = {
                     labels[j]: float(probs.data[j].item()) for j in range(len(labels))
                 }
                 best_idx = int(probs.top1)
                 yield {
                     "sample_id": sid,
-                    "label": labels[best_idx] if best_idx < len(labels) else "",
+                    "label": labels[best_idx],
                     "confidence": float(probs.top1conf.item()),
                     "scores": scores,
                 }

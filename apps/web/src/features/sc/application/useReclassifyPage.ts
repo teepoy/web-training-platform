@@ -16,8 +16,10 @@ import {
   getJobApiV1TrainingJobsJobIdGet,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
+import { getAnnotationStats } from "@/shared/api/datasets";
 import type { Trainer } from "@/shared/api/types";
 import type {
+  DatasetAnnotationStats,
   DatasetStatusResponse,
   PredictionJobResponse,
   TrainingJob,
@@ -126,8 +128,9 @@ export interface ReclassifyPageState {
   fetchMoreSamples: () => Promise<unknown>;
   hasMoreSamples: ComputedRef<boolean>;
   isFetchingMoreSamples: ComputedRef<boolean>;
-  samplingAvailableCount: ComputedRef<number>;
   annotatedCount: ComputedRef<number>;
+  activeClassCount: ComputedRef<number>;
+  canTrainAndPredict: ComputedRef<boolean>;
   labelSpace: ComputedRef<string[]>;
   effectiveLabels: ComputedRef<string[]>;
   codeLabels: ComputedRef<ReclassifyCodeLabel[]>;
@@ -196,7 +199,7 @@ export interface ReclassifyPageState {
   showSamplingModal: Ref<boolean>;
   samplingCount: Ref<number>;
   assignDefaultDraftLabel: Ref<boolean>;
-  applySampling: () => void;
+  applySampling: (defectIds: string[]) => void;
   galleryRandomSamplingDefectIds: Ref<Set<string>>;
   clearGalleryRandomSamplingDefectIds: () => void;
 
@@ -211,7 +214,7 @@ export interface ReclassifyPageState {
   trainPredictPredictionPercent: ComputedRef<number | null>;
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
-  trainAndPredict: () => Promise<void>;
+  trainAndPredict: (sampleFilter?: ScSampleTableFilter | null) => Promise<void>;
 }
 
 function scImageUrlForRole(row: ScViewRow, image: ScViewImage): string {
@@ -375,21 +378,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const mapFilteredIds = ref<Set<string>>(new Set());
   const sampledIds = ref<Set<string>>(new Set());
-
-  const datasetMetaSampleCount = computed<number | null>(() => {
-    const raw = selectedDataset.value?.dataset_meta?.sample_count;
-    const count = typeof raw === "number" ? raw : Number(raw);
-    return Number.isFinite(count) && count >= 0 ? count : null;
-  });
-
-  const datasetSampleTotal = computed<number>(() => {
-    const statusTotal = datasetStatusQuery.data.value?.total_samples;
-    if (typeof statusTotal === "number" && Number.isFinite(statusTotal)) {
-      return Math.max(0, statusTotal);
-    }
-    if (datasetMetaSampleCount.value !== null) return datasetMetaSampleCount.value;
-    return 0;
-  });
 
   const explicitBlinkSourceDefectIds = computed<string[] | null>(() => {
     if (selectedDefectFilterIds.value.size > 0) return [...selectedDefectFilterIds.value];
@@ -568,9 +556,17 @@ export function useReclassifyPage(): ReclassifyPageState {
     return 0;
   });
 
-  const samplingAvailableCount = computed<number>(() => {
-    if (mapFilteredIds.value.size > 0) return mapFilteredIds.value.size;
-    return datasetSampleTotal.value || scSamples.value.length;
+  const annotationStatsQuery = useQuery({
+    queryKey: computed(() => ["api", "v1", "datasets", datasetId.value, "annotation-stats"]),
+    queryFn: () => getAnnotationStats(datasetId.value),
+    enabled: computed(() => !!selectedDataset.value),
+    retry: false,
+  });
+
+  const activeClassCount = computed<number>(() => {
+    const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
+    const counts = stats?.label_counts ?? {};
+    return Object.values(counts).filter((count) => Number(count) > 0).length;
   });
 
   async function fetchMoreSamples(): Promise<unknown> {
@@ -1060,29 +1056,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     galleryRandomSamplingDefectIds.value = new Set();
   }
 
-  async function applySampling(): Promise<void> {
-    const count = samplingCount.value;
-    if (count <= 0) return;
-
-    let resp;
-    if (mapFilteredIds.value.size > 0) {
-      const pool = [...mapFilteredIds.value];
-      const shuffled = pool.sort(() => Math.random() - 0.5);
-      const picked = shuffled.slice(0, Math.min(count, pool.length));
-      resp = await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
-        datasetId.value,
-        "patch_image_v1",
-        { sampleIds: picked.join(","), limit: picked.length },
-      );
-    } else {
-      resp = await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
-        datasetId.value,
-        "patch_image_v1",
-        { order_by: "random", limit: count },
-      );
-    }
-    const data = (resp.data ?? { items: [], total: 0 }) as ScViewRowsPage;
-    const sampled = data.items.map((row) => String(row.defect_id));
+  function applySampling(defectIds: string[]): void {
+    const sampled = Array.from(new Set(defectIds));
     if (sampled.length === 0) return;
 
     sampledIds.value = new Set(sampled);
@@ -1122,6 +1097,16 @@ export function useReclassifyPage(): ReclassifyPageState {
     (trainersQuery.data.value ?? [])
       .filter((t) => t.trainable !== false && t.view_type === "patch_image_v1")
       .map((t) => ({ label: t.name, value: t.id })),
+  );
+
+  watch(
+    trainerOptions,
+    (options) => {
+      if (selectedTrainerId.value) return;
+      const first = options[0];
+      if (first) selectedTrainerId.value = first.value;
+    },
+    { immediate: true },
   );
 
   const isTrainPredictRunning = ref(false);
@@ -1212,6 +1197,10 @@ export function useReclassifyPage(): ReclassifyPageState {
     return status === "running" || status === "waiting";
   });
 
+  const canTrainAndPredict = computed(
+    () => !!selectedTrainerId.value && !isTrainPredictRunning.value && activeClassCount.value >= 2,
+  );
+
   function invalidatePredictionViews(): void {
     void queryClient.invalidateQueries({
       queryKey: ["sc", "view-samples-paged", datasetId.value],
@@ -1273,10 +1262,14 @@ export function useReclassifyPage(): ReclassifyPageState {
     mounted.value = false;
   });
 
-  async function trainAndPredict(): Promise<void> {
+  async function trainAndPredict(sampleFilter: ScSampleTableFilter | null = null): Promise<void> {
     const trainerId = selectedTrainerId.value;
     if (!trainerId) {
       message.warning("Please select a trainer first");
+      return;
+    }
+    if (activeClassCount.value < 2) {
+      message.warning("At least two active classes are required to train");
       return;
     }
     if (isTrainPredictRunning.value) return;
@@ -1289,6 +1282,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         dataset_id: datasetId.value,
         trainer_id: trainerId,
         target: "image_classification",
+        sample_filter: sampleFilter,
       });
       const trainJobId = typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
       if (!trainJobId) {
@@ -1324,8 +1318,9 @@ export function useReclassifyPage(): ReclassifyPageState {
     fetchMoreSamples,
     hasMoreSamples,
     isFetchingMoreSamples,
-    samplingAvailableCount,
     annotatedCount,
+    activeClassCount,
+    canTrainAndPredict,
     labelSpace,
     effectiveLabels,
     codeLabels,

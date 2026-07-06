@@ -83,10 +83,49 @@ services:
           "-c",
           "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 20s
       retries: 12
-      start_period: 20s
+      start_period: 60s
+    restart: unless-stopped
+
+  perspective-ws:
+    image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
+    command:
+      [
+        "/usr/bin/supervisord",
+        "-c",
+        "/app/apps/api/supervisord.perspective.conf",
+      ]
+    environment: *platform-environment
+    mem_limit: ${PERSPECTIVE_WS_MEMORY:-8g}
+    shm_size: ${PERSPECTIVE_WS_SHM_SIZE:-1g}
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    expose:
+      - "8001"
+      - "8002"
+      - "8003"
+      - "8004"
+    volumes:
+      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+    networks:
+      finetune-prod:
+        aliases:
+          - perspective-ws
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
 
   web:
@@ -94,6 +133,8 @@ services:
     mem_limit: ${WEB_MEMORY:-1g}
     depends_on:
       api:
+        condition: service_healthy
+      perspective-ws:
         condition: service_healthy
     expose:
       - "80"
@@ -165,6 +206,18 @@ services:
       finetune-prod:
         aliases:
           - sc-upstream
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('localhost', 9091), timeout=20); s.close()",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
 
   image-parser:
@@ -197,6 +250,12 @@ services:
       finetune-prod:
         aliases:
           - image-parser
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
 networks:

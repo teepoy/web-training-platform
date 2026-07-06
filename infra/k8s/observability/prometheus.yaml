@@ -35,6 +35,11 @@ data:
           - targets: ['finetune-api.finetune.svc.cluster.local:8000']
         metrics_path: '/metrics'
 
+      - job_name: 'image-parser'
+        static_configs:
+          - targets: ['image-parser.finetune.svc.cluster.local:8090']
+        metrics_path: '/metrics'
+
       - job_name: 'gpu-worker'
         static_configs:
           - targets: ['gpu-worker.finetune.svc.cluster.local:8010']
@@ -74,10 +79,10 @@ spec:
         - name: prometheus
           image: prom/prometheus:v2.55.0
           args:
-            - '--config.file=/etc/prometheus/prometheus.yml'
-            - '--storage.tsdb.path=/prometheus'
-            - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-            - '--web.console.templates=/usr/share/prometheus/consoles'
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
           ports:
             - containerPort: 9090
               name: http

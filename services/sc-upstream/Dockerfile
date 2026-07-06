@@ -25,4 +25,4 @@ ENV CACHE_DIR=/data/cache
 EXPOSE 9091 9093
 
 WORKDIR /app/services/sc-upstream
-CMD ["uv", "run", "--no-dev", "python", "-m", "sc_upstream.server"]
+CMD ["uv", "run", "--no-dev", "--frozen", "python", "-m", "sc_upstream.server"]

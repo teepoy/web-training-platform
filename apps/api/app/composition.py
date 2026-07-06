@@ -31,7 +31,10 @@ from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from app.shared.infrastructure.storage.minio import MinioArtifactStorage
+from app.shared.infrastructure.storage.minio import (
+    MinioArtifactStorage,
+    build_minio_export_lifecycle,
+)
 from app.modules.dashboard.app.services.service_health import (
     ServiceHealthService,
 )
@@ -127,6 +130,7 @@ def _build_artifact_storage(cfg: AppConfig) -> ArtifactStorage:
             secret_key=str(cfg.storage.minio.secret_key),
             bucket=str(cfg.storage.minio.bucket),
             secure=bool(cfg.storage.minio.secure),
+            export_lifecycle=build_minio_export_lifecycle(cfg),
         )
     raise RuntimeError(f"Unsupported storage.kind: {kind}")
 

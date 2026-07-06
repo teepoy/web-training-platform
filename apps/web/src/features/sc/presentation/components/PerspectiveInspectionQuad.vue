@@ -53,6 +53,7 @@ const props = defineProps<{
   reticleOptions?: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   selectedGalleryDefectIds?: Array<number | string>;
+  globalFilter?: ScSampleTableFilter;
   tableFilter?: ScSampleTableFilter;
   globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
@@ -73,6 +74,7 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "table-filter-change", filter: ScSampleTableFilter): void;
+  (e: "update:global-filter", filter: ScSampleTableFilter): void;
   (e: "table-apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
@@ -105,7 +107,6 @@ const HIGHLIGHT_MAX_DEFECTS = 9999;
 const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
-const globalFilter = ref<ScSampleTableFilter>({});
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
 type QueuedBoxSelection = {
@@ -114,6 +115,10 @@ type QueuedBoxSelection = {
 };
 
 const isReclassify = computed(() => props.variant === "reclassify");
+const globalFilterModel = computed<ScSampleTableFilter>({
+  get: () => props.globalFilter ?? {},
+  set: (filter) => emit("update:global-filter", filter),
+});
 const enabledLegendSources = computed<ScLegendSource[]>(
   () =>
     props.legendSources ??
@@ -143,6 +148,16 @@ const {
   dispose: disposePerspectiveQuadData,
 } = usePerspectiveQuadData();
 
+async function queryGlobalFilterCount(): Promise<number> {
+  return model.queryGlobalFilterCount();
+}
+
+async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number[]> {
+  return model.queryRandomGlobalFilteredDefectIds(count);
+}
+
+defineExpose({ queryGlobalFilterCount, queryRandomGlobalFilteredDefectIds });
+
 const sampleTableTotal = 0;
 const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),
@@ -160,6 +175,22 @@ const activeDieDisplay = computed(() =>
 const activeReticleDisplay = computed(() =>
   props.activeMapTab === "reticle" ? model.reticleDisplay.value : EMPTY_MAP_DISPLAY,
 );
+const perspectiveMaskVisible = computed(
+  () => perspective.reconnecting.value || perspective.reconnectFailed.value,
+);
+const perspectiveMaskTitle = computed(() =>
+  perspective.reconnectFailed.value ? "Perspective connection lost" : "Reconnecting...",
+);
+const perspectiveMaskDescription = computed(() => {
+  if (perspective.reconnectFailed.value) {
+    return "Automatic reconnect failed. Try reconnecting manually, or refresh the page.";
+  }
+  const attempt = perspective.reconnectAttempt.value;
+  const maxAttempts = perspective.reconnectMaxAttempts;
+  return attempt > 0
+    ? `Restoring websocket connection (${attempt}/${maxAttempts})`
+    : "Restoring websocket connection";
+});
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -217,12 +248,9 @@ watch(
   { immediate: true },
 );
 
-watch(
-  [() => props.activeMapTab, () => props.zoom],
-  () => {
-    void refreshImmediateCrosshairFromMapSelection();
-  },
-);
+watch([() => props.activeMapTab, () => props.zoom], () => {
+  void refreshImmediateCrosshairFromMapSelection();
+});
 
 onUnmounted(() => {
   disposePerspectiveQuadData();
@@ -389,6 +417,12 @@ function handleTableSelectionChange(ids: number[]): void {
 function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
   model.setHiddenLegendKeys(payload.hiddenKeys);
 }
+function reconnectPerspective(): void {
+  perspective.reconnect();
+}
+function refreshPage(): void {
+  window.location.reload();
+}
 async function selectBarChartGroup(defectIds: number[]): Promise<void> {
   await model.applyMapSelection(defectIds);
   emit("map-filter-change", { ids: defectIds, region: { x: 0, y: 0, w: 0, h: 0 } });
@@ -470,6 +504,7 @@ function usePerspectiveQuadData() {
   function reportPerspectiveError(reason: string, err: unknown): void {
     if (disposed) return;
     console.warn("[sc-perspective] operation failed", { reason, err });
+    perspective.requestReconnect(reason, err);
   }
 
   const perspectiveScopeKey = computed(() => {
@@ -488,7 +523,7 @@ function usePerspectiveQuadData() {
     inspectionTime: computed(() => props.inspectionTime),
     waferKey: computed(() => props.waferKey),
     legendGroupBy: computed(() => props.legendGroupBy),
-    globalFilter,
+    globalFilter: globalFilterModel,
     zoom: computed(() => props.zoom),
     activeMapMode: computed(() => props.activeMapTab),
     galleryRandomSamplingFilter,
@@ -570,10 +605,10 @@ function usePerspectiveQuadData() {
   >
     <div ref="leftPanelEl" class="iq-panel-left" :style="leftPanelStyle">
       <ScGlobalFilterBar
-        :filter="globalFilter"
+        :filter="globalFilterModel"
         :distinct-values="globalDistinctValues"
         @update:filter="
-          globalFilter = $event;
+          globalFilterModel = $event;
           if (galleryRandomSamplingDefectIds && galleryRandomSamplingDefectIds.size > 0) {
             emit('clear-gallery-random-sampling');
           }
@@ -709,6 +744,23 @@ function usePerspectiveQuadData() {
       ><div class="iq-splitter iq-splitter--column" role="separator" aria-orientation="vertical" />
       <div class="iq-panel-annotation"><slot name="annotation" /></div
     ></template>
+    <div v-if="perspectiveMaskVisible" class="iq-reconnect-mask">
+      <div class="iq-reconnect-panel">
+        <div v-if="perspective.reconnecting.value" class="iq-reconnect-spinner" />
+        <NResult
+          :status="perspective.reconnectFailed.value ? 'error' : 'info'"
+          :title="perspectiveMaskTitle"
+          :description="perspectiveMaskDescription"
+        >
+          <template v-if="perspective.reconnectFailed.value" #footer>
+            <div class="iq-reconnect-actions">
+              <NButton size="small" type="primary" @click="reconnectPerspective">Reconnect</NButton>
+              <NButton size="small" quaternary @click="refreshPage">Refresh page</NButton>
+            </div>
+          </template>
+        </NResult>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -729,6 +781,7 @@ function usePerspectiveQuadData() {
   min-height: 320px;
 }
 .iq-quad {
+  position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -736,6 +789,44 @@ function usePerspectiveQuadData() {
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
+}
+.iq-reconnect-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 15, 26, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+.iq-reconnect-panel {
+  width: min(360px, calc(100% - 32px));
+  padding: 18px 16px 14px;
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.14));
+  border-radius: 8px;
+  background: var(--cv-card-bg, #1a1a2e);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+}
+.iq-reconnect-spinner {
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 4px;
+  border: 2px solid rgba(128, 128, 128, 0.35);
+  border-top-color: var(--cv-primary, #4c80f0);
+  border-radius: 50%;
+  animation: iq-reconnect-spin 0.8s linear infinite;
+}
+.iq-reconnect-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+@keyframes iq-reconnect-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .iq-quad--column-resizing {
   cursor: col-resize;

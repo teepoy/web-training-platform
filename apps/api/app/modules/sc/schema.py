@@ -106,6 +106,7 @@ SC_SPARSE_SHARD_SCHEMA_V2: list[dict[str, str]] = [
     {"name": "die_y", "type": "int32"},
     {"name": "rough_bin", "type": "int32"},
     {"name": "class_number", "type": "int32"},
+    {"name": "test_id", "type": "int32"},
     {"name": "lot_id", "type": "string"},
     {"name": "has_review", "type": "int32"},
     {"name": "images", "type": "list<struct>"},
@@ -130,7 +131,8 @@ for table construction.
     - ``"image_uris"`` and ``"metadata"`` columns are **removed**.
     - A new ``"images"`` column (``list<struct>``) carries all image
       identity, role, bytes, and provenance inline.
-    - All other scalar columns (``sample_id`` … ``lot_id``) are
+    - All other scalar columns (``sample_id`` … ``lot_id``), including
+      the upstream ``test_id`` metadata field, are
       **identical** in name and type.
 """
 

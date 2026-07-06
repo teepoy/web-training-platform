@@ -19,14 +19,13 @@ from __future__ import annotations
 import io as _io
 import json as _json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pyarrow.parquet as _pq
 from sqlalchemy import select
 
 from app.modules.sc.schema import find_images_by_role
-from app.shared.db.registry import AnnotationORM, PredictionJobORM
-from app.shared.db.models.prediction import PlatformPredictionORM
+from app.shared.db.registry import AnnotationORM
 from platform_runtime.sparse import DatasetPayloadStore, SparseManifestReader
 
 if TYPE_CHECKING:
@@ -42,6 +41,9 @@ _SPARSE_EXPORT_COLUMNS = ["sample_id", "image_uris", "metadata"]
 
 _SPARSE_EXPORT_COLUMNS_V2 = ["sample_id", "images"]
 """Columns read from v2 shards — sample_id + embedded image list<struct>."""
+
+_FINAL_PREDICTION_DIR = "final"
+_ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
 
 
 class SparseExportAssembler:
@@ -98,8 +100,8 @@ class SparseExportAssembler:
             else [],
         )
 
-        # ── 3. load prediction results (latest completed job) ─────────
-        pred_by_locator: dict[Any, dict] = await self._load_prediction_results(
+        # ── 3. load accumulated final prediction results ──────────────
+        pred_by_sample: dict[str, dict] = await self._load_prediction_results(
             dataset_id, org_id
         )
 
@@ -131,8 +133,7 @@ class SparseExportAssembler:
                 label = ann_label_by_sample.get(sample_id)
 
                 # ── prediction join ───────────────────────────────
-                loc_key: tuple[int, int] = (shard_entry.shard_index, row_index)
-                pred = pred_by_locator.get(loc_key) or pred_by_locator.get(sample_id)
+                pred = pred_by_sample.get(sample_id)
 
                 if is_v2:
                     sample_row = self._assemble_v2_row(
@@ -232,113 +233,50 @@ class SparseExportAssembler:
     # prediction loading
     # ------------------------------------------------------------------
 
-    async def _resolve_job_result_uri(self, prefix: str) -> str:
-        """Resolve the scheme-prefixed URI for ``job_result.json``.
-
-        Uses the same temp-key discovery pattern as
-        :meth:`PredictionService._resolve_job_result_uri`: write a temporary
-        marker object, capture the resolved URI from ``put_bytes``, delete
-        the marker, and strip the marker suffix.
-
-        This is necessary because ``ArtifactStorage.get_bytes()`` requires
-        the full scheme-prefixed URI (``memory://...`` or ``s3://bucket/...``)
-        — bare keys raise ``FileNotFoundError``.
-        """
-        tmp_key = f"{prefix}/job_result.json.__tmp_discovery__"
-        tmp_uri = await self._storage.put_bytes(
-            object_name=tmp_key, data=b"", content_type="application/json"
-        )
-        await self._storage.delete(tmp_uri)
-        return tmp_uri.replace(".__tmp_discovery__", "")
-
     async def _load_prediction_results(
         self, dataset_id: str, org_id: str
-    ) -> dict[tuple[int, int] | str, dict]:
-        """Find the latest completed prediction job and load its results.
+    ) -> dict[str, dict]:
+        """Load accumulated final sparse prediction results.
 
-        Returns ``{(shard_index, row_index) | sample_id: {predicted_label, ...}}``.
-        Parquet results use ``(shard_index, row_index)`` keys; SQL fallback
-        results use ``sample_id`` keys.
+        Returns ``{sample_id: {predicted_label, ...}}``.
 
         Gracefully returns empty dict when no prediction job exists,
-        the job has no results, or the result files are missing.
+        the final accumulated file has no results, or the result file is
+        missing.
         """
-        # ── Find latest completed job ──────────────────────────────────
-        async with self._session_factory() as session:
-            stmt = (
-                select(PredictionJobORM)
-                .where(
-                    PredictionJobORM.dataset_id == dataset_id,
-                    PredictionJobORM.status == "completed",
-                )
-                .order_by(PredictionJobORM.created_at.desc())
-                .limit(1)
-            )
-            row = (await session.execute(stmt)).scalars().first()
-            if row is None:
-                logger.debug("No completed prediction job for dataset %s", dataset_id)
-                return {}
-            job_id = row.id
-
-        # ── Try parquet shard results first ────────────────────────────
-        prefix = f"datasets/{org_id}/{dataset_id}/predictions/{job_id}"
-        result = await self._load_prediction_parquet_shards(prefix, job_id)
-
-        if result:
-            return result  # pyright: ignore[reportReturnType]
-
-        # ── Fallback: query platform_predictions SQL table ─────────────
-        logger.debug(
-            "No parquet results for job %s, falling back to platform_predictions SQL",
-            job_id,
-        )
-        return await self._load_predictions_from_sql(dataset_id, org_id, job_id)  # pyright: ignore[reportReturnType]
-
-    async def _load_prediction_parquet_shards(
-        self, prefix: str, job_id: str
-    ) -> dict[tuple[int, int], dict]:
-        """Load prediction results from parquet shard files.
-
-        Reads ``job_result.json`` manifest and per-shard parquet files
-        from object storage. Returns ``{(shard_index, row_index): dict}``
-        or empty dict if files are missing.
-        """
+        prefix = f"datasets/{org_id}/{dataset_id}/predictions/{_FINAL_PREDICTION_DIR}/"
         try:
-            manifest_uri = await self._resolve_job_result_uri(prefix)
-            manifest_bytes = await self._storage.get_bytes(manifest_uri)
-        except (FileNotFoundError, ValueError, OSError):
-            logger.debug("No job_result.json for prediction job %s", job_id)
+            uris = await self._storage.list_prefix(prefix)
+        except Exception:
             return {}
+        accumulated_uris = [
+            uri
+            for uri in uris
+            if uri.rsplit("/", 1)[-1] == _ACCUMULATED_PREDICTION_FILE
+        ]
+        return await self._load_accumulated_prediction_parquet(accumulated_uris)
 
-        manifest = _json.loads(manifest_bytes)
-        shards_meta = sorted(
-            manifest.get("shards", []), key=lambda s: s.get("shard_index", 0)
-        )
-        if not shards_meta:
-            return {}
-
-        result: dict[tuple[int, int], dict] = {}
-        for shard_meta in shards_meta:
-            shard_index: int = shard_meta["shard_index"]
-            shard_uri: str = shard_meta.get("shard_uri", "")
-            if not shard_uri:
+    async def _load_accumulated_prediction_parquet(
+        self, uris: list[str]
+    ) -> dict[str, dict]:
+        """Load accumulated final prediction rows keyed by sample_id."""
+        result: dict[str, dict] = {}
+        for uri in uris:
+            if not uri.endswith(".parquet"):
                 continue
 
             try:
-                parquet_bytes = await self._storage.get_bytes(shard_uri)
+                parquet_bytes = await self._storage.get_bytes(uri)
             except (FileNotFoundError, ValueError, OSError):
-                logger.debug(
-                    "Prediction shard %d not found for job %s", shard_index, job_id
-                )
                 continue
 
             table = _pq.read_table(_io.BytesIO(parquet_bytes))
             col = table.column
 
-            row_indices: list[int] = (
-                col("row_index").to_pylist()
-                if "row_index" in table.column_names
-                else list(range(table.num_rows))
+            sample_ids: list[str] = (
+                col("sample_id").to_pylist()
+                if "sample_id" in table.column_names
+                else [""] * table.num_rows
             )
             pred_labels: list[str] = (
                 col("predicted_label").to_pylist()
@@ -362,8 +300,9 @@ class SparseExportAssembler:
             )
 
             for i in range(table.num_rows):
-                row_idx = row_indices[i]
-                key: tuple[int, int] = (shard_index, row_idx)
+                sample_id = str(sample_ids[i] or "")
+                if not sample_id:
+                    continue
 
                 scores: dict[str, float] | None = None
                 raw_scores = all_scores_raw[i]
@@ -373,7 +312,7 @@ class SparseExportAssembler:
                     except (_json.JSONDecodeError, TypeError):
                         pass
 
-                result[key] = {
+                result[sample_id] = {
                     "predicted_label": str(pred_labels[i] or ""),
                     "confidence": (
                         float(confidences[i]) if confidences[i] is not None else None  # type: ignore[arg-type]
@@ -381,65 +320,8 @@ class SparseExportAssembler:
                     "all_scores": scores,
                 }
                 if errors[i]:
-                    result[key]["error"] = str(errors[i])
+                    result[sample_id]["error"] = str(errors[i])
 
-        return result
-
-    async def _load_predictions_from_sql(
-        self, dataset_id: str, org_id: str, job_id: str
-    ) -> dict[str, dict]:
-        """Load prediction results from ``platform_predictions`` SQL table.
-
-        Returns ``{sample_id: {predicted_label, confidence, all_scores}}``
-        for the given job. Falls back to the latest prediction per sample
-        across all completed jobs for this dataset when *job_id* has no
-        results.
-        """
-        async with self._session_factory() as session:
-            stmt = (
-                select(PlatformPredictionORM)
-                .where(
-                    PlatformPredictionORM.dataset_id == dataset_id,
-                    PlatformPredictionORM.job_id == job_id,
-                )
-                .order_by(PlatformPredictionORM.created_at.desc())
-            )
-            rows = (await session.execute(stmt)).scalars().all()
-
-            if not rows:
-                # Fallback: latest prediction per sample across all jobs
-                stmt = (
-                    select(PlatformPredictionORM)
-                    .where(
-                        PlatformPredictionORM.dataset_id == dataset_id,
-                    )
-                    .order_by(
-                        PlatformPredictionORM.sample_id,
-                        PlatformPredictionORM.created_at.desc(),
-                    )
-                )
-                rows = (await session.execute(stmt)).scalars().all()
-
-        result: dict[str, dict] = {}
-        seen: set[str] = set()
-        for r in rows:
-            sid = r.sample_id
-            if sid in seen:
-                continue
-            seen.add(sid)
-            result[sid] = {
-                "predicted_label": r.predicted_label,
-                "confidence": r.confidence,
-                "all_scores": r.all_scores_json,
-            }
-            if r.error:
-                result[sid]["error"] = r.error
-
-        logger.debug(
-            "SparseExportAssembler: loaded %d predictions from SQL for job %s",
-            len(result),
-            job_id,
-        )
         return result
 
     # ------------------------------------------------------------------

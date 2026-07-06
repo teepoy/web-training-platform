@@ -16,6 +16,7 @@ API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
+LOCAL_PROD_PREFECT_AUTH ?= dangerous:dangerous
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
 SC_PATCH_ZIP_DEFECTS ?= 200000
@@ -86,11 +87,11 @@ dev: ## [DEPRECATED] Use `make up-dev` instead. Redirects to compose dev mode.
 
 .PHONY: dev-api
 dev-api: ## Start API dev server (default: 8000)
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
 
 .PHONY: dev-api-host
 dev-api-host: up-dev-host-api ## Start compose dependencies, then run API on host
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run alembic upgrade head && $(DEV_API_HOST_ENV) uv run uvicorn app.main:app --reload --port $(API_PORT)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen alembic upgrade head && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
 
 .PHONY: dev-web
 dev-web: ## Start frontend dev server (default: 5173)
@@ -112,11 +113,11 @@ prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run con
 
 .PHONY: db-migrate
 db-migrate: ## Run Alembic migrations (upgrade head)
-	cd $(API_DIR) && uv run alembic upgrade head
+	cd $(API_DIR) && uv run --no-dev --frozen alembic upgrade head
 
 .PHONY: db-revision
 db-revision: ## Create a new Alembic revision (usage: make db-revision MSG="add users table")
-	cd $(API_DIR) && uv run alembic revision --autogenerate -m "$(MSG)"
+	cd $(API_DIR) && uv run --no-dev --frozen alembic revision --autogenerate -m "$(MSG)"
 
 # ──────────────────────────────────────────────
 # Tests & checks
@@ -363,8 +364,11 @@ up-dev-host-api: ensure-fixtures ## Start compose dev dependencies without Docke
 	docker compose -f $(COMPOSE_DEV) up -d --scale api=0 --scale web=0 $(ARGS)
 
 .PHONY: up-prod
-up-prod: ## Start local prod validation stack (docker-compose.yaml + docker-compose.prod.yaml)
-	docker compose -f $(COMPOSE_PROD) up -d $(ARGS)
+up-prod: ensure-fixtures ## Migrate, register deployments, and start the local prod validation stack
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d postgres minio redis label-studio prefect-server sc-upstream image-parser
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /app/.venv/bin/alembic upgrade head
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /bin/sh -lc '/app/.venv/bin/prefect work-pool create default-cpu --type process || true; /app/.venv/bin/prefect work-pool create default-gpu --type process || true; /app/.venv/bin/ftapi deployments apply'
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d api perspective-ws web prefect-worker-cpu $(ARGS)
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
@@ -372,7 +376,7 @@ build-dev: ## Build all dev-target Docker images
 
 .PHONY: build-prod
 build-prod: ## Build all prod-target Docker images (local validation stack)
-	docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
 
 .PHONY: logs-dev
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
@@ -380,7 +384,7 @@ logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
 
 .PHONY: logs-prod
 logs-prod: ## Tail local prod validation stack logs (usage: make logs-prod ARGS="api")
-	docker compose -f $(COMPOSE_PROD) logs -f $(ARGS)
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) logs -f $(ARGS)
 
 .PHONY: build
 build: ## Build all dev-target Docker images (use build-dev/build-prod explicitly)

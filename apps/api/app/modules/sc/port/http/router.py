@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 
 import polars as pl
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
@@ -31,23 +31,15 @@ from app.modules.sc.port.http.deps import (
     ScPlotPointsServiceDep,
     ScUpstreamReaderDep,
 )
-from app.modules.auth.port.http.deps import get_current_org as resolve_current_org
-from app.modules.auth.port.http.deps import get_current_user as resolve_current_user
-from app.modules.sc.port.http.perspective_ws import (
-    _build_dataset_df,
-    _build_inspection_df,
-    overlay_df_from_samples,
-    run_sc_perspective_ws,
-)
 from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     _apply_sample_filters,
-    apply_sample_table_filter,
     encode_defect_ids_int32le,
     filter_box_defect_ids,
     sorted_defect_ids_from_lazyframe,
 )
+from app.modules.sc.app.services.sample_filter import apply_sample_table_filter
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
@@ -65,8 +57,6 @@ from app.modules.sc.schemas import (
     ScImportResponse,
     ScInspectionListResponse,
     ScInspectionSummaryItem,
-    ScReclassifySampleTableRow,
-    ScReclassifySampleTableRowsResponse,
     ScReviewImageItem,
     ScReviewImagesByDefectItem,
     ScSampleTableRow,
@@ -82,7 +72,6 @@ from app.shared.sse.events import (
     ScProgressEvent,
     SSEEvent,
 )
-import starlette.websockets
 
 router = APIRouter(prefix="/sc", tags=["sc"])
 
@@ -112,92 +101,6 @@ _SAMPLE_TABLE_COLUMNS = {
 _SAMPLE_TABLE_CACHE_DIR = (
     Path(tempfile.gettempdir()) / "web-training-platform" / "sc-sample-table-cache"
 )
-
-
-def _redis_client_from_request(request_or_websocket: Request | WebSocket) -> Any | None:
-    publisher = getattr(
-        request_or_websocket.app.state.app_context.shared,
-        "redis_event_publisher",
-        None,
-    )
-    return getattr(publisher, "_redis", None)
-
-
-@router.websocket("/perspective/inspections/{inspection_time}/{wafer_key}/ws")
-async def sc_inspection_perspective_ws(
-    websocket: WebSocket,
-    inspection_time: str,
-    wafer_key: int,
-    reticle_x_die_count: int = Query(default=10, alias="reticleXDieCount", ge=1),
-    reticle_y_die_count: int = Query(default=10, alias="reticleYDieCount", ge=1),
-    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
-    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
-) -> None:
-    upstream_reader = websocket.app.state.app_context.sc.upstream_reader
-
-    async def samples_df_factory() -> pl.DataFrame:
-        return await _build_inspection_df(
-            upstream_reader=upstream_reader,
-            inspection_time=inspection_time,
-            wafer_key=wafer_key,
-            reticle_x_die_count=reticle_x_die_count,
-            reticle_y_die_count=reticle_y_die_count,
-            reticle_x_die_shift=reticle_x_die_shift,
-            reticle_y_die_shift=reticle_y_die_shift,
-        )
-
-    await run_sc_perspective_ws(
-        websocket=websocket,
-        dataset_id=None,
-        samples_df_factory=samples_df_factory,
-        redis_client=_redis_client_from_request(websocket),
-    )
-
-
-@router.websocket("/perspective/datasets/{dataset_id}/ws")
-async def sc_dataset_perspective_ws(
-    websocket: WebSocket,
-    dataset_id: str,
-    reticle_x_die_count: int = Query(default=3, alias="reticleXDieCount", ge=1),
-    reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
-    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
-    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
-) -> None:
-    app_context = websocket.app.state.app_context
-    current_user = await resolve_current_user(websocket)  # type: ignore[arg-type]
-    org = await resolve_current_org(websocket, current_user)  # type: ignore[arg-type]
-    upstream_reader = app_context.sc.upstream_reader
-    storage_factory = app_context.datasets.dataset_storage_factory
-
-    async def build_dataset_df() -> pl.DataFrame:
-        return await _build_dataset_df(
-            dataset_id=dataset_id,
-            org_id=org.id,
-            storage_factory=storage_factory,
-            upstream_reader=upstream_reader,
-            reticle_x_die_count=reticle_x_die_count,
-            reticle_y_die_count=reticle_y_die_count,
-            reticle_x_die_shift=reticle_x_die_shift,
-            reticle_y_die_shift=reticle_y_die_shift,
-        )
-
-    async def samples_df_factory() -> pl.DataFrame:
-        return await build_dataset_df()
-
-    async def refresh_overlay() -> pl.DataFrame:
-        return overlay_df_from_samples(await build_dataset_df())
-
-    try:
-        await run_sc_perspective_ws(
-            websocket=websocket,
-            dataset_id=dataset_id,
-            samples_df_factory=samples_df_factory,
-            redis_client=_redis_client_from_request(websocket),
-            refresh_overlay=refresh_overlay,
-        )
-    except starlette.websockets.WebSocketDisconnect:
-        # Ignore disconnects, they are expected when the client closes the connection
-        pass
 
 
 _TOP_LEVEL_FILTER_COLUMNS = {
@@ -749,34 +652,6 @@ async def stream_inspection_map_points_progress(
     )
 
 
-@router.get(
-    "/datasets/{dataset_id}/defect-ids.bin",
-    responses={
-        200: {
-            "description": "Return sorted dataset defect ids as little-endian Int32 bytes",
-            "content": {
-                "application/octet-stream": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            },
-        }
-    },
-)
-async def get_sc_dataset_defect_ids_binary(
-    dataset_id: str,
-    service: ScPlotPointsServiceDep,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> Response:
-    try:
-        body = await service.build_defect_ids_response(dataset_id, org.id)
-    except ScPlotPointsNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScPlotPointsRejectedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=body, media_type="application/octet-stream")
-
-
 @router.post(
     "/inspections/{inspection_time}/{wafer_key}/box-filter",
     response_model=ScBoxFilterResponse,
@@ -999,46 +874,6 @@ async def filter_sc_dataset_box(
     except ScPlotPointsRejectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ScBoxFilterResponse(defect_ids=defect_ids, total=len(defect_ids))
-
-
-@router.post(
-    "/datasets/{dataset_id}/sample-table-rows",
-    response_model=ScReclassifySampleTableRowsResponse,
-)
-async def get_sc_dataset_sample_table_rows(
-    dataset_id: str,
-    payload: ScSampleTableRowsRequest,
-    service: ScPlotPointsServiceDep,
-    upstream_reader: ScUpstreamReaderDep,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> ScReclassifySampleTableRowsResponse:
-    try:
-        rows, total, next_anchor = await service.build_dataset_sample_table_rows(
-            dataset_id,
-            org.id,
-            upstream_reader=upstream_reader,
-            defect_ids=payload.defect_ids,
-            anchor=payload.anchor,
-            page=payload.page,
-            page_size=payload.page_size,
-            limit=payload.limit,
-            filter_params=payload.filter,
-            sort_params=payload.sort,
-            reticle_x_die_count=payload.reticle_x_die_count,
-            reticle_y_die_count=payload.reticle_y_die_count,
-            reticle_x_die_shift=payload.reticle_x_die_shift,
-            reticle_y_die_shift=payload.reticle_y_die_shift,
-        )
-    except ScPlotPointsNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScPlotPointsRejectedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ScReclassifySampleTableRowsResponse(
-        items=[ScReclassifySampleTableRow.model_validate(row) for row in rows],
-        total=total,
-        next_anchor=next_anchor,
-    )
 
 
 @router.get(

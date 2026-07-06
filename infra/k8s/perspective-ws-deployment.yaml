@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finetune-perspective-ws
+  namespace: finetune
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finetune-perspective-ws
+  template:
+    metadata:
+      labels:
+        app: finetune-perspective-ws
+    spec:
+      serviceAccountName: finetune-api
+      containers:
+        - name: perspective-ws
+          image: finetune-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+              name: websocket-1
+            - containerPort: 8002
+              name: websocket-2
+            - containerPort: 8003
+              name: websocket-3
+            - containerPort: 8004
+              name: websocket-4
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
+          command:
+            - /usr/bin/supervisord
+            - -c
+            - /app/apps/api/supervisord.perspective.conf
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finetune-perspective-ws
+  namespace: finetune
+spec:
+  selector:
+    app: finetune-perspective-ws
+  ports:
+    - port: 8001
+      targetPort: 8001
+      name: websocket-1
+    - port: 8002
+      targetPort: 8002
+      name: websocket-2
+    - port: 8003
+      targetPort: 8003
+      name: websocket-3
+    - port: 8004
+      targetPort: 8004
+      name: websocket-4

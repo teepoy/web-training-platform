@@ -55,8 +55,14 @@ vi.mock("@/features/sc/presentation/composables/useScPerspectiveWorkbench", () =
     connected: { value: false },
     dataReady: { value: false },
     error: { value: null },
+    reconnecting: { value: false },
+    reconnectFailed: { value: false },
+    reconnectAttempt: { value: 0 },
+    reconnectMaxAttempts: 5,
     connect: vi.fn(),
     disconnect: vi.fn(),
+    reconnect: vi.fn(),
+    requestReconnect: vi.fn(),
   }),
 }));
 vi.mock("@/features/sc/presentation/composables/usePerspectiveInspectionModel", () => ({
@@ -130,9 +136,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
   it("batches queued box selection ids into one table update", async () => {
     const firstRegion = { x: 10, y: 20, w: 30, h: 40 };
     const secondRegion = { x: 50, y: 60, w: 70, h: 80 };
-    modelMock.queryBoxSelection
-      .mockResolvedValueOnce([2, 3])
-      .mockResolvedValueOnce([4, 5]);
+    modelMock.queryBoxSelection.mockResolvedValueOnce([2, 3]).mockResolvedValueOnce([4, 5]);
     modelMock.appendMapSelection.mockResolvedValueOnce([1, 2, 3, 4, 5]);
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {

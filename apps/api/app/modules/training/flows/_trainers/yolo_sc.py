@@ -19,6 +19,32 @@ from app.core.registry import trainer
 IMAGE_FETCH_BATCH_SIZE = 512
 
 
+def _normalize_training_label(value: object) -> str | None:
+    if value is None:
+        return None
+    label = str(value)
+    return label or None
+
+
+def _ordered_active_labels(
+    rows: list[dict[str, Any]], label_space: list[str]
+) -> list[str]:
+    active: set[str] = set()
+    for row in rows:
+        label = _normalize_training_label(row.get("label"))
+        if not label:
+            continue
+        images_list: list[dict[str, Any]] = row.get("images") or []
+        if not find_images_by_role(images_list, "patch_defective"):
+            continue
+        if not find_images_by_role(images_list, "patch_template"):
+            continue
+        active.add(label)
+    ordered = [label for label in label_space if label in active]
+    extras = sorted(active - set(ordered))
+    return ordered + extras
+
+
 @trainer(
     id="yolo-sc-v1",
     name="YOLO SC Detection Trainer",
@@ -51,14 +77,12 @@ async def yolo_sc_train(
     if lazyframe is None:
         raise ValueError("no lazyframe provided for training")
 
-    label_space: list[str] = list(ctx.dataset_ref.label_space)
-    label_map: dict[str, int] = {label: idx for idx, label in enumerate(label_space)}
-
     if image_fetcher is not None:
         _lf: Any = lazyframe
         df = _lf.collect()
         rows = [dict(row) for row in df.iter_rows(named=True)]
         for row in rows:
+            row["label"] = _normalize_training_label(row.get("label"))
             row["images"] = [dict(img) for img in row.get("images") or []]
 
         grouped_fetches: dict[
@@ -67,7 +91,7 @@ async def yolo_sc_train(
 
         for row in rows:
             label: str | None = row.get("label")
-            if not label or label not in label_map:
+            if not label:
                 continue
 
             images_list: list[dict[str, Any]] = row.get("images") or []
@@ -118,7 +142,7 @@ async def yolo_sc_train(
                         )
                     img["bytes"] = bytes(result.get("image_data", b""))
 
-        lazyframe = pl.DataFrame(rows).lazy()
+        lazyframe = pl.DataFrame(rows, infer_schema_length=None).lazy()
 
     # ── Device selection ──────────────────────────────────────────────
     if torch.cuda.is_available():
@@ -134,6 +158,18 @@ async def yolo_sc_train(
     try:
         # ── Collect LazyFrame and build YOLO dataset on disk ──────────
         df = lazyframe.collect()
+        rows = [dict(row) for row in df.iter_rows(named=True)]
+        for row in rows:
+            row["label"] = _normalize_training_label(row.get("label"))
+            row["images"] = [dict(img) for img in row.get("images") or []]
+
+        label_space: list[str] = list(ctx.dataset_ref.label_space)
+        labels = _ordered_active_labels(rows, label_space)
+        if len(labels) < 2:
+            raise ValueError(
+                f"need at least 2 active labels for training, got: {labels}"
+            )
+        label_to_idx: dict[str, int] = {label: idx for idx, label in enumerate(labels)}
 
         images_dir = os.path.join(tmpdir, "images")
         labels_dir = os.path.join(tmpdir, "labels")
@@ -143,7 +179,7 @@ async def yolo_sc_train(
         sample_count = 0
 
         logger.info("YOLO SC training — building dataset from LazyFrame")
-        for row in df.iter_rows(named=True):
+        for row in rows:
             sample_id: str = row.get("sample_id", "unknown")
             images_list: list[dict[str, Any]] = row.get("images") or []
 
@@ -153,7 +189,7 @@ async def yolo_sc_train(
                 continue
 
             label: str | None = row.get("label")
-            if not label or label not in label_map:
+            if not label or label not in label_to_idx:
                 continue
 
             defective_bytes: bytes | None = cast(
@@ -176,7 +212,7 @@ async def yolo_sc_train(
             img_path = os.path.join(images_dir, f"{sample_id}.jpg")
             pil_img.save(img_path, "JPEG")
 
-            class_idx = label_map[label]
+            class_idx = label_to_idx[label]
             label_path = os.path.join(labels_dir, f"{sample_id}.txt")
             with open(label_path, "w") as lf:
                 lf.write(f"{class_idx} 0.5 0.5 1.0 1.0\n")
@@ -188,9 +224,6 @@ async def yolo_sc_train(
         if sample_count == 0:
             raise ValueError("no valid defective images with labels found in LazyFrame")
 
-        # ── Label mapping ─────────────────────────────────────────────
-        labels = list(label_space)
-        label_to_idx: dict[str, int] = dict(label_map)
         num_classes: int = len(labels)
 
         # ── Train YOLOv8 classification model ─────────────────────────

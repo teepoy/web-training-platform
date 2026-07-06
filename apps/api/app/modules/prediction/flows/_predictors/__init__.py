@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Callable
-from typing import Any, Generator
+from typing import Any
 
 from app.core.registry import get_predictor as get_registered_predictor
 from app.core.registry import predictor as predictor
@@ -22,7 +22,7 @@ _PREDICTOR_MODULES: dict[str, str] = {
 
 def get_predictor(
     predictor_id: str,
-) -> Callable[..., Generator[dict[str, Any], None, None]]:
+) -> Callable[..., Any]:
     """Return an **executable** predictor callable by ID.
 
     Lazy-imports the predictor module on first call to trigger central

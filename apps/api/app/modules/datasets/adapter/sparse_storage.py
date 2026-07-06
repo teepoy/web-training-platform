@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pyarrow as pa
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from platform_runtime.sparse import (
@@ -40,10 +40,23 @@ from app.modules.datasets.domain.storage_agg import (
     MaterializeResult,
 )
 from app.shared.api.schemas import Annotation, DatasetStorageMode
-from app.shared.db.registry import PredictionJobORM, SampleFeatureORM
+from app.shared.db.registry import SampleFeatureORM
 from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
 
 _SCAN_PARQUET_SCHEMES = ("s3://", "file://")
+_FINAL_PREDICTION_DIR = "final"
+_ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
+_PREDICTION_COLUMNS = [
+    "sample_id",
+    "predicted_label",
+    "confidence",
+    "all_scores",
+    "model_id",
+    "target",
+    "model_version",
+    "job_id",
+    "error",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -219,35 +232,42 @@ class SparseDatasetStorage:
             return lf
         return await self._read_parquet_uris_fallback(uris)
 
-    async def _resolve_latest_prediction_job_id(self) -> str | None:
-        if self._session_factory is None:
-            return None
-        async with self._session_factory() as session:
-            stmt = (
-                select(PredictionJobORM.id)
-                .where(
-                    PredictionJobORM.dataset_id == self._dataset_id,
-                    PredictionJobORM.status == "completed",
-                )
-                .order_by(PredictionJobORM.created_at.desc())
-                .limit(1)
-            )
-            if self._org_id:
-                stmt = stmt.where(PredictionJobORM.org_id == self._org_id)
-            return (await session.execute(stmt)).scalars().first()
+    def _prediction_base_prefix(self) -> str:
+        return f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
+
+    def _prediction_job_prefix(self, prediction_job_id: str) -> str:
+        return f"{self._prediction_base_prefix()}{prediction_job_id}/"
+
+    def _final_prediction_prefix(self) -> str:
+        return f"{self._prediction_base_prefix()}{_FINAL_PREDICTION_DIR}/"
+
+    def _accumulated_prediction_object_name(self) -> str:
+        return f"{self._final_prediction_prefix()}{_ACCUMULATED_PREDICTION_FILE}"
+
+    async def _accumulated_prediction_uris(self) -> list[str]:
+        try:
+            uris = await self._storage.list_prefix(self._final_prediction_prefix())
+        except Exception:
+            return []
+        return [
+            uri
+            for uri in uris
+            if uri.rsplit("/", 1)[-1] == _ACCUMULATED_PREDICTION_FILE
+        ]
 
     async def _prediction_lazyframe(
         self, prediction_job_id: str | None = None
     ) -> Any | None:
         if prediction_job_id is None:
-            prediction_job_id = await self._resolve_latest_prediction_job_id()
-            if prediction_job_id is None:
+            uris = await self._accumulated_prediction_uris()
+        else:
+            try:
+                uris = await self._storage.list_prefix(
+                    self._prediction_job_prefix(prediction_job_id)
+                )
+            except Exception:
                 return None
-        prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
-        prefix = f"{prefix}{prediction_job_id}/"
-        try:
-            uris = await self._storage.list_prefix(prefix)
-        except Exception:
+        if not uris:
             return None
         return await self._parquet_uris_to_lazyframe(uris)
 
@@ -645,23 +665,21 @@ class SparseDatasetStorage:
     ) -> dict[str, dict[str, Any]]:
         """Load prediction results, optionally filtered by job_id.
 
-        Predictions are stored as per-job parquet files under
-        ``datasets/{org_id}/{dataset_id}/predictions/``.
+        Job-scoped predictions are stored as per-job parquet files under
+        ``datasets/{org_id}/{dataset_id}/predictions/{job_id}/``. Unscoped
+        latest predictions are read from the accumulated final parquet.
         """
         import pyarrow.parquet as pq
 
         if prediction_job_id is None:
-            prediction_job_id = await self._resolve_latest_prediction_job_id()
-            if prediction_job_id is None:
+            uris = await self._accumulated_prediction_uris()
+        else:
+            try:
+                uris = await self._storage.list_prefix(
+                    self._prediction_job_prefix(prediction_job_id)
+                )
+            except Exception:
                 return {}
-
-        prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/"
-        prefix = f"{prefix}{prediction_job_id}/"
-
-        try:
-            uris = await self._storage.list_prefix(prefix)
-        except Exception:
-            return {}
 
         results: dict[str, dict[str, Any]] = {}
         for uri in uris:
@@ -1188,15 +1206,17 @@ class SparseDatasetStorage:
         lightweight ``job_result.json`` manifest.
         """
 
-        prefix = f"datasets/{self._org_id}/{self._dataset_id}/predictions/{job_id}/"
+        prefix = self._prediction_job_prefix(job_id)
         shard_index = 0
         total = 0
+        total_successful = 0
         batch: list[PredictionResult] = []
+        shard_entries: list[tuple[str, int]] = []
 
         async for r in results:
             batch.append(r)
             if len(batch) >= batch_size:
-                await self._write_prediction_shard(
+                shard_uri = await self._write_prediction_shard(
                     batch,
                     prefix,
                     shard_index,
@@ -1204,12 +1224,14 @@ class SparseDatasetStorage:
                     model_id=model_id,
                     model_version=model_version,
                 )
+                shard_entries.append((shard_uri, len(batch)))
                 total += len(batch)
+                total_successful += sum(1 for item in batch if not item.error)
                 shard_index += 1
                 batch.clear()
 
         if batch:
-            await self._write_prediction_shard(
+            shard_uri = await self._write_prediction_shard(
                 batch,
                 prefix,
                 shard_index,
@@ -1217,20 +1239,38 @@ class SparseDatasetStorage:
                 model_id=model_id,
                 model_version=model_version,
             )
+            shard_entries.append((shard_uri, len(batch)))
             total += len(batch)
+            total_successful += sum(1 for item in batch if not item.error)
 
         manifest_payload = {
             "job_id": job_id,
             "model_id": model_id,
             "model_version": model_version,
+            "total_processed": total,
+            "total_successful": total_successful,
             "total_predictions": total,
-            "shard_count": shard_index + (1 if batch else 0),
+            "shard_count": len(shard_entries),
+            "shards": [
+                {
+                    "shard_uri": shard_uri,
+                    "shard_index": index,
+                    "row_count": row_count,
+                    "model_id": model_id,
+                    "model_version": model_version,
+                }
+                for index, (shard_uri, row_count) in enumerate(shard_entries)
+            ],
         }
         await self._storage.put_bytes(
             object_name=f"{prefix}job_result.json",
             data=_json.dumps(manifest_payload).encode("utf-8"),
             content_type="application/json",
         )
+        if shard_entries:
+            await self._merge_accumulated_predictions(
+                [shard_uri for shard_uri, _ in shard_entries]
+            )
         return total
 
     async def _write_prediction_shard(
@@ -1242,7 +1282,7 @@ class SparseDatasetStorage:
         job_id: str,
         model_id: str,
         model_version: str | None,
-    ) -> None:
+    ) -> str:
         import pyarrow.parquet as pq
 
         rows: list[dict[str, Any]] = []
@@ -1265,11 +1305,78 @@ class SparseDatasetStorage:
         buf = _io.BytesIO()
         pq.write_table(table, buf, compression="snappy")
 
-        await self._storage.put_bytes(
+        return await self._storage.put_bytes(
             object_name=f"{prefix}{shard_index:04d}.parquet",
             data=buf.getvalue(),
             content_type="application/octet-stream",
         )
+
+    async def _merge_accumulated_predictions(
+        self, new_prediction_uris: list[str]
+    ) -> None:
+        import polars as pl
+
+        new_frames = await self._read_prediction_dataframes(new_prediction_uris)
+        if not new_frames:
+            return
+
+        existing_frames = await self._read_prediction_dataframes(
+            await self._accumulated_prediction_uris()
+        )
+        merged = pl.concat(
+            [*existing_frames, *new_frames],
+            how="diagonal_relaxed",
+        )
+        merged = self._normalize_prediction_dataframe(merged)
+        merged = merged.unique(
+            subset=["sample_id"],
+            keep="last",
+            maintain_order=True,
+        ).select(_PREDICTION_COLUMNS)
+
+        buf = _io.BytesIO()
+        merged.write_parquet(buf, compression="snappy")
+        await self._storage.put_bytes(
+            object_name=self._accumulated_prediction_object_name(),
+            data=buf.getvalue(),
+            content_type="application/octet-stream",
+        )
+
+    async def _read_prediction_dataframes(self, uris: list[str]) -> list[Any]:
+        import polars as pl
+
+        frames: list[Any] = []
+        for uri in uris:
+            if not uri.endswith(".parquet"):
+                continue
+            try:
+                raw = await self._storage.get_bytes(uri)
+                df = pl.read_parquet(_io.BytesIO(raw))
+            except Exception:
+                continue
+            if "sample_id" not in df.columns:
+                continue
+            frames.append(self._normalize_prediction_dataframe(df))
+        return frames
+
+    @staticmethod
+    def _normalize_prediction_dataframe(df: Any) -> Any:
+        import polars as pl
+
+        for column in _PREDICTION_COLUMNS:
+            if column not in df.columns:
+                df = df.with_columns(pl.lit(None).alias(column))
+        return df.with_columns(
+            pl.col("sample_id").cast(pl.Utf8),
+            pl.col("predicted_label").cast(pl.Utf8),
+            pl.col("confidence").cast(pl.Float64),
+            pl.col("all_scores").cast(pl.Utf8),
+            pl.col("model_id").cast(pl.Utf8),
+            pl.col("target").cast(pl.Utf8),
+            pl.col("model_version").cast(pl.Utf8),
+            pl.col("job_id").cast(pl.Utf8),
+            pl.col("error").cast(pl.Utf8),
+        ).select(_PREDICTION_COLUMNS)
 
     # ── prediction_summary ──────────────────────────────────────────
 

@@ -19,6 +19,12 @@ storage:
     secret_key: "minioadmin"
     bucket: "finetune-artifacts"
     secure: false
+    lifecycle:
+      exports:
+        enabled: true
+        prefix: "exports/"
+        expiration_days: 1
+        abort_incomplete_multipart_upload_days: 1
   runtime_bucket: "finetune-runtime-inputs"
 
 k8s:

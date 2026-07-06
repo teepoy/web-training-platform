@@ -11,7 +11,10 @@ from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from app.shared.infrastructure.storage.minio import MinioArtifactStorage
+from app.shared.infrastructure.storage.minio import (
+    MinioArtifactStorage,
+    build_minio_export_lifecycle,
+)
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 
@@ -82,6 +85,7 @@ def build_shared_infra(cfg: Any) -> SharedInfra:
             secret_key=str(cfg.storage.minio.secret_key),
             bucket=str(cfg.storage.minio.bucket),
             secure=bool(cfg.storage.minio.secure),
+            export_lifecycle=build_minio_export_lifecycle(cfg),
         )
     else:
         raise RuntimeError(f"Unsupported storage.kind: {kind}")

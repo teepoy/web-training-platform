@@ -18,9 +18,7 @@ from app.modules.sc.models import PatchSample, ReviewImage
 
 INSP_DT = datetime(2026, 5, 26, 8, 0, 0, tzinfo=timezone.utc)
 
-MOCK_REVIEW_URI_TPL = (
-    "mock-sc://review/2026-05-26T08:00:00+00:00/1/{defect_id}"
-)
+MOCK_REVIEW_URI_TPL = "mock-sc://review/2026-05-26T08:00:00+00:00/1/{defect_id}"
 
 
 def _make_review_image(
@@ -45,6 +43,7 @@ def _sample_with_review(sample_id: str = "1") -> PatchSample:
         wafer_y=200,
         rough_bin=1,
         class_number=2,
+        test_id=7,
         inspection_time=INSP_DT,
         review_images=[_make_review_image(uri)],
     )
@@ -96,6 +95,7 @@ class TestV2SparseImportBytes:
         assert row["images"][0]["bytes"] == b"fake-review-bytes"
         assert row["images"][1]["role"] == "patch_template"
         assert row["images"][1]["bytes"] == b"fake-template-bytes"
+        assert row["test_id"] == 7
 
     # -- _build_image_structs unit test -------------------------------------
 
@@ -186,13 +186,13 @@ class TestV2SparseImportBytes:
                 on_progress=None,
             ) -> pl.LazyFrame:
                 if offset < 0:
-                    raise ValueError(
-                        f"offset must be >= 0, got {offset}"
-                    )
+                    raise ValueError(f"offset must be >= 0, got {offset}")
                 return pl.LazyFrame([])
 
             async def list_review_images(
-                self, inspection_time: datetime, wafer_key: int,
+                self,
+                inspection_time: datetime,
+                wafer_key: int,
             ) -> pl.LazyFrame:
                 return pl.LazyFrame([])
 
@@ -359,6 +359,7 @@ class TestV2SparseImportBytes:
         assert result["sample_index"]["3"].shard_index == 1
         assert result["sample_index"]["3"].row_index == 0
 
+
 # ── v2 schema contract tests ───────────────────────────────────────────────
 
 
@@ -407,17 +408,14 @@ class TestV2EmbeddedImageSchema:
         from app.modules.sc.schema import SC_IMAGE_STRUCT_DTYPE
 
         field_map = {f.name: f for f in SC_IMAGE_STRUCT_DTYPE}
-        non_nullable = {"image_id", "image_type", "role", "content_type",
-                        "filename"}
+        non_nullable = {"image_id", "image_type", "role", "content_type", "filename"}
         for name in non_nullable:
-            assert not field_map[name].nullable, (
-                f"Field {name!r} must be non-nullable"
-            )
+            assert not field_map[name].nullable, f"Field {name!r} must be non-nullable"
         assert field_map["bytes"].nullable, "Field 'bytes' must be nullable"
-        assert field_map["review_image_id"].nullable, "Field 'review_image_id' must be nullable"
-        assert field_map["source_uri"].nullable, (
-            "Field 'source_uri' must be nullable"
+        assert field_map["review_image_id"].nullable, (
+            "Field 'review_image_id' must be nullable"
         )
+        assert field_map["source_uri"].nullable, "Field 'source_uri' must be nullable"
 
     # ── SC_SPARSE_SHARD_SCHEMA_V2 tests ──────────────────────────────────
 
@@ -440,21 +438,27 @@ class TestV2EmbeddedImageSchema:
 
         names = {c["name"] for c in SC_SPARSE_SHARD_SCHEMA_V2}
         expected_scalars = {
-            "sample_id", "defect_id", "inspection_time", "wafer_key",
-            "wafer_x", "wafer_y", "die_x", "die_y",
-            "rough_bin", "class_number", "lot_id", "has_review",
+            "sample_id",
+            "defect_id",
+            "inspection_time",
+            "wafer_key",
+            "wafer_x",
+            "wafer_y",
+            "die_x",
+            "die_y",
+            "rough_bin",
+            "class_number",
+            "test_id",
+            "lot_id",
+            "has_review",
         }
         for name in expected_scalars:
             assert name in names, (
                 f"Missing scalar column {name!r} in SC_SPARSE_SHARD_SCHEMA_V2"
             )
         assert "images" in names, "Missing 'images' column"
-        assert "image_uris" not in names, (
-            "'image_uris' must be removed in v2"
-        )
-        assert "metadata" not in names, (
-            "'metadata' must be removed in v2"
-        )
+        assert "image_uris" not in names, "'image_uris' must be removed in v2"
+        assert "metadata" not in names, "'metadata' must be removed in v2"
 
     # ── _build_v2_pyarrow_schema tests ───────────────────────────────────
 
@@ -462,9 +466,7 @@ class TestV2EmbeddedImageSchema:
         from app.modules.sc.schema import _build_v2_pyarrow_schema
 
         schema = _build_v2_pyarrow_schema()
-        assert isinstance(schema, pa.Schema), (
-            f"Expected pa.Schema, got {type(schema)}"
-        )
+        assert isinstance(schema, pa.Schema), f"Expected pa.Schema, got {type(schema)}"
 
     def test_build_v2_pyarrow_schema_has_images_list_struct(self) -> None:
         from app.modules.sc.schema import _build_v2_pyarrow_schema
@@ -524,7 +526,10 @@ class TestV2EmbeddedImageSchema:
         from app.modules.sc.schema import IMAGE_ROLES
 
         assert set(IMAGE_ROLES.keys()) == {
-            "review", "patch_template", "patch_defective", "patch_difference",
+            "review",
+            "patch_template",
+            "patch_defective",
+            "patch_difference",
         }, f"Unexpected IMAGE_ROLES keys: {set(IMAGE_ROLES.keys())}"
 
     # ── check_sc_v2_or_raise tests ───────────────────────────────────────

@@ -18,28 +18,29 @@ kubectl apply -k infra/k8s/observability
 
 ## Components
 
-| Manifest               | What it deploys                                           |
-| ---------------------- | --------------------------------------------------------- |
-| `prometheus.yaml`      | Prometheus (ConfigMap + Deployment + Service on :9090)    |
-| `alertmanager.yaml`    | Alertmanager (ConfigMap + Deployment + Service on :9093)  |
-| `loki.yaml`            | Loki log aggregator (ConfigMap + Deployment + Service on :3100) |
-| `promtail.yaml`        | Promtail log collector (DaemonSet + RBAC)                 |
-| `grafana.yaml`         | Grafana dashboards (ConfigMap + Deployment + Service on :3000) |
-| `prefect-exporter.yaml`| Custom Prefect health exporter (ConfigMap + Deployment + Service on :8000) |
-| `dcgm-exporter.yaml`   | NVIDIA DCGM metrics (DaemonSet on GPU nodes only, :9400) |
-| `podmonitors.yaml`     | Prometheus Operator PodMonitors — NOT in kustomization; apply separately after installing kube-prometheus-stack |
+| Manifest                | What it deploys                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `prometheus.yaml`       | Prometheus (ConfigMap + Deployment + Service on :9090)                                                          |
+| `alertmanager.yaml`     | Alertmanager (ConfigMap + Deployment + Service on :9093)                                                        |
+| `loki.yaml`             | Loki log aggregator (ConfigMap + Deployment + Service on :3100)                                                 |
+| `promtail.yaml`         | Promtail log collector (DaemonSet + RBAC)                                                                       |
+| `grafana.yaml`          | Grafana dashboards (ConfigMap + Deployment + Service on :3000)                                                  |
+| `prefect-exporter.yaml` | Custom Prefect health exporter (ConfigMap + Deployment + Service on :8000)                                      |
+| `dcgm-exporter.yaml`    | NVIDIA DCGM metrics (DaemonSet on GPU nodes only, :9400)                                                        |
+| `podmonitors.yaml`      | Prometheus Operator PodMonitors — NOT in kustomization; apply separately after installing kube-prometheus-stack |
 
 ## Prometheus scrape targets
 
 Scrape configs use cluster-internal DNS names (renders without CRDs):
 
-| Target                                         | Path       | Interval |
-| ---------------------------------------------- | ---------- | -------- |
-| `finetune-api.finetune.svc.cluster.local:8000`  | `/metrics` | 15s      |
-| `gpu-worker.finetune.svc.cluster.local:8010`    | `/metrics` | 15s      |
-| `prefect-exporter.finetune.svc.cluster.local:8000` | `/metrics` | 15s   |
-| `alertmanager.finetune.svc.cluster.local:9093`  | `/metrics` | 15s      |
-| `dcgm-exporter.finetune.svc.cluster.local:9400` | `/metrics` | 15s      |
+| Target                                             | Path       | Interval |
+| -------------------------------------------------- | ---------- | -------- |
+| `finetune-api.finetune.svc.cluster.local:8000`     | `/metrics` | 15s      |
+| `image-parser.finetune.svc.cluster.local:8090`     | `/metrics` | 15s      |
+| `gpu-worker.finetune.svc.cluster.local:8010`       | `/metrics` | 15s      |
+| `prefect-exporter.finetune.svc.cluster.local:8000` | `/metrics` | 15s      |
+| `alertmanager.finetune.svc.cluster.local:9093`     | `/metrics` | 15s      |
+| `dcgm-exporter.finetune.svc.cluster.local:9400`    | `/metrics` | 15s      |
 
 ## Prometheus Operator (kube-prometheus-stack)
 
@@ -52,6 +53,7 @@ PodMonitor endpoints reference **named container ports**:
 | Service          | Port name | Container port |
 | ---------------- | --------- | -------------- |
 | finetune-api     | `http`    | 8000           |
+| image-parser     | `http`    | 8090           |
 | gpu-worker       | `http`    | 8010           |
 | prefect-exporter | `metrics` | 8000           |
 
@@ -73,6 +75,7 @@ kubectl apply -f infra/k8s/observability/podmonitors.yaml
 ```
 
 This deploys:
+
 - Prometheus Operator + Prometheus (discovers PodMonitors with `release: monitoring`)
 - Grafana (with Prometheus datasource pre-configured)
 - Alertmanager
@@ -129,14 +132,14 @@ kubectl -n finetune port-forward svc/grafana 3000:3000
 
 Six Prometheus alert rules are defined in `prometheus-rules.yaml` (ConfigMap `prometheus-rules`) and mounted into the Prometheus pod at `/etc/prometheus/rules/`. Prometheus loads them via `rule_files: ['/etc/prometheus/rules/*.yml']`. All alerts carry `severity` (critical/warning) and `group: finetune` labels.
 
-| Alert | Condition | For | Severity |
-|---|---|---|---|
-| `GPUWorkerDown` | `up{job="gpu-worker"} == 0` | 2m | critical |
-| `PrefectExporterDown` | `up{job="prefect-exporter"} == 0` | 2m | warning |
-| `QueueBacklogHigh` | `prefect_work_queue_depth > 100` | 5m | warning |
-| `GPUWorkerOOM` | GPU worker container restarts > 3 in 15m | 1m | critical |
-| `DcgmGpuMemoryHigh` | GPU FB memory > 90% (skipped if DCGM absent) | 5m | warning |
-| `ServiceRestartLoop` | Any platform service restarts > 5 in 10m | 1m | critical |
+| Alert                 | Condition                                    | For | Severity |
+| --------------------- | -------------------------------------------- | --- | -------- |
+| `GPUWorkerDown`       | `up{job="gpu-worker"} == 0`                  | 2m  | critical |
+| `PrefectExporterDown` | `up{job="prefect-exporter"} == 0`            | 2m  | warning  |
+| `QueueBacklogHigh`    | `prefect_work_queue_depth > 100`             | 5m  | warning  |
+| `GPUWorkerOOM`        | GPU worker container restarts > 3 in 15m     | 1m  | critical |
+| `DcgmGpuMemoryHigh`   | GPU FB memory > 90% (skipped if DCGM absent) | 5m  | warning  |
+| `ServiceRestartLoop`  | Any platform service restarts > 5 in 10m     | 1m  | critical |
 
 ### Silencing Alerts During Maintenance
 
@@ -199,14 +202,14 @@ Promtail runs as a DaemonSet and ships pod logs from `/var/log/pods` to Loki. La
 
 ### Loki labels applied to every log stream
 
-| Label       | Source                          | Example values                                      |
-| ----------- | ------------------------------- | --------------------------------------------------- |
-| `namespace` | `__meta_kubernetes_namespace`   | `finetune`                                          |
-| `pod`       | `__meta_kubernetes_pod_name`    | `finetune-api-7f4b9-xk2pq`                         |
-| `container` | Pod container name              | `finetune-api`, `gpu-worker`                        |
-| `service`   | Container name (normalized)     | `api`, `gpu-worker`, `prefect-worker`               |
-| `env`       | Static (pipeline stage)         | `finetune`                                          |
-| `level`     | JSON field extraction           | `info`, `warn`, `error`, `debug`                    |
+| Label       | Source                        | Example values                        |
+| ----------- | ----------------------------- | ------------------------------------- |
+| `namespace` | `__meta_kubernetes_namespace` | `finetune`                            |
+| `pod`       | `__meta_kubernetes_pod_name`  | `finetune-api-7f4b9-xk2pq`            |
+| `container` | Pod container name            | `finetune-api`, `gpu-worker`          |
+| `service`   | Container name (normalized)   | `api`, `gpu-worker`, `prefect-worker` |
+| `env`       | Static (pipeline stage)       | `finetune`                            |
+| `level`     | JSON field extraction         | `info`, `warn`, `error`, `debug`      |
 
 ### Labels explicitly NOT promoted (high-cardinality)
 
@@ -238,12 +241,13 @@ The following values are **never** Loki stream labels. They remain searchable as
 
 ## Port summary
 
-| Service           | Port  | Scrape Path   | Notes                |
-| ----------------- | ----- | ------------- | -------------------- |
-| prometheus        | 9090  | /metrics      | Self-scraped         |
-| alertmanager      | 9093  | /metrics      |                      |
-| loki              | 3100  | /ready        | Not scraped by Prom  |
-| promtail          | 9080  | /metrics      | Per-node DaemonSet   |
-| grafana           | 3000  | /api/health   | Not scraped by Prom  |
-| prefect-exporter  | 8000  | /metrics      | `prefect_health` gauge |
-| dcgm-exporter     | 9400  | /metrics      | GPU nodes only       |
+| Service          | Port | Scrape Path | Notes                     |
+| ---------------- | ---- | ----------- | ------------------------- |
+| prometheus       | 9090 | /metrics    | Self-scraped              |
+| alertmanager     | 9093 | /metrics    |                           |
+| loki             | 3100 | /ready      | Not scraped by Prom       |
+| promtail         | 9080 | /metrics    | Per-node DaemonSet        |
+| grafana          | 3000 | /api/health | Not scraped by Prom       |
+| image-parser     | 8090 | /metrics    | HTTP/gRPC traffic metrics |
+| prefect-exporter | 8000 | /metrics    | `prefect_health` gauge    |
+| dcgm-exporter    | 9400 | /metrics    | GPU nodes only            |

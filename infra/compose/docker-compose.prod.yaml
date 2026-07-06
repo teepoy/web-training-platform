@@ -1,53 +1,72 @@
+x-platform-environment: &platform-environment
+  APP_CONFIG_PROFILE: prod
+  MNT: /mnt
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+  PREFECT_API_URL: http://prefect-server:4200/api
+  PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:-dangerous:dangerous}
+  PREFECT_UI_URL: http://localhost:4200
+  LABEL_STUDIO_URL: "http://label-studio:8080"
+  LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+  LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+  LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: finetune-artifacts
+  SC_PATCH_S3_ENDPOINT: minio:9000
+  SC_PATCH_S3_ACCESS_KEY: minioadmin
+  SC_PATCH_S3_SECRET_KEY: minioadmin
+  SC_PATCH_S3_BUCKET: sc-patch-images
+  SC_REVIEW_S3_ENDPOINT: minio:9000
+  SC_REVIEW_S3_ACCESS_KEY: minioadmin
+  SC_REVIEW_S3_SECRET_KEY: minioadmin
+  SC_REVIEW_S3_BUCKET: sc-review-images
+  SC_UPSTREAM_ADDR: sc-upstream:9091
+  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
+  IMAGE_PARSER_GRPC_ADDR: image-parser:9092
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+
+x-api-runtime: &api-runtime
+  build:
+    context: ../..
+    dockerfile: apps/api/Dockerfile
+    target: prod
+    args:
+      UV_INDEX_URL: ${UV_INDEX_URL:-}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    prefect-server:
+      condition: service_healthy
+    label-studio:
+      condition: service_healthy
+    redis:
+      condition: service_started
+    sc-upstream:
+      condition: service_healthy
+    image-parser:
+      condition: service_healthy
+  environment: *platform-environment
+  shm_size: ${API_SHM_SIZE:-1g}
+  volumes:
+    - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+  restart: unless-stopped
+
 services:
   prefect-server:
     environment:
-      PREFECT_SERVER_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
+      PREFECT_SERVER_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:-dangerous:dangerous}
 
   api:
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile
-      target: prod
-      args:
-        UV_INDEX_URL: ${UV_INDEX_URL:-}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      prefect-server:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      sc-upstream:
-        condition: service_healthy
-      image-parser:
-        condition: service_healthy
-    environment:
-      APP_CONFIG_PROFILE: prod
-      MNT: /mnt
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
-      PREFECT_UI_URL: http://localhost:4200
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-    mem_limit: ${API_MEMORY:-8g}
-    shm_size: ${API_SHM_SIZE:-1g}
-    volumes:
-      - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
+    <<: *api-runtime
+    mem_limit: ${API_MEMORY:-4g}
     ports:
       - "8000:8000"
     healthcheck:
@@ -58,11 +77,38 @@ services:
           "-c",
           "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 20s
       retries: 12
-      start_period: 20s
-    restart: unless-stopped
+      start_period: 60s
+
+  perspective-ws:
+    <<: *api-runtime
+    command:
+      [
+        "/usr/bin/supervisord",
+        "-c",
+        "/app/apps/api/supervisord.perspective.conf",
+      ]
+    mem_limit: ${PERSPECTIVE_WS_MEMORY:-4g}
+    ports:
+      - "8001:8001"
+    expose:
+      - "8002"
+      - "8003"
+      - "8004"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
 
   web:
     build:
@@ -73,6 +119,7 @@ services:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
     depends_on:
       - api
+      - perspective-ws
     mem_limit: ${WEB_MEMORY:-1g}
     ports:
       - "5173:80"
@@ -80,7 +127,7 @@ services:
 
   prefect-exporter:
     environment:
-      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
+      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:-dangerous:dangerous}
 
   prefect-worker-cpu:
     build:
@@ -91,22 +138,9 @@ services:
       prefect-server:
         condition: service_healthy
     environment:
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
-      APP_CONFIG_PROFILE: prod
-      MNT: /mnt
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${CPU_PREFECT_WORKER_LIMIT:-2}
-    mem_limit: ${CPU_WORKER_MEMORY:-8g}
+    mem_limit: ${CPU_WORKER_MEMORY:-4g}
     shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
@@ -130,20 +164,7 @@ services:
       prefect-server:
         condition: service_healthy
     environment:
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
-      APP_CONFIG_PROFILE: prod
-      MNT: /mnt
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${GPU_PREFECT_WORKER_LIMIT:-1}
     mem_limit: ${GPU_WORKER_MEMORY:-16g}
     shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
@@ -166,7 +187,7 @@ services:
       - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       - REDIS_URL=redis://redis:6379/0
       # Mock SQLite DB paths use sc-upstream service defaults.
-    mem_limit: ${SC_UPSTREAM_MEMORY:-8g}
+    mem_limit: ${SC_UPSTREAM_MEMORY:-4g}
     shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
       - "9091"
@@ -174,6 +195,18 @@ services:
     volumes:
       - ${SC_UPSTREAM_DATA_DIR:-./data/sc-upstream}:/data
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('localhost', 9091), timeout=20); s.close()",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
 
   image-parser:
     build:
@@ -189,7 +222,7 @@ services:
       - S3_MAX_CONNS=1000
       - SC_UPSTREAM_ADDR=sc-upstream:9091
       # Mock S3 endpoint/credentials use image-parser service defaults.
-    mem_limit: ${IMAGE_PARSER_MEMORY:-32g}
+    mem_limit: ${IMAGE_PARSER_MEMORY:-8g}
     shm_size: ${IMAGE_PARSER_SHM_SIZE:-2g}
     ports:
       - "8090:8090"
@@ -197,3 +230,9 @@ services:
     volumes:
       - ${IMAGE_PARSER_DATA_DIR:-./data/image-parser}:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 60s

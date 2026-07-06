@@ -76,6 +76,7 @@ def _patch_sample_to_parquet_row(
         "die_y": ps.die_y,
         "rough_bin": ps.rough_bin,
         "class_number": ps.class_number,
+        "test_id": ps.test_id,
         "lot_id": ps.lot_id,
         "has_review": has_review,
         "images": images,

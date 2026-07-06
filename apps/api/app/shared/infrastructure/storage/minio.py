@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import re
 from io import BytesIO
+from typing import Any
 
+from minio.commonconfig import Filter
+from minio.lifecycleconfig import (
+    AbortIncompleteMultipartUpload,
+    Expiration,
+    LifecycleConfig,
+    Rule,
+)
 from minio import Minio
 
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
+_EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
+_EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -17,6 +28,71 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+@dataclass(frozen=True)
+class MinioExportLifecycle:
+    prefix: str
+    expiration_days: int
+    abort_incomplete_multipart_upload_days: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.prefix:
+            raise ValueError("export lifecycle prefix must be non-empty")
+        if self.expiration_days <= 0:
+            raise ValueError("export lifecycle expiration_days must be positive")
+        if (
+            self.abort_incomplete_multipart_upload_days is not None
+            and self.abort_incomplete_multipart_upload_days <= 0
+        ):
+            raise ValueError(
+                "export lifecycle abort_incomplete_multipart_upload_days "
+                "must be positive"
+            )
+
+    def to_rules(self) -> list[Rule]:
+        rules = [
+            Rule(
+                status="Enabled",
+                rule_filter=Filter(prefix=self.prefix),
+                rule_id=_EXPORT_LIFECYCLE_RULE_ID,
+                expiration=Expiration(days=self.expiration_days),
+            )
+        ]
+        if self.abort_incomplete_multipart_upload_days is not None:
+            rules.append(
+                Rule(
+                    status="Enabled",
+                    rule_filter=Filter(prefix=self.prefix),
+                    rule_id=_EXPORT_MULTIPART_ABORT_RULE_ID,
+                    abort_incomplete_multipart_upload=(
+                        AbortIncompleteMultipartUpload(
+                            days_after_initiation=(
+                                self.abort_incomplete_multipart_upload_days
+                            )
+                        )
+                    ),
+                )
+            )
+        return rules
+
+
+def build_minio_export_lifecycle(cfg: Any) -> MinioExportLifecycle | None:
+    lifecycle_cfg = cfg.storage.minio.get("lifecycle")
+    if lifecycle_cfg is None:
+        return None
+    exports_cfg = lifecycle_cfg.get("exports")
+    if exports_cfg is None or not bool(exports_cfg.get("enabled", False)):
+        return None
+    return MinioExportLifecycle(
+        prefix=str(exports_cfg.prefix),
+        expiration_days=int(exports_cfg.expiration_days),
+        abort_incomplete_multipart_upload_days=int(
+            exports_cfg.abort_incomplete_multipart_upload_days
+        )
+        if exports_cfg.get("abort_incomplete_multipart_upload_days") is not None
+        else None,
+    )
+
+
 class MinioArtifactStorage:
     def __init__(
         self,
@@ -25,6 +101,7 @@ class MinioArtifactStorage:
         secret_key: str,
         bucket: str,
         secure: bool = False,
+        export_lifecycle: MinioExportLifecycle | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.access_key = access_key
@@ -37,6 +114,8 @@ class MinioArtifactStorage:
         )
         self.bucket = bucket
         self.secure = secure
+        self.export_lifecycle = export_lifecycle
+        self._lifecycle_configured_buckets: set[str] = set()
 
     def polars_storage_options(self) -> dict[str, str]:
         """Return cloud options accepted by Polars' native object-store reader."""
@@ -63,6 +142,7 @@ class MinioArtifactStorage:
         def _put() -> None:
             if not client.bucket_exists(bucket):
                 client.make_bucket(bucket)
+            self._ensure_export_lifecycle(bucket)
             client.put_object(
                 bucket_name=bucket,
                 object_name=object_name,
@@ -73,6 +153,34 @@ class MinioArtifactStorage:
 
         await asyncio.to_thread(_put)
         return f"s3://{self.bucket}/{object_name}"
+
+    def _ensure_export_lifecycle(self, bucket: str) -> None:
+        config = self.export_lifecycle
+        if config is None or bucket in self._lifecycle_configured_buckets:
+            return
+
+        rules = self._existing_lifecycle_rules(bucket)
+        rules = [
+            rule
+            for rule in rules
+            if rule.rule_id
+            not in {_EXPORT_LIFECYCLE_RULE_ID, _EXPORT_MULTIPART_ABORT_RULE_ID}
+        ]
+        rules.extend(config.to_rules())
+        self.client.set_bucket_lifecycle(bucket, LifecycleConfig(rules))
+        self._lifecycle_configured_buckets.add(bucket)
+
+    def _existing_lifecycle_rules(self, bucket: str) -> list[Rule]:
+        try:
+            lifecycle = self.client.get_bucket_lifecycle(bucket)
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code == "NoSuchLifecycleConfiguration":
+                return []
+            raise
+        if lifecycle is None:
+            return []
+        return list(lifecycle.rules)
 
     async def get_bytes(self, uri: str) -> bytes:
         """Read bytes from a MinIO object identified by an ``s3://`` URI.

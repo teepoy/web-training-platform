@@ -1,7 +1,6 @@
 import { computed, onUnmounted, type Ref } from "vue";
 import type { Filter, Table } from "@perspective-dev/client";
 import { tableFromIPC } from "apache-arrow";
-import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 import type {
   ScSampleTableDataSource,
   ScSampleTableDisplayRow,
@@ -10,43 +9,10 @@ import {
   managePerspectiveTable,
   type ManagedPerspectiveView,
 } from "@/features/sc/presentation/composables/managedPerspectiveView";
-
-const TABLE_TO_PERSPECTIVE_FIELD: Record<string, string> = {
-  class_number: "class_number",
-  annotation_label: "annotation_label",
-  prediction_label: "prediction_label",
-};
-
-function perspectiveField(field: string): string {
-  return TABLE_TO_PERSPECTIVE_FIELD[field] ?? field;
-}
-
-function filtersFromSampleTable(filter: ScSampleTableFilter | undefined, omitField?: string) {
-  const out: Array<[string, string, unknown]> = [];
-  for (const [field, raw] of Object.entries(filter ?? {})) {
-    if (field === omitField) continue;
-    const col = perspectiveField(field);
-    const sf = raw as {
-      filterType: string;
-      values?: Array<string | number>;
-      type?: string;
-      filter?: number;
-      filterTo?: number;
-    };
-    if (sf.filterType === "set" && sf.values?.length) {
-      out.push([col, "in", sf.values]);
-    }
-    if (
-      sf.filterType === "number" &&
-      sf.type === "inRange" &&
-      typeof sf.filter === "number" &&
-      typeof sf.filterTo === "number"
-    ) {
-      out.push([col, ">=", sf.filter], [col, "<=", sf.filterTo]);
-    }
-  }
-  return out;
-}
+import {
+  buildPerspectiveFilters,
+  perspectiveFilterField,
+} from "@/features/sc/presentation/composables/perspectiveFilter";
 
 function numericSearchFilter(
   field: string,
@@ -199,9 +165,12 @@ export function usePerspectiveSampleTableDataSource(
       scopeKey: `${scopeKey.value}:${baseFilterKey}:table`,
       async loadRows(query) {
         try {
-          const filter = [...(baseFilters?.value ?? []), ...filtersFromSampleTable(query.filter)];
+          const filter = [...(baseFilters?.value ?? []), ...buildPerspectiveFilters(query.filter)];
           const sort = query.sort?.direction
-            ? ([[perspectiveField(query.sort.field), query.sort.direction]] as [string, string][])
+            ? ([[perspectiveFilterField(query.sort.field), query.sort.direction]] as [
+                string,
+                string,
+              ][])
             : undefined;
           const rowsViewKey = JSON.stringify({ filter, sort });
           const rowsView = await getRowsView(tbl, rowsViewKey, filter, sort);
@@ -232,12 +201,12 @@ export function usePerspectiveSampleTableDataSource(
       },
       async loadDistinctValues(query) {
         try {
-          const field = perspectiveField(query.field);
+          const field = perspectiveFilterField(query.field);
           const searchFilters = numericSearchFilter(field, query.search);
           if (searchFilters === null) return [];
           const filter = [
             ...(baseFilters?.value ?? []),
-            ...filtersFromSampleTable(query.filter, query.field),
+            ...buildPerspectiveFilters(query.filter, { omitField: query.field }),
             ...searchFilters,
           ];
           const managedTable = managePerspectiveTable(tbl);

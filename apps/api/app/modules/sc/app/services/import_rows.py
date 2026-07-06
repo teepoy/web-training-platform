@@ -48,6 +48,7 @@ def _patch_sample_from_row(row: dict[str, Any]) -> PatchSample:
         die_y=_required_int(row, "die_y", fallback_key="index_y"),
         rough_bin=_required_int(row, "rough_bin"),
         class_number=_optional_int(row.get("class_number")),
+        test_id=_optional_int(row.get("test_id")),
     )
 
 
