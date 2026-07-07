@@ -54,6 +54,7 @@ async def run_training_pipeline(
     job_id: str,
     dataset_id: str,
     trainer_id: str,
+    sample_ids: list[str] | None = None,
     artifact_storage: Any | None = None,
     materialization_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -122,7 +123,11 @@ async def run_training_pipeline(
         session_factory=container.session_factory,
     )
     storage = await factory.open(dataset_id, org_id=dataset_row.org_id)
-    lf = await storage.list_samples(with_labels=True, return_lazyframe=True)
+    lf = await storage.list_samples(
+        with_labels=True,
+        return_lazyframe=True,
+        sample_ids=sample_ids,
+    )
 
     ctx = TrainContext(
         job_id=job_id,

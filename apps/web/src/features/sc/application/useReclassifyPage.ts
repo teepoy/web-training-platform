@@ -14,6 +14,7 @@ import {
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
+  getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
 import { getAnnotationStats } from "@/shared/api/datasets";
@@ -22,6 +23,7 @@ import type {
   DatasetAnnotationStats,
   DatasetStatusResponse,
   PredictionJobResponse,
+  ScReclassifySampleTableRowsResponse,
   TrainingJob,
 } from "@/generated/orval/models";
 import type { ScSampleTableFilter } from "../domain/sampleTable";
@@ -408,6 +410,50 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function hasEffectiveSampleTableFilter(): boolean {
     return Object.keys(effectiveSampleTableFilter.value).length > 0;
+  }
+
+  function hasGlobalWorkflowFilter(): boolean {
+    return Object.keys(globalFilter.value).length > 0;
+  }
+
+  async function loadFilteredWorkflowSampleIds(): Promise<string[] | null> {
+    if (!hasGlobalWorkflowFilter()) return null;
+
+    const sampleIds: string[] = [];
+    let anchor: string | null = null;
+    const limit = 10000;
+
+    do {
+      const request =
+        anchor === null
+          ? {
+              page: 0,
+              page_size: limit,
+              filter: globalFilter.value,
+              reticle_x_die_count: reticleOptions.value.xDieCount,
+              reticle_y_die_count: reticleOptions.value.yDieCount,
+              reticle_x_die_shift: reticleOptions.value.xDieShift,
+              reticle_y_die_shift: reticleOptions.value.yDieShift,
+            }
+          : {
+              anchor,
+              limit,
+              filter: globalFilter.value,
+              reticle_x_die_count: reticleOptions.value.xDieCount,
+              reticle_y_die_count: reticleOptions.value.yDieCount,
+              reticle_x_die_shift: reticleOptions.value.xDieShift,
+              reticle_y_die_shift: reticleOptions.value.yDieShift,
+            };
+      const response = await getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost(
+        datasetId.value,
+        request,
+      );
+      const page = response.data as ScReclassifySampleTableRowsResponse;
+      sampleIds.push(...page.items.map((row) => String(row.defect_id)));
+      anchor = page.next_anchor ?? null;
+    } while (anchor);
+
+    return sampleIds;
   }
 
   const sampleTableFilteredDefectIdsQuery = useQuery({
@@ -1324,6 +1370,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         dataset_id: datasetId.value,
         trainer_id: trainerId,
         target: "image_classification",
+        sample_ids: await loadFilteredWorkflowSampleIds(),
       });
       const trainJobId = typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
       if (!trainJobId) {

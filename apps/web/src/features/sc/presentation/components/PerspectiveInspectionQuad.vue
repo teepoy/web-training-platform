@@ -53,6 +53,7 @@ const props = defineProps<{
   reticleOptions?: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   selectedGalleryDefectIds?: Array<number | string>;
+  globalFilter?: ScSampleTableFilter;
   tableFilter?: ScSampleTableFilter;
   globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
@@ -73,6 +74,7 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "table-filter-change", filter: ScSampleTableFilter): void;
+  (e: "update:global-filter", filter: ScSampleTableFilter): void;
   (e: "table-apply-filter-as-global", filter: ScSampleTableFilter): void;
   (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
   (e: "table-selection-change", ids: number[]): void;
@@ -105,7 +107,6 @@ const HIGHLIGHT_MAX_DEFECTS = 9999;
 const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
-const globalFilter = ref<ScSampleTableFilter>({});
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
 type QueuedBoxSelection = {
@@ -114,6 +115,10 @@ type QueuedBoxSelection = {
 };
 
 const isReclassify = computed(() => props.variant === "reclassify");
+const globalFilterModel = computed<ScSampleTableFilter>({
+  get: () => props.globalFilter ?? {},
+  set: (filter) => emit("update:global-filter", filter),
+});
 const enabledLegendSources = computed<ScLegendSource[]>(
   () =>
     props.legendSources ??
@@ -508,7 +513,7 @@ function usePerspectiveQuadData() {
     inspectionTime: computed(() => props.inspectionTime),
     waferKey: computed(() => props.waferKey),
     legendGroupBy: computed(() => props.legendGroupBy),
-    globalFilter,
+    globalFilter: globalFilterModel,
     zoom: computed(() => props.zoom),
     activeMapMode: computed(() => props.activeMapTab),
     galleryRandomSamplingFilter,
@@ -590,10 +595,10 @@ function usePerspectiveQuadData() {
   >
     <div ref="leftPanelEl" class="iq-panel-left" :style="leftPanelStyle">
       <ScGlobalFilterBar
-        :filter="globalFilter"
+        :filter="globalFilterModel"
         :distinct-values="globalDistinctValues"
         @update:filter="
-          globalFilter = $event;
+          globalFilterModel = $event;
           if (galleryRandomSamplingDefectIds && galleryRandomSamplingDefectIds.size > 0) {
             emit('clear-gallery-random-sampling');
           }

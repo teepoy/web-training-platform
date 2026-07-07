@@ -230,6 +230,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :reticle-options="page.reticleOptions.value"
             :zoom="page.mapZoom.value"
             :selected-gallery-defect-ids="Array.from(page.selectedDefectIds.value)"
+            v-model:global-filter="page.globalFilter.value"
             :table-filter="page.sampleTableFilter.value"
             :global-filter-action-enabled="hasLocalSampleTableFilter"
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"

@@ -41,6 +41,7 @@ async def train_stage(
     job_id: str,
     dataset_id: str,
     trainer_id: str,
+    sample_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     logger = get_run_logger()
     cfg = load_config(skip_runtime_validation=True)
@@ -62,6 +63,7 @@ async def train_stage(
             job_id=job_id,
             dataset_id=dataset_id,
             trainer_id=trainer_id,
+            sample_ids=sample_ids,
         )
         model_id = await _latest_model_artifact_id(container, job_id)
         if model_id is None:
@@ -202,6 +204,7 @@ async def train_and_predict_flow(
         job_id=job_id,
         dataset_id=dataset_id,
         trainer_id=trainer_id,
+        sample_ids=sample_ids,
     )
     model_id = str(train_result["model_id"])
     prediction_result = await predict_stage(
