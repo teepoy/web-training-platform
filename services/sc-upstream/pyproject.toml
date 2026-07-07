@@ -19,7 +19,6 @@ dependencies = [
     "pyarrow>=14.0",
     "diskcache>=5.0",
     "redis>=7.0",
-    "uvicorn==0.42.0",
 ]
 
 [dependency-groups]

@@ -133,14 +133,12 @@ services:
     environment:
       - GRPC_PORT=9091
       - FLIGHT_PORT=9093
-      - HEALTH_PORT=8091
       - CACHE_DIR=/data/cache
       - SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
       - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       - REDIS_URL=redis://redis:6379/0
       # Mock SQLite DB paths use sc-upstream service defaults.
     expose:
-      - "8091"
       - "9091"
       - "9093"
     volumes:
@@ -152,7 +150,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8091/health', timeout=20)",
+          "import socket; s=socket.create_connection(('localhost', 9091), timeout=20); s.close()",
         ]
       interval: 30s
       timeout: 20s

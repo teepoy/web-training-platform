@@ -19,15 +19,11 @@ spec:
         - name: sc-upstream
           image: ${SC_UPSTREAM_IMAGE}
           ports:
-            - containerPort: 8091
-              name: http
             - containerPort: 9091
               name: grpc
             - containerPort: 9093
               name: flight
           env:
-            - name: HEALTH_PORT
-              value: "8091"
             - name: GRPC_PORT
               value: "9091"
             - name: FLIGHT_PORT
@@ -65,17 +61,15 @@ spec:
             - name: data
               mountPath: /data
           readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8091
+            tcpSocket:
+              port: 9091
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 20
             failureThreshold: 10
           livenessProbe:
-            httpGet:
-              path: /health
-              port: 8091
+            tcpSocket:
+              port: 9091
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 20
@@ -96,9 +90,6 @@ spec:
   selector:
     app: sc-upstream
   ports:
-    - name: http
-      port: 8091
-      targetPort: 8091
     - name: grpc
       port: 9091
       targetPort: 9091

@@ -18,15 +18,11 @@ RUN uv sync --frozen --package sc-upstream --no-dev
 
 ENV GRPC_PORT=9091
 ENV FLIGHT_PORT=9093
-ENV HEALTH_PORT=8091
-ENV UVICORN_TIMEOUT_KEEP_ALIVE=120
-ENV UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN=600
-ENV UVICORN_TIMEOUT_WORKER_HEALTHCHECK=60
 ENV UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
 ENV ZIPS_DB_URL=sqlite:////data/inspection_zips.db
 ENV CACHE_DIR=/data/cache
 
-EXPOSE 8091 9091 9093
+EXPOSE 9091 9093
 
 WORKDIR /app/services/sc-upstream
-CMD ["sh", "-lc", "exec uv run --no-dev --frozen uvicorn sc_upstream.server:app --host 0.0.0.0 --port ${HEALTH_PORT:-8091} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown ${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck ${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}"]
+CMD ["uv", "run", "--no-dev", "--frozen", "python", "-m", "sc_upstream.server"]

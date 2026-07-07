@@ -160,27 +160,21 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/services/sc-upstream && uv sync --frozen && uv run --no-dev --frozen uvicorn sc_upstream.server:app --host 0.0.0.0 --port 8091 --reload --reload-dir src --reload-dir /app/libs/protos/src --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "cd /app/services/sc-upstream && uv sync --frozen && uv run --no-dev --frozen python -m sc_upstream.server",
       ]
     environment:
       PYTHONPATH: /app/libs/protos/src
       GRPC_PORT: "9091"
       FLIGHT_PORT: "9093"
-      HEALTH_PORT: "8091"
       CACHE_DIR: /data/cache
       REDIS_URL: redis://redis:6379/0
-      UVICORN_TIMEOUT_KEEP_ALIVE: "120"
-      UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN: "600"
-      UVICORN_TIMEOUT_WORKER_HEALTHCHECK: "60"
     depends_on:
       redis:
         condition: service_started
     expose:
-      - "8091"
       - "9091"
       - "9093"
     ports:
-      - "8091:8091"
       - "9091:9091"
       - "9093:9093"
     healthcheck:
@@ -189,7 +183,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=20)",
+          "import socket; s=socket.create_connection(('127.0.0.1', 9091), timeout=20); s.close()",
         ]
       interval: 30s
       timeout: 20s
