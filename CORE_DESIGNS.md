@@ -49,6 +49,16 @@ prefect-worker-gpu  -> Prefect server（拉取 default-gpu 池 flow）
                     -> libs/ml（GPU 计算）
 ```
 
+### Perspective WebSocket 隔离
+
+Perspective WebSocket 与普通 HTTP API 必须运行在不同进程和不同容器中：
+
+- `app.main:app` 只提供普通 HTTP API，不注册 Perspective WebSocket 路由。
+- `app.perspective_main:app` 只提供 `/api/v1/sc/perspective/**/ws`、健康检查与就绪检查。
+- Compose 中使用独立的 `perspective-ws` 服务；Kubernetes 中使用独立 Deployment/Service。
+- Web 反向代理必须把 Perspective WebSocket 路径定向到 `perspective-ws:8001`，其余 `/api` 请求仍定向到 `api:8000`。
+- Perspective 容器默认只启动一个 worker；扩容通过增加容器/Pod 副本完成，不能把普通 API worker 与其混合。
+
 > **迁移说明：** 旧版独立的 `gpu-worker` / `inference` / `embedding` 服务已并入 `apps/api` Prefect flow。原 `apps/worker`、`apps/inference`、`apps/embedding` 目录已移除。
 
 ## 2. 后端组织

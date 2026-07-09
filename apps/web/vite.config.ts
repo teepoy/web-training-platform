@@ -19,7 +19,8 @@ export default defineConfig({
     }),
     Components({ resolvers: [NaiveUiResolver()] }),
     legacy({
-      targets: ["chrome >= 108", "not IE 11"],
+      targets: ["chrome >= 108"],
+      modernTargets: ["chrome >= 108"],
     }),
   ],
   build: {
@@ -61,10 +62,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
+      [`${API_V1_PROXY_PREFIX}/sc/perspective/`]: {
+        target: process.env.VITE_PERSPECTIVE_WS_TARGET || "http://localhost:8001",
+        changeOrigin: true,
+        ws: true,
+      },
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
-        ws: true,
       },
     },
   },

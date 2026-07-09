@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finetune-perspective-ws
+  namespace: finetune
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finetune-perspective-ws
+  template:
+    metadata:
+      labels:
+        app: finetune-perspective-ws
+    spec:
+      serviceAccountName: finetune-api
+      containers:
+        - name: perspective-ws
+          image: finetune-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+              name: websocket
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
+          command:
+            - sh
+            - -lc
+            - >-
+              exec uv run --no-dev --frozen uvicorn app.perspective_main:app
+              --host 0.0.0.0 --port 8001 --workers 1
+              --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-120}
+              --timeout-graceful-shutdown ${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600}
+              --timeout-worker-healthcheck ${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finetune-perspective-ws
+  namespace: finetune
+spec:
+  selector:
+    app: finetune-perspective-ws
+  ports:
+    - port: 8001
+      targetPort: 8001

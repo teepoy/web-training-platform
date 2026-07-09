@@ -57,7 +57,18 @@ Adds via `docker-compose.prod.yaml`:
 - **prefect-worker-cpu** with baked image (no bind mounts)
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
-Prod mode does **not** include: pgadmin, deployments-bootstrap, automatic alembic migrations.
+Prod mode does **not** include pgadmin or a long-running deployments bootstrap.
+`make up-prod` performs Alembic migration and idempotent Prefect pool/deployment
+registration as one-shot steps before it starts the application services. The local
+Prefect auth value defaults to `dangerous:dangerous` and can be overridden with
+`LOCAL_PROD_PREFECT_AUTH=...`.
+
+When invoking the two Compose files directly instead of using Make, export the
+same value explicitly:
+
+```bash
+export PREFECT_SERVER_API_AUTH_STRING=dangerous:dangerous
+```
 
 ### Production Split-Stack (real deployment)
 
@@ -84,8 +95,8 @@ ignored across separate Compose projects.
 - `make up-stack` → now redirects to `make up-dev --scale web=0` (deprecated)
 - `make updev` → unchanged (starts compose backend + local Vite on host)
 - `make prod` → removed (was deprecated redirect to `make up-prod`)
-- Flow deployment in prod: run `make deployments-prod` (split-stack) or `make ftctl ARGS="deployments apply"` (manual)
-- Alembic migrations in prod: run `make db-migrate-prod` (split-stack) or `make db-migrate-compose` (dev)
+- Local prod validation: `make up-prod` performs migrations and deployment registration.
+- Split-stack production: run `make db-migrate-prod` and `make deployments-prod` explicitly.
 
 `docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
 local infrastructure (postgres, minio, redis, prefect-server, label-studio,
@@ -116,11 +127,16 @@ The stack is split across multiple Compose files:
 
 - **Base infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, sc-upstream, image-parser, profile-gated observability, profile-gated dcgm-exporter
 - **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
-- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), isolated perspective-ws, web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
 - **Production ops** (`production/compose.ops.yaml`): migrate, deployments (one-shot ops)
 - **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
+
+Dev, local-prod, production-platform, and production-ops manifests define a
+top-level `x-platform-environment` anchor. API, Perspective, workers, and ops
+services inherit the same database, Prefect, Label Studio, MinIO/SC object-store,
+Redis, LLM, and runtime endpoint settings; service-specific values are merged on top.
 
 All services at a glance:
 
@@ -129,7 +145,8 @@ All services at a glance:
 - **redis** (no exposed port): Redis with appendonly persistence, used by API and workers
 - **prefect-server** (:4200): Prefect 3 control plane
 - **label-studio** (:8080): Annotation UI
-- **api** (:8000): Platform API (dev: fastapi hot-reload with bind mounts; prod: uvicorn workers with baked image)
+- **api** (:8000): Platform HTTP API (dev: hot reload with bind mounts; prod: uvicorn workers with baked image)
+- **perspective-ws** (:8001): Isolated Perspective WebSocket process/container
 - **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
 - **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).

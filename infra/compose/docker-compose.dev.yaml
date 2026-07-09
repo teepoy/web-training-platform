@@ -11,65 +11,83 @@
 #   restart, ports, profiles, devices, privileged, deploy
 # ─────────────────────────────────────────────────────────────────────
 
+x-platform-environment: &platform-environment
+  PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src
+  APP_CONFIG_PROFILE: dev
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
+  PREFECT_API_URL: http://prefect-server:4200/api
+  PREFECT_UI_URL: http://localhost:4200
+  LABEL_STUDIO_URL: "http://label-studio:8080"
+  LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
+  LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
+  LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: finetune-artifacts
+  SC_PATCH_S3_ENDPOINT: minio:9000
+  SC_PATCH_S3_ACCESS_KEY: minioadmin
+  SC_PATCH_S3_SECRET_KEY: minioadmin
+  SC_PATCH_S3_BUCKET: sc-patch-images
+  SC_REVIEW_S3_ENDPOINT: minio:9000
+  SC_REVIEW_S3_ACCESS_KEY: minioadmin
+  SC_REVIEW_S3_SECRET_KEY: minioadmin
+  SC_REVIEW_S3_BUCKET: sc-review-images
+  SC_UPSTREAM_ADDR: sc-upstream:9091
+  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
+  IMAGE_PARSER_GRPC_ADDR: image-parser:9092
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+
+x-api-runtime: &api-runtime
+  build:
+    context: ../..
+    dockerfile: apps/api/Dockerfile
+    target: dev
+    args:
+      UV_INDEX_URL: ${UV_INDEX_URL:-}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+  volumes:
+    - ../../apps/api:/app/apps/api
+    - ../../libs/platform-runtime:/app/libs/platform-runtime
+    - ../../libs/protos:/app/libs/protos
+  environment:
+    <<: *platform-environment
+    UVICORN_TIMEOUT_KEEP_ALIVE: "120"
+    UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN: "600"
+    UVICORN_TIMEOUT_WORKER_HEALTHCHECK: "60"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    label-studio:
+      condition: service_healthy
+    prefect-server:
+      condition: service_healthy
+    redis:
+      condition: service_started
+    sc-upstream:
+      condition: service_healthy
+    image-parser:
+      condition: service_healthy
+  restart: on-failure
+
 services:
   # ───────────────────────────────────────────────────────────────────
   # API — dev mode with bind mounts, hot reload, alembic auto‑migration
   # ───────────────────────────────────────────────────────────────────
   api:
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile
-      target: dev
-      args:
-        UV_INDEX_URL: ${UV_INDEX_URL:-}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    volumes:
-      - ../../apps/api:/app/apps/api
-      - ../../libs/platform-runtime:/app/libs/platform-runtime
-      - ../../libs/protos:/app/libs/protos
+    <<: *api-runtime
     command:
       [
         "/bin/sh",
         "-lc",
         "cd /app/apps/api && ( uv run --no-dev --frozen alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
-    environment:
-      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src
-      APP_CONFIG_PROFILE: dev
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      PREFECT_API_URL: http://prefect-server:4200/api
-      PREFECT_UI_URL: http://localhost:4200
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      UVICORN_TIMEOUT_KEEP_ALIVE: "120"
-      UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN: "600"
-      UVICORN_TIMEOUT_WORKER_HEALTHCHECK: "60"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      label-studio:
-        condition: service_healthy
-      prefect-server:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      sc-upstream:
-        condition: service_healthy
-      image-parser:
-        condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:
@@ -84,7 +102,29 @@ services:
       timeout: 20s
       retries: 12
       start_period: 60s
-    restart: on-failure
+
+  perspective-ws:
+    <<: *api-runtime
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        "cd /app/apps/api && uv run --no-dev --frozen uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+      ]
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 12
+      start_period: 60s
 
   # ───────────────────────────────────────────────────────────────────
   # Web — Vite dev server with bind mount + hot module replacement
@@ -100,11 +140,13 @@ services:
       - ../../apps/web:/app/apps/web
     environment:
       VITE_PROXY_TARGET: "http://api:8000"
+      VITE_PERSPECTIVE_WS_TARGET: "http://perspective-ws:8001"
       VITE_API_BASE_URL: "http://api:8000"
       VITE_IMAGE_PARSER_TARGET: "http://image-parser:8090"
     command: sh -lc "rm -rf node_modules/.vite && pnpm dev --host 0.0.0.0 --port 5173 --force"
     depends_on:
       - api
+      - perspective-ws
     ports:
       - "5173:5173"
     restart: on-failure
@@ -208,18 +250,8 @@ services:
       - ../../libs/protos:/app/libs/protos
       - ../../libs/ml:/app/libs/ml
     environment:
+      <<: *platform-environment
       PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src
-      PREFECT_API_URL: http://prefect-server:4200/api
-      APP_CONFIG_PROFILE: dev
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      IMAGE_PARSER_GRPC_ADDR: image-parser:9092
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -253,18 +285,8 @@ services:
       - ../../libs/protos:/app/libs/protos
       - ../../libs/ml:/app/libs/ml
     environment:
+      <<: *platform-environment
       PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src
-      PREFECT_API_URL: http://prefect-server:4200/api
-      APP_CONFIG_PROFILE: dev
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finetune-artifacts
-      LABEL_STUDIO_URL: "http://label-studio:8080"
-      LABEL_STUDIO_EXTERNAL_URL: "http://localhost:8080"
-      LABEL_STUDIO_API_KEY: "ls-smoke-token-for-local-dev"
-      IMAGE_PARSER_GRPC_ADDR: image-parser:9092
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -291,7 +313,7 @@ services:
         uv run --no-dev --frozen --directory apps/api ftapi deployments apply
       "
     environment:
-      PREFECT_API_URL: http://prefect-server:4200/api
+      <<: *platform-environment
     depends_on:
       prefect-server:
         condition: service_healthy
