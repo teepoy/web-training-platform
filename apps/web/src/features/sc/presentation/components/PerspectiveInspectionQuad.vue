@@ -148,6 +148,12 @@ const {
   dispose: disposePerspectiveQuadData,
 } = usePerspectiveQuadData();
 
+async function queryGlobalFilterCount(): Promise<number> {
+  return model.queryGlobalFilterCount();
+}
+
+defineExpose({ queryGlobalFilterCount });
+
 const sampleTableTotal = 0;
 const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),

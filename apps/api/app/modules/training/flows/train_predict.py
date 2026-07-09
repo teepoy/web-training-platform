@@ -42,6 +42,7 @@ async def train_stage(
     dataset_id: str,
     trainer_id: str,
     sample_ids: list[str] | None = None,
+    sample_filter: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     logger = get_run_logger()
     cfg = load_config(skip_runtime_validation=True)
@@ -64,6 +65,7 @@ async def train_stage(
             dataset_id=dataset_id,
             trainer_id=trainer_id,
             sample_ids=sample_ids,
+            sample_filter=sample_filter,
         )
         model_id = await _latest_model_artifact_id(container, job_id)
         if model_id is None:
@@ -110,6 +112,7 @@ async def predict_stage(
     target: str,
     model_version: str | None,
     sample_ids: list[str] | None,
+    sample_filter: dict[str, Any] | None,
     prompt: str | None,
 ) -> dict[str, Any]:
     logger = get_run_logger()
@@ -135,6 +138,7 @@ async def predict_stage(
             sample_ids=sample_ids,
             summary={
                 "source_training_job_id": source_training_job_id,
+                **({"sample_filter": sample_filter} if sample_filter else {}),
                 **({"prompt": prompt} if prompt else {}),
             },
         )
@@ -161,6 +165,7 @@ async def predict_stage(
             target=target,
             model_version=model_version,
             sample_ids=sample_ids,
+            sample_filter=sample_filter,
             prompt=prompt,
         )
         await _add_training_event(
@@ -195,6 +200,7 @@ async def train_and_predict_flow(
     target: str = "image_classification",
     model_version: str | None = None,
     sample_ids: list[str] | None = None,
+    sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
 ) -> dict[str, Any]:
     import app.registrations  # noqa: F401
@@ -205,6 +211,7 @@ async def train_and_predict_flow(
         dataset_id=dataset_id,
         trainer_id=trainer_id,
         sample_ids=sample_ids,
+        sample_filter=sample_filter,
     )
     model_id = str(train_result["model_id"])
     prediction_result = await predict_stage(
@@ -216,6 +223,7 @@ async def train_and_predict_flow(
         target=target,
         model_version=model_version,
         sample_ids=sample_ids,
+        sample_filter=sample_filter,
         prompt=prompt,
     )
     logger.info(

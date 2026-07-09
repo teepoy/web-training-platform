@@ -139,7 +139,6 @@ import type {
   ScInspectionListResponse,
   ScInspectionReviewImagesResponse,
   ScInspectionSummaryItem,
-  ScReclassifySampleTableRowsResponse,
   ScSampleTableRowsRequest,
   ScSampleTableRowsResponse,
   ScheduleResponse,
@@ -11461,83 +11460,6 @@ export const useFilterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost = <TErro
       > => {
 
       const mutationOptions = getFilterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPostMutationOptions(options);
-
-      return useMutation(mutationOptions);
-    }
-
-/**
- * @summary Get Sc Dataset Sample Table Rows
- */
-export type getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostResponse = {
-  data: ScReclassifySampleTableRowsResponse | HTTPValidationError;
-  status: number;
-  headers: Headers;
-}
-
-export const getGetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostUrl = (datasetId: string,) => {
-
-
-  return `/api/v1/sc/datasets/${datasetId}/sample-table-rows`
-}
-
-export const getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost = async (datasetId: string,
-    scSampleTableRowsRequest: ScSampleTableRowsRequest, options?: RequestInit): Promise<getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostResponse> => {
-
-  return orvalFetcher<getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostResponse>(getGetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostUrl(datasetId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      scSampleTableRowsRequest,)
-  }
-);}
-
-
-
-
-export const getGetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>, TError,{datasetId: string;data: ScSampleTableRowsRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>, TError,{datasetId: string;data: ScSampleTableRowsRequest}, TContext> => {
-
-const mutationKey = ['getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>, {datasetId: string;data: ScSampleTableRowsRequest}> = (props) => {
-          const {datasetId,data} = props ?? {};
-
-          return  getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost(datasetId,data,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type GetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostMutationResult = NonNullable<Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>>
-    export type GetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostMutationBody = ScSampleTableRowsRequest
-    export type GetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostMutationError = HTTPValidationError
-
-    /**
- * @summary Get Sc Dataset Sample Table Rows
- */
-export const useGetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>, TError,{datasetId: string;data: ScSampleTableRowsRequest}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationReturnType<
-        Awaited<ReturnType<typeof getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost>>,
-        TError,
-        {datasetId: string;data: ScSampleTableRowsRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getGetScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

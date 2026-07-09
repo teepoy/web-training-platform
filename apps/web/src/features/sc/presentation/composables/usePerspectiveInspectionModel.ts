@@ -703,6 +703,22 @@ export function usePerspectiveInspectionModel(args: {
     return idsForFilter(table, [...globalFilters.value, [col, "==", value] as Filter]);
   }
 
+  async function queryGlobalFilterCount(): Promise<number> {
+    const table = args.table.value;
+    if (!table) {
+      throw new Error("Perspective data is not ready");
+    }
+    const managed = await managePerspectiveTable(table).view({
+      columns: ["defect_id"],
+      filter: globalFilters.value,
+    } as never);
+    try {
+      return await managed.num_rows();
+    } finally {
+      managed.retire();
+    }
+  }
+
   async function applyMapSelection(ids: number[]): Promise<void> {
     const table = args.table.value;
     if (!table) return;
@@ -867,6 +883,7 @@ export function usePerspectiveInspectionModel(args: {
     setReviewMode,
     queryBoxSelection,
     queryLegendSelection,
+    queryGlobalFilterCount,
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,

@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 import uuid
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 from prefect import flow, get_run_logger
@@ -55,6 +55,7 @@ async def run_training_pipeline(
     dataset_id: str,
     trainer_id: str,
     sample_ids: list[str] | None = None,
+    sample_filter: dict[str, Any] | None = None,
     artifact_storage: Any | None = None,
     materialization_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -125,9 +126,18 @@ async def run_training_pipeline(
     storage = await factory.open(dataset_id, org_id=dataset_row.org_id)
     lf = await storage.list_samples(
         with_labels=True,
+        with_predictions=sample_filter is not None,
         return_lazyframe=True,
         sample_ids=sample_ids,
     )
+    if sample_filter is not None:
+        if dataset_row.dataset_type != "image_sc":
+            raise ValueError("sample_filter is only supported for image_sc datasets")
+        from app.modules.sc.app.services.sc_plot_points_service import (
+            apply_sc_workflow_sample_filter,
+        )
+
+        lf = apply_sc_workflow_sample_filter(cast(Any, lf), sample_filter)
 
     ctx = TrainContext(
         job_id=job_id,

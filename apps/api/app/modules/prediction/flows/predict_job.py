@@ -621,6 +621,7 @@ async def _run_prediction_job_with_container(
     target: str,
     model_version: str | None,
     sample_ids: list[str] | None,
+    sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
 ) -> dict[str, Any]:
     logger = get_run_logger()
@@ -657,7 +658,20 @@ async def _run_prediction_job_with_container(
         session_factory=container.session_factory,
     )
     storage_agg = await factory.open(dataset_id, org_id=org_id)
-    lf = await storage_agg.list_samples(return_lazyframe=True, sample_ids=sample_ids)
+    lf = await storage_agg.list_samples(
+        return_lazyframe=True,
+        with_labels=sample_filter is not None,
+        with_predictions=sample_filter is not None,
+        sample_ids=sample_ids,
+    )
+    if sample_filter is not None:
+        if dataset.dataset_type != "image_sc":
+            raise ValueError("sample_filter is only supported for image_sc datasets")
+        from app.modules.sc.app.services.sc_plot_points_service import (
+            apply_sc_workflow_sample_filter,
+        )
+
+        lf = apply_sc_workflow_sample_filter(cast(Any, lf), sample_filter)
     import polars as pl
 
     total_samples = int(cast(Any, lf).select(pl.len()).collect().item())
@@ -853,6 +867,7 @@ async def predict_job_flow(
     target: str = "image_classification",
     model_version: str | None = None,
     sample_ids: list[str] | None = None,
+    sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
 ) -> dict[str, Any]:
     import app.registrations  # noqa: F401  # trigger all mapper registrations
@@ -878,6 +893,7 @@ async def predict_job_flow(
             target=target,
             model_version=model_version,
             sample_ids=sample_ids,
+            sample_filter=sample_filter,
             prompt=prompt,
         )
     finally:

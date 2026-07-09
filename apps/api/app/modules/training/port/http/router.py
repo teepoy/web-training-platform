@@ -140,6 +140,11 @@ async def create_train_and_predict_job(
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
     _validate_training_dataset(dataset, payload.trainer_id)
+    if payload.sample_filter is not None and dataset.dataset_type != "image_sc":
+        raise HTTPException(
+            status_code=400,
+            detail="sample_filter is only supported for image_sc datasets",
+        )
 
     job = TrainingJob(
         dataset_id=payload.dataset_id,
@@ -169,6 +174,7 @@ async def create_train_and_predict_job(
                 "target": payload.target,
                 "model_version": payload.model_version,
                 "sample_ids": payload.sample_ids,
+                "sample_filter": payload.sample_filter,
                 "prompt": payload.prompt,
             },
             idempotency_key=f"train-and-predict:{job.id}",
@@ -189,6 +195,11 @@ async def create_train_and_predict_job(
             payload={
                 "external_id": workflow_run_id,
                 "status": JobStatus.QUEUED.value,
+                **(
+                    {"sample_filter": payload.sample_filter}
+                    if payload.sample_filter is not None
+                    else {}
+                ),
             },
         )
     )

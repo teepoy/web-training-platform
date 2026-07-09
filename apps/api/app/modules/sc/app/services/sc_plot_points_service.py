@@ -72,6 +72,8 @@ _SAMPLE_TABLE_FILTER_COLUMNS = {
     "kill_ratio": "kill_ratio",
     "annotation_label": "label",
     "prediction_label": "predicted_label",
+    "prediction_confidence": "confidence",
+    "final_class": "final_class",
 }
 
 _SAMPLE_TABLE_OUTPUT_COLUMNS = frozenset(
@@ -172,6 +174,54 @@ def apply_sample_table_filter(
                 )
             )
     return lf
+
+
+def apply_sc_workflow_sample_filter(
+    lf: pl.LazyFrame,
+    raw_filter: dict[str, Any],
+) -> pl.LazyFrame:
+    """Apply the persisted SC global-filter contract to a worker LazyFrame."""
+    from app.modules.sc.schemas import ScSampleTableRowsRequest
+
+    filter_params = ScSampleTableRowsRequest.model_validate(
+        {"filter": raw_filter}
+    ).filter
+    if not filter_params:
+        raise ValueError("sample_filter must contain at least one condition")
+
+    columns = set(lf.collect_schema().names())
+    if "final_class" in filter_params:
+        missing = {"label", "predicted_label"} - columns
+        if missing:
+            raise ValueError(
+                f"sample_filter field 'final_class' requires columns: {sorted(missing)}"
+            )
+        lf = lf.with_columns(
+            pl.when(
+                pl.col("label").is_not_null()
+                & (pl.col("label") != "")
+                & (pl.col("label") != "0")
+            )
+            .then(pl.col("label"))
+            .otherwise(pl.col("predicted_label"))
+            .cast(pl.Utf8)
+            .alias("final_class")
+        )
+
+    for field in filter_params:
+        column = (
+            "final_class"
+            if field == "final_class"
+            else _SAMPLE_TABLE_FILTER_COLUMNS.get(field)
+        )
+        if column is None:
+            raise ValueError(f"Unsupported sample_filter field: {field}")
+        if column not in set(lf.collect_schema().names()):
+            raise ValueError(
+                f"sample_filter field '{field}' requires missing column '{column}'"
+            )
+
+    return apply_sample_table_filter(lf, filter_params)
 
 
 def sample_table_filter_requires_label_columns(
@@ -652,150 +702,6 @@ class ScPlotPointsService:
             width=width,
             height=height,
         )
-
-    async def build_dataset_sample_table_rows(
-        self,
-        dataset_id: str,
-        org_id: str,
-        *,
-        upstream_reader: Any,
-        defect_ids: list[str],
-        anchor: str | None,
-        page: int,
-        page_size: int,
-        limit: int,
-        filter_params: dict | None,
-        sort_params: Any | None,
-        reticle_x_die_count: int,
-        reticle_y_die_count: int,
-        reticle_x_die_shift: int,
-        reticle_y_die_shift: int,
-    ) -> tuple[list[dict[str, Any]], int, str | None]:
-        dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
-        if dataset is None:
-            raise ScPlotPointsNotFoundError(dataset_id)
-        if dataset.dataset_type != self._SC_DATASET_TYPE:
-            raise ScPlotPointsRejectedError("sample-table requires an image_sc dataset")
-        if dataset.storage_mode != DatasetStorageMode.FILE_SHARD_SPARSE:
-            raise ScPlotPointsRejectedError(
-                "sample-table requires a file_shard_sparse dataset"
-            )
-
-        geometry_raw = dataset.dataset_meta.get("geometry")
-        if not isinstance(geometry_raw, dict):
-            raise ScPlotPointsRejectedError("dataset_meta.geometry is required")
-        missing_geometry = _REQUIRED_GEOMETRY_KEYS - set(geometry_raw)
-        if missing_geometry:
-            raise ScPlotPointsRejectedError(
-                f"dataset_meta.geometry missing keys: {sorted(missing_geometry)}"
-            )
-        origin_index_x = _require_int(geometry_raw, "origin_index_x")
-        origin_index_y = _require_int(geometry_raw, "origin_index_y")
-
-        storage = await self._storage_factory.open(dataset_id, org_id)
-        sparse_lf = cast(
-            pl.LazyFrame,
-            await storage.list_samples(
-                return_lazyframe=True,
-                with_labels=True,
-                with_predictions=True,
-            ),
-        )
-        source_inspection_time, source_wafer_key = await _dataset_source_identity(
-            dataset.dataset_meta, sparse_lf
-        )
-        upstream_lf = await upstream_reader.list_samples(
-            source_inspection_time,
-            source_wafer_key,
-            count=None,
-            reticle_size_x=reticle_x_die_count,
-            reticle_size_y=reticle_y_die_count,
-            reticle_offset_x=reticle_x_die_shift - origin_index_x,
-            reticle_offset_y=reticle_y_die_shift - origin_index_y,
-        )
-
-        upstream_missing = _SAMPLE_TABLE_UPSTREAM_COLUMNS - set(
-            upstream_lf.collect_schema().names()
-        )
-        if upstream_missing:
-            raise ScPlotPointsRejectedError(
-                f"sample-table requires SC upstream columns: {sorted(upstream_missing)}"
-            )
-
-        sparse_columns = set(sparse_lf.collect_schema().names())
-        sparse_select_columns = ["defect_id"]
-        for column in ("label", "predicted_label", "confidence"):
-            if column in sparse_columns:
-                sparse_select_columns.append(column)
-        sparse_lf = sparse_lf.select(sparse_select_columns).with_columns(
-            pl.col("defect_id").cast(pl.Utf8)
-        )
-
-        lf = upstream_lf.with_columns(pl.col("defect_id").cast(pl.Utf8)).join(
-            sparse_lf,
-            on="defect_id",
-            how="inner",
-        )
-        lf = await _join_upstream_image_counts(
-            lf,
-            upstream_reader=upstream_reader,
-            inspection_time=source_inspection_time,
-            wafer_key=source_wafer_key,
-        )
-
-        missing = _SAMPLE_TABLE_OUTPUT_COLUMNS - set(lf.collect_schema().names())
-        if missing:
-            raise ScPlotPointsRejectedError(
-                f"sample-table requires SC joined columns: {sorted(missing)}"
-            )
-
-        requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
-        if requested is not None:
-            lf = lf.filter(pl.col("defect_id").cast(pl.Utf8).is_in(set(requested)))
-        lf = apply_sample_table_filter(lf, filter_params)
-        lf = _apply_sample_table_sort(lf, sort_params, requested)
-
-        offset = int(anchor) if anchor and anchor.isdigit() else page * page_size
-        page_limit = limit if anchor is not None else page_size
-        total_df = await lf.select(pl.len().alias("total")).collect_async()
-        page_df = await lf.slice(offset, page_limit).collect_async()
-        total = int(total_df["total"][0]) if len(total_df) else 0
-        rows: list[dict[str, Any]] = []
-        for row in page_df.to_dicts():
-            rows.append(
-                {
-                    "defect_id": str(row["defect_id"]),
-                    "rough_bin": _int_value(row, "rough_bin"),
-                    "class_number": _int_value(row, "class_number"),
-                    "images": _int_value(row, "images"),
-                    "test_id": _int_value(row, "test_id"),
-                    "wafer_x": _int_value(row, "wafer_x"),
-                    "wafer_y": _int_value(row, "wafer_y"),
-                    "index_x": _int_value(row, "index_x"),
-                    "index_y": _int_value(row, "index_y"),
-                    "adder": _int_value(row, "adder"),
-                    "cluster_id": None
-                    if row.get("cluster") is None
-                    else _int_value(row, "cluster"),
-                    "die_x": _int_value(row, "die_x"),
-                    "die_y": _int_value(row, "die_y"),
-                    "reticle_x": _int_value(row, "reticle_x"),
-                    "reticle_y": _int_value(row, "reticle_y"),
-                    "size_x": _int_value(row, "size_x"),
-                    "size_y": _int_value(row, "size_y"),
-                    "size_d": _int_value(row, "size_d"),
-                    "area": _int_value(row, "area"),
-                    "final_bin": _int_value(row, "final_bin"),
-                    "manual_bin": _int_value(row, "manual_bin"),
-                    "kill_ratio": _float_or_none(row.get("kill_ratio")),
-                    "annotation_label": _str_or_none(row.get("label")),
-                    "prediction_label": _str_or_none(row.get("predicted_label")),
-                    "prediction_confidence": _float_or_none(row.get("confidence")),
-                }
-            )
-        next_offset = offset + len(rows)
-        next_anchor = str(next_offset) if next_offset < total else None
-        return rows, total, next_anchor
 
     async def build_defect_ids_response(self, dataset_id: str, org_id: str) -> bytes:
         dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)

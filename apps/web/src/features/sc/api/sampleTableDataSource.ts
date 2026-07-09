@@ -1,5 +1,4 @@
 import { streamApiSse } from "@/shared/api/sse";
-import { getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost } from "@/generated/orval/endpoints/api";
 import {
   buildScSampleTableRowsRequest,
   type ScSampleTableDataSource,
@@ -13,19 +12,6 @@ function normalizeRowsResponse(response: ScSampleTableRowsResponse): ScSampleTab
     items: response.items,
     total: response.total,
     nextAnchor: response.next_anchor ?? null,
-  };
-}
-
-export function createDatasetSampleTableDataSource(datasetId: string): ScSampleTableDataSource {
-  return {
-    scopeKey: `dataset:${datasetId}`,
-    async loadRows(query: ScSampleTableRowsQuery): Promise<ScSampleTableRowsPage> {
-      const response = await getScDatasetSampleTableRowsApiV1ScDatasetsDatasetIdSampleTableRowsPost(
-        datasetId,
-        buildScSampleTableRowsRequest(query),
-      );
-      return normalizeRowsResponse(response.data as ScSampleTableRowsResponse);
-    },
   };
 }
 

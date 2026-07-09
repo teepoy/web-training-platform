@@ -328,22 +328,10 @@ describe("useReclassifyPage - train defaults", () => {
     expect(state.canTrainAndPredict.value).toBe(false);
   });
 
-  it("passes global-filtered sample ids to train-and-predict", async () => {
+  it("passes the global filter condition to train-and-predict", async () => {
     const trainRequests: Array<Record<string, unknown>> = [];
-    const tableRequests: Array<Record<string, unknown>> = [];
 
     server.use(
-      http.post("/api/v1/sc/datasets/:id/sample-table-rows", async ({ request }) => {
-        tableRequests.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json({
-          items: [
-            { ...makeViewSampleRows(1, 40)[0], defect_id: "41" },
-            { ...makeViewSampleRows(1, 41)[0], defect_id: "42" },
-          ],
-          total: 2,
-          next_anchor: null,
-        });
-      }),
       http.post("/api/v1/training-jobs/train-and-predict", async ({ request }) => {
         const body = (await request.json()) as Record<string, unknown>;
         trainRequests.push(body);
@@ -363,17 +351,15 @@ describe("useReclassifyPage - train defaults", () => {
     await waitForCondition(() => state.selectedTrainerId.value === "resnet50-sc-v1");
     await waitForCondition(() => state.activeClassCount.value === 2);
 
-    state.globalFilter.value = {
-      class_number: { filterType: "set", values: [1] },
-    };
-    await state.trainAndPredict();
-
-    expect(tableRequests).toHaveLength(1);
-    expect(tableRequests[0]?.filter).toEqual({
-      class_number: { filterType: "set", values: [1] },
+    await state.trainAndPredict({
+      final_class: { filterType: "set", values: ["Scratch"] },
     });
+
     expect(trainRequests).toHaveLength(1);
-    expect(trainRequests[0]?.sample_ids).toEqual(["41", "42"]);
+    expect(trainRequests[0]?.sample_filter).toEqual({
+      final_class: { filterType: "set", values: ["Scratch"] },
+    });
+    expect(trainRequests[0]?.sample_ids).toBeUndefined();
   });
 });
 

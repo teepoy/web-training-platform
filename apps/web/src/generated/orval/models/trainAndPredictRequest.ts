@@ -6,6 +6,7 @@
  */
 import type { TrainAndPredictRequestModelVersion } from './trainAndPredictRequestModelVersion';
 import type { TrainAndPredictRequestSampleIds } from './trainAndPredictRequestSampleIds';
+import type { TrainAndPredictRequestSampleFilter } from './trainAndPredictRequestSampleFilter';
 import type { TrainAndPredictRequestPrompt } from './trainAndPredictRequestPrompt';
 
 export interface TrainAndPredictRequest {
@@ -14,5 +15,6 @@ export interface TrainAndPredictRequest {
   target?: string;
   model_version?: TrainAndPredictRequestModelVersion;
   sample_ids?: TrainAndPredictRequestSampleIds;
+  sample_filter?: TrainAndPredictRequestSampleFilter;
   prompt?: TrainAndPredictRequestPrompt;
 }

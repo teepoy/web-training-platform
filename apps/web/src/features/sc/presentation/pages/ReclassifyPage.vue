@@ -11,7 +11,10 @@ import {
   NModal,
   NCheckbox,
   NTooltip,
+  NDescriptions,
+  NDescriptionsItem,
   useThemeVars,
+  useMessage,
 } from "naive-ui";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
@@ -23,8 +26,16 @@ import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
+const message = useMessage();
 const router = useRouter();
 const taskInsightVisible = ref(false);
+const inspectionQuad = ref<{
+  queryGlobalFilterCount: () => Promise<number>;
+} | null>(null);
+const filterConfirmationVisible = ref(false);
+const filteredWorkflowCount = ref(0);
+const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
+const isPreparingFilteredWorkflow = ref(false);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -68,11 +79,35 @@ function applyAnnotationCode(code: string): void {
 }
 
 async function handleTrainAndPredictClick(): Promise<void> {
-  await page.trainAndPredict();
+  if (Object.keys(page.globalFilter.value).length > 0) {
+    isPreparingFilteredWorkflow.value = true;
+    try {
+      filteredWorkflowFilter.value = { ...page.globalFilter.value };
+      const count = await inspectionQuad.value?.queryGlobalFilterCount();
+      if (count === undefined) throw new Error("Perspective data is not ready");
+      filteredWorkflowCount.value = count;
+      filterConfirmationVisible.value = true;
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : "Failed to resolve filtered workflow samples",
+      );
+    } finally {
+      isPreparingFilteredWorkflow.value = false;
+    }
+    return;
+  }
+  await submitTrainAndPredict(null);
+}
+
+async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): Promise<void> {
+  filterConfirmationVisible.value = false;
+  await page.trainAndPredict(sampleFilter);
   if (page.trainPredictTaskId.value) {
     taskInsightVisible.value = true;
   }
 }
+
+const globalFilterEntries = computed(() => Object.entries(page.globalFilter.value));
 
 function onBlinkTableSelect(
   defectIds: string[],
@@ -183,7 +218,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
               size="small"
               type="primary"
               :disabled="!page.canTrainAndPredict.value"
-              :loading="page.isTrainPredictRunning.value"
+              :loading="page.isTrainPredictRunning.value || isPreparingFilteredWorkflow"
               @click="handleTrainAndPredictClick"
             >
               Train &amp; Predict
@@ -215,6 +250,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             description="Inspection metadata not available for this dataset"
           />
           <InspectionQuad
+            ref="inspectionQuad"
             v-else
             variant="reclassify"
             :dataset-id="page.datasetId.value"
@@ -301,6 +337,38 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
         <div class="sc-sampling-footer">
           <NButton @click="page.showSamplingModal.value = false">Cancel</NButton>
           <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
+        </div>
+      </template>
+    </NModal>
+    <NModal
+      v-model:show="filterConfirmationVisible"
+      preset="card"
+      title="Filtered Train & Predict"
+      :style="{ width: '560px' }"
+    >
+      <NText>
+        The current global filter will limit both training and prediction to
+        {{ filteredWorkflowCount }} defects.
+      </NText>
+      <NDescriptions bordered :column="1" size="small" style="margin-top: 16px">
+        <NDescriptionsItem
+          v-for="[field, condition] in globalFilterEntries"
+          :key="field"
+          :label="field"
+        >
+          {{ JSON.stringify(condition) }}
+        </NDescriptionsItem>
+      </NDescriptions>
+      <template #footer>
+        <div class="sc-sampling-footer">
+          <NButton @click="filterConfirmationVisible = false">Cancel</NButton>
+          <NButton
+            type="primary"
+            :disabled="filteredWorkflowCount === 0"
+            @click="submitTrainAndPredict(filteredWorkflowFilter)"
+          >
+            Continue with {{ filteredWorkflowCount }} defects
+          </NButton>
         </div>
       </template>
     </NModal>
