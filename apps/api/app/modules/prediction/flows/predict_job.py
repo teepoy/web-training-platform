@@ -667,11 +667,11 @@ async def _run_prediction_job_with_container(
     if sample_filter is not None:
         if dataset.dataset_type != "image_sc":
             raise ValueError("sample_filter is only supported for image_sc datasets")
-        from app.modules.sc.app.services.sc_plot_points_service import (
-            apply_sc_workflow_sample_filter,
+        from app.modules.sc.app.services.sample_filter import (
+            parse_and_apply_workflow_sample_filter,
         )
 
-        lf = apply_sc_workflow_sample_filter(cast(Any, lf), sample_filter)
+        lf = parse_and_apply_workflow_sample_filter(cast(Any, lf), sample_filter)
     import polars as pl
 
     total_samples = int(cast(Any, lf).select(pl.len()).collect().item())

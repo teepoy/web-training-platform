@@ -31,11 +31,14 @@ const router = useRouter();
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
   queryGlobalFilterCount: () => Promise<number>;
+  queryRandomGlobalFilteredDefectIds: (count: number) => Promise<number[]>;
 } | null>(null);
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
 const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
+const perspectiveSamplingAvailableCount = ref(0);
+const isPreparingSampling = ref(false);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -108,6 +111,36 @@ async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): 
 }
 
 const globalFilterEntries = computed(() => Object.entries(page.globalFilter.value));
+
+async function openSamplingModal(): Promise<void> {
+  isPreparingSampling.value = true;
+  try {
+    const count = await inspectionQuad.value?.queryGlobalFilterCount();
+    if (count === undefined) throw new Error("Perspective data is not ready");
+    perspectiveSamplingAvailableCount.value = count;
+    page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
+    page.showSamplingModal.value = true;
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "Failed to prepare sampling");
+  } finally {
+    isPreparingSampling.value = false;
+  }
+}
+
+async function applyPerspectiveSampling(): Promise<void> {
+  isPreparingSampling.value = true;
+  try {
+    const ids = await inspectionQuad.value?.queryRandomGlobalFilteredDefectIds(
+      page.samplingCount.value,
+    );
+    if (!ids) throw new Error("Perspective data is not ready");
+    page.applySampling(ids.map(String));
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "Failed to sample defects");
+  } finally {
+    isPreparingSampling.value = false;
+  }
+}
 
 function onBlinkTableSelect(
   defectIds: string[],
@@ -234,7 +267,12 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             >
               View Task
             </NButton>
-            <NButton size="small" type="primary" @click="page.showSamplingModal.value = true">
+            <NButton
+              size="small"
+              type="primary"
+              :loading="isPreparingSampling"
+              @click="openSamplingModal"
+            >
               Sampling
             </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
@@ -322,11 +360,11 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
           <NInputNumber
             v-model:value="page.samplingCount.value"
             :min="1"
-            :max="page.samplingAvailableCount.value"
+            :max="perspectiveSamplingAvailableCount"
             style="width: 100%"
           />
           <NText depth="3" style="font-size: 11px; margin-top: 4px">
-            Total available: {{ page.samplingAvailableCount.value }} samples
+            Total available: {{ perspectiveSamplingAvailableCount }} samples
           </NText>
         </div>
         <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
@@ -336,7 +374,14 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
       <template #footer>
         <div class="sc-sampling-footer">
           <NButton @click="page.showSamplingModal.value = false">Cancel</NButton>
-          <NButton type="primary" @click="page.applySampling()">Confirm</NButton>
+          <NButton
+            type="primary"
+            :loading="isPreparingSampling"
+            :disabled="perspectiveSamplingAvailableCount === 0"
+            @click="applyPerspectiveSampling"
+          >
+            Confirm
+          </NButton>
         </div>
       </template>
     </NModal>

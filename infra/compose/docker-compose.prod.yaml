@@ -86,13 +86,17 @@ services:
     <<: *api-runtime
     command:
       [
-        "/bin/sh",
-        "-lc",
-        "exec /app/.venv/bin/uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --workers $${PERSPECTIVE_WS_WORKERS:-1} --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "/usr/bin/supervisord",
+        "-c",
+        "/app/apps/api/supervisord.perspective.conf",
       ]
     mem_limit: ${PERSPECTIVE_WS_MEMORY:-4g}
     ports:
       - "8001:8001"
+    expose:
+      - "8002"
+      - "8003"
+      - "8004"
     healthcheck:
       test:
         [

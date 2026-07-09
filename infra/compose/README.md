@@ -146,7 +146,7 @@ All services at a glance:
 - **prefect-server** (:4200): Prefect 3 control plane
 - **label-studio** (:8080): Annotation UI
 - **api** (:8000): Platform HTTP API (dev: hot reload with bind mounts; prod: uvicorn workers with baked image)
-- **perspective-ws** (:8001): Isolated Perspective WebSocket process/container
+- **perspective-ws** (:8001–:8004 internally): Isolated Perspective WebSocket container with four Supervisor-managed single-process Uvicorn instances; nginx distributes WebSockets with `least_conn`
 - **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
 - **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).

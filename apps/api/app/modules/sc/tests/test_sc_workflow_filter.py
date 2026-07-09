@@ -3,8 +3,8 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from app.modules.sc.app.services.sc_plot_points_service import (
-    apply_sc_workflow_sample_filter,
+from app.modules.sc.app.services.sample_filter import (
+    parse_and_apply_workflow_sample_filter,
 )
 
 
@@ -22,7 +22,7 @@ def _samples() -> pl.LazyFrame:
 
 @pytest.mark.asyncio
 async def test_workflow_filter_applies_final_class_and_confidence() -> None:
-    filtered = apply_sc_workflow_sample_filter(
+    filtered = parse_and_apply_workflow_sample_filter(
         _samples(),
         {
             "final_class": {"filterType": "set", "values": ["Scratch"]},
@@ -42,7 +42,7 @@ async def test_workflow_filter_applies_final_class_and_confidence() -> None:
 
 def test_workflow_filter_rejects_unknown_fields() -> None:
     with pytest.raises(ValueError, match="Unsupported sample_filter field"):
-        apply_sc_workflow_sample_filter(
+        parse_and_apply_workflow_sample_filter(
             _samples(),
             {"unknown": {"filterType": "set", "values": [1]}},
         )
@@ -50,7 +50,7 @@ def test_workflow_filter_rejects_unknown_fields() -> None:
 
 def test_workflow_filter_rejects_missing_columns() -> None:
     with pytest.raises(ValueError, match="requires missing column"):
-        apply_sc_workflow_sample_filter(
+        parse_and_apply_workflow_sample_filter(
             _samples(),
             {"rough_bin": {"filterType": "set", "values": [1]}},
         )

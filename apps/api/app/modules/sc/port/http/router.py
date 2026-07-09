@@ -35,11 +35,11 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
     _apply_sample_filters,
-    apply_sample_table_filter,
     encode_defect_ids_int32le,
     filter_box_defect_ids,
     sorted_defect_ids_from_lazyframe,
 )
+from app.modules.sc.app.services.sample_filter import apply_sample_table_filter
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
@@ -650,34 +650,6 @@ async def stream_inspection_map_points_progress(
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
-
-
-@router.get(
-    "/datasets/{dataset_id}/defect-ids.bin",
-    responses={
-        200: {
-            "description": "Return sorted dataset defect ids as little-endian Int32 bytes",
-            "content": {
-                "application/octet-stream": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            },
-        }
-    },
-)
-async def get_sc_dataset_defect_ids_binary(
-    dataset_id: str,
-    service: ScPlotPointsServiceDep,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> Response:
-    try:
-        body = await service.build_defect_ids_response(dataset_id, org.id)
-    except ScPlotPointsNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScPlotPointsRejectedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=body, media_type="application/octet-stream")
 
 
 @router.post(

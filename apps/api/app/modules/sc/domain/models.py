@@ -113,6 +113,7 @@ class PatchSample(BaseModel):
     die_y: int = 0
     rough_bin: int = 0
     class_number: int | None = None
+    test_id: int | None = None
     review_images: list[ReviewImage] = Field(default_factory=list)
     shard_images: list[ShardImageRef] = Field(default_factory=list)
     label: str = ""

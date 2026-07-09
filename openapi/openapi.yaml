@@ -4435,35 +4435,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/sc/datasets/{dataset_id}/defect-ids.bin:
-    get:
-      tags:
-      - sc
-      summary: Get Sc Dataset Defect Ids Binary
-      operationId: get_sc_dataset_defect_ids_binary_api_v1_sc_datasets__dataset_id__defect_ids_bin_get
-      parameters:
-      - name: dataset_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Dataset Id
-      responses:
-        '200':
-          description: Return sorted dataset defect ids as little-endian Int32 bytes
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/sc/inspections/{inspection_time}/{wafer_key}/box-filter:
     post:
       tags:

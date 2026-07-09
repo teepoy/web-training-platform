@@ -37,6 +37,11 @@ CMD ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000", "--
 
 FROM deps AS prod
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends supervisor \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod +x /app/apps/api/scripts/run_perspective_worker.sh
+
 WORKDIR /app/apps/api
 EXPOSE 8000
 ENV UVICORN_TIMEOUT_KEEP_ALIVE=120

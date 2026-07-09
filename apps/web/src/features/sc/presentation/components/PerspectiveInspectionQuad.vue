@@ -152,7 +152,11 @@ async function queryGlobalFilterCount(): Promise<number> {
   return model.queryGlobalFilterCount();
 }
 
-defineExpose({ queryGlobalFilterCount });
+async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number[]> {
+  return model.queryRandomGlobalFilteredDefectIds(count);
+}
+
+defineExpose({ queryGlobalFilterCount, queryRandomGlobalFilteredDefectIds });
 
 const sampleTableTotal = 0;
 const tableHighlightIds = computed(

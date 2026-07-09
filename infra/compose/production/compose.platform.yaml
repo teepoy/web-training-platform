@@ -93,9 +93,9 @@ services:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     command:
       [
-        "/bin/sh",
-        "-lc",
-        "exec /app/.venv/bin/uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --workers $${PERSPECTIVE_WS_WORKERS:-1} --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "/usr/bin/supervisord",
+        "-c",
+        "/app/apps/api/supervisord.perspective.conf",
       ]
     environment: *platform-environment
     mem_limit: ${PERSPECTIVE_WS_MEMORY:-8g}
@@ -105,6 +105,9 @@ services:
         condition: service_healthy
     expose:
       - "8001"
+      - "8002"
+      - "8003"
+      - "8004"
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
     networks:

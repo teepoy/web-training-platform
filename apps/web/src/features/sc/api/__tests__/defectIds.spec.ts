@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  decodeInt32DefectIds,
-  defaultDefectIds,
-  fetchDatasetDefectIds,
-  fetchInspectionDefectIds,
-} from "../defectIds";
+import { decodeInt32DefectIds, fetchInspectionDefectIds } from "../defectIds";
 import { req } from "@/shared/api/client";
 
 vi.mock("@/shared/api/client", () => ({
@@ -19,11 +14,6 @@ function int32Buffer(values: number[]): ArrayBuffer {
 }
 
 describe("SC defect id binary helpers", () => {
-  it("builds fallback defect ids from 1 to total", () => {
-    expect(defaultDefectIds(4)).toEqual([1, 2, 3, 4]);
-    expect(defaultDefectIds(-1)).toEqual([]);
-  });
-
   it("decodes little-endian Int32 defect ids", () => {
     expect(decodeInt32DefectIds(int32Buffer([1, 2, 10]))).toEqual([1, 2, 10]);
   });
@@ -34,21 +24,13 @@ describe("SC defect id binary helpers", () => {
     );
   });
 
-  it("fetches dataset and inspection binary endpoints", async () => {
-    vi.mocked(req)
-      .mockResolvedValueOnce(new Response(int32Buffer([7])))
-      .mockResolvedValueOnce(new Response(int32Buffer([3])));
+  it("fetches the inspection binary endpoint", async () => {
+    vi.mocked(req).mockResolvedValueOnce(new Response(int32Buffer([3])));
 
-    await expect(fetchDatasetDefectIds("dataset 1")).resolves.toEqual([7]);
     await expect(fetchInspectionDefectIds("2026-01-01 00:00:00", 2)).resolves.toEqual([3]);
 
     expect(req).toHaveBeenNthCalledWith(
       1,
-      "/sc/datasets/dataset%201/defect-ids.bin",
-      { headers: { Accept: "application/octet-stream" } },
-    );
-    expect(req).toHaveBeenNthCalledWith(
-      2,
       "/sc/inspections/2026-01-01%2000%3A00%3A00/2/defect-ids.bin",
       { headers: { Accept: "application/octet-stream" } },
     );

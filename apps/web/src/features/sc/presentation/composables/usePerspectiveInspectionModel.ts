@@ -17,6 +17,7 @@ import {
   managePerspectiveTable,
   type ManagedPerspectiveView,
 } from "@/features/sc/presentation/composables/managedPerspectiveView";
+import { buildPerspectiveFilters, perspectiveFilterField } from "./perspectiveFilter";
 
 const PATCH_BLINK_COLUMNS = [
   "defect_id",
@@ -84,38 +85,6 @@ function legendValue(value: unknown): string | number {
 
 function legendKey(value: unknown): string {
   return String(legendValue(value));
-}
-
-function perspectiveField(field: string): string {
-  if (field === "annotation_label") return "annotation_label";
-  if (field === "prediction_label") return "prediction_label";
-  if (field === "final_class") return "final_class";
-  if (field === "class_number") return "class_number";
-  return field;
-}
-
-function sampleFilterToPerspective(filter: ScSampleTableFilter | undefined): Filter[] {
-  const out: Filter[] = [];
-  for (const [field, raw] of Object.entries(filter ?? {})) {
-    const col = perspectiveField(field);
-    const sf = raw as {
-      filterType: string;
-      values?: Array<string | number>;
-      type?: string;
-      filter?: number;
-      filterTo?: number;
-    };
-    if (sf.filterType === "set" && sf.values?.length) out.push([col, "in", sf.values] as Filter);
-    if (
-      sf.filterType === "number" &&
-      sf.type === "inRange" &&
-      typeof sf.filter === "number" &&
-      typeof sf.filterTo === "number"
-    ) {
-      out.push([col, ">=", sf.filter] as Filter, [col, "<=", sf.filterTo] as Filter);
-    }
-  }
-  return out;
 }
 
 function sortedUniqueIds(ids: unknown[]): number[] {
@@ -359,7 +328,7 @@ export function usePerspectiveInspectionModel(args: {
   });
   const legendGroups = ref<Record<string, DefectList> | null>(null);
 
-  const globalFilters = computed(() => sampleFilterToPerspective(args.globalFilter?.value));
+  const globalFilters = computed(() => buildPerspectiveFilters(args.globalFilter?.value));
   const reviewModeFilters = computed<Filter[]>(() =>
     reviewMode.value ? [REVIEW_MODE_FILTER] : [],
   );
@@ -710,10 +679,41 @@ export function usePerspectiveInspectionModel(args: {
     }
     const managed = await managePerspectiveTable(table).view({
       columns: ["defect_id"],
-      filter: globalFilters.value,
+      filter: globalFilters.value.length ? globalFilters.value : undefined,
     } as never);
     try {
       return await managed.num_rows();
+    } finally {
+      managed.retire();
+    }
+  }
+
+  async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number[]> {
+    if (!Number.isInteger(count) || count <= 0) {
+      throw new Error("Sampling count must be a positive integer");
+    }
+    const table = args.table.value;
+    if (!table) {
+      throw new Error("Perspective data is not ready");
+    }
+    const managed = await managePerspectiveTable(table).view({
+      columns: ["defect_id"],
+      filter: globalFilters.value.length ? globalFilters.value : undefined,
+    } as never);
+    try {
+      const total = await managed.num_rows();
+      if (total === 0) return [];
+      const data = (await managed.to_columns({
+        start_row: 0,
+        end_row: total,
+      })) as Record<string, unknown[]>;
+      const defectIds = (data.defect_id ?? []).map(Number).filter(Number.isFinite);
+      const sampleSize = Math.min(count, defectIds.length);
+      for (let index = 0; index < sampleSize; index += 1) {
+        const swapIndex = index + Math.floor(Math.random() * (defectIds.length - index));
+        [defectIds[index], defectIds[swapIndex]] = [defectIds[swapIndex], defectIds[index]];
+      }
+      return defectIds.slice(0, sampleSize);
     } finally {
       managed.retire();
     }
@@ -823,7 +823,7 @@ export function usePerspectiveInspectionModel(args: {
   ): Promise<Array<string | number>> {
     const table = args.table.value;
     if (!table) return [];
-    const col = perspectiveField(field);
+    const col = perspectiveFilterField(field);
     const filters = search.trim() ? [[col, "contains", search.trim()] satisfies Filter] : [];
     const managedTable = managePerspectiveTable(table);
     const managed = await managedTable.view({
@@ -884,6 +884,7 @@ export function usePerspectiveInspectionModel(args: {
     queryBoxSelection,
     queryLegendSelection,
     queryGlobalFilterCount,
+    queryRandomGlobalFilteredDefectIds,
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,

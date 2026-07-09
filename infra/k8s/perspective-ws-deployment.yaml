@@ -20,21 +20,22 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
-              name: websocket
+              name: websocket-1
+            - containerPort: 8002
+              name: websocket-2
+            - containerPort: 8003
+              name: websocket-3
+            - containerPort: 8004
+              name: websocket-4
           envFrom:
             - configMapRef:
                 name: finetune-config
             - secretRef:
                 name: finetune-secrets
           command:
-            - sh
-            - -lc
-            - >-
-              exec uv run --no-dev --frozen uvicorn app.perspective_main:app
-              --host 0.0.0.0 --port 8001 --workers 1
-              --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-120}
-              --timeout-graceful-shutdown ${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600}
-              --timeout-worker-healthcheck ${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
+            - /usr/bin/supervisord
+            - -c
+            - /app/apps/api/supervisord.perspective.conf
           readinessProbe:
             httpGet:
               path: /ready
@@ -63,3 +64,13 @@ spec:
   ports:
     - port: 8001
       targetPort: 8001
+      name: websocket-1
+    - port: 8002
+      targetPort: 8002
+      name: websocket-2
+    - port: 8003
+      targetPort: 8003
+      name: websocket-3
+    - port: 8004
+      targetPort: 8004
+      name: websocket-4
