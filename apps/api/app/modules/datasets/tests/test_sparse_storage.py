@@ -495,14 +495,13 @@ class TestSparseDatasetStorage:
         assert summary["total_predictions"] == 3
 
     @pytest.mark.asyncio
-    async def test_with_predictions_without_job_id_reads_latest_prediction_job(
+    async def test_with_predictions_without_job_id_reads_accumulated_final(
         self,
         storage: SparseDatasetStorage,
-        _test_infra: dict,
         sparse_fixture: tuple[str, str],
     ) -> None:
-        """Unscoped prediction listing reads only the latest completed job."""
-        dataset_id, org_id = sparse_fixture
+        """Unscoped prediction listing reads the accumulated final result."""
+        _dataset_id, _org_id = sparse_fixture
         rows, _ = await storage.list_samples(limit=1)
         sample_id = rows[0].sample_id
 
@@ -544,20 +543,6 @@ class TestSparseDatasetStorage:
             model_id="test-model",
             model_version="v1",
         )
-        await _create_prediction_job(
-            _test_infra,
-            job_id=old_job_id,
-            dataset_id=dataset_id,
-            org_id=org_id,
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        )
-        await _create_prediction_job(
-            _test_infra,
-            job_id=latest_job_id,
-            dataset_id=dataset_id,
-            org_id=org_id,
-            created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-        )
 
         listed, _ = await storage.list_samples(
             limit=1,
@@ -568,6 +553,87 @@ class TestSparseDatasetStorage:
         assert listed[0].latest_prediction is not None
         assert listed[0].latest_prediction["predicted_label"] == "latest-label"
         assert listed[0].latest_prediction["job_id"] == latest_job_id
+
+        old_scoped, _ = await storage.list_samples(
+            limit=1,
+            with_predictions=True,
+            prediction_job_id=old_job_id,
+            sample_ids=[sample_id],
+        )
+        assert old_scoped[0].latest_prediction is not None
+        assert old_scoped[0].latest_prediction["predicted_label"] == "old-label"
+        assert old_scoped[0].latest_prediction["job_id"] == old_job_id
+
+    @pytest.mark.asyncio
+    async def test_accumulated_predictions_overwrite_and_preserve(
+        self,
+        storage: SparseDatasetStorage,
+    ) -> None:
+        rows, _ = await storage.list_samples(limit=2)
+        first_id = rows[0].sample_id
+        second_id = rows[1].sample_id
+
+        await storage.write_predictions(
+            _prediction_stream(
+                [
+                    PredictionResult(
+                        sample_id=first_id,
+                        predicted_label="first-v1",
+                        confidence=0.1,
+                        model_id="test-model",
+                        target="classification",
+                        model_version="v1",
+                        job_id="job-one",
+                    ),
+                    PredictionResult(
+                        sample_id=second_id,
+                        predicted_label="second-v1",
+                        confidence=0.2,
+                        model_id="test-model",
+                        target="classification",
+                        model_version="v1",
+                        job_id="job-one",
+                    ),
+                ]
+            ),
+            job_id="job-one",
+            model_id="test-model",
+            model_version="v1",
+        )
+        await storage.write_predictions(
+            _prediction_stream(
+                [
+                    PredictionResult(
+                        sample_id=first_id,
+                        predicted_label="first-v2",
+                        confidence=0.9,
+                        model_id="test-model",
+                        target="classification",
+                        model_version="v2",
+                        job_id="job-two",
+                    )
+                ]
+            ),
+            job_id="job-two",
+            model_id="test-model",
+            model_version="v2",
+        )
+
+        listed, _ = await storage.list_samples(
+            limit=2,
+            with_predictions=True,
+            sample_ids=[first_id, second_id],
+        )
+        predictions = {
+            row.sample_id: row.latest_prediction
+            for row in listed
+            if row.latest_prediction is not None
+        }
+
+        assert predictions[first_id]["predicted_label"] == "first-v2"
+        assert predictions[first_id]["job_id"] == "job-two"
+        assert predictions[second_id]["predicted_label"] == "second-v1"
+        assert predictions[second_id]["job_id"] == "job-one"
 
     # ── 13. materialize ─────────────────────────────────────────────────
 
