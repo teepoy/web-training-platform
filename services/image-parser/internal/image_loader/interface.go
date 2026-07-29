@@ -43,10 +43,13 @@ type ImageLoader interface {
 }
 
 type Options struct {
-	Upstream    UpstreamSource
-	CacheSizeMB int
-	CacheTTL    time.Duration
-	S3MaxConns  int
+	Upstream             UpstreamSource
+	CacheSizeMB          int
+	CacheDir             string
+	CacheTTL             time.Duration
+	CacheCleanupInterval time.Duration
+	CacheMaxBytes        int64
+	S3MaxConns           int
 }
 
 type UpstreamSource interface {
@@ -66,9 +69,6 @@ func Initialize(opts Options) (ImageLoader, func(), error) {
 	if opts.CacheSizeMB <= 0 {
 		opts.CacheSizeMB = 1024
 	}
-	if opts.CacheTTL <= 0 {
-		opts.CacheTTL = 10 * time.Minute
-	}
 	if opts.S3MaxConns <= 0 {
 		opts.S3MaxConns = 1000
 	}
@@ -77,8 +77,22 @@ func Initialize(opts Options) (ImageLoader, func(), error) {
 	_ = getZips()
 	_ = getReview()
 
-	zipCache, err := cache.New(opts.CacheSizeMB, opts.CacheTTL)
+	localFileCache, err := cache.NewLocalFileCache(cache.LocalFileCacheConfig{
+		Dir:             opts.CacheDir,
+		TTL:             opts.CacheTTL,
+		CleanupInterval: opts.CacheCleanupInterval,
+		MaxBytes:        opts.CacheMaxBytes,
+	})
 	if err != nil {
+		return nil, nil, err
+	}
+	zipCache, err := cache.New(
+		opts.CacheSizeMB,
+		opts.CacheTTL,
+		cache.WithLocalFileCache(localFileCache),
+	)
+	if err != nil {
+		_ = localFileCache.Close()
 		return nil, nil, err
 	}
 

@@ -30,6 +30,14 @@ spec:
               value: "9092"
             - name: CACHE_SIZE_MB
               value: "32768"
+            - name: CACHE_DIR
+              value: /tmp/image-parser-cache
+            - name: CACHE_TTL
+              value: 10m
+            - name: CACHE_CLEANUP_INTERVAL
+              value: 5m
+            - name: CACHE_MAX_BYTES
+              value: "34359738368"
             - name: S3_MAX_CONNS
               value: "1000"
             - name: S3_ENDPOINT

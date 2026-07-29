@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -9,24 +10,37 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+type Option func(*ZipCache)
+
+func WithLocalFileCache(local *LocalFileCache) Option {
+	return func(cache *ZipCache) {
+		cache.local = local
+	}
+}
+
 type ZipCache struct {
 	mu        sync.Mutex
 	maxBytes  int64
 	usedBytes int64
 	cache     *lru.Cache[string, []byte]
+	local     *LocalFileCache
 	sf        singleflight.Group
 }
 
-func New(maxSizeMB int, lifeWindow time.Duration) (*ZipCache, error) {
+func New(maxSizeMB int, lifeWindow time.Duration, options ...Option) (*ZipCache, error) {
 	_ = lifeWindow
-	cache, err := lru.New[string, []byte](1_000_000)
+	memory, err := lru.New[string, []byte](1_000_000)
 	if err != nil {
 		return nil, err
 	}
-	return &ZipCache{
+	cache := &ZipCache{
 		maxBytes: int64(maxSizeMB) * 1024 * 1024,
-		cache:    cache,
-	}, nil
+		cache:    memory,
+	}
+	for _, option := range options {
+		option(cache)
+	}
+	return cache, nil
 }
 
 func (c *ZipCache) Get(key string) ([]byte, bool) {
@@ -36,12 +50,24 @@ func (c *ZipCache) Get(key string) ([]byte, bool) {
 }
 
 func (c *ZipCache) Set(key string, data []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.setLocked(key, data)
+	if int64(len(data)) > c.maxBytes {
+		return fmt.Errorf("entry %d bytes exceeds cache max %d bytes", len(data), c.maxBytes)
+	}
+	if c.local != nil {
+		if err := c.local.Set(key, data); err != nil {
+			return fmt.Errorf("write local file cache: %w", err)
+		}
+	}
+	return c.setMemory(key, data)
 }
 
-func (c *ZipCache) setLocked(key string, data []byte) error {
+func (c *ZipCache) setMemory(key string, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.setMemoryLocked(key, data)
+}
+
+func (c *ZipCache) setMemoryLocked(key string, data []byte) error {
 	size := int64(len(data))
 
 	if old, ok := c.cache.Peek(key); ok {
@@ -69,9 +95,21 @@ func (c *ZipCache) GetOrLoad(key string, loader func() ([]byte, error)) ([]byte,
 		return data, nil
 	}
 
-	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
+	value, err, _ := c.sf.Do(key, func() (interface{}, error) {
 		if data, ok := c.Get(key); ok {
 			return data, nil
+		}
+		if c.local != nil {
+			data, ok, err := c.local.Get(key)
+			if err != nil {
+				return nil, fmt.Errorf("read local file cache: %w", err)
+			}
+			if ok {
+				if err := c.setMemory(key, data); err != nil {
+					return nil, err
+				}
+				return data, nil
+			}
 		}
 		data, err := loader()
 		if err != nil {
@@ -85,19 +123,28 @@ func (c *ZipCache) GetOrLoad(key string, loader func() ([]byte, error)) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	return v.([]byte), nil
+	return value.([]byte), nil
 }
 
 func (c *ZipCache) Evict(key string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if old, ok := c.cache.Peek(key); ok {
 		c.usedBytes -= int64(len(old))
 		c.cache.Remove(key)
 	}
+	c.mu.Unlock()
+
+	if c.local != nil {
+		if err := c.local.Evict(key); err != nil {
+			log.Printf("evict local file cache entry failed: %v", err)
+		}
+	}
 }
 
 func (c *ZipCache) Close() error {
+	if c.local != nil {
+		return c.local.Close()
+	}
 	return nil
 }
 

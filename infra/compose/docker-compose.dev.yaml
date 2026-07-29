@@ -178,6 +178,10 @@ services:
       PORT: "8090"
       GRPC_PORT: "9092"
       CACHE_SIZE_MB: "1024"
+      CACHE_DIR: /tmp/image-parser-cache
+      CACHE_TTL: 10m
+      CACHE_CLEANUP_INTERVAL: 5m
+      CACHE_MAX_BYTES: "1073741824"
       S3_MAX_CONNS: "1000"
       SC_UPSTREAM_ADDR: sc-upstream:9091
     depends_on:
