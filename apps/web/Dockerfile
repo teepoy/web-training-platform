@@ -5,7 +5,7 @@ FROM node:20-alpine AS build
 ARG NPM_CONFIG_REGISTRY=""
 ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 
-RUN npm install -g pnpm
+RUN corepack enable && corepack prepare pnpm@10.5.0 --activate
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ FROM node:20-alpine AS dev
 ARG NPM_CONFIG_REGISTRY=""
 ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 
-RUN npm install -g pnpm
+RUN corepack enable && corepack prepare pnpm@10.5.0 --activate
 
 WORKDIR /app
 

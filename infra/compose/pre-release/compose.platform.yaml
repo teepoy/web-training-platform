@@ -1,0 +1,50 @@
+# Local acceptance overlay for the production platform manifest.
+# The web/API/runtime processes still execute only baked image content.
+
+services:
+  prefect-server:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_PREFECT_PORT:?Set PRE_RELEASE_PREFECT_PORT}:4200"
+
+  api:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_API_PORT:?Set PRE_RELEASE_API_PORT}:8000"
+    volumes:
+      - platform-data:/mnt
+
+  perspective-ws:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_PERSPECTIVE_PORT:?Set PRE_RELEASE_PERSPECTIVE_PORT}:8001"
+    volumes:
+      - platform-data:/mnt
+
+  web:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_WEB_PORT:?Set PRE_RELEASE_WEB_PORT}:80"
+
+  prefect-worker-cpu:
+    volumes:
+      - platform-data:/mnt
+
+  prefect-worker-gpu:
+    volumes:
+      - platform-data:/mnt
+
+  sc-upstream:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_SC_GRPC_PORT:?Set PRE_RELEASE_SC_GRPC_PORT}:9091"
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_SC_FLIGHT_PORT:?Set PRE_RELEASE_SC_FLIGHT_PORT}:9093"
+    volumes:
+      - sc-upstream-data:/data
+
+  image-parser:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_IMAGE_PARSER_HTTP_PORT:?Set PRE_RELEASE_IMAGE_PARSER_HTTP_PORT}:8090"
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_IMAGE_PARSER_GRPC_PORT:?Set PRE_RELEASE_IMAGE_PARSER_GRPC_PORT}:9092"
+    volumes:
+      - image-parser-data:/data
+
+volumes:
+  platform-data:
+  sc-upstream-data:
+  image-parser-data:

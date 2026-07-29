@@ -8,12 +8,12 @@ container orchestrator instead.
 
 Use four independently managed Compose projects:
 
-| Project | Services | Lifecycle |
-| --- | --- | --- |
-| Stateful | PostgreSQL, MinIO, Redis, Label Studio | Long-lived; backed up before upgrades |
-| Platform | API, web, Prefect server, workers | Released with application versions |
-| Ops | Migrations, Prefect deployments | Run once per release |
-| Observability | Prometheus, Grafana, Loki, Alertmanager, exporters | Upgraded independently |
+| Project       | Services                                           | Lifecycle                             |
+| ------------- | -------------------------------------------------- | ------------------------------------- |
+| Stateful      | PostgreSQL, MinIO, Redis, Label Studio             | Long-lived; backed up before upgrades |
+| Platform      | API, web, Prefect server, workers                  | Released with application versions    |
+| Ops           | Migrations, Prefect deployments                    | Run once per release                  |
+| Observability | Prometheus, Grafana, Loki, Alertmanager, exporters | Upgraded independently                |
 
 The repository provides split production manifests under
 `infra/compose/production/`:
@@ -51,11 +51,16 @@ The values currently committed in `infra/compose/docker-compose.yaml` and
 Install Docker Engine with the Compose plugin. For GPU workers, also install the
 NVIDIA driver and NVIDIA Container Toolkit.
 
-Create a shared network used by the three projects:
+Create a shared network used by the four projects:
 
 ```bash
 docker network create finetune-prod
 ```
+
+Set `PLATFORM_NETWORK_NAME=finetune-prod` in every environment file. For a
+pre-release deployment, use an isolated name such as
+`finetune-pre-release`; do not attach pre-release services to the production
+network.
 
 Create deployment directories outside the repository:
 
@@ -80,11 +85,27 @@ The manifests intentionally publish no host ports. Run a TLS reverse proxy on
 the `finetune-prod` network and route public hostnames to `web:80`, `api:8000`,
 `prefect-server:4200`, `label-studio:8080`, and `grafana:3000` as needed.
 
+For workstation acceptance of production-built images, use the local
+pre-release overlays instead of adding ports or build directives to these
+production manifests:
+
+```bash
+make init-pre-release-env
+make up-pre-release
+```
+
+The command forces the `pre-release` API profile, builds every application and
+runtime service from its production Docker target, and uses isolated Compose
+projects, network, and named volumes. See
+`infra/compose/pre-release/env.example` for the loopback endpoints. The example
+credentials must be replaced before running on a shared host.
+
 ## Configuration
 
 Data environment:
 
 ```dotenv
+PLATFORM_NETWORK_NAME=finetune-prod
 POSTGRES_USER=finetune
 POSTGRES_PASSWORD=<strong-password>
 MINIO_ROOT_USER=<access-key>
@@ -94,6 +115,10 @@ MINIO_ROOT_PASSWORD=<strong-secret-key>
 Platform environment:
 
 ```dotenv
+APP_CONFIG_PROFILE=prod
+PLATFORM_NETWORK_NAME=finetune-prod
+FRONTEND_URL=https://finetune.example.com
+JWT_SECRET_KEY=<random-secret-at-least-32-bytes>
 DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
 PREFECT_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/prefect
 PREFECT_UI_URL=https://prefect.example.com
@@ -101,6 +126,8 @@ MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=<access-key>
 MINIO_SECRET_KEY=<secret-key>
 MINIO_BUCKET=finetune-artifacts
+S3_ACCESS_KEY=<image-parser-access-key>
+S3_SECRET_KEY=<image-parser-secret-key>
 SC_PATCH_S3_ACCESS_KEY=<access-key>
 SC_PATCH_S3_SECRET_KEY=<secret-key>
 SC_REVIEW_S3_ACCESS_KEY=<access-key>
@@ -133,6 +160,12 @@ IMAGE_PARSER_MEMORY=32g
 IMAGE_PARSER_SHM_SIZE=2g
 ```
 
+For the deployable test/acceptance environment, copy the platform environment
+file and set `APP_CONFIG_PROFILE=pre-release`, test-environment public URLs,
+unique credentials, separate host data paths, and
+`PLATFORM_NETWORK_NAME=finetune-pre-release`. The `test` profile is reserved
+for automated tests using SQLite and memory storage and must not be deployed.
+
 Stateful data paths and resource limits can also be set in the data
 environment file:
 
@@ -156,6 +189,7 @@ LABEL_STUDIO_SHM_SIZE=512m
 Observability environment:
 
 ```dotenv
+PLATFORM_NETWORK_NAME=finetune-prod
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<strong-password>
 ALERTMANAGER_CONFIG_PATH=/srv/finetune/observability/alertmanager.yml
@@ -184,12 +218,15 @@ Use separate protected environment files:
 Render each manifest with its environment file before starting services. Compose
 will fail fast when a required value is missing.
 
+From a repository checkout, `make check-config` renders every supported local
+and split-stack variant with the committed example files.
+
 Build and publish the four application images from these Dockerfiles:
 
-| Variable | Dockerfile target |
-| --- | --- |
-| `FINETUNE_API_IMAGE` | `apps/api/Dockerfile`, target `prod` |
-| `FINETUNE_WEB_IMAGE` | `apps/web/Dockerfile`, target `prod` |
+| Variable                    | Dockerfile target                                       |
+| --------------------------- | ------------------------------------------------------- |
+| `FINETUNE_API_IMAGE`        | `apps/api/Dockerfile`, target `prod`                    |
+| `FINETUNE_WEB_IMAGE`        | `apps/web/Dockerfile`, target `prod`                    |
 | `FINETUNE_CPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-cpu`, target `prod` |
 | `FINETUNE_GPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-gpu`, target `prod` |
 

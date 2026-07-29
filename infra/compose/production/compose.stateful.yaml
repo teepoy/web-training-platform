@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
       - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
-      - ${INIT_SCRIPTS_DIR:-./init-scripts}:/docker-entrypoint-initdb.d:ro
+      - ${INIT_SCRIPTS_DIR:-../init-scripts}:/docker-entrypoint-initdb.d:ro
     networks:
       finetune-prod:
         aliases:
@@ -22,7 +22,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U \"$${POSTGRES_USER}\" -d finetune && psql -U \"$${POSTGRES_USER}\" -d prefect -c 'SELECT 1' >/dev/null 2>&1",
+          'pg_isready -U "$${POSTGRES_USER}" -d finetune && psql -U "$${POSTGRES_USER}" -d prefect -c ''SELECT 1'' >/dev/null 2>&1',
         ]
       interval: 10s
       timeout: 5s
@@ -103,4 +103,4 @@ services:
 networks:
   finetune-prod:
     external: true
-    name: finetune-prod
+    name: ${PLATFORM_NETWORK_NAME:?Set PLATFORM_NETWORK_NAME}

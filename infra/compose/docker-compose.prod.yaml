@@ -1,5 +1,7 @@
 x-platform-environment: &platform-environment
   APP_CONFIG_PROFILE: prod
+  FRONTEND_URL: http://localhost:5173
+  JWT_SECRET_KEY: local-prod-validation-only-change-me
   MNT: /mnt
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
   PREFECT_API_URL: http://prefect-server:4200/api

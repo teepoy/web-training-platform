@@ -1,0 +1,51 @@
+# Local build overlay for the deployable production platform manifest.
+# Every application/runtime service is built from the same Dockerfile target
+# that is published for a release. No source directories are bind-mounted.
+
+x-api-build: &api-build
+  context: ../../..
+  dockerfile: apps/api/Dockerfile
+  target: prod
+  args:
+    UV_INDEX_URL: ${UV_INDEX_URL:-}
+    PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+
+services:
+  api:
+    build: *api-build
+
+  web:
+    build:
+      context: ../../..
+      dockerfile: apps/web/Dockerfile
+      target: prod
+      args:
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
+
+  prefect-worker-cpu:
+    build:
+      context: ../../..
+      dockerfile: apps/api/Dockerfile.prefect-worker-cpu
+      target: prod
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+
+  prefect-worker-gpu:
+    build:
+      context: ../../..
+      dockerfile: apps/api/Dockerfile.prefect-worker-gpu
+      target: prod
+      args:
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+
+  sc-upstream:
+    build:
+      context: ../../..
+      dockerfile: services/sc-upstream/Dockerfile
+
+  image-parser:
+    build:
+      context: ../../..
+      dockerfile: services/image-parser/Dockerfile

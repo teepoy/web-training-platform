@@ -2,6 +2,15 @@
 #  finetune-platform — App plane (.env.example)
 # ============================================================
 
+# Runtime profile. Use pre-release for the test environment and prod only for
+# the production environment.
+APP_CONFIG_PROFILE=prod
+PLATFORM_NETWORK_NAME=finetune-prod
+FRONTEND_URL=https://finetune.example.com
+JWT_SECRET_KEY=<random-secret-at-least-32-bytes>
+# Required only when oauth.enabled=true in the selected API profile.
+OAUTH_STATE_SECRET=
+
 # API database
 DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
 
@@ -15,6 +24,8 @@ MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=<access-key>
 MINIO_SECRET_KEY=<secret-key>
 MINIO_BUCKET=finetune-artifacts
+S3_ACCESS_KEY=<image-parser-access-key>
+S3_SECRET_KEY=<image-parser-secret-key>
 S3_ZIPS_ACCESS_KEY=<zips-access-key>
 S3_ZIPS_SECRET_KEY=<zips-secret-key>
 S3_REVIEW_ACCESS_KEY=<review-access-key>

@@ -194,7 +194,10 @@ Training, prediction, embedding, image parsing, and other heavy dependency execu
 ## CONVENTIONS
 
 - Run from this directory with `uv run ...`.
-- `APP_CONFIG_PROFILE=test` is the test-only profile. Supported runtime profiles are `dev` and `prod`.
+- `APP_CONFIG_PROFILE=test` is the unit/integration-test-only profile. Supported
+  deployable runtime profiles are `dev`, `pre-release`, and `prod`;
+  `pre-release` uses production-shaped dependencies with test-environment
+  credentials and URLs.
 - `execution.engine=local` and `storage.kind=memory` are test-only. Dev/prod require Prefect and MinIO/S3-compatible storage.
 - Browser-native image requests cannot carry platform auth headers. Image-serving endpoints must support token/org context query parameters, and route dependencies should not assume `X-Organization-ID` is the only org context source.
 

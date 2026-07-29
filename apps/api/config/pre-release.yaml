@@ -1,5 +1,5 @@
 app:
-  env: prod
+  env: pre-release
   frontend_url: ""
 
 execution:
@@ -22,10 +22,6 @@ k8s:
   incluster: false
   kubeconfig: null
 
-oauth:
-  enabled: false
-  state_secret: ""
-
 prefect:
   api_url: ""
   ui_url: ""
@@ -39,3 +35,7 @@ label_studio:
 auth:
   enabled: true
   jwt_secret_key: ""
+
+oauth:
+  enabled: false
+  state_secret: ""

@@ -52,6 +52,58 @@ COMPOSE_PROD_STATEFUL       := infra/compose/production/compose.stateful.yaml
 COMPOSE_PROD_PLATFORM       := infra/compose/production/compose.platform.yaml
 COMPOSE_PROD_OPS            := infra/compose/production/compose.ops.yaml
 COMPOSE_PROD_OBSERVABILITY  := infra/compose/production/compose.observability.yaml
+
+# Local pre-release acceptance stack. It reuses the production manifests,
+# builds production Docker targets, and keeps projects/network/volumes isolated.
+PRE_RELEASE_ENV              ?= infra/compose/pre-release/.env
+PRE_RELEASE_NETWORK          ?= finetune-pre-release
+PRE_RELEASE_PROJECT          ?= finetune-pre-release
+PRE_RELEASE_TAG              ?= $(shell git describe --always --dirty 2>/dev/null)
+PRE_RELEASE_IMAGE_PREFIX     ?= web-training-platform
+PRE_RELEASE_PROFILES         ?=
+PRE_RELEASE_BIND_HOST        ?= 127.0.0.1
+PRE_RELEASE_POSTGRES_PORT    ?= 15432
+PRE_RELEASE_MINIO_PORT       ?= 19000
+PRE_RELEASE_MINIO_CONSOLE_PORT ?= 19001
+PRE_RELEASE_REDIS_PORT       ?= 16379
+PRE_RELEASE_LABEL_STUDIO_PORT ?= 18080
+PRE_RELEASE_PREFECT_PORT     ?= 14200
+PRE_RELEASE_API_PORT         ?= 18000
+PRE_RELEASE_PERSPECTIVE_PORT ?= 18001
+PRE_RELEASE_WEB_PORT         ?= 15173
+PRE_RELEASE_SC_GRPC_PORT     ?= 19091
+PRE_RELEASE_SC_FLIGHT_PORT   ?= 19093
+PRE_RELEASE_IMAGE_PARSER_HTTP_PORT ?= 18090
+PRE_RELEASE_IMAGE_PARSER_GRPC_PORT ?= 19092
+COMPOSE_PRE_RELEASE_BUILD    := infra/compose/pre-release/compose.build.yaml
+COMPOSE_PRE_RELEASE_STATEFUL := infra/compose/pre-release/compose.stateful.yaml
+COMPOSE_PRE_RELEASE_PLATFORM := infra/compose/pre-release/compose.platform.yaml
+PRE_RELEASE_RUNTIME_ENV      := \
+	APP_CONFIG_PROFILE=pre-release \
+	PLATFORM_NETWORK_NAME=$(PRE_RELEASE_NETWORK) \
+	FRONTEND_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT) \
+	PREFECT_UI_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_PREFECT_PORT) \
+	LABEL_STUDIO_EXTERNAL_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_LABEL_STUDIO_PORT) \
+	PRE_RELEASE_BIND_HOST=$(PRE_RELEASE_BIND_HOST) \
+	PRE_RELEASE_POSTGRES_PORT=$(PRE_RELEASE_POSTGRES_PORT) \
+	PRE_RELEASE_MINIO_PORT=$(PRE_RELEASE_MINIO_PORT) \
+	PRE_RELEASE_MINIO_CONSOLE_PORT=$(PRE_RELEASE_MINIO_CONSOLE_PORT) \
+	PRE_RELEASE_REDIS_PORT=$(PRE_RELEASE_REDIS_PORT) \
+	PRE_RELEASE_LABEL_STUDIO_PORT=$(PRE_RELEASE_LABEL_STUDIO_PORT) \
+	PRE_RELEASE_PREFECT_PORT=$(PRE_RELEASE_PREFECT_PORT) \
+	PRE_RELEASE_API_PORT=$(PRE_RELEASE_API_PORT) \
+	PRE_RELEASE_PERSPECTIVE_PORT=$(PRE_RELEASE_PERSPECTIVE_PORT) \
+	PRE_RELEASE_WEB_PORT=$(PRE_RELEASE_WEB_PORT) \
+	PRE_RELEASE_SC_GRPC_PORT=$(PRE_RELEASE_SC_GRPC_PORT) \
+	PRE_RELEASE_SC_FLIGHT_PORT=$(PRE_RELEASE_SC_FLIGHT_PORT) \
+	PRE_RELEASE_IMAGE_PARSER_HTTP_PORT=$(PRE_RELEASE_IMAGE_PARSER_HTTP_PORT) \
+	PRE_RELEASE_IMAGE_PARSER_GRPC_PORT=$(PRE_RELEASE_IMAGE_PARSER_GRPC_PORT) \
+	FINETUNE_API_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/api:$(PRE_RELEASE_TAG) \
+	FINETUNE_WEB_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/web:$(PRE_RELEASE_TAG) \
+	FINETUNE_CPU_WORKER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/cpu-worker:$(PRE_RELEASE_TAG) \
+	FINETUNE_GPU_WORKER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/gpu-worker:$(PRE_RELEASE_TAG) \
+	SC_UPSTREAM_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/sc-upstream:$(PRE_RELEASE_TAG) \
+	IMAGE_PARSER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/image-parser:$(PRE_RELEASE_TAG)
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 LITELLM_LOCAL_MODEL_COST_MAP="True"
@@ -374,6 +426,19 @@ build-dev: ## Build all dev-target Docker images
 build-prod: ## Build all prod-target Docker images (local validation stack)
 	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
 
+.PHONY: check-config
+check-config: ## Render dev, local release-validation, pre-release, and production Compose configurations
+	docker compose -f $(COMPOSE_DEV) config --quiet
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) config --quiet
+	docker compose --env-file infra/compose/production/env-stateful.example -f $(COMPOSE_PROD_STATEFUL) config --quiet
+	APP_CONFIG_PROFILE=pre-release docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
+	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
+	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	docker compose --env-file infra/compose/production/env-observability.example -f $(COMPOSE_PROD_OBSERVABILITY) config --quiet
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) config --quiet
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+
 .PHONY: logs-dev
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS)
@@ -479,6 +544,86 @@ down: ## Stop dev compose stack only
 .PHONY: logs
 logs: ## Tail dev compose logs (use logs-dev/logs-prod explicitly)
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS) -n 1000
+
+# ──────────────────────────────────────────────
+# Local pre-release acceptance targets
+# ──────────────────────────────────────────────
+
+.PHONY: init-pre-release-env
+init-pre-release-env: ## Create the ignored local pre-release env file
+	@test ! -e $(PRE_RELEASE_ENV) || { echo "ERROR: $(PRE_RELEASE_ENV) already exists"; exit 1; }
+	cp infra/compose/pre-release/env.example $(PRE_RELEASE_ENV)
+	@echo "Created $(PRE_RELEASE_ENV). Credentials are local-only; replace them before using a shared host."
+
+.PHONY: require-pre-release-env
+require-pre-release-env:
+	@test -f $(PRE_RELEASE_ENV) || { echo "ERROR: missing $(PRE_RELEASE_ENV); run 'make init-pre-release-env'"; exit 1; }
+
+.PHONY: create-pre-release-network
+create-pre-release-network: ## Create the isolated pre-release Docker network
+	@docker network inspect $(PRE_RELEASE_NETWORK) >/dev/null 2>&1 || docker network create $(PRE_RELEASE_NETWORK)
+
+.PHONY: check-pre-release-config
+check-pre-release-config: require-pre-release-env ## Render the complete local pre-release configuration
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) config --quiet
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+
+.PHONY: build-pre-release
+build-pre-release: require-pre-release-env ## Build production-target images for pre-release acceptance
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) build $(ARGS)
+
+.PHONY: up-pre-release-stateful
+up-pre-release-stateful: require-pre-release-env create-pre-release-network ## Start and wait for the isolated pre-release data plane
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) up -d --wait --wait-timeout 180
+
+.PHONY: db-migrate-pre-release
+db-migrate-pre-release: require-pre-release-env ## Run Alembic migrations against pre-release
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm migrate
+
+.PHONY: deployments-pre-release
+deployments-pre-release: require-pre-release-env ## Register Prefect pools and deployments in pre-release
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm deployments
+
+.PHONY: up-pre-release-platform
+up-pre-release-platform: require-pre-release-env create-pre-release-network ## Start production-built pre-release platform services
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) up -d --no-build --wait --wait-timeout 300 $(ARGS)
+
+.PHONY: up-pre-release
+up-pre-release: require-pre-release-env ## Build and start the complete local pre-release acceptance stack
+	$(MAKE) check-pre-release-config
+	$(MAKE) build-pre-release
+	$(MAKE) up-pre-release-stateful
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) up -d --no-build --wait --wait-timeout 180 prefect-server
+	$(MAKE) db-migrate-pre-release
+	$(MAKE) deployments-pre-release
+	$(MAKE) up-pre-release-platform
+	$(MAKE) verify-pre-release
+
+.PHONY: verify-pre-release
+verify-pre-release: ## Verify public pre-release service health endpoints
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT)/ >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_API_PORT)/health >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_API_PORT)/ready >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_PREFECT_PORT)/api/health >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_LABEL_STUDIO_PORT)/health >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_MINIO_PORT)/minio/health/live >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_IMAGE_PARSER_HTTP_PORT)/health >/dev/null
+	@echo "Pre-release is healthy: http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT)"
+
+.PHONY: ps-pre-release
+ps-pre-release: require-pre-release-env ## Show stateful and platform pre-release containers
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) ps
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) ps
+
+.PHONY: logs-pre-release
+logs-pre-release: require-pre-release-env ## Tail pre-release platform logs (usage: make logs-pre-release ARGS="api")
+	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) logs -f $(ARGS)
+
+.PHONY: down-pre-release
+down-pre-release: require-pre-release-env ## Stop pre-release containers without deleting their volumes
+	@$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) down --remove-orphans
+	@$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) down --remove-orphans
 
 # ──────────────────────────────────────────────
 # Production split-stack targets

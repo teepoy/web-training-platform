@@ -2,6 +2,8 @@
 #  finetune-stateful — Data plane (.env.example)
 # ============================================================
 
+PLATFORM_NETWORK_NAME=finetune-prod
+
 # PostgreSQL credentials (shared with all DB consumers)
 POSTGRES_USER=finetune
 POSTGRES_PASSWORD=<strong-password>
@@ -11,7 +13,7 @@ MINIO_ROOT_USER=<access-key>
 MINIO_ROOT_PASSWORD=<strong-secret-key>
 
 # Path to init-scripts directory (relative to compose.stateful.yaml or absolute)
-INIT_SCRIPTS_DIR=./init-scripts
+INIT_SCRIPTS_DIR=../init-scripts
 
 # Label Studio image (immutable tag required)
 LABEL_STUDIO_IMAGE=heartexlabs/label-studio:<immutable-tag>

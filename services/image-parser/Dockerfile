@@ -19,9 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 FROM base AS builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /app
 COPY services/image-parser/ ./
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /server ./cmd/server/
+RUN CGO_ENABLED=1 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+    go build -ldflags="-s -w" -o /server ./cmd/server/
 
 FROM base AS dev
 WORKDIR /app/services/image-parser

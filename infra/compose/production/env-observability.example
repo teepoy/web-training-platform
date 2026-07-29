@@ -2,6 +2,9 @@
 #  finetune-observability — Monitoring plane (.env.example)
 # ============================================================
 
+PLATFORM_NETWORK_NAME=finetune-prod
+PREFECT_SERVER_API_AUTH_STRING=<prefect-user>:<strong-prefect-password>
+
 # Grafana admin
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<strong-password>
@@ -10,7 +13,7 @@ GRAFANA_ADMIN_PASSWORD=<strong-password>
 ALERTMANAGER_CONFIG_PATH=/srv/finetune/observability/alertmanager.yml
 
 # Observability configuration directory (relative to manifest or absolute)
-OBS_CONFIG_DIR=./observability
+OBS_CONFIG_DIR=../observability
 
 # Prefect exporter script directory
-EXPORTER_DIR=./observability/prefect-exporter
+EXPORTER_DIR=../observability/prefect-exporter

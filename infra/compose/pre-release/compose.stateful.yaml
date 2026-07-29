@@ -1,0 +1,35 @@
+# Local acceptance overlay for the production stateful manifest.
+# Named volumes are isolated by the pre-release Compose project. Host ports are
+# loopback-only and exist solely for acceptance/debugging.
+
+services:
+  postgres:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_POSTGRES_PORT:?Set PRE_RELEASE_POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  minio:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_MINIO_PORT:?Set PRE_RELEASE_MINIO_PORT}:9000"
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_MINIO_CONSOLE_PORT:?Set PRE_RELEASE_MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio-data:/data
+
+  redis:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_REDIS_PORT:?Set PRE_RELEASE_REDIS_PORT}:6379"
+    volumes:
+      - redis-data:/data
+
+  label-studio:
+    ports:
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_LABEL_STUDIO_PORT:?Set PRE_RELEASE_LABEL_STUDIO_PORT}:8080"
+    volumes:
+      - label-studio-data:/label-studio/data
+
+volumes:
+  postgres-data:
+  minio-data:
+  redis-data:
+  label-studio-data:

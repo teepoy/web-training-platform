@@ -10,6 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 T = TypeVar("T")
+_SUPPORTED_PROFILES = frozenset({"dev", "pre-release", "prod", "test"})
+_PROFILE_ENV = {
+    "dev": "dev",
+    "pre-release": "pre-release",
+    "prod": "prod",
+    "test": "test",
+}
+_INSECURE_SECRET_VALUES = frozenset({"replace-me-in-production"})
 
 
 class ConfigSection(BaseModel):
@@ -246,8 +254,15 @@ def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
     storage_kind = str(cfg.storage.kind)
     db_url = str(cfg.db.url)
 
-    if profile == "test" or env == "test":
+    expected_env = _PROFILE_ENV.get(profile)
+    if expected_env is None:
+        raise RuntimeError(f"Unsupported config profile: {profile}")
+    if profile == "test":
         return
+    if env != expected_env:
+        raise RuntimeError(
+            f"Config profile {profile!r} must set app.env={expected_env!r}, got {env!r}"
+        )
 
     if storage_kind == "memory":
         raise RuntimeError("storage.kind=memory is only supported in the test profile")
@@ -257,8 +272,9 @@ def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
             "execution.engine=local is only supported in the test profile"
         )
 
+    _require(db_url, "db.url")
     if not db_url.startswith("postgresql"):
-        raise RuntimeError("dev/prod environments require PostgreSQL")
+        raise RuntimeError("deployable environments require PostgreSQL")
 
     if storage_kind != "minio":
         raise RuntimeError(
@@ -266,14 +282,25 @@ def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
         )
 
     _require(str(cfg.prefect.api_url), "prefect.api_url")
+    _require(str(cfg.prefect.ui_url), "prefect.ui_url")
+    _require(str(cfg.app.frontend_url), "app.frontend_url")
     _require(str(cfg.storage.minio.endpoint), "storage.minio.endpoint")
     _require(str(cfg.storage.minio.access_key), "storage.minio.access_key")
     _require(str(cfg.storage.minio.secret_key), "storage.minio.secret_key")
     _require(str(cfg.storage.minio.bucket), "storage.minio.bucket")
     _require(str(runtime_bucket), "storage.runtime_bucket")
     _require(str(cfg.label_studio.url), "label_studio.url")
+    _require(str(cfg.label_studio.external_url), "label_studio.external_url")
     _require(str(cfg.label_studio.api_key), "label_studio.api_key")
     _require(str(cfg.label_studio.database_url), "label_studio.database_url")
+    if cfg.auth.enabled:
+        _require(str(cfg.auth.jwt_secret_key), "auth.jwt_secret_key")
+        if cfg.auth.jwt_secret_key in _INSECURE_SECRET_VALUES:
+            raise RuntimeError("auth.jwt_secret_key must not use a placeholder value")
+    if cfg.oauth.enabled:
+        _require(str(cfg.oauth.state_secret), "oauth.state_secret")
+        if cfg.oauth.state_secret in _INSECURE_SECRET_VALUES:
+            raise RuntimeError("oauth.state_secret must not use a placeholder value")
 
 
 def _config_root() -> Path:
@@ -284,12 +311,17 @@ def _config_root() -> Path:
 def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     base = OmegaConf.load(_config_root() / "base.yaml")
     profile = os.getenv("APP_CONFIG_PROFILE", "dev")
+    if profile not in _SUPPORTED_PROFILES:
+        supported = ", ".join(sorted(_SUPPORTED_PROFILES))
+        raise RuntimeError(
+            f"Unsupported APP_CONFIG_PROFILE={profile!r}; expected one of: {supported}"
+        )
     profile_path = _config_root() / f"{profile}.yaml"
-    if profile_path.exists():
-        cfg = OmegaConf.merge(base, OmegaConf.load(profile_path))
-    else:
-        cfg = base
+    cfg = OmegaConf.merge(base, OmegaConf.load(profile_path))
 
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        cfg.app.frontend_url = frontend_url
     db_url = os.getenv("DATABASE_URL")
     if db_url:
         cfg.db.url = db_url
@@ -344,6 +376,12 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     llm_model = os.getenv("LLM_MODEL")
     if llm_model:
         cfg.llm.model = llm_model
+    jwt_secret_key = os.getenv("JWT_SECRET_KEY")
+    if jwt_secret_key:
+        cfg.auth.jwt_secret_key = jwt_secret_key
+    oauth_state_secret = os.getenv("OAUTH_STATE_SECRET")
+    if oauth_state_secret:
+        cfg.oauth.state_secret = oauth_state_secret
     mnt = os.getenv("MNT")
     if mnt:
         cfg.data.dir = mnt

@@ -10,14 +10,15 @@ The deployable split manifests are:
 - `production/compose.ops.yaml`
 - `production/compose.observability.yaml`
 
-## Dev vs Prod Modes
+## Local Dev vs Release Validation
 
 The compose stack now supports two modes via override files:
 
-| Mode | Command        | Compose Files                                      | Hot Reload                | Volume Mounts       |
-| ---- | -------------- | -------------------------------------------------- | ------------------------- | ------------------- |
-| Dev  | `make up-dev`  | `docker-compose.yaml` + `docker-compose.dev.yaml`  | ✅ fastapi dev + vite dev | ✅ All code mounted |
-| Prod | `make up-prod` | `docker-compose.yaml` + `docker-compose.prod.yaml` | ❌                        | ❌ Baked images     |
+| Mode                    | Command               | Compose Files                                             | Hot Reload                | Volume Mounts                  |
+| ----------------------- | --------------------- | --------------------------------------------------------- | ------------------------- | ------------------------------ |
+| Dev                     | `make up-dev`         | `docker-compose.yaml` + `docker-compose.dev.yaml`         | ✅ fastapi dev + vite dev | ✅ All code mounted            |
+| Legacy local validation | `make up-prod`        | `docker-compose.yaml` + `docker-compose.prod.yaml`        | ❌                        | ❌ Baked images                |
+| Pre-release acceptance  | `make up-pre-release` | production manifests + `pre-release/` acceptance overlays | ❌                        | ❌ Production-built image code |
 
 ### Base Infrastructure (shared by both modes)
 
@@ -48,7 +49,7 @@ Adds via `docker-compose.dev.yaml`:
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
-### Prod Mode (`make up-prod`)
+### Local Release Validation (`make up-prod`)
 
 Adds via `docker-compose.prod.yaml`:
 
@@ -70,7 +71,43 @@ same value explicitly:
 export PREFECT_SERVER_API_AUTH_STRING=dangerous:dangerous
 ```
 
-### Production Split-Stack (real deployment)
+### Pre-release and Production Split-Stack
+
+For a local acceptance run of the production-built services:
+
+```bash
+make init-pre-release-env
+make up-pre-release
+```
+
+This path builds the production Docker targets, then runs them against the same
+PostgreSQL, MinIO, Redis, Label Studio, Prefect, SC upstream, and image-parser
+boundaries used by the production manifests. The overlays under
+`infra/compose/pre-release/` only add local builds, loopback host ports, and
+project-scoped named volumes. They do not replace the production topology.
+
+The default endpoints are:
+
+| Service       | URL                      |
+| ------------- | ------------------------ |
+| Web           | `http://127.0.0.1:15173` |
+| API           | `http://127.0.0.1:18000` |
+| Prefect       | `http://127.0.0.1:14200` |
+| Label Studio  | `http://127.0.0.1:18080` |
+| MinIO console | `http://127.0.0.1:19001` |
+
+Use `make verify-pre-release`, `make ps-pre-release`, and
+`make logs-pre-release ARGS=api` for inspection. `make down-pre-release` stops
+containers but preserves the isolated volumes. Enable the GPU worker only on a
+compatible NVIDIA host:
+
+```bash
+make up-pre-release PRE_RELEASE_PROFILES="--profile gpu"
+```
+
+`infra/compose/pre-release/.env` is ignored by Git. The supplied `env.example`
+credentials are safe only for a loopback-bound local machine; replace them
+before using the stack on a shared host.
 
 For production use the split-stack manifests under `infra/compose/production/`:
 
@@ -88,6 +125,17 @@ The API performs startup readiness checks against `postgres`, `redis`, and `labe
 If any dependency is unreachable, the container exits with code 1 so the orchestrator
 restarts it after a delay. This replaces cross-project `depends_on` which is silently
 ignored across separate Compose projects.
+
+The same split manifests are used for pre-release and production. Set
+`APP_CONFIG_PROFILE=pre-release` for the deployable test/acceptance environment
+and `APP_CONFIG_PROFILE=prod` for production. Use different Compose project
+names, `PLATFORM_NETWORK_NAME`, credentials, URLs, and host data paths so the
+environments cannot share state accidentally. The `test` API profile remains
+unit/integration-test-only and is never deployed.
+
+Run `make check-config` before starting or releasing a stack. It renders the
+dev, local release-validation, pre-release, production, ops, and observability
+manifests without starting containers.
 
 ### Migration Notes
 

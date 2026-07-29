@@ -218,8 +218,10 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 运行行为必须由配置 profile 决定，不允许在业务代码中硬编码环境分支。
 
-- `test` profile 只用于测试，可以使用 SQLite、memory storage、mock 外部服务。
-- `dev` / `prod` profile 面向 Postgres、S3-compatible object storage、后台编排系统和 out-of-process runtime services。
+- `test` profile 只用于单元/集成测试，可以使用 SQLite、memory storage、mock 外部服务；不得作为可部署测试环境。
+- `pre-release` 是可部署的测试/验收环境，必须与 `prod` 使用相同的 Postgres、S3-compatible object storage、后台编排系统和 out-of-process runtime service 边界。
+- `dev` / `pre-release` / `prod` profile 面向 Postgres、S3-compatible object storage、后台编排系统和 out-of-process runtime services。
+- 未知 profile 必须启动失败；`pre-release` / `prod` 的数据库、公开 URL、凭据和签名 secret 必须由部署环境显式提供，不得继承本地 placeholder。
 - Smoke fallback 只能用于本地验证，不得被当作 dev/prod 可靠行为。
 
 如果某个能力在 test/smoke 下被 mock 或降级，必须在测试、文档或 capability matrix 中说明。
