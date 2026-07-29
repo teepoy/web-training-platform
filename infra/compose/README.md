@@ -47,6 +47,8 @@ Adds via `docker-compose.dev.yaml`:
 - **prefect-worker-cpu** with bind mounts for flow code changes
 - **deployments-bootstrap**: one-shot pool creation + flow deployment registration
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
+- **sc-upstream** with `watchfiles` reload for Python service and protobuf changes
+- **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
 ### Local Release Validation (`make up-prod`)

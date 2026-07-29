@@ -1,5 +1,4 @@
-import { tableFromIPC } from "apache-arrow";
-import type { Table } from "apache-arrow";
+import type { DecodedSampleArrowTable } from "./sampleArrowDecode";
 
 export type ArrowBackedRow = Record<string, unknown>;
 
@@ -12,7 +11,7 @@ export interface ArrowBackedRowsStats {
 interface ArrowPage {
   start: number;
   end: number;
-  table: Table;
+  table: DecodedSampleArrowTable;
 }
 
 const ROW_INDEX = Symbol("arrow-row-index");
@@ -45,14 +44,6 @@ const ARROW_FIELDS = [
   "prediction_confidence",
 ] as const;
 
-function normalizeArrowValue(value: unknown): unknown {
-  if (typeof value === "bigint") return Number(value);
-  if (value && typeof value === "object" && "toJSON" in value) {
-    return (value as { toJSON: () => unknown }).toJSON();
-  }
-  return value;
-}
-
 function numericIndex(property: PropertyKey): number | null {
   if (typeof property !== "string" || !/^(0|[1-9]\d*)$/.test(property)) return null;
   const index = Number(property);
@@ -62,7 +53,7 @@ function numericIndex(property: PropertyKey): number | null {
 export class ArrowBackedRows {
   readonly rows: ArrowBackedRow[];
 
-  private defectIds: Table | null = null;
+  private defectIds: DecodedSampleArrowTable | null = null;
   private defectIdField = "defect_id";
   private pages: ArrowPage[] = [];
   private rowCache = new Map<number, ArrowBackedRow>();
@@ -115,9 +106,9 @@ export class ArrowBackedRows {
     this.rows = rowsProxy;
   }
 
-  reset(total: number, defectIdIpc: unknown, defectIdField = "defect_id"): void {
+  reset(total: number, defectIds: DecodedSampleArrowTable, defectIdField = "defect_id"): void {
     this.total = total;
-    this.defectIds = tableFromIPC(defectIdIpc as Uint8Array);
+    this.defectIds = defectIds;
     this.defectIdField = defectIdField;
     this.pages = [];
     this.rowCache.clear();
@@ -131,8 +122,7 @@ export class ArrowBackedRows {
     this.rowCache.clear();
   }
 
-  hydrate(start: number, ipc: unknown): ArrowBackedRow[] {
-    const table = tableFromIPC(ipc as Uint8Array);
+  hydrate(start: number, table: DecodedSampleArrowTable): ArrowBackedRow[] {
     const end = Math.min(this.total, start + table.numRows);
     this.pages = this.pages.filter((page) => page.end <= start || page.start >= end);
     this.pages.push({ start, end, table });
@@ -163,11 +153,11 @@ export class ArrowBackedRows {
   }
 
   getAllDefectIds(): number[] {
-    const column = this.defectIds?.getChild(this.defectIdField);
+    const column = this.defectIds?.columns[this.defectIdField];
     if (!column) return [];
     const ids: number[] = [];
     for (let index = 0; index < this.total; index += 1) {
-      const value = Number(normalizeArrowValue(column.get(index)));
+      const value = Number(column[index]);
       if (Number.isFinite(value)) ids.push(value);
     }
     return ids;
@@ -189,14 +179,14 @@ export class ArrowBackedRows {
   private getDefectId(index: number): string {
     const page = this.findPage(index);
     const value =
-      this.defectIds?.getChild(this.defectIdField)?.get(index) ??
-      page?.table.getChild("defect_id")?.get(index - page.start);
-    return value == null || value === "" ? `__row_${index}` : String(normalizeArrowValue(value));
+      this.defectIds?.columns[this.defectIdField]?.[index] ??
+      page?.table.columns.defect_id?.[index - page.start];
+    return value == null || value === "" ? `__row_${index}` : String(value);
   }
 
   private getPageValue(index: number, field: string): unknown {
     const page = this.findPage(index);
     if (!page) return undefined;
-    return normalizeArrowValue(page.table.getChild(field)?.get(index - page.start));
+    return page.table.columns[field]?.[index - page.start];
   }
 }

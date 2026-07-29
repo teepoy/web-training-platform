@@ -62,4 +62,40 @@ describe("ScBlinkVirtualTable - loading", () => {
       end_row: 2_000,
     });
   });
+
+  it("does not reload gallery data when selection highlighting is cleared", async () => {
+    const toArrow = vi.fn(async () =>
+      tableToIPC(
+        tableFromArrays({
+          defect_id: [1, 2, 3],
+        }),
+      ),
+    );
+    const snapshot = {
+      viewConfigKey: "patch-gallery",
+      view: {
+        rawView: {},
+        num_rows: vi.fn(async () => 3),
+        to_arrow: toArrow,
+      },
+    } as unknown as PerspectiveViewSnapshot;
+    const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
+      props: {
+        inspectionTime: "2026-07-26T04:00:00+08:00",
+        patchViewSnapshot: snapshot,
+        selectedDefectIds: new Set(["1"]),
+        waferKey: 1,
+      },
+    });
+    await vi.waitFor(() => {
+      expect(wrapper.attributes("data-loaded-samples")).toBe("3");
+    });
+    toArrow.mockClear();
+
+    await wrapper.setProps({ selectedDefectIds: new Set<string>() });
+    await wrapper.vm.$nextTick();
+
+    expect(toArrow).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain("Loading...");
+  });
 });

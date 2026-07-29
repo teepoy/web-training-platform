@@ -15,6 +15,7 @@ import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInte
 import { buildPerspectiveSampleViewConfig } from "@/features/sc/presentation/composables/perspectiveSampleViewConfig";
 import { perspectiveViewConfigKey } from "@/features/sc/presentation/composables/perspectiveViewConfig";
 import { ArrowBackedRows } from "./arrowBackedRows";
+import { createSampleArrowDecoder } from "./sampleArrowClient";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
@@ -132,6 +133,7 @@ const activeColumnDefinitions = computed(() =>
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 
 let arrowRows = new ArrowBackedRows();
+const arrowDecoder = createSampleArrowDecoder();
 let rawRows = arrowRows.rows as VxeSampleTableRow[];
 let displayRows: VxeSampleTableRow[] = [];
 const gridRef = ref<VxeGridRef | null>(null);
@@ -486,8 +488,10 @@ async function loadDefectIdRows(
     end_col: defectIdColumnIndex + 1,
   });
   if (version !== requestVersion) return false;
+  const decoded = await arrowDecoder.decode(ipc);
+  if (version !== requestVersion) return false;
   const defectIdColumn = columnPaths[defectIdColumnIndex];
-  rows.reset(total, ipc, defectIdColumn);
+  rows.reset(total, decoded, defectIdColumn);
   return true;
 }
 
@@ -536,7 +540,11 @@ async function loadPage(pageIndex: number): Promise<void> {
       if (!loadedIds) return;
     }
     if (version !== requestVersion || pageIndex !== requestedPage) return;
-    const items = page.ipc ? (nextArrowRows.hydrate(start, page.ipc) as VxeSampleTableRow[]) : [];
+    const decodedPage = page.ipc ? await arrowDecoder.decode(page.ipc) : null;
+    if (version !== requestVersion || pageIndex !== requestedPage) return;
+    const items = decodedPage
+      ? (nextArrowRows.hydrate(start, decodedPage) as VxeSampleTableRow[])
+      : [];
     nextArrowRows.retainRange(start, start + items.length);
     if (version !== requestVersion || pageIndex !== requestedPage) return;
     if (replacesRows) {
@@ -1044,6 +1052,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   requestVersion += 1;
+  arrowDecoder.dispose();
   resizeObserver?.disconnect();
   resizeObserver = null;
   endScrollbarDrag();

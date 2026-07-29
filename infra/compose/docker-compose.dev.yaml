@@ -215,7 +215,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/services/sc-upstream && uv sync --frozen && uv run --no-dev --frozen python -m sc_upstream.server",
+        "cd /app/services/sc-upstream && uv sync --frozen --package sc-upstream && exec /app/.venv/bin/python -m watchfiles --filter python --target-type command '/app/.venv/bin/python -m sc_upstream.server' /app/services/sc-upstream/src /app/libs/protos/src",
       ]
     environment:
       PYTHONPATH: /app/libs/protos/src

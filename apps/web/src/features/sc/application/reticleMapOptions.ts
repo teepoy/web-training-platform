@@ -12,23 +12,26 @@ export const DEFAULT_RETICLE_MAP_OPTIONS: ReticleMapOptions = {
   yDieShift: 0,
 };
 
-export function normalizeReticleMapOptions(
-  options: ReticleMapOptions,
-): ReticleMapOptions {
+export function normalizeReticleMapOptions(options: ReticleMapOptions): ReticleMapOptions {
   return {
     xDieCount: Math.max(
       1,
-      Math.floor(
-        Number(options.xDieCount) || DEFAULT_RETICLE_MAP_OPTIONS.xDieCount,
-      ),
+      Math.floor(Number(options.xDieCount) || DEFAULT_RETICLE_MAP_OPTIONS.xDieCount),
     ),
     yDieCount: Math.max(
       1,
-      Math.floor(
-        Number(options.yDieCount) || DEFAULT_RETICLE_MAP_OPTIONS.yDieCount,
-      ),
+      Math.floor(Number(options.yDieCount) || DEFAULT_RETICLE_MAP_OPTIONS.yDieCount),
     ),
     xDieShift: Math.floor(Number(options.xDieShift) || 0),
     yDieShift: Math.floor(Number(options.yDieShift) || 0),
   };
+}
+
+export function reticleMapOptionsEqual(left: ReticleMapOptions, right: ReticleMapOptions): boolean {
+  return (
+    left.xDieCount === right.xDieCount &&
+    left.yDieCount === right.yDieCount &&
+    left.xDieShift === right.xDieShift &&
+    left.yDieShift === right.yDieShift
+  );
 }

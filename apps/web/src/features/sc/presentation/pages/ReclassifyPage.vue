@@ -89,7 +89,7 @@ async function handleTrainAndPredictClick(): Promise<void> {
     try {
       filteredWorkflowFilter.value = { ...page.globalFilter.value };
       const count = await inspectionQuad.value?.queryGlobalFilterCount();
-      if (count === undefined) throw new Error("Perspective data is not ready");
+      if (count === undefined) throw new Error("Data is still loading. Try again in a moment.");
       filteredWorkflowCount.value = count;
       filterConfirmationVisible.value = true;
     } catch (error) {
@@ -118,7 +118,7 @@ async function openSamplingModal(): Promise<void> {
   isPreparingSampling.value = true;
   try {
     const count = await inspectionQuad.value?.queryGlobalFilterCount();
-    if (count === undefined) throw new Error("Perspective data is not ready");
+    if (count === undefined) throw new Error("Data is still loading. Try again in a moment.");
     perspectiveSamplingAvailableCount.value = count;
     page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
     page.showSamplingModal.value = true;
@@ -135,7 +135,7 @@ async function applyPerspectiveSampling(): Promise<void> {
     const ids = await inspectionQuad.value?.queryRandomGlobalFilteredDefectIds(
       page.samplingCount.value,
     );
-    if (!ids) throw new Error("Perspective data is not ready");
+    if (!ids) throw new Error("Data is still loading. Try again in a moment.");
     page.applySampling(ids.map(String));
   } catch (error) {
     message.error(toUserMessage(error, "Failed to sample defects"));

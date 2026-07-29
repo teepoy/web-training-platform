@@ -1,16 +1,19 @@
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { describe, expect, it } from "vitest";
 import { ArrowBackedRows } from "./arrowBackedRows";
+import { decodeSampleArrowIpc } from "./sampleArrowDecode";
 
-function ipc(columns: Record<string, Array<number | string>>): Uint8Array {
-  return tableToIPC(tableFromArrays(columns));
+function decoded(columns: Record<string, Array<number | string>>) {
+  const ipc = tableToIPC(tableFromArrays(columns));
+  const buffer = ipc.buffer.slice(ipc.byteOffset, ipc.byteOffset + ipc.byteLength) as ArrayBuffer;
+  return decodeSampleArrowIpc(buffer);
 }
 
 describe("ArrowBackedRows", () => {
   it("uses the full defect id vector to size the virtual scroller without eager rows", () => {
     const store = new ArrowBackedRows();
 
-    store.reset(4, ipc({ defect_id: [101, 102, 103, 104] }));
+    store.reset(4, decoded({ defect_id: [101, 102, 103, 104] }));
 
     expect(store.rows).toHaveLength(4);
     expect(store.rows.slice(0)).toBe(store.rows);
@@ -26,7 +29,7 @@ describe("ArrowBackedRows", () => {
   it("reads all numeric defect ids without creating virtual row objects", () => {
     const store = new ArrowBackedRows();
 
-    store.reset(4, ipc({ defect_id: [101, 102, 103, 104] }));
+    store.reset(4, decoded({ defect_id: [101, 102, 103, 104] }));
 
     expect(store.getAllDefectIds()).toEqual([101, 102, 103, 104]);
     expect(store.getStats()).toEqual({
@@ -38,11 +41,11 @@ describe("ArrowBackedRows", () => {
 
   it("reads hydrated fields from Arrow pages while preserving row identity", () => {
     const store = new ArrowBackedRows();
-    store.reset(4, ipc({ defect_id: [101, 102, 103, 104] }));
+    store.reset(4, decoded({ defect_id: [101, 102, 103, 104] }));
 
     const rows = store.hydrate(
       2,
-      ipc({
+      decoded({
         defect_id: [103, 104],
         class_number: [7, 8],
         kill_ratio: [0.25, 0.5],
@@ -64,9 +67,9 @@ describe("ArrowBackedRows", () => {
 
   it("evicts row objects and page tables outside the active scroll window", () => {
     const store = new ArrowBackedRows();
-    store.reset(6, ipc({ defect_id: [101, 102, 103, 104, 105, 106] }));
-    store.hydrate(0, ipc({ defect_id: [101, 102], class_number: [1, 2] }));
-    store.hydrate(4, ipc({ defect_id: [105, 106], class_number: [5, 6] }));
+    store.reset(6, decoded({ defect_id: [101, 102, 103, 104, 105, 106] }));
+    store.hydrate(0, decoded({ defect_id: [101, 102], class_number: [1, 2] }));
+    store.hydrate(4, decoded({ defect_id: [105, 106], class_number: [5, 6] }));
 
     store.retainRange(4, 6);
 

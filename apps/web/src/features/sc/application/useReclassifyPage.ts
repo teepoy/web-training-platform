@@ -29,6 +29,7 @@ import type { ScSampleTableFilter } from "../domain/sampleTable";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
+  reticleMapOptionsEqual,
   type ReticleMapOptions,
 } from "./reticleMapOptions";
 import { sampleTableFilterToMapFilter } from "./globalFilter";
@@ -662,7 +663,9 @@ export function useReclassifyPage(): ReclassifyPageState {
   );
 
   function updateReticleOptions(options: ReticleMapOptions): void {
-    reticleOptionsState.value = normalizeReticleMapOptions(options);
+    const nextOptions = normalizeReticleMapOptions(options);
+    if (reticleMapOptionsEqual(nextOptions, reticleOptions.value)) return;
+    reticleOptionsState.value = nextOptions;
   }
 
   // ── Map filter + selection state ─────────────────────────────────────

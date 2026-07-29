@@ -4,6 +4,7 @@ import { NButton, NIcon, NInputNumber, NModal, NSwitch } from "naive-ui";
 import { SettingsOutline } from "@vicons/ionicons5";
 import {
   normalizeReticleMapOptions,
+  reticleMapOptionsEqual,
   type ReticleMapOptions,
 } from "@/features/sc/application/reticleMapOptions";
 
@@ -41,11 +42,22 @@ function updateDraft(key: keyof ReticleMapOptions, value: number | null): void {
 }
 
 function applyOptions(): void {
-  emit("submit", normalizeReticleMapOptions(draft.value));
-  emit("submit-display", {
+  const nextReticleOptions = normalizeReticleMapOptions(draft.value);
+  const currentReticleOptions = normalizeReticleMapOptions(props.modelValue);
+  if (!reticleMapOptionsEqual(nextReticleOptions, currentReticleOptions)) {
+    emit("submit", nextReticleOptions);
+  }
+
+  const nextDisplayOptions = {
     showImageMarkers: draftShowImageMarkers.value,
     defectSize: draftDefectSize.value,
-  });
+  };
+  if (
+    nextDisplayOptions.showImageMarkers !== (props.showImageMarkers ?? true) ||
+    nextDisplayOptions.defectSize !== (props.defectSize ?? 2)
+  ) {
+    emit("submit-display", nextDisplayOptions);
+  }
   showModal.value = false;
 }
 </script>
