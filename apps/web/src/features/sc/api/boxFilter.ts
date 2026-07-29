@@ -45,11 +45,10 @@ export async function fetchScDatasetBoxFilter(
   options: ReticleMapOptions,
   globalFilter?: ScSampleTableFilter,
 ): Promise<ScBoxFilterResponse> {
-  const response = await filterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost(
+  return filterScDatasetBoxApiV1ScDatasetsDatasetIdBoxFilterPost(
     datasetId,
     boxFilterBody(mode, region, options, globalFilter),
   );
-  return response.data as ScBoxFilterResponse;
 }
 
 export async function fetchScInspectionBoxFilter(
@@ -60,10 +59,9 @@ export async function fetchScInspectionBoxFilter(
   options: ReticleMapOptions,
   globalFilter?: ScSampleTableFilter,
 ): Promise<ScBoxFilterResponse> {
-  const response = await filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPost(
+  return filterInspectionBoxApiV1ScInspectionsInspectionTimeWaferKeyBoxFilterPost(
     inspectionTime,
     waferKey,
     boxFilterBody(mode, region, options, globalFilter),
   );
-  return response.data as ScBoxFilterResponse;
 }

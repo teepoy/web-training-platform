@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import Annotated
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.responses import RedirectResponse
 
 from app.core.config import load_config
@@ -53,6 +53,22 @@ router = APIRouter(prefix="/api/v1", tags=["auth"])
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Repo = Annotated[AuthRepository, Depends(get_repository)]
+
+
+def _oauth_callback_url(provider: str) -> str:
+    public_frontend_url = str(load_config().app.frontend_url)
+    parsed = urlsplit(public_frontend_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError("app.frontend_url must be an absolute public URL")
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            f"/api/v1/auth/oauth/{provider}/callback",
+            "",
+            "",
+        )
+    )
 
 
 @router.post("/auth/register", response_model=UserResponse, status_code=201)
@@ -326,7 +342,7 @@ async def list_oauth_providers() -> list[OAuthProviderInfo]:
 
 
 @router.get("/auth/oauth/{provider}")
-async def oauth_authorize(provider: str, request: Request) -> RedirectResponse:
+async def oauth_authorize(provider: str) -> RedirectResponse:
     prov_cfg = get_oauth_provider_config(provider)
     if not prov_cfg or not prov_cfg.get("enabled"):
         raise HTTPException(
@@ -336,7 +352,7 @@ async def oauth_authorize(provider: str, request: Request) -> RedirectResponse:
         raise HTTPException(status_code=400, detail="OAuth provider is misconfigured")
 
     state = f"{provider}:{generate_oauth_state()}"
-    callback_url = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
+    callback_url = _oauth_callback_url(provider)
     authorize_url = build_authorize_url(prov_cfg, state, callback_url)
     return RedirectResponse(url=authorize_url)
 
@@ -346,7 +362,6 @@ async def oauth_callback(
     provider: str,
     code: str,
     state: str,
-    request: Request,
     repo: Repo,
 ) -> RedirectResponse:
     cfg = load_config()
@@ -360,7 +375,7 @@ async def oauth_callback(
     if not prov_cfg:
         raise HTTPException(status_code=404, detail="OAuth provider not found")
 
-    redirect_uri = f"{request.base_url}api/v1/auth/oauth/{provider}/callback"
+    redirect_uri = _oauth_callback_url(provider)
 
     try:
         access_token = await exchange_code_for_token(prov_cfg, code, redirect_uri)

@@ -70,7 +70,7 @@ export type {
   UseDatasetListSurfaceResult,
   BuildDatasetColumnsOptions,
 } from "./datasets/types";
-export type { SyncResult, CreateDatasetBody, PaginatedResponse } from "./api/types";
+export type { SyncResult, PaginatedResponse } from "./api/types";
 export type { DatasetExport, ExportFormatItem } from "./api/ui-helpers";
 export {
   listPreviewItems,

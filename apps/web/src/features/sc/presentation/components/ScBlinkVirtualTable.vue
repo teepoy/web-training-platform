@@ -275,8 +275,9 @@ const sampleOffset = computed(() =>
 );
 const currentLoading = computed(
   () =>
-    props.loading ||
-    (mode.value === "review" ? reviewGallery.isPending.value : patchGallery.isPending.value),
+    (props.loading ||
+      (mode.value === "review" ? reviewGallery.isPending.value : patchGallery.isPending.value)) &&
+    samplesRef.value.length === 0,
 );
 const patchCellSizeRef = patchImageSize;
 const reviewCellSizeRef = reviewImageSize;

@@ -3,9 +3,18 @@
     :show="show"
     :width="520"
     placement="right"
-    @update:show="(val: boolean) => { if (!val) emit('close') }"
+    @update:show="
+      (val: boolean) => {
+        if (!val) emit('close');
+      }
+    "
   >
-    <n-drawer-content title="Sample Detail" :native-scrollbar="false" closable @close="emit('close')">
+    <n-drawer-content
+      title="Sample Detail"
+      :native-scrollbar="false"
+      closable
+      @close="emit('close')"
+    >
       <n-scrollbar>
         <div v-if="!sampleId" style="padding: 24px">
           <n-empty description="No sample selected" />
@@ -20,14 +29,22 @@
           </n-divider>
 
           <div style="margin-bottom: 16px">
-            <div v-if="sampleQuery.isLoading.value" style="display: flex; justify-content: center; padding: 32px">
+            <div
+              v-if="sampleQuery.isLoading.value"
+              style="display: flex; justify-content: center; padding: 32px"
+            >
               <n-spin size="medium" />
             </div>
             <div v-else-if="sampleQuery.isError.value" style="padding: 16px">
               <n-alert type="error" title="Failed to load sample" />
             </div>
             <template v-else-if="sample">
-              <div v-if="resolvedUris.length === 0 || (resolvedUris.length === 1 && resolvedUris[0] === FALLBACK_PLACEHOLDER)">
+              <div
+                v-if="
+                  resolvedUris.length === 0 ||
+                  (resolvedUris.length === 1 && resolvedUris[0] === FALLBACK_PLACEHOLDER)
+                "
+              >
                 <n-empty description="No images" />
               </div>
               <n-image-group v-else>
@@ -54,11 +71,25 @@
           </n-divider>
 
           <div style="margin-bottom: 16px">
-            <div v-if="sampleQuery.isLoading.value" style="display: flex; justify-content: center; padding: 16px">
+            <div
+              v-if="sampleQuery.isLoading.value"
+              style="display: flex; justify-content: center; padding: 16px"
+            >
               <n-spin size="small" />
             </div>
             <template v-else-if="sample">
-              <pre style="margin: 0; padding: 10px; background: #f6f6f6; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{ metadataJson }}</pre>
+              <pre
+                style="
+                  margin: 0;
+                  padding: 10px;
+                  background: #f6f6f6;
+                  border-radius: 6px;
+                  font-size: 12px;
+                  white-space: pre-wrap;
+                  word-break: break-all;
+                "
+                >{{ metadataJson }}</pre
+              >
             </template>
           </div>
 
@@ -70,18 +101,33 @@
           </n-divider>
 
           <div style="margin-bottom: 16px">
-            <div v-if="annotationsQuery.isLoading.value" style="display: flex; justify-content: center; padding: 16px">
+            <div
+              v-if="annotationsQuery.isLoading.value"
+              style="display: flex; justify-content: center; padding: 16px"
+            >
               <n-spin size="small" />
             </div>
             <div v-else-if="annotationsQuery.isError.value" style="padding: 8px">
               <n-alert type="error" title="Failed to load annotations" />
             </div>
             <template v-else>
-              <n-empty v-if="annotations.length === 0" description="No annotations yet" style="margin-bottom: 12px" />
+              <n-empty
+                v-if="annotations.length === 0"
+                description="No annotations yet"
+                style="margin-bottom: 12px"
+              />
               <div
                 v-for="ann in annotations"
                 :key="ann.id"
-                style="display: flex; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px"
+                style="
+                  display: flex;
+                  align-items: flex-start;
+                  gap: 8px;
+                  padding: 8px;
+                  border: 1px solid #eee;
+                  border-radius: 6px;
+                  margin-bottom: 8px;
+                "
               >
                 <!-- Edit mode -->
                 <template v-if="editingAnnotationId === ann.id">
@@ -119,17 +165,15 @@
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
                       <n-tag type="info" size="small">{{ ann.label }}</n-tag>
                       <span style="font-size: 11px; color: #888">{{ ann.created_by }}</span>
-                      <span style="font-size: 11px; color: #bbb">{{ formatDate(ann.created_at ?? "") }}</span>
+                      <span style="font-size: 11px; color: #bbb">{{
+                        formatDate(ann.created_at ?? "")
+                      }}</span>
                     </div>
-                    <div style="font-size: 11px; color: #aaa; font-family: monospace">{{ ann.id!.slice(0, 8) }}…</div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace">
+                      {{ ann.id!.slice(0, 8) }}…
+                    </div>
                   </div>
-                  <n-button
-                    size="small"
-                    quaternary
-                    @click="startEdit(ann)"
-                  >
-                    Edit
-                  </n-button>
+                  <n-button size="small" quaternary @click="startEdit(ann)"> Edit </n-button>
                   <n-popconfirm
                     positive-text="Delete"
                     negative-text="Cancel"
@@ -144,8 +188,12 @@
               </div>
 
               <!-- Add new annotation -->
-              <div style="padding: 12px; border: 1px dashed #ccc; border-radius: 6px; margin-top: 8px">
-                <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 600">Add Annotation</div>
+              <div
+                style="padding: 12px; border: 1px dashed #ccc; border-radius: 6px; margin-top: 8px"
+              >
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 600">
+                  Add Annotation
+                </div>
                 <div style="display: flex; flex-direction: column; gap: 8px">
                   <n-select
                     v-if="labelSpace.length > 0"
@@ -184,101 +232,131 @@
           <!-- 4. Replace Image                                                  -->
           <!-- ================================================================ -->
           <template v-if="!isSparse">
-          <n-divider title-placement="left">
-            <span style="font-size: 13px; font-weight: 600">Replace Image</span>
-          </n-divider>
+            <n-divider title-placement="left">
+              <span style="font-size: 13px; font-weight: 600">Replace Image</span>
+            </n-divider>
 
-          <div style="margin-bottom: 16px">
-            <input
-              type="file"
-              accept="image/*"
-              style="display: none"
-              ref="replaceFileInputRef"
-              @change="onReplaceFileChange"
-            />
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-              <n-button size="small" @click="(replaceFileInputRef as HTMLInputElement)?.click()">
-                Choose File
+            <div style="margin-bottom: 16px">
+              <input
+                type="file"
+                accept="image/*"
+                style="display: none"
+                ref="replaceFileInputRef"
+                @change="onReplaceFileChange"
+              />
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
+                <n-button size="small" @click="(replaceFileInputRef as HTMLInputElement)?.click()">
+                  Choose File
+                </n-button>
+                <span v-if="replaceFile" style="font-size: 12px; color: #666">{{
+                  replaceFile.name
+                }}</span>
+              </div>
+              <n-image
+                v-if="replacePreviewUrl"
+                :src="replacePreviewUrl"
+                width="120"
+                height="120"
+                object-fit="cover"
+                style="
+                  border-radius: 6px;
+                  border: 1px solid #eee;
+                  margin-bottom: 8px;
+                  display: block;
+                "
+              />
+              <n-button
+                v-if="replaceFile"
+                type="primary"
+                size="small"
+                :loading="uploadingImage"
+                @click="doUpload"
+              >
+                Upload
               </n-button>
-              <span v-if="replaceFile" style="font-size: 12px; color: #666">{{ replaceFile.name }}</span>
             </div>
-            <n-image
-              v-if="replacePreviewUrl"
-              :src="replacePreviewUrl"
-              width="120"
-              height="120"
-              object-fit="cover"
-              style="border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px; display: block"
-            />
-            <n-button
-              v-if="replaceFile"
-              type="primary"
-              size="small"
-              :loading="uploadingImage"
-              @click="doUpload"
-            >
-              Upload
-            </n-button>
-          </div>
           </template>
 
           <!-- ================================================================ -->
           <!-- 5. Find Similar                                                  -->
           <!-- ================================================================ -->
           <template v-if="!isSparse">
-          <n-divider title-placement="left">
-            <span style="font-size: 13px; font-weight: 600">Find Similar</span>
-          </n-divider>
+            <n-divider title-placement="left">
+              <span style="font-size: 13px; font-weight: 600">Find Similar</span>
+            </n-divider>
 
-          <div style="margin-bottom: 24px">
-            <!-- Button + loading state -->
-            <n-button
-              size="small"
-              type="default"
-              :loading="findSimilarLoading"
-              @click="doFindSimilar"
-            >
-              Find Similar
-            </n-button>
-
-            <!-- Error -->
-            <n-alert v-if="findSimilarError" type="error" :title="findSimilarError" style="margin-top: 8px" />
-
-            <!-- Results panel -->
-            <div v-if="similarNeighbors.length > 0" style="margin-top: 12px">
-              <div style="font-size: 12px; color: #888; margin-bottom: 8px">
-                {{ similarNeighbors.length }} similar samples
-              </div>
-              <div
-                v-for="nb in similarNeighbors"
-                :key="nb.sample_id"
-                style="display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid #eee; border-radius: 6px; margin-bottom: 6px; cursor: pointer"
-                @click="emit('select-sample', nb.sample_id)"
+            <div style="margin-bottom: 24px">
+              <!-- Button + loading state -->
+              <n-button
+                size="small"
+                type="default"
+                :loading="findSimilarLoading"
+                @click="doFindSimilar"
               >
-                <n-image
-                  :src="nb.previewUri"
-                  width="48"
-                  height="48"
-                  object-fit="cover"
-                  style="border-radius: 4px; flex-shrink: 0"
-                  preview-disabled
-                />
-                <div style="flex: 1; min-width: 0">
-                  <div style="font-size: 11px; color: #666; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                    {{ nb.sample_id.slice(0, 12) }}…
-                  </div>
-                  <div style="font-size: 12px; color: #333; margin-top: 2px">
-                    Score: {{ (nb.score * 100).toFixed(1) }}%
+                Find Similar
+              </n-button>
+
+              <!-- Error -->
+              <n-alert
+                v-if="findSimilarError"
+                type="error"
+                :title="findSimilarError"
+                style="margin-top: 8px"
+              />
+
+              <!-- Results panel -->
+              <div v-if="similarNeighbors.length > 0" style="margin-top: 12px">
+                <div style="font-size: 12px; color: #888; margin-bottom: 8px">
+                  {{ similarNeighbors.length }} similar samples
+                </div>
+                <div
+                  v-for="nb in similarNeighbors"
+                  :key="nb.sample_id"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 6px;
+                    border: 1px solid #eee;
+                    border-radius: 6px;
+                    margin-bottom: 6px;
+                    cursor: pointer;
+                  "
+                  @click="emit('select-sample', nb.sample_id)"
+                >
+                  <n-image
+                    :src="nb.previewUri"
+                    width="48"
+                    height="48"
+                    object-fit="cover"
+                    style="border-radius: 4px; flex-shrink: 0"
+                    preview-disabled
+                  />
+                  <div style="flex: 1; min-width: 0">
+                    <div
+                      style="
+                        font-size: 11px;
+                        color: #666;
+                        font-family: monospace;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                    >
+                      {{ nb.sample_id.slice(0, 12) }}…
+                    </div>
+                    <div style="font-size: 12px; color: #333; margin-top: 2px">
+                      Score: {{ (nb.score * 100).toFixed(1) }}%
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Empty state after search -->
-            <div v-else-if="findSimilarSearched && !findSimilarLoading" style="margin-top: 8px">
-              <n-empty description="No similar samples found" />
+              <!-- Empty state after search -->
+              <div v-else-if="findSimilarSearched && !findSimilarLoading" style="margin-top: 8px">
+                <n-empty description="No similar samples found" />
+              </div>
             </div>
-          </div>
           </template>
         </div>
       </n-scrollbar>
@@ -288,7 +366,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import {
   NDrawer,
   NDrawerContent,
@@ -305,26 +383,40 @@ import {
   NDivider,
   NSpace,
   NAlert,
+  useMessage,
 } from "naive-ui";
-import { getSample, uploadSampleImage, listAnnotationsForSample } from "../../api/samples";
-import { createAnnotation, updateAnnotation, deleteAnnotation } from "../../api/annotations";
-import { getSimilarity } from "../../api/datasets";
-import type { SimilarityResponse } from "@/generated/orval/models";
+import {
+  getGetSampleApiV1DatasetsDatasetIdSamplesSampleIdGetQueryKey,
+  getListAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGetQueryKey,
+  getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet,
+  similaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGet,
+  useCreateAnnotationApiV1AnnotationsPost,
+  useDeleteAnnotationApiV1AnnotationsAnnotationIdDelete,
+  useGetSampleApiV1DatasetsDatasetIdSamplesSampleIdGet,
+  useListAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGet,
+  useUpdateAnnotationApiV1AnnotationsAnnotationIdPatch,
+  useUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
+} from "@/generated/orval/endpoints/api";
 import type { Annotation } from "@/generated/orval/models";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey, toUserMessage } from "../../api";
 import { resolveImageUris, FALLBACK_PLACEHOLDER } from "../../utils/image-adapters";
 
 // ---------------------------------------------------------------------------
 // Props / Emits
 // ---------------------------------------------------------------------------
-const props = withDefaults(defineProps<{
-  sampleId: string | null;
-  datasetId: string;
-  labelSpace: string[];
-  show: boolean;
-  sparse?: boolean;
-}>(), {
-  sparse: false,
-});
+const props = withDefaults(
+  defineProps<{
+    sampleId: string | null;
+    datasetId: string;
+    labelSpace: string[];
+    show: boolean;
+    sparse?: boolean;
+  }>(),
+  {
+    sparse: false,
+  },
+);
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -335,16 +427,39 @@ const emit = defineEmits<{
 // Query client
 // ---------------------------------------------------------------------------
 const qc = useQueryClient();
+const message = useMessage();
+const orgStore = useOrgStore();
 
 const isSparse = computed(() => !!props.sparse);
+const datasetId = computed(() => props.datasetId);
+const sampleId = computed(() => props.sampleId ?? "");
+const sampleQueryKey = computed(() =>
+  orgScopedQueryKey(
+    orgStore.currentOrgId,
+    getGetSampleApiV1DatasetsDatasetIdSamplesSampleIdGetQueryKey(
+      props.datasetId,
+      props.sampleId ?? "",
+    ),
+  ),
+);
+const annotationsQueryKey = computed(() =>
+  orgScopedQueryKey(
+    orgStore.currentOrgId,
+    getListAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGetQueryKey(
+      props.datasetId,
+      props.sampleId ?? "",
+    ),
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // Fetch sample
 // ---------------------------------------------------------------------------
-const sampleQuery = useQuery({
-  queryKey: computed(() => ["sample", props.sampleId, isSparse.value]),
-  queryFn: () => getSample(props.sampleId!, props.datasetId),
-  enabled: computed(() => !!props.sampleId),
+const sampleQuery = useGetSampleApiV1DatasetsDatasetIdSamplesSampleIdGet(datasetId, sampleId, {
+  query: {
+    queryKey: sampleQueryKey,
+    enabled: computed(() => !!orgStore.currentOrgId && !!props.sampleId),
+  },
 });
 
 const sample = computed(() => sampleQuery.data.value ?? null);
@@ -355,26 +470,30 @@ const resolvedUris = computed(() => {
 });
 
 const metadataJson = computed(() =>
-  sample.value ? JSON.stringify(sample.value.metadata, null, 2) : "{}"
+  sample.value ? JSON.stringify(sample.value.metadata, null, 2) : "{}",
 );
 
 // ---------------------------------------------------------------------------
 // Fetch annotations
 // ---------------------------------------------------------------------------
-const annotationsQuery = useQuery({
-  queryKey: computed(() => ["annotations", props.sampleId, isSparse.value]),
-  queryFn: () => listAnnotationsForSample(props.sampleId!, props.datasetId),
-  enabled: computed(() => !!props.sampleId),
-});
+const annotationsQuery =
+  useListAnnotationsForSampleApiV1DatasetsDatasetIdSamplesSampleIdAnnotationsGet(
+    datasetId,
+    sampleId,
+    {
+      query: {
+        queryKey: annotationsQueryKey,
+        enabled: computed(() => !!orgStore.currentOrgId && !!props.sampleId),
+      },
+    },
+  );
 
 const annotations = computed(() => annotationsQuery.data.value ?? []);
 
 // ---------------------------------------------------------------------------
 // Label space options
 // ---------------------------------------------------------------------------
-const labelSpaceOptions = computed(() =>
-  props.labelSpace.map((l) => ({ label: l, value: l }))
-);
+const labelSpaceOptions = computed(() => props.labelSpace.map((l) => ({ label: l, value: l })));
 
 // ---------------------------------------------------------------------------
 // Annotation edit state
@@ -392,29 +511,42 @@ function cancelEdit() {
   editingLabel.value = "";
 }
 
-const updateAnnotationMutation = useMutation({
-  mutationFn: ({ id, label }: { id: string; label: string }) =>
-    updateAnnotation(id, props.datasetId, { label }),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
-    cancelEdit();
+const updateAnnotationMutation = useUpdateAnnotationApiV1AnnotationsAnnotationIdPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: annotationsQueryKey.value });
+      cancelEdit();
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to update annotation"));
+    },
   },
 });
 
 function saveAnnotation(id: string) {
   if (!editingLabel.value) return;
-  updateAnnotationMutation.mutate({ id, label: editingLabel.value });
+  updateAnnotationMutation.mutate({
+    annotationId: id,
+    data: { dataset_id: props.datasetId, label: editingLabel.value },
+  });
 }
 
-const deleteAnnotationMutation = useMutation({
-  mutationFn: (id: string) => deleteAnnotation(id, props.datasetId),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
+const deleteAnnotationMutation = useDeleteAnnotationApiV1AnnotationsAnnotationIdDelete({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: annotationsQueryKey.value });
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to delete annotation"));
+    },
   },
 });
 
 function deleteAnnot(id: string) {
-  deleteAnnotationMutation.mutate(id);
+  deleteAnnotationMutation.mutate({
+    annotationId: id,
+    params: { dataset_id: props.datasetId },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -423,22 +555,28 @@ function deleteAnnot(id: string) {
 const newAnnotationLabel = ref("");
 const newAnnotationCreatedBy = ref("web-user");
 
-const createAnnotationMutation = useMutation({
-  mutationFn: (vars: { sample_id: string; label: string; created_by: string }) =>
-    createAnnotation({ dataset_id: props.datasetId, ...vars }),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["annotations", props.sampleId] });
-    newAnnotationLabel.value = "";
-    newAnnotationCreatedBy.value = "web-user";
+const createAnnotationMutation = useCreateAnnotationApiV1AnnotationsPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: annotationsQueryKey.value });
+      newAnnotationLabel.value = "";
+      newAnnotationCreatedBy.value = "web-user";
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to create annotation"));
+    },
   },
 });
 
 function addAnnotation() {
   if (!props.sampleId || !newAnnotationLabel.value) return;
   createAnnotationMutation.mutate({
-    sample_id: props.sampleId,
-    label: newAnnotationLabel.value,
-    created_by: newAnnotationCreatedBy.value || "web-user",
+    data: {
+      dataset_id: props.datasetId,
+      sample_id: props.sampleId,
+      label: newAnnotationLabel.value,
+      created_by: newAnnotationCreatedBy.value || "web-user",
+    },
   });
 }
 
@@ -448,7 +586,25 @@ function addAnnotation() {
 const replaceFileInputRef = ref<HTMLInputElement | null>(null);
 const replaceFile = ref<File | null>(null);
 const replacePreviewUrl = ref<string | null>(null);
-const uploadingImage = ref(false);
+const uploadImageMutation = useUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: sampleQueryKey.value });
+      replaceFile.value = null;
+      if (replacePreviewUrl.value) {
+        URL.revokeObjectURL(replacePreviewUrl.value);
+        replacePreviewUrl.value = null;
+      }
+      if (replaceFileInputRef.value) {
+        replaceFileInputRef.value.value = "";
+      }
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to upload the sample image"));
+    },
+  },
+});
+const uploadingImage = computed(() => uploadImageMutation.isPending.value);
 
 function onReplaceFileChange(e: Event) {
   const target = e.target as HTMLInputElement;
@@ -462,21 +618,11 @@ function onReplaceFileChange(e: Event) {
 
 async function doUpload() {
   if (!props.sampleId || !replaceFile.value) return;
-  uploadingImage.value = true;
-  try {
-    await uploadSampleImage(props.sampleId, replaceFile.value, props.datasetId);
-    qc.invalidateQueries({ queryKey: ["sample", props.sampleId] });
-    replaceFile.value = null;
-    if (replacePreviewUrl.value) {
-      URL.revokeObjectURL(replacePreviewUrl.value);
-      replacePreviewUrl.value = null;
-    }
-    if (replaceFileInputRef.value) {
-      replaceFileInputRef.value.value = "";
-    }
-  } finally {
-    uploadingImage.value = false;
-  }
+  uploadImageMutation.mutate({
+    datasetId: props.datasetId,
+    sampleId: props.sampleId,
+    data: { file: replaceFile.value },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -493,23 +639,31 @@ async function doFindSimilar() {
   findSimilarError.value = null;
   findSimilarSearched.value = true;
   try {
-    const result: SimilarityResponse = await getSimilarity(props.datasetId, props.sampleId, 10);
+    const result = await similaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGet(
+      props.datasetId,
+      props.sampleId,
+      { k: 10 },
+    );
     const neighbors = await Promise.all(
       (result.neighbors ?? []).map(async (nb) => {
         try {
-          const sample = await getSample(nb.sample_id, props.datasetId);
-          const previewUri = (sample.image_uris ?? []).length > 0
-            ? resolveImageUris(sample.image_uris ?? [])[0]
-            : FALLBACK_PLACEHOLDER;
+          const sample = await getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet(
+            props.datasetId,
+            nb.sample_id,
+          );
+          const previewUri =
+            (sample.image_uris ?? []).length > 0
+              ? resolveImageUris(sample.image_uris ?? [])[0]
+              : FALLBACK_PLACEHOLDER;
           return { sample_id: nb.sample_id, score: nb.score, previewUri };
         } catch {
           return { sample_id: nb.sample_id, score: nb.score, previewUri: FALLBACK_PLACEHOLDER };
         }
-      })
+      }),
     );
     similarNeighbors.value = neighbors;
-  } catch (e) {
-    findSimilarError.value = e instanceof Error ? e.message : "Failed to find similar samples";
+  } catch (error) {
+    findSimilarError.value = toUserMessage(error, "Failed to find similar samples");
   } finally {
     findSimilarLoading.value = false;
   }
@@ -549,6 +703,6 @@ watch(
     findSimilarError.value = null;
     findSimilarSearched.value = false;
     similarNeighbors.value = [];
-  }
+  },
 );
 </script>

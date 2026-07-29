@@ -4,7 +4,11 @@ import {
   authMeApiV1AuthMeGet,
   registerApiV1AuthRegisterPost,
 } from "@/generated/orval/endpoints/api";
-import type { UserResponse as User, UserWithOrgsResponse as UserWithOrgs, LoginResponse } from "@/generated/orval/models";
+import type {
+  UserResponse as User,
+  UserWithOrgsResponse as UserWithOrgs,
+  LoginResponse,
+} from "@/generated/orval/models";
 import { useOrgStore } from "./org";
 
 const TOKEN_KEY = "auth_token";
@@ -76,8 +80,8 @@ export function clearStoredAuth(): void {
  */
 function resolveAuthEnabled(): boolean {
   const val = import.meta.env.VITE_AUTH_ENABLED;
-  if (val === 'true' || val === '1') return true;
-  if (val === 'false' || val === '0') return false;
+  if (val === "true" || val === "1") return true;
+  if (val === "false" || val === "0") return false;
   return !import.meta.env.DEV;
 }
 
@@ -100,16 +104,15 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async login(email: string, password: string) {
-      const resp = await loginApiV1AuthLoginPost({ email, password });
-      const loginData = resp.data as LoginResponse;
+      const loginData: LoginResponse = await loginApiV1AuthLoginPost({ email, password });
       const token = loginData.access_token;
       localStorage.setItem(TOKEN_KEY, token);
-      const meResp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
+      const me = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
       this.token = token;
-      this.user = meResp.data as UserWithOrgs;
-      localStorage.setItem(USER_KEY, JSON.stringify(meResp.data));
+      this.user = me;
+      localStorage.setItem(USER_KEY, JSON.stringify(me));
       try {
-        useOrgStore().syncFromMeResponse((meResp.data as UserWithOrgs).organizations ?? []);
+        useOrgStore().syncFromMeResponse(me.organizations ?? []);
       } catch {
         // org store may not be available
       }
@@ -122,12 +125,12 @@ export const useAuthStore = defineStore("auth", {
 
     async oauthLogin(token: string) {
       localStorage.setItem(TOKEN_KEY, token);
-      const resp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
+      const user = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
       this.token = token;
-      this.user = resp.data as UserWithOrgs;
-      localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+      this.user = user;
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
       try {
-        useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+        useOrgStore().syncFromMeResponse(user.organizations ?? []);
       } catch {
         // org store may not be available
       }
@@ -153,12 +156,12 @@ export const useAuthStore = defineStore("auth", {
       this.hydrateFromStorage();
       if (!this.authEnabled) {
         try {
-          const resp = await authMeApiV1AuthMeGet();
+          const user = await authMeApiV1AuthMeGet();
           this.token = null;
-          this.user = resp.data as UserWithOrgs;
-          localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+          this.user = user;
+          localStorage.setItem(USER_KEY, JSON.stringify(user));
           try {
-            useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+            useOrgStore().syncFromMeResponse(user.organizations ?? []);
           } catch {
             // org store may not be available
           }
@@ -172,12 +175,14 @@ export const useAuthStore = defineStore("auth", {
       const token = this.token;
       if (!token) return;
       try {
-        const resp = await authMeApiV1AuthMeGet({ headers: { Authorization: `Bearer ${token}` } });
+        const user = await authMeApiV1AuthMeGet({
+          headers: { Authorization: `Bearer ${token}` },
+        });
         this.token = token;
-        this.user = resp.data as UserWithOrgs;
-        localStorage.setItem(USER_KEY, JSON.stringify(resp.data));
+        this.user = user;
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
         try {
-          useOrgStore().syncFromMeResponse((resp.data as UserWithOrgs).organizations ?? []);
+          useOrgStore().syncFromMeResponse(user.organizations ?? []);
         } catch {
           // org store may not be available
         }

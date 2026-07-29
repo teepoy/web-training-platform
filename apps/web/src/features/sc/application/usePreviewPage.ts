@@ -665,7 +665,7 @@ export function usePreviewPage(): PreviewPageState {
 
     try {
       const { data } = await inspectionsQuery.refetch({ throwOnError: true });
-      const payload = data?.data;
+      const payload = data;
       if (payload && "items" in payload) {
         const items = payload.items;
         summaries.value = items;

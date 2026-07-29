@@ -178,6 +178,9 @@ export async function mockDatasetStatus(
 ): Promise<void> {
   const body: DatasetStatusResponse = {
     allow_train: true,
+    train_disabled_reason: null,
+    minimum_active_class_count: 2,
+    active_class_count: 2,
     annotated_samples: 10,
     total_samples: 10,
     ...status,

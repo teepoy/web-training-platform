@@ -4,6 +4,7 @@ from typing import Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
+from app.modules.datasets.domain.status import DatasetTrainDisabledReason
 from app.modules.datasets.views.image_input.v1.schemas import (
     ImageInputV1Row as ImageInputV1Row,
 )
@@ -19,6 +20,18 @@ SparseSummaryJsonValue: TypeAlias = (
     | dict[str, SparseSummaryJsonScalar]
     | list[dict[str, SparseSummaryJsonScalar]]
 )
+
+
+# ── Dataset status response ─────────────────────────────────────────────
+
+
+class DatasetStatusResponse(BaseModel):
+    allow_train: bool
+    train_disabled_reason: DatasetTrainDisabledReason | None
+    minimum_active_class_count: int
+    active_class_count: int
+    annotated_samples: int
+    total_samples: int
 
 
 # ── Paginated per-view response ─────────────────────────────────────────

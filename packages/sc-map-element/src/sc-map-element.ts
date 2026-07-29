@@ -187,6 +187,16 @@ export class ScMapElement extends HTMLElement {
   }
 
   set arrowData(value: ArrayBuffer | readonly ArrayBuffer[] | null) {
+    const current = this.#arrowData;
+    if (
+      value === current ||
+      (Array.isArray(value) &&
+        Array.isArray(current) &&
+        value.length === current.length &&
+        value.every((chunk, index) => chunk === current[index]))
+    ) {
+      return;
+    }
     this.#arrowData = value;
     this.#scheduleDatasetLoad();
   }
@@ -208,6 +218,7 @@ export class ScMapElement extends HTMLElement {
     this.#postData();
   }
   set showImageMarkers(value: boolean) {
+    if (value === this.#showImageMarkers) return;
     this.#showImageMarkers = value;
     this.#postData();
   }
@@ -215,6 +226,7 @@ export class ScMapElement extends HTMLElement {
     if (!Number.isFinite(value) || value <= 0) {
       throw new Error(`Invalid defect size: ${value}`);
     }
+    if (value === this.#defectSize) return;
     this.#defectSize = value;
     this.#postData();
   }

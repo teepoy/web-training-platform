@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
 import { getExport } from "@/shared/api/datasets";
+import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
@@ -20,7 +21,7 @@ async function runPreview() {
     const result = await getExport(props.datasetId);
     exportData.value = result as unknown as Record<string, unknown>;
   } catch (error) {
-    message.error(`Export preview failed: ${(error as Error).message}`);
+    message.error(toUserMessage(error, "Export preview failed"));
   } finally {
     loading.value = false;
   }
@@ -40,7 +41,9 @@ function close() {
 
     <n-card v-if="exportData" title="Export Preview" size="small">
       <n-scrollbar style="max-height: 420px">
-        <pre style="margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{ exportJson }}</pre>
+        <pre style="margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{
+          exportJson
+        }}</pre>
       </n-scrollbar>
       <div style="display: flex; justify-content: flex-end; margin-top: 10px">
         <n-button type="success" @click="close">Done</n-button>

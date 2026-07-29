@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, h, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { useMessage, NButton } from "naive-ui";
 import { FlowModal, FlowTypeSelector, SampleDetailDrawer, type FlowCard } from "@/shared";
-import { getDataset, buildExportDownloadUrl } from "@/shared/api/datasets";
+import { buildExportDownloadUrl } from "@/shared/api/datasets";
+import {
+  getGetDatasetApiV1DatasetsDatasetIdGetQueryKey,
+  useGetDatasetApiV1DatasetsDatasetIdGet,
+} from "@/generated/orval/endpoints/api";
 import type { Dataset } from "@/generated/orval/models";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey } from "@/shared/api";
 import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
 import ManualDatasetImporter from "@/features/datasets/presentation/components/ManualDatasetImporter.vue";
 import ParquetImporter from "@/features/datasets/presentation/components/ParquetImporter.vue";
@@ -19,6 +25,7 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 const id = computed(() => String(route.params.id));
 const activeTab = ref("train");
@@ -27,10 +34,17 @@ const showImportFlow = ref(false);
 const exportStep = ref<"select" | "execute">("select");
 const selectedExporter = ref<FlowCard | null>(null);
 
-const datasetQuery = useQuery({
-  queryKey: computed(() => ["dataset", id.value]),
-  queryFn: () => getDataset(id.value),
-  retry: false,
+const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet(id, {
+  query: {
+    queryKey: computed(() =>
+      orgScopedQueryKey(
+        orgStore.currentOrgId,
+        getGetDatasetApiV1DatasetsDatasetIdGetQueryKey(id.value),
+      ),
+    ),
+    enabled: computed(() => !!orgStore.currentOrgId && !!id.value),
+    retry: false,
+  },
 });
 
 const dataset = computed(
@@ -91,8 +105,12 @@ const exporterFlows: FlowCard[] = [
 
 function handleImporterComplete() {
   showImportFlow.value = false;
-  qc.invalidateQueries({ queryKey: ["view-samples", id.value] });
-  qc.invalidateQueries({ queryKey: ["feature-samples", id.value] });
+  qc.invalidateQueries({
+    queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["view-samples", id.value]),
+  });
+  qc.invalidateQueries({
+    queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["feature-samples", id.value]),
+  });
 }
 
 function handleExportSelect(flow: FlowCard) {

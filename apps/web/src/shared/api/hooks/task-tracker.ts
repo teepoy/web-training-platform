@@ -1,10 +1,7 @@
-import { useQuery, useMutation, type UseQueryOptions } from "@tanstack/vue-query";
+import { useQuery, type UseQueryOptions } from "@tanstack/vue-query";
 import { computed } from "vue";
-import {
-  listTrackedTasks,
-  getTrackedTask,
-  cancelTrackedTask,
-} from "../task-tracker";
+import { getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet } from "@/generated/orval/endpoints/api";
+import { listTrackedTasks } from "../task-tracker";
 
 export const taskTrackerKeys = {
   all: ["task-tracker"] as const,
@@ -30,14 +27,9 @@ export function useTrackedTaskQuery(taskId: () => string | null) {
       const id = taskId();
       return id ? taskTrackerKeys.detail(id) : taskTrackerKeys.all;
     }),
-    queryFn: ({ queryKey }) => getTrackedTask(queryKey[2] as string),
+    queryFn: ({ queryKey }) =>
+      getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet(queryKey[2] as string),
     enabled: computed(() => !!taskId()),
     refetchInterval: 5000,
-  });
-}
-
-export function useCancelTrackedTaskMutation() {
-  return useMutation({
-    mutationFn: (id: string) => cancelTrackedTask(id),
   });
 }

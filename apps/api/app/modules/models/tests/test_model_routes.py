@@ -31,6 +31,22 @@ def _setup(c: TestClient) -> tuple[str, str, str]:
     )
     assert resp.status_code == 200, resp.text
     dataset_id = resp.json()["id"]
+    for label in ("defect", "clean"):
+        sample_resp = c.post(
+            f"/api/v1/datasets/{dataset_id}/samples",
+            json={"image_uris": []},
+        )
+        assert sample_resp.status_code == 200, sample_resp.text
+        annotation_resp = c.post(
+            "/api/v1/annotations",
+            json={
+                "dataset_id": dataset_id,
+                "sample_id": sample_resp.json()["id"],
+                "label": label,
+                "created_by": "tester",
+            },
+        )
+        assert annotation_resp.status_code == 200, annotation_resp.text
     job_id = create_job(c, dataset_id, trainer_id=TRAINER_ID)
     model_id = upload_model(c, job_id)
     return dataset_id, job_id, model_id

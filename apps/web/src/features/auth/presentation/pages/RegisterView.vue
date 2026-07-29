@@ -49,56 +49,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useMessage, useThemeVars, type FormInst, type FormRules } from 'naive-ui'
-import { useAuthStore } from '@/features/auth/application/store'
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useMessage, useThemeVars, type FormInst, type FormRules } from "naive-ui";
+import { useAuthStore } from "@/features/auth/application/store";
 
-const router = useRouter()
-const message = useMessage()
-const authStore = useAuthStore()
-const themeVars = useThemeVars()
+const router = useRouter();
+const message = useMessage();
+const authStore = useAuthStore();
+const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
-  '--auth-bg-start': themeVars.value.bodyColor,
-  '--auth-bg-mid': themeVars.value.cardColor,
-  '--auth-bg-end': themeVars.value.modalColor,
-  '--auth-shadow': themeVars.value.boxShadow1,
-}))
+  "--auth-bg-start": themeVars.value.bodyColor,
+  "--auth-bg-mid": themeVars.value.cardColor,
+  "--auth-bg-end": themeVars.value.modalColor,
+  "--auth-shadow": themeVars.value.boxShadow1,
+}));
 
-import { useOrgStore } from '@/features/auth/application/org'
-const orgStore = useOrgStore()
+import { useOrgStore } from "@/features/auth/application/org";
+const orgStore = useOrgStore();
 
-const formRef = ref<FormInst | null>(null)
-const loading = ref(false)
+const formRef = ref<FormInst | null>(null);
+const loading = ref(false);
 
 const formData = ref({
-  name: '',
-  email: '',
-  password: '',
-})
+  name: "",
+  email: "",
+  password: "",
+});
 
 const rules: FormRules = {
-  name: [{ required: true, message: 'Name is required', trigger: 'blur' }],
-  email: [{ required: true, message: 'Email is required', trigger: 'blur' }],
-  password: [{ required: true, message: 'Password is required', trigger: 'blur' }],
-}
+  name: [{ required: true, message: "Name is required", trigger: "blur" }],
+  email: [{ required: true, message: "Email is required", trigger: "blur" }],
+  password: [{ required: true, message: "Password is required", trigger: "blur" }],
+};
 
 async function handleSubmit() {
   try {
-    await formRef.value?.validate()
+    await formRef.value?.validate();
   } catch {
-    return
+    return;
   }
-  loading.value = true
+  loading.value = true;
   try {
-    await authStore.register(formData.value.name, formData.value.email, formData.value.password)
-    await orgStore.fetchOrganizations()
-    router.push('/datasets')
+    await authStore.register(formData.value.name, formData.value.email, formData.value.password);
+    await orgStore.fetchOrganizations();
+    router.push("/datasets");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Registration failed'
-    message.error(msg)
+    const msg = err instanceof Error ? err.message : "Registration failed";
+    message.error(msg);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -109,7 +109,12 @@ async function handleSubmit() {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--auth-bg-start) 0%, var(--auth-bg-mid) 50%, var(--auth-bg-end) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--auth-bg-start) 0%,
+    var(--auth-bg-mid) 50%,
+    var(--auth-bg-end) 100%
+  );
 }
 
 .auth-card {

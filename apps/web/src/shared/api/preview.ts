@@ -1,4 +1,8 @@
-import { req } from "./client";
+import { getApiBase, requestData } from "./client";
+
+function previewRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestData<T>(`${getApiBase()}${path}`, init);
+}
 
 export interface PreviewSession {
   session_id: string;
@@ -34,17 +38,15 @@ export interface PreviewPersistStatus {
   error: string | null;
 }
 
-export function createPreviewSession(
-  collectionRef: string,
-): Promise<PreviewSession> {
-  return req<PreviewSession>("/preview-sessions", {
+export function createPreviewSession(collectionRef: string): Promise<PreviewSession> {
+  return previewRequest<PreviewSession>("/preview-sessions", {
     method: "POST",
     body: JSON.stringify({ collection_ref: collectionRef }),
   });
 }
 
 export function getPreviewSession(sessionId: string): Promise<PreviewSession> {
-  return req<PreviewSession>(`/preview-sessions/${sessionId}`);
+  return previewRequest<PreviewSession>(`/preview-sessions/${sessionId}`);
 }
 
 export function listPreviewItems(
@@ -54,25 +56,19 @@ export function listPreviewItems(
 ): Promise<PreviewItemsPage> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
-  return req<PreviewItemsPage>(
-    `/preview-sessions/${sessionId}/items?${params}`,
-  );
+  return previewRequest<PreviewItemsPage>(`/preview-sessions/${sessionId}/items?${params}`);
 }
 
 export function startPreviewPersist(
   sessionId: string,
   scope: PreviewPersistScope,
 ): Promise<PreviewPersistStatus> {
-  return req<PreviewPersistStatus>(`/preview-sessions/${sessionId}/persist`, {
+  return previewRequest<PreviewPersistStatus>(`/preview-sessions/${sessionId}/persist`, {
     method: "POST",
     body: JSON.stringify({ scope }),
   });
 }
 
-export function getPreviewPersistStatus(
-  sessionId: string,
-): Promise<PreviewPersistStatus> {
-  return req<PreviewPersistStatus>(
-    `/preview-sessions/${sessionId}/persist-status`,
-  );
+export function getPreviewPersistStatus(sessionId: string): Promise<PreviewPersistStatus> {
+  return previewRequest<PreviewPersistStatus>(`/preview-sessions/${sessionId}/persist-status`);
 }

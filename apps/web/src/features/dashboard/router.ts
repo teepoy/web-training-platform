@@ -1,7 +1,7 @@
-import type { RouteRecordRaw } from 'vue-router'
+import type { RouteRecordRaw } from "vue-router";
 
 export const dashboardRoutes: RouteRecordRaw[] = [
-  { path: '/dashboard', component: () => import('./presentation/pages/DashboardView.vue') },
-]
+  { path: "/dashboard", component: () => import("./presentation/pages/DashboardView.vue") },
+];
 
-export const routes = dashboardRoutes
+export const routes = dashboardRoutes;

@@ -5,8 +5,6 @@
 import type {
   TaskTrackerRawPayload,
   TaskTrackerDerived,
-  AgentPanelDescriptor,
-  DatasetStorageMode,
   UserResponse as User,
 } from "@/generated/orval/models";
 
@@ -43,12 +41,6 @@ export interface UploadModelMetadata {
     embedding_dimension?: number | null;
     normalized_output?: boolean | null;
   };
-}
-
-export interface UploadResponse {
-  uri: string;
-  sample_id: string;
-  index: number;
 }
 
 export interface ScheduleRun {
@@ -123,70 +115,9 @@ export interface OAuthRegisterRequest {
   name: string;
 }
 
-export interface CreatePredictionCollectionRequest {
-  name: string;
-  dataset_id: string;
-  model_id: string;
-  prediction_ids: string[];
-  model_version?: string | null;
-  target?: string;
-  source_job_id?: string | null;
-}
-
 export interface VersionExportResponse {
   uri: string;
   format_id: string;
-}
-
-export interface SurfaceStateDocument {
-  version: number;
-  surface_id: string;
-  panels: AgentPanelDescriptor[];
-  layout: { width: number; position: "right" | "left" };
-  exported_at: string | null;
-  metadata: Record<string, unknown>;
-}
-
-export interface UpdateAnnotationPayload {
-  label: string;
-}
-
-export interface CreateDatasetBody {
-  name: string;
-  dataset_type: DatasetType;
-  task_spec?: {
-    task_type: TaskType;
-    label_space: string[];
-    metadata_schema?: Record<string, { type: string; description: string }>;
-  };
-  storage_mode?: DatasetStorageMode;
-}
-
-export interface CreateSampleBody {
-  image_uris: string[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface CreateAnnotationBody {
-  sample_id: string;
-  label: string;
-  created_by?: string;
-}
-
-export interface CreateScheduleBody {
-  name: string;
-  flow_name: string;
-  cron: string;
-  parameters?: Record<string, unknown>;
-  description?: string;
-}
-
-export interface UpdateScheduleBody {
-  name?: string;
-  cron?: string;
-  parameters?: Record<string, unknown>;
-  description?: string;
-  is_schedule_active?: boolean;
 }
 
 export type TaskType = "classification" | "vqa" | "detection" | "patch";

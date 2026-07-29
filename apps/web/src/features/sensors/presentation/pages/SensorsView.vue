@@ -20,7 +20,11 @@
 
       <!-- Right Column: Subscriptions -->
       <n-grid-item span="1 s:1 m:1 l:2">
-        <n-card :title="selectedSensor ? `Subscriptions: ${selectedSensor.name}` : 'Subscriptions'" :bordered="false" size="small">
+        <n-card
+          :title="selectedSensor ? `Subscriptions: ${selectedSensor.name}` : 'Subscriptions'"
+          :bordered="false"
+          size="small"
+        >
           <template #header-extra>
             <n-button
               type="primary"
@@ -64,18 +68,38 @@
 import { ref, computed, h } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns } from "naive-ui";
-import { useMessage, NPageHeader, NSpace, NGrid, NGridItem, NCard, NDataTable, NSpin, NEmpty, NButton, NSwitch, NPopconfirm, NTag } from "naive-ui";
+import {
+  useMessage,
+  NPageHeader,
+  NSpace,
+  NGrid,
+  NGridItem,
+  NCard,
+  NDataTable,
+  NSpin,
+  NEmpty,
+  NButton,
+  NSwitch,
+  NPopconfirm,
+  NTag,
+} from "naive-ui";
 import {
   useListSensorsApiV1SensorsGet,
   useListSensorSubscriptionsApiV1SensorsSensorIdSubscriptionsGet,
   useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch,
   useDeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete,
 } from "@/generated/orval/endpoints/api";
-import type { SensorDefinitionResponse as SensorDefinition, SensorSubscriptionResponse as SensorSubscription } from "@/generated/orval/models";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
+import { useOrgStore } from "@/features/auth/application/org";
+import type {
+  SensorDefinitionResponse as SensorDefinition,
+  SensorSubscriptionResponse as SensorSubscription,
+} from "@/generated/orval/models";
 import SensorSubscriptionModal from "./SensorSubscriptionModal.vue";
 
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 const selectedSensorId = ref<string | null>(null);
 
@@ -84,28 +108,35 @@ const selectedSensorId = ref<string | null>(null);
 // ---------------------------------------------------------------------------
 const { data: sensors, isLoading: isLoadingSensors } = useListSensorsApiV1SensorsGet({
   query: {
-    select: (response) => response.data,
+    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["sensors"])),
+    enabled: computed(() => !!orgStore.currentOrgId),
   },
 });
 
 const selectedSensor = computed(() => {
-  return sensors.value?.find(s => s.id === selectedSensorId.value) || null;
+  return sensors.value?.find((s) => s.id === selectedSensorId.value) || null;
 });
 
 const sensorColumns = computed<DataTableColumns<SensorDefinition>>(() => [
   {
     title: "Name",
     key: "name",
-    render: (row) => h(
-      "div",
-      { style: selectedSensorId.value === row.id ? "font-weight: bold; color: var(--n-text-color-pressed);" : "" },
-      row.name
-    )
+    render: (row) =>
+      h(
+        "div",
+        {
+          style:
+            selectedSensorId.value === row.id
+              ? "font-weight: bold; color: var(--n-text-color-pressed);"
+              : "",
+        },
+        row.name,
+      ),
   },
   {
     title: "Cron",
     key: "cron",
-  }
+  },
 ]);
 
 function sensorRowProps(row: SensorDefinition) {
@@ -120,33 +151,36 @@ function sensorRowProps(row: SensorDefinition) {
 // ---------------------------------------------------------------------------
 // Subscriptions List
 // ---------------------------------------------------------------------------
-const sensorId = computed(() => selectedSensorId.value ?? '');
+const sensorId = computed(() => selectedSensorId.value ?? "");
+const subscriptionsQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["subscriptions", selectedSensorId.value]),
+);
 
-const { data: subscriptions, isLoading: isLoadingSubscriptions } = useListSensorSubscriptionsApiV1SensorsSensorIdSubscriptionsGet(sensorId, {
-  query: {
-    queryKey: computed(() => ["subscriptions", selectedSensorId.value]),
-    enabled: computed(() => !!selectedSensorId.value),
-    select: (response) => response.data as SensorSubscription[],
-  },
-});
+const { data: subscriptions, isLoading: isLoadingSubscriptions } =
+  useListSensorSubscriptionsApiV1SensorsSensorIdSubscriptionsGet(sensorId, {
+    query: {
+      queryKey: subscriptionsQueryKey,
+      enabled: computed(() => !!orgStore.currentOrgId && !!selectedSensorId.value),
+    },
+  });
 
 const toggleMutation = useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
+      qc.invalidateQueries({ queryKey: subscriptionsQueryKey.value });
       message.success("Subscription updated");
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to update subscription")),
   },
 });
 
 const deleteMutation = useDeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions", selectedSensorId.value] });
+      qc.invalidateQueries({ queryKey: subscriptionsQueryKey.value });
       message.success("Subscription deleted");
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to delete subscription"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to delete subscription")),
   },
 });
 
@@ -160,53 +194,64 @@ const subscriptionColumns = computed<DataTableColumns<SensorSubscription>>(() =>
     key: "filter_config",
     render: (row) => {
       const keys = Object.keys(row.filter_config);
-      if (keys.length === 0) return h(NTag, { size: "small", type: "info" }, { default: () => "Match All" });
-      return h("pre", { style: "margin: 0; font-size: 12px; white-space: pre-wrap;" }, JSON.stringify(row.filter_config, null, 2));
-    }
+      if (keys.length === 0)
+        return h(NTag, { size: "small", type: "info" }, { default: () => "Match All" });
+      return h(
+        "pre",
+        { style: "margin: 0; font-size: 12px; white-space: pre-wrap;" },
+        JSON.stringify(row.filter_config, null, 2),
+      );
+    },
   },
   {
     title: "Enabled",
     key: "enabled",
     width: 100,
-    render: (row) => h(
-      NSwitch,
-      {
+    render: (row) =>
+      h(NSwitch, {
         value: row.enabled,
-            onUpdateValue: (val: boolean) => toggleMutation.mutate({ sensorId: selectedSensorId.value!, subId: row.id, data: { enabled: val } })
-      }
-    )
+        onUpdateValue: (val: boolean) =>
+          toggleMutation.mutate({
+            sensorId: selectedSensorId.value!,
+            subId: row.id,
+            data: { enabled: val },
+          }),
+      }),
   },
   {
     title: "Actions",
     key: "actions",
     width: 150,
-    render: (row) => h(NSpace, { size: "small" }, {
-      default: () => [
-        h(
-          NButton,
-          {
-            size: "small",
-            onClick: () => openEditModal(row),
-          },
-          { default: () => "Edit" }
-        ),
-        h(
-          NPopconfirm,
-          {
-              onPositiveClick: () => deleteMutation.mutate({ sensorId: selectedSensorId.value!, subId: row.id }),
-          },
-          {
-            trigger: () => h(
+    render: (row) =>
+      h(
+        NSpace,
+        { size: "small" },
+        {
+          default: () => [
+            h(
               NButton,
-              { size: "small", type: "error" },
-              { default: () => "Delete" }
+              {
+                size: "small",
+                onClick: () => openEditModal(row),
+              },
+              { default: () => "Edit" },
             ),
-            default: () => "Are you sure?"
-          }
-        )
-      ]
-    })
-  }
+            h(
+              NPopconfirm,
+              {
+                onPositiveClick: () =>
+                  deleteMutation.mutate({ sensorId: selectedSensorId.value!, subId: row.id }),
+              },
+              {
+                trigger: () =>
+                  h(NButton, { size: "small", type: "error" }, { default: () => "Delete" }),
+                default: () => "Are you sure?",
+              },
+            ),
+          ],
+        },
+      ),
+  },
 ]);
 
 // ---------------------------------------------------------------------------

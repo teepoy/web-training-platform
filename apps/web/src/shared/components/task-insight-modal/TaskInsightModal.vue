@@ -214,11 +214,9 @@ export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
 import { computed, inject, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
-import {
-  useTrackedTaskQuery,
-  useCancelTrackedTaskMutation,
-  taskTrackerKeys,
-} from "../../api/hooks";
+import { useTrackedTaskQuery, taskTrackerKeys } from "../../api/hooks";
+import { useCancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost } from "@/generated/orval/endpoints/api";
+import { toUserMessage } from "../../api";
 import type { TaskTrackerNode } from "@/generated/orval/models";
 import type {
   TaskTrackerDetailResponse as TaskTrackerDetail,
@@ -273,20 +271,23 @@ if (stream) {
   );
 }
 
-const rawCancel = useCancelTrackedTaskMutation();
+const rawCancel = useCancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost();
 
 const cancelMutation = {
   ...rawCancel,
   mutate: () =>
-    rawCancel.mutate(props.task!.id, {
-      onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey: taskTrackerKeys.all });
-        message.warning("Cancellation requested");
+    rawCancel.mutate(
+      { taskId: props.task!.id },
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: taskTrackerKeys.all });
+          message.warning("Cancellation requested");
+        },
+        onError: (error) => {
+          message.error(toUserMessage(error, "Failed to cancel task"));
+        },
       },
-      onError: (error: Error) => {
-        message.error(error.message || "Failed to cancel task");
-      },
-    }),
+    ),
 };
 
 const defaultExpanded = computed(() => {

@@ -170,11 +170,19 @@ async function openJoinedSamplesTable(
     const remainingMs = timeoutMs - (Date.now() - startedAt);
     if (remainingMs <= 0) break;
     try {
-      return await withTimeout(
-        client.open_table(tableName),
-        remainingMs,
-        `Perspective websocket table "${tableName}" did not open within ${timeoutMs}ms`,
-      );
+      const openTablePromise = client.open_table(tableName);
+      try {
+        return await withTimeout(
+          openTablePromise,
+          remainingMs,
+          `Perspective websocket table "${tableName}" did not open within ${timeoutMs}ms`,
+        );
+      } catch (err) {
+        void openTablePromise
+          .then((lateTable) => managePerspectiveTable(lateTable).retire())
+          .catch(() => undefined);
+        throw err;
+      }
     } catch (err) {
       lastError = err;
       if (isWebSocketClientError(err)) break;
@@ -425,11 +433,20 @@ export function useScPerspectiveWorkbench(
     error.value = null;
     try {
       const tableName = tableNameFactory();
-      const nextClient = await withTimeout(
-        websocket(buildWsUrl(options, tableName)),
-        connectionTimeoutMs,
-        `Perspective websocket connection timed out after ${connectionTimeoutMs}ms`,
-      );
+      const clientPromise = websocket(buildWsUrl(options, tableName));
+      let nextClient: Client;
+      try {
+        nextClient = await withTimeout(
+          clientPromise,
+          connectionTimeoutMs,
+          `Perspective websocket connection timed out after ${connectionTimeoutMs}ms`,
+        );
+      } catch (err) {
+        void clientPromise
+          .then((lateClient) => retirePerspectiveResources(null, lateClient))
+          .catch(() => undefined);
+        throw err;
+      }
       if (seq !== connectionSeq) {
         retirePerspectiveResources(null, nextClient);
         return;

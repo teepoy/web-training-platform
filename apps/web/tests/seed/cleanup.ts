@@ -1,11 +1,11 @@
 /**
  * Cleanup helpers — best-effort deletion of test artifacts.
  */
-import type { Dataset } from '../../src/generated/orval/models';
+import type { Dataset } from "../../src/generated/orval/models";
 import {
   listDatasetsApiV1DatasetsGet,
   deleteDatasetApiV1DatasetsDatasetIdDelete,
-} from '../../src/generated/orval/endpoints/api';
+} from "../../src/generated/orval/endpoints/api";
 
 /**
  * Delete all datasets whose name starts with the given prefix.
@@ -18,8 +18,8 @@ import {
  */
 export async function cleanupTestArtifacts(prefix: string): Promise<void> {
   try {
-    const res = await listDatasetsApiV1DatasetsGet();
-    const datasets = res.data as Dataset[];
+    const page = await listDatasetsApiV1DatasetsGet();
+    const datasets: Dataset[] = page.items;
 
     for (const ds of datasets) {
       if (ds.name?.startsWith(prefix)) {
@@ -36,8 +36,6 @@ export async function cleanupTestArtifacts(prefix: string): Promise<void> {
       }
     }
   } catch (e: unknown) {
-    console.warn(
-      `[cleanup] Failed to list datasets: ${(e as Error)?.message ?? String(e)}`,
-    );
+    console.warn(`[cleanup] Failed to list datasets: ${(e as Error)?.message ?? String(e)}`);
   }
 }

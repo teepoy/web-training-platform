@@ -5,7 +5,7 @@
 // Also includes EventSource-based helpers for job/task streaming.
 // ---------------------------------------------------------------------------
 
-import { getApiBase, getAuthToken, getOrgId, ApiError } from "./client";
+import { getApiBase, getAuthToken, getOrgId, requestRaw } from "./client";
 import type { GlobalChatRequest } from "@/generated/orval/models";
 
 /** Parsed SSE frame from a POST-based SSE response stream. */
@@ -70,17 +70,12 @@ export async function* streamGlobalAgentChat(
   request: GlobalChatRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<SSEFrame> {
-  const resp = await fetch(`${getApiBase()}/agent/chat`, {
+  const resp = await requestRaw(`${getApiBase()}/agent/chat`, {
     method: "POST",
     headers: buildSSEHeaders(),
     body: JSON.stringify(request),
     signal,
   });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new ApiError(text || resp.statusText, resp.status);
-  }
 
   const reader = resp.body!.getReader();
   yield* parseSSEStream(reader);
@@ -135,20 +130,11 @@ export async function streamApiSse(
     body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(`${getApiBase()}${path}`, {
+  const response = await requestRaw(`${getApiBase()}${path}`, {
     method: options.method ?? (body ? "POST" : "GET"),
     headers,
     body,
   });
-  if (!response.ok) {
-    let detail = `request failed: ${response.status}`;
-    try {
-      const parsed = await response.json();
-      detail =
-        typeof parsed?.detail === "string" ? parsed.detail : JSON.stringify(parsed);
-    } catch {}
-    throw new ApiError(detail, response.status);
-  }
   if (!response.body) {
     throw new Error("SSE response body is not readable");
   }

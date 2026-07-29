@@ -5739,6 +5739,16 @@ components:
         allow_train:
           type: boolean
           title: Allow Train
+        train_disabled_reason:
+          anyOf:
+            - $ref: "#/components/schemas/DatasetTrainDisabledReason"
+            - type: "null"
+        minimum_active_class_count:
+          type: integer
+          title: Minimum Active Class Count
+        active_class_count:
+          type: integer
+          title: Active Class Count
         annotated_samples:
           type: integer
           title: Annotated Samples
@@ -5748,6 +5758,9 @@ components:
       type: object
       required:
         - allow_train
+        - train_disabled_reason
+        - minimum_active_class_count
+        - active_class_count
         - annotated_samples
         - total_samples
       title: DatasetStatusResponse
@@ -5757,6 +5770,11 @@ components:
         - db_full
         - file_shard_sparse
       title: DatasetStorageMode
+    DatasetTrainDisabledReason:
+      type: string
+      enum:
+        - insufficient_active_classes
+      title: DatasetTrainDisabledReason
     ExportFormatResponse:
       properties:
         format_id:

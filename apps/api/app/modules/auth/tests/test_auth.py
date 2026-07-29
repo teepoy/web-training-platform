@@ -11,8 +11,24 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
 
+import app.modules.auth.port.http.router as auth_router
 from app.main import app
 from app.shared.db.models import UserORM
+
+
+def test_oauth_callback_url_uses_public_frontend_origin(monkeypatch) -> None:
+    monkeypatch.setattr(
+        auth_router,
+        "load_config",
+        lambda: SimpleNamespace(
+            app=SimpleNamespace(frontend_url="https://platform.example/app/")
+        ),
+    )
+
+    assert (
+        auth_router._oauth_callback_url("github")
+        == "https://platform.example/api/v1/auth/oauth/github/callback"
+    )
 
 
 # ---------------------------------------------------------------------------

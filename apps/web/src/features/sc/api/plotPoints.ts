@@ -1,5 +1,5 @@
 import { fromBinary } from "@bufbuild/protobuf";
-import { req } from "@/shared/api/client";
+import { getApiBase, requestRaw } from "@/shared/api/client";
 import { streamApiSse } from "@/shared/api/sse";
 import { WaferMapResponseSchema, type WaferMapResponse } from "../generated/proto/sc/v1/sample_pb";
 import type { ReticleMapOptions } from "../application/reticleMapOptions";
@@ -42,8 +42,8 @@ export async function fetchScPlotPoints(
   onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
   const params = buildDatasetMapParams(options, filter, legendGroupBy, sampleFilter);
-  const response = await req<Response>(
-    `/sc/datasets/${encodeURIComponent(datasetId)}/plot-points?${params.toString()}`,
+  const response = await requestRaw(
+    `${getApiBase()}/sc/datasets/${encodeURIComponent(datasetId)}/plot-points?${params.toString()}`,
     { headers: { Accept: "application/x-protobuf" } },
   );
   return readMapResponse(response, onProgress);
@@ -104,8 +104,8 @@ export async function fetchScInspectionMapPoints(
   onProgress?: ScMapProgressCallback,
 ): Promise<WaferMapResponse> {
   const params = buildInspectionMapParams(options, filter, legendGroupBy, extra, sampleFilter);
-  const response = await req<Response>(
-    `/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points?${params.toString()}`,
+  const response = await requestRaw(
+    `${getApiBase()}/sc/inspections/${encodeURIComponent(inspectionTime)}/${encodeURIComponent(waferKey)}/map-points?${params.toString()}`,
     { headers: { Accept: "application/x-protobuf" } },
   );
   return readMapResponse(response, onProgress);

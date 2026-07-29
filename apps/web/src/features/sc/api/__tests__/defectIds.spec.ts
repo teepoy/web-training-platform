@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { decodeInt32DefectIds, fetchInspectionDefectIds } from "../defectIds";
-import { req } from "@/shared/api/client";
+import { requestRaw } from "@/shared/api/client";
 
 vi.mock("@/shared/api/client", () => ({
-  req: vi.fn(),
+  getApiBase: () => "/api/v1",
+  requestRaw: vi.fn(),
 }));
 
 function int32Buffer(values: number[]): ArrayBuffer {
@@ -25,13 +26,13 @@ describe("SC defect id binary helpers", () => {
   });
 
   it("fetches the inspection binary endpoint", async () => {
-    vi.mocked(req).mockResolvedValueOnce(new Response(int32Buffer([3])));
+    vi.mocked(requestRaw).mockResolvedValueOnce(new Response(int32Buffer([3])));
 
     await expect(fetchInspectionDefectIds("2026-01-01 00:00:00", 2)).resolves.toEqual([3]);
 
-    expect(req).toHaveBeenNthCalledWith(
+    expect(requestRaw).toHaveBeenNthCalledWith(
       1,
-      "/sc/inspections/2026-01-01%2000%3A00%3A00/2/defect-ids.bin",
+      "/api/v1/sc/inspections/2026-01-01%2000%3A00%3A00/2/defect-ids.bin",
       { headers: { Accept: "application/octet-stream" } },
     );
   });

@@ -44,6 +44,16 @@ def _dataset() -> Dataset:
     )
 
 
+def _classification_dataset() -> Dataset:
+    return Dataset(
+        id="dataset-2",
+        org_id="org-1",
+        name="classification-readiness-test",
+        dataset_type="classification",
+        task_spec=TaskSpec(task_type="classification", label_space=["Cat", "Dog"]),
+    )
+
+
 def _row(index: int, label: str, *, with_images: bool = True) -> dict[str, Any]:
     sample = build_patch_sample(index)
     shard_images = [
@@ -87,6 +97,44 @@ async def test_readiness_accepts_two_labels_with_real_inline_images() -> None:
     assert report.readable_samples == 2
     assert report.runtime_resolvable_samples == 0
     assert report.active_labels == ["Particle", "Scratch"]
+
+
+@pytest.mark.asyncio
+async def test_class_readiness_accepts_two_active_labels() -> None:
+    service = TrainingReadinessService(
+        storage_factory=_factory(
+            [
+                {"id": "sample-1", "label": "Cat"},
+                {"id": "sample-2", "label": "Dog"},
+            ]
+        ),
+        artifact_storage=InMemoryArtifactStorage(),
+    )
+
+    report = await service.assess_classes(dataset=_classification_dataset())
+
+    assert report.ready
+    assert report.annotated_samples == 2
+    assert report.active_labels == ["Cat", "Dog"]
+
+
+@pytest.mark.asyncio
+async def test_class_readiness_rejects_one_active_label() -> None:
+    service = TrainingReadinessService(
+        storage_factory=_factory(
+            [
+                {"id": "sample-1", "label": "Cat"},
+                {"id": "sample-2", "label": "Cat"},
+            ]
+        ),
+        artifact_storage=InMemoryArtifactStorage(),
+    )
+
+    report = await service.assess_classes(dataset=_classification_dataset())
+
+    assert not report.ready
+    assert report.active_labels == ["Cat"]
+    assert "at least 2 active labels" in report.failure_reasons[-1]
 
 
 @pytest.mark.asyncio

@@ -87,6 +87,7 @@ import {
   usePauseScheduleApiV1SchedulesScheduleIdPausePost,
   useResumeScheduleApiV1SchedulesScheduleIdResumePost,
 } from "@/generated/orval/endpoints/api";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
 import type { ScheduleResponse as Schedule } from "@/generated/orval/models";
 
@@ -95,6 +96,7 @@ const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const schedulesQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["schedules"]));
 
 // ---------------------------------------------------------------------------
 // Query
@@ -104,13 +106,8 @@ const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet(
   { offset: 0, limit: 200 },
   {
     query: {
-      select: (response) => {
-        if (!("items" in response.data)) {
-          throw new Error("Failed to list schedules");
-        }
-        return response.data.items;
-      },
-      queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
+      select: (response) => response.items,
+      queryKey: schedulesQueryKey,
       enabled: computed(() => !!orgStore.currentOrgId),
     },
   },
@@ -123,42 +120,42 @@ const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet(
 const createMutation = useCreateScheduleApiV1SchedulesPost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
       message.success("Schedule created");
       showModal.value = false;
       resetForm();
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to create schedule"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to create schedule")),
   },
 });
 
 const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
       message.success("Schedule deleted");
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to delete schedule"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to delete schedule")),
   },
 });
 
 const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
       message.success("Schedule paused");
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to pause schedule"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to pause schedule")),
   },
 });
 
 const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedules", orgStore.currentOrgId] });
+      qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
       message.success("Schedule resumed");
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to resume schedule"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to resume schedule")),
   },
 });
 

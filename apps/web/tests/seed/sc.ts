@@ -10,13 +10,13 @@ import type {
   ScBulkAnnotationRequest,
   ScAnnotationItem,
   Dataset,
-} from '../../src/generated/orval/models';
+} from "../../src/generated/orval/models";
 import {
   startScImportApiV1ScImportPost,
   scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost,
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   listDatasetsApiV1DatasetsGet,
-} from '../../src/generated/orval/endpoints/api';
+} from "../../src/generated/orval/endpoints/api";
 
 /**
  * Start an SC dataset import via the API.
@@ -26,8 +26,7 @@ import {
  * to wait for the dataset to appear and get its ID.
  */
 export async function startScImport(req: ScImportRequest): Promise<ScImportResponse> {
-  const res = await startScImportApiV1ScImportPost(req);
-  return res.data as ScImportResponse;
+  return startScImportApiV1ScImportPost(req);
 }
 
 /**
@@ -40,15 +39,13 @@ export async function waitForScImportByDatasetName(
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const res = await listDatasetsApiV1DatasetsGet();
-    const datasets = res.data as Dataset[];
+    const page = await listDatasetsApiV1DatasetsGet();
+    const datasets: Dataset[] = page.items;
     const found = datasets.find((d) => d.name === datasetName);
     if (found?.id) return found.id;
     await new Promise((r) => setTimeout(r, 3000));
   }
-  throw new Error(
-    `SC import for "${datasetName}" did not complete within ${timeoutMs}ms`,
-  );
+  throw new Error(`SC import for "${datasetName}" did not complete within ${timeoutMs}ms`);
 }
 
 /**
@@ -59,12 +56,7 @@ export async function scBulkAnnotate(
   annotations: ScAnnotationItem[],
 ): Promise<{ created: number }> {
   const req: ScBulkAnnotationRequest = { annotations };
-  const res =
-    await scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost(
-      datasetId,
-      req,
-    );
-  return res.data as { created: number };
+  return scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost(datasetId, req);
 }
 
 /** Shape of a single sample item from the patch_image_v1 view. */
@@ -89,13 +81,12 @@ export async function listScSamples(datasetId: string): Promise<ScSampleItem[]> 
   const limit = 200;
 
   while (true) {
-    const res =
+    const body: ScSampleListBody =
       await listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet(
         datasetId,
-        'patch_image_v1',
+        "patch_image_v1",
         { offset, limit },
       );
-    const body = res.data as ScSampleListBody;
     const items = body.items ?? [];
     if (items.length === 0) break;
     allItems.push(...items);
@@ -127,7 +118,7 @@ export async function setupScImportedAndAnnotated(
     source_inspection_time: inspectionTime,
     source_wafer_key: waferKey,
     dataset_name: datasetName,
-    storage_mode: 'file_shard_sparse',
+    storage_mode: "file_shard_sparse",
   };
 
   await startScImport(importReq);
@@ -136,12 +127,10 @@ export async function setupScImportedAndAnnotated(
   const samples = await listScSamples(datasetId);
   const toAnnotate = Math.min(annotateCount, samples.length);
   const shuffled = [...samples].sort(() => Math.random() - 0.5);
-  const annotations: ScAnnotationItem[] = shuffled
-    .slice(0, toAnnotate)
-    .map((item) => ({
-      defect_id: item.defect_id,
-      label: labels[Math.floor(Math.random() * labels.length)],
-    }));
+  const annotations: ScAnnotationItem[] = shuffled.slice(0, toAnnotate).map((item) => ({
+    defect_id: item.defect_id,
+    label: labels[Math.floor(Math.random() * labels.length)],
+  }));
 
   const result = await scBulkAnnotate(datasetId, annotations);
   return { datasetId, annotated: result.created ?? annotations.length };

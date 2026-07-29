@@ -14,6 +14,10 @@
         </template>
       </n-page-header>
 
+      <n-alert v-if="!canTrain && props.trainDisabledReason" type="warning">
+        {{ props.trainDisabledReason }}
+      </n-alert>
+
       <n-spin :show="isLoading">
         <n-data-table
           :columns="columns"
@@ -84,6 +88,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
 import { listDatasets } from "@/shared/api/datasets";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
 import {
   useListJobsApiV1TrainingJobsGet,
@@ -107,9 +112,11 @@ const orgStore = useOrgStore();
 const props = defineProps<{
   datasetId?: string | null;
   allowTrain?: boolean;
+  trainDisabledReason?: string | null;
   compatibleViewTypes?: string[] | null;
 }>();
 const canTrain = computed(() => props.allowTrain !== false);
+const jobsQueryPrefix = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["jobs"]));
 provide(
   TASK_INSIGHT_ORG_ID_KEY,
   computed(() => orgStore.currentOrgId),
@@ -125,13 +132,14 @@ const jobsQueryParams = computed(() => ({
 
 const { data: jobsPage, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryParams, {
   query: {
-    select: (response) => response.data,
-    queryKey: computed(() => [
-      "jobs",
-      orgStore.currentOrgId,
-      props.datasetId,
-      jobsPageNumber.value,
-    ]),
+    queryKey: computed(() =>
+      orgScopedQueryKey(orgStore.currentOrgId, [
+        "jobs",
+        props.datasetId,
+        jobsPageNumber.value,
+        jobsPageSize,
+      ]),
+    ),
     refetchInterval: 5000,
     enabled: computed(() => !!orgStore.currentOrgId),
   },
@@ -152,16 +160,23 @@ const jobsPagination = computed(() => ({
 }));
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
-  queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
+  queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all-pages"])),
   queryFn: listDatasets,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 
 const { data: trainers, isLoading: trainersLoading } = useListTrainersRouteApiV1TrainersGet({
   query: {
-    // ast-grep-ignore: forbid-unsafe-type-casts
-    select: (response) => response.data as unknown as Trainer[],
-    queryKey: computed(() => ["trainers", orgStore.currentOrgId]),
+    select: (response) =>
+      response.map(
+        (item): Trainer => ({
+          id: String(item.id ?? ""),
+          name: String(item.name ?? ""),
+          view_type: String(item.view_type ?? ""),
+          trainable: Boolean(item.trainable ?? true),
+        }),
+      ),
+    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["trainers"])),
     refetchInterval: 30000,
     enabled: computed(() => !!orgStore.currentOrgId),
   },
@@ -307,13 +322,13 @@ const formRules: FormRules = {
 const createJobMutation = useCreateTrainingJobApiV1TrainingJobsPost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["jobs", orgStore.currentOrgId] });
+      qc.invalidateQueries({ queryKey: jobsQueryPrefix.value });
       message.success("Job started");
       showModal.value = false;
       resetForm();
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to start job");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to start job"));
     },
   },
 });

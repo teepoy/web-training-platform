@@ -18,6 +18,7 @@ import type {
   ScImportResponse,
 } from "@/features/sc/domain/models";
 import { streamApiSse } from "@/shared/api/sse";
+import { toUserMessage } from "@/shared/api";
 
 function isInspectionSummaryItem(payload: unknown): payload is InspectionSummaryItem {
   return (
@@ -59,7 +60,7 @@ const inspectionQuery = useGetInspectionApiV1ScInspectionsInspectionTimeWaferKey
 const inspectionFetching = computed(() => inspectionQuery.isFetching.value);
 
 const inspectionItem = computed<InspectionSummaryItem | null>(() => {
-  const payload = inspectionQuery.data.value?.data;
+  const payload = inspectionQuery.data.value;
   return isInspectionSummaryItem(payload) ? payload : null;
 });
 const samplesError = computed(() => {
@@ -149,8 +150,8 @@ async function startReclassifyImport(): Promise<void> {
       return;
     }
     message.error(resp.error || "Import failed");
-  } catch (err) {
-    message.error(err instanceof Error ? err.message : "Import failed");
+  } catch (error) {
+    message.error(toUserMessage(error, "Import failed"));
   } finally {
     isImporting.value = false;
   }

@@ -1,22 +1,22 @@
 export {
   configureTransport,
   ApiError,
+  isApiError,
+  toUserMessage,
   API_BASE,
-  req,
+  requestData,
+  requestRaw,
   getApiBase,
   getAuthToken,
   getOrgId,
   withAuthQueryParams,
   uploadFile,
 } from "./client";
-export * from "./annotations";
+export * from "./queryKeys";
 export * from "./datasets";
-export * from "./samples";
 export * from "./preview";
 export * from "./predictions";
-export * from "./schedules";
 export * from "./task-tracker";
-export * from "./agent";
 export * from "./sse";
 export * from "./types";
 export * from "./hooks";

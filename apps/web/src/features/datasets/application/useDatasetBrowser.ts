@@ -1,6 +1,8 @@
 import { computed, onMounted, provide, ref, watch, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { queryWaferPoints } from "@/shared/api/datasets";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey } from "@/shared/api";
 import {
   BROWSER_DASHBOARD_KEY,
   DATA_PIPELINE_KEY,
@@ -19,6 +21,7 @@ interface UseDatasetBrowserOptions {
 }
 
 export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOptions) {
+  const orgStore = useOrgStore();
   const pageDashboardData = ref<Record<string, unknown>>({});
   const browserSidebarDashboard: Record<string, unknown> = {
     get stats() {
@@ -70,8 +73,11 @@ export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOp
 
   const filteredSamples = computed<BrowserItem[]>(() => {
     const labelFilter = pipeline.getNode("label-distribution")?.annotation.value;
-    if (!labelFilter || labelFilter.kind !== "labelFilter" || labelFilter.ids.size === 0) return browserSamples.value;
-    return browserSamples.value.filter((sample) => sample.currentLabel !== null && labelFilter.ids.has(sample.currentLabel));
+    if (!labelFilter || labelFilter.kind !== "labelFilter" || labelFilter.ids.size === 0)
+      return browserSamples.value;
+    return browserSamples.value.filter(
+      (sample) => sample.currentLabel !== null && labelFilter.ids.has(sample.currentLabel),
+    );
   });
 
   const browserSidebarStats = computed(() => {
@@ -113,8 +119,11 @@ export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOp
   );
 
   const waferPointsQuery = useQuery({
-    queryKey: computed(() => ["dataset", datasetId.value, "wafer-points"]),
+    queryKey: computed(() =>
+      orgScopedQueryKey(orgStore.currentOrgId, ["dataset", datasetId.value, "wafer-points"]),
+    ),
     queryFn: () => queryWaferPoints(datasetId.value),
+    enabled: computed(() => !!orgStore.currentOrgId && !!datasetId.value),
     retry: false,
   });
 

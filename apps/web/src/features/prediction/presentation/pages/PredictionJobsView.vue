@@ -25,38 +25,34 @@
       :loading="runMutation.isPending.value"
       @positive-click="onSubmit"
       @negative-click="onCancel"
+    >
+      <n-form
+        ref="formRef"
+        :model="formModel"
+        :rules="formRules"
+        label-placement="left"
+        label-width="auto"
       >
-        <n-form
-          ref="formRef"
-          :model="formModel"
-          :rules="formRules"
-          label-placement="left"
-          label-width="auto"
-        >
-          <template v-if="orgStore.currentOrgId">
-            <n-form-item label="Model" path="model_id">
-              <n-select
-                v-model:value="formModel.model_id"
-                :options="modelOptions"
-                :loading="modelsLoading"
-                placeholder="Select a model"
-                filterable
-              />
-            </n-form-item>
-          </template>
-          <template v-else>
-            <div style="padding: 16px 0; text-align: center; color: var(--n-text-color-2)">
-              Select an organization first.
-            </div>
-          </template>
-        </n-form>
-      </n-modal>
+        <template v-if="orgStore.currentOrgId">
+          <n-form-item label="Model" path="model_id">
+            <n-select
+              v-model:value="formModel.model_id"
+              :options="modelOptions"
+              :loading="modelsLoading"
+              placeholder="Select a model"
+              filterable
+            />
+          </n-form-item>
+        </template>
+        <template v-else>
+          <div style="padding: 16px 0; text-align: center; color: var(--n-text-color-2)">
+            Select an organization first.
+          </div>
+        </template>
+      </n-form>
+    </n-modal>
 
-    <TaskInsightModal
-      v-model:show="insightVisible"
-      :task="selectedTask"
-      :handoff-enabled="false"
-    />
+    <TaskInsightModal v-model:show="insightVisible" :task="selectedTask" :handoff-enabled="false" />
   </n-space>
 </template>
 
@@ -72,8 +68,13 @@ import {
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs } from "@/shared/api/predictions";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
-import type { ModelResponse, PredictionJobResponse as PredictionJob, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
+import type {
+  ModelResponse,
+  PredictionJobResponse as PredictionJob,
+  TaskTrackerSummaryResponse as TaskTrackerSummary,
+} from "@/generated/orval/models";
 import type { RunPredictionRequest } from "@/generated/orval/models";
 
 const props = defineProps<{ datasetId?: string | null }>();
@@ -83,10 +84,19 @@ const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
-provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
+provide(
+  TASK_INSIGHT_ORG_ID_KEY,
+  computed(() => orgStore.currentOrgId),
+);
 
 const { data: jobs, isLoading } = useQuery({
-  queryKey: computed(() => ["prediction-jobs", orgStore.currentOrgId, props.datasetId ?? null]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "prediction-jobs",
+      "all-pages",
+      props.datasetId ?? null,
+    ]),
+  ),
   queryFn: () => listPredictionJobs(props.datasetId),
   refetchInterval: 5000,
 });
@@ -100,25 +110,22 @@ function predictionJobRowKey(row: PredictionJob): string {
 const { data: models, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
   computed(() => ({})),
   {
-  query: {
-    select: (response: any) => response.data,
-    queryKey: computed(() => [
-      "models",
-      "prediction-launcher",
-      orgStore.currentOrgId,
-    ]),
-    enabled: computed(() => !!orgStore.currentOrgId),
-    refetchInterval: 5000,
+    query: {
+      select: (response) => response.items,
+      queryKey: computed(() =>
+        orgScopedQueryKey(orgStore.currentOrgId, ["models", "prediction-launcher"]),
+      ),
+      enabled: computed(() => !!orgStore.currentOrgId),
+      refetchInterval: 5000,
+    },
   },
-},
 );
 
 const modelOptions = computed<SelectOption[]>(() =>
-  ((models.value ?? []) as ModelResponse[])
-    .map((model) => ({
-      label: model.name?.trim() || model.id.slice(0, 8),
-      value: model.id,
-    })),
+  ((models.value ?? []) as ModelResponse[]).map((model) => ({
+    label: model.name?.trim() || model.id.slice(0, 8),
+    value: model.id,
+  })),
 );
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
@@ -203,13 +210,15 @@ const formRules: FormRules = {
 const runMutation = useRunPredictionsApiV1PredictionsRunPost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["prediction-jobs"] });
+      qc.invalidateQueries({
+        queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["prediction-jobs"]),
+      });
       message.success("Prediction started");
       showModal.value = false;
       resetForm();
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to start prediction");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to start prediction"));
     },
   },
 });
@@ -257,7 +266,10 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
     execution_kind: "predict-batch",
     display_name: "Prediction",
     display_status: row.status,
-    stage: row.status === "completed" || row.status === "failed" ? "validation_output" : "queue_allocation",
+    stage:
+      row.status === "completed" || row.status === "failed"
+        ? "validation_output"
+        : "queue_allocation",
     dataset_id: row.dataset_id,
     model_id: row.model_id,
     trainer_id: null,

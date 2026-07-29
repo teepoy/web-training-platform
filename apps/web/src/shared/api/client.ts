@@ -4,6 +4,8 @@ let _onAuthError: (() => void) | null = null;
 let _apiBase: string = "/api/v1";
 let _authEnabled: (() => boolean) | null = null;
 
+export type ApiErrorKind = "http" | "network" | "timeout";
+
 export function configureTransport(config: {
   getToken?: () => string | null;
   getOrgId?: () => string | null;
@@ -18,15 +20,186 @@ export function configureTransport(config: {
   if (config.authEnabled !== undefined) _authEnabled = config.authEnabled;
 }
 
-export class ApiError extends Error {
-  detail: string;
-  status: number;
+export class ApiError<ErrorBody = unknown> extends Error {
+  readonly cause: unknown;
+  readonly kind: ApiErrorKind;
+  readonly detail: string;
+  readonly status: number | null;
+  readonly body: ErrorBody | null;
+  readonly requestId: string | null;
 
-  constructor(detail: string, status: number) {
-    super(`API ${status}: ${detail}`);
-    this.detail = detail;
-    this.status = status;
+  constructor(options: {
+    kind: ApiErrorKind;
+    detail: string;
+    status?: number | null;
+    body?: ErrorBody | null;
+    requestId?: string | null;
+    cause?: unknown;
+  }) {
+    super(options.detail);
+    this.name = "ApiError";
+    this.kind = options.kind;
+    this.detail = options.detail;
+    this.status = options.status ?? null;
+    this.body = options.body ?? null;
+    this.requestId = options.requestId ?? null;
+    this.cause = options.cause;
   }
+}
+
+export function isApiError(value: unknown): value is ApiError {
+  return value instanceof ApiError;
+}
+
+export function toUserMessage(error: unknown, fallback: string): string {
+  if (isApiError(error)) {
+    if (error.kind === "timeout") return "The request timed out. Please try again.";
+    if (error.kind === "network") return "The server could not be reached. Please try again.";
+    if (error.status === 401) return "Your session has expired. Please sign in again.";
+    if (error.status === 403) return "You do not have permission to perform this action.";
+    if (error.status === 404) return "The requested item could not be found.";
+    if (error.status === 409) return "The request conflicts with the current state.";
+    if (error.status === 422) return "Some request values are invalid.";
+    return fallback;
+  }
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "The request was cancelled.";
+  }
+  return fallback;
+}
+
+function safeGetToken(): string | null {
+  try {
+    return _getToken?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeGetOrgId(): string | null {
+  try {
+    return _getOrgId?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildHeaders(init: RequestInit): Headers {
+  const headers = new Headers(init.headers);
+  const isFormData = init.body instanceof FormData;
+  if (init.body !== undefined && !isFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const token = safeGetToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const orgId = safeGetOrgId();
+  if (orgId) headers.set("X-Organization-ID", orgId);
+  return headers;
+}
+
+function combineSignals(
+  callerSignal: AbortSignal | null | undefined,
+  timeoutSignal: AbortSignal,
+): AbortSignal {
+  if (!callerSignal) return timeoutSignal;
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([callerSignal, timeoutSignal]);
+  }
+  const controller = new AbortController();
+  const abort = (signal: AbortSignal) => {
+    if (!controller.signal.aborted) controller.abort(signal.reason);
+  };
+  if (callerSignal.aborted) abort(callerSignal);
+  else callerSignal.addEventListener("abort", () => abort(callerSignal), { once: true });
+  if (timeoutSignal.aborted) abort(timeoutSignal);
+  else timeoutSignal.addEventListener("abort", () => abort(timeoutSignal), { once: true });
+  return controller.signal;
+}
+
+async function parseResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204 || response.status === 205) return undefined;
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (contentType.includes("application/json")) {
+    const text = await response.text();
+    return text ? (JSON.parse(text) as unknown) : undefined;
+  }
+  if (contentType.startsWith("text/")) return response.text();
+  return response.blob();
+}
+
+function errorDetail(body: unknown, status: number): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "detail" in body &&
+    typeof body.detail === "string"
+  ) {
+    return body.detail;
+  }
+  if (typeof body === "string" && body.trim()) return body;
+  return `Request failed with status ${status}`;
+}
+
+export async function requestData<T>(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 30_000,
+): Promise<T> {
+  const response = await requestRaw(url, init, timeoutMs);
+  return (await parseResponseBody(response)) as T;
+}
+
+export async function requestRaw(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 30_000,
+): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = combineSignals(init.signal, timeoutSignal);
+  const token = safeGetToken();
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: buildHeaders(init),
+      signal,
+    });
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    if (timeoutSignal.aborted) {
+      throw new ApiError({
+        kind: "timeout",
+        detail: "Request timed out",
+        cause: error,
+      });
+    }
+    throw new ApiError({
+      kind: "network",
+      detail: "Network request failed",
+      cause: error,
+    });
+  }
+
+  if (!response.ok) {
+    const body = await parseResponseBody(response);
+    if (response.status === 401 && token && (_authEnabled?.() ?? true)) {
+      try {
+        _onAuthError?.();
+      } catch {
+        // Auth cleanup must not replace the request error.
+      }
+    }
+    throw new ApiError({
+      kind: "http",
+      detail: errorDetail(body, response.status),
+      status: response.status,
+      body,
+      requestId: response.headers.get("x-request-id") ?? response.headers.get("x-correlation-id"),
+    });
+  }
+
+  return response;
 }
 
 export const API_BASE = "/api/v1";
@@ -35,84 +208,13 @@ function resolveApiBase(): string {
   return _apiBase;
 }
 
-export async function req<T>(
-  path: string,
-  init?: RequestInit,
-  timeoutMs = 30_000,
-): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  const authHeader: Record<string, string> = {};
-  let hasAuthToken = false;
-
-  try {
-    const token = _getToken?.() ?? null;
-    if (token) {
-      authHeader["Authorization"] = `Bearer ${token}`;
-      hasAuthToken = true;
-    }
-  } catch {}
-
-  try {
-    const orgId = _getOrgId?.() ?? null;
-    if (orgId) {
-      authHeader["X-Organization-ID"] = orgId;
-    }
-  } catch {}
-
-  try {
-    const { headers: initHeaders, ...restInit } = init ?? {};
-    const r = await fetch(`${resolveApiBase()}${path}`, {
-      ...restInit,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeader,
-        ...((initHeaders as Record<string, string>) ?? {}),
-      },
-      signal: controller.signal,
-    });
-
-    if (!r.ok) {
-      if (r.status === 401 && hasAuthToken && (_authEnabled?.() ?? true)) {
-        try {
-          _onAuthError?.();
-        } catch {}
-      }
-      let detail = `request failed: ${r.status}`;
-      try {
-        const body = await r.json();
-        detail =
-          typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-      } catch {}
-      throw new ApiError(detail, r.status);
-    }
-
-    if (r.status === 204 || r.status === 205) {
-      return undefined as T;
-    }
-    const acceptHeader = (initHeaders as Record<string, string> | undefined)?.Accept;
-    if (
-      acceptHeader?.includes("application/x-protobuf") ||
-      acceptHeader?.includes("application/octet-stream")
-    ) {
-      return r as T;
-    }
-    return (await r.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export function getApiBase(): string {
   return resolveApiBase();
 }
 
 export function getAuthToken(): string | null {
-  try {
-    const token = _getToken?.() ?? null;
-    if (token) return token;
-  } catch {}
+  const token = safeGetToken();
+  if (token) return token;
 
   try {
     return localStorage.getItem("auth_token");
@@ -122,11 +224,7 @@ export function getAuthToken(): string | null {
 }
 
 export function getOrgId(): string | null {
-  try {
-    return _getOrgId?.() ?? null;
-  } catch {
-    return null;
-  }
+  return safeGetOrgId();
 }
 
 export function withAuthQueryParams(url: string): string {
@@ -146,29 +244,8 @@ export function withAuthQueryParams(url: string): string {
 }
 
 export async function uploadFile<T>(path: string, form: FormData): Promise<T> {
-  const headers: Record<string, string> = {};
-  try {
-    const token = _getToken?.() ?? null;
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-  } catch {}
-  try {
-    const orgId = _getOrgId?.() ?? null;
-    if (orgId) headers["X-Organization-ID"] = orgId;
-  } catch {}
-
-  const r = await fetch(`${resolveApiBase()}${path}`, {
+  return requestData<T>(`${resolveApiBase()}${path}`, {
     method: "POST",
-    headers,
     body: form,
   });
-  if (!r.ok) {
-    let detail = `upload failed: ${r.status}`;
-    try {
-      const body = await r.json();
-      detail =
-        typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
-    } catch {}
-    throw new ApiError(detail, r.status);
-  }
-  return r.json() as Promise<T>;
 }

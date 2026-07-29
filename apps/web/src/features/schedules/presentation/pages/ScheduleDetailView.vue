@@ -3,7 +3,7 @@
     <n-page-header :title="schedule?.name ?? 'Schedule Detail'" @back="router.push('/schedules')">
       <template #subtitle>
         <n-tag :type="schedule?.is_schedule_active ? 'success' : 'warning'" size="small" round>
-          {{ schedule?.is_schedule_active ? 'Active' : 'Paused' }}
+          {{ schedule?.is_schedule_active ? "Active" : "Paused" }}
         </n-tag>
       </template>
       <template #extra>
@@ -14,7 +14,7 @@
             :loading="pauseMutation.isPending.value || resumeMutation.isPending.value"
             @click="onTogglePause"
           >
-            {{ schedule.is_schedule_active ? 'Pause' : 'Resume' }}
+            {{ schedule.is_schedule_active ? "Pause" : "Resume" }}
           </n-button>
           <n-button size="small" @click="showEditModal = true">Edit</n-button>
           <n-button
@@ -50,16 +50,18 @@
       <n-card v-if="schedule">
         <n-descriptions label-placement="left" :column="2" bordered>
           <n-descriptions-item label="Flow Name">{{ schedule.flow_name }}</n-descriptions-item>
-          <n-descriptions-item label="Cron">{{ schedule.cron ?? '—' }}</n-descriptions-item>
-          <n-descriptions-item label="Description">{{ schedule.description || '—' }}</n-descriptions-item>
+          <n-descriptions-item label="Cron">{{ schedule.cron ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="Description">{{
+            schedule.description || "—"
+          }}</n-descriptions-item>
           <n-descriptions-item label="Deployment ID">
-            {{ schedule.prefect_deployment_id || '—' }}
+            {{ schedule.prefect_deployment_id || "—" }}
           </n-descriptions-item>
           <n-descriptions-item label="Created">
-            {{ schedule.created ? new Date(schedule.created).toLocaleString() : '—' }}
+            {{ schedule.created ? new Date(schedule.created).toLocaleString() : "—" }}
           </n-descriptions-item>
           <n-descriptions-item label="Updated">
-            {{ schedule.updated ? new Date(schedule.updated).toLocaleString() : '—' }}
+            {{ schedule.updated ? new Date(schedule.updated).toLocaleString() : "—" }}
           </n-descriptions-item>
         </n-descriptions>
       </n-card>
@@ -76,7 +78,7 @@
           :loading="runsLoading"
         />
       </n-spin>
-      <div v-if="selectedRunId" style="margin-top: 16px;">
+      <div v-if="selectedRunId" style="margin-top: 16px">
         <RunLogViewer :runId="selectedRunId" />
       </div>
     </n-card>
@@ -97,7 +99,12 @@
         <n-input v-model:value="editForm.cron" placeholder="*/5 * * * *" />
       </n-form-item>
       <n-form-item label="Parameters">
-        <n-input v-model:value="editForm.parameters" type="textarea" placeholder="{}" :autosize="{ minRows: 3, maxRows: 6 }" />
+        <n-input
+          v-model:value="editForm.parameters"
+          type="textarea"
+          placeholder="{}"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
       </n-form-item>
       <n-form-item label="Description">
         <n-input v-model:value="editForm.description" placeholder="Optional description" />
@@ -136,33 +143,53 @@ import {
   useResumeScheduleApiV1SchedulesScheduleIdResumePost,
   useListRunsApiV1SchedulesScheduleIdRunsGet,
 } from "@/generated/orval/endpoints/api";
-import type { RunResponse as ScheduleRun, ScheduleResponse, UpdateScheduleRequest } from "@/generated/orval/models";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
+import { useOrgStore } from "@/features/auth/application/org";
+import type {
+  RunResponse as ScheduleRun,
+  ScheduleResponse,
+  UpdateScheduleRequest,
+} from "@/generated/orval/models";
 import RunLogViewer from "@/shared/components/run-log-viewer/RunLogViewer.vue";
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
 
 const id = computed(() => route.params.id as string);
+const scheduleQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["schedule", id.value]),
+);
+const scheduleRunsQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["schedule-runs", id.value]),
+);
 
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
 
-const { data: schedule, isLoading: scheduleLoading } = useGetScheduleApiV1SchedulesScheduleIdGet(id, {
-  query: {
-    select: (response) => response.data as ScheduleResponse,
-    queryKey: computed(() => ["schedule", id.value]),
+const { data: schedule, isLoading: scheduleLoading } = useGetScheduleApiV1SchedulesScheduleIdGet(
+  id,
+  {
+    query: {
+      queryKey: scheduleQueryKey,
+      enabled: computed(() => !!orgStore.currentOrgId && !!id.value),
+    },
   },
-});
+);
 
-const { data: runs, isLoading: runsLoading } = useListRunsApiV1SchedulesScheduleIdRunsGet(id, undefined, {
-  query: {
-    select: (response) => response.data as ScheduleRun[],
-    queryKey: computed(() => ["schedule-runs", id.value]),
+const { data: runs, isLoading: runsLoading } = useListRunsApiV1SchedulesScheduleIdRunsGet(
+  id,
+  undefined,
+  {
+    query: {
+      queryKey: scheduleRunsQueryKey,
+      enabled: computed(() => !!orgStore.currentOrgId && !!id.value),
+    },
   },
-});
+);
 
 // ---------------------------------------------------------------------------
 // Mutations
@@ -171,11 +198,11 @@ const { data: runs, isLoading: runsLoading } = useListRunsApiV1SchedulesSchedule
 const triggerMutation = useTriggerRunApiV1SchedulesScheduleIdRunPost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedule-runs", id.value] });
+      qc.invalidateQueries({ queryKey: scheduleRunsQueryKey.value });
       message.success("Run triggered");
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to trigger run");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to trigger run"));
     },
   },
 });
@@ -183,11 +210,11 @@ const triggerMutation = useTriggerRunApiV1SchedulesScheduleIdRunPost({
 const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
       message.success("Schedule paused");
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to pause schedule");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to pause schedule"));
     },
   },
 });
@@ -195,11 +222,11 @@ const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
 const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
       message.success("Schedule resumed");
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to resume schedule");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to resume schedule"));
     },
   },
 });
@@ -210,8 +237,8 @@ const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
       message.success("Schedule deleted");
       router.push("/schedules");
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to delete schedule");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to delete schedule"));
     },
   },
 });
@@ -235,18 +262,18 @@ watch(
       };
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const updateMutation = useUpdateScheduleApiV1SchedulesScheduleIdPatch({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedule", id.value] });
+      qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
       message.success("Schedule updated");
       showEditModal.value = false;
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to update schedule");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to update schedule"));
     },
   },
 });
@@ -264,10 +291,7 @@ function onEditSubmit() {
   if (editForm.value.cron !== (schedule.value?.cron ?? "")) {
     body.cron = editForm.value.cron;
   }
-  if (
-    JSON.stringify(parsedParams) !==
-    JSON.stringify(schedule.value?.parameters ?? {})
-  ) {
+  if (JSON.stringify(parsedParams) !== JSON.stringify(schedule.value?.parameters ?? {})) {
     body.parameters = parsedParams;
   }
   if (editForm.value.description !== (schedule.value?.description ?? "")) {
@@ -349,7 +373,7 @@ const runColumns = computed<DataTableColumns<ScheduleRun>>(() => [
       h(
         NTag,
         { type: runStateType(row.state_type), size: "small", round: true },
-        { default: () => row.state_name ?? row.state_type ?? "—" }
+        { default: () => row.state_name ?? row.state_type ?? "—" },
       ),
   },
   {

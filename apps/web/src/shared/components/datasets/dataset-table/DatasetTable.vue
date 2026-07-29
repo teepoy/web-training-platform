@@ -5,6 +5,7 @@
     :row-props="rowProps"
     :bordered="false"
     :pagination="pagination"
+    remote
     style="cursor: pointer"
   />
 </template>

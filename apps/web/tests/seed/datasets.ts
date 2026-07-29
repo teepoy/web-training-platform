@@ -6,12 +6,12 @@ import type {
   Dataset,
   BulkCreateSampleRequest,
   BulkCreateSampleResponse,
-} from '../../src/generated/orval/models';
+} from "../../src/generated/orval/models";
 import {
   createDatasetApiV1DatasetsPost,
   deleteDatasetApiV1DatasetsDatasetIdDelete,
   importSamplesApiV1DatasetsDatasetIdSamplesImportPost,
-} from '../../src/generated/orval/endpoints/api';
+} from "../../src/generated/orval/endpoints/api";
 
 /**
  * Create a new dataset.
@@ -20,8 +20,7 @@ import {
  * token BEFORE calling this.
  */
 export async function createDataset(req: CreateDatasetRequest): Promise<Dataset> {
-  const res = await createDatasetApiV1DatasetsPost(req);
-  return res.data as Dataset;
+  return createDatasetApiV1DatasetsPost(req);
 }
 
 /**
@@ -31,8 +30,7 @@ export async function addSamples(
   datasetId: string,
   req: BulkCreateSampleRequest,
 ): Promise<BulkCreateSampleResponse> {
-  const res = await importSamplesApiV1DatasetsDatasetIdSamplesImportPost(datasetId, req);
-  return res.data as BulkCreateSampleResponse;
+  return importSamplesApiV1DatasetsDatasetIdSamplesImportPost(datasetId, req);
 }
 
 /**

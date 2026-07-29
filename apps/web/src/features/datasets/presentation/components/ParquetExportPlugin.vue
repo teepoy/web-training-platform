@@ -4,6 +4,7 @@ import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
 import { streamApiSse } from "@/shared/api/sse";
+import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
@@ -36,7 +37,7 @@ async function runExport() {
     statusMessage.value = "Parquet export complete";
     message.success(`Parquet export complete: ${rowCount.value ?? "?"} rows`);
   } catch (error) {
-    message.error(`Parquet export failed: ${(error as Error).message}`);
+    message.error(toUserMessage(error, "Parquet export failed"));
   } finally {
     loading.value = false;
   }
@@ -54,9 +55,7 @@ function done() {
 <template>
   <div>
     <n-space vertical>
-      <n-button type="primary" :loading="loading" @click="runExport">
-        Export as Parquet
-      </n-button>
+      <n-button type="primary" :loading="loading" @click="runExport"> Export as Parquet </n-button>
       <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
 
       <n-space v-if="uri" vertical :size="4">

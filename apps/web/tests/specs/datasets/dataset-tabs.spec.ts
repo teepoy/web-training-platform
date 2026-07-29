@@ -15,6 +15,9 @@ test("Train tab disables Start New Job button when allowTrain=false @mock", asyn
   });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: false,
+    train_disabled_reason: "insufficient_active_classes",
+    minimum_active_class_count: 2,
+    active_class_count: 0,
     annotated_samples: 0,
     total_samples: 10,
   });
@@ -30,6 +33,9 @@ test("Train tab disables Start New Job button when allowTrain=false @mock", asyn
   const startButton = page.getStartJobButton();
   await expect(startButton).toBeVisible();
   await expect(startButton).toBeDisabled();
+  await expect(
+    authedPage.getByText("Training requires at least 2 active classes; currently 0."),
+  ).toBeVisible();
 });
 
 test("Train tab enables Start New Job button when allowTrain=true @mock", async ({
@@ -43,6 +49,9 @@ test("Train tab enables Start New Job button when allowTrain=true @mock", async 
   });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: true,
+    train_disabled_reason: null,
+    minimum_active_class_count: 2,
+    active_class_count: 2,
     annotated_samples: 5,
     total_samples: 10,
   });
@@ -133,19 +142,22 @@ test("Task Explorer renders task table @mock", async ({ authedPage }) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "task-1",
-          display_name: "Prediction task",
-          dataset_id: datasetId,
-          dataset_name: "flowers-dataset",
-          display_status: "running",
-          stage: "running",
-          task_kind: "prediction",
-          queue_priority_label: "none",
-          updated_at: "2026-01-01T00:00:00Z",
-        },
-      ]),
+      body: JSON.stringify({
+        items: [
+          {
+            id: "task-1",
+            display_name: "Prediction task",
+            dataset_id: datasetId,
+            dataset_name: "flowers-dataset",
+            display_status: "running",
+            stage: "running",
+            task_kind: "prediction",
+            queue_priority_label: "none",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+      }),
     });
   });
 
@@ -167,6 +179,9 @@ test("Train tab modal hides dataset selector when datasetId prop is set @mock", 
   });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: true,
+    train_disabled_reason: null,
+    minimum_active_class_count: 2,
+    active_class_count: 2,
     annotated_samples: 5,
     total_samples: 10,
   });

@@ -39,15 +39,17 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { useMessage, NModal, NInput, type PaginationProps } from "naive-ui";
 import { DatasetPageShell } from "@/shared";
 import {
-  deleteDataset,
-  listDatasetPage,
-  renameDataset,
-  toggleDatasetPublic,
-} from "@/shared/api/datasets";
+  getListDatasetsApiV1DatasetsGetQueryKey,
+  useDeleteDatasetApiV1DatasetsDatasetIdDelete,
+  useListDatasetsApiV1DatasetsGet,
+  useSetDatasetPublicApiV1DatasetsDatasetIdPublicPatch,
+  useUpdateDatasetApiV1DatasetsDatasetIdPatch,
+} from "@/generated/orval/endpoints/api";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useDatasetListSurface } from "@/features/datasets/application/surface";
@@ -78,23 +80,29 @@ const pagination = reactive<PaginationProps>({
   },
 });
 
+const datasetListParams = computed(() => ({
+  limit: pagination.pageSize ?? 20,
+  offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
+}));
+const datasetListQueryKey = computed(() =>
+  orgScopedQueryKey(
+    orgStore.currentOrgId,
+    getListDatasetsApiV1DatasetsGetQueryKey(datasetListParams.value),
+  ),
+);
+const datasetListQueryPrefix = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["api", "v1", "datasets"]),
+);
+
 const {
   data: datasetPage,
   isLoading,
   error,
-} = useQuery({
-  queryKey: computed(() => [
-    "datasets",
-    orgStore.currentOrgId,
-    pagination.page,
-    pagination.pageSize,
-  ]),
-  queryFn: () =>
-    listDatasetPage({
-      limit: pagination.pageSize ?? 20,
-      offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
-    }),
-  enabled: computed(() => !!orgStore.currentOrgId),
+} = useListDatasetsApiV1DatasetsGet(datasetListParams, {
+  query: {
+    queryKey: datasetListQueryKey,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
 });
 
 const datasets = computed(() => datasetPage.value?.items ?? []);
@@ -107,25 +115,26 @@ watch(
   { immediate: true },
 );
 
-const toggleDatasetPublicMut = useMutation({
-  mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
-    toggleDatasetPublic(id, isPublic),
-  onSuccess: () => {
-    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to update visibility");
+const toggleDatasetPublicMut = useSetDatasetPublicApiV1DatasetsDatasetIdPublicPatch({
+  mutation: {
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to update visibility"));
+    },
   },
 });
 
-const deleteDatasetMut = useMutation({
-  mutationFn: (datasetId: string) => deleteDataset(datasetId),
-  onSuccess: () => {
-    message.success("Dataset deleted");
-    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to delete dataset");
+const deleteDatasetMut = useDeleteDatasetApiV1DatasetsDatasetIdDelete({
+  mutation: {
+    onSuccess: () => {
+      message.success("Dataset deleted");
+      qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to delete dataset"));
+    },
   },
 });
 
@@ -133,17 +142,18 @@ const renameVisible = ref(false);
 const renameTarget = ref<{ id: string; name: string } | null>(null);
 const renameName = ref("");
 
-const renameMutation = useMutation({
-  mutationFn: ({ id, name }: { id: string; name: string }) => renameDataset(id, name),
-  onSuccess: () => {
-    message.success("Dataset renamed");
-    qc.invalidateQueries({ queryKey: ["datasets", orgStore.currentOrgId] });
-    renameVisible.value = false;
-    renameTarget.value = null;
-    renameName.value = "";
-  },
-  onError: (err: Error) => {
-    message.error(err.message ?? "Failed to rename dataset");
+const renameMutation = useUpdateDatasetApiV1DatasetsDatasetIdPatch({
+  mutation: {
+    onSuccess: () => {
+      message.success("Dataset renamed");
+      qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
+      renameVisible.value = false;
+      renameTarget.value = null;
+      renameName.value = "";
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to rename dataset"));
+    },
   },
 });
 
@@ -152,7 +162,10 @@ function handleViewDataset(datasetId: string) {
 }
 
 function handleTogglePublic(payload: { id: string; isPublic: boolean }) {
-  toggleDatasetPublicMut.mutate(payload);
+  toggleDatasetPublicMut.mutate({
+    datasetId: payload.id,
+    data: { is_public: payload.isPublic },
+  });
 }
 
 function handleDeleteDataset(row: DatasetListItem) {
@@ -167,7 +180,7 @@ function handleDeleteDataset(row: DatasetListItem) {
   ) {
     return;
   }
-  deleteDatasetMut.mutate(row.id!);
+  deleteDatasetMut.mutate({ datasetId: row.id! });
 }
 
 function handleRenameDataset(row: DatasetListItem) {
@@ -184,7 +197,7 @@ function submitRename(): false {
   const target = renameTarget.value;
   const name = renameName.value.trim();
   if (!target || !name) return false;
-  renameMutation.mutate({ id: target.id, name });
+  renameMutation.mutate({ datasetId: target.id, data: { name } });
   return false;
 }
 

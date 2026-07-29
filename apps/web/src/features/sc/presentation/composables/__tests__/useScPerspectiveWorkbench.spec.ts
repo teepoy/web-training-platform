@@ -70,6 +70,38 @@ describe("useScPerspectiveWorkbench timeouts", () => {
     harness.unmount();
   });
 
+  it("terminates a websocket client that resolves after its handshake timed out", async () => {
+    let resolveClient: ((client: Client) => void) | undefined;
+    const terminate = vi.fn();
+    const websocket = vi.fn(
+      () =>
+        new Promise<Client>((resolve) => {
+          resolveClient = resolve;
+        }),
+    );
+    const harness = mountWorkbench(() =>
+      useScPerspectiveWorkbench({
+        websocket,
+        connectionTimeoutMs: 10,
+        reconnectMaxAttempts: 0,
+      }),
+    );
+
+    const connectPromise = harness.state.connect({
+      kind: "preview",
+      inspectionTime: "2026-07-26T04:00:00+08:00",
+      waferKey: 1,
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    await connectPromise;
+
+    resolveClient?.({ terminate } as unknown as Client);
+    await Promise.resolve();
+
+    expect(terminate).toHaveBeenCalledTimes(1);
+    harness.unmount();
+  });
+
   it("does not mark an empty table ready when the data deadline expires", async () => {
     const table = {
       delete: vi.fn(async () => undefined),

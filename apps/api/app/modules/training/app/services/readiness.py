@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from typing import Any, cast
 
 from injector import inject
@@ -31,6 +32,40 @@ class TrainingReadinessService:
         self._storage_factory = storage_factory
         self._artifact_storage = artifact_storage
 
+    async def assess_classes(
+        self,
+        *,
+        dataset: Dataset,
+        sample_ids: list[str] | None = None,
+        sample_filter: dict[str, Any] | None = None,
+    ) -> TrainingReadinessReport:
+        annotated, label_column = await self._annotated_frame(
+            dataset=dataset,
+            sample_ids=sample_ids,
+            sample_filter=sample_filter,
+        )
+        label_counts = self._collect_label_counts(annotated, label_column)
+        annotated_samples = sum(label_counts.values())
+        active_labels = sorted(label_counts)
+        reasons: list[str] = []
+        if not annotated_samples:
+            reasons.append("dataset has no annotated samples in the selected scope")
+        if len(active_labels) < 2:
+            reasons.append(
+                f"training requires at least 2 active labels; got {active_labels}"
+            )
+        return TrainingReadinessReport(
+            dataset_id=dataset.id,
+            missing_image_policy="",
+            annotated_samples=annotated_samples,
+            readable_samples=annotated_samples,
+            runtime_resolvable_samples=0,
+            unusable_samples=0,
+            skipped_samples=0,
+            label_counts=label_counts,
+            failure_reasons=tuple(reasons),
+        )
+
     async def assess(
         self,
         *,
@@ -41,16 +76,94 @@ class TrainingReadinessService:
     ) -> TrainingReadinessReport:
         policy = str(missing_image_policy or "")
         if dataset.dataset_type != "image_sc":
-            return TrainingReadinessReport(
-                dataset_id=dataset.id,
-                missing_image_policy=policy,
-                annotated_samples=0,
-                readable_samples=0,
-                runtime_resolvable_samples=0,
-                unusable_samples=0,
-                skipped_samples=0,
+            return await self.assess_classes(
+                dataset=dataset,
+                sample_ids=sample_ids,
+                sample_filter=sample_filter,
             )
 
+        annotated, label_column = await self._annotated_frame(
+            dataset=dataset,
+            sample_ids=sample_ids,
+            sample_filter=sample_filter,
+        )
+        if annotated is None or label_column is None:
+            annotated_batches: Iterable[Any] = ()
+        else:
+            annotated_batches = annotated.collect_batches(
+                chunk_size=_READINESS_BATCH_SIZE,
+                maintain_order=False,
+            )
+
+        annotated_samples = 0
+        readable_samples = 0
+        runtime_resolvable_samples = 0
+        unusable_samples = 0
+        label_counts: dict[str, int] = {}
+
+        for batch in annotated_batches:
+            assert label_column is not None
+            raw_rows = [dict(row) for row in batch.iter_rows(named=True)]
+            annotated_samples += len(raw_rows)
+            rows = await asyncio.gather(
+                *(
+                    resolve_sc_training_image_bytes(
+                        raw_row,
+                        self._artifact_storage,
+                    )
+                    for raw_row in raw_rows
+                )
+            )
+            for row in rows:
+                label = str(row.get(label_column) or "").strip()
+                if row_has_readable_training_images(row):
+                    readable_samples += 1
+                    label_counts[label] = label_counts.get(label, 0) + 1
+                elif row_has_runtime_resolvable_training_images(row):
+                    runtime_resolvable_samples += 1
+                    label_counts[label] = label_counts.get(label, 0) + 1
+                else:
+                    unusable_samples += 1
+
+        reasons: list[str] = []
+        if policy not in {"fail", "skip"}:
+            reasons.append(
+                "runtime route must declare missing_image_policy as 'fail' or 'skip'"
+            )
+        if not annotated_samples:
+            reasons.append("dataset has no annotated samples in the selected scope")
+        if policy == "fail" and unusable_samples:
+            reasons.append(
+                f"{unusable_samples} annotated samples have missing or unreadable image roles"
+            )
+        active_labels = sorted(
+            label for label, count in label_counts.items() if count > 0
+        )
+        if len(active_labels) < 2:
+            reasons.append(
+                "training requires at least 2 active labels after image validation; "
+                f"got {active_labels}"
+            )
+
+        return TrainingReadinessReport(
+            dataset_id=dataset.id,
+            missing_image_policy=policy,
+            annotated_samples=annotated_samples,
+            readable_samples=readable_samples,
+            runtime_resolvable_samples=runtime_resolvable_samples,
+            unusable_samples=unusable_samples,
+            skipped_samples=unusable_samples if policy == "skip" else 0,
+            label_counts=label_counts,
+            failure_reasons=tuple(reasons),
+        )
+
+    async def _annotated_frame(
+        self,
+        *,
+        dataset: Dataset,
+        sample_ids: list[str] | None,
+        sample_filter: dict[str, Any] | None,
+    ) -> tuple[Any | None, str | None]:
         if not dataset.org_id:
             raise ValueError(
                 f"Dataset is missing required organization ownership: {dataset.id}"
@@ -87,68 +200,24 @@ class TrainingReadinessService:
                 pl.col(label_column).is_not_null()
                 & (pl.col(label_column).cast(pl.Utf8).str.strip_chars() != "")
             )
+        return annotated, label_column
 
-        annotated_samples = 0
-        readable_samples = 0
-        runtime_resolvable_samples = 0
-        unusable_samples = 0
-        label_counts: dict[str, int] = {}
+    @staticmethod
+    def _collect_label_counts(
+        annotated: Any | None,
+        label_column: str | None,
+    ) -> dict[str, int]:
+        if annotated is None or label_column is None:
+            return {}
+        import polars as pl
 
-        if annotated is not None:
-            for batch in annotated.collect_batches(
-                chunk_size=_READINESS_BATCH_SIZE,
-                maintain_order=False,
-            ):
-                raw_rows = [dict(row) for row in batch.iter_rows(named=True)]
-                annotated_samples += len(raw_rows)
-                rows = await asyncio.gather(
-                    *(
-                        resolve_sc_training_image_bytes(
-                            raw_row,
-                            self._artifact_storage,
-                        )
-                        for raw_row in raw_rows
-                    )
-                )
-                for row in rows:
-                    label = str(row.get("label") or "").strip()
-                    if row_has_readable_training_images(row):
-                        readable_samples += 1
-                        label_counts[label] = label_counts.get(label, 0) + 1
-                    elif row_has_runtime_resolvable_training_images(row):
-                        runtime_resolvable_samples += 1
-                        label_counts[label] = label_counts.get(label, 0) + 1
-                    else:
-                        unusable_samples += 1
-
-        reasons: list[str] = []
-        if policy not in {"fail", "skip"}:
-            reasons.append(
-                "runtime route must declare missing_image_policy as 'fail' or 'skip'"
-            )
-        if not annotated_samples:
-            reasons.append("dataset has no annotated samples in the selected scope")
-        if policy == "fail" and unusable_samples:
-            reasons.append(
-                f"{unusable_samples} annotated samples have missing or unreadable image roles"
-            )
-        active_labels = sorted(
-            label for label, count in label_counts.items() if count > 0
+        label = pl.col(label_column).cast(pl.Utf8).str.strip_chars().alias("label")
+        rows = (
+            cast(Any, annotated)
+            .select(label)
+            .group_by("label")
+            .agg(pl.len().alias("count"))
+            .collect()
+            .iter_rows(named=True)
         )
-        if len(active_labels) < 2:
-            reasons.append(
-                "training requires at least 2 active labels after image validation; "
-                f"got {active_labels}"
-            )
-
-        return TrainingReadinessReport(
-            dataset_id=dataset.id,
-            missing_image_policy=policy,
-            annotated_samples=annotated_samples,
-            readable_samples=readable_samples,
-            runtime_resolvable_samples=runtime_resolvable_samples,
-            unusable_samples=unusable_samples,
-            skipped_samples=unusable_samples if policy == "skip" else 0,
-            label_counts=label_counts,
-            failure_reasons=tuple(reasons),
-        )
+        return {str(row["label"]): int(row["count"]) for row in rows}

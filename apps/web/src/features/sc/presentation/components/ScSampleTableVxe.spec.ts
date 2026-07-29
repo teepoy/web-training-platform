@@ -76,7 +76,7 @@ describe("ScSampleTableVxe virtual paging", () => {
     });
 
     await vi.waitFor(() => {
-      expect(wrapper.attributes("data-hydrated-rows")).toBe("1000");
+      expect(wrapper.attributes("data-hydrated-rows")).toBe("250");
     });
 
     expect(wrapper.get(".sst-vxe-scrollbar-rail--x").attributes("role")).toBe("scrollbar");
@@ -100,18 +100,18 @@ describe("ScSampleTableVxe virtual paging", () => {
       expect(scrollTo).toHaveBeenCalledWith(null, 120);
     });
 
-    rail.element.scrollTop = 40_500;
+    rail.element.scrollTop = 13_500;
     await rail.trigger("scroll");
     await vi.waitFor(() => {
       expect(view.to_arrow).toHaveBeenCalledWith({
-        start_row: 1_000,
-        end_row: 2_000,
+        start_row: 250,
+        end_row: 500,
       });
       expect(scrollTo).toHaveBeenCalledWith(null, 4_500);
     });
 
-    expect(wrapper.attributes("data-hydrated-rows")).toBe("1000");
-    expect(wrapper.attributes("data-row-objects")).toBe("1000");
+    expect(wrapper.attributes("data-hydrated-rows")).toBe("250");
+    expect(wrapper.attributes("data-row-objects")).toBe("250");
     wrapper.unmount();
   });
 
@@ -190,7 +190,7 @@ describe("ScSampleTableVxe virtual paging", () => {
     });
 
     await vi.waitFor(() => {
-      expect(wrapper.attributes("data-hydrated-rows")).toBe("1000");
+      expect(wrapper.attributes("data-hydrated-rows")).toBe("250");
     });
     expect(table.view).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -216,7 +216,7 @@ describe("ScSampleTableVxe virtual paging", () => {
     expect(selected).toHaveLength(total);
     expect(selected[0]).toBe(1);
     expect(selected.at(-1)).toBe(total);
-    expect(wrapper.attributes("data-row-objects")).toBe("1000");
+    expect(wrapper.attributes("data-row-objects")).toBe("250");
 
     await wrapper.get(".clear-all").trigger("click");
     expect(wrapper.emitted("selection-change")?.at(-1)?.[0]).toEqual([]);

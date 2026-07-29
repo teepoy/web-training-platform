@@ -15,31 +15,29 @@ import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, SelectOption } from "naive-ui";
 import { NButton, useMessage, useDialog, useThemeVars } from "naive-ui";
+import { syncAnnotationsToLs } from "@/shared/api/datasets";
 import {
-  bulkCreateAnnotations,
-  getDataset,
-  syncAnnotationsToLs,
-  updateLabelSpace,
-} from "@/shared/api/datasets";
-import { getSample, listSamplesWithLabels } from "@/shared/api/samples";
-import { useListModelsApiV1ModelsGet } from "@/generated/orval/endpoints/api";
-import {
+  getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet,
+  getDatasetApiV1DatasetsDatasetIdGet,
+  bulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost,
+  cancelPredictionJobApiV1PredictionJobsJobIdCancelPost,
+  createPredictionCollectionApiV1PredictionCollectionsPost,
+  createReviewActionApiV1PredictionReviewsPost,
+  getPredictionJobApiV1PredictionJobsJobIdGet,
+  listPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGet,
+  listSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithLabelsGet,
+  runPredictionsApiV1PredictionsRunPost,
+  saveReviewAnnotationsApiV1PredictionReviewsActionIdAnnotationsPost,
+  syncPredictionCollectionToLabelStudioApiV1PredictionCollectionsCollectionIdSyncLabelStudioPost,
+  updateLabelSpaceApiV1DatasetsDatasetIdLabelSpacePatch,
+  useListModelsApiV1ModelsGet,
   useListJobsApiV1TrainingJobsGet,
   useCreateTrainingJobApiV1TrainingJobsPost,
   useListTrainersRouteApiV1TrainersGet,
 } from "@/generated/orval/endpoints/api";
-import {
-  listPredictionJobs,
-  listPredictionJobPredictions,
-  runPredictions as runPredictionsApi,
-  getPredictionJob,
-  cancelPredictionJob,
-  createPredictionCollection,
-  syncPredictionCollection,
-  createReviewAction as createReviewActionApi,
-  saveReviewAnnotations,
-} from "@/shared/api/predictions";
+import { listPredictionJobs } from "@/shared/api/predictions";
 import { queryWaferPoints } from "@/shared/api/datasets";
+import { toUserMessage } from "@/shared/api";
 import type {
   BulkAnnotationRequest,
   BulkAnnotationResponse,
@@ -208,7 +206,7 @@ export function useClassifyPage() {
 
   const datasetQuery = useQuery({
     queryKey: computed(() => ["dataset", datasetId.value]),
-    queryFn: () => getDataset(datasetId.value),
+    queryFn: () => getDatasetApiV1DatasetsDatasetIdGet(datasetId.value),
     retry: false,
   });
 
@@ -373,7 +371,7 @@ export function useClassifyPage() {
 
   const { data: models } = useListModelsApiV1ModelsGet(undefined, {
     query: {
-      select: (response) => response.data as Model[],
+      select: (response) => response.items,
       queryKey: computed(() => ["models", orgStore.currentOrgId]),
       enabled: computed(() => !!orgStore.currentOrgId),
     },
@@ -450,7 +448,9 @@ export function useClassifyPage() {
     if (summaryPredictions.length > 0) {
       return summaryPredictions;
     }
-    const fetched = await listPredictionJobPredictions(job.id);
+    const fetched = await listPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGet(
+      job.id,
+    );
     return fetched.filter((item) => !item.error).map(predictionResultToReviewRow);
   }
 
@@ -497,7 +497,11 @@ export function useClassifyPage() {
       let offset = 0;
       let total = Infinity;
       while (offset < total) {
-        const result = await listSamplesWithLabels(datasetId.value, offset, pageSize);
+        const result =
+          await listSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithLabelsGet(
+            datasetId.value,
+            { offset, limit: pageSize },
+          );
         all.push(...result.items);
         total = result.total;
         offset += pageSize;
@@ -514,7 +518,7 @@ export function useClassifyPage() {
       if (!selectedModelId.value) {
         throw new Error("Model is required");
       }
-      return runPredictionsApi({
+      return runPredictionsApiV1PredictionsRunPost({
         model_id: selectedModelId.value,
         dataset_id: datasetId.value,
         model_version: modelVersionTag.value || null,
@@ -530,8 +534,8 @@ export function useClassifyPage() {
       message.success(`Prediction job submitted: ${job.id}`);
       void pollPredictionJob(job.id);
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to run predictions");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to run predictions"));
     },
   });
 
@@ -540,13 +544,13 @@ export function useClassifyPage() {
       if (!activePredictionJob.value) {
         throw new Error("No active prediction job");
       }
-      return cancelPredictionJob(activePredictionJob.value.id);
+      return cancelPredictionJobApiV1PredictionJobsJobIdCancelPost(activePredictionJob.value.id);
     },
     onSuccess: () => {
       message.warning("Prediction cancellation requested");
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to cancel prediction job");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to cancel prediction job"));
     },
   });
 
@@ -554,7 +558,7 @@ export function useClassifyPage() {
     pollingPredictionJob.value = true;
     try {
       for (let attempt = 0; attempt < 120; attempt += 1) {
-        const job = await getPredictionJob(jobId);
+        const job = await getPredictionJobApiV1PredictionJobsJobIdGet(jobId);
         activePredictionJob.value = job;
         const status = job.status.toLowerCase();
         if (status === "completed") {
@@ -581,7 +585,7 @@ export function useClassifyPage() {
       if (!selectedModelId.value || predictions.value.length === 0) {
         throw new Error("Predictions are required before syncing to Label Studio");
       }
-      const collection = await createPredictionCollection({
+      const collection = await createPredictionCollectionApiV1PredictionCollectionsPost({
         name: `review-${new Date().toISOString()}`,
         dataset_id: datasetId.value,
         model_id: selectedModelId.value,
@@ -592,7 +596,11 @@ export function useClassifyPage() {
         target: predictionTarget.value,
         source_job_id: activePredictionJob.value?.id ?? null,
       });
-      const syncResult = await syncPredictionCollection(collection.id);
+      const syncResult =
+        await syncPredictionCollectionToLabelStudioApiV1PredictionCollectionsCollectionIdSyncLabelStudioPost(
+          collection.id,
+          {},
+        );
       syncedCollection.value = collection;
       syncedCollectionTag.value = syncResult.sync_tag;
       return syncResult;
@@ -600,8 +608,8 @@ export function useClassifyPage() {
     onSuccess: (data) => {
       message.success(`Synced ${data.synced_count} predictions to Label Studio`);
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to sync predictions to Label Studio");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to sync predictions to Label Studio"));
     },
   });
 
@@ -610,7 +618,7 @@ export function useClassifyPage() {
       if (!selectedModelId.value) {
         throw new Error("Model is required");
       }
-      const action = await createReviewActionApi({
+      const action = await createReviewActionApiV1PredictionReviewsPost({
         dataset_id: datasetId.value,
         model_id: selectedModelId.value,
         model_version: modelVersionTag.value || null,
@@ -624,14 +632,16 @@ export function useClassifyPage() {
         confidence: row.confidence,
         prediction_id: row.prediction_id,
       }));
-      return saveReviewAnnotations(action.id, items);
+      return saveReviewAnnotationsApiV1PredictionReviewsActionIdAnnotationsPost(action.id, {
+        items,
+      });
     },
     onSuccess: (data: { created_count: number }) => {
       message.success(`Saved ${data.created_count} reviewed annotations`);
       clearPredictionReview();
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to save reviewed annotations");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to save reviewed annotations"));
     },
   });
 
@@ -666,7 +676,7 @@ export function useClassifyPage() {
     { limit: 200, offset: 0 },
     {
       query: {
-        select: (response) => ("items" in response.data ? response.data.items : []),
+        select: (response) => response.items,
         queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
         refetchInterval: 5000,
         enabled: computed(() => !!orgStore.currentOrgId),
@@ -676,8 +686,15 @@ export function useClassifyPage() {
 
   const { data: trainers } = useListTrainersRouteApiV1TrainersGet({
     query: {
-      // ast-grep-ignore: forbid-unsafe-type-casts
-      select: (response) => response.data as unknown as Trainer[],
+      select: (response) =>
+        response.map(
+          (item): Trainer => ({
+            id: String(item.id ?? ""),
+            name: String(item.name ?? ""),
+            view_type: String(item.view_type ?? ""),
+            trainable: Boolean(item.trainable ?? true),
+          }),
+        ),
       queryKey: computed(() => ["trainers", orgStore.currentOrgId]),
       refetchInterval: 30000,
       enabled: computed(() => !!orgStore.currentOrgId),
@@ -702,17 +719,16 @@ export function useClassifyPage() {
   const startTrainingMutation = useCreateTrainingJobApiV1TrainingJobsPost({
     mutation: {
       onSuccess: (result) => {
-        const job = result.data as TrainingJob;
-        activeTrainingJobId.value = job.id ?? null;
+        activeTrainingJobId.value = result.id ?? null;
         taskModalSource.value = "training";
         showTaskModal.value = true;
-        message.success(`Training job started: ${job.id}`);
+        message.success(`Training job started: ${result.id}`);
         void queryClient.invalidateQueries({
           queryKey: ["jobs", orgStore.currentOrgId],
         });
       },
-      onError: (err: Error) => {
-        message.error(err.message ?? "Failed to start training job");
+      onError: (error) => {
+        message.error(toUserMessage(error, "Failed to start training job"));
       },
     },
   });
@@ -973,7 +989,7 @@ export function useClassifyPage() {
     queryFn: async () => {
       const samples = await Promise.all(
         selectedSidebarSampleHydrationIds.value.map((sampleId) =>
-          getSample(sampleId, datasetId.value),
+          getSampleApiV1DatasetsDatasetIdSamplesSampleIdGet(datasetId.value, sampleId),
         ),
       );
       return samples;
@@ -1054,13 +1070,14 @@ export function useClassifyPage() {
     onSuccess: (data: SyncResult) => {
       message.success(`Synced ${data.synced_count} annotations to Label Studio`);
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to sync to Label Studio");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to sync to Label Studio"));
     },
   });
 
   const bulkAnnotateMutation = useMutation({
-    mutationFn: (body: BulkAnnotationRequest) => bulkCreateAnnotations(datasetId.value, body),
+    mutationFn: (body: BulkAnnotationRequest) =>
+      bulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost(datasetId.value, body),
     onSuccess: (data: BulkAnnotationResponse) => {
       message.success(`Created ${data.created} annotations`);
       if (datasetQuery.data.value?.ls_project_id) {
@@ -1074,8 +1091,8 @@ export function useClassifyPage() {
         queryKey: ["annotation-stats", datasetId.value],
       });
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to create annotations");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to create annotations"));
     },
   });
 
@@ -1146,7 +1163,9 @@ export function useClassifyPage() {
       if (currentLabels.includes(newLabel)) {
         throw new Error(`Label "${newLabel}" already exists`);
       }
-      return updateLabelSpace(datasetId.value, [...currentLabels, newLabel]);
+      return updateLabelSpaceApiV1DatasetsDatasetIdLabelSpacePatch(datasetId.value, {
+        label_space: [...currentLabels, newLabel],
+      });
     },
     onSuccess: () => {
       message.success(`Added label "${newLabelName.value}"`);
@@ -1154,8 +1173,8 @@ export function useClassifyPage() {
       newLabelName.value = "";
       void datasetQuery.refetch();
     },
-    onError: (err: Error) => {
-      message.error(err.message ?? "Failed to add label");
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to add label"));
     },
   });
 

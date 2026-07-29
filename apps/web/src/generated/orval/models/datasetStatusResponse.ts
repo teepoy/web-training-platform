@@ -4,9 +4,13 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { DatasetStatusResponseTrainDisabledReason } from './datasetStatusResponseTrainDisabledReason';
 
 export interface DatasetStatusResponse {
   allow_train: boolean;
+  train_disabled_reason: DatasetStatusResponseTrainDisabledReason;
+  minimum_active_class_count: number;
+  active_class_count: number;
   annotated_samples: number;
   total_samples: number;
 }

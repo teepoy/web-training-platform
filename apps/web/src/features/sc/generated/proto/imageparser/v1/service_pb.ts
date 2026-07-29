@@ -9,23 +9,20 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file imageparser/v1/service.proto.
  */
-export const file_imageparser_v1_service: GenFile =
-  /*@__PURE__*/
-  fileDesc(
-    "ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSJNCg9HZXRJbWFnZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEgsKA2tleRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFY2FjaGUYBCABKAgiVwoQR2V0SW1hZ2VSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEhAKCGZpbGVuYW1lGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBSJbCg1TcHJpdGVSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRILCgNrZXkYAiABKAkSEAoIcHJlZml4ZXMYAyADKAkSDAoEc2l6ZRgEIAEoBRINCgVjYWNoZRgFIAEoCCJDCg5TcHJpdGVSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEg0KBXdpZHRoGAIgASgFEg4KBmhlaWdodBgDIAEoBSJOCg9WMlNwcml0ZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnJlY29yZBgCIAEoCRINCgVpdGVtcxgDIAMoCRIMCgRzaXplGAQgASgFIkUKEFYyU3ByaXRlUmVzcG9uc2USEgoKaW1hZ2VfZGF0YRgBIAEoDBINCgV3aWR0aBgCIAEoBRIOCgZoZWlnaHQYAyABKAUifwoRR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIRCglkZWZlY3RfaWQYAyABKAkSEgoKaW1hZ2VfdHlwZRgEIAEoCRIXCg9yZXZpZXdfaW1hZ2VfaWQYBSABKAUiPgoSR2V0U2NJbWFnZVJlc3BvbnNlEhIKCmltYWdlX2RhdGEYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIkwKClNjSW1hZ2VSZWYSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSFwoPcmV2aWV3X2ltYWdlX2lkGAMgASgFInAKFkJhdGNoR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIqCgZpbWFnZXMYAyADKAsyGi5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVmIm8KDVNjSW1hZ2VSZXN1bHQSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSEgoKaW1hZ2VfZGF0YRgDIAEoDBIUCgxjb250ZW50X3R5cGUYBCABKAkSDQoFZXJyb3IYBSABKAkiSQoXQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USLgoHcmVzdWx0cxgBIAMoCzIdLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQidgofU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUSEwoLaW1hZ2VfdHlwZXMYBCADKAkiVAoSV2FybVNjQ2FjaGVSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEgoKZGVmZWN0X2lkcxgDIAMoBSI6ChNXYXJtU2NDYWNoZVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRITCgt6aXBzX3dhcm1lZBgCIAEoBTK8BQoLSW1hZ2VQYXJzZXISRwoGSGVhbHRoEh0uaW1hZ2VwYXJzZXIudjEuSGVhbHRoUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlc3BvbnNlEk0KCEdldEltYWdlEh8uaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXF1ZXN0GiAuaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXNwb25zZRJHCgZTcHJpdGUSHS5pbWFnZXBhcnNlci52MS5TcHJpdGVSZXF1ZXN0Gh4uaW1hZ2VwYXJzZXIudjEuU3ByaXRlUmVzcG9uc2USTQoIVjJTcHJpdGUSHy5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlcXVlc3QaIC5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlc3BvbnNlElMKCkdldFNjSW1hZ2USIS5pbWFnZXBhcnNlci52MS5HZXRTY0ltYWdlUmVxdWVzdBoiLmltYWdlcGFyc2VyLnYxLkdldFNjSW1hZ2VSZXNwb25zZRJiCg9CYXRjaEdldFNjSW1hZ2USJi5pbWFnZXBhcnNlci52MS5CYXRjaEdldFNjSW1hZ2VSZXF1ZXN0GicuaW1hZ2VwYXJzZXIudjEuQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USbAoYU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzEi8uaW1hZ2VwYXJzZXIudjEuU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBodLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQwARJWCgtXYXJtU2NDYWNoZRIiLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVxdWVzdBojLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVzcG9uc2VCOFo2ZnQtcGxhdGZvcm0vcHJvdG9zL2dlbi9nby9pbWFnZXBhcnNlci92MTtpbWFnZXBhcnNlcnYxYgZwcm90bzM",
-  );
+export const file_imageparser_v1_service: GenFile = /*@__PURE__*/
+  fileDesc("ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSJNCg9HZXRJbWFnZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEgsKA2tleRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFY2FjaGUYBCABKAgiVwoQR2V0SW1hZ2VSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEhAKCGZpbGVuYW1lGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBSJbCg1TcHJpdGVSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRILCgNrZXkYAiABKAkSEAoIcHJlZml4ZXMYAyADKAkSDAoEc2l6ZRgEIAEoBRINCgVjYWNoZRgFIAEoCCJDCg5TcHJpdGVSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEg0KBXdpZHRoGAIgASgFEg4KBmhlaWdodBgDIAEoBSJOCg9WMlNwcml0ZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnJlY29yZBgCIAEoCRINCgVpdGVtcxgDIAMoCRIMCgRzaXplGAQgASgFIkUKEFYyU3ByaXRlUmVzcG9uc2USEgoKaW1hZ2VfZGF0YRgBIAEoDBINCgV3aWR0aBgCIAEoBRIOCgZoZWlnaHQYAyABKAUifwoRR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIRCglkZWZlY3RfaWQYAyABKAkSEgoKaW1hZ2VfdHlwZRgEIAEoCRIXCg9yZXZpZXdfaW1hZ2VfaWQYBSABKAUiPgoSR2V0U2NJbWFnZVJlc3BvbnNlEhIKCmltYWdlX2RhdGEYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIkwKClNjSW1hZ2VSZWYSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSFwoPcmV2aWV3X2ltYWdlX2lkGAMgASgFInAKFkJhdGNoR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIqCgZpbWFnZXMYAyADKAsyGi5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVmIm8KDVNjSW1hZ2VSZXN1bHQSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSEgoKaW1hZ2VfZGF0YRgDIAEoDBIUCgxjb250ZW50X3R5cGUYBCABKAkSDQoFZXJyb3IYBSABKAkiSQoXQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USLgoHcmVzdWx0cxgBIAMoCzIdLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQidgofU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUSEwoLaW1hZ2VfdHlwZXMYBCADKAkiVAoSV2FybVNjQ2FjaGVSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEgoKZGVmZWN0X2lkcxgDIAMoBSI6ChNXYXJtU2NDYWNoZVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRITCgt6aXBzX3dhcm1lZBgCIAEoBTK8BQoLSW1hZ2VQYXJzZXISRwoGSGVhbHRoEh0uaW1hZ2VwYXJzZXIudjEuSGVhbHRoUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlc3BvbnNlEk0KCEdldEltYWdlEh8uaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXF1ZXN0GiAuaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXNwb25zZRJHCgZTcHJpdGUSHS5pbWFnZXBhcnNlci52MS5TcHJpdGVSZXF1ZXN0Gh4uaW1hZ2VwYXJzZXIudjEuU3ByaXRlUmVzcG9uc2USTQoIVjJTcHJpdGUSHy5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlcXVlc3QaIC5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlc3BvbnNlElMKCkdldFNjSW1hZ2USIS5pbWFnZXBhcnNlci52MS5HZXRTY0ltYWdlUmVxdWVzdBoiLmltYWdlcGFyc2VyLnYxLkdldFNjSW1hZ2VSZXNwb25zZRJiCg9CYXRjaEdldFNjSW1hZ2USJi5pbWFnZXBhcnNlci52MS5CYXRjaEdldFNjSW1hZ2VSZXF1ZXN0GicuaW1hZ2VwYXJzZXIudjEuQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USbAoYU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzEi8uaW1hZ2VwYXJzZXIudjEuU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBodLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQwARJWCgtXYXJtU2NDYWNoZRIiLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVxdWVzdBojLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVzcG9uc2VCOFo2ZnQtcGxhdGZvcm0vcHJvdG9zL2dlbi9nby9pbWFnZXBhcnNlci92MTtpbWFnZXBhcnNlcnYxYgZwcm90bzM");
 
 /**
  * @generated from message imageparser.v1.HealthRequest
  */
-export type HealthRequest = Message<"imageparser.v1.HealthRequest"> & {};
+export type HealthRequest = Message<"imageparser.v1.HealthRequest"> & {
+};
 
 /**
  * Describes the message imageparser.v1.HealthRequest.
  * Use `create(HealthRequestSchema)` to create a new message.
  */
-export const HealthRequestSchema: GenMessage<HealthRequest> =
-  /*@__PURE__*/
+export const HealthRequestSchema: GenMessage<HealthRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 0);
 
 /**
@@ -42,8 +39,7 @@ export type HealthResponse = Message<"imageparser.v1.HealthResponse"> & {
  * Describes the message imageparser.v1.HealthResponse.
  * Use `create(HealthResponseSchema)` to create a new message.
  */
-export const HealthResponseSchema: GenMessage<HealthResponse> =
-  /*@__PURE__*/
+export const HealthResponseSchema: GenMessage<HealthResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 1);
 
 /**
@@ -75,8 +71,7 @@ export type GetImageRequest = Message<"imageparser.v1.GetImageRequest"> & {
  * Describes the message imageparser.v1.GetImageRequest.
  * Use `create(GetImageRequestSchema)` to create a new message.
  */
-export const GetImageRequestSchema: GenMessage<GetImageRequest> =
-  /*@__PURE__*/
+export const GetImageRequestSchema: GenMessage<GetImageRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 2);
 
 /**
@@ -108,8 +103,7 @@ export type GetImageResponse = Message<"imageparser.v1.GetImageResponse"> & {
  * Describes the message imageparser.v1.GetImageResponse.
  * Use `create(GetImageResponseSchema)` to create a new message.
  */
-export const GetImageResponseSchema: GenMessage<GetImageResponse> =
-  /*@__PURE__*/
+export const GetImageResponseSchema: GenMessage<GetImageResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 3);
 
 /**
@@ -146,8 +140,7 @@ export type SpriteRequest = Message<"imageparser.v1.SpriteRequest"> & {
  * Describes the message imageparser.v1.SpriteRequest.
  * Use `create(SpriteRequestSchema)` to create a new message.
  */
-export const SpriteRequestSchema: GenMessage<SpriteRequest> =
-  /*@__PURE__*/
+export const SpriteRequestSchema: GenMessage<SpriteRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 4);
 
 /**
@@ -174,8 +167,7 @@ export type SpriteResponse = Message<"imageparser.v1.SpriteResponse"> & {
  * Describes the message imageparser.v1.SpriteResponse.
  * Use `create(SpriteResponseSchema)` to create a new message.
  */
-export const SpriteResponseSchema: GenMessage<SpriteResponse> =
-  /*@__PURE__*/
+export const SpriteResponseSchema: GenMessage<SpriteResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 5);
 
 /**
@@ -207,8 +199,7 @@ export type V2SpriteRequest = Message<"imageparser.v1.V2SpriteRequest"> & {
  * Describes the message imageparser.v1.V2SpriteRequest.
  * Use `create(V2SpriteRequestSchema)` to create a new message.
  */
-export const V2SpriteRequestSchema: GenMessage<V2SpriteRequest> =
-  /*@__PURE__*/
+export const V2SpriteRequestSchema: GenMessage<V2SpriteRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 6);
 
 /**
@@ -235,8 +226,7 @@ export type V2SpriteResponse = Message<"imageparser.v1.V2SpriteResponse"> & {
  * Describes the message imageparser.v1.V2SpriteResponse.
  * Use `create(V2SpriteResponseSchema)` to create a new message.
  */
-export const V2SpriteResponseSchema: GenMessage<V2SpriteResponse> =
-  /*@__PURE__*/
+export const V2SpriteResponseSchema: GenMessage<V2SpriteResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 7);
 
 /**
@@ -273,8 +263,7 @@ export type GetScImageRequest = Message<"imageparser.v1.GetScImageRequest"> & {
  * Describes the message imageparser.v1.GetScImageRequest.
  * Use `create(GetScImageRequestSchema)` to create a new message.
  */
-export const GetScImageRequestSchema: GenMessage<GetScImageRequest> =
-  /*@__PURE__*/
+export const GetScImageRequestSchema: GenMessage<GetScImageRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 8);
 
 /**
@@ -296,8 +285,7 @@ export type GetScImageResponse = Message<"imageparser.v1.GetScImageResponse"> & 
  * Describes the message imageparser.v1.GetScImageResponse.
  * Use `create(GetScImageResponseSchema)` to create a new message.
  */
-export const GetScImageResponseSchema: GenMessage<GetScImageResponse> =
-  /*@__PURE__*/
+export const GetScImageResponseSchema: GenMessage<GetScImageResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 9);
 
 /**
@@ -324,8 +312,7 @@ export type ScImageRef = Message<"imageparser.v1.ScImageRef"> & {
  * Describes the message imageparser.v1.ScImageRef.
  * Use `create(ScImageRefSchema)` to create a new message.
  */
-export const ScImageRefSchema: GenMessage<ScImageRef> =
-  /*@__PURE__*/
+export const ScImageRefSchema: GenMessage<ScImageRef> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 10);
 
 /**
@@ -352,8 +339,7 @@ export type BatchGetScImageRequest = Message<"imageparser.v1.BatchGetScImageRequ
  * Describes the message imageparser.v1.BatchGetScImageRequest.
  * Use `create(BatchGetScImageRequestSchema)` to create a new message.
  */
-export const BatchGetScImageRequestSchema: GenMessage<BatchGetScImageRequest> =
-  /*@__PURE__*/
+export const BatchGetScImageRequestSchema: GenMessage<BatchGetScImageRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 11);
 
 /**
@@ -390,8 +376,7 @@ export type ScImageResult = Message<"imageparser.v1.ScImageResult"> & {
  * Describes the message imageparser.v1.ScImageResult.
  * Use `create(ScImageResultSchema)` to create a new message.
  */
-export const ScImageResultSchema: GenMessage<ScImageResult> =
-  /*@__PURE__*/
+export const ScImageResultSchema: GenMessage<ScImageResult> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 12);
 
 /**
@@ -408,42 +393,39 @@ export type BatchGetScImageResponse = Message<"imageparser.v1.BatchGetScImageRes
  * Describes the message imageparser.v1.BatchGetScImageResponse.
  * Use `create(BatchGetScImageResponseSchema)` to create a new message.
  */
-export const BatchGetScImageResponseSchema: GenMessage<BatchGetScImageResponse> =
-  /*@__PURE__*/
+export const BatchGetScImageResponseSchema: GenMessage<BatchGetScImageResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 13);
 
 /**
  * @generated from message imageparser.v1.StreamScInspectionImagesRequest
  */
-export type StreamScInspectionImagesRequest =
-  Message<"imageparser.v1.StreamScInspectionImagesRequest"> & {
-    /**
-     * @generated from field: string inspection_time = 1;
-     */
-    inspectionTime: string;
+export type StreamScInspectionImagesRequest = Message<"imageparser.v1.StreamScInspectionImagesRequest"> & {
+  /**
+   * @generated from field: string inspection_time = 1;
+   */
+  inspectionTime: string;
 
-    /**
-     * @generated from field: int32 wafer_key = 2;
-     */
-    waferKey: number;
+  /**
+   * @generated from field: int32 wafer_key = 2;
+   */
+  waferKey: number;
 
-    /**
-     * @generated from field: repeated int32 defect_ids = 3;
-     */
-    defectIds: number[];
+  /**
+   * @generated from field: repeated int32 defect_ids = 3;
+   */
+  defectIds: number[];
 
-    /**
-     * @generated from field: repeated string image_types = 4;
-     */
-    imageTypes: string[];
-  };
+  /**
+   * @generated from field: repeated string image_types = 4;
+   */
+  imageTypes: string[];
+};
 
 /**
  * Describes the message imageparser.v1.StreamScInspectionImagesRequest.
  * Use `create(StreamScInspectionImagesRequestSchema)` to create a new message.
  */
-export const StreamScInspectionImagesRequestSchema: GenMessage<StreamScInspectionImagesRequest> =
-  /*@__PURE__*/
+export const StreamScInspectionImagesRequestSchema: GenMessage<StreamScInspectionImagesRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 14);
 
 /**
@@ -470,8 +452,7 @@ export type WarmScCacheRequest = Message<"imageparser.v1.WarmScCacheRequest"> & 
  * Describes the message imageparser.v1.WarmScCacheRequest.
  * Use `create(WarmScCacheRequestSchema)` to create a new message.
  */
-export const WarmScCacheRequestSchema: GenMessage<WarmScCacheRequest> =
-  /*@__PURE__*/
+export const WarmScCacheRequestSchema: GenMessage<WarmScCacheRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 15);
 
 /**
@@ -493,8 +474,7 @@ export type WarmScCacheResponse = Message<"imageparser.v1.WarmScCacheResponse"> 
  * Describes the message imageparser.v1.WarmScCacheResponse.
  * Use `create(WarmScCacheResponseSchema)` to create a new message.
  */
-export const WarmScCacheResponseSchema: GenMessage<WarmScCacheResponse> =
-  /*@__PURE__*/
+export const WarmScCacheResponseSchema: GenMessage<WarmScCacheResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 16);
 
 /**
@@ -508,7 +488,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof HealthRequestSchema;
     output: typeof HealthResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.GetImage
    */
@@ -516,7 +496,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof GetImageRequestSchema;
     output: typeof GetImageResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.Sprite
    */
@@ -524,7 +504,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof SpriteRequestSchema;
     output: typeof SpriteResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.V2Sprite
    */
@@ -532,7 +512,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof V2SpriteRequestSchema;
     output: typeof V2SpriteResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.GetScImage
    */
@@ -540,7 +520,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof GetScImageRequestSchema;
     output: typeof GetScImageResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.BatchGetScImage
    */
@@ -548,7 +528,7 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof BatchGetScImageRequestSchema;
     output: typeof BatchGetScImageResponseSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.StreamScInspectionImages
    */
@@ -556,7 +536,7 @@ export const ImageParser: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamScInspectionImagesRequestSchema;
     output: typeof ScImageResultSchema;
-  };
+  },
   /**
    * @generated from rpc imageparser.v1.ImageParser.WarmScCache
    */
@@ -564,5 +544,6 @@ export const ImageParser: GenService<{
     methodKind: "unary";
     input: typeof WarmScCacheRequestSchema;
     output: typeof WarmScCacheResponseSchema;
-  };
-}> = /*@__PURE__*/ serviceDesc(file_imageparser_v1_service, 0);
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_imageparser_v1_service, 0);

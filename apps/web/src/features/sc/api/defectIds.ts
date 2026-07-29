@@ -1,4 +1,4 @@
-import { req } from "@/shared/api/client";
+import { getApiBase, requestRaw } from "@/shared/api/client";
 
 export function decodeInt32DefectIds(buffer: ArrayBuffer): number[] {
   if (buffer.byteLength % 4 !== 0) {
@@ -13,7 +13,7 @@ export function decodeInt32DefectIds(buffer: ArrayBuffer): number[] {
 }
 
 async function fetchBinaryDefectIds(path: string): Promise<number[]> {
-  const response = await req<Response>(path, {
+  const response = await requestRaw(`${getApiBase()}${path}`, {
     headers: { Accept: "application/octet-stream" },
   });
   return decodeInt32DefectIds(await response.arrayBuffer());

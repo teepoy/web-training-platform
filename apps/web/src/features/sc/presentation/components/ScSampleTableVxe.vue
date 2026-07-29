@@ -115,7 +115,7 @@ const reclassifyColumnDefinitions: ColumnDefinition[] = [
   },
 ];
 
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 250;
 const ROW_HEIGHT = 36;
 const SCROLLBAR_SIZE = 10;
 const MIN_SCROLL_THUMB_SIZE = 24;

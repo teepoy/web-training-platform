@@ -10,6 +10,11 @@ from app.modules.storage.domain.sparse import DatasetPayloadStore
 from app.core.config import AppConfig
 from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.datasets.domain.status import (
+    MINIMUM_ACTIVE_CLASSES_FOR_TRAINING,
+    DatasetStatus,
+    DatasetTrainDisabledReason,
+)
 from app.shared.api.schemas import (
     Annotation,
     Dataset,
@@ -89,6 +94,28 @@ class DatasetService:
                 sample_count = sparse_counts[dataset.id]
             responses.append(self._with_list_sample_count(dataset, sample_count))
         return responses
+
+    async def get_status(self, dataset_id: str, org_id: str) -> DatasetStatus:
+        storage = await self._storage_factory.open(dataset_id, org_id)
+        stats = await storage.get_annotation_stats()
+        label_counts = stats.get("label_counts", {})
+        if not isinstance(label_counts, dict):
+            raise TypeError("dataset annotation stats label_counts must be a mapping")
+
+        active_class_count = sum(1 for count in label_counts.values() if int(count) > 0)
+        allow_train = active_class_count >= MINIMUM_ACTIVE_CLASSES_FOR_TRAINING
+        return DatasetStatus(
+            allow_train=allow_train,
+            train_disabled_reason=(
+                None
+                if allow_train
+                else DatasetTrainDisabledReason.INSUFFICIENT_ACTIVE_CLASSES
+            ),
+            minimum_active_class_count=MINIMUM_ACTIVE_CLASSES_FOR_TRAINING,
+            active_class_count=active_class_count,
+            annotated_samples=int(stats.get("annotated_samples", 0)),
+            total_samples=int(stats.get("total_samples", 0)),
+        )
 
     def _with_list_sample_count(self, dataset: Dataset, sample_count: int) -> Dataset:
         dataset_meta = dict(dataset.dataset_meta or {})

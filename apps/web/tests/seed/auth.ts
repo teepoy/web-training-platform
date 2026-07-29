@@ -1,8 +1,11 @@
 /**
  * Auth seed helpers — login / logout using orval-generated API functions.
  */
-import type { LoginRequest, LoginResponse, UserResponse } from '../../src/generated/orval/models';
-import { loginApiV1AuthLoginPost, authMeApiV1AuthMeGet } from '../../src/generated/orval/endpoints/api';
+import type { LoginRequest, LoginResponse, UserResponse } from "../../src/generated/orval/models";
+import {
+  loginApiV1AuthLoginPost,
+  authMeApiV1AuthMeGet,
+} from "../../src/generated/orval/endpoints/api";
 
 export interface SeedAuthResult {
   token: string;
@@ -17,8 +20,7 @@ export interface SeedAuthResult {
  * itself is unauthenticated).
  */
 export async function seedLogin(loginRequest: LoginRequest): Promise<SeedAuthResult> {
-  const res = await loginApiV1AuthLoginPost(loginRequest);
-  const body = res.data as LoginResponse;
+  const body: LoginResponse = await loginApiV1AuthLoginPost(loginRequest);
   return { token: body.access_token, user: body.user };
 }
 

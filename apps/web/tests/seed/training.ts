@@ -1,25 +1,21 @@
 /**
  * Training job seed helpers — start jobs and poll for status.
  */
-import type { CreateTrainingJobRequest, TrainingJob } from '../../src/generated/orval/models';
+import type { CreateTrainingJobRequest, TrainingJob } from "../../src/generated/orval/models";
 import {
   createTrainingJobApiV1TrainingJobsPost,
   getJobApiV1TrainingJobsJobIdGet,
   listTrainersRouteApiV1TrainersGet,
-} from '../../src/generated/orval/endpoints/api';
+} from "../../src/generated/orval/endpoints/api";
 
 /**
  * Thrown by {@link waitForJobStatus} when the job does not reach the
  * expected status within the timeout window.
  */
 export class JobPollTimeoutError extends Error {
-  constructor(
-    jobId: string,
-    expectedStatus: string,
-    timeoutMs: number,
-  ) {
+  constructor(jobId: string, expectedStatus: string, timeoutMs: number) {
     super(`Job ${jobId} did not reach status "${expectedStatus}" within ${timeoutMs}ms`);
-    this.name = 'JobPollTimeoutError';
+    this.name = "JobPollTimeoutError";
   }
 }
 
@@ -30,8 +26,7 @@ export class JobPollTimeoutError extends Error {
  * token BEFORE calling this.
  */
 export async function listTrainers(): Promise<Record<string, unknown>[]> {
-  const res = await listTrainersRouteApiV1TrainersGet();
-  return res.data as Record<string, unknown>[];
+  return listTrainersRouteApiV1TrainersGet();
 }
 
 /**
@@ -40,11 +35,8 @@ export async function listTrainers(): Promise<Record<string, unknown>[]> {
  * IMPORTANT: call {@link getSeedClient} (from `./client`) with a valid
  * token BEFORE calling this.
  */
-export async function startTrainingJob(
-  req: CreateTrainingJobRequest,
-): Promise<TrainingJob> {
-  const res = await createTrainingJobApiV1TrainingJobsPost(req);
-  return res.data as TrainingJob;
+export async function startTrainingJob(req: CreateTrainingJobRequest): Promise<TrainingJob> {
+  return createTrainingJobApiV1TrainingJobsPost(req);
 }
 
 /**
@@ -68,15 +60,12 @@ export async function waitForJobStatus(
   const deadline = Date.now() + timeout;
 
   while (Date.now() < deadline) {
-    const res = await getJobApiV1TrainingJobsJobIdGet(jobId);
-    const job = res.data as TrainingJob;
+    const job = await getJobApiV1TrainingJobsJobIdGet(jobId);
 
     if (job.status === status) return job;
 
-    if (job.status === 'failed' || job.status === 'cancelled') {
-      throw new Error(
-        `Job ${jobId} reached terminal state "${job.status}" (expected "${status}")`,
-      );
+    if (job.status === "failed" || job.status === "cancelled") {
+      throw new Error(`Job ${jobId} reached terminal state "${job.status}" (expected "${status}")`);
     }
 
     await new Promise((r) => setTimeout(r, interval));

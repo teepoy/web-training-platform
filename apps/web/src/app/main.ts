@@ -2,7 +2,6 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
 import { configureTransport } from "@/shared/api/client";
-import { configureOrvalFetcher } from "@/shared/api/orval-fetcher";
 
 import "../style.css";
 import "vxe-pc-ui/lib/style.css";
@@ -46,33 +45,6 @@ configureTransport({
     } catch {
       return true;
     }
-  },
-});
-
-configureOrvalFetcher({
-  getToken: () => {
-    try {
-      const auth = useAuthStore(pinia);
-      return auth.token ?? getStoredToken();
-    } catch {
-      return getStoredToken();
-    }
-  },
-  getOrgId: () => {
-    try {
-      return useOrgStore(pinia).currentOrgId;
-    } catch {
-      return null;
-    }
-  },
-  onAuthError: () => {
-    try {
-      const auth = useAuthStore(pinia);
-      auth.logout();
-    } catch {}
-    try {
-      router.push("/login");
-    } catch {}
   },
 });
 

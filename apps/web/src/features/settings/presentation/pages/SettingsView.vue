@@ -19,9 +19,7 @@
       description="No access keys yet"
     >
       <template #extra>
-        <n-button type="primary" @click="openCreateModal">
-          Create your first key
-        </n-button>
+        <n-button type="primary" @click="openCreateModal"> Create your first key </n-button>
       </template>
     </n-empty>
 
@@ -53,11 +51,7 @@
           label-width="auto"
         >
           <n-form-item label="Name" path="name">
-            <n-input
-              v-model:value="formModel.name"
-              placeholder="my-access-key"
-              :maxlength="100"
-            />
+            <n-input v-model:value="formModel.name" placeholder="my-access-key" :maxlength="100" />
           </n-form-item>
         </n-form>
       </template>
@@ -67,9 +61,7 @@
           <label class="created-token-label">Access Key</label>
           <n-input :value="createdToken" readonly />
         </div>
-        <n-button @click="copyToken" class="copy-btn">
-          Copy
-        </n-button>
+        <n-button @click="copyToken" class="copy-btn"> Copy </n-button>
         <n-alert type="warning">
           Copy your access key now. You won't be able to see it again.
         </n-alert>
@@ -88,10 +80,8 @@ import {
   useListTokensApiV1AuthTokensGet,
   useDeleteTokenApiV1AuthTokensTokenIdDelete,
 } from "@/generated/orval/endpoints/api";
-import type {
-  PersonalAccessToken,
-  PersonalAccessTokenCreated,
-} from "@/shared/api/types";
+import { toUserMessage } from "@/shared/api";
+import type { PersonalAccessToken, PersonalAccessTokenCreated } from "@/shared/api/types";
 
 const authKeys = {
   tokens: ["auth", "tokens"] as const,
@@ -106,9 +96,8 @@ const {
   isError,
   error,
   refetch,
-} = useListTokensApiV1AuthTokensGet<PersonalAccessToken[], Error>({
+} = useListTokensApiV1AuthTokensGet({
   query: {
-    select: (response) => response.data as PersonalAccessToken[],
     queryKey: authKeys.tokens,
   },
 });
@@ -118,13 +107,12 @@ const createdToken = ref("");
 const createMutation = useCreateTokenApiV1AuthTokensPost({
   mutation: {
     onSuccess: (result) => {
-      const data = result.data as PersonalAccessTokenCreated;
       qc.invalidateQueries({ queryKey: authKeys.tokens });
       message.success("Access key created");
-      createdToken.value = data.token;
+      createdToken.value = result.token;
       modalStep.value = "created";
     },
-    onError: (err: Error) => message.error(err.message),
+    onError: (error) => message.error(toUserMessage(error, "Failed to save setting")),
   },
 });
 
@@ -134,7 +122,7 @@ const deleteMutation = useDeleteTokenApiV1AuthTokensTokenIdDelete({
       qc.invalidateQueries({ queryKey: authKeys.tokens });
       message.success("Access key deleted");
     },
-    onError: (err: Error) => message.error(err.message),
+    onError: (error) => message.error(toUserMessage(error, "Failed to delete setting")),
   },
 });
 
@@ -176,11 +164,11 @@ const columns = computed<DataTableColumns<PersonalAccessToken>>(() => [
                 loading: deleteMutation.isPending.value,
                 onClick: (e: Event) => e.stopPropagation(),
               },
-              { default: () => "Delete" }
+              { default: () => "Delete" },
             ),
           default: () =>
             "Are you sure you want to delete this access key? Any applications using it will lose access.",
-        }
+        },
       ),
   },
 ]);

@@ -40,7 +40,7 @@
 
 <script setup lang="ts">
 import { computed, h, reactive, ref, watch } from "vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, PaginationProps } from "naive-ui";
 import {
   NButton,
@@ -53,7 +53,12 @@ import {
   useMessage,
 } from "naive-ui";
 import type { ModelResponse } from "@/generated/orval/models";
-import { deleteModel, listModels, renameModel } from "@/shared/api/models";
+import {
+  useDeleteModelApiV1ModelsModelIdDelete,
+  useUpdateModelApiV1ModelsModelIdPatch,
+} from "@/generated/orval/endpoints/api";
+import { listModels } from "@/shared/api/models";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -83,7 +88,9 @@ const pagination = reactive<PaginationProps>({
 });
 
 const modelsQuery = useQuery({
-  queryKey: computed(() => ["models", "list", orgStore.currentOrgId]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, ["models", "list", "all-pages"]),
+  ),
   queryFn: listModels,
   enabled: computed(() => !!orgStore.currentOrgId),
   refetchInterval: 5000,
@@ -123,26 +130,30 @@ const renameVisible = ref(false);
 const renameTarget = ref<ModelResponse | null>(null);
 const renameName = ref("");
 
-const renameMutation = useMutation({
-  mutationFn: ({ id, name }: { id: string; name: string }) => renameModel(id, name),
-  onSuccess: () => {
-    message.success("Model renamed");
-    queryClient.invalidateQueries({ queryKey: ["models"] });
-    resetRename();
-  },
-  onError: (error: Error) => {
-    message.error(error.message || "Failed to rename model");
+const modelsQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models"]));
+
+const renameMutation = useUpdateModelApiV1ModelsModelIdPatch({
+  mutation: {
+    onSuccess: () => {
+      message.success("Model renamed");
+      queryClient.invalidateQueries({ queryKey: modelsQueryKey.value });
+      resetRename();
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to rename model"));
+    },
   },
 });
 
-const deleteMutation = useMutation({
-  mutationFn: (id: string) => deleteModel(id),
-  onSuccess: () => {
-    message.success("Model deleted");
-    queryClient.invalidateQueries({ queryKey: ["models"] });
-  },
-  onError: (error: Error) => {
-    message.error(error.message || "Failed to delete model");
+const deleteMutation = useDeleteModelApiV1ModelsModelIdDelete({
+  mutation: {
+    onSuccess: () => {
+      message.success("Model deleted");
+      queryClient.invalidateQueries({ queryKey: modelsQueryKey.value });
+    },
+    onError: (error) => {
+      message.error(toUserMessage(error, "Failed to delete model"));
+    },
   },
 });
 
@@ -174,7 +185,7 @@ function submitRename(): false {
   const target = renameTarget.value;
   const name = renameName.value.trim();
   if (!target || !name) return false;
-  renameMutation.mutate({ id: target.id, name });
+  renameMutation.mutate({ modelId: target.id, data: { name } });
   return false;
 }
 
@@ -239,7 +250,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
               ? h(
                   NPopconfirm,
                   {
-                    onPositiveClick: () => deleteMutation.mutate(row.id),
+                    onPositiveClick: () => deleteMutation.mutate({ modelId: row.id }),
                   },
                   {
                     trigger: () =>
@@ -251,7 +262,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
                           type: "error",
                           loading:
                             deleteMutation.isPending.value &&
-                            deleteMutation.variables.value === row.id,
+                            deleteMutation.variables.value?.modelId === row.id,
                         },
                         { default: () => "Delete" },
                       ),

@@ -3,6 +3,8 @@ import { computed, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { NButton, NResult, NSpin, NText } from "naive-ui";
 import { getViewSamples } from "@/shared/api/datasets";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey } from "@/shared/api";
 import {
   getViewSchema,
   listRegisteredViewTypes,
@@ -16,6 +18,7 @@ const props = defineProps<{
 
 const id = computed(() => props.datasetId);
 const viewType = computed(() => props.viewType);
+const orgStore = useOrgStore();
 
 const viewSchema = computed(() => getViewSchema(viewType.value));
 const viewComponent = computed(() => resolveViewComponent(viewType.value));
@@ -31,9 +34,19 @@ const limit = 50;
 const isSelfLoadingView = computed(() => viewSchema.value?.selfLoading === true);
 
 const viewSamplesQuery = useQuery({
-  queryKey: computed(() => ["view-samples", id.value, viewType.value, offset.value]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "view-samples",
+      id.value,
+      viewType.value,
+      offset.value,
+      limit,
+    ]),
+  ),
   queryFn: () => getViewSamples(id.value, viewType.value, offset.value, limit),
-  enabled: computed(() => isViewValid.value === true && !isSelfLoadingView.value),
+  enabled: computed(
+    () => !!orgStore.currentOrgId && isViewValid.value === true && !isSelfLoadingView.value,
+  ),
   retry: false,
 });
 
@@ -91,7 +104,9 @@ function handlePrevPage() {
           <n-text depth="3" style="line-height: 34px">
             {{ offset + 1 }}–{{ Math.min(offset + limit, viewData.total) }} of {{ viewData.total }}
           </n-text>
-          <n-button :disabled="offset + limit >= viewData.total" @click="handleNextPage">Next</n-button>
+          <n-button :disabled="offset + limit >= viewData.total" @click="handleNextPage"
+            >Next</n-button
+          >
         </div>
       </template>
     </template>

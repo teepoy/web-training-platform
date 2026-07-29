@@ -36,12 +36,7 @@
           <span class="oauth-divider-text">or continue with</span>
         </div>
         <div v-for="prov in oauthProviders" :key="prov.id" class="oauth-button-wrapper">
-          <n-button
-            secondary
-            block
-            tag="a"
-            :href="`${API_BASE}/auth/oauth/${prov.id}`"
-          >
+          <n-button secondary block tag="a" :href="`${API_BASE}/auth/oauth/${prov.id}`">
             Continue with {{ prov.display_name }}
           </n-button>
         </div>
@@ -55,64 +50,62 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useMessage, useThemeVars, type FormInst, type FormRules } from 'naive-ui'
-import { useAuthStore } from '@/features/auth/application/store'
-import { API_BASE } from '@/shared/api/client'
-import { useListOauthProvidersApiV1AuthOauthProvidersGet } from '@/generated/orval/endpoints/api'
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useMessage, useThemeVars, type FormInst, type FormRules } from "naive-ui";
+import { useAuthStore } from "@/features/auth/application/store";
+import { API_BASE } from "@/shared/api/client";
+import { useListOauthProvidersApiV1AuthOauthProvidersGet } from "@/generated/orval/endpoints/api";
 
-const router = useRouter()
-const message = useMessage()
-const authStore = useAuthStore()
-const themeVars = useThemeVars()
+const router = useRouter();
+const message = useMessage();
+const authStore = useAuthStore();
+const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
-  '--auth-bg-start': themeVars.value.bodyColor,
-  '--auth-bg-mid': themeVars.value.cardColor,
-  '--auth-bg-end': themeVars.value.modalColor,
-  '--auth-divider': themeVars.value.dividerColor,
-  '--auth-text-muted': themeVars.value.textColor3,
-  '--auth-shadow': themeVars.value.boxShadow1,
-}))
+  "--auth-bg-start": themeVars.value.bodyColor,
+  "--auth-bg-mid": themeVars.value.cardColor,
+  "--auth-bg-end": themeVars.value.modalColor,
+  "--auth-divider": themeVars.value.dividerColor,
+  "--auth-text-muted": themeVars.value.textColor3,
+  "--auth-shadow": themeVars.value.boxShadow1,
+}));
 
-import { useOrgStore } from '@/features/auth/application/org'
-const orgStore = useOrgStore()
+import { useOrgStore } from "@/features/auth/application/org";
+const orgStore = useOrgStore();
 
-const formRef = ref<FormInst | null>(null)
-const loading = ref(false)
+const formRef = ref<FormInst | null>(null);
+const loading = ref(false);
 
 const { data: oauthProviders } = useListOauthProvidersApiV1AuthOauthProvidersGet({
-  query: {
-    select: (resp) => resp.data ?? [],
-  },
-})
+  query: {},
+});
 
 const formData = ref({
-  email: '',
-  password: '',
-})
+  email: "",
+  password: "",
+});
 
 const rules: FormRules = {
-  email: [{ required: true, message: 'Email is required', trigger: 'blur' }],
-  password: [{ required: true, message: 'Password is required', trigger: 'blur' }],
-}
+  email: [{ required: true, message: "Email is required", trigger: "blur" }],
+  password: [{ required: true, message: "Password is required", trigger: "blur" }],
+};
 
 async function handleSubmit() {
   try {
-    await formRef.value?.validate()
+    await formRef.value?.validate();
   } catch {
-    return
+    return;
   }
-  loading.value = true
+  loading.value = true;
   try {
-    await authStore.login(formData.value.email, formData.value.password)
-    await orgStore.fetchOrganizations()
-    router.push('/datasets')
+    await authStore.login(formData.value.email, formData.value.password);
+    await orgStore.fetchOrganizations();
+    router.push("/datasets");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Login failed'
-    message.error(msg)
+    const msg = err instanceof Error ? err.message : "Login failed";
+    message.error(msg);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -157,7 +150,7 @@ async function handleSubmit() {
 
 .oauth-divider::before,
 .oauth-divider::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--auth-divider);

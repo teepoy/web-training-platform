@@ -2,7 +2,7 @@ import { ref, computed, watch, onBeforeUnmount, type Ref, type ComputedRef } fro
 import { useRoute } from "vue-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
-import { withAuthQueryParams } from "@/shared/api/client";
+import { toUserMessage, withAuthQueryParams } from "@/shared/api/client";
 import { buildBlinkTableData } from "@/shared/utils/blink-table-data";
 import type { BlinkSampleInput } from "@/shared/utils/blink-table-data";
 
@@ -14,9 +14,10 @@ import {
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
+  getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
+  createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost,
 } from "@/generated/orval/endpoints/api";
-import { listPredictionJobs, startTrainAndPredict } from "@/shared/api/predictions";
-import { getAnnotationStats } from "@/shared/api/datasets";
+import { listPredictionJobs } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type {
   DatasetAnnotationStats,
@@ -242,7 +243,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     computed(() => datasetId.value),
     {
       query: {
-        select: (res) => res.data as ScDatasetInfo,
+        select: (res) => res as ScDatasetInfo,
         retry: false,
       },
     },
@@ -255,7 +256,6 @@ export function useReclassifyPage(): ReclassifyPageState {
       computed(() => datasetId.value),
       {
         query: {
-          select: (res) => res.data as DatasetStatusResponse,
           enabled: computed(() => !!selectedDataset.value),
           retry: false,
         },
@@ -456,7 +456,7 @@ export function useReclassifyPage(): ReclassifyPageState {
           "patch_image_v1",
           { sampleIds: ids.join(","), limit: ids.length },
         );
-        return (resp.data ?? {
+        return (resp ?? {
           items: [],
           total: sourceIds.length,
         }) as ScViewRowsPage;
@@ -466,7 +466,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         "patch_image_v1",
         { offset: pageParam, limit: pageSize },
       );
-      return (resp.data ?? { items: [], total: 0 }) as ScViewRowsPage;
+      return (resp ?? { items: [], total: 0 }) as ScViewRowsPage;
     },
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((n, p) => n + p.items.length, 0);
@@ -551,7 +551,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const annotationStatsQuery = useQuery({
     queryKey: computed(() => ["api", "v1", "datasets", datasetId.value, "annotation-stats"]),
-    queryFn: () => getAnnotationStats(datasetId.value),
+    queryFn: () => getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(datasetId.value),
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
   });
@@ -928,7 +928,7 @@ export function useReclassifyPage(): ReclassifyPageState {
           data: ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
           variables,
         ) => {
-          const created = (data.data as { created: number }).created;
+          const created = data.created;
           const submittedCount = variables.data.annotations.length;
           message.success(
             created > 0
@@ -980,8 +980,8 @@ export function useReclassifyPage(): ReclassifyPageState {
             queryKey: ["api", "v1", "datasets", datasetId.value, "status"],
           });
         },
-        onError: (err: Error) => {
-          message.error(err.message ?? "Failed to create annotations");
+        onError: (error) => {
+          message.error(toUserMessage(error, "Failed to create annotations"));
         },
       },
     });
@@ -1065,7 +1065,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const trainersQuery = useListTrainersRouteApiV1TrainersGet({
     query: {
       select: (response) =>
-        (response.data ?? []).map(
+        response.map(
           (item): Trainer => ({
             id: String(item.id ?? ""),
             name: String(item.name ?? ""),
@@ -1101,8 +1101,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     queryKey: computed(() => ["sc", "train-predict-task", trainPredictTaskId.value]),
     queryFn: async () => {
       if (!trainPredictTaskId.value) return null;
-      const response = await getJobApiV1TrainingJobsJobIdGet(trainPredictTaskId.value);
-      return response.data as TrainingJob;
+      return getJobApiV1TrainingJobsJobIdGet(trainPredictTaskId.value);
     },
     enabled: computed(() => !!trainPredictTaskId.value),
     refetchInterval: computed(() => (isTrainPredictRunning.value ? 1000 : false)),
@@ -1261,7 +1260,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     trainPredictStatusMessage.value = "Starting train and predict workflow...";
 
     try {
-      const workflow = await startTrainAndPredict({
+      const workflow = await createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost({
         dataset_id: datasetId.value,
         trainer_id: trainerId,
         target: "image_classification",
@@ -1280,10 +1279,10 @@ export function useReclassifyPage(): ReclassifyPageState {
       if (mounted.value) {
         message.success(`Workflow submitted: ${trainJobId.slice(0, 8)}`);
       }
-    } catch (err: unknown) {
+    } catch (error: unknown) {
       trainPredictStatusMessage.value = "";
       isTrainPredictRunning.value = false;
-      message.error((err as Error)?.message ?? "Train & Predict failed");
+      message.error(toUserMessage(error, "Train & Predict failed"));
     }
   }
 

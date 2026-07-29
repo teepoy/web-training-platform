@@ -27,6 +27,7 @@
       :bordered="false"
       size="small"
       :pagination="pagination"
+      remote
       @update:checked-row-keys="handleCheckedRowKeysChange"
     />
   </div>

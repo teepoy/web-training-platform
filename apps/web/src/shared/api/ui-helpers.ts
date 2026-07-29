@@ -17,11 +17,6 @@ export interface FetchSampleSliceOptions {
 
 export type ScheduleStatus = "active" | "paused";
 
-export interface ApiError {
-  detail: string;
-  status: number;
-}
-
 export interface DatasetExport {
   dataset: Dataset;
   samples: Sample[];

@@ -1,16 +1,13 @@
 /**
  * Schedule seed helpers — create, pause, resume, delete schedules.
  */
-import type {
-  CreateScheduleRequest,
-  ScheduleResponse,
-} from '../../src/generated/orval/models';
+import type { CreateScheduleRequest, ScheduleResponse } from "../../src/generated/orval/models";
 import {
   createScheduleApiV1SchedulesPost,
   pauseScheduleApiV1SchedulesScheduleIdPausePost,
   resumeScheduleApiV1SchedulesScheduleIdResumePost,
   deleteScheduleApiV1SchedulesScheduleIdDelete,
-} from '../../src/generated/orval/endpoints/api';
+} from "../../src/generated/orval/endpoints/api";
 
 /**
  * Create a new schedule.
@@ -18,27 +15,22 @@ import {
  * IMPORTANT: call {@link getSeedClient} (from `./client`) with a valid
  * token BEFORE calling this.
  */
-export async function createSchedule(
-  req: CreateScheduleRequest,
-): Promise<ScheduleResponse> {
-  const res = await createScheduleApiV1SchedulesPost(req);
-  return res.data as ScheduleResponse;
+export async function createSchedule(req: CreateScheduleRequest): Promise<ScheduleResponse> {
+  return createScheduleApiV1SchedulesPost(req);
 }
 
 /**
  * Pause an active schedule.
  */
 export async function pauseSchedule(scheduleId: string): Promise<ScheduleResponse> {
-  const res = await pauseScheduleApiV1SchedulesScheduleIdPausePost(scheduleId);
-  return res.data as ScheduleResponse;
+  return pauseScheduleApiV1SchedulesScheduleIdPausePost(scheduleId);
 }
 
 /**
  * Resume a paused schedule.
  */
 export async function resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
-  const res = await resumeScheduleApiV1SchedulesScheduleIdResumePost(scheduleId);
-  return res.data as ScheduleResponse;
+  return resumeScheduleApiV1SchedulesScheduleIdResumePost(scheduleId);
 }
 
 /**

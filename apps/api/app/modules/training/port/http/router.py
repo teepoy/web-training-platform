@@ -96,6 +96,11 @@ async def create_training_job(
         )
     except TrainingDatasetNotFoundError:
         raise HTTPException(status_code=404, detail="dataset not found")
+    except TrainingReadinessError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=exc.report.as_http_detail(),
+        ) from exc
     except (DatasetCompatibilityError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

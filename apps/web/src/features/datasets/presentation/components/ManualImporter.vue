@@ -2,7 +2,11 @@
 import { ref, watch } from "vue";
 import { useMessage, type FormInst, type FormRules } from "naive-ui";
 import type { ImporterProps } from "@/shared/widgets/sdk";
-import { createSample, uploadSampleImage } from "@/shared/api/samples";
+import {
+  createSampleApiV1DatasetsDatasetIdSamplesPost,
+  uploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
+} from "@/generated/orval/endpoints/api";
+import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();
@@ -61,20 +65,24 @@ function submit() {
 
     loading.value = true;
     try {
-      const sample = await createSample(props.datasetId, {
+      const sample = await createSampleApiV1DatasetsDatasetIdSamplesPost(props.datasetId, {
         image_uris: imageUris,
         metadata,
       });
 
       if (uploadFile.value) {
-        await uploadSampleImage(sample.id!, uploadFile.value, props.datasetId);
+        await uploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost(
+          props.datasetId,
+          sample.id!,
+          { file: uploadFile.value },
+        );
       }
 
       message.success("Sample created");
       resetLocalState();
       props.onComplete({ imported: 1, failed: 0, message: "Manual import complete" });
     } catch (error) {
-      message.error(`Failed to create sample: ${(error as Error).message}`);
+      message.error(toUserMessage(error, "Failed to create sample"));
     } finally {
       loading.value = false;
     }

@@ -35,7 +35,6 @@ from app.modules.datasets.domain.sample_row import BulkSampleRow
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.shared.api.schemas import (
     DatasetAnnotationStats,
-    DatasetStatusResponse,
     PaginatedResponse,
     SetPublicRequest,
     SetPublicResponse,
@@ -52,6 +51,7 @@ from app.modules.datasets.port.http.schemas import (
     BulkCreateSampleResponse,
     CreateAnnotationRequest,
     CreateDatasetRequest,
+    DatasetStatusResponse,
     CreateSampleRequest,
     ImportVqaJsonlResponse,
     LatestAnnotation,
@@ -902,22 +902,18 @@ async def get_annotation_stats(
 )
 async def get_dataset_status(
     dataset_id: str,
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    factory: DatasetStorageFactory = Depends(get_dataset_storage_factory),
 ) -> DatasetStatusResponse:
-    storage = await _open_storage(factory, dataset_id, org.id)
-
-    stats = await storage.get_annotation_stats()
-    stats_response = DatasetAnnotationStats(**stats)
-
-    total_samples = stats_response.total_samples
-    annotated_samples = stats_response.annotated_samples
-    allow_train = annotated_samples >= 1
+    status = await service.get_status(dataset_id, org.id)
     return DatasetStatusResponse(
-        allow_train=allow_train,
-        annotated_samples=annotated_samples,
-        total_samples=total_samples,
+        allow_train=status.allow_train,
+        train_disabled_reason=status.train_disabled_reason,
+        minimum_active_class_count=status.minimum_active_class_count,
+        active_class_count=status.active_class_count,
+        annotated_samples=status.annotated_samples,
+        total_samples=status.total_samples,
     )
 
 

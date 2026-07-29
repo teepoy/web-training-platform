@@ -19,6 +19,7 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}` — Serve an embedded sparse image from a dataset shard. Browser-native image callers must pass auth context by query parameter (`token`, and `org_id` when needed) because `<img>` requests cannot send platform headers.
 - `GET /api/v1/images/resolve?uri=` — Resolve storage-backed image URIs such as `s3://...` or `memory://...` through the backend image proxy. Frontend code should call `resolveImageUri()` / `resolveImageUris()` instead of hand-building this URL.
 - `GET /api/v1/datasets/{dataset_id}/annotation-stats` (aggregate annotation progress: total/annotated/unannotated counts and per-label distribution)
+- `GET /api/v1/datasets/{dataset_id}/status` (dataset-level training gate: `allow_train`, active/minimum class counts, and a machine-readable disable reason)
 - `POST /api/v1/annotations`
 - `POST /api/v1/datasets/{dataset_id}/annotations/bulk-sc` — Sparse SC bulk annotation using defect IDs and the dataset manifest sample index.
 

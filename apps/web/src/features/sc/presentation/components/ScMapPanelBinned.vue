@@ -13,7 +13,13 @@ import {
   NText,
 } from "naive-ui";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
-import { AddOutline, MoveOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
+import {
+  AddOutline,
+  MoveOutline,
+  RemoveOutline,
+  ScanOutline,
+  SearchOutline,
+} from "@vicons/ionicons5";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
@@ -192,6 +198,47 @@ const handleZoomIn = (vp: { x: number; y: number; w: number; h: number } | null)
   clearLocalImmediateCrosshair();
   emit("zoom-in", vp);
 };
+
+function fullMapRegion(): { x: number; y: number; w: number; h: number } {
+  const geometry = nativeGeometry.value;
+  if (internalTab.value === "wafer") {
+    return {
+      x: geometry.centerX - geometry.waferRadiusNm,
+      y: geometry.centerY - geometry.waferRadiusNm,
+      w: geometry.waferRadiusNm * 2,
+      h: geometry.waferRadiusNm * 2,
+    };
+  }
+  if (internalTab.value === "die") {
+    return { x: 0, y: 0, w: geometry.dieSizeX, h: geometry.dieSizeY };
+  }
+  return {
+    x: 0,
+    y: 0,
+    w: geometry.dieSizeX * geometry.reticleXDieCount,
+    h: geometry.dieSizeY * geometry.reticleYDieCount,
+  };
+}
+
+function zoomBy(factor: number): void {
+  clearLocalImmediateCrosshair();
+  const full = fullMapRegion();
+  const current = props.zoom ?? full;
+  const width = Math.min(full.w, current.w * factor);
+  const height = Math.min(full.h, current.h * factor);
+  if (factor > 1 && width >= full.w && height >= full.h) {
+    emit("zoom-in", null);
+    return;
+  }
+  const centerX = current.x + current.w / 2;
+  const centerY = current.y + current.h / 2;
+  emit("zoom-in", {
+    x: Math.min(full.x + full.w - width, Math.max(full.x, centerX - width / 2)),
+    y: Math.min(full.y + full.h - height, Math.max(full.y, centerY - height / 2)),
+    w: width,
+    h: height,
+  });
+}
 
 const handleRetry = () => {
   emit("retry");
@@ -459,6 +506,39 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               </NButton>
             </template>
             Zoom in
+          </NTooltip>
+          <NTooltip placement="bottom">
+            <template #trigger>
+              <NButton
+                data-testid="sc-map-zoom-in-button"
+                size="small"
+                quaternary
+                aria-label="Zoom in one step"
+                @click="zoomBy(0.5)"
+              >
+                <template #icon
+                  ><NIcon><AddOutline /></NIcon
+                ></template>
+              </NButton>
+            </template>
+            Zoom in one step
+          </NTooltip>
+          <NTooltip placement="bottom">
+            <template #trigger>
+              <NButton
+                data-testid="sc-map-zoom-out-button"
+                size="small"
+                quaternary
+                :disabled="zoom == null"
+                aria-label="Zoom out one step"
+                @click="zoomBy(2)"
+              >
+                <template #icon
+                  ><NIcon><RemoveOutline /></NIcon
+                ></template>
+              </NButton>
+            </template>
+            Zoom out
           </NTooltip>
           <NTooltip placement="bottom">
             <template #trigger>

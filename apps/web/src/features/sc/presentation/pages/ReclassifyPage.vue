@@ -19,6 +19,7 @@ import {
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
+import { toUserMessage } from "@/shared/api";
 import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
@@ -122,7 +123,7 @@ async function openSamplingModal(): Promise<void> {
     page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
     page.showSamplingModal.value = true;
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "Failed to prepare sampling");
+    message.error(toUserMessage(error, "Failed to prepare sampling"));
   } finally {
     isPreparingSampling.value = false;
   }
@@ -137,7 +138,7 @@ async function applyPerspectiveSampling(): Promise<void> {
     if (!ids) throw new Error("Perspective data is not ready");
     page.applySampling(ids.map(String));
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "Failed to sample defects");
+    message.error(toUserMessage(error, "Failed to sample defects"));
   } finally {
     isPreparingSampling.value = false;
   }

@@ -35,7 +35,7 @@ export function usePerspectiveMapView(
   const arrowData = ref<ArrayBuffer[] | null>(null);
   const pending = ref(false);
   const error = ref<string | null>(null);
-  const progressMessage = ref("Waiting for Perspective data");
+  const progressMessage = ref("Waiting for map data");
   const progressPercent = ref(0);
   let loadSequence = 0;
 
@@ -46,14 +46,14 @@ export function usePerspectiveMapView(
 
     if (!sourceTable) {
       pending.value = false;
-      progressMessage.value = "Waiting for Perspective data";
+      progressMessage.value = "Waiting for map data";
       progressPercent.value = 0;
       return;
     }
 
     pending.value = true;
     error.value = null;
-    progressMessage.value = "Creating globally filtered map view";
+    progressMessage.value = "Preparing filtered map data";
     progressPercent.value = 10;
     const columns = [...new Set([...RAW_MAP_COLUMNS, legendCol.value, "images"])];
     let view: ManagedPerspectiveView | null = null;

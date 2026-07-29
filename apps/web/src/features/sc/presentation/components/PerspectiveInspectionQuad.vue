@@ -156,7 +156,7 @@ const perspectiveMaskVisible = computed(
   () => perspective.reconnecting.value || perspective.reconnectFailed.value,
 );
 const perspectiveMaskTitle = computed(() =>
-  perspective.reconnectFailed.value ? "Perspective connection lost" : "Reconnecting...",
+  perspective.reconnectFailed.value ? "Data connection lost" : "Restoring connection...",
 );
 const perspectiveMaskDescription = computed(() => {
   if (perspective.reconnectFailed.value) {
@@ -165,8 +165,13 @@ const perspectiveMaskDescription = computed(() => {
   const attempt = perspective.reconnectAttempt.value;
   const maxAttempts = perspective.reconnectMaxAttempts;
   return attempt > 0
-    ? `Restoring websocket connection (${attempt}/${maxAttempts})`
-    : "Restoring websocket connection";
+    ? `Restoring the data connection (${attempt}/${maxAttempts})`
+    : "Restoring the data connection";
+});
+const userFacingMapError = computed(() => {
+  if (model.mapError.value) return "Map data could not be loaded. Try again.";
+  if (perspective.error.value) return "The data connection was interrupted. Try reconnecting.";
+  return null;
 });
 
 function clamp(value: number, min: number, max: number): number {
@@ -508,9 +513,9 @@ function useBoxSelectionQueue() {
           :immediate-crosshair-defects="mapImmediateCrosshairDefects"
           :immediate-crosshair-version="mapImmediateCrosshairVersion"
           :map-loading="model.activeMapLoading.value || !perspectiveReady"
-          :map-error="model.mapError.value ?? perspective.error.value"
+          :map-error="userFacingMapError"
           :map-progress-message="
-            perspectiveReady ? model.mapProgressMessage.value : 'Connecting to Perspective...'
+            perspectiveReady ? model.mapProgressMessage.value : 'Connecting to data service...'
           "
           :map-progress-percent="perspectiveReady ? model.mapProgressPercent.value : 0"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"

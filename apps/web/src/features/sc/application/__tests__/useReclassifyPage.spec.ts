@@ -84,6 +84,9 @@ async function mountPage(
     http.get(`/api/v1/datasets/${datasetId}/status`, () =>
       HttpResponse.json({
         allow_train: true,
+        train_disabled_reason: null,
+        minimum_active_class_count: 2,
+        active_class_count: Object.values(annotationStats).filter((count) => count > 0).length,
         annotated_samples: Object.values(annotationStats).reduce((sum, count) => sum + count, 0),
         total_samples: 10,
       }),
@@ -91,9 +94,7 @@ async function mountPage(
   );
 
   // Seed dataset query (Orval query key)
-  qc.setQueryData(["api", "v1", "datasets", datasetId], {
-    data: dataset,
-  });
+  qc.setQueryData(["api", "v1", "datasets", datasetId], dataset);
 
   // Seed any extra queries
   for (const { key, data } of extraQueries ?? []) {

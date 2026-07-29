@@ -3,22 +3,14 @@
     <n-spin :show="isLoading">
       <div class="log-container">
         <template v-if="!isLoading && (!logs || logs.length === 0)">
-          <n-text depth="3" style="padding: 16px; display: block;">No logs available</n-text>
+          <n-text depth="3" style="padding: 16px; display: block">No logs available</n-text>
         </template>
         <template v-else>
-          <div
-            v-for="(log, idx) in logs"
-            :key="log.id ?? idx"
-            class="log-line"
-          >
+          <div v-for="(log, idx) in logs" :key="log.id ?? idx" class="log-line">
             <n-text depth="3" class="log-ts">
               {{ formatTimestamp(log.timestamp) }}
             </n-text>
-            <n-tag
-              :type="levelInfo(log.level).type"
-              size="small"
-              class="log-badge"
-            >
+            <n-tag :type="levelInfo(log.level).type" size="small" class="log-badge">
               {{ levelInfo(log.level).label }}
             </n-tag>
             <n-text class="log-msg">{{ log.message }}</n-text>
@@ -31,29 +23,41 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { useQuery } from "@tanstack/vue-query";
 import { NCard, NSpin, NTag, NText } from "naive-ui";
-import { getRunLogs } from "../../api/schedules";
+import {
+  getGetRunLogsApiV1RunsRunIdLogsGetQueryKey,
+  useGetRunLogsApiV1RunsRunIdLogsGet,
+} from "@/generated/orval/endpoints/api";
 import type { RunLogResponse as RunLog } from "@/generated/orval/models";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey } from "../../api";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 const props = defineProps<{ runId: string }>();
+const orgStore = useOrgStore();
+const runId = computed(() => props.runId);
 
 // ---------------------------------------------------------------------------
 // Log level mapping
 // ---------------------------------------------------------------------------
 
-const LOG_LEVELS: Record<number, { label: string; type: "default" | "info" | "warning" | "error" }> = {
+const LOG_LEVELS: Record<
+  number,
+  { label: string; type: "default" | "info" | "warning" | "error" }
+> = {
   10: { label: "DEBUG", type: "default" },
   20: { label: "INFO", type: "info" },
   30: { label: "WARNING", type: "warning" },
   40: { label: "ERROR", type: "error" },
 };
 
-function levelInfo(level: number): { label: string; type: "default" | "info" | "warning" | "error" } {
+function levelInfo(level: number): {
+  label: string;
+  type: "default" | "info" | "warning" | "error";
+} {
   // Find the closest known level (largest key <= level)
   const known = Object.keys(LOG_LEVELS)
     .map(Number)
@@ -71,11 +75,17 @@ function formatTimestamp(ts: string): string {
 // Query
 // ---------------------------------------------------------------------------
 
-const { data: logs, isLoading } = useQuery<RunLog[]>({
-  queryKey: computed(() => ["run-logs", props.runId]),
-  queryFn: () => getRunLogs(props.runId),
-  enabled: computed(() => !!props.runId),
-  refetchOnWindowFocus: false,
+const { data: logs, isLoading } = useGetRunLogsApiV1RunsRunIdLogsGet<RunLog[]>(runId, undefined, {
+  query: {
+    queryKey: computed(() =>
+      orgScopedQueryKey(
+        orgStore.currentOrgId,
+        getGetRunLogsApiV1RunsRunIdLogsGetQueryKey(props.runId),
+      ),
+    ),
+    enabled: computed(() => !!orgStore.currentOrgId && !!props.runId),
+    refetchOnWindowFocus: false,
+  },
 });
 </script>
 

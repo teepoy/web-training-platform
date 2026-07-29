@@ -14,6 +14,9 @@ export default defineConfig({
       clean: true,
       prettier: true,
       override: {
+        fetch: {
+          includeHttpResponseReturnType: false,
+        },
         mutator: {
           path: "src/shared/api/orval-fetcher.ts",
           name: "orvalFetcher",

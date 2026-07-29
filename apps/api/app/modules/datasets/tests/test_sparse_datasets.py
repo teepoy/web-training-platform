@@ -511,8 +511,8 @@ def test_sparse_delete_lifecycle() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_sparse_sc_dataset_accepts_resnet50_sc_trainer() -> None:
-    """Sparse SC dataset + resnet50-sc-v1 (patch_image_v1) → passes gates."""
+def test_sparse_sc_dataset_requires_two_classes_before_training() -> None:
+    """Trainer compatibility passes, then readiness rejects an empty dataset."""
     sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
     with TestClient(app) as c:
         ds = c.post("/api/v1/datasets", json={
@@ -528,12 +528,11 @@ def test_sparse_sc_dataset_accepts_resnet50_sc_trainer() -> None:
             "dataset_id": ds_id,
             "trainer_id": "resnet50-sc-v1",
         })
-        # capability gate passes (can_train=True) AND view gate passes
-        # (resnet50-sc-v1 view=patch_image_v1 is in SC view_types)
-        assert resp.status_code in (200, 500), (
-            f"Expected accepted training (200) or orchestrator error (500), "
-            f"got {resp.status_code}: {resp.text}"
-        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert detail["code"] == "dataset_training_readiness_failed"
+        assert detail["active_labels"] == []
+        assert any("at least 2 active labels" in reason for reason in detail["reasons"])
 
 
 # ---------------------------------------------------------------------------

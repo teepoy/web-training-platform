@@ -31,13 +31,9 @@
           <n-space v-for="(item, index) in filterPairs" :key="index" align="center" :wrap="false">
             <n-input v-model:value="item.key" placeholder="Key" />
             <n-input v-model:value="item.value" placeholder="Value" />
-            <n-button circle size="small" type="error" @click="removeFilter(index)">
-              X
-            </n-button>
+            <n-button circle size="small" type="error" @click="removeFilter(index)"> X </n-button>
           </n-space>
-          <n-button dashed size="small" @click="addFilter">
-            Add Filter
-          </n-button>
+          <n-button dashed size="small" @click="addFilter"> Add Filter </n-button>
         </n-space>
       </n-form-item>
 
@@ -51,13 +47,28 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import type { FormInst, FormRules } from "naive-ui";
-import { useMessage, NModal, NForm, NFormItem, NSelect, NInput, NSpace, NButton, NSwitch } from "naive-ui";
+import {
+  useMessage,
+  NModal,
+  NForm,
+  NFormItem,
+  NSelect,
+  NInput,
+  NSpace,
+  NButton,
+  NSwitch,
+} from "naive-ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import {
   useCreateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsPost,
   useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch,
 } from "@/generated/orval/endpoints/api";
-import type { SensorDefinitionResponse as SensorDefinition, SensorSubscriptionResponse as SensorSubscription } from "@/generated/orval/models";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
+import { useOrgStore } from "@/features/auth/application/org";
+import type {
+  SensorDefinitionResponse as SensorDefinition,
+  SensorSubscriptionResponse as SensorSubscription,
+} from "@/generated/orval/models";
 
 const props = defineProps<{
   show: boolean;
@@ -72,12 +83,16 @@ const emit = defineEmits<{
 
 const message = useMessage();
 const qc = useQueryClient();
+const orgStore = useOrgStore();
+const subscriptionsQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["subscriptions", props.sensor.id]),
+);
 const formRef = ref<FormInst | null>(null);
 
 const isEdit = computed(() => !!props.subscription);
 
 const triggerOptions = computed(() => {
-  return props.sensor.available_triggers.map(t => ({ label: t, value: t }));
+  return props.sensor.available_triggers.map((t) => ({ label: t, value: t }));
 });
 
 const formModel = ref({
@@ -97,7 +112,7 @@ watch(
 
         filterPairs.value = Object.entries(props.subscription.filter_config).map(([k, v]) => ({
           key: k,
-          value: String(v)
+          value: String(v),
         }));
       } else {
         formModel.value.workflow_type = props.sensor.available_triggers[0] || null;
@@ -105,11 +120,13 @@ watch(
         filterPairs.value = [];
       }
     }
-  }
+  },
 );
 
 const formRules: FormRules = {
-  workflow_type: [{ required: true, message: "Please select a workflow type", trigger: ["blur", "change"] }],
+  workflow_type: [
+    { required: true, message: "Please select a workflow type", trigger: ["blur", "change"] },
+  ],
 };
 
 function addFilter() {
@@ -123,24 +140,24 @@ function removeFilter(index: number) {
 const createMutation = useCreateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsPost({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
+      qc.invalidateQueries({ queryKey: subscriptionsQueryKey.value });
       message.success("Subscription created");
       emit("saved");
       emit("update:show", false);
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to create subscription"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to create subscription")),
   },
 });
 
 const updateMutation = useUpdateSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdPatch({
   mutation: {
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions", props.sensor.id] });
+      qc.invalidateQueries({ queryKey: subscriptionsQueryKey.value });
       message.success("Subscription updated");
       emit("saved");
       emit("update:show", false);
     },
-    onError: (err: Error) => message.error(err.message ?? "Failed to update subscription"),
+    onError: (error) => message.error(toUserMessage(error, "Failed to update subscription")),
   },
 });
 

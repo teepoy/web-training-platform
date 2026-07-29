@@ -510,12 +510,6 @@ class DatasetAnnotationStats(BaseModel):
     label_counts: dict[str, int] = Field(default_factory=dict)
 
 
-class DatasetStatusResponse(BaseModel):
-    allow_train: bool
-    annotated_samples: int
-    total_samples: int
-
-
 class DashboardResponse(BaseModel):
     work_pool: WorkPoolStatus | None = None
     job_queue: JobQueueStats = Field(default_factory=JobQueueStats)

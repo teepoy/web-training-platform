@@ -4,6 +4,7 @@ import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
 import { streamApiSse } from "@/shared/api/sse";
+import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
@@ -27,14 +28,13 @@ async function runPersist() {
         },
       },
     );
-    const resultUri =
-      typeof event?.payload?.uri === "string" ? event.payload.uri : null;
+    const resultUri = typeof event?.payload?.uri === "string" ? event.payload.uri : null;
     if (!resultUri) throw new Error("Export stream returned no URI");
     uri.value = resultUri;
     statusMessage.value = "Export persisted";
     message.success("Export persisted successfully");
   } catch (error) {
-    message.error(`Persist failed: ${(error as Error).message}`);
+    message.error(toUserMessage(error, "Persist failed"));
   } finally {
     loading.value = false;
   }

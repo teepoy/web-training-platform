@@ -16,6 +16,7 @@ from app.modules.storage.port.local import (
     SparseImportWriterFactoryPort as SparseImportWriterFactoryPort,
     SparseImportWriterPort as SparseImportWriterPort,
 )
+from app.modules.datasets.domain.status import DatasetStatus
 from app.shared.api.schemas import Annotation, Dataset
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 
@@ -33,6 +34,8 @@ class IDatasetService(Protocol):
         ...
 
     async def to_list_responses(self, datasets: list[Dataset]) -> list[Dataset]: ...
+
+    async def get_status(self, dataset_id: str, org_id: str) -> DatasetStatus: ...
 
     async def build_export_data(
         self,

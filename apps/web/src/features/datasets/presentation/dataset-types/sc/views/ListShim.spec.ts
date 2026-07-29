@@ -6,7 +6,7 @@ import type { DatasetListItem } from "@/shared/datasets/types";
 
 const stubs = {
   DatasetToolbar: {
-    template: "<div data-testid=\"toolbar\" />",
+    template: '<div data-testid="toolbar" />',
   },
   NButton: {
     template: "<button><slot /></button>",
@@ -14,8 +14,7 @@ const stubs = {
   NInput: {
     props: ["value"],
     emits: ["update:value"],
-    template:
-      "<input :value=\"value\" @input=\"$emit('update:value', $event.target.value)\" />",
+    template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
   },
   NSelect: {
     props: ["value", "options"],
@@ -23,7 +22,7 @@ const stubs = {
     template: "<select :value=\"value ?? ''\"><slot /></select>",
   },
   NDataTable: {
-    props: ["columns", "data"],
+    props: ["columns", "data", "remote"],
     template: `
       <table>
         <thead>
@@ -66,6 +65,20 @@ function makeDataset(
 }
 
 describe("SC dataset list shim", () => {
+  it("uses remote pagination for server-paged rows", () => {
+    const wrapper = mount(ListShim, {
+      props: {
+        datasets: [makeDataset({ total_samples: 12 })],
+        currentOrgId: "org-1",
+        isSuperadmin: false,
+        pagination: { page: 1, pageSize: 20, itemCount: 42 },
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.findComponent({ name: "DataTable" }).props("remote")).toBe(true);
+  });
+
   it("does not show the inspection workspace alert or inspection time column", () => {
     const wrapper = mount(ListShim, {
       props: {

@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import type { ImporterProps } from "@/shared/widgets/sdk";
 import { importParquetApiV1PluginsImportParquetImportPost } from "@/generated/orval/endpoints/api";
+import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();
@@ -25,16 +26,15 @@ async function submit() {
 
   loading.value = true;
   try {
-    const resp = await importParquetApiV1PluginsImportParquetImportPost(
+    const data = await importParquetApiV1PluginsImportParquetImportPost(
       { file: file.value as File },
       { dataset_id: props.datasetId },
     );
-    const data = resp.data as {
-      imported: number;
-      failed: number;
-      errors: string[];
+    result.value = {
+      imported: data.imported,
+      failed: data.failed,
+      errors: data.errors ?? [],
     };
-    result.value = data;
     message.success(`Imported ${data.imported} samples`);
     props.onComplete({
       imported: data.imported,
@@ -44,7 +44,7 @@ async function submit() {
         : "Parquet import complete",
     });
   } catch (error) {
-    message.error(`Parquet import failed: ${(error as Error).message}`);
+    message.error(toUserMessage(error, "Parquet import failed"));
   } finally {
     loading.value = false;
   }
@@ -65,7 +65,10 @@ async function submit() {
       <n-alert v-if="result" type="success" :show-icon="false">
         Imported {{ result.imported }} samples
         <span v-if="result.failed > 0">, {{ result.failed }} failed</span>
-        <ul v-if="result.errors.length" style="margin: 4px 0 0; padding-left: 20px; font-size: 12px">
+        <ul
+          v-if="result.errors.length"
+          style="margin: 4px 0 0; padding-left: 20px; font-size: 12px"
+        >
           <li v-for="w in result.errors" :key="w">{{ w }}</li>
         </ul>
       </n-alert>

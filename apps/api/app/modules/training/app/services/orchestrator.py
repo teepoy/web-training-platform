@@ -68,6 +68,9 @@ class TrainingOrchestrator:
             trainer_id=command.trainer_id,
             view_types=dataset.view_types,
         )
+        readiness_report = await self._readiness.assess_classes(dataset=dataset)
+        if not readiness_report.ready:
+            raise TrainingReadinessError(readiness_report)
         return await self._start_job(
             TrainingJob(
                 dataset_id=command.dataset_id,

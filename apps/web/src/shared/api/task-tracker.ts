@@ -1,12 +1,5 @@
-import {
-  listTaskTrackerTasksApiV1TaskTrackerTasksGet,
-  getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet,
-  cancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost,
-} from "@/generated/orval/endpoints/api";
-import type {
-  TaskTrackerSummaryResponse as TaskTrackerSummary,
-  TaskTrackerDetailResponse as TaskTrackerDetail,
-} from "@/generated/orval/models";
+import { listTaskTrackerTasksApiV1TaskTrackerTasksGet } from "@/generated/orval/endpoints/api";
+import type { TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
 
 export async function listTrackedTasks(
   kind?: "training" | "prediction",
@@ -20,10 +13,7 @@ export async function listTrackedTasks(
       offset,
       limit: pageSize,
     });
-    const page = response.data;
-    if (!("items" in page)) {
-      throw new Error("Failed to list tracked tasks");
-    }
+    const page = response;
     tasks.push(...page.items);
     if (tasks.length >= page.total) {
       return tasks;
@@ -33,14 +23,4 @@ export async function listTrackedTasks(
     }
     offset += page.items.length;
   }
-}
-
-export async function getTrackedTask(id: string): Promise<TaskTrackerDetail> {
-  return (await getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet(id)).data as TaskTrackerDetail;
-}
-
-export async function cancelTrackedTask(id: string): Promise<{ cancelled: boolean }> {
-  return (await cancelTaskTrackerTaskApiV1TaskTrackerTasksTaskIdCancelPost(id)).data as {
-    cancelled: boolean;
-  };
 }

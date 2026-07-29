@@ -528,6 +528,9 @@ async def run() -> bool:
             f"status annotated_samples: expected 0, got {status['annotated_samples']}"
         )
         assert status["allow_train"] is False, f"allow_train should be False, got {status['allow_train']}"
+        assert status["train_disabled_reason"] == "insufficient_active_classes"
+        assert status["minimum_active_class_count"] == 2
+        assert status["active_class_count"] == 0
         _ok(f"status: total={status['total_samples']}, annotated={status['annotated_samples']}, allow_train={status['allow_train']}")
 
         ann_stats = await api.get_annotation_stats(dataset_id, org_id)
@@ -585,6 +588,9 @@ async def run() -> bool:
             f"Expected 100 annotated, got {status['annotated_samples']}"
         )
         assert status["allow_train"] is True
+        assert status["train_disabled_reason"] is None
+        assert status["minimum_active_class_count"] == 2
+        assert status["active_class_count"] == 2
         _ok(f"status: annotated={status['annotated_samples']}, allow_train={status['allow_train']}")
 
         # Verify label_space unchanged (no new labels introduced)

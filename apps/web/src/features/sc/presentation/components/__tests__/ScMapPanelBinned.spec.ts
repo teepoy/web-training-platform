@@ -30,6 +30,34 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.emitted("box-select")?.at(-1)?.[0]).toEqual(zoom);
   });
 
+  it("offers one-step zoom in and zoom out controls", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: {
+        waferRadiusNm: 100,
+        waferGeometry: {
+          centerX: 0,
+          centerY: 0,
+          originX: 0,
+          originY: 0,
+          dieSizeX: 10,
+          dieSizeY: 10,
+        },
+      },
+    });
+
+    await wrapper.get('[data-testid="sc-map-zoom-in-button"]').trigger("click");
+    expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toEqual({
+      x: -50,
+      y: -50,
+      w: 100,
+      h: 100,
+    });
+
+    await wrapper.setProps({ zoom: { x: -50, y: -50, w: 100, h: 100 } });
+    await wrapper.get('[data-testid="sc-map-zoom-out-button"]').trigger("click");
+    expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toBeNull();
+  });
+
   it("assigns camel-case custom-element properties and switches interaction mode", async () => {
     const arrowData = [new ArrayBuffer(8), new ArrayBuffer(16)];
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
