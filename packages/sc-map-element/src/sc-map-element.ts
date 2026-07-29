@@ -4,6 +4,7 @@ import {
   type MapArrowDataset,
   type MapProjectionSpec,
 } from "./map-arrow-client";
+import ScMapRenderWorker from "./sc-map-render.worker?worker&inline";
 
 export const SC_MAP_TAG_NAME = "sc-map";
 export type ScMapMode = "wafer" | "die" | "reticle";
@@ -122,9 +123,7 @@ export class ScMapElement extends HTMLElement {
     if (!this.#pointsContext) {
       throw new Error("<sc-map> requires ImageBitmapRenderingContext support");
     }
-    this.#worker = new Worker(new URL("./sc-map-render.worker.ts", import.meta.url), {
-      type: "module",
-    });
+    this.#worker = new ScMapRenderWorker();
     this.#worker.onmessage = (
       event: MessageEvent<{
         type: "render-stats";

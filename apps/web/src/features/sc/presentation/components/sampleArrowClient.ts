@@ -1,4 +1,5 @@
 import type { DecodedSampleArrowTable } from "./sampleArrowDecode";
+import SampleArrowWorker from "./sample-arrow.worker?worker&inline";
 
 interface PendingDecode {
   reject: (error: Error) => void;
@@ -34,9 +35,7 @@ export function createSampleArrowDecoder(): SampleArrowDecoder {
     };
   }
 
-  const worker = new Worker(new URL("./sample-arrow.worker.ts", import.meta.url), {
-    type: "module",
-  });
+  const worker = new SampleArrowWorker();
   const pending = new Map<number, PendingDecode>();
   let requestId = 0;
   let disposed = false;

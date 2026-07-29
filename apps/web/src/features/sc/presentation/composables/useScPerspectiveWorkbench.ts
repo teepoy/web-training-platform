@@ -1,10 +1,12 @@
 import { onUnmounted, ref, type Ref } from "vue";
 import { useTimeoutFn } from "@vueuse/core";
-import perspective from "@perspective-dev/client";
-import type { Client, Table } from "@perspective-dev/client";
-import clientWasmUrl from "@perspective-dev/client/dist/wasm/perspective-js.wasm?url";
 import { API_BASE, getAuthToken, getOrgId } from "@/shared/api/client";
 import { managePerspectiveTable } from "@/features/sc/presentation/composables/managedPerspectiveView";
+import {
+  openPerspectiveWorkerClient,
+  type ScPerspectiveClient as Client,
+  type ScPerspectiveTable as Table,
+} from "./perspectiveWorkerClient";
 
 export type ScPerspectiveWorkbenchKind = "preview" | "reclassify";
 
@@ -65,8 +67,6 @@ const CLIENT_PROBE_INTERVAL_MS = 15_000;
 const CLIENT_PROBE_TIMEOUT_MS = 3_000;
 const CLIENT_PROBE_FAILURE_THRESHOLD = 1;
 const UNEXPECTED_TIMEOUT_MS = 60_000;
-let perspectiveClientInitialized = false;
-
 const WEBSOCKET_CLIENT_ERROR_PATTERNS = [
   /websocket/i,
   /web socket/i,
@@ -115,14 +115,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   return Promise.race([promise, timeout]).finally(() => {
     if (timer !== undefined) clearTimeout(timer);
   });
-}
-
-async function openPerspectiveWebsocket(url: string): Promise<Client> {
-  if (!perspectiveClientInitialized) {
-    perspective.init_client(fetch(clientWasmUrl));
-    perspectiveClientInitialized = true;
-  }
-  return perspective.websocket(url);
 }
 
 function perspectiveErrorMessage(err: unknown): string {
@@ -232,9 +224,10 @@ export function useScPerspectiveWorkbench(
   let _lastOptions: ScPerspectiveWorkbenchOptions | null = null;
   let _disposed = false;
   let _phase: WorkbenchPhase = "idle";
-  const websocket = runtime.websocket ?? openPerspectiveWebsocket;
   const tableNameFactory = runtime.tableNameFactory ?? (() => crypto.randomUUID());
   const connectionTimeoutMs = runtime.connectionTimeoutMs ?? CONNECTION_TIMEOUT_MS;
+  const websocket =
+    runtime.websocket ?? ((url: string) => openPerspectiveWorkerClient(url, connectionTimeoutMs));
   const tableReadyTimeoutMs = runtime.tableReadyTimeoutMs ?? TABLE_READY_TIMEOUT_MS;
   const dataReadyTimeoutMs = runtime.dataReadyTimeoutMs ?? DATA_READY_TIMEOUT_MS;
   const reconnectInitialDelayMs = runtime.reconnectInitialDelayMs ?? RECONNECT_INITIAL_DELAY_MS;

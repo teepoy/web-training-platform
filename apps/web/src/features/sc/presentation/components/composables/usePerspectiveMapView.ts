@@ -1,5 +1,6 @@
 import { onUnmounted, ref, watch, type Ref } from "vue";
-import type { Filter, Table } from "@perspective-dev/client";
+import type { Filter } from "@perspective-dev/client";
+import type { ScPerspectiveTable as Table } from "../../composables/perspectiveWorkerClient";
 import type { PerspectiveExpressions } from "@/features/sc/presentation/composables/perspectiveReticleExpressions";
 import {
   managePerspectiveTable,

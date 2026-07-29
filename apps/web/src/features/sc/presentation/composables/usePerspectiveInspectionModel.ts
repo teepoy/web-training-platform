@@ -1,6 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { create } from "@bufbuild/protobuf";
-import type { Filter, Table, ViewConfigUpdate } from "@perspective-dev/client";
+import type { Filter, ViewConfigUpdate } from "@perspective-dev/client";
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
@@ -12,6 +12,7 @@ import {
   type PerspectiveViewSnapshot,
 } from "@/features/sc/presentation/components/composables/useManagedPerspectiveView";
 import { managePerspectiveTable } from "@/features/sc/presentation/composables/managedPerspectiveView";
+import type { ScPerspectiveTable as Table } from "./perspectiveWorkerClient";
 import { perspectiveViewConfigKey } from "./perspectiveViewConfig";
 import { buildPerspectiveFilters, perspectiveFilterField } from "./perspectiveFilter";
 import type { PerspectiveExpressions } from "./perspectiveReticleExpressions";

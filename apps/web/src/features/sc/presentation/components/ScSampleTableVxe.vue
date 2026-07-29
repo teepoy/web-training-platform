@@ -2,7 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { CSSProperties } from "vue";
 import { NButton, NIcon, NPopover, NText } from "naive-ui";
-import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
+import type { Filter, ViewConfigUpdate } from "@perspective-dev/client";
+import type {
+  ScPerspectiveTable as Table,
+  ScPerspectiveView as View,
+} from "../composables/perspectiveWorkerClient";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
 import {
   ArrowDownOutline,

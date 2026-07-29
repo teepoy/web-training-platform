@@ -1,5 +1,5 @@
 import { computed, onUnmounted, type Ref } from "vue";
-import type { Filter, Table } from "@perspective-dev/client";
+import type { Filter } from "@perspective-dev/client";
 import { tableFromIPC } from "apache-arrow";
 import type {
   ScSampleTableDataSource,
@@ -13,6 +13,7 @@ import {
   buildPerspectiveFilters,
   perspectiveFilterField,
 } from "@/features/sc/presentation/composables/perspectiveFilter";
+import type { ScPerspectiveTable as Table } from "./perspectiveWorkerClient";
 import type { PerspectiveExpressions } from "@/features/sc/presentation/composables/perspectiveReticleExpressions";
 
 function numericSearchFilter(

@@ -1,4 +1,5 @@
 import type { ScMapRegion } from "./types";
+import ScMapArrowWorker from "./sc-map-arrow.worker?worker&inline";
 
 export type MapProjectionMode = "wafer" | "die" | "reticle";
 
@@ -29,9 +30,7 @@ export async function createMapArrowDataset(
   onProgress?: (progress: number, stage: string) => void,
 ): Promise<MapArrowDataset> {
   onProgress?.(0, "starting Arrow map worker");
-  const worker = new Worker(new URL("./sc-map-arrow.worker.ts", import.meta.url), {
-    type: "module",
-  });
+  const worker = new ScMapArrowWorker();
   const pending = new Map<number, PendingCall>();
   let requestId = 0;
   let disposed = false;

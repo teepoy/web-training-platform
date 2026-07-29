@@ -1,8 +1,9 @@
 import { computed, onScopeDispose, watch, type ComputedRef } from "vue";
-import type { Filter, Table } from "@perspective-dev/client";
+import type { Filter } from "@perspective-dev/client";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import { usePerspectiveInspectionModel } from "./usePerspectiveInspectionModel";
+import type { ScPerspectiveTable as Table } from "./perspectiveWorkerClient";
 import type { PerspectiveExpressions } from "./perspectiveReticleExpressions";
 import { useScPerspectiveWorkbench } from "./useScPerspectiveWorkbench";
 

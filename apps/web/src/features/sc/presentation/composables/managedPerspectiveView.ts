@@ -1,4 +1,7 @@
-import type { Table, View } from "@perspective-dev/client";
+import type {
+  ScPerspectiveTable as Table,
+  ScPerspectiveView as View,
+} from "./perspectiveWorkerClient";
 
 export type ManagedPerspectiveResourceStatus = "active" | "retiring" | "deleted";
 

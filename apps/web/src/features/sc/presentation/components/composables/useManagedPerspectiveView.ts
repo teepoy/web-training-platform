@@ -1,5 +1,8 @@
 import { computed, ref, shallowRef, watch, onUnmounted, type Ref, type ShallowRef } from "vue";
-import type { Table, View } from "@perspective-dev/client";
+import type {
+  ScPerspectiveTable as Table,
+  ScPerspectiveView as View,
+} from "../../composables/perspectiveWorkerClient";
 import {
   managePerspectiveTable,
   type ManagedPerspectiveView,

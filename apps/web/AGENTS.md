@@ -98,6 +98,9 @@ Browser-native image consumers (`<img>`, Naive image previews, virtualized blink
 - SC pages live under `src/features/sc/`; the SC preview route is `/sc/preview`, and imported dataset views are rendered by the dataset detail page `/datasets/:id` with the `patch_image_v1` or `review_image_v1` view type selected via the internal dropdown.
 - SC-specific image helpers and transport-facing domain helpers live in `src/features/sc/domain/models.ts`.
 - `ScBlinkTable` is a consumer only: it receives already-authenticated image URLs through `imageUrlsByDefectId`. Do not add raw URL fallback construction to the table.
+- The Perspective websocket `Client`, `Table`, and `View` instances belong to `perspective-client.worker.ts`; the main thread uses the narrow RPC proxies in `perspectiveWorkerClient.ts`. Add new RPC methods explicitly when an SC consumer needs them instead of moving Perspective ownership back to the UI thread.
+- Transfer Arrow buffers from workers rather than cloning them. Keep worker update events narrow: SC currently consumes only `port_id`.
+- Import SC workers with Vite's `?worker&inline` form. The legacy build plugin does not reliably emit assets discovered through `new Worker(new URL(...))`.
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 
