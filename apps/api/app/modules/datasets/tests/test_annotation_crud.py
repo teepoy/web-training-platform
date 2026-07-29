@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -136,7 +135,9 @@ def test_list_annotations_empty() -> None:
     with TestClient(app) as c:
         dataset_id, sample_id = _create_dataset_and_sample(c)
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
+        resp = c.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/annotations"
+        )
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -151,7 +152,9 @@ def test_list_annotations_with_data() -> None:
         dataset_id, sample_id = _create_dataset_and_sample(c)
         _create_annotation(c, sample_id, dataset_id, label="rose")
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
+        resp = c.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/annotations"
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert len(body) == 1
@@ -336,5 +339,8 @@ def test_delete_nonexistent_annotation_returns_404() -> None:
 
 def test_list_annotations_nonexistent_sample_returns_404() -> None:
     with TestClient(app) as c:
-        resp = c.get("/api/v1/samples/nonexistent-id/annotations?dataset_id=nonexistent-dataset")
+        resp = c.get(
+            "/api/v1/datasets/nonexistent-dataset/samples/"
+            "nonexistent-id/annotations"
+        )
         assert resp.status_code == 404

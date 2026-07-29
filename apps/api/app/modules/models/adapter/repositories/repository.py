@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.shared.api.schemas import ArtifactRef, Model
@@ -33,7 +33,47 @@ class ModelArtifactRepository:
         dataset_id: str | None = None,
         job_id: str | None = None,
     ) -> list[Model]:
+        models, _ = await self.list_models_paginated(
+            org_id=org_id,
+            dataset_id=dataset_id,
+            job_id=job_id,
+            offset=0,
+            limit=None,
+        )
+        return models
+
+    async def list_models_paginated(
+        self,
+        org_id: str,
+        dataset_id: str | None = None,
+        job_id: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[Model], int]:
         async with self.session_factory() as session:
+            conditions = [
+                ArtifactORM.kind == "model",
+                or_(
+                    TrainingJobORM.org_id == org_id,
+                    TrainingJobORM.is_public.is_(True),
+                ),
+            ]
+            if dataset_id is not None:
+                conditions.append(TrainingJobORM.dataset_id == dataset_id)
+            if job_id is not None:
+                conditions.append(ArtifactORM.job_id == job_id)
+
+            joins = (
+                select(ArtifactORM.id)
+                .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
+                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .where(*conditions)
+            )
+            total = int(
+                await session.scalar(select(func.count()).select_from(joins.subquery()))
+                or 0
+            )
             stmt = (
                 select(
                     ArtifactORM, TrainingJobORM, DatasetORM, UserORM.name, UserORM.email
@@ -41,19 +81,15 @@ class ModelArtifactRepository:
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
-                .where(ArtifactORM.kind == "model")
-                .where(
-                    or_(
-                        TrainingJobORM.org_id == org_id,
-                        TrainingJobORM.is_public.is_(True),
-                    )
-                )  # noqa: E712
+                .where(*conditions)
+                .order_by(
+                    ArtifactORM.created_at.desc().nulls_last(),
+                    ArtifactORM.id.desc(),
+                )
+                .offset(offset)
             )
-            if dataset_id is not None:
-                stmt = stmt.where(TrainingJobORM.dataset_id == dataset_id)
-            if job_id is not None:
-                stmt = stmt.where(ArtifactORM.job_id == job_id)
-            stmt = stmt.order_by(ArtifactORM.created_at.desc().nulls_last())
+            if limit is not None:
+                stmt = stmt.limit(limit)
 
             rows = (await session.execute(stmt)).all()
             return [
@@ -76,7 +112,7 @@ class ModelArtifactRepository:
                     creator_name=_creator_name(job.created_by, user_name, user_email),
                 )
                 for artifact, job, dataset, user_name, user_email in rows
-            ]
+            ], total
 
     async def get_model(
         self,

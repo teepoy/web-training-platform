@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from platform_runtime.sparse import SampleLocator
+from app.modules.storage.domain.sparse import SampleLocator
 
 
 class SparseSampleAccess(Protocol):

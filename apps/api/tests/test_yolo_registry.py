@@ -9,18 +9,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
-from platform_runtime.contracts import DatasetRef, ModelRef, PredictContext, TrainContext
+from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
 
 from app.core.registry import get_predictor_by_id, get_trainer_by_id
 from app.modules.types import catalog
 
-import app.modules.training.flows._trainers.sc  # noqa: F401  @trainer(resnet50-sc-v1)
-import app.modules.training.flows._trainers.yolo_sc  # noqa: F401  @trainer(yolo-sc-v1)
-import app.modules.prediction.flows._predictors.sc  # noqa: F401  @predictor(resnet50-sc-v1)
-import app.modules.prediction.flows._predictors.yolo_sc  # noqa: F401  @predictor(yolo-sc-v1)
+import app.runtime_compat.ml.trainers.sc  # noqa: F401  @trainer(resnet50-sc-v1)
+import app.runtime_compat.ml.trainers.yolo_sc  # noqa: F401  @trainer(yolo-sc-v1)
+import app.runtime_compat.ml.predictors.sc  # noqa: F401  @predictor(resnet50-sc-v1)
+import app.runtime_compat.ml.predictors.yolo_sc  # noqa: F401  @predictor(yolo-sc-v1)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -31,17 +30,18 @@ import app.modules.prediction.flows._predictors.yolo_sc  # noqa: F401  @predicto
 def test_yolo_trainer_metadata_id_matches() -> None:
     """Catalog metadata ID 'yolo-sc-v1' matches executable trainer ID."""
     meta = catalog.get_trainer_meta("yolo-sc-v1")
-    assert meta["id"] == "yolo-sc-v1"
-    assert meta["name"] == "YOLO SC Detection Trainer"
-    assert meta["view_id"] == "patch_image_v1"
+    assert meta.id == "yolo-sc-v1"
+    assert meta.name == "YOLO SC Detection Trainer"
+    assert meta.view_id == "patch_image_v1"
+    assert meta.predictor_id == "yolo-sc-v1"
 
 
 def test_yolo_predictor_metadata_id_matches() -> None:
     """Catalog metadata ID 'yolo-sc-v1' matches executable predictor ID."""
     meta = catalog.get_predictor_meta("yolo-sc-v1")
-    assert meta["id"] == "yolo-sc-v1"
-    assert meta["name"] == "YOLO SC Detection"
-    assert meta["view_id"] == "patch_image_v1"
+    assert meta.id == "yolo-sc-v1"
+    assert meta.name == "YOLO SC Detection Predictor"
+    assert meta.view_id == "patch_image_v1"
 
 
 def test_yolo_trainer_id_in_catalog_listing() -> None:
@@ -132,7 +132,7 @@ async def test_yolo_trainer_error_message_mentions_lazyframe() -> None:
 
 def test_yolo_predictor_resolves_in_flow_registry() -> None:
     """yolo-sc-v1 is registered in the flow runtime predictor registry."""
-    from app.modules.prediction.flows._predictors import (
+    from app.runtime_compat.ml.predictors import (
         get_predictor as flow_get_predictor,
     )
 
@@ -144,7 +144,7 @@ def test_yolo_predictor_is_generator() -> None:
     """yolo-sc-v1 predictor is a generator function, not a class."""
     import inspect
 
-    from app.modules.prediction.flows._predictors import (
+    from app.runtime_compat.ml.predictors import (
         get_predictor as flow_get_predictor,
     )
 
@@ -158,7 +158,7 @@ def test_yolo_predictor_is_generator() -> None:
 def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.modules.prediction.flows._predictors import yolo_sc
+    from app.runtime_compat.ml.predictors import yolo_sc
 
     checkpoint_bytes = b"native-ultralytics-checkpoint"
     loaded_bytes: list[bytes] = []
@@ -195,10 +195,6 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
         lambda: SimpleNamespace(info=lambda *args: None),
     )
 
-    class EmptyLazyFrame:
-        def collect(self) -> Any:
-            return SimpleNamespace(iter_rows=lambda named: [])
-
     model_ref = ModelRef(
         uri="memory://model.pt",
         metadata={"label_space": ["defect", "clean"]},
@@ -211,11 +207,11 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
 
     predictions = list(
         yolo_sc.yolo_sc_predictor.func(
-            artifact_storage=ArtifactStorage(),
-            ctx=ctx,
-            lazyframe=EmptyLazyFrame(),
-            model_ref=model_ref,
-        )
+                artifact_storage=ArtifactStorage(),
+                ctx=ctx,
+                model_ref=model_ref,
+                materialized_dataset=[],
+            )
     )
 
     assert predictions == []
@@ -223,7 +219,7 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
 
 
 def test_yolo_active_labels_are_compacted_from_training_rows() -> None:
-    from app.modules.training.flows._trainers import yolo_sc
+    from app.runtime_compat.ml.trainers import yolo_sc
 
     rows = [
         {"label": "a", "images": [{"role": "patch_defective"}, {"role": "patch_template"}]},
@@ -234,7 +230,7 @@ def test_yolo_active_labels_are_compacted_from_training_rows() -> None:
 
 
 def test_yolo_predictor_requires_model_metadata_label_space() -> None:
-    from app.modules.prediction.flows._predictors import yolo_sc
+    from app.runtime_compat.ml.predictors import yolo_sc
 
     model_ref = ModelRef(metadata={})
 
@@ -258,9 +254,9 @@ def test_trained_model_metadata_preserves_trainer_label_space() -> None:
 @pytest.mark.skip(reason="Requires Prefect flow/task run context for get_run_logger()")
 def test_yolo_predictor_raises_on_missing_storage() -> None:
     """yolo-sc-v1 predictor raises ValueError when artifact_storage is None."""
-    from platform_runtime.contracts import ModelRef, PredictContext, DatasetRef
+    from app.shared.domain.runtime import ModelRef, PredictContext, DatasetRef
 
-    from app.modules.prediction.flows._predictors import (
+    from app.runtime_compat.ml.predictors import (
         get_predictor as flow_get_predictor,
     )
 

@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.shared.api.schemas import Sample
+from app.shared.db.registry import SampleORM
 
 _SAMPLES_COLUMNS = "id, dataset_id, image_uris, metadata_json, ls_task_id"
 
@@ -43,6 +44,30 @@ class ScBatchReader:
             params={"dataset_id": dataset_id},
         )
         return _rows_to_dicts(rows)
+
+    async def map_defect_ids_to_sample_ids(
+        self,
+        dataset_id: str,
+        defect_ids: set[str],
+    ) -> dict[str, str]:
+        """Resolve SC defect identities with one database query."""
+        if not defect_ids:
+            return {}
+
+        defect_id_expr = SampleORM.metadata_json["defect_id"].as_string()
+        stmt = (
+            select(SampleORM.id, defect_id_expr.label("defect_id"))
+            .where(
+                SampleORM.dataset_id == dataset_id,
+                defect_id_expr.in_(defect_ids),
+            )
+            .order_by(SampleORM.id)
+        )
+        async with self._engine.connect() as conn:
+            rows = (await conn.execute(stmt)).all()
+        return {
+            str(row.defect_id): str(row.id) for row in rows if row.defect_id is not None
+        }
 
     async def list_samples_paginated(
         self, dataset_id: str, *, offset: int = 0, limit: int = 50

@@ -2,16 +2,27 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.prediction.domain.review import ReviewAnnotationCommand
+from app.modules.prediction.domain.submission import PredictionJobCommand
 
 
-class RunPredictionRequest(BaseModel):
+class StrictRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RunPredictionRequest(StrictRequest):
     """Request to run predictions on a dataset using a model."""
 
-    model_id: str = Field(description="ID of the model artifact to use")
-    dataset_id: str = Field(description="ID of the dataset to run predictions on")
+    model_id: str = Field(min_length=1, description="ID of the model artifact to use")
+    dataset_id: str = Field(
+        min_length=1,
+        description="ID of the dataset to run predictions on",
+    )
     sample_ids: list[str] | None = Field(
         default=None,
+        min_length=1,
         description="Optional list of sample IDs. If None, runs on all samples in dataset",
     )
     model_version: str | None = Field(
@@ -19,11 +30,34 @@ class RunPredictionRequest(BaseModel):
         description="Optional version tag for Label Studio filtering",
     )
     target: str = Field(
-        default="image_classification", description="Prediction target key in trainer"
+        default="image_classification",
+        min_length=1,
+        description="Prediction target key in trainer",
     )
     prompt: str | None = Field(
         default=None, description="Optional runtime prompt/question override"
     )
+    predictor_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Explicit predictor paired with the model's trainer; required when "
+            "the trainer declares multiple predictors"
+        ),
+    )
+
+    def to_command(self, *, org_id: str, created_by: str) -> PredictionJobCommand:
+        return PredictionJobCommand(
+            dataset_id=self.dataset_id,
+            model_id=self.model_id,
+            org_id=org_id,
+            created_by=created_by,
+            target=self.target,
+            model_version=self.model_version,
+            sample_ids=tuple(self.sample_ids) if self.sample_ids is not None else None,
+            prompt=self.prompt,
+            predictor_id=self.predictor_id,
+        )
 
 
 class PredictionResultResponse(BaseModel):
@@ -78,22 +112,31 @@ class BatchPredictionResponse(BaseModel):
     model_version: str | None = None
 
 
-class PredictSingleRequest(BaseModel):
+class PredictSingleRequest(StrictRequest):
     """Request to predict a single sample."""
 
-    dataset_id: str = Field(description="ID of the dataset containing the sample")
-    model_id: str = Field(description="ID of the model artifact to use")
-    sample_id: str = Field(description="ID of the sample to predict")
+    dataset_id: str = Field(
+        min_length=1,
+        description="ID of the dataset containing the sample",
+    )
+    model_id: str = Field(
+        min_length=1,
+        description="ID of the model artifact to use",
+    )
+    sample_id: str = Field(min_length=1, description="ID of the sample to predict")
     model_version: str | None = Field(
         default=None,
         description="Optional version tag for Label Studio filtering",
     )
     target: str = Field(
-        default="image_classification", description="Prediction target key in trainer"
+        default="image_classification",
+        min_length=1,
+        description="Prediction target key in trainer",
     )
     prompt: str | None = Field(
         default=None, description="Optional runtime prompt/question override"
     )
+    predictor_id: str | None = Field(default=None, min_length=1)
 
 
 class CreateReviewActionRequest(BaseModel):
@@ -135,6 +178,15 @@ class SaveReviewAnnotationItem(BaseModel):
     final_label: str
     confidence: float | None = None
     prediction_id: str | None = None
+
+    def to_command(self) -> ReviewAnnotationCommand:
+        return ReviewAnnotationCommand(
+            sample_id=self.sample_id,
+            predicted_label=self.predicted_label,
+            final_label=self.final_label,
+            confidence=self.confidence,
+            prediction_id=self.prediction_id,
+        )
 
 
 class SaveReviewAnnotationsRequest(BaseModel):

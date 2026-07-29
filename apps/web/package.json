@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.0",
+    "@platform/sc-map-element": "workspace:*",
     "@perspective-dev/client": "4.5.1",
     "@perspective-dev/server": "4.5.1",
     "@perspective-dev/viewer": "4.5.1",

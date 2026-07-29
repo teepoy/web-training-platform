@@ -41,26 +41,6 @@ const emit = defineEmits<{
   (e: "update:hiddenKeys", hiddenKeys: string[]): void;
 }>();
 
-function sortLegendKeys(keys: string[]): string[] {
-  return [...keys].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
-}
-
-function colorMapKeyForLegendKey(
-  source: LegendSource,
-  rawKey: string,
-  compactGroups?: Record<string, DefectList>,
-): string {
-  if (source === "class" || source === "bin" || !compactGroups) return rawKey;
-  if (rawKey === UNLABELED_KEY || rawKey === NO_PREDICTION_KEY) return "-1";
-  return String(
-    sortLegendKeys(
-      Object.keys(compactGroups).filter(
-        (key) => key !== UNLABELED_KEY && key !== NO_PREDICTION_KEY,
-      ),
-    ).indexOf(rawKey),
-  );
-}
-
 function groupDisplayName(group: DefectList): string | null {
   const record = group as unknown as Record<string, unknown>;
   const value = record.name ?? record.display_name ?? record.displayName ?? record.label;
@@ -99,7 +79,7 @@ const legendData = computed(() => {
     return Object.entries(compactGroups)
       .map(([rawKey, group]) => {
         const key = isNumericSource ? Number(rawKey) : rawKey;
-        const colorKey = colorMapKeyForLegendKey(source, rawKey, compactGroups);
+        const colorKey = rawKey;
         return {
           key,
           rawKey,

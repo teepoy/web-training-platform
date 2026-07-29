@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.shared.api.schemas import (
@@ -17,7 +17,7 @@ from app.shared.api.schemas import (
 )
 from app.shared.api.schemas import JobStatus
 from app.shared.db.models.auth import OrganizationORM
-from app.shared.db.models.datasets import AnnotationVersionORM
+from app.shared.db.models.datasets import AnnotationVersionORM, DatasetORM
 from app.shared.db.models.prediction import (
     PlatformPredictionORM,
     PredictionCollectionItemORM,
@@ -35,6 +35,27 @@ def _utcnow() -> datetime:
 def _assert_not_none(value: str | None) -> str:
     assert value is not None
     return value
+
+
+def _platform_prediction_to_domain(
+    row: PlatformPredictionORM,
+) -> PlatformPrediction:
+    return PlatformPrediction(
+        id=row.id,
+        org_id=row.org_id,
+        dataset_id=row.dataset_id,
+        sample_id=row.sample_id,
+        model_id=row.model_id,
+        target=row.target,
+        job_id=row.job_id,
+        model_version=row.model_version,
+        predicted_label=row.predicted_label,
+        confidence=row.confidence,
+        all_scores=row.all_scores_json,
+        error=row.error,
+        created_by=row.created_by,
+        created_at=row.created_at,
+    )
 
 
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
@@ -127,34 +148,78 @@ class PredictionRepository:
             )
 
     async def list_prediction_jobs(
-        self, org_id: str | None = None, dataset_id: str | None = None
+        self,
+        org_id: str | None = None,
+        dataset_id: str | None = None,
     ) -> list[PredictionJob]:
+        items, _ = await self.list_prediction_jobs_paginated(
+            org_id=org_id,
+            dataset_id=dataset_id,
+            offset=0,
+            limit=None,
+        )
+        return items
+
+    async def list_prediction_jobs_paginated(
+        self,
+        org_id: str | None = None,
+        dataset_id: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[PredictionJob], int]:
         async with self.session_factory() as session:
-            stmt = select(PredictionJobORM).order_by(PredictionJobORM.created_at.desc())
+            conditions = []
             if org_id is not None:
-                stmt = stmt.where(PredictionJobORM.org_id == org_id)
+                conditions.append(PredictionJobORM.org_id == org_id)
             if dataset_id is not None:
-                stmt = stmt.where(PredictionJobORM.dataset_id == dataset_id)
-            rows = (await session.execute(stmt)).scalars().all()
-            return [
-                PredictionJob(
-                    id=row.id,
-                    org_id=row.org_id,
-                    org_name=await _org_name_for(session, row.org_id),
-                    dataset_id=_assert_not_none(row.dataset_id),
-                    model_id=row.model_id,
-                    status=cast(JobStatus, row.status),
-                    created_by=row.created_by,
-                    target=row.target,
-                    model_version=row.model_version,
-                    created_at=row.created_at,
-                    updated_at=row.updated_at,
-                    external_job_id=row.external_job_id,
-                    sample_ids=row.sample_ids,
-                    summary=row.summary_json or {},
+                conditions.append(PredictionJobORM.dataset_id == dataset_id)
+            total = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PredictionJobORM)
+                    .where(*conditions)
                 )
-                for row in rows
-            ]
+                or 0
+            )
+            stmt = (
+                select(PredictionJobORM, OrganizationORM.name)
+                .outerjoin(
+                    OrganizationORM,
+                    OrganizationORM.id == PredictionJobORM.org_id,
+                )
+                .where(*conditions)
+                .order_by(
+                    PredictionJobORM.created_at.desc(),
+                    PredictionJobORM.id.desc(),
+                )
+                .offset(offset)
+            )
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            rows = (await session.execute(stmt)).all()
+            return (
+                [
+                    PredictionJob(
+                        id=row.id,
+                        org_id=row.org_id,
+                        org_name=str(org_name or ""),
+                        dataset_id=_assert_not_none(row.dataset_id),
+                        model_id=row.model_id,
+                        status=cast(JobStatus, row.status),
+                        created_by=row.created_by,
+                        target=row.target,
+                        model_version=row.model_version,
+                        created_at=row.created_at,
+                        updated_at=row.updated_at,
+                        external_job_id=row.external_job_id,
+                        sample_ids=row.sample_ids,
+                        summary=row.summary_json or {},
+                    )
+                    for row, org_name in rows
+                ],
+                total,
+            )
 
     async def add_prediction_event(self, event: PredictionEvent) -> None:
         async with self.session_factory() as session:
@@ -170,18 +235,38 @@ class PredictionRepository:
             await session.commit()
 
     async def list_prediction_events(self, job_id: str) -> list[PredictionEvent]:
+        events, _ = await self.list_prediction_events_paginated(
+            job_id,
+            offset=0,
+            limit=None,
+        )
+        return events
+
+    async def list_prediction_events_paginated(
+        self,
+        job_id: str,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[PredictionEvent], int]:
         async with self.session_factory() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(PredictionEventORM)
-                        .where(PredictionEventORM.job_id == job_id)
-                        .order_by(PredictionEventORM.id.asc())
-                    )
+            total = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PredictionEventORM)
+                    .where(PredictionEventORM.job_id == job_id)
                 )
-                .scalars()
-                .all()
+                or 0
             )
+            stmt = (
+                select(PredictionEventORM)
+                .where(PredictionEventORM.job_id == job_id)
+                .order_by(PredictionEventORM.id.asc())
+                .offset(offset)
+            )
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionEvent(
                     job_id=r.job_id,
@@ -191,7 +276,7 @@ class PredictionRepository:
                     payload=r.payload,
                 )
                 for r in rows
-            ]
+            ], total
 
     async def create_platform_prediction(
         self, prediction: PlatformPrediction
@@ -255,22 +340,29 @@ class PredictionRepository:
                 return None
             if org_id is not None and row.org_id != org_id:
                 return None
-            return PlatformPrediction(
-                id=row.id,
-                org_id=row.org_id,
-                dataset_id=row.dataset_id,
-                sample_id=row.sample_id,
-                model_id=row.model_id,
-                target=row.target,
-                job_id=row.job_id,
-                model_version=row.model_version,
-                predicted_label=row.predicted_label,
-                confidence=row.confidence,
-                all_scores=row.all_scores_json,
-                error=row.error,
-                created_by=row.created_by,
-                created_at=row.created_at,
+            return _platform_prediction_to_domain(row)
+
+    async def get_platform_predictions_by_ids(
+        self,
+        prediction_ids: list[str],
+        org_id: str,
+    ) -> dict[str, PlatformPrediction]:
+        if not prediction_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(prediction_ids))
+        async with self.session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(PlatformPredictionORM)
+                        .where(PlatformPredictionORM.id.in_(unique_ids))
+                        .where(PlatformPredictionORM.org_id == org_id)
+                    )
+                )
+                .scalars()
+                .all()
             )
+        return {row.id: _platform_prediction_to_domain(row) for row in rows}
 
     async def list_platform_predictions_for_sample(
         self,
@@ -288,25 +380,7 @@ class PredictionRepository:
             if model_version is not None:
                 stmt = stmt.where(PlatformPredictionORM.model_version == model_version)
             rows = (await session.execute(stmt)).scalars().all()
-            return [
-                PlatformPrediction(
-                    id=row.id,
-                    org_id=row.org_id,
-                    dataset_id=row.dataset_id,
-                    sample_id=row.sample_id,
-                    model_id=row.model_id,
-                    target=row.target,
-                    job_id=row.job_id,
-                    model_version=row.model_version,
-                    predicted_label=row.predicted_label,
-                    confidence=row.confidence,
-                    all_scores=row.all_scores_json,
-                    error=row.error,
-                    created_by=row.created_by,
-                    created_at=row.created_at,
-                )
-                for row in rows
-            ]
+            return [_platform_prediction_to_domain(row) for row in rows]
 
     async def list_platform_predictions_for_job(
         self, job_id: str, org_id: str, offset: int = 0, limit: int | None = None
@@ -322,25 +396,7 @@ class PredictionRepository:
             if limit is not None:
                 stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
-            return [
-                PlatformPrediction(
-                    id=row.id,
-                    org_id=row.org_id,
-                    dataset_id=row.dataset_id,
-                    sample_id=row.sample_id,
-                    model_id=row.model_id,
-                    target=row.target,
-                    job_id=row.job_id,
-                    model_version=row.model_version,
-                    predicted_label=row.predicted_label,
-                    confidence=row.confidence,
-                    all_scores=row.all_scores_json,
-                    error=row.error,
-                    created_by=row.created_by,
-                    created_at=row.created_at,
-                )
-                for row in rows
-            ]
+            return [_platform_prediction_to_domain(row) for row in rows]
 
     async def create_prediction_collection(
         self, collection: PredictionCollection
@@ -390,13 +446,46 @@ class PredictionRepository:
     async def list_prediction_collections(
         self, dataset_id: str, org_id: str
     ) -> list[PredictionCollection]:
+        collections, _ = await self.list_prediction_collections_paginated(
+            dataset_id,
+            org_id,
+            offset=0,
+            limit=None,
+        )
+        return collections
+
+    async def list_prediction_collections_paginated(
+        self,
+        dataset_id: str,
+        org_id: str,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[PredictionCollection], int]:
         async with self.session_factory() as session:
+            conditions = (
+                PredictionCollectionORM.dataset_id == dataset_id,
+                PredictionCollectionORM.org_id == org_id,
+            )
+            total = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PredictionCollectionORM)
+                    .where(*conditions)
+                )
+                or 0
+            )
             stmt = (
                 select(PredictionCollectionORM)
-                .where(PredictionCollectionORM.dataset_id == dataset_id)
-                .where(PredictionCollectionORM.org_id == org_id)
-                .order_by(PredictionCollectionORM.created_at.desc())
+                .where(*conditions)
+                .order_by(
+                    PredictionCollectionORM.created_at.desc(),
+                    PredictionCollectionORM.id.desc(),
+                )
+                .offset(offset)
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionCollection(
@@ -413,7 +502,7 @@ class PredictionRepository:
                     created_at=row.created_at,
                 )
                 for row in rows
-            ]
+            ], total
 
     async def add_prediction_collection_items(
         self, items: list[PredictionCollectionItem]
@@ -432,6 +521,42 @@ class PredictionRepository:
             await session.commit()
         return items
 
+    async def create_prediction_collection_with_items(
+        self,
+        collection: PredictionCollection,
+        items: list[PredictionCollectionItem],
+    ) -> PredictionCollection:
+        if any(item.collection_id != collection.id for item in items):
+            raise ValueError("Prediction collection item targets another collection")
+        async with self.session_factory() as session:
+            session.add(
+                PredictionCollectionORM(
+                    id=collection.id,
+                    org_id=collection.org_id,
+                    dataset_id=collection.dataset_id,
+                    model_id=collection.model_id,
+                    name=collection.name,
+                    model_version=collection.model_version,
+                    target=collection.target,
+                    source_job_id=collection.source_job_id,
+                    sync_tag=collection.sync_tag,
+                    created_by=collection.created_by,
+                    created_at=collection.created_at,
+                )
+            )
+            session.add_all(
+                [
+                    PredictionCollectionItemORM(
+                        collection_id=item.collection_id,
+                        prediction_id=item.prediction_id,
+                        created_at=item.created_at,
+                    )
+                    for item in items
+                ]
+            )
+            await session.commit()
+        return collection
+
     async def list_prediction_collection_predictions(
         self, collection_id: str, org_id: str
     ) -> list[PlatformPrediction]:
@@ -448,25 +573,43 @@ class PredictionRepository:
                 .order_by(PlatformPredictionORM.created_at.asc())
             )
             rows = (await session.execute(stmt)).scalars().all()
-            return [
-                PlatformPrediction(
-                    id=row.id,
-                    org_id=row.org_id,
-                    dataset_id=row.dataset_id,
-                    sample_id=row.sample_id,
-                    model_id=row.model_id,
-                    target=row.target,
-                    job_id=row.job_id,
-                    model_version=row.model_version,
-                    predicted_label=row.predicted_label,
-                    confidence=row.confidence,
-                    all_scores=row.all_scores_json,
-                    error=row.error,
-                    created_by=row.created_by,
-                    created_at=row.created_at,
+            return [_platform_prediction_to_domain(row) for row in rows]
+
+    async def list_prediction_ids_by_collection(
+        self,
+        collection_ids: list[str],
+        org_id: str,
+    ) -> dict[str, list[str]]:
+        if not collection_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(collection_ids))
+        async with self.session_factory() as session:
+            stmt = (
+                select(
+                    PredictionCollectionItemORM.collection_id,
+                    PredictionCollectionItemORM.prediction_id,
                 )
-                for row in rows
-            ]
+                .join(
+                    PlatformPredictionORM,
+                    PlatformPredictionORM.id
+                    == PredictionCollectionItemORM.prediction_id,
+                )
+                .where(PredictionCollectionItemORM.collection_id.in_(unique_ids))
+                .where(PlatformPredictionORM.org_id == org_id)
+                .order_by(
+                    PredictionCollectionItemORM.collection_id,
+                    PlatformPredictionORM.created_at,
+                    PlatformPredictionORM.id,
+                )
+            )
+            rows = (await session.execute(stmt)).all()
+
+        prediction_ids_by_collection = {
+            collection_id: [] for collection_id in unique_ids
+        }
+        for collection_id, prediction_id in rows:
+            prediction_ids_by_collection[str(collection_id)].append(str(prediction_id))
+        return prediction_ids_by_collection
 
     async def create_review_action(
         self, action: PredictionReviewAction
@@ -487,9 +630,23 @@ class PredictionRepository:
             await session.commit()
         return action
 
-    async def get_review_action(self, action_id: str) -> PredictionReviewAction | None:
+    async def get_review_action(
+        self,
+        action_id: str,
+        org_id: str,
+    ) -> PredictionReviewAction | None:
         async with self.session_factory() as session:
-            row = await session.get(PredictionReviewActionORM, action_id)
+            row = (
+                await session.execute(
+                    select(PredictionReviewActionORM)
+                    .join(
+                        DatasetORM,
+                        DatasetORM.id == PredictionReviewActionORM.dataset_id,
+                    )
+                    .where(PredictionReviewActionORM.id == action_id)
+                    .where(DatasetORM.org_id == org_id)
+                )
+            ).scalar_one_or_none()
             if row is None:
                 return None
             return PredictionReviewAction(
@@ -504,14 +661,58 @@ class PredictionRepository:
             )
 
     async def list_review_actions(
-        self, dataset_id: str
+        self,
+        dataset_id: str,
+        org_id: str,
     ) -> list[PredictionReviewAction]:
+        actions, _ = await self.list_review_actions_paginated(
+            dataset_id,
+            org_id,
+            offset=0,
+            limit=None,
+        )
+        return actions
+
+    async def list_review_actions_paginated(
+        self,
+        dataset_id: str,
+        org_id: str,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[PredictionReviewAction], int]:
         async with self.session_factory() as session:
+            conditions = (
+                PredictionReviewActionORM.dataset_id == dataset_id,
+                DatasetORM.org_id == org_id,
+            )
+            base = (
+                select(PredictionReviewActionORM.id)
+                .join(
+                    DatasetORM,
+                    DatasetORM.id == PredictionReviewActionORM.dataset_id,
+                )
+                .where(*conditions)
+            )
+            total = int(
+                await session.scalar(select(func.count()).select_from(base.subquery()))
+                or 0
+            )
             stmt = (
                 select(PredictionReviewActionORM)
-                .where(PredictionReviewActionORM.dataset_id == dataset_id)
-                .order_by(PredictionReviewActionORM.created_at.desc())
+                .join(
+                    DatasetORM,
+                    DatasetORM.id == PredictionReviewActionORM.dataset_id,
+                )
+                .where(*conditions)
+                .order_by(
+                    PredictionReviewActionORM.created_at.desc(),
+                    PredictionReviewActionORM.id.desc(),
+                )
+                .offset(offset)
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 PredictionReviewAction(
@@ -525,11 +726,21 @@ class PredictionRepository:
                     created_at=r.created_at,
                 )
                 for r in rows
-            ]
+            ], total
 
-    async def delete_review_action(self, action_id: str) -> bool:
+    async def delete_review_action(self, action_id: str, org_id: str) -> bool:
         async with self.session_factory() as session:
-            row = await session.get(PredictionReviewActionORM, action_id)
+            row = (
+                await session.execute(
+                    select(PredictionReviewActionORM)
+                    .join(
+                        DatasetORM,
+                        DatasetORM.id == PredictionReviewActionORM.dataset_id,
+                    )
+                    .where(PredictionReviewActionORM.id == action_id)
+                    .where(DatasetORM.org_id == org_id)
+                )
+            ).scalar_one_or_none()
             if row is None:
                 return False
             await session.delete(row)
@@ -582,12 +793,40 @@ class PredictionRepository:
     async def list_annotation_versions(
         self, review_action_id: str
     ) -> list[AnnotationVersion]:
+        versions, _ = await self.list_annotation_versions_paginated(
+            review_action_id,
+            offset=0,
+            limit=None,
+        )
+        return versions
+
+    async def list_annotation_versions_paginated(
+        self,
+        review_action_id: str,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[AnnotationVersion], int]:
         async with self.session_factory() as session:
+            total = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AnnotationVersionORM)
+                    .where(AnnotationVersionORM.review_action_id == review_action_id)
+                )
+                or 0
+            )
             stmt = (
                 select(AnnotationVersionORM)
                 .where(AnnotationVersionORM.review_action_id == review_action_id)
-                .order_by(AnnotationVersionORM.created_at.asc())
+                .order_by(
+                    AnnotationVersionORM.created_at.asc(),
+                    AnnotationVersionORM.id.asc(),
+                )
+                .offset(offset)
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [
                 AnnotationVersion(
@@ -601,7 +840,7 @@ class PredictionRepository:
                     created_at=r.created_at,
                 )
                 for r in rows
-            ]
+            ], total
 
     async def get_annotation_version(self, version_id: str) -> AnnotationVersion | None:
         async with self.session_factory() as session:

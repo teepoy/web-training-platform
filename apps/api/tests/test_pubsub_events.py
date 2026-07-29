@@ -14,9 +14,11 @@ Tests override get_redis_event_publisher to capture and verify event calls.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, call
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 from app.shared.infrastructure.redis.event_publisher import (
@@ -33,6 +35,8 @@ from app.modules.prediction.port.http.deps import (
     get_redis_event_publisher as prediction_get_publisher,
 )
 from tests.conftest import DEFAULT_ORG_ID
+
+pytestmark = pytest.mark.integration
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -307,7 +311,7 @@ class TestScBulkAnnotationRefreshEvent:
         return str(resp.json()["id"])
 
     def test_publishes_refresh_when_annotations_created(self):
-        from platform_runtime.sparse import (
+        from app.modules.storage.domain.sparse import (
             DatasetManifest,
             SampleLocator,
         )
@@ -323,7 +327,7 @@ class TestScBulkAnnotationRefreshEvent:
 
                 # Seed manifest so defect_id → sample_id mapping works
                 payload_store = (
-                    app.state.app_context.datasets.dataset_payload_store
+                    app.state.app_context.storage.dataset_payload_store
                 )
                 manifest = DatasetManifest(
                     dataset_id=dataset_id,
@@ -369,7 +373,7 @@ class TestScBulkAnnotationRefreshEvent:
         """Label "0" is SC Unclassified → annotation deleted, no new data.
         The handler still publishes refresh because annotation_ids_to_delete
         is non-empty."""
-        from platform_runtime.sparse import (
+        from app.modules.storage.domain.sparse import (
             DatasetManifest,
             SampleLocator,
         )
@@ -383,7 +387,7 @@ class TestScBulkAnnotationRefreshEvent:
                 )
 
                 payload_store = (
-                    app.state.app_context.datasets.dataset_payload_store
+                    app.state.app_context.storage.dataset_payload_store
                 )
                 manifest = DatasetManifest(
                     dataset_id=dataset_id,
@@ -529,7 +533,7 @@ class TestPredictionDeadCode:
                 "app/",
             ],
             capture_output=True, text=True,
-            cwd="/Users/jin/Desktop/_/web-training-platform/apps/api",
+            cwd=Path(__file__).resolve().parents[1],
         )
         # Only event_publisher.py (definition) should match
         files = [f for f in result.stdout.strip().split("\n") if f]
@@ -553,7 +557,7 @@ class TestPredictionDeadCode:
                 "app/",
             ],
             capture_output=True, text=True,
-            cwd="/Users/jin/Desktop/_/web-training-platform/apps/api",
+            cwd=Path(__file__).resolve().parents[1],
         )
         files = [f for f in result.stdout.strip().split("\n") if f]
         definition_file = "app/shared/infrastructure/redis/event_publisher.py"
@@ -573,7 +577,7 @@ class TestPredictionDeadCode:
                 "app/",
             ],
             capture_output=True, text=True,
-            cwd="/Users/jin/Desktop/_/web-training-platform/apps/api",
+            cwd=Path(__file__).resolve().parents[1],
         )
         files = [f for f in result.stdout.strip().split("\n") if f]
         # Should find event_publisher.py + router + predict_job flow
@@ -597,7 +601,6 @@ class TestPredictionReviewRefreshEvent:
     def test_publishes_refresh_after_saving_review_annotations(self):
         from datetime import datetime, timezone
 
-        from app.modules.datasets.domain.storage_agg import Capabilities
         from app.shared.api.schemas import (
             Annotation,
             AnnotationVersion,
@@ -623,18 +626,16 @@ class TestPredictionReviewRefreshEvent:
         )
 
         from app.modules.prediction.port.http.deps import (
-            get_prediction_service,
+            get_dataset_reader,
+            get_dataset_service,
+            get_prediction_review,
             get_prediction_repository,
         )
-        from app.modules.datasets.port.http.deps import (
-            get_dataset_storage_factory,
-        )
-
         mock_svc = MagicMock()
         mock_svc.save_review_annotations = AsyncMock(
             return_value=([mock_ann], [mock_ver])
         )
-        app.dependency_overrides[get_prediction_service] = lambda: mock_svc
+        app.dependency_overrides[get_prediction_review] = lambda: mock_svc
 
         mock_repo = MagicMock()
         mock_repo.get_review_action = AsyncMock(
@@ -660,14 +661,13 @@ class TestPredictionReviewRefreshEvent:
         )
         app.dependency_overrides[get_prediction_repository] = lambda: mock_repo
 
-        # Mock storage factory → returns mock storage with can_list_samples=True
-        mock_storage = MagicMock()
-        mock_storage.capabilities = Capabilities(
-            can_list_samples=True, can_similarity=False
-        )
-        mock_factory = MagicMock()
-        mock_factory.open = AsyncMock(return_value=mock_storage)
-        app.dependency_overrides[get_dataset_storage_factory] = lambda: mock_factory
+        mock_reader = MagicMock()
+        mock_reader.get_dataset = AsyncMock(return_value=mock_repo.get_dataset.return_value)
+        app.dependency_overrides[get_dataset_reader] = lambda: mock_reader
+
+        mock_dataset_service = MagicMock()
+        mock_dataset_service.merge_label_space = AsyncMock()
+        app.dependency_overrides[get_dataset_service] = lambda: mock_dataset_service
 
         try:
             with TestClient(app) as c:
@@ -693,14 +693,14 @@ class TestPredictionReviewRefreshEvent:
                 )
         finally:
             app.dependency_overrides.pop(prediction_get_publisher, None)
-            app.dependency_overrides.pop(get_prediction_service, None)
+            app.dependency_overrides.pop(get_prediction_review, None)
             app.dependency_overrides.pop(get_prediction_repository, None)
-            app.dependency_overrides.pop(get_dataset_storage_factory, None)
+            app.dependency_overrides.pop(get_dataset_reader, None)
+            app.dependency_overrides.pop(get_dataset_service, None)
 
     def test_no_refresh_when_no_annotations_saved(self):
         from datetime import datetime, timezone
 
-        from app.modules.datasets.domain.storage_agg import Capabilities
         from app.shared.api.schemas import (
             Dataset,
             DatasetStorageMode,
@@ -712,16 +712,14 @@ class TestPredictionReviewRefreshEvent:
         app.dependency_overrides[prediction_get_publisher] = lambda: mock_pub
 
         from app.modules.prediction.port.http.deps import (
-            get_prediction_service,
+            get_dataset_reader,
+            get_dataset_service,
+            get_prediction_review,
             get_prediction_repository,
         )
-        from app.modules.datasets.port.http.deps import (
-            get_dataset_storage_factory,
-        )
-
         mock_svc = MagicMock()
         mock_svc.save_review_annotations = AsyncMock(return_value=([], []))
-        app.dependency_overrides[get_prediction_service] = lambda: mock_svc
+        app.dependency_overrides[get_prediction_review] = lambda: mock_svc
 
         mock_repo = MagicMock()
         mock_repo.get_review_action = AsyncMock(
@@ -747,13 +745,13 @@ class TestPredictionReviewRefreshEvent:
         )
         app.dependency_overrides[get_prediction_repository] = lambda: mock_repo
 
-        mock_storage = MagicMock()
-        mock_storage.capabilities = Capabilities(
-            can_list_samples=True, can_similarity=False
-        )
-        mock_factory = MagicMock()
-        mock_factory.open = AsyncMock(return_value=mock_storage)
-        app.dependency_overrides[get_dataset_storage_factory] = lambda: mock_factory
+        mock_reader = MagicMock()
+        mock_reader.get_dataset = AsyncMock(return_value=mock_repo.get_dataset.return_value)
+        app.dependency_overrides[get_dataset_reader] = lambda: mock_reader
+
+        mock_dataset_service = MagicMock()
+        mock_dataset_service.merge_label_space = AsyncMock()
+        app.dependency_overrides[get_dataset_service] = lambda: mock_dataset_service
 
         try:
             with TestClient(app) as c:
@@ -775,9 +773,10 @@ class TestPredictionReviewRefreshEvent:
                 mock_pub.publish_prediction_refresh.assert_not_awaited()
         finally:
             app.dependency_overrides.pop(prediction_get_publisher, None)
-            app.dependency_overrides.pop(get_prediction_service, None)
+            app.dependency_overrides.pop(get_prediction_review, None)
             app.dependency_overrides.pop(get_prediction_repository, None)
-            app.dependency_overrides.pop(get_dataset_storage_factory, None)
+            app.dependency_overrides.pop(get_dataset_reader, None)
+            app.dependency_overrides.pop(get_dataset_service, None)
 
 
 # ── Event Publisher Redis Integration (unit) ────────────────────────────────

@@ -33,9 +33,9 @@ from app.shared.api.schemas import (
 )
 from app.shared.db.registry import Base, OrganizationORM
 from app.shared.db.session import create_session_factory
-from app.shared.db.sql_repository import SqlRepository
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from platform_runtime.sparse import (
+from app.modules.storage.domain.sparse import (
     DatasetManifest,
     DatasetPayloadStore,
     SampleLocator,
@@ -80,7 +80,7 @@ async def _test_infra(request):
         await conn.run_sync(Base.metadata.create_all)
 
     session_factory = create_session_factory(engine)
-    repo = SqlRepository(session_factory)
+    repo = DatasetSqlRepository(session_factory)
     storage = InMemoryArtifactStorage()
     payload_store = DatasetPayloadStore(storage)
 
@@ -113,7 +113,7 @@ async def db_full_fixture(_test_infra: dict):  # type: ignore[return-type]  # py
 
     Returns (dataset_id, org_id).
     """
-    repo: SqlRepository = _test_infra["repo"]
+    repo: DatasetSqlRepository = _test_infra["repo"]
     org_id: str = _test_infra["org_id"]
 
     dataset_id = str(uuid4())
@@ -165,7 +165,7 @@ async def sparse_fixture(_test_infra: dict):  # type: ignore[return-type]  # pyt
 
     Returns (dataset_id, org_id).
     """
-    repo: SqlRepository = _test_infra["repo"]
+    repo: DatasetSqlRepository = _test_infra["repo"]
     payload_store: DatasetPayloadStore = _test_infra["payload_store"]
     org_id: str = _test_infra["org_id"]
 
@@ -305,6 +305,3 @@ def prediction_data() -> list[PredictionResult]:
             job_id="job-test-predict-001",
         ),
     ]
-
-
-

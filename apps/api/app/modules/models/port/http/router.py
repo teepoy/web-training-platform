@@ -1,6 +1,6 @@
 import base64
+import binascii
 from typing import Annotated, Any, cast
-from unittest.mock import Mock
 
 import httpx
 from fastapi import (
@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
 )
 
-from app.shared.api.schemas import Organization, User
+from app.shared.api.schemas import Organization, PaginatedResponse, User
 from app.shared.domain.protocols import ArtifactStorage
 from app.modules.auth.port.http.deps import (
     get_current_org,
@@ -26,7 +26,7 @@ from app.modules.models.port.http.schemas import (
     UpdateModelRequest,
     UploadTemplateProfileResponse,
 )
-from app.modules.models.app.services.model_service import ModelService
+from app.modules.models.port.local import ModelManagementPort
 from app.shared.application.compatibility import UPLOAD_TEMPLATE_DEFINITIONS
 from app.modules.models.port.http.deps import (
     get_artifact_storage,
@@ -37,7 +37,7 @@ from omegaconf import DictConfig
 
 router = APIRouter(prefix="/api/v1", tags=["models"])
 
-ModelServiceDep = Annotated[ModelService, Depends(get_model_service)]
+ModelServiceDep = Annotated[ModelManagementPort, Depends(get_model_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 
@@ -62,20 +62,27 @@ def _model_to_response(model) -> ModelResponse:
     )
 
 
-@router.get("/models", response_model=list[ModelResponse])
+@router.get("/models", response_model=PaginatedResponse[ModelResponse])
 async def list_models(
     model_service: ModelServiceDep,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     dataset_id: str | None = Query(default=None),
     job_id: str | None = Query(default=None),
-) -> list[ModelResponse]:
-    models = await model_service.list_models(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[ModelResponse]:
+    models, total = await model_service.list_models_paginated(
         org_id=org.id,
         dataset_id=dataset_id,
         job_id=job_id,
+        offset=offset,
+        limit=limit,
     )
-    return [_model_to_response(m) for m in models]
+    return PaginatedResponse(
+        items=[_model_to_response(model) for model in models],
+        total=total,
+    )
 
 
 @router.get("/models/{model_id}", response_model=ModelResponse)
@@ -199,10 +206,10 @@ async def resolve_image(
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(uri)
                 resp.raise_for_status()
-        except Exception:
+        except httpx.HTTPError as exc:
             raise HTTPException(
                 status_code=502, detail="failed to fetch image from Label Studio"
-            )
+            ) from exc
         content_type = resp.headers.get("content-type") or resp.headers.get(
             "Content-Type"
         )
@@ -221,20 +228,23 @@ async def resolve_image(
         try:
             header, encoded = uri.split(",", 1)
             mime_part = header.split(";")[0][len("data:") :]
-            data = base64.b64decode(encoded)
+            data = base64.b64decode(encoded, validate=True)
             return Response(
                 content=data, media_type=mime_part or "application/octet-stream"
             )
-        except Exception:
-            raise HTTPException(status_code=400, detail="malformed data URI")
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="malformed data URI",
+            ) from exc
     if uri.startswith("s3://") or uri.startswith("memory://"):
-        if isinstance(storage, Mock):
-            data = await storage.get_bytes(uri)
-            return Response(content=data, media_type="image/png")
         try:
             data = await storage.get_bytes(uri)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="image not found")
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="image not found",
+            ) from exc
         lower_uri = uri.lower()
         if lower_uri.endswith(".png"):
             media_type = "image/png"

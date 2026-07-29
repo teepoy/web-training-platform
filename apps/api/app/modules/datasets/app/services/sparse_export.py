@@ -26,7 +26,7 @@ from sqlalchemy import select
 
 from app.modules.sc.schema import find_images_by_role
 from app.shared.db.registry import AnnotationORM
-from platform_runtime.sparse import DatasetPayloadStore, SparseManifestReader
+from app.modules.storage.domain.sparse import DatasetPayloadStore, SparseManifestReader
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -138,6 +138,7 @@ class SparseExportAssembler:
                 if is_v2:
                     sample_row = self._assemble_v2_row(
                         row=row,
+                        dataset_id=dataset_id,
                         sample_id=sample_id,
                     )
                 else:
@@ -240,15 +241,10 @@ class SparseExportAssembler:
 
         Returns ``{sample_id: {predicted_label, ...}}``.
 
-        Gracefully returns empty dict when no prediction job exists,
-        the final accumulated file has no results, or the result file is
-        missing.
+        Returns an empty dict when no completed prediction file exists.
         """
         prefix = f"datasets/{org_id}/{dataset_id}/predictions/{_FINAL_PREDICTION_DIR}/"
-        try:
-            uris = await self._storage.list_prefix(prefix)
-        except Exception:
-            return {}
+        uris = await self._storage.list_prefix(prefix)
         accumulated_uris = [
             uri
             for uri in uris
@@ -265,10 +261,7 @@ class SparseExportAssembler:
             if not uri.endswith(".parquet"):
                 continue
 
-            try:
-                parquet_bytes = await self._storage.get_bytes(uri)
-            except (FileNotFoundError, ValueError, OSError):
-                continue
+            parquet_bytes = await self._storage.get_bytes(uri)
 
             table = _pq.read_table(_io.BytesIO(parquet_bytes))
             col = table.column
@@ -332,6 +325,7 @@ class SparseExportAssembler:
     def _assemble_v2_row(
         *,
         row: dict[str, object],
+        dataset_id: str,
         sample_id: str,
     ) -> dict:
         """Build an export row dict from a v2 shard row.
@@ -342,7 +336,9 @@ class SparseExportAssembler:
         images_list = SparseExportAssembler._parse_images_column(row.get("images"))
 
         # Build compact image references (no bytes, no source_uri).
-        image_refs = SparseExportAssembler._build_image_refs_v2(images_list, sample_id)
+        image_refs = SparseExportAssembler._build_image_refs_v2(
+            images_list, dataset_id, sample_id
+        )
 
         # Derive primary fields from role-matched images.
         review_imgs = find_images_by_role(images_list, "review")
@@ -354,21 +350,21 @@ class SparseExportAssembler:
             "defect_id": sample_id,
             "image_uri": (
                 SparseExportAssembler._make_sample_image_url(
-                    sample_id, str(review_imgs[0]["image_id"])
+                    dataset_id, sample_id, str(review_imgs[0]["image_id"])
                 )
                 if review_imgs
                 else None
             ),
             "defective_uri": (
                 SparseExportAssembler._make_sample_image_url(
-                    sample_id, str(defective_imgs[0]["image_id"])
+                    dataset_id, sample_id, str(defective_imgs[0]["image_id"])
                 )
                 if defective_imgs
                 else None
             ),
             "reference_uri": (
                 SparseExportAssembler._make_sample_image_url(
-                    sample_id, str(reference_imgs[0]["image_id"])
+                    dataset_id, sample_id, str(reference_imgs[0]["image_id"])
                 )
                 if reference_imgs
                 else None
@@ -381,6 +377,7 @@ class SparseExportAssembler:
     @staticmethod
     def _build_image_refs_v2(
         images_list: list[dict[str, object]],
+        dataset_id: str,
         sample_id: str,
     ) -> list[dict[str, object]]:
         """Convert v2 image structs into compact export references.
@@ -399,20 +396,20 @@ class SparseExportAssembler:
                     "content_type": str(img.get("content_type", "")),
                     "filename": str(img.get("filename", "")),
                     "access_url": SparseExportAssembler._make_sample_image_url(
-                        sample_id, image_id
+                        dataset_id, sample_id, image_id
                     ),
                 }
             )
         return refs
 
     @staticmethod
-    def _make_sample_image_url(sample_id: str, image_id: str) -> str:
+    def _make_sample_image_url(dataset_id: str, sample_id: str, image_id: str) -> str:
         """Build a storage-relative API access URL for a sample image.
 
         Uses sample identity (sample_id + image_id), not upstream
         object-store URIs.
         """
-        return f"/api/v1/samples/{sample_id}/images/{image_id}"
+        return f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}"
 
     @staticmethod
     def _parse_images_column(value: object) -> list[dict[str, object]]:

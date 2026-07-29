@@ -1,7 +1,6 @@
 """SC domain model definitions.
 
-Per CORE_DESIGNS.md §2: "Module domain model 归属所在 module. libs/platform-runtime
-只承载跨进程 shared contracts，不承载 SC 这类 module 私有 domain model."
+Per CORE_DESIGNS.md §2: module domain models live in the owning module.
 """
 
 from __future__ import annotations

@@ -26,14 +26,12 @@ class TestScImportRequest:
             source_wafer_key=1,
             dataset_name="Test",
             storage_mode="file_shard_sparse",
-            filters={"wafer_id": "W001"},
             label_space=["defect"],
         )
         assert req.source_inspection_time == "2024-01-15T08:30:00"
         assert req.source_wafer_key == 1
         assert req.dataset_name == "Test"
         assert req.storage_mode == "file_shard_sparse"
-        assert req.filters == {"wafer_id": "W001"}
         assert req.label_space == ["defect"]
 
     def test_default_storage_mode(self) -> None:
@@ -52,7 +50,7 @@ class TestScImportRequest:
                 source_inspection_time="2024-01-15T08:30:00",
                 source_wafer_key=1,
                 dataset_name="Test",
-                storage_mode="invalid",
+                storage_mode="invalid",  # pyright: ignore[reportArgumentType]
             )
 
     def test_empty_dataset_name_raises_validation_error(self) -> None:

@@ -2,8 +2,7 @@
 import { ref } from "vue";
 import { useMessage, NInput, NButton, NSpace, NAlert } from "naive-ui";
 import type { PreviewLauncherRequiredProps } from "@/shared/widgets/sdk";
-import { createPreviewSessionApiV1PreviewSessionsPost } from "@/generated/orval/endpoints/api";
-import type { PreviewSessionResponse } from "@/generated/orval/models";
+import { createPreviewSession } from "@/shared/api/preview";
 
 const props = defineProps<PreviewLauncherRequiredProps>();
 
@@ -18,8 +17,7 @@ async function handlePreview() {
   }
   isLoading.value = true;
   try {
-    const { data } = await createPreviewSessionApiV1PreviewSessionsPost({ collection_ref: collectionRef.value.trim() });
-    const session = data as PreviewSessionResponse;
+    const session = await createPreviewSession(collectionRef.value.trim());
     props.onComplete({ sessionId: session.session_id });
   } catch (err) {
     const error = err instanceof Error ? err.message : "Failed to start preview";
@@ -44,12 +42,8 @@ async function handlePreview() {
     />
 
     <NSpace justify="end">
-      <NButton :disabled="isLoading" @click="props.onCancel">
-        Cancel
-      </NButton>
-      <NButton type="primary" :loading="isLoading" @click="handlePreview">
-        Start Preview
-      </NButton>
+      <NButton :disabled="isLoading" @click="props.onCancel"> Cancel </NButton>
+      <NButton type="primary" :loading="isLoading" @click="handlePreview"> Start Preview </NButton>
     </NSpace>
   </NSpace>
 </template>

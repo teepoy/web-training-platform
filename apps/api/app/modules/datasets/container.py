@@ -2,50 +2,118 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-from app.modules.datasets.app.services.dataset_capability_guard import (
-    assert_not_sparse,
+from injector import Module, inject, provider, singleton
+
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+    DatasetSqlRepository,
+)
+from app.shared.adapter.repositories.artifact_lookup_repository import (
+    ArtifactSqlLookupRepository,
 )
 from app.modules.datasets.app.services.dataset_service import DatasetService
-from platform_runtime.sparse import DatasetPayloadStore
-from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.datasets.app.services.sample_similarity import SampleSimilarityService
+from app.modules.datasets.domain.repository import (
+    ArtifactLookupRepository,
+    DatasetRepository,
+)
 from app.modules.datasets.port.dataset_reader import DatasetReader
+from app.modules.datasets.port.local import IDatasetService, SampleSimilarityPort
+from app.modules.storage.container import StorageContext
 from app.shared.context import SharedInfra
-from app.shared.db.sql_repository import SqlRepository
 
 
 @dataclass
 class DatasetsContext:
     dataset_repository: DatasetRepository
+    artifact_lookup_repository: ArtifactLookupRepository
     dataset_reader: DatasetReader
-    dataset_payload_store: DatasetPayloadStore
     dataset_service: DatasetService
-    dataset_storage_factory: DatasetStorageFactory
+    sample_similarity_service: SampleSimilarityService
 
 
-def init_datasets(shared: SharedInfra) -> DatasetsContext:
-    repo = SqlRepository(session_factory=shared.session_factory)
-    store = DatasetPayloadStore(storage=shared.artifact_storage)
-    storage_factory = DatasetStorageFactory(
-        repo=repo,
-        storage=shared.artifact_storage,
-        payload_store=store,
-        ls_client=shared.label_studio_client,
-        session_factory=shared.session_factory,
-    )
+def init_datasets(
+    shared: SharedInfra,
+    *,
+    repository: DatasetSqlRepository,
+    artifact_lookup_repository: ArtifactLookupRepository,
+    storage: StorageContext,
+) -> DatasetsContext:
     dataset_service = DatasetService(
-        repository=repo,
-        storage_factory=storage_factory,
-        ls_client=shared.label_studio_client,
-        storage=shared.artifact_storage,
-        payload_store=store,
-        capability_guard=assert_not_sparse,
+        repository=repository,
+        storage_factory=storage.dataset_storage_factory,
+        payload_store=storage.dataset_payload_store,
         config=shared.config,
     )
-    return DatasetsContext(
-        dataset_repository=repo,
-        dataset_reader=repo,
-        dataset_payload_store=store,
-        dataset_service=dataset_service,
-        dataset_storage_factory=storage_factory,
+    sample_similarity_service = SampleSimilarityService(
+        storage_factory=storage.dataset_storage_factory
     )
+    return DatasetsContext(
+        dataset_repository=repository,
+        artifact_lookup_repository=artifact_lookup_repository,
+        dataset_reader=repository,
+        dataset_service=dataset_service,
+        sample_similarity_service=sample_similarity_service,
+    )
+
+
+class DatasetsModule(Module):
+    @inject
+    @provider
+    @singleton
+    def provide_artifact_lookup_repository_impl(
+        self, shared: SharedInfra
+    ) -> ArtifactSqlLookupRepository:
+        return ArtifactSqlLookupRepository(
+            session_factory=shared.session_factory.sessionmaker
+        )
+
+    @inject
+    @provider
+    @singleton
+    def provide_datasets_context(
+        self,
+        shared: SharedInfra,
+        repository: DatasetSqlRepository,
+        artifact_lookup_repository: ArtifactSqlLookupRepository,
+        storage: StorageContext,
+    ) -> DatasetsContext:
+        return init_datasets(
+            shared,
+            repository=repository,
+            artifact_lookup_repository=artifact_lookup_repository,
+            storage=storage,
+        )
+
+    @provider
+    @singleton
+    def provide_dataset_service(self, context: DatasetsContext) -> DatasetService:
+        return context.dataset_service
+
+    @provider
+    @singleton
+    def provide_dataset_service_port(self, context: DatasetsContext) -> IDatasetService:
+        return context.dataset_service
+
+    @provider
+    @singleton
+    def provide_sample_similarity_port(
+        self, context: DatasetsContext
+    ) -> SampleSimilarityPort:
+        return context.sample_similarity_service
+
+    @provider
+    @singleton
+    def provide_dataset_repository(self, context: DatasetsContext) -> DatasetRepository:
+        return context.dataset_repository
+
+    @provider
+    @singleton
+    def provide_artifact_lookup_repository(
+        self, context: DatasetsContext
+    ) -> ArtifactLookupRepository:
+        return context.artifact_lookup_repository
+
+    @provider
+    @singleton
+    def provide_dataset_reader(self, context: DatasetsContext) -> DatasetReader:
+        return context.dataset_reader

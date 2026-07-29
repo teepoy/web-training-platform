@@ -1,7 +1,8 @@
-# pyright: reportMissingImports=false
+from __future__ import annotations
 
 import io
 import logging
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -14,7 +15,7 @@ from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
 )
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.port.http.deps import (
     get_artifact_storage,
     get_dataset_storage_factory,
@@ -32,6 +33,7 @@ from app.shared.sse.events import (
 
 router = APIRouter(prefix="/api/v1/plugins/export-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
+_EXPORT_PAGE_SIZE = 1000
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -44,6 +46,25 @@ def _build_image_struct(path: str, image_bytes: bytes | None = None) -> dict:
         "bytes": image_bytes,
         "path": path,
     }
+
+
+async def _list_all_samples_with_labels(ds_storage: Any) -> list[Any]:
+    rows: list[Any] = []
+    offset = 0
+    while True:
+        page, total = await ds_storage.list_samples(
+            offset=offset,
+            limit=_EXPORT_PAGE_SIZE,
+            with_labels=True,
+        )
+        rows.extend(page)
+        offset += len(page)
+        if offset >= total:
+            return rows
+        if not page:
+            raise RuntimeError(
+                "Dataset storage returned an empty page before the reported total"
+            )
 
 
 @router.post("/export")
@@ -60,13 +81,7 @@ async def export_parquet(
         raise HTTPException(status_code=404, detail="dataset not found")
 
     ds_storage = await factory.open(dataset_id, org_id=org.id)
-    rows, _ = await ds_storage.list_samples(limit=100_000)
-
-    annotated_rows, _ = await ds_storage.list_samples(limit=100_000, with_labels=True)
-    annotations_by_sample: dict[str, list[str]] = {}
-    for r in annotated_rows:
-        if r.latest_label is not None:
-            annotations_by_sample.setdefault(r.sample_id, []).append(r.latest_label)
+    rows = await _list_all_samples_with_labels(ds_storage)
 
     image_arrays: list[list[dict]] = []
     label_arrays: list[str | None] = []
@@ -76,8 +91,7 @@ async def export_parquet(
         image_structs = [_build_image_struct(uri) for uri in row.image_uris]
         image_arrays.append(image_structs if image_structs else [{}])
 
-        labels = annotations_by_sample.get(row.sample_id, [])
-        label_arrays.append(labels[0] if labels else None)
+        label_arrays.append(row.latest_label)
 
         md = {k: v for k, v in row.metadata.items()} if row.metadata else {}
         metadata_arrays.append(md)

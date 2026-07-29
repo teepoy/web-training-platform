@@ -29,4 +29,29 @@ describe("useBlinkVirtualScroll", () => {
     expect(measure).toHaveBeenCalled();
     scope.stop();
   });
+
+  it("uses global offsets and totals for a pre-filtered paged review window", () => {
+    const scope = effectScope();
+
+    scope.run(() => {
+      const { samplesForVirtualRow, virtualizer } = useBlinkVirtualScroll({
+        samples: ref([
+          { defectId: 1_001, reviewImages: [1] },
+          { defectId: 1_002, reviewImages: [1] },
+        ]),
+        mode: ref("review"),
+        patchPerRow: ref(2),
+        reviewPerRow: ref(2),
+        totalSamples: ref(300_000),
+        sampleOffset: ref(1_000),
+        reviewSamplesArePreFiltered: true,
+      });
+
+      expect(samplesForVirtualRow(499)).toEqual([]);
+      expect(samplesForVirtualRow(500).map((sample) => sample.defectId)).toEqual([1_001, 1_002]);
+      expect(virtualizer.value.getTotalSize()).toBe(150_000 * 156);
+    });
+
+    scope.stop();
+  });
 });

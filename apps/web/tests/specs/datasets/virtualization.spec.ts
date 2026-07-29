@@ -4,16 +4,16 @@
  * Verifies that the shared sample browser renders only a bounded subset
  * of DOM nodes when loaded with a large item set (200 items → < 50 nodes).
  *
- * @mock — uses authedPage (auto mock) + apiMocks dataset handlers.
+ * @legacy — uses authedPage (auto mock) + apiMocks dataset handlers.
  */
-import { test, expect } from '../../fixtures';
-import { DatasetSamplesPage } from '../../pages/datasets/DatasetSamplesPage';
-import { makeSamples } from '../../mocks/factories';
+import { test, expect } from "../../fixtures";
+import { DatasetSamplesPage } from "../../pages/datasets/DatasetSamplesPage";
+import { makeSamples } from "../../mocks/factories";
 
-const datasetId = 'dataset-virt-1';
+const datasetId = "dataset-virt-1";
 
-test.describe('shared browser virtualization', () => {
-  test('renders only a bounded subset of nodes for large item sets @mock', async ({
+test.describe("shared browser virtualization", () => {
+  test("renders only a bounded subset of nodes for large item sets @legacy", async ({
     authedPage,
     apiMocks,
   }) => {

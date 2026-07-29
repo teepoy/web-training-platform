@@ -12,26 +12,20 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker
-
 from app.modules.agent.port.http.schemas import AgentContext, AgentPanelDescriptor
 from app.shared.api.schemas import WaferPoint, WaferPointsResponse  # noqa: F401
-from app.shared.db.registry import AnnotationORM, SampleORM
 from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
-    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-    from app.shared.db.sql_repository import SqlRepository
-    from app.modules.models.app.services.model_service import ModelService
-    from app.modules.training.app.services.orchestrator import (
-        TrainingOrchestrator,
-    )
-    from app.modules.prediction.app.services.prediction_orchestrator import (
-        PredictionOrchestrator,
-    )
-    from app.modules.schedules.app.services.scheduler import SchedulerService
+    from app.modules.datasets.domain.repository import DatasetRepository
+    from app.modules.storage.port.local import DatasetStorageFactoryPort
+    from app.modules.models.port.local import ModelCatalogPort
+    from app.modules.prediction.domain.repository import PredictionRepository
+    from app.modules.prediction.port.local import PredictionExecutionPort
+    from app.modules.jobs.schedules.port.local import ScheduleManagementPort
+    from app.modules.training.port.local import TrainingExecutionPort
+    from app.modules.training.domain.repository import TrainingRepository
 
 _logger = logging.getLogger(__name__)
 
@@ -306,7 +300,7 @@ MAX_PANELS = 8
 
 
 async def execute_list_datasets(
-    *, repository: SqlRepository, org_id: str
+    *, repository: DatasetRepository, org_id: str
 ) -> dict[str, Any]:
     datasets = await repository.list_datasets(org_id=org_id)
     return {
@@ -326,18 +320,17 @@ async def execute_list_datasets(
 async def execute_get_dataset(
     *,
     dataset_id: str,
-    repository: SqlRepository,
-    factory: DatasetStorageFactory | None = None,
+    repository: DatasetRepository,
+    factory: DatasetStorageFactoryPort | None = None,
     org_id: str,
 ) -> dict[str, Any]:
     dataset = await repository.get_dataset(dataset_id, org_id=org_id)
     if dataset is None:
         return {"error": f"Dataset '{dataset_id}' not found"}
-    if factory is not None:
-        storage = await factory.open(dataset_id, org_id)
-        stats = await storage.get_annotation_stats()
-    else:
-        stats = await repository.get_annotation_stats(dataset_id)
+    if factory is None:
+        return {"error": "DatasetStorageFactory not configured"}
+    storage = await factory.open(dataset_id, org_id)
+    stats = await storage.get_annotation_stats()
     task_spec = dataset.task_spec
     label_space: list[str] = []
     if task_spec and hasattr(task_spec, "label_space"):
@@ -359,7 +352,7 @@ async def execute_get_dataset(
 
 async def execute_list_training_jobs(
     *,
-    repository: SqlRepository,
+    repository: TrainingRepository,
     org_id: str,
     dataset_id: str | None = None,
     status: str | None = None,
@@ -385,7 +378,7 @@ async def execute_list_training_jobs(
 
 
 async def execute_get_training_job(
-    *, job_id: str, repository: SqlRepository, org_id: str
+    *, job_id: str, repository: TrainingRepository, org_id: str
 ) -> dict[str, Any]:
     job = await repository.get_job(job_id, org_id=org_id)
     if job is None:
@@ -403,15 +396,12 @@ async def execute_get_training_job(
 async def execute_list_trainers(*, trainer_registry: Any = None) -> dict[str, Any]:
     from app.modules.types import catalog
 
-    trainers = [
-        catalog.get_trainer_meta(trainer_id)
-        for trainer_id in catalog.list_trainer_ids()
-    ]
+    trainers = catalog.list_trainers()
     return {
         "trainers": [
             {
-                "id": t["id"],
-                "name": t["name"],
+                "id": t.id,
+                "name": t.name,
                 "trainable": True,
             }
             for t in trainers
@@ -421,7 +411,7 @@ async def execute_list_trainers(*, trainer_registry: Any = None) -> dict[str, An
 
 
 async def execute_list_models(
-    *, model_service: ModelService, org_id: str, dataset_id: str | None = None
+    *, model_service: ModelCatalogPort, org_id: str, dataset_id: str | None = None
 ) -> dict[str, Any]:
     models = await model_service.list_models(org_id=org_id, dataset_id=dataset_id)
     return {
@@ -442,7 +432,7 @@ async def execute_list_models(
 
 
 async def execute_list_prediction_jobs(
-    *, repository: SqlRepository, org_id: str
+    *, repository: PredictionRepository, org_id: str
 ) -> dict[str, Any]:
     jobs = await repository.list_prediction_jobs(org_id=org_id)
     return {
@@ -462,7 +452,7 @@ async def execute_list_prediction_jobs(
 
 
 async def execute_list_schedules(
-    *, scheduler_service: SchedulerService, org_id: str
+    *, scheduler_service: ScheduleManagementPort, org_id: str
 ) -> dict[str, Any]:
     schedules = await scheduler_service.list_schedules(org_id=org_id)
     return {
@@ -480,10 +470,13 @@ async def execute_list_schedules(
 
 
 async def execute_get_dashboard(
-    *, repository: SqlRepository, org_id: str
+    *,
+    dataset_repository: DatasetRepository,
+    training_repository: TrainingRepository,
+    org_id: str,
 ) -> dict[str, Any]:
-    datasets = await repository.list_datasets(org_id=org_id)
-    jobs = await repository.list_jobs(org_id=org_id)
+    datasets = await dataset_repository.list_datasets(org_id=org_id)
+    jobs = await training_repository.list_jobs(org_id=org_id)
     running = [j for j in jobs if str(j.status).lower() == "running"]
     completed = [j for j in jobs if str(j.status).lower() == "completed"]
     failed = [j for j in jobs if str(j.status).lower() == "failed"]
@@ -501,8 +494,7 @@ async def execute_query_data(
     dataset_id: str,
     query_type: str,
     params: dict[str, Any] | None,
-    factory: DatasetStorageFactory,
-    session_factory: async_sessionmaker | None = None,
+    factory: DatasetStorageFactoryPort,
     org_id: str,
 ) -> dict[str, Any]:
     storage = await factory.open(dataset_id, org_id)
@@ -541,9 +533,8 @@ async def execute_query_data(
         key = params.get("key")
         if not key:
             return {"error": "params.key is required for metadata-histogram"}
-        if session_factory is None:
-            return {"error": "metadata-histogram requires session_factory"}
-        return await _metadata_histogram(dataset_id, key, session_factory)
+        result = await storage.metadata_histogram(str(key))
+        return {"bins": result.get("histogram", [])}
 
     if query_type == "recent-annotations":
         limit = min(int(params.get("limit", 20)), 100)
@@ -553,9 +544,7 @@ async def execute_query_data(
         return await storage.prediction_summary()
 
     if query_type == "wafer-points":
-        if session_factory is None:
-            return {"error": "wafer-points requires session_factory"}
-        return await _wafer_points(dataset_id, session_factory)
+        return await storage.wafer_points()
 
     return {"error": f"Unknown query_type: {query_type}"}
 
@@ -575,52 +564,6 @@ def _rows_to_dicts(rows: list[Any]) -> list[dict[str, Any]]:
     return result
 
 
-async def _metadata_histogram(
-    dataset_id: str,
-    key: str,
-    session_factory: async_sessionmaker,
-) -> dict[str, Any]:
-    """Self-implemented metadata histogram via direct SQLAlchemy query."""
-    async with session_factory() as session:
-        val_col = func.json_extract(SampleORM.metadata_json, f"$.{key}").label("val")
-        stmt = (
-            select(val_col, func.count())
-            .where(SampleORM.dataset_id == dataset_id)
-            .group_by(val_col)
-            .order_by(func.count().desc())
-        )
-        rows = (await session.execute(stmt)).all()
-        return {
-            "bins": [
-                {"value": row[0], "count": row[1]}
-                for row in rows
-            ]
-        }
-
-
-async def _wafer_points(
-    dataset_id: str,
-    session_factory: async_sessionmaker,
-) -> dict[str, Any]:
-    """Self-implemented wafer points via direct SQLAlchemy query."""
-    async with session_factory() as session:
-        stmt = (
-            select(SampleORM.id, SampleORM.metadata_json)
-            .where(SampleORM.dataset_id == dataset_id)
-        )
-        rows = (await session.execute(stmt)).all()
-        points: list[dict[str, Any]] = []
-        for row in rows:
-            metadata = row[1] or {}
-            x = float(str(metadata.get("x", 0.0)))
-            y = float(str(metadata.get("y", 0.0)))
-            points.append({"id": str(row[0]), "x": x, "y": y})
-        return {
-            "points": points,
-            "total": len(points),
-        }
-
-
 # ---------------------------------------------------------------------------
 # Tool implementations — writes
 # ---------------------------------------------------------------------------
@@ -631,7 +574,7 @@ async def execute_create_dataset(
     name: str,
     label_space: list[str],
     task_type: str | None,
-    repository: SqlRepository,
+    repository: DatasetRepository,
     org_id: str,
     label_studio_client: LabelStudioClient,
     user_id: str,
@@ -674,29 +617,35 @@ async def execute_start_training_job(
     *,
     dataset_id: str,
     trainer_id: str,
-    repository: SqlRepository,
     org_id: str,
-    orchestrator: TrainingOrchestrator,
+    orchestrator: TrainingExecutionPort,
     user_id: str,
 ) -> dict[str, Any]:
-    from app.modules.types import catalog
-    from app.shared.api.schemas import TrainingJob
-
-    dataset = await repository.get_dataset(dataset_id, org_id=org_id)
-    if dataset is None:
-        return {"error": f"Dataset '{dataset_id}' not found"}
-    try:
-        catalog.get_trainer_meta(trainer_id)
-    except KeyError:
-        return {"error": f"Trainer '{trainer_id}' not found"}
-
-    job = TrainingJob(
-        dataset_id=dataset_id,
-        trainer_id=trainer_id,
-        created_by=user_id,
-        org_id=org_id,
+    from app.modules.datasets.port.local import DatasetCompatibilityError
+    from app.modules.training.domain.submission import (
+        TrainingDatasetNotFoundError,
+        TrainingJobCommand,
+        TrainingRuntimeUnavailableError,
+        TrainingSubmissionError,
     )
-    started = await orchestrator.start_job(job)
+
+    try:
+        started = await orchestrator.submit_job(
+            TrainingJobCommand(
+                dataset_id=dataset_id,
+                trainer_id=trainer_id,
+                created_by=user_id,
+                org_id=org_id,
+            )
+        )
+    except (
+        TrainingDatasetNotFoundError,
+        DatasetCompatibilityError,
+        TrainingRuntimeUnavailableError,
+        TrainingSubmissionError,
+        ValueError,
+    ) as exc:
+        return {"error": str(exc)}
     return {
         "id": started.id,
         "status": str(started.status),
@@ -710,26 +659,39 @@ async def execute_run_predictions(
     dataset_id: str,
     model_id: str,
     target: str | None,
-    repository: SqlRepository,
     org_id: str,
-    prediction_orchestrator: PredictionOrchestrator,
+    prediction_orchestrator: PredictionExecutionPort,
     user_id: str,
 ) -> dict[str, Any]:
     """Run predictions on a dataset."""
-    from app.shared.api.schemas import PredictionJob
-
-    dataset = await repository.get_dataset(dataset_id, org_id=org_id)
-    if dataset is None:
-        return {"error": f"Dataset '{dataset_id}' not found"}
-
-    job = PredictionJob(
-        dataset_id=dataset_id,
-        model_id=model_id,
-        created_by=user_id,
-        target=target or "image_classification",
-        org_id=org_id,
+    from app.modules.datasets.port.local import DatasetCompatibilityError
+    from app.modules.prediction.domain.submission import (
+        PredictionJobCommand,
+        PredictionResourceNotFoundError,
+        PredictionRuntimeUnavailableError,
+        PredictionSubmissionError,
+        PredictionSubmissionRejectedError,
     )
-    started = await prediction_orchestrator.start_job(job)
+
+    try:
+        started = await prediction_orchestrator.submit_job(
+            PredictionJobCommand(
+                dataset_id=dataset_id,
+                model_id=model_id,
+                created_by=user_id,
+                target=target or "image_classification",
+                org_id=org_id,
+            )
+        )
+    except (
+        DatasetCompatibilityError,
+        PredictionResourceNotFoundError,
+        PredictionRuntimeUnavailableError,
+        PredictionSubmissionError,
+        PredictionSubmissionRejectedError,
+        ValueError,
+    ) as exc:
+        return {"error": str(exc)}
     return {
         "id": started.id,
         "status": str(started.status),
@@ -745,7 +707,7 @@ async def execute_create_schedule(
     cron: str,
     parameters: dict[str, Any] | None,
     description: str | None,
-    scheduler_service: SchedulerService,
+    scheduler_service: ScheduleManagementPort,
     org_id: str,
     user_id: str,
 ) -> dict[str, Any]:
@@ -773,8 +735,8 @@ async def execute_create_schedule(
 async def execute_cancel_training_job(
     *,
     job_id: str,
-    orchestrator: TrainingOrchestrator,
-    repository: SqlRepository,
+    orchestrator: TrainingExecutionPort,
+    repository: TrainingRepository,
     org_id: str,
 ) -> dict[str, Any]:
     """Cancel a running training job."""

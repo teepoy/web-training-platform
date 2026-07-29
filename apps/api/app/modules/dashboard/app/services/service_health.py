@@ -3,9 +3,10 @@ from __future__ import annotations
 import time
 
 import httpx
-from omegaconf import DictConfig
+from injector import inject
 from pydantic import BaseModel
 
+from app.core.config import AppConfig
 from app.shared.domain.protocols import PrefectClient
 
 
@@ -19,9 +20,10 @@ class ServiceCheckResult(BaseModel):
 
 
 class ServiceHealthService:
+    @inject
     def __init__(
         self,
-        config: DictConfig,
+        config: AppConfig,
         prefect_client: PrefectClient,
     ) -> None:
         self._config = config

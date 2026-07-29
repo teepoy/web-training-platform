@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
 from typing import Any
 
 from fastapi import HTTPException
-from omegaconf import DictConfig
-from platform_runtime.sparse import DatasetPayloadStore
+from injector import inject
+from app.modules.storage.domain.sparse import DatasetPayloadStore
 
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.core.config import AppConfig
+from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.shared.api.schemas import (
     Annotation,
@@ -15,28 +16,24 @@ from app.shared.api.schemas import (
     DatasetStorageMode,
     SPARSE_NO_LS,
 )
-from app.shared.domain.protocols import ArtifactStorage, LabelStudioClient
 from app.shared.infrastructure.label_studio.client import ls_annotation_to_platform
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 
+_EXPORT_SAMPLE_PAGE_SIZE = 1000
+
 
 class DatasetService:
+    @inject
     def __init__(
         self,
         repository: DatasetRepository,
         storage_factory: DatasetStorageFactory,
-        ls_client: LabelStudioClient,
-        storage: ArtifactStorage,
         payload_store: DatasetPayloadStore,
-        capability_guard: Callable[[Dataset], None],
-        config: DictConfig,
+        config: AppConfig,
     ) -> None:
         self._repository = repository
         self._storage_factory = storage_factory
-        self._ls_client = ls_client
-        self._storage = storage
         self._payload_store = payload_store
-        self._capability_guard = capability_guard
         self._config = config
 
     def to_response(self, dataset: Dataset) -> Dataset:
@@ -66,13 +63,30 @@ class DatasetService:
             if dataset.storage_mode == DatasetStorageMode.DB_FULL
         ]
         db_counts = await self._repository.count_samples_by_dataset(db_full_ids)
+        sparse_datasets = [
+            dataset
+            for dataset in datasets
+            if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
+        ]
+        sparse_counts = dict(
+            zip(
+                (dataset.id for dataset in sparse_datasets),
+                await asyncio.gather(
+                    *(
+                        self._resolve_sample_count(dataset)
+                        for dataset in sparse_datasets
+                    )
+                ),
+                strict=True,
+            )
+        )
 
         responses: list[Dataset] = []
         for dataset in datasets:
             if dataset.storage_mode == DatasetStorageMode.DB_FULL:
                 sample_count = db_counts.get(dataset.id, 0)
             else:
-                sample_count = await self._resolve_sample_count(dataset)
+                sample_count = sparse_counts[dataset.id]
             responses.append(self._with_list_sample_count(dataset, sample_count))
         return responses
 
@@ -86,14 +100,15 @@ class DatasetService:
         )
 
     async def _resolve_sample_count(self, dataset: Dataset) -> int:
+        if not dataset.org_id:
+            raise RuntimeError(
+                f"Dataset is missing required organization ownership: {dataset.id}"
+            )
         if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-            try:
-                manifest = await self._payload_store.get_manifest(
-                    dataset.id,
-                    dataset.org_id or "",
-                )
-            except (FileNotFoundError, KeyError):
-                return 0
+            manifest = await self._payload_store.get_manifest(
+                dataset.id,
+                dataset.org_id,
+            )
             return int(manifest.total_rows)
 
         storage = await self._storage_factory.open(dataset.id, dataset.org_id)
@@ -103,11 +118,12 @@ class DatasetService:
     async def build_export_data(
         self,
         dataset_id: str,
+        org_id: str,
         ls_read_repository: LsReadRepository,
     ):
         """Return (dataset, samples, annotations) sourced from Label Studio read DB."""
         repo = self._repository
-        dataset = await repo.get_dataset(dataset_id)
+        dataset = await repo.get_dataset(dataset_id, org_id=org_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="dataset not found")
 
@@ -117,16 +133,26 @@ class DatasetService:
                 detail="Dataset has no Label Studio project — cannot export.",
             )
 
-        try:
-            storage = await self._storage_factory.open(
-                dataset_id, org_id=dataset.org_id or ""
+        storage = await self._storage_factory.open(dataset_id, org_id=org_id)
+        task_id_to_sample: dict[int, Any] = {}
+        offset = 0
+        while True:
+            page, total = await storage.list_samples(
+                offset=offset,
+                limit=_EXPORT_SAMPLE_PAGE_SIZE,
             )
-            all_samples, _ = await storage.list_samples(limit=100_000)
-            task_id_to_sample: dict[int, Any] = {}
-            for s in all_samples:
-                if hasattr(s, "ls_task_id") and s.ls_task_id is not None:
-                    task_id_to_sample[s.ls_task_id] = s
+            for sample in page:
+                if sample.ls_task_id is not None:
+                    task_id_to_sample[sample.ls_task_id] = sample
+            offset += len(page)
+            if offset >= total:
+                break
+            if not page:
+                raise RuntimeError(
+                    "Dataset storage returned an empty page before the reported total"
+                )
 
+        try:
             ls_tasks = await ls_read_repository.get_tasks_for_project(
                 int(dataset.ls_project_id)
             )
@@ -136,40 +162,39 @@ class DatasetService:
                 if task_ids
                 else {}
             )
-
-            samples_out: list[Any] = []
-            annotations_out: list[Annotation] = []
-
-            for ls_task in ls_tasks:
-                task_id = ls_task["id"]
-                platform_sample = task_id_to_sample.get(task_id)
-                if platform_sample is None:
-                    continue
-                samples_out.append(platform_sample)
-
-                for ls_ann in ls_annotations.get(task_id, []):
-                    result = ls_ann.get("result", [])
-                    label = ls_annotation_to_platform(result)
-                    if label:
-                        annotations_out.append(
-                            Annotation(
-                                sample_id=platform_sample.id,
-                                label=label,
-                                created_by="label_studio",
-                            )
-                        )
-
-            return dataset, samples_out, annotations_out
-
-        except HTTPException:
-            raise
         except Exception as exc:
             raise HTTPException(
                 status_code=502, detail=f"Label Studio database read failed: {exc}"
-            )
+            ) from exc
+
+        samples_out: list[Any] = []
+        annotations_out: list[Annotation] = []
+        for ls_task in ls_tasks:
+            task_id = ls_task["id"]
+            platform_sample = task_id_to_sample.get(task_id)
+            if platform_sample is None:
+                continue
+            samples_out.append(platform_sample)
+
+            for ls_ann in ls_annotations.get(task_id, []):
+                result = ls_ann.get("result", [])
+                label = ls_annotation_to_platform(result)
+                if label:
+                    annotations_out.append(
+                        Annotation(
+                            sample_id=platform_sample.id,
+                            label=label,
+                            created_by="label_studio",
+                        )
+                    )
+
+        return dataset, samples_out, annotations_out
 
     async def merge_label_space(
-        self, dataset_id: str, incoming_labels: set[str]
+        self,
+        dataset_id: str,
+        org_id: str,
+        incoming_labels: set[str],
     ) -> bool:
         """Merge new labels into the dataset's task_spec.label_space.
 
@@ -183,7 +208,7 @@ class DatasetService:
         if not incoming_labels:
             return False
 
-        dataset = await self._repository.get_dataset(dataset_id)
+        dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
         if dataset is None:
             return False
 
@@ -195,6 +220,8 @@ class DatasetService:
         merged = sorted(existing | incoming_labels)
         updated = dataset.task_spec.model_copy(update={"label_space": merged})
         await self._repository.update_dataset_meta(
-            dataset_id, updated.model_dump(mode="json")
+            dataset_id,
+            updated.model_dump(mode="json"),
+            org_id=org_id,
         )
         return True

@@ -12,38 +12,38 @@ from __future__ import annotations
 import base64
 import inspect
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from typing import Any, cast
 
 import asyncstdlib as a
 from prefect import flow, get_run_logger, task
-from sqlalchemy import or_, select, text
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from platform_runtime.contracts import (
+from app.shared.domain.runtime import (
     BatchPredictResult,
     DatasetRef,
     ModelRef,
     PredictContext,
 )
 
-from app.composition import AppContainer, build_flow_container
+from app.composition import build_flow_app_context, close_flow_app_context
 from app.core.config import load_config
 from app.modules.datasets.domain.sample_row import (
     PredictionResult as StoragePredictionResult,
 )
-from app.modules.prediction.flows._predictors import get_predictor
+from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.types import catalog
 
+from app.shared.context import AppContext
 from app.shared.api.schemas import (
     Dataset,
     DatasetStorageMode,
     JobStatus,
     Model,
     PredictionEvent,
-    SampleFeature,
     TaskSpec,
 )
 
@@ -53,40 +53,26 @@ from app.shared.db.models import (
     DatasetORM,
     PredictionEventORM,
     PredictionJobORM,
-    SampleFeatureORM,
     SampleORM,
     TrainingJobORM,
 )
-from app.shared.db.sql_repository import SqlRepository
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 
 PREDICTION_PROGRESS_FLUSH_EVERY = 50
 PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
 
 
-@asynccontextmanager
-async def _flow_redis_event_publisher(
-    container: AppContainer,
-) -> AsyncIterator[RedisEventPublisher]:
-    import redis.asyncio as redis_client  # type: ignore[import-untyped]
+def get_predictor(predictor_id: str) -> Any:
+    """Lazy worker-boundary import kept patchable for flow tests."""
 
-    cfg = container.config
-    redis = redis_client.Redis(
-        host=str(cfg.redis.host),
-        port=int(cfg.redis.port),
-        password=str(cfg.redis.password) if cfg.redis.password else None,
-        db=int(cfg.redis.db),
-        socket_connect_timeout=1,
-        socket_timeout=1,
-    )
-    try:
-        await redis.ping()  # type: ignore[awaitable]
-        yield RedisEventPublisher(cast(Any, redis))
-    except Exception:
-        yield RedisEventPublisher(None)
-    finally:
-        await redis.aclose()
+    from app.runtime_compat.ml.predictors import get_predictor as load_predictor
+
+    return load_predictor(predictor_id)
+
+
+def _dataset_storage_factory(ctx: AppContext) -> DatasetStorageFactoryPort:
+    if ctx.injector is None:
+        raise RuntimeError("AppContext injector was not initialized")
+    return ctx.injector.get(DatasetStorageFactoryPort)
 
 
 @dataclass
@@ -189,56 +175,6 @@ class PredictionRepository:
             )
             await session.commit()
 
-    async def get_sample_feature(self, sample_id: str) -> SampleFeature | None:
-        async with self.session_factory() as session:
-            row = await session.get(SampleFeatureORM, sample_id)
-            if row is None:
-                return None
-            return SampleFeature(
-                sample_id=row.sample_id,
-                embedding=row.embedding,
-                embed_model=row.embed_model,
-                computed_at=row.computed_at,
-            )
-
-    async def upsert_sample_feature(
-        self, sample_id: str, embedding: list[float], embed_model: str
-    ) -> SampleFeature:
-        now = datetime.now(timezone.utc)
-        async with self.session_factory() as session:
-            row = await session.get(SampleFeatureORM, sample_id)
-            if row is None:
-                row = SampleFeatureORM(
-                    sample_id=sample_id,
-                    embedding=embedding,
-                    embed_model=embed_model,
-                    computed_at=now,
-                )
-                session.add(row)
-            else:
-                row.embedding = embedding
-                row.embed_model = embed_model
-                row.computed_at = now
-            await session.commit()
-            try:
-                dialect_name = session.bind.dialect.name
-            except Exception:
-                dialect_name = ""
-            if dialect_name == "postgresql":
-                await session.execute(
-                    text(
-                        "UPDATE sample_features SET embedding_vec = :vec::vector WHERE sample_id = :sid"
-                    ),
-                    {"vec": str(embedding), "sid": sample_id},
-                )
-                await session.commit()
-        return SampleFeature(
-            sample_id=sample_id,
-            embedding=embedding,
-            embed_model=embed_model,
-            computed_at=now,
-        )
-
     async def list_annotations_for_dataset(
         self, dataset_id: str
     ) -> list[dict[str, Any]]:
@@ -262,16 +198,16 @@ class PredictionRepository:
             ]
 
 
-# ── Container helpers (adapted from worker → API) ────────────────────────
+# ── App context helpers (adapted from worker → API) ──────────────────────
 
 
-async def _with_app_container() -> tuple[AppContainer, bool]:
+async def _with_app_context() -> tuple[AppContext, bool]:
     cfg = load_config()
-    return build_flow_container(cfg), True
+    return build_flow_app_context(cfg), True
 
 
-def _prediction_repository(container: AppContainer) -> PredictionRepository:
-    return PredictionRepository(session_factory=container.session_factory)
+def _prediction_repository(ctx: AppContext) -> PredictionRepository:
+    return PredictionRepository(session_factory=ctx.shared.session_factory.sessionmaker)
 
 
 async def _get_image_bytes(sample: Any, storage: Any) -> bytes | None:
@@ -298,13 +234,10 @@ async def _get_image_bytes(sample: Any, storage: Any) -> bytes | None:
     return None
 
 
-def _resolve_sparse_chunk_size(container: AppContainer) -> int:
-    """Resolve per-chunk batch size for sparse prediction from container config."""
+def _resolve_sparse_chunk_size(ctx: AppContext) -> int:
+    """Resolve per-chunk batch size for sparse prediction from app config."""
     try:
-        cfg = container.config
-        if isinstance(cfg, dict):
-            return int(cfg.get("prediction", {}).get("sparse_chunk_size", 32))
-        return int(cfg.get("prediction", {}).get("sparse_chunk_size", 32))
+        return int(ctx.shared.config.prediction.sparse_chunk_size)
     except (TypeError, ValueError, KeyError, AttributeError):
         return 32
 
@@ -351,40 +284,34 @@ async def predict_chunk(
         model_id,
         len(sample_ids),
     )
-    container, should_close = await _with_app_container()
+    app_context, should_close = await _with_app_context()
     try:
-        repo = _prediction_repository(container)
+        repo = _prediction_repository(app_context)
         model = await repo.get_model(model_id, org_id)
         if model is None:
             logger.error("Model not found for predict_chunk: %s", model_id)
             raise ValueError(f"Model not found: {model_id}")
         logger.info("predict_chunk: model loaded successfully model_id=%s", model_id)
 
-        sql_repo = SqlRepository(session_factory=container.session_factory)
-        storage = container.artifact_storage
+        storage = app_context.shared.artifact_storage
 
-        first_sample = await sql_repo.get_sample(sample_ids[0])
-        if first_sample is None:
-            logger.warning("predict_chunk: first sample not found, returning empty")
-            return []
-        dataset_id = first_sample.dataset_id
+        if model.dataset_id is None:
+            raise ValueError(f"Model has no dataset: {model_id}")
+        dataset_id = model.dataset_id
         dataset = await repo.get_dataset(dataset_id, org_id)
         if dataset is None:
             logger.error("predict_chunk: dataset not found dataset_id=%s", dataset_id)
             raise ValueError(f"Dataset not found: {dataset_id}")
 
-        factory = DatasetStorageFactory(
-            repo=sql_repo,
-            storage=storage,
-            payload_store=container.dataset_payload_store,
-            ls_client=container.label_studio_client,
-            session_factory=container.session_factory,
+        storage_agg = await _dataset_storage_factory(app_context).open(
+            dataset_id,
+            org_id=org_id,
         )
-        storage_agg = await factory.open(dataset_id, org_id=org_id)
-        rows = await storage_agg.get_samples_batch(sample_ids)
+        samples_by_id = await storage_agg.get_samples_by_id(sample_ids)
 
         payload_samples: list[dict[str, Any]] = []
-        for row in rows:
+        for sample_id in sample_ids:
+            row = samples_by_id.get(sample_id)
             if row is None:
                 continue
             metadata = row.metadata if isinstance(row.metadata, dict) else {}
@@ -408,12 +335,13 @@ async def predict_chunk(
             logger.warning("predict_chunk: no valid payload samples, returning empty")
             return []
 
-        predictor_id = model.trainer_id or model.trainer_name or ""
-        if not predictor_id:
+        trainer_id = model.trainer_id or model.trainer_name or ""
+        if not trainer_id:
             logger.error(
                 "predict_chunk: no predictor_id resolved from model %s", model.id
             )
             raise ValueError(f"No predictor_id resolved from model {model.id}")
+        predictor_id = catalog.resolve_predictor_id(trainer_id)
 
         predictor_factory = get_predictor(predictor_id)
         predictor = cast(Any, predictor_factory(artifact_storage=storage))
@@ -448,7 +376,7 @@ async def predict_chunk(
         return result
     finally:
         if should_close:
-            await container.close()
+            await close_flow_app_context(app_context)
 
 
 @task(name="persist-chunk")
@@ -469,24 +397,19 @@ async def persist_chunk_results(
         len(sample_ids),
         len(worker_results),
     )
-    container, should_close = await _with_app_container()
+    app_context, should_close = await _with_app_context()
     try:
-        repo = _prediction_repository(container)
-        sql_repo = SqlRepository(session_factory=container.session_factory)
+        repo = _prediction_repository(app_context)
         model = await repo.get_model(model_id, org_id)
         if model is None:
             logger.error("persist_chunk_results: model not found model_id=%s", model_id)
             raise ValueError(f"Model not found: {model_id}")
         if model.dataset_id is None:
             raise ValueError(f"Model has no dataset: {model_id}")
-        factory = DatasetStorageFactory(
-            repo=sql_repo,
-            storage=container.artifact_storage,
-            payload_store=container.dataset_payload_store,
-            ls_client=container.label_studio_client,
-            session_factory=container.session_factory,
+        storage_agg = await _dataset_storage_factory(app_context).open(
+            model.dataset_id,
+            org_id=org_id,
         )
-        storage_agg = await factory.open(model.dataset_id, org_id=org_id)
         outcome = await _persist_worker_results(
             repo=repo,
             storage_agg=storage_agg,
@@ -506,7 +429,7 @@ async def persist_chunk_results(
         return outcome
     finally:
         if should_close:
-            await container.close()
+            await close_flow_app_context(app_context)
 
 
 async def _persist_worker_results(
@@ -526,8 +449,9 @@ async def _persist_worker_results(
     failed = 0
     predictions: list[dict[str, Any]] = []
     storage_results: list[StoragePredictionResult] = []
-    samples = await storage_agg.get_samples_batch(sample_ids)
-    for sample_id, sample in zip(sample_ids, samples, strict=True):
+    samples_by_id = await storage_agg.get_samples_by_id(sample_ids)
+    for sample_id in sample_ids:
+        sample = samples_by_id.get(sample_id)
         if sample is None:
             failed += 1
             continue
@@ -611,9 +535,9 @@ async def _persist_worker_results(
 # ── Public flow wrapper ────────────────────────────────────────────────────
 
 
-async def _run_prediction_job_with_container(
+async def _run_prediction_job_with_context(
     *,
-    container: AppContainer,
+    app_context: AppContext,
     job_id: str,
     dataset_id: str,
     model_id: str,
@@ -623,9 +547,10 @@ async def _run_prediction_job_with_container(
     sample_ids: list[str] | None,
     sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
+    requested_predictor_id: str | None = None,
 ) -> dict[str, Any]:
     logger = get_run_logger()
-    repo = _prediction_repository(container)
+    repo = _prediction_repository(app_context)
     dataset = await repo.get_dataset(dataset_id, org_id)
     if dataset is None:
         raise ValueError(f"Dataset not found: {dataset_id}")
@@ -635,29 +560,33 @@ async def _run_prediction_job_with_container(
     if model is None:
         raise ValueError(f"Model not found: {model_id}")
 
-    predictor_id = model.trainer_id or model.trainer_name or ""
-    if not predictor_id:
+    trainer_id = model.trainer_id or model.trainer_name or ""
+    if not trainer_id:
         raise ValueError(f"No predictor_id resolved from model {model.id}")
-
-    try:
-        predictor_factory = get_predictor(predictor_id)
-        predictor_view_id: str | None = getattr(predictor_factory, "_view_id", None)
-    except KeyError:
-        predictor_view_id = None
-
-    view_id = predictor_view_id or (
-        dataset.view_types[0] if dataset.view_types else target
+    predictor_id = catalog.resolve_predictor_id(
+        trainer_id,
+        requested_predictor_id=requested_predictor_id,
     )
+
+    model_metadata = model.metadata if isinstance(model.metadata, dict) else {}
+    predictor_metadata = catalog.validate_predictor_model_contract(
+        predictor_id,
+        model_contract=model_metadata.get("model_contract"),
+        model_schema_version=model_metadata.get("model_schema_version"),
+    )
+    view_id = predictor_metadata.view_id
+    view_metadata = catalog.get_view_meta(view_id)
+    if view_id not in dataset.view_types:
+        raise ValueError(
+            f"Predictor {predictor_id!r} requires view {view_id!r}, "
+            f"dataset provides {dataset.view_types}"
+        )
 
     # ── Open dataset storage via factory ────────────────────────────
-    factory = DatasetStorageFactory(
-        repo=SqlRepository(session_factory=container.session_factory),
-        storage=container.artifact_storage,
-        payload_store=container.dataset_payload_store,
-        ls_client=container.label_studio_client,
-        session_factory=container.session_factory,
+    storage_agg = await _dataset_storage_factory(app_context).open(
+        dataset_id,
+        org_id=org_id,
     )
-    storage_agg = await factory.open(dataset_id, org_id=org_id)
     lf = await storage_agg.list_samples(
         return_lazyframe=True,
         with_labels=sample_filter is not None,
@@ -737,106 +666,114 @@ async def _run_prediction_job_with_container(
         )
         last_progress_flush_at = now
 
-    async def prediction_results():
-        image_fetcher = None
+    async def prediction_results(exit_stack: AsyncExitStack):
         materialization = None
-        supports_materialized_dataset = (
-            "materialized_dataset" in inspect.signature(predictor_fn).parameters
-        )
-        if dataset.dataset_type == "image_sc":
-            import os as _os_pj
-            from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
-            from app.modules.sc.app.services.inspection_materializer import (
-                ScInspectionMaterializer,
+        predictor_parameters = inspect.signature(predictor_fn).parameters
+        supports_materialized_dataset = "materialized_dataset" in predictor_parameters
+        if supports_materialized_dataset:
+            materializers = catalog.capabilities.materializers_for(
+                view_id,
+                purpose="predict",
+                storage_mode=dataset.storage_mode.value,
             )
-
-            image_fetcher = GrpcImageFetcher(
-                addr=_os_pj.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
-            )
-            if supports_materialized_dataset:
-                materializer = ScInspectionMaterializer(image_fetcher)
-                materialization = await materializer.materialize(
-                    rows_lazyframe=lf,
-                    image_types=["patch_template", "patch_defective"],
+            if len(materializers) != 1:
+                raise RuntimeError(
+                    f"Expected exactly one materializer for view={view_id!r}, "
+                    f"purpose='predict', storage_mode="
+                    f"{dataset.storage_mode.value!r}; found "
+                    f"{[item.id for item in materializers]}"
                 )
-                if materialization.errors:
-                    logger.warning(
-                        "SC materialization completed with %d image errors",
-                        len(materialization.errors),
-                    )
-        try:
-            predictor_kwargs: dict[str, Any] = {
-                "artifact_storage": container.artifact_storage,
-                "ctx": ctx,
-                "lazyframe": lf,
-                "model_ref": model_ref,
-            }
-            if "image_fetcher" in inspect.signature(predictor_fn).parameters:
-                predictor_kwargs["image_fetcher"] = image_fetcher
-            if materialization is not None and supports_materialized_dataset:
-                predictor_kwargs["materialized_dataset"] = materialization.dataset
-            predictions = predictor_fn(**predictor_kwargs)
-            if inspect.isawaitable(predictions):
-                predictions = await predictions
-            async with a.scoped_iter(predictions) as prediction_iter:
-                async for pred in prediction_iter:
-                    sample_id = str(pred.get("sample_id", ""))
-                    confidence_raw = pred.get("confidence")
-                    confidence = (
-                        float(confidence_raw)
-                        if isinstance(confidence_raw, int | float)
-                        else None
-                    )
-                    scores = pred.get("scores")
-                    all_scores = (
-                        {str(k): float(v) for k, v in scores.items()}
-                        if isinstance(scores, dict)
-                        else None
-                    )
-                    result = StoragePredictionResult(
-                        sample_id=sample_id,
-                        predicted_label=str(pred.get("label", "")),
-                        confidence=confidence,
-                        all_scores=all_scores,
-                        model_id=model.id,
-                        target=target,
-                        model_version=summary["model_version"],
-                        job_id=job_id,
-                        error=pred.get("error"),
-                    )
-                    if result.error:
-                        summary["failed"] += 1
-                        logger.warning(
-                            "prediction failed for sample %s: %s",
-                            sample_id,
-                            result.error,
-                        )
-                    else:
-                        summary["successful"] += 1
-                    summary["processed"] += 1
-                    if summary["processed"] % 50 == 0:
-                        logger.info(
-                            "prediction progress: %d/%d (ok=%d fail=%d)",
-                            summary["processed"],
-                            summary["total_samples"],
-                            summary["successful"],
-                            summary["failed"],
-                        )
-                    yield result
-                    await flush_prediction_progress()
-        finally:
-            if materialization is not None:
-                materialization.cleanup()
-            if image_fetcher is not None:
-                await image_fetcher.close()
+            materializer_metadata = materializers[0]
+            if app_context.injector is None:
+                raise RuntimeError("AppContext injector was not initialized")
+            from app.runtime_compat.materializers import (
+                resolve_local_materializer,
+            )
 
-    await storage_agg.write_predictions(
-        prediction_results(),
-        job_id=job_id,
-        model_id=model.id,
-        model_version=summary["model_version"],
-    )
-    async with _flow_redis_event_publisher(container) as event_publisher:
+            materializer = resolve_local_materializer(
+                app_context.injector,
+                materializer_metadata.id,
+            )
+            materialization = await materializer.materialize(
+                rows_lazyframe=lf,
+                dataset_id=dataset_id,
+                job_id=job_id,
+                image_types=list(view_metadata.image_roles),
+            )
+            exit_stack.callback(materialization.cleanup)
+            if materialization.errors:
+                logger.warning(
+                    "Materialization completed with %d image errors",
+                    len(materialization.errors),
+                )
+        predictor_kwargs: dict[str, Any] = {
+            "artifact_storage": app_context.shared.artifact_storage,
+            "ctx": ctx,
+            "model_ref": model_ref,
+        }
+        if "lazyframe" in predictor_parameters:
+            predictor_kwargs["lazyframe"] = lf
+        if materialization is not None and supports_materialized_dataset:
+            predictor_kwargs["materialized_dataset"] = materialization.dataset
+        predictions = predictor_fn(**predictor_kwargs)
+        if inspect.isawaitable(predictions):
+            predictions = await predictions
+        async with a.scoped_iter(predictions) as prediction_iter:
+            async for pred in prediction_iter:
+                sample_id = str(pred.get("sample_id", ""))
+                confidence_raw = pred.get("confidence")
+                confidence = (
+                    float(confidence_raw)
+                    if isinstance(confidence_raw, int | float)
+                    else None
+                )
+                scores = pred.get("scores")
+                all_scores = (
+                    {str(k): float(v) for k, v in scores.items()}
+                    if isinstance(scores, dict)
+                    else None
+                )
+                result = StoragePredictionResult(
+                    sample_id=sample_id,
+                    predicted_label=str(pred.get("label", "")),
+                    confidence=confidence,
+                    all_scores=all_scores,
+                    model_id=model.id,
+                    target=target,
+                    model_version=summary["model_version"],
+                    job_id=job_id,
+                    error=pred.get("error"),
+                )
+                if result.error:
+                    summary["failed"] += 1
+                    logger.warning(
+                        "prediction failed for sample %s: %s",
+                        sample_id,
+                        result.error,
+                    )
+                else:
+                    summary["successful"] += 1
+                summary["processed"] += 1
+                if summary["processed"] % 50 == 0:
+                    logger.info(
+                        "prediction progress: %d/%d (ok=%d fail=%d)",
+                        summary["processed"],
+                        summary["total_samples"],
+                        summary["successful"],
+                        summary["failed"],
+                    )
+                yield result
+                await flush_prediction_progress()
+
+    async with AsyncExitStack() as exit_stack:
+        await storage_agg.write_predictions(
+            prediction_results(exit_stack),
+            job_id=job_id,
+            model_id=model.id,
+            model_version=summary["model_version"],
+        )
+    event_publisher = app_context.shared.redis_event_publisher
+    if event_publisher is not None:
         await event_publisher.publish_prediction_refresh(
             dataset_id=dataset_id, job_id=job_id
         )
@@ -869,6 +806,16 @@ async def predict_job_flow(
     sample_ids: list[str] | None = None,
     sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
+    predictor_id: str | None = None,
+    catalog_id: str | None = None,
+    input_contract: str | None = None,
+    output_contract: str | None = None,
+    resource_profile: str | None = None,
+    owner: str | None = None,
+    algo_id: str | None = None,
+    algo_version: str | None = None,
+    code_version: str | None = None,
+    missing_image_policy: str | None = None,
 ) -> dict[str, Any]:
     import app.registrations  # noqa: F401  # trigger all mapper registrations
 
@@ -882,10 +829,34 @@ async def predict_job_flow(
         target,
         created_by,
     )
-    container, should_close = await _with_app_container()
+    if catalog_id is None or predictor_id is None or predictor_id != catalog_id:
+        raise ValueError(
+            "Prediction flow requires matching predictor_id and routed catalog_id"
+        )
+    if owner != "local_compat":
+        raise ValueError("API-local prediction flow requires owner='local_compat'")
+    route_metadata = catalog.get_predictor_meta(predictor_id)
+    if input_contract != route_metadata.input_view.contract:
+        raise ValueError(
+            f"Prediction route input_contract={input_contract!r} does not match "
+            f"predictor view contract={route_metadata.input_view.contract!r}"
+        )
+    logger.info(
+        "Prediction runtime route: catalog=%s input=%s output=%s profile=%s "
+        "algo=%s@%s code=%s missing_image_policy=%s",
+        catalog_id,
+        input_contract,
+        output_contract,
+        resource_profile,
+        algo_id,
+        algo_version,
+        code_version,
+        missing_image_policy,
+    )
+    app_context, should_close = await _with_app_context()
     try:
-        result = await _run_prediction_job_with_container(
-            container=container,
+        result = await _run_prediction_job_with_context(
+            app_context=app_context,
             job_id=job_id,
             dataset_id=dataset_id,
             model_id=model_id,
@@ -895,10 +866,11 @@ async def predict_job_flow(
             sample_ids=sample_ids,
             sample_filter=sample_filter,
             prompt=prompt,
+            requested_predictor_id=predictor_id,
         )
     finally:
         if should_close:
-            await container.close()
+            await close_flow_app_context(app_context)
     if result.get("status") == "failed":
         logger.error(
             "Prediction job %s failed: %s | full result: %s",

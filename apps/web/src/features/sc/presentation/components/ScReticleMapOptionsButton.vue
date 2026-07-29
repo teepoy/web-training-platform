@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { NButton, NIcon, NInputNumber, NModal } from "naive-ui";
+import { NButton, NIcon, NInputNumber, NModal, NSwitch } from "naive-ui";
 import { SettingsOutline } from "@vicons/ionicons5";
 import {
   normalizeReticleMapOptions,
@@ -12,17 +12,24 @@ const props = defineProps<{
   size?: "tiny" | "small" | "medium" | "large";
   iconOnly?: boolean;
   quaternary?: boolean;
+  showImageMarkers?: boolean;
+  defectSize?: number;
 }>();
 
 const emit = defineEmits<{
   (e: "submit", value: ReticleMapOptions): void;
+  (e: "submit-display", value: { showImageMarkers: boolean; defectSize: number }): void;
 }>();
 
 const showModal = ref(false);
 const draft = ref<ReticleMapOptions>({ ...props.modelValue });
+const draftShowImageMarkers = ref(props.showImageMarkers ?? true);
+const draftDefectSize = ref(props.defectSize ?? 2);
 
 function openModal(): void {
   draft.value = { ...props.modelValue };
+  draftShowImageMarkers.value = props.showImageMarkers ?? true;
+  draftDefectSize.value = props.defectSize ?? 2;
   showModal.value = true;
 }
 
@@ -35,15 +42,20 @@ function updateDraft(key: keyof ReticleMapOptions, value: number | null): void {
 
 function applyOptions(): void {
   emit("submit", normalizeReticleMapOptions(draft.value));
+  emit("submit-display", {
+    showImageMarkers: draftShowImageMarkers.value,
+    defectSize: draftDefectSize.value,
+  });
   showModal.value = false;
 }
 </script>
 
 <template>
   <NButton
+    data-testid="sc-map-settings"
     :size="size ?? 'tiny'"
     :quaternary="quaternary"
-    title="Reticle options"
+    title="Map settings"
     @click="openModal"
   >
     <template v-if="iconOnly" #icon>
@@ -54,11 +66,12 @@ function applyOptions(): void {
   <NModal
     v-model:show="showModal"
     preset="card"
-    title="Reticle Map Options"
+    title="Map Settings"
     class="srmo-modal"
     :style="{ width: '520px', maxWidth: 'calc(100vw - 32px)' }"
   >
     <div class="srmo-grid">
+      <h3>Reticle layout</h3>
       <label>
         X die count
         <NInputNumber
@@ -93,6 +106,15 @@ function applyOptions(): void {
           @update:value="(v) => updateDraft('yDieShift', v)"
         />
       </label>
+      <h3>Defect display</h3>
+      <label>
+        Image box indicator
+        <NSwitch v-model:value="draftShowImageMarkers" />
+      </label>
+      <label>
+        Defect size (px)
+        <NInputNumber v-model:value="draftDefectSize" :min="1" :max="24" :step="1" />
+      </label>
     </div>
     <template #footer>
       <div class="srmo-footer">
@@ -116,6 +138,12 @@ function applyOptions(): void {
   gap: 6px;
   font-size: 12px;
   font-weight: 500;
+}
+
+.srmo-grid h3 {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 13px;
 }
 
 .srmo-footer {

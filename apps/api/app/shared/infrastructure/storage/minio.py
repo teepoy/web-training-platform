@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import logging
 import re
 from io import BytesIO
 from typing import Any
@@ -18,6 +19,7 @@ from minio import Minio
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 _EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
 _EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
+logger = logging.getLogger(__name__)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -167,7 +169,17 @@ class MinioArtifactStorage:
             not in {_EXPORT_LIFECYCLE_RULE_ID, _EXPORT_MULTIPART_ABORT_RULE_ID}
         ]
         rules.extend(config.to_rules())
-        self.client.set_bucket_lifecycle(bucket, LifecycleConfig(rules))
+        try:
+            self.client.set_bucket_lifecycle(bucket, LifecycleConfig(rules))
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code != "InvalidArgument":
+                raise
+            logger.warning(
+                "Skipping MinIO lifecycle configuration for bucket %s: %s",
+                bucket,
+                exc,
+            )
         self._lifecycle_configured_buckets.add(bucket)
 
     def _existing_lifecycle_rules(self, bucket: str) -> list[Rule]:

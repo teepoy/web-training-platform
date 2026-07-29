@@ -5,7 +5,7 @@ T13: Separate executable predictor registry from catalog metadata naming.
 These tests verify:
 1.  ``get_predictor()`` only returns executable predictors (raises KeyError
     for metadata-only entries).
-2.  ``get_predictor_by_id()`` still provides catalog fallback for listing/compat.
+2.  ``get_predictor_by_id()`` only reads executable registrations.
 3.  The flow runtime loader resolves SC predictors from the central registry.
 4.  Metadata-only predictor IDs fail clearly when no executable exists.
 """
@@ -29,8 +29,8 @@ class TestMetadataCatalogVsExecutableRegistry:
         from app.modules.types import catalog
 
         meta = catalog.get_predictor_meta("resnet50-sc-v1")
-        assert meta["id"] == "resnet50-sc-v1"
-        assert meta["name"] == "ResNet-50 SC Defect Classifier"
+        assert meta.id == "resnet50-sc-v1"
+        assert meta.name == "ResNet-50 SC Defect Prediction"
 
     def test_get_predictor_rejects_unknown_id(self) -> None:
         """get_predictor raises KeyError for completely unknown IDs."""
@@ -39,32 +39,29 @@ class TestMetadataCatalogVsExecutableRegistry:
         with pytest.raises(KeyError, match="No executable predictor registered"):
             get_predictor("nonexistent-predictor-v99")
 
-    # ── get_predictor_by_id (backward compat — includes catalog fallback) ──
+    # ── get_predictor_by_id (executable registry only) ────────────────
 
     def test_get_predictor_by_id_resolves_sc_predictor(self) -> None:
-        """get_predictor_by_id resolves metadata or an imported executable.
-
-        Test collection may already have imported the SC executable, so both
-        paths must expose the same identity and view contract.
-        """
+        """get_predictor_by_id resolves an imported executable."""
+        from app.runtime_compat.ml.predictors import get_predictor
         from app.core.registry import get_predictor_by_id
 
+        get_predictor("resnet50-sc-v1")
         pred = get_predictor_by_id("resnet50-sc-v1")
         assert pred is not None
         assert pred.predictor_id == "resnet50-sc-v1"
-        assert pred.name in {
-            "ResNet-50 SC Defect Classifier",
-            "ResNet-50 SC Defect Prediction",
-        }
+        assert pred.name == "ResNet-50 SC Defect Prediction"
         assert pred.view_id == "patch_image_v1"
 
-    def test_catalog_stub_predictor_loads_central_executable(self) -> None:
-        """A catalog stub lazy-loads the centrally registered SC predictor."""
-        from app.core.registry import _make_catalog_stub_predictor
+    def test_metadata_catalog_does_not_create_executable_stub(self) -> None:
+        """Catalog lookup remains separate from the executable registry."""
+        from app.core.registry import _Registry
+        from app.modules.types import catalog
 
-        pred = _make_catalog_stub_predictor("resnet50-sc-v1")
-        with pytest.raises(TypeError):
-            pred()
+        isolated_registry = _Registry()
+        with pytest.raises(KeyError):
+            catalog.get_predictor_meta("clip-zero-shot-v1")
+        assert isolated_registry.get_predictor_by_id("clip-zero-shot-v1") is None
 
     # ── get_predictor_by_id returns None for unknown ID ───────────────
 
@@ -78,7 +75,7 @@ class TestMetadataCatalogVsExecutableRegistry:
 
     def test_sc_executable_predictor_resolves_in_flow_registry(self) -> None:
         """The flow loader returns the raw centrally registered callable."""
-        from app.modules.prediction.flows._predictors import (
+        from app.runtime_compat.ml.predictors import (
             get_predictor as flow_get_predictor,
         )
         from app.core.registry import get_predictor
@@ -90,11 +87,11 @@ class TestMetadataCatalogVsExecutableRegistry:
 
     def test_flow_registry_rejects_metadata_only_ids(self) -> None:
         """The flow loader rejects IDs without a flow executable module."""
-        from app.modules.prediction.flows._predictors import (
+        from app.runtime_compat.ml.predictors import (
             get_predictor as flow_get_predictor,
         )
 
-        with pytest.raises(KeyError, match="not found in executable predictor registry"):
+        with pytest.raises(KeyError, match="no worker-local executable binding"):
             flow_get_predictor("clip-zero-shot-v1")
 
     # ── Naming clarity ───────────────────────────────────────────────
@@ -108,21 +105,15 @@ class TestMetadataCatalogVsExecutableRegistry:
         )
         assert callable(reg_mod.get_predictor)
 
-    def test_catalog_stub_names_reflect_purpose(self) -> None:
-        """The stub factory functions are named to reflect their catalog-thru nature."""
+    def test_catalog_stub_surface_is_removed(self) -> None:
+        """Metadata-only executable facades are not part of the registry."""
         import app.core.registry as reg_mod
 
-        # Old name should NOT exist
         assert not hasattr(reg_mod, "_make_metadata_only_predictor"), (
             "old _make_metadata_only_predictor function name removed"
         )
-        # New name clarifies it's a catalog stub
-        assert hasattr(reg_mod, "_make_catalog_stub_predictor"), (
-            "_make_catalog_stub_predictor must exist with clear naming"
-        )
-        assert hasattr(reg_mod, "_make_catalog_stub_trainer"), (
-            "_make_catalog_stub_trainer must exist with clear naming"
-        )
+        assert not hasattr(reg_mod, "_make_catalog_stub_predictor")
+        assert not hasattr(reg_mod, "_make_catalog_stub_trainer")
 
     def test_registry_class_documents_namespaces(self) -> None:
         """_Registry.__doc__ explains the distinction between views/trainers/predictors."""

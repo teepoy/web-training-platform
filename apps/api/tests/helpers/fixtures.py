@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import base64
 import io
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import TRAINER_ID
-from tests.helpers.factories import (
-    create_test_training_job,
-    wait_for_job_completion,
-)
 from tests.helpers.test_seed_runner import TestSeedRunner
 
 from seedmaker.labels import IMAGENET_LABELS
@@ -46,8 +42,8 @@ def _synthetic_data_uri() -> str:
 def seeded_imagenet_mock() -> tuple[str, str]:
     """Seed an ImageNet-1K Mock dataset with 10 synthetic samples.
 
-    Creates the dataset, uploads 10 samples, launches a training job,
-    waits for completion, and returns ``(dataset_id, dataset_name)``.
+    Creates the dataset, uploads 10 samples, and returns
+    ``(dataset_id, dataset_name)``.
     Uses the seedmaker ``imagenet-mock`` recipe config and item builder.
     """
     from seedmaker.datasets.imagenet_mock import config, build_sample_item
@@ -57,8 +53,6 @@ def seeded_imagenet_mock() -> tuple[str, str]:
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(10, build_sample_item)
-        job = create_test_training_job(client, runner.dataset_id, TRAINER_ID)
-        wait_for_job_completion(client, job["id"])
         return (runner.dataset_id, config.dataset_name)
 
 
@@ -66,8 +60,8 @@ def seeded_imagenet_mock() -> tuple[str, str]:
 def seeded_imagenet_poc() -> tuple[str, str]:
     """Seed an ImageNet-1K Real dataset with 5 synthetic samples.
 
-    Creates the dataset, uploads 5 samples, launches a training job,
-    waits for completion, and returns ``(dataset_id, dataset_name)``.
+    Creates the dataset, uploads 5 samples, and returns
+    ``(dataset_id, dataset_name)``.
     Uses the seedmaker ``imagenet-real`` recipe config and the
     ``imagenet-mock`` item builder (real ImageNet images are too heavy
     for unit tests).
@@ -80,8 +74,6 @@ def seeded_imagenet_poc() -> tuple[str, str]:
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(5, build_sample_item)
-        job = create_test_training_job(client, runner.dataset_id, TRAINER_ID)
-        wait_for_job_completion(client, job["id"])
         return (runner.dataset_id, config.dataset_name)
 
 
@@ -125,7 +117,14 @@ def seeded_multi_image_scatter() -> tuple[str, str]:
     from seedmaker.datasets.multi_image_scatter import config, build_sample_item
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(client, config)
+        runner = TestSeedRunner(
+            client,
+            replace(
+                config,
+                dataset_type="image_classification",
+                task_type="classification",
+            ),
+        )
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(6, lambda idx: build_sample_item(idx, 3))
@@ -143,7 +142,14 @@ def seeded_mock_multi_image() -> tuple[str, str]:
     from seedmaker.datasets.mock_multi_image import config
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(client, config)
+        runner = TestSeedRunner(
+            client,
+            replace(
+                config,
+                dataset_type="image_classification",
+                task_type="classification",
+            ),
+        )
         runner.ensure_dataset()
         assert runner.dataset_id is not None
 

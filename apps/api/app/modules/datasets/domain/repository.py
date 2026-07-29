@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.shared.api.schemas import Dataset
+from app.shared.api.schemas import ArtifactRef, Dataset
 
 
 class DatasetRepository(Protocol):
@@ -19,6 +19,12 @@ class DatasetRepository(Protocol):
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Dataset]: ...
+
+    async def list_dataset_names(
+        self,
+        dataset_ids: list[str],
+        org_id: str | None = None,
+    ) -> dict[str, str]: ...
 
     async def count_datasets(self, org_id: str | None = None) -> int: ...
 
@@ -43,6 +49,8 @@ class DatasetRepository(Protocol):
         self,
         dataset_id: str,
         meta_update: dict,
+        *,
+        org_id: str | None = None,
     ) -> Dataset | None: ...
 
     async def rename_dataset(
@@ -53,14 +61,6 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> Dataset | None: ...
 
-    async def set_dataset_public(
-        self,
-        dataset_id: str,
-        is_public: bool,
-    ) -> bool: ...
 
-    async def update_dataset_embed_config(
-        self,
-        dataset_id: str,
-        embed_config: dict,
-    ) -> None: ...
+class ArtifactLookupRepository(Protocol):
+    async def get_artifact(self, artifact_id: str) -> ArtifactRef | None: ...

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import io as _io
-import json as _json
-
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 from app.modules.datasets.domain.compatibility import validate_predictor_for_dataset
 from app.modules.datasets.port.http.deps import get_label_studio_client
 from app.shared.api.schemas import DatasetStorageMode
+
+pytestmark = pytest.mark.integration
 
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
@@ -131,7 +129,7 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
 
     from app.modules.sc.schema import _build_v2_pyarrow_schema
     from tests.conftest import DEFAULT_ORG_ID
-    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+    from app.modules.storage.domain.sparse import ColumnSchema, DatasetManifest, SampleLocator
 
     sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
 
@@ -198,7 +196,7 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         shard_bytes = buf.getvalue()
 
         # ── Store shard + manifest via DatasetPayloadStore ─────────────
-        store = app.state.app_context.datasets.dataset_payload_store
+        store = app.state.app_context.storage.dataset_payload_store
 
         shard_entry = asyncio.run(store.put_shard(
             dataset_id=ds_id,
@@ -253,9 +251,15 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         assert sample["defect_id"] == "defect-001"
 
         # primary URI fields should be API access URLs, not upstream S3
-        assert sample["image_uri"] == "/api/v1/samples/defect-001/images/img-review-1"
-        assert sample["defective_uri"] == "/api/v1/samples/defect-001/images/img-defect-1"
-        assert sample["reference_uri"] == "/api/v1/samples/defect-001/images/img-tmpl-1"
+        assert sample["image_uri"] == (
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-review-1"
+        )
+        assert sample["defective_uri"] == (
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-defect-1"
+        )
+        assert sample["reference_uri"] == (
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-tmpl-1"
+        )
 
         # v2 export has no metadata
         assert sample.get("metadata") == {}
@@ -279,7 +283,9 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
             assert "filename" in img_ref, f"Missing filename: {img_ref}"
             assert "image_type" in img_ref, f"Missing image_type: {img_ref}"
             assert "access_url" in img_ref, f"Missing access_url: {img_ref}"
-            assert img_ref["access_url"].startswith("/api/v1/samples/"), (
+            assert img_ref["access_url"].startswith(
+                f"/api/v1/datasets/{ds_id}/samples/"
+            ), (
                 f"Unexpected access_url: {img_ref['access_url']}"
             )
 
@@ -287,7 +293,7 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         review_ref = next(r for r in images if r["role"] == "review")
         assert review_ref["image_id"] == "img-review-1"
         assert review_ref["access_url"] == (
-            "/api/v1/samples/defect-001/images/img-review-1"
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-review-1"
         )
 
         tmpl_ref = next(r for r in images if r["role"] == "patch_template")
@@ -392,7 +398,7 @@ def test_sparse_summary_v2_omits_embedded_image_bytes() -> None:
 
     from app.modules.sc.schema import _build_v2_pyarrow_schema
     from tests.conftest import DEFAULT_ORG_ID
-    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+    from app.modules.storage.domain.sparse import ColumnSchema, DatasetManifest, SampleLocator
 
     with TestClient(app) as c:
         ds = c.post("/api/v1/datasets", json={
@@ -434,7 +440,7 @@ def test_sparse_summary_v2_omits_embedded_image_bytes() -> None:
         buf = io.BytesIO()
         pq.write_table(table, buf)
 
-        store = app.state.app_context.datasets.dataset_payload_store
+        store = app.state.app_context.storage.dataset_payload_store
         shard_entry = asyncio.run(store.put_shard(
             dataset_id=ds_id,
             org_id=DEFAULT_ORG_ID,
@@ -521,7 +527,6 @@ def test_sparse_sc_dataset_accepts_resnet50_sc_trainer() -> None:
         resp = c.post("/api/v1/training-jobs", json={
             "dataset_id": ds_id,
             "trainer_id": "resnet50-sc-v1",
-            "created_by": "tester",
         })
         # capability gate passes (can_train=True) AND view gate passes
         # (resnet50-sc-v1 view=patch_image_v1 is in SC view_types)
@@ -547,9 +552,7 @@ def test_sparse_sc_prediction_accepts_compatible_predictor() -> None:
     # Should not raise — compatible predictor + sparse storage_mode
     validate_predictor_for_dataset(
         predictor_id="resnet50-sc-v1",
-        dataset_type="image_sc",
         view_types=SC_VIEW_TYPES,
-        storage_mode="file_shard_sparse",
     )
 
 
@@ -562,7 +565,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
     """Sparse dataset image proxy serves embedded images from Parquet shards.
 
     Verifies the standard dataset image interface:
-    GET /api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...
+    GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}
     """
     import asyncio
     import io
@@ -572,7 +575,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
     from app.modules.sc.schema import _build_v2_pyarrow_schema
     from tests.conftest import DEFAULT_ORG_ID
-    from platform_runtime.sparse import ColumnSchema, DatasetManifest, SampleLocator
+    from app.modules.storage.domain.sparse import ColumnSchema, DatasetManifest, SampleLocator
 
     sc_task_spec = {"task_type": "sc", "label_space": ["defect", "clean"]}
 
@@ -641,7 +644,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
         shard_bytes = buf.getvalue()
 
         # ── Store shard + manifest via DatasetPayloadStore ─────────────
-        store = app.state.app_context.datasets.dataset_payload_store
+        store = app.state.app_context.storage.dataset_payload_store
 
         shard_entry = asyncio.run(store.put_shard(
             dataset_id=ds_id,
@@ -676,8 +679,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
         # ── Image proxy: serve review image ────────────────────────────
         resp = c.get(
-            "/api/v1/samples/defect-001/images/img-review-1",
-            params={"dataset_id": ds_id},
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-review-1",
         )
         assert resp.status_code == 200, (
             f"Image proxy failed with {resp.status_code}: {resp.text}"
@@ -692,8 +694,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
         # ── Image proxy: serve patch template image ────────────────────
         resp2 = c.get(
-            "/api/v1/samples/defect-001/images/img-tmpl-1",
-            params={"dataset_id": ds_id},
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-tmpl-1",
         )
         assert resp2.status_code == 200, resp2.text
         assert resp2.headers["content-type"] == "image/png"
@@ -701,8 +702,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
         # ── Image proxy: serve patch defective image ───────────────────
         resp3 = c.get(
-            "/api/v1/samples/defect-001/images/img-defect-1",
-            params={"dataset_id": ds_id},
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-defect-1",
         )
         assert resp3.status_code == 200, resp3.text
         assert resp3.headers["content-type"] == "image/png"
@@ -710,8 +710,7 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
         # ── Nonexistent image returns 404 ──────────────────────────────
         resp4 = c.get(
-            "/api/v1/samples/defect-001/images/img-bogus",
-            params={"dataset_id": ds_id},
+            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-bogus",
         )
         assert resp4.status_code == 404, (
             f"Expected 404 for nonexistent image, got {resp4.status_code}"
@@ -719,17 +718,16 @@ def test_sparse_sample_image_proxy_serves_embedded_images() -> None:
 
         # ── Nonexistent sample returns 404 ─────────────────────────────
         resp5 = c.get(
-            "/api/v1/samples/nonexistent/images/img-review-1",
-            params={"dataset_id": ds_id},
+            f"/api/v1/datasets/{ds_id}/samples/nonexistent/images/img-review-1",
         )
         assert resp5.status_code == 404, (
             f"Expected 404 for nonexistent sample, got {resp5.status_code}"
         )
 
-        # ── Missing dataset_id returns 422 ─────────────────────────────
+        # ── Removed unscoped compatibility route stays unavailable ─────
         resp6 = c.get(
             "/api/v1/samples/defect-001/images/img-review-1",
         )
-        assert resp6.status_code == 422, (
-            f"Expected 422 for missing dataset_id, got {resp6.status_code}"
+        assert resp6.status_code == 404, (
+            f"Expected 404 for removed unscoped route, got {resp6.status_code}"
         )

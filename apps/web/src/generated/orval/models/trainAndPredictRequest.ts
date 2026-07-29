@@ -8,13 +8,18 @@ import type { TrainAndPredictRequestModelVersion } from './trainAndPredictReques
 import type { TrainAndPredictRequestSampleIds } from './trainAndPredictRequestSampleIds';
 import type { TrainAndPredictRequestSampleFilter } from './trainAndPredictRequestSampleFilter';
 import type { TrainAndPredictRequestPrompt } from './trainAndPredictRequestPrompt';
+import type { TrainAndPredictRequestPredictorId } from './trainAndPredictRequestPredictorId';
 
 export interface TrainAndPredictRequest {
+  /** @minLength 1 */
   dataset_id: string;
+  /** @minLength 1 */
   trainer_id: string;
+  /** @minLength 1 */
   target?: string;
   model_version?: TrainAndPredictRequestModelVersion;
   sample_ids?: TrainAndPredictRequestSampleIds;
   sample_filter?: TrainAndPredictRequestSampleFilter;
   prompt?: TrainAndPredictRequestPrompt;
+  predictor_id?: TrainAndPredictRequestPredictorId;
 }

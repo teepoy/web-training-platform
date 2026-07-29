@@ -18,14 +18,16 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.modules.datasets.port.http.deps import (
     get_dataset_storage_factory,
+    get_dataset_service,
     get_repository,
 )
 from app.modules.prediction.port.http.deps import (
     get_artifact_service as get_artifacts,
 )
 from app.modules.datasets.port.http.router import (
-    get_ls_read_repository_optional,
+    get_ls_read_repository_factory,
 )
+from app.modules.datasets.app.services.dataset_service import DatasetService
 
 if TYPE_CHECKING:
     from app.shared.api.schemas import Dataset, Sample, Annotation
@@ -40,8 +42,9 @@ def _clear_overrides() -> None:
     for dep in (
         get_repository,
         get_dataset_storage_factory,
+        get_dataset_service,
         get_artifacts,
-        get_ls_read_repository_optional,
+        get_ls_read_repository_factory,
     ):
         app.dependency_overrides.pop(dep, None)
 
@@ -76,6 +79,15 @@ def _make_annotation(sample_id: str, label: str = "cat") -> "Annotation":
         label=label,
         created_by="tester",
         created_at=datetime.now(UTC),
+    )
+
+
+def _make_dataset_service(repo_mock: AsyncMock, storage_factory_mock: AsyncMock) -> DatasetService:
+    return DatasetService(
+        repository=repo_mock,
+        storage_factory=storage_factory_mock,
+        payload_store=MagicMock(),
+        config=MagicMock(),
     )
 
 
@@ -134,8 +146,13 @@ def test_export_with_ls_project() -> None:
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
         app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
+        app.dependency_overrides[get_dataset_service] = lambda: _make_dataset_service(
+            repo_mock, storage_factory_mock
+        )
         app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
-        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        app.dependency_overrides[get_ls_read_repository_factory] = lambda: (
+            lambda: ls_read_mock
+        )
         r = c.get(f"/api/v1/exports/{dataset.id}")
         _clear_overrides()
 
@@ -177,6 +194,9 @@ def test_export_no_ls_project_returns_500() -> None:
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
         app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
+        app.dependency_overrides[get_dataset_service] = lambda: _make_dataset_service(
+            repo_mock, storage_factory_mock
+        )
         r = c.get(f"/api/v1/exports/{dataset.id}")
         _clear_overrides()
 
@@ -209,7 +229,12 @@ def test_export_ls_db_failure_returns_502() -> None:
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
         app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
-        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        app.dependency_overrides[get_dataset_service] = lambda: _make_dataset_service(
+            repo_mock, storage_factory_mock
+        )
+        app.dependency_overrides[get_ls_read_repository_factory] = lambda: (
+            lambda: ls_read_mock
+        )
         r = c.get(f"/api/v1/exports/{dataset.id}")
         _clear_overrides()
 
@@ -262,8 +287,13 @@ def test_export_persist_with_ls() -> None:
     with TestClient(app) as c:
         app.dependency_overrides[get_repository] = lambda: repo_mock
         app.dependency_overrides[get_dataset_storage_factory] = lambda: storage_factory_mock
+        app.dependency_overrides[get_dataset_service] = lambda: _make_dataset_service(
+            repo_mock, storage_factory_mock
+        )
         app.dependency_overrides[get_artifacts] = lambda: artifacts_mock
-        app.dependency_overrides[get_ls_read_repository_optional] = lambda: ls_read_mock
+        app.dependency_overrides[get_ls_read_repository_factory] = lambda: (
+            lambda: ls_read_mock
+        )
         r = c.post(f"/api/v1/exports/{dataset.id}/persist")
         _clear_overrides()
 

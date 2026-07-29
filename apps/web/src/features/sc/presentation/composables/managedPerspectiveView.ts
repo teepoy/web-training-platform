@@ -3,7 +3,7 @@ import type { Table, View } from "@perspective-dev/client";
 export type ManagedPerspectiveResourceStatus = "active" | "retiring" | "deleted";
 
 export interface ManagedPerspectiveView {
-  readonly view: View;
+  readonly rawView: View;
   readonly status: ManagedPerspectiveResourceStatus;
   readonly pendingOperations: number;
   num_rows: () => Promise<number>;
@@ -18,7 +18,7 @@ export interface ManagedPerspectiveView {
 }
 
 export interface ManagedPerspectiveTable {
-  readonly table: Table;
+  readonly rawTable: Table;
   readonly status: ManagedPerspectiveResourceStatus;
   readonly pendingOperations: number;
   readonly views: ReadonlySet<ManagedPerspectiveView>;
@@ -39,7 +39,7 @@ const TABLE_RETIRE_RETRY_MS = 100;
 const TABLE_RETIRE_MAX_RETRIES = 50;
 
 class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
-  readonly view: View;
+  readonly rawView: View;
   private _status: ManagedPerspectiveResourceStatus = "active";
   private _pendingOperations = 0;
   private _retireTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,7 +49,7 @@ class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
     view: View,
     private readonly owner?: ManagedPerspectiveTableImpl,
   ) {
-    this.view = view;
+    this.rawView = view;
   }
 
   get status(): ManagedPerspectiveResourceStatus {
@@ -84,7 +84,7 @@ class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
     let latestEvent: unknown;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    this.view.on_update((event: unknown) => {
+    this.rawView.on_update((event: unknown) => {
       if (this._status !== "active" || options.shouldRun?.(event) === false) return;
       latestEvent = event;
       if (timer !== null) clearTimeout(timer);
@@ -108,7 +108,7 @@ class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
     }
     this._pendingOperations += 1;
     try {
-      return await operation(this.view);
+      return await operation(this.rawView);
     } finally {
       this._pendingOperations -= 1;
       if (this._status === "retiring") this.scheduleDelete();
@@ -126,7 +126,7 @@ class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
         return;
       }
       try {
-        await this.view.delete();
+        await this.rawView.delete();
       } catch {
         if (this._retireRetries < VIEW_RETIRE_MAX_RETRIES) {
           this._retireRetries += 1;
@@ -141,7 +141,7 @@ class ManagedPerspectiveViewImpl implements ManagedPerspectiveView {
 }
 
 class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
-  readonly table: Table;
+  readonly rawTable: Table;
   private _status: ManagedPerspectiveResourceStatus = "active";
   private _pendingOperations = 0;
   private _retireTimer: ReturnType<typeof setTimeout> | null = null;
@@ -150,7 +150,7 @@ class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
   private readonly _views = new Set<ManagedPerspectiveViewImpl>();
 
   constructor(table: Table) {
-    this.table = table;
+    this.rawTable = table;
   }
 
   get status(): ManagedPerspectiveResourceStatus {
@@ -175,7 +175,7 @@ class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
     }
     this._pendingOperations += 1;
     try {
-      const view = await this.table.view(config as never);
+      const view = await this.rawTable.view(config as never);
       return this.trackView(view);
     } finally {
       this._pendingOperations -= 1;
@@ -225,7 +225,7 @@ class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
     }
     this._pendingOperations += 1;
     try {
-      return await operation(this.table);
+      return await operation(this.rawTable);
     } finally {
       this._pendingOperations -= 1;
       if (this._status === "retiring") this.scheduleDelete();
@@ -250,7 +250,7 @@ class ManagedPerspectiveTableImpl implements ManagedPerspectiveTable {
         return;
       }
       try {
-        await this.table.delete();
+        await this.rawTable.delete();
       } catch {
         if (this._retireRetries < TABLE_RETIRE_MAX_RETRIES) {
           this._retireRetries += 1;

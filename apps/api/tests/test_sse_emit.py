@@ -16,12 +16,26 @@ from app.shared.sse.events import (
     TrainingMetricEvent,
     TrainingStatusEvent,
 )
-from app.shared.api.schemas import TaskTrackerDetailResponse
+from app.shared.api.schemas import (
+    TaskTrackerDerived,
+    TaskTrackerDetailResponse,
+    TaskTrackerRawPayload,
+)
 
 
 def _event_cases() -> list[SSEEvent]:
     ts = datetime(2026, 5, 25, 12, 0, tzinfo=timezone.utc)
-    task = TaskTrackerDetailResponse.model_construct()
+    task = TaskTrackerDetailResponse(
+        id="task-1",
+        task_kind="training",
+        raw=TaskTrackerRawPayload(),
+        derived=TaskTrackerDerived(
+            task_kind="training",
+            execution_kind="local",
+            display_status="running",
+            stage="running",
+        ),
+    )
     return [
         SSEEvent(AgentMessageEvent(event_type="agent-message", content="hello")),
         SSEEvent(AgentActionEvent(event_type="agent-action", tool="tool-x", summary="run")),

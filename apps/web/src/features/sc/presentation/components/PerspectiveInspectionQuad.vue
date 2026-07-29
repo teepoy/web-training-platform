@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import "@perspective-dev/viewer/inline";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { NButton, NResult, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
@@ -11,27 +10,22 @@ import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterBar from "@/features/sc/presentation/components/ScGlobalFilterBar.vue";
-import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
+import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
-import type { InspectionSummaryItem } from "@/features/sc/domain/models";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
-import type { Filter } from "@perspective-dev/client";
-import { useScPerspectiveWorkbench } from "@/features/sc/presentation/composables/useScPerspectiveWorkbench";
-import { usePerspectiveSampleTableDataSource } from "@/features/sc/presentation/composables/usePerspectiveSampleTableDataSource";
-import { usePerspectiveInspectionModel } from "@/features/sc/presentation/composables/usePerspectiveInspectionModel";
+import { perspectiveReticleExpressions } from "@/features/sc/presentation/composables/perspectiveReticleExpressions";
+import { usePerspectiveInspectionQuadData } from "@/features/sc/presentation/composables/usePerspectiveInspectionQuadData";
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 const props = defineProps<{
   variant?: "preview" | "reclassify";
   datasetId?: string;
-  samplesError: string | null;
   inspectionTime: string;
   waferKey: number;
-  inspectionItem?: InspectionSummaryItem;
   showPredictionBadges?: boolean;
   annotationDrafts?: Record<string, string>;
   activeMapTab: "wafer" | "die" | "reticle";
@@ -46,19 +40,15 @@ const props = defineProps<{
   } | null;
   legendGroupBy?: ScLegendSource | null;
   legendSources?: ScLegendSource[];
-  reticleXDieCount?: number;
-  reticleYDieCount?: number;
-  reticleDieSizeX?: number;
-  reticleDieSizeY?: number;
-  reticleOptions?: ReticleMapOptions;
+  reticleDieSizeX: number;
+  reticleDieSizeY: number;
+  reticleOptions: ReticleMapOptions;
   zoom?: { x: number; y: number; w: number; h: number } | null;
   selectedGalleryDefectIds?: Array<number | string>;
   globalFilter?: ScSampleTableFilter;
   tableFilter?: ScSampleTableFilter;
-  globalFilterActionEnabled?: boolean;
   tableSort?: ScSampleTableSort | null;
   galleryRandomSamplingDefectIds?: Set<string>;
-  syncGallerySelection?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -73,10 +63,9 @@ const emit = defineEmits<{
       key?: string | number | null;
     },
   ): void;
-  (e: "table-filter-change", filter: ScSampleTableFilter): void;
+  (e: "update:tableFilter", filter: ScSampleTableFilter): void;
   (e: "update:global-filter", filter: ScSampleTableFilter): void;
-  (e: "table-apply-filter-as-global", filter: ScSampleTableFilter): void;
-  (e: "table-sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
+  (e: "update:tableSort", sort: ScSampleTableSort | null): void;
   (e: "table-selection-change", ids: number[]): void;
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "clear-gallery-random-sampling"): void;
@@ -90,7 +79,6 @@ const emit = defineEmits<{
       selectionMode?: string;
     },
   ): void;
-  (e: "retry"): void;
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
@@ -126,27 +114,27 @@ const enabledLegendSources = computed<ScLegendSource[]>(
       ? ["class", "bin", "annotation", "prediction", "final_class"]
       : ["class", "bin"]),
 );
-const reticleOptionsModel = computed<ReticleMapOptions>(() => ({
-  xDieCount: props.reticleOptions?.xDieCount ?? props.reticleXDieCount ?? 2,
-  yDieCount: props.reticleOptions?.yDieCount ?? props.reticleYDieCount ?? 6,
-  xDieShift: props.reticleOptions?.xDieShift ?? 0,
-  yDieShift: props.reticleOptions?.yDieShift ?? 0,
-}));
-const reticleDieSizeXModel = computed(
-  () => props.reticleDieSizeX ?? props.inspectionItem?.die_size_x ?? 150_000_000,
-);
-const reticleDieSizeYModel = computed(
-  () => props.reticleDieSizeY ?? props.inspectionItem?.die_size_y ?? 150_000_000,
+const reticleOptionsModel = computed(() => props.reticleOptions);
+const reticleExpressionsModel = computed(() =>
+  perspectiveReticleExpressions(reticleOptionsModel.value, {
+    dieSizeX: props.reticleDieSizeX,
+    dieSizeY: props.reticleDieSizeY,
+  }),
 );
 
-const {
-  perspective,
-  perspectiveReady,
-  model,
-  tableDataSource,
-  reportPerspectiveError,
-  dispose: disposePerspectiveQuadData,
-} = usePerspectiveQuadData();
+const { perspective, perspectiveReady, model, reportPerspectiveError } =
+  usePerspectiveInspectionQuadData({
+    variant: computed(() => props.variant),
+    datasetId: computed(() => props.datasetId),
+    inspectionTime: computed(() => props.inspectionTime),
+    waferKey: computed(() => props.waferKey),
+    legendGroupBy: computed(() => props.legendGroupBy),
+    globalFilter: globalFilterModel,
+    tableFilter: computed(() => props.tableFilter),
+    tableSort: computed(() => props.tableSort),
+    reticleExpressions: reticleExpressionsModel,
+    galleryRandomSamplingDefectIds: computed(() => props.galleryRandomSamplingDefectIds),
+  });
 
 async function queryGlobalFilterCount(): Promise<number> {
   return model.queryGlobalFilterCount();
@@ -158,22 +146,11 @@ async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number
 
 defineExpose({ queryGlobalFilterCount, queryRandomGlobalFilteredDefectIds });
 
-const sampleTableTotal = 0;
 const tableHighlightIds = computed(
   () => new Set((model.tableSelectedDefectIds.value ?? []).map(Number).filter(Number.isFinite)),
 );
 const blinkHighlightIds = computed(
   () => new Set((props.selectedGalleryDefectIds ?? []).map(String)),
-);
-const EMPTY_MAP_DISPLAY = new Float32Array(0);
-const activeWaferDisplay = computed(() =>
-  props.activeMapTab === "wafer" ? model.waferDisplay.value : EMPTY_MAP_DISPLAY,
-);
-const activeDieDisplay = computed(() =>
-  props.activeMapTab === "die" ? model.dieDisplay.value : EMPTY_MAP_DISPLAY,
-);
-const activeReticleDisplay = computed(() =>
-  props.activeMapTab === "reticle" ? model.reticleDisplay.value : EMPTY_MAP_DISPLAY,
 );
 const perspectiveMaskVisible = computed(
   () => perspective.reconnecting.value || perspective.reconnectFailed.value,
@@ -204,15 +181,6 @@ let mapImmediateCrosshairSeq = 0;
 let _highlightTimer: ReturnType<typeof setTimeout> | null = null;
 const HIGHLIGHT_DEBOUNCE_MS = 250;
 const boxSelectionQueue = useBoxSelectionQueue();
-
-watch(
-  () => props.selectedGalleryDefectIds,
-  (ids) => {
-    if (!props.syncGallerySelection) return;
-    void model.setGallerySelectedDefectIds(ids ?? []);
-  },
-  { immediate: true },
-);
 
 function scheduleHighlightUpdate(ids: Set<string>, tab: string): void {
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
@@ -253,7 +221,6 @@ watch([() => props.activeMapTab, () => props.zoom], () => {
 });
 
 onUnmounted(() => {
-  disposePerspectiveQuadData();
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
   boxSelectionQueue.clear();
 });
@@ -414,8 +381,11 @@ function handleTableSelectionChange(ids: number[]): void {
   void model.setTableSelectedDefectIds(ids);
   emit("table-selection-change", ids);
 }
-function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
-  model.setHiddenLegendKeys(payload.hiddenKeys);
+function handleTableSortChange(sort: { field: string; direction: "asc" | "desc" | null }): void {
+  emit(
+    "update:tableSort",
+    sort.direction ? { field: sort.field, direction: sort.direction } : null,
+  );
 }
 function reconnectPerspective(): void {
   perspective.reconnect();
@@ -494,105 +464,10 @@ function useBoxSelectionQueue() {
 
   return { clear, enqueue };
 }
-
-function usePerspectiveQuadData() {
-  const perspective = useScPerspectiveWorkbench();
-  const perspectiveReady = computed(() => perspective.dataReady.value);
-  let disposed = false;
-  let stopConnectWatch: (() => void) | null = null;
-
-  function reportPerspectiveError(reason: string, err: unknown): void {
-    if (disposed) return;
-    console.warn("[sc-perspective] operation failed", { reason, err });
-    perspective.requestReconnect(reason, err);
-  }
-
-  const perspectiveScopeKey = computed(() => {
-    if (!perspectiveReady.value) return "perspective:disconnected";
-    if (props.variant === "reclassify") return `perspective:dataset:${props.datasetId ?? ""}`;
-    return `perspective:inspection:${props.inspectionTime ?? ""}:${props.waferKey ?? ""}`;
-  });
-  const galleryRandomSamplingFilter = computed<Filter[]>(() => {
-    const ids = props.galleryRandomSamplingDefectIds;
-    if (!ids || ids.size === 0) return [];
-    return [["defect_id", "in", [...ids]] as Filter];
-  });
-
-  const model = usePerspectiveInspectionModel({
-    table: perspective.table,
-    inspectionTime: computed(() => props.inspectionTime),
-    waferKey: computed(() => props.waferKey),
-    legendGroupBy: computed(() => props.legendGroupBy),
-    globalFilter: globalFilterModel,
-    zoom: computed(() => props.zoom),
-    activeMapMode: computed(() => props.activeMapTab),
-    galleryRandomSamplingFilter,
-    onRecoverableError: reportPerspectiveError,
-  });
-  const tableDataSource = usePerspectiveSampleTableDataSource(
-    perspective.table,
-    perspectiveScopeKey,
-    model.tableBaseFilters,
-    reportPerspectiveError,
-  );
-
-  onMounted(() => {
-    stopConnectWatch = watch(
-      [
-        () => props.variant,
-        () => props.datasetId,
-        () => props.inspectionTime,
-        () => props.waferKey,
-        () => reticleOptionsModel.value,
-      ],
-      async () => {
-        const opts = reticleOptionsModel.value;
-        if (props.variant === "reclassify") {
-          if (!props.datasetId) return perspective.disconnect();
-          await perspective.connect({
-            kind: "reclassify",
-            datasetId: props.datasetId,
-            reticleXDieCount: opts.xDieCount,
-            reticleYDieCount: opts.yDieCount,
-            reticleXDieShift: opts.xDieShift,
-            reticleYDieShift: opts.yDieShift,
-          });
-          return;
-        }
-        if (!props.inspectionTime || props.waferKey === undefined) return perspective.disconnect();
-        await perspective.connect({
-          kind: "preview",
-          inspectionTime: props.inspectionTime,
-          waferKey: props.waferKey,
-          reticleXDieCount: opts.xDieCount,
-          reticleYDieCount: opts.yDieCount,
-          reticleXDieShift: opts.xDieShift,
-          reticleYDieShift: opts.yDieShift,
-        });
-      },
-      { immediate: true },
-    );
-  });
-
-  function dispose(): void {
-    disposed = true;
-    stopConnectWatch?.();
-    stopConnectWatch = null;
-  }
-
-  return { perspective, perspectiveReady, model, tableDataSource, reportPerspectiveError, dispose };
-}
 </script>
 
 <template>
-  <perspective-viewer class="iq-hidden-perspective-viewer" aria-hidden="true" />
-  <div v-if="samplesError" class="iq-state">
-    <NResult status="error" :title="samplesError" description="Failed to load inspection samples"
-      ><template #footer><NButton @click="emit('retry')">Retry</NButton></template></NResult
-    >
-  </div>
   <div
-    v-else
     ref="quadEl"
     class="iq-quad"
     :class="{
@@ -618,16 +493,13 @@ function usePerspectiveQuadData() {
       <div class="iq-wafer">
         <ScMapPanelBinned
           :active-map-tab="activeMapTab"
-          :wafer-points="activeWaferDisplay"
-          :die-points="activeDieDisplay"
-          :reticle-points="activeReticleDisplay"
+          :arrow-data="model.mapArrowData.value"
+          :map-legend-column="model.mapLegendColumn.value"
           :legend-groups="model.legendGroups.value"
           :wafer-geometry="waferGeometry"
           :wafer-radius-nm="waferGeometry?.waferRadiusNm ?? undefined"
-          :reticle-x-die-count="reticleOptionsModel.xDieCount"
-          :reticle-y-die-count="reticleOptionsModel.yDieCount"
-          :reticle-die-size-x="reticleDieSizeXModel"
-          :reticle-die-size-y="reticleDieSizeYModel"
+          :reticle-die-size-x="reticleDieSizeX"
+          :reticle-die-size-y="reticleDieSizeY"
           :reticle-options="reticleOptionsModel"
           :legend-group-by="legendGroupBy"
           :legend-sources="enabledLegendSources"
@@ -637,17 +509,18 @@ function usePerspectiveQuadData() {
           :immediate-crosshair-version="mapImmediateCrosshairVersion"
           :map-loading="model.activeMapLoading.value || !perspectiveReady"
           :map-error="model.mapError.value ?? perspective.error.value"
-          :map-progress-message="perspectiveReady ? undefined : 'Loading data...'"
-          :map-progress-percent="perspectiveReady ? undefined : 0"
+          :map-progress-message="
+            perspectiveReady ? model.mapProgressMessage.value : 'Connecting to Perspective...'
+          "
+          :map-progress-percent="perspectiveReady ? model.mapProgressPercent.value : 0"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
           @selection-change="handleMapSelectionChange"
           @legend-select="handleLegendFilterChange"
           @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
-          @legend-hidden-change="handleLegendHiddenChange"
           @zoom-in="(vp) => emit('zoom-in', vp)"
           @box-select="handleBoxSelect"
-          @retry="() => emit('retry')"
+          @retry="reconnectPerspective"
         />
       </div>
       <div
@@ -659,25 +532,20 @@ function usePerspectiveQuadData() {
         @pointerup="onRowResizeEnd"
         @pointercancel="onRowResizeEnd"
       />
-      <ScSampleTable
-        :data-source="tableDataSource"
+      <ScSampleTableVxe
+        v-if="perspective.table.value"
+        :perspective-table="perspective.table.value"
+        :base-view-config="model.sampleTableBaseViewConfig.value"
         :loading="!perspectiveReady"
-        :total="sampleTableTotal"
         :selected-defect-ids="tableHighlightIds"
+        :ignored-perspective-update-port-ids="model.selectionUpdatePortIds.value"
         :filter="tableFilter"
         :sort="tableSort"
         :show-reclassify-columns="isReclassify"
-        :show-global-filter-action="isReclassify"
-        :global-filter-action-enabled="globalFilterActionEnabled"
         :enable-selection="true"
-        :reticle-x-die-count="reticleOptionsModel.xDieCount"
-        :reticle-y-die-count="reticleOptionsModel.yDieCount"
-        :reticle-x-die-shift="reticleOptionsModel.xDieShift"
-        :reticle-y-die-shift="reticleOptionsModel.yDieShift"
         @selection-change="handleTableSelectionChange"
-        @apply-filter-as-global="(filter) => emit('table-apply-filter-as-global', filter)"
-        @filter-change="(filter) => emit('table-filter-change', filter)"
-        @sort-change="(sort) => emit('table-sort-change', sort)"
+        @filter-change="(filter) => emit('update:tableFilter', filter)"
+        @sort-change="handleTableSortChange"
       />
     </div>
     <div
@@ -697,11 +565,9 @@ function usePerspectiveQuadData() {
     >
       <div class="iq-blink-pane">
         <ScBlinkVirtualTable
-          :patch-view="model.patchBlinkView.value"
-          :patch-view-version="model.patchBlinkViewVersion.value"
-          :review-view="model.reviewBlinkView.value"
-          :review-view-version="model.reviewBlinkViewVersion.value"
-          :loading="model.blinkFetching.value"
+          :patch-view-snapshot="model.patchGalleryViewSnapshot.value"
+          :review-view-snapshot="model.reviewGalleryViewSnapshot.value"
+          :loading="model.galleryLoading.value"
           :dataset-id="datasetId"
           :selected-defect-ids="blinkHighlightIds"
           :inspection-time="inspectionTime"
@@ -765,21 +631,6 @@ function usePerspectiveQuadData() {
 </template>
 
 <style scoped>
-.iq-hidden-perspective-viewer {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-.iq-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  min-height: 320px;
-}
 .iq-quad {
   position: relative;
   flex: 1;

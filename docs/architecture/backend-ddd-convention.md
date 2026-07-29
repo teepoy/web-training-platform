@@ -15,11 +15,11 @@ apps/api/app/modules/<context>/
     └── http/        # FastAPI routers, request/response schemas, Depends() functions
 ```
 
-| Layer | Directory | Role |
-|-------|-----------|------|
-| Domain | `domain/` | Pure business rules. Defines entity models and repository Protocols that upper layers depend on. No IO, no ORM, no framework imports. |
-| Application | `app/` | Orchestration and use-case logic. Depends on `domain/` Protocols. Services take typed Protocol parameters only. No HTTP or DB session imports. |
-| Adapter | `adapter/` | Implements contracts from `domain/` and `app/`. Contains DB repositories, external API clients, execution engines, Prefect flows, and runtime logic. Imports IO libraries freely. |
+| Layer       | Directory    | Role                                                                                                                                                                                                  |
+| ----------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain      | `domain/`    | Pure business rules. Defines entity models and repository Protocols that upper layers depend on. No IO, no ORM, no framework imports.                                                                 |
+| Application | `app/`       | Orchestration and use-case logic. Depends on `domain/` Protocols. Services take typed Protocol parameters only. No HTTP or DB session imports.                                                        |
+| Adapter     | `adapter/`   | Implements contracts from `domain/` and `app/`. Contains DB repositories, external API clients, execution engines, Prefect flows, and runtime logic. Imports IO libraries freely.                     |
 | Port (HTTP) | `port/http/` | Delivery layer. FastAPI routers, Pydantic request/response schemas, and `Depends()` functions that read from `request.app.state.app_context.<module>.<field>`. Thin handlers only; no business logic. |
 
 Additional port flavors (`port/consumer/`, `port/grpc/`) are reserved for future use and not yet implemented.
@@ -48,7 +48,7 @@ The unified dataset module has a storage aggregate boundary in addition to the g
 
 ```text
 app/modules/datasets/
-├── domain/storage_agg.py          # DatasetStorageAgg Protocol, Capabilities
+├── domain/storage_agg.py          # DatasetStorageAgg protocol
 ├── adapter/storage_factory.py     # storage_mode -> concrete aggregate
 ├── adapter/db_full_storage.py     # SampleORM-backed implementation
 ├── adapter/sparse_storage.py      # Parquet shard / manifest implementation
@@ -65,17 +65,17 @@ Routes and services should receive a factory or service from DI, open the storag
 
 These renames apply uniformly across all bounded contexts:
 
-| Old path | New path | Notes |
-|----------|----------|-------|
-| `application/` | `app/` | All modules |
-| `infrastructure/` | `adapter/` | All modules |
-| `interfaces/controllers/` | `port/http/` | Routers move here |
-| `interfaces/dtos/` | `port/http/` | Schemas move here; may be `port/http/schemas.py` |
-| `api/deps.py` | `port/http/deps.py` | DI dependency functions |
-| `data/` | `adapter/data/` | Dataset-type modules only |
-| `runtime/` | `adapter/runtime/` | Dataset-type modules only |
-| `mocks/` | `adapter/mocks/` | Dataset-type modules only |
-| `presets/` | `app/presets/` | Dataset-type modules only |
+| Old path                  | New path            | Notes                                            |
+| ------------------------- | ------------------- | ------------------------------------------------ |
+| `application/`            | `app/`              | All modules                                      |
+| `infrastructure/`         | `adapter/`          | All modules                                      |
+| `interfaces/controllers/` | `port/http/`        | Routers move here                                |
+| `interfaces/dtos/`        | `port/http/`        | Schemas move here; may be `port/http/schemas.py` |
+| `api/deps.py`             | `port/http/deps.py` | DI dependency functions                          |
+| `data/`                   | `adapter/data/`     | Dataset-type modules only                        |
+| `runtime/`                | `adapter/runtime/`  | Dataset-type modules only                        |
+| `mocks/`                  | `adapter/mocks/`    | Dataset-type modules only                        |
+| `presets/`                | `app/presets/`      | Dataset-type modules only                        |
 
 These old directories must not exist as committed paths after migration. No `__init__.py` re-exports, no compatibility shims, no alias packages.
 

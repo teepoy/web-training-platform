@@ -149,4 +149,23 @@ describe("ScLegend", () => {
 
     expect(wrapper.emitted("update:colorMap")?.[0]).toEqual([{ "1": "#00ff00" }]);
   });
+
+  it("uses the numeric annotation class as the color-map key", async () => {
+    const { wrapper } = await mountWithProviders(ScLegend, {
+      props: {
+        legendSource: "annotation",
+        annotations: {
+          "7": {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [101, 102],
+          },
+        },
+      },
+    });
+
+    await wrapper.find<HTMLInputElement>(".sc-legend-color-input").setValue("#00ff00");
+
+    expect(wrapper.emitted("update:colorMap")?.[0]).toEqual([{ "7": "#00ff00" }]);
+  });
 });

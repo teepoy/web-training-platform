@@ -12,18 +12,15 @@ from app.modules.auth.port.http.deps import (
 )
 from app.shared.api.schemas import (
     Organization,
-    JobStatus,
     TrainingEvent,
     TrainingJob,
     User,
-    DatasetStorageMode,
 )
 from app.modules.models.port.http.schemas import (
     SetPublicRequest,
     SetPublicResponse,
 )
 from app.modules.training.port.http.deps import (
-    PrefectClientDep,
     RepositoryDep,
     TrainingOrchestratorDep,
 )
@@ -33,30 +30,19 @@ from app.modules.training.port.http.schemas import (
     TrainAndPredictRequest,
     TrainAndPredictResponse,
 )
-from app.modules.datasets.port.local import validate_trainer_for_dataset
+from app.modules.datasets.port.local import DatasetCompatibilityError
+from app.modules.training.domain.submission import (
+    TrainingDatasetNotFoundError,
+    TrainingReadinessError,
+    TrainingRuntimeUnavailableError,
+    TrainingSubmissionError,
+)
 from app.modules.types import catalog
 from app.shared.api.schemas import CancelJobResponse
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import SSEEvent, TrainingStatusEvent
 
 router = APIRouter(prefix="/api/v1", tags=["training"])
-
-
-def _validate_training_dataset(dataset, trainer_id: str) -> None:
-    if (
-        dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
-        and dataset.dataset_type not in ("image_sc",)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Training is not supported for this dataset's storage mode",
-        )
-    validate_trainer_for_dataset(
-        trainer_id=trainer_id,
-        dataset_type=dataset.dataset_type,
-        view_types=dataset.view_types,
-        storage_mode=dataset.storage_mode.value,
-    )
 
 
 @router.get("/trainers")
@@ -66,20 +52,17 @@ async def list_trainers_route(
 ) -> list[dict]:
     return [
         {
-            "id": t["id"],
-            "name": t["name"],
-            "view_type": t["view_id"],
+            "id": t.id,
+            "name": t.name,
+            "view_type": t.view_id,
             "trainable": True,
         }
         for t in _list_trainer_metadata()
     ]
 
 
-def _list_trainer_metadata() -> list[dict[str, str]]:
-    return [
-        catalog.get_trainer_meta(trainer_id)
-        for trainer_id in catalog.list_trainer_ids()
-    ]
+def _list_trainer_metadata() -> list[catalog.TrainerMetadata]:
+    return list(catalog.list_trainers())
 
 
 @router.get("/trainers/{trainer_id}")
@@ -93,9 +76,9 @@ async def get_trainer_route(
     except KeyError:
         raise HTTPException(status_code=404, detail="Trainer not found") from None
     return {
-        "id": trainer_meta["id"],
-        "name": trainer_meta["name"],
-        "view_type": trainer_meta["view_id"],
+        "id": trainer_meta.id,
+        "name": trainer_meta.name,
+        "view_type": trainer_meta.view_id,
         "trainable": True,
     }
 
@@ -103,121 +86,76 @@ async def get_trainer_route(
 @router.post("/training-jobs", response_model=TrainingJob)
 async def create_training_job(
     payload: CreateTrainingJobRequest,
-    repo: RepositoryDep,
     orchestrator: TrainingOrchestratorDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TrainingJob:
-    dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    _validate_training_dataset(dataset, payload.trainer_id)
-    job = TrainingJob(
-        dataset_id=payload.dataset_id,
-        trainer_id=payload.trainer_id,
-        created_by=current_user.id,
-        org_id=org.id,
-    )
     try:
-        return await orchestrator.start_job(job)
-    except HTTPException:
-        raise
+        return await orchestrator.submit_job(
+            payload.to_command(org_id=org.id, created_by=current_user.id)
+        )
+    except TrainingDatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    except (DatasetCompatibilityError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=502, detail=f"Failed to start training job: {exc}"
-        )
+        ) from exc
 
 
 @router.post("/training-jobs/train-and-predict", response_model=TrainAndPredictResponse)
 async def create_train_and_predict_job(
     payload: TrainAndPredictRequest,
-    repo: RepositoryDep,
-    prefect_client: PrefectClientDep,
+    orchestrator: TrainingOrchestratorDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TrainAndPredictResponse:
-    dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    _validate_training_dataset(dataset, payload.trainer_id)
-    if payload.sample_filter is not None and dataset.dataset_type != "image_sc":
-        raise HTTPException(
-            status_code=400,
-            detail="sample_filter is only supported for image_sc datasets",
+    try:
+        submission = await orchestrator.submit_train_and_predict(
+            payload.to_command(org_id=org.id, created_by=current_user.id)
         )
-
-    job = TrainingJob(
-        dataset_id=payload.dataset_id,
-        trainer_id=payload.trainer_id,
-        created_by=current_user.id,
-        org_id=org.id,
-    )
-    job = await repo.create_job(job, org_id=org.id, user_id=current_user.id)
-
-    deployment_id = await prefect_client.resolve_deployment_id(
-        "train-and-predict-deployment"
-    )
-    if deployment_id is None:
+    except TrainingDatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    except TrainingReadinessError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=exc.report.as_http_detail(),
+        ) from exc
+    except DatasetCompatibilityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TrainingRuntimeUnavailableError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Deployment 'train-and-predict-deployment' is not registered",
-        )
-    try:
-        run = await prefect_client.create_flow_run_from_deployment(
-            deployment_id=deployment_id,
-            parameters={
-                "job_id": job.id,
-                "dataset_id": payload.dataset_id,
-                "trainer_id": payload.trainer_id,
-                "org_id": org.id,
-                "created_by": current_user.id,
-                "target": payload.target,
-                "model_version": payload.model_version,
-                "sample_ids": payload.sample_ids,
-                "sample_filter": payload.sample_filter,
-                "prompt": payload.prompt,
-            },
-            idempotency_key=f"train-and-predict:{job.id}",
-        )
-    except Exception as exc:
-        await repo.update_job_status(job.id, JobStatus.FAILED)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to start train and predict workflow: {exc}",
+            detail=str(exc),
         ) from exc
+    except TrainingSubmissionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    workflow_run_id = str(run["id"])
-    await repo.set_job_external_id(job.id, workflow_run_id)
-    await repo.add_event(
-        TrainingEvent(
-            job_id=job.id,
-            message="train and predict workflow submitted",
-            payload={
-                "external_id": workflow_run_id,
-                "status": JobStatus.QUEUED.value,
-                **(
-                    {"sample_filter": payload.sample_filter}
-                    if payload.sample_filter is not None
-                    else {}
-                ),
-            },
-        )
-    )
-    job.external_job_id = workflow_run_id
     return TrainAndPredictResponse(
-        train_job=job.model_dump(mode="json"),
-        workflow_run_id=workflow_run_id,
+        train_job=submission.train_job,
+        workflow_run_id=submission.workflow_run_id,
     )
 
 
-@router.get("/training-jobs", response_model=list[TrainingJob])
+@router.get("/training-jobs", response_model=PaginatedResponse[TrainingJob])
 async def list_jobs(
     repo: RepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     dataset_id: str | None = Query(default=None, description="Filter by dataset"),
-) -> list[TrainingJob]:
-    return await repo.list_jobs(org_id=org.id, dataset_id=dataset_id)
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[TrainingJob]:
+    items, total = await repo.list_jobs_paginated(
+        org_id=org.id,
+        dataset_id=dataset_id,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedResponse(items=items, total=total)
 
 
 @router.get("/training-jobs/{job_id}", response_model=TrainingJob)

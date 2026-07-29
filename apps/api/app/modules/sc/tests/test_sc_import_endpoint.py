@@ -49,7 +49,6 @@ _VALID_BODY: dict[str, object] = {
     "source_wafer_key": 1,
     "dataset_name": "test-sc-dataset",
     "storage_mode": "file_shard_sparse",
-    "filters": None,
     "label_space": ["defect", "clean"],
 }
 
@@ -174,7 +173,7 @@ def test_post_import_invalid_body_returns_422() -> None:
         _unmock_auth()
 
 
-def test_post_import_direct_import_failure_returns_200_fallback() -> None:
+def test_post_import_direct_import_failure_returns_502() -> None:
     mock_service = MagicMock()
     mock_status = ScImportStatus(
         status="failed",
@@ -191,10 +190,9 @@ def test_post_import_direct_import_failure_returns_200_fallback() -> None:
     try:
         with TestClient(app) as client:
             resp = client.post("/api/v1/sc/import", json=_VALID_BODY)
-            assert resp.status_code == 200, resp.text
+            assert resp.status_code == 502, resp.text
             body = resp.json()
-            assert body["status"] == "failed"
-            assert "Direct import failed" in (body.get("error") or "")
+            assert "Direct import failed" in body["detail"]
     finally:
         _unmock_auth()
         _unset_service_mock()

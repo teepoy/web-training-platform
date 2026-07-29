@@ -5,8 +5,6 @@ Monorepo for an online finetune platform with:
 - Vue 3 frontend (`apps/web`)
 - FastAPI backend (`apps/api`)
 - Prefect flow definitions (in-app, inside `apps/api`)
-- Python SDK + CLI (`libs/platform-runtime`)
-- Python SDK compatibility shim (`libs/python-sdk`)
 
 Current implementation focuses on extensible interfaces, classification-first types,
 swappable execution engines (local + Kubeflow mock), SSE job progress, webhook
@@ -23,7 +21,6 @@ notification sink as the default custom notification function, and async SQLAlch
 - Centralized config via OmegaConf and runtime wiring via composition root (`apps/api/app/composition.py`).
 - Lightweight in-app orchestration with SSE event streaming.
 - Custom notification sink contract with webhook default implementation.
-- Python SDK/CLI for status checks and simple agent-friendly operations.
 
 ## Quick start (local smoke)
 
@@ -47,20 +44,6 @@ Frontend:
 cd apps/web
 pnpm install
 pnpm dev
-```
-
-SDK CLI:
-
-```bash
-cd libs/platform-runtime
-uv run ftctl jobs status --job-id <job-id>
-```
-
-Or run module directly:
-
-```bash
-cd libs/platform-runtime
-uv run python -m platform_runtime.sdk.cli jobs ls
 ```
 
 ## Notes

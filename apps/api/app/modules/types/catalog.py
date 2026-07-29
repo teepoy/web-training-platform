@@ -1,99 +1,122 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from app.modules.types.capabilities import (
+    CapabilityBundle,
+    CapabilityCatalog,
+    MaterializerMetadata,
+    ModelContractRef,
+    PredictorMetadata,
+    TrainerMetadata,
+    ViewContractRef,
+    ViewDefinition,
+)
+from app.modules.types.registrations.core_image import (
+    BOX_DETECTION_V1,
+    CORE_IMAGE_CAPABILITIES,
+    IMAGE_INPUT_V1,
+    LABELED_IMAGE_V1,
+    QA_INPUT_V1,
+)
+from app.modules.types.registrations.sc import (
+    SC_CAPABILITIES,
+    SC_PATCH_IMAGE_V1,
+    SC_REVIEW_IMAGE_V1,
+)
+
+capabilities = CapabilityCatalog((CORE_IMAGE_CAPABILITIES, SC_CAPABILITIES))
 
 
-def _extract_meta(
-    entries: Mapping[str, object],
-    fallback: Iterable[dict[str, str]],
-) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {
-        row["id"]: {
-            "id": row["id"],
-            "name": row["name"],
-            "view_id": row["view_id"],
-        }
-        for row in fallback
-    }
-    for tid, obj in entries.items():
-        if tid in result:
-            continue
-        name = getattr(obj, "name", tid)
-        view_id = getattr(obj, "view_id", "")
-        result[tid] = {"id": tid, "name": str(name), "view_id": str(view_id)}
-    return result
+def list_views() -> tuple[ViewDefinition, ...]:
+    return capabilities.list_views()
 
 
-def _trainer_meta_index() -> dict[str, dict[str, str]]:
-    from app.core.registry import _registry
-
-    return _extract_meta(_registry._trainers, _TRAINER_FALLBACK)
+def list_materializers() -> tuple[MaterializerMetadata, ...]:
+    return capabilities.list_materializers()
 
 
-def _predictor_meta_index() -> dict[str, dict[str, str]]:
-    from app.core.registry import _registry
+def list_trainers() -> tuple[TrainerMetadata, ...]:
+    return capabilities.list_trainers()
 
-    return _extract_meta(_registry._predictors, _PREDICTOR_FALLBACK)
+
+def list_predictors() -> tuple[PredictorMetadata, ...]:
+    return capabilities.list_predictors()
 
 
 def list_trainer_ids() -> list[str]:
-    return list(_trainer_meta_index().keys())
+    return [trainer.id for trainer in list_trainers()]
 
 
 def list_predictor_ids() -> list[str]:
-    return list(_predictor_meta_index().keys())
+    return [predictor.id for predictor in list_predictors()]
 
 
-def get_trainer_meta(trainer_id: str) -> dict[str, str]:
-    try:
-        return _trainer_meta_index()[trainer_id]
-    except KeyError as exc:
-        raise KeyError(trainer_id) from exc
+def get_view_meta(view_id: str) -> ViewDefinition:
+    return capabilities.get_view(view_id)
 
 
-def get_predictor_meta(predictor_id: str) -> dict[str, str]:
-    try:
-        return _predictor_meta_index()[predictor_id]
-    except KeyError as exc:
-        raise KeyError(predictor_id) from exc
+def get_materializer_meta(materializer_id: str) -> MaterializerMetadata:
+    return capabilities.get_materializer(materializer_id)
 
 
-# ── Fallback entries for trainers/predictors not yet registered ──
-#     via @trainer/@predictor decorators (planned / non-executable).
+def get_trainer_meta(trainer_id: str) -> TrainerMetadata:
+    return capabilities.get_trainer(trainer_id)
 
-_TRAINER_FALLBACK: tuple[dict[str, str], ...] = (
-    {
-        "id": "resnet50-sc-v1",
-        "name": "ResNet-50 SC Defect Classifier",
-        "view_id": "patch_image_v1",
-    },
-    {
-        "id": "yolo-sc-v1",
-        "name": "YOLO SC Detection Trainer",
-        "view_id": "patch_image_v1",
-    },
-)
 
-_PREDICTOR_FALLBACK: tuple[dict[str, str], ...] = (
-    {
-        "id": "resnet50-cls-v1",
-        "name": "ResNet-50 Classification",
-        "view_id": "image_input_v1",
-    },
-    {"id": "dspy-vqa-v1", "name": "DSPy VQA", "view_id": "qa_input_v1"},
-    {"id": "clip-zero-shot-v1", "name": "CLIP Zero-Shot", "view_id": "image_input_v1"},
-    {"id": "detection-v1", "name": "Detection V1", "view_id": "box_detection_v1"},
-    {
-        "id": "resnet50-sc-v1",
-        "name": "ResNet-50 SC Defect Classifier",
-        "view_id": "image_input_v1",
-    },
-    {"id": "yolo-sc-v1", "name": "YOLO SC Detection", "view_id": "patch_image_v1"},
-)
+def get_predictor_meta(predictor_id: str) -> PredictorMetadata:
+    return capabilities.get_predictor(predictor_id)
+
+
+def resolve_predictor_id(
+    trainer_id: str,
+    *,
+    requested_predictor_id: str | None = None,
+) -> str:
+    return capabilities.resolve_predictor_id(
+        trainer_id,
+        requested_predictor_id=requested_predictor_id,
+    )
+
+
+def validate_predictor_model_contract(
+    predictor_id: str,
+    *,
+    model_contract: object,
+    model_schema_version: object,
+) -> PredictorMetadata:
+    return capabilities.validate_predictor_model_contract(
+        predictor_id,
+        model_contract=model_contract,
+        model_schema_version=model_schema_version,
+    )
+
 
 __all__ = [
+    "BOX_DETECTION_V1",
+    "CORE_IMAGE_CAPABILITIES",
+    "CapabilityBundle",
+    "IMAGE_INPUT_V1",
+    "LABELED_IMAGE_V1",
+    "MaterializerMetadata",
+    "ModelContractRef",
+    "PredictorMetadata",
+    "QA_INPUT_V1",
+    "SC_CAPABILITIES",
+    "SC_PATCH_IMAGE_V1",
+    "SC_REVIEW_IMAGE_V1",
+    "TrainerMetadata",
+    "ViewContractRef",
+    "ViewDefinition",
+    "capabilities",
+    "get_materializer_meta",
     "get_predictor_meta",
     "get_trainer_meta",
+    "get_view_meta",
+    "list_materializers",
     "list_predictor_ids",
+    "list_predictors",
     "list_trainer_ids",
+    "list_trainers",
+    "list_views",
+    "resolve_predictor_id",
+    "validate_predictor_model_contract",
 ]

@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TrainAndPredictResponseTrainJob } from './trainAndPredictResponseTrainJob';
+import type { TrainingJob } from './trainingJob';
 
 export interface TrainAndPredictResponse {
-  train_job: TrainAndPredictResponseTrainJob;
+  train_job: TrainingJob;
   workflow_run_id: string;
 }

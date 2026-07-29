@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.core.registry import list_predictors
 from app.main import app
+from app.modules.types import catalog
 
 
 def test_trainer_catalog_endpoint_preserves_baseline_shape() -> None:
@@ -23,11 +23,18 @@ def test_trainer_catalog_endpoint_preserves_baseline_shape() -> None:
         assert row["trainable"] is True
 
     trainer_ids = {row["id"] for row in body}
-    assert {"resnet50-sc-v1", "resnet50-sc-v1", "resnet50-sc-v1", "resnet50-sc-v1", "yolo-sc-v1"} <= trainer_ids
+    assert trainer_ids == {"resnet50-sc-v1", "yolo-sc-v1"}
 
 
 def test_predictor_catalog_listing_preserves_baseline_shape() -> None:
-    body = list_predictors()
+    body = [
+        {
+            "id": predictor.id,
+            "name": predictor.name,
+            "view_type": predictor.view_id,
+        }
+        for predictor in catalog.list_predictors()
+    ]
 
     assert isinstance(body, list)
     assert body, "predictor catalog should not be empty"
@@ -39,4 +46,4 @@ def test_predictor_catalog_listing_preserves_baseline_shape() -> None:
         assert isinstance(row["view_type"], str)
 
     predictor_ids = {row["id"] for row in body}
-    assert {"resnet50-sc-v1", "resnet50-sc-v1", "resnet50-sc-v1", "resnet50-sc-v1", "yolo-sc-v1", "clip-zero-shot-v1"} <= predictor_ids
+    assert predictor_ids == {"resnet50-sc-v1", "yolo-sc-v1"}

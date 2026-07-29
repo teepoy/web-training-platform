@@ -330,6 +330,25 @@ class PrefectClient:
         """
         existing_id = await self.resolve_deployment_id(deployment_name)
         if existing_id is not None:
+            body = {
+                key: value
+                for key, value in {
+                    "work_pool_name": work_pool_name,
+                    "entrypoint": entrypoint,
+                    "path": path,
+                    "parameters": parameters,
+                    "tags": tags,
+                }.items()
+                if value is not None
+            }
+            if body:
+                await self._request(
+                    "PATCH",
+                    f"/deployments/{existing_id}",
+                    json=body,
+                    expect_json=False,
+                    resource_label="deployment",
+                )
             return await self.get_deployment(existing_id)
 
         flow_id = await self.resolve_flow_id(flow_name)

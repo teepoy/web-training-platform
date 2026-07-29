@@ -8,17 +8,26 @@ from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
 )
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
 from app.modules.datasets.port.http.deps import get_dataset_storage_factory
-from app.modules.datasets.port.local import validate_predictor_for_dataset
+from app.modules.datasets.port.local import DatasetCompatibilityError
+from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.prediction.port.http.deps import (
     ArtifactServiceDep,
-    ConfigDep,
+    DatasetReaderDep,
     DatasetServiceDep,
+    PredictionCollectionDep,
     PredictionOrchestratorDep,
+    PredictionQueryDep,
     PredictionRepositoryDep,
-    PredictionServiceDep,
+    PredictionReviewDep,
+    PredictionRuntimeDep,
     RedisEventPublisherDep,
+)
+from app.modules.prediction.domain.submission import (
+    PredictionResourceNotFoundError,
+    PredictionRuntimeUnavailableError,
+    PredictionSubmissionError,
+    PredictionSubmissionRejectedError,
 )
 from app.modules.prediction.port.http.schemas import (
     CreateReviewActionRequest,
@@ -40,13 +49,13 @@ from app.modules.prediction.port.http.schemas import (
     VersionExportRequest,
 )
 from app.shared.api.schemas import Organization, User
-from app.shared.api.schemas import CancelJobResponse
+from app.shared.api.schemas import CancelJobResponse, PaginatedResponse
 
 router = APIRouter(prefix="/api/v1", tags=["prediction"])
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 CurrentOrgDep = Annotated[Organization, Depends(get_current_org)]
 DatasetStorageFactoryDep = Annotated[
-    DatasetStorageFactory, Depends(get_dataset_storage_factory)
+    DatasetStorageFactoryPort, Depends(get_dataset_storage_factory)
 ]
 
 
@@ -116,92 +125,29 @@ async def run_predictions(
     payload: RunPredictionRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    cfg: ConfigDep,
-    repo: PredictionRepositoryDep,
-    prediction_service: PredictionServiceDep,
     prediction_orchestrator: PredictionOrchestratorDep,
-    factory: DatasetStorageFactoryDep,
 ) -> PredictionJobResponse:
-    # ── Validate dataset ────────────────────────────────────────────────
-    dataset = await repo.get_dataset(payload.dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-
-    # ── Capability gate ─────────────────────────────────────────────────
-    storage = await factory.open(payload.dataset_id, org_id=org.id)
-    if not storage.capabilities.can_list_samples:
-        raise HTTPException(
-            status_code=409,
-            detail="Prediction is not supported for this dataset's storage mode",
-        )
-
-    # ── Predictor compatibility gate ────────────────────────────────────
-    model = await repo.get_model(payload.model_id, org_id=org.id)
-    if model is None:
-        raise HTTPException(status_code=404, detail="Model not found")
-    predictor_id = model.trainer_id or model.trainer_name or ""
-    if not predictor_id:
-        raise HTTPException(
-            status_code=422,
-            detail="Model has no associated predictor",
-        )
-    validate_predictor_for_dataset(
-        predictor_id=predictor_id,
-        dataset_type=dataset.dataset_type,
-        view_types=dataset.view_types,
-        storage_mode=dataset.storage_mode.value,
-    )
-
     try:
-        from app.shared.api.schemas import PredictionJob
-
-        job = PredictionJob(
-            dataset_id=payload.dataset_id,
-            model_id=payload.model_id,
-            created_by=current_user.id,
-            target=payload.target,
-            model_version=payload.model_version,
-            org_id=org.id,
-            sample_ids=payload.sample_ids,
+        started = await prediction_orchestrator.submit_job(
+            payload.to_command(org_id=org.id, created_by=current_user.id)
         )
-        if str(cfg.app.env) == "test":
-            from app.shared.api.schemas import PredictionEvent
-            from app.shared.api.schemas import JobStatus
-
-            result = await prediction_service.run_prediction(
-                model_id=payload.model_id,
-                dataset_id=payload.dataset_id,
-                org_id=org.id,
-                sample_ids=payload.sample_ids,
-                model_version=payload.model_version,
-                target=payload.target,
-                prompt=payload.prompt,
-            )
-            job.status = JobStatus.COMPLETED
-            job.summary = result.model_dump(mode="json")
-            persisted = await repo.create_prediction_job(job, org_id=org.id)
-            await repo.add_prediction_event(
-                PredictionEvent(
-                    job_id=persisted.id,
-                    message="prediction completed in test mode",
-                    payload={"summary": persisted.summary},
-                )
-            )
-            return _prediction_job_to_response(persisted)
-        try:
-            started = await prediction_orchestrator.start_job(job)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502, detail=f"Failed to start prediction job: {exc}"
-            )
-        return _prediction_job_to_response(started)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except PredictionResourceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PredictionSubmissionRejectedError, DatasetCompatibilityError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PredictionRuntimeUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except PredictionSubmissionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return _prediction_job_to_response(started)
 
 
-@router.get("/prediction-jobs", response_model=list[PredictionJobResponse])
+@router.get(
+    "/prediction-jobs",
+    response_model=PaginatedResponse[PredictionJobResponse],
+)
 async def list_prediction_jobs(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
@@ -210,9 +156,19 @@ async def list_prediction_jobs(
         default=None,
         description="Filter prediction jobs to one dataset.",
     ),
-) -> list[PredictionJobResponse]:
-    jobs = await repo.list_prediction_jobs(org_id=org.id, dataset_id=dataset_id)
-    return [_prediction_job_to_response(job) for job in jobs]
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[PredictionJobResponse]:
+    jobs, total = await repo.list_prediction_jobs_paginated(
+        org_id=org.id,
+        dataset_id=dataset_id,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedResponse(
+        items=[_prediction_job_to_response(job) for job in jobs],
+        total=total,
+    )
 
 
 @router.get("/prediction-jobs/{job_id}", response_model=PredictionJobResponse)
@@ -237,14 +193,14 @@ async def list_prediction_job_predictions(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
-    prediction_service: PredictionServiceDep,
+    prediction_query: PredictionQueryDep,
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     limit: int = Query(1000, ge=1, le=10000, description="Max results to return"),
 ) -> list[PredictionResultResponse]:
     job = await repo.get_prediction_job(job_id, org_id=org.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Prediction job not found")
-    predictions = await prediction_service.list_predictions_for_job(
+    predictions = await prediction_query.list_predictions_for_job(
         job_id, org_id=org.id, offset=offset, limit=limit
     )
     return [_prediction_result_to_response(item) for item in predictions]
@@ -252,28 +208,37 @@ async def list_prediction_job_predictions(
 
 @router.get(
     "/prediction-jobs/{job_id}/events",
-    response_model=list[PredictionEventResponse],
+    response_model=PaginatedResponse[PredictionEventResponse],
 )
 async def list_prediction_job_events(
     job_id: str,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
-) -> list[PredictionEventResponse]:
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[PredictionEventResponse]:
     job = await repo.get_prediction_job(job_id, org_id=org.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Prediction job not found")
-    events = await repo.list_prediction_events(job_id)
-    return [
-        PredictionEventResponse(
-            job_id=e.job_id,
-            ts=e.ts,
-            level=e.level,
-            message=e.message,
-            payload=e.payload,
-        )
-        for e in events
-    ]
+    events, total = await repo.list_prediction_events_paginated(
+        job_id,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedResponse(
+        items=[
+            PredictionEventResponse(
+                job_id=event.job_id,
+                ts=event.ts,
+                level=event.level,
+                message=event.message,
+                payload=event.payload,
+            )
+            for event in events
+        ],
+        total=total,
+    )
 
 
 @router.post("/prediction-jobs/{job_id}/cancel", response_model=CancelJobResponse)
@@ -296,10 +261,10 @@ async def predict_single(
     payload: PredictSingleRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_service: PredictionServiceDep,
+    prediction_runtime: PredictionRuntimeDep,
 ) -> PredictionResultResponse:
     try:
-        result = await prediction_service.predict_single(
+        result = await prediction_runtime.predict_single(
             model_id=payload.model_id,
             dataset_id=payload.dataset_id,
             sample_id=payload.sample_id,
@@ -307,6 +272,7 @@ async def predict_single(
             model_version=payload.model_version,
             target=payload.target,
             prompt=payload.prompt,
+            predictor_id=payload.predictor_id,
         )
         return _prediction_result_to_response(result)
     except ValueError as e:
@@ -321,14 +287,14 @@ async def list_sample_predictions(
     sample_id: str,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_service: PredictionServiceDep,
+    prediction_query: PredictionQueryDep,
     dataset_id: str | None = Query(
         default=None, description="Dataset ID (required for sparse datasets)"
     ),
     model_version: str | None = Query(default=None),
 ) -> list[PredictionResultResponse]:
     try:
-        predictions = await prediction_service.list_predictions_for_sample(
+        predictions = await prediction_query.list_predictions_for_sample(
             sample_id=sample_id,
             org_id=org.id,
             dataset_id=dataset_id,
@@ -353,10 +319,10 @@ async def create_prediction_collection(
     payload: PredictionCollectionRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_service: PredictionServiceDep,
+    prediction_collection: PredictionCollectionDep,
 ) -> PredictionCollectionResponse:
     try:
-        collection = await prediction_service.create_prediction_collection(
+        collection = await prediction_collection.create_prediction_collection(
             dataset_id=payload.dataset_id,
             model_id=payload.model_id,
             org_id=org.id,
@@ -373,29 +339,37 @@ async def create_prediction_collection(
 
 
 @router.get(
-    "/prediction-collections", response_model=list[PredictionCollectionResponse]
+    "/prediction-collections",
+    response_model=PaginatedResponse[PredictionCollectionResponse],
 )
 async def list_prediction_collections(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
-    prediction_service: PredictionServiceDep,
     dataset_id: str = Query(...),
-) -> list[PredictionCollectionResponse]:
-    collections = await prediction_service.list_prediction_collections(
-        dataset_id, org_id=org.id
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[PredictionCollectionResponse]:
+    collections, total = await repo.list_prediction_collections_paginated(
+        dataset_id,
+        org.id,
+        offset=offset,
+        limit=limit,
     )
-    responses: list[PredictionCollectionResponse] = []
-    for collection in collections:
-        predictions = await repo.list_prediction_collection_predictions(
-            collection.id, org.id
-        )
-        responses.append(
+    prediction_ids_by_collection = await repo.list_prediction_ids_by_collection(
+        [collection.id for collection in collections],
+        org.id,
+    )
+    return PaginatedResponse(
+        items=[
             _prediction_collection_to_response(
-                collection, [item.id for item in predictions]
+                collection,
+                prediction_ids_by_collection[collection.id],
             )
-        )
-    return responses
+            for collection in collections
+        ],
+        total=total,
+    )
 
 
 @router.post(
@@ -407,7 +381,7 @@ async def sync_prediction_collection_to_label_studio(
     payload: SyncPredictionCollectionRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_service: PredictionServiceDep,
+    prediction_collection: PredictionCollectionDep,
 ) -> SyncPredictionCollectionResponse:
     try:
         (
@@ -415,7 +389,7 @@ async def sync_prediction_collection_to_label_studio(
             synced_count,
             failed_count,
             errors,
-        ) = await prediction_service.sync_prediction_collection_to_label_studio(
+        ) = await prediction_collection.sync_prediction_collection_to_label_studio(
             collection_id=collection_id,
             org_id=org.id,
             sync_tag=payload.sync_tag,
@@ -443,10 +417,10 @@ async def create_review_action(
     payload: CreateReviewActionRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_service: PredictionServiceDep,
+    prediction_review: PredictionReviewDep,
 ) -> ReviewActionResponse:
     try:
-        action = await prediction_service.create_review_action(
+        action = await prediction_review.create_review_action(
             dataset_id=payload.dataset_id,
             model_id=payload.model_id,
             org_id=org.id,
@@ -469,27 +443,40 @@ async def create_review_action(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/prediction-reviews", response_model=list[ReviewActionResponse])
+@router.get(
+    "/prediction-reviews",
+    response_model=PaginatedResponse[ReviewActionResponse],
+)
 async def list_review_actions(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
     dataset_id: str = Query(...),
-) -> list[ReviewActionResponse]:
-    actions = await repo.list_review_actions(dataset_id)
-    return [
-        ReviewActionResponse(
-            id=a.id,
-            dataset_id=a.dataset_id,
-            model_id=a.model_id,
-            model_version=a.model_version,
-            collection_id=a.collection_id,
-            sync_tag=a.sync_tag,
-            created_by=a.created_by,
-            created_at=a.created_at,
-        )
-        for a in actions
-    ]
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[ReviewActionResponse]:
+    actions, total = await repo.list_review_actions_paginated(
+        dataset_id,
+        org.id,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedResponse(
+        items=[
+            ReviewActionResponse(
+                id=action.id,
+                dataset_id=action.dataset_id,
+                model_id=action.model_id,
+                model_version=action.model_version,
+                collection_id=action.collection_id,
+                sync_tag=action.sync_tag,
+                created_by=action.created_by,
+                created_at=action.created_at,
+            )
+            for action in actions
+        ],
+        total=total,
+    )
 
 
 @router.get("/prediction-reviews/{action_id}", response_model=ReviewActionResponse)
@@ -499,7 +486,7 @@ async def get_review_action(
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
 ) -> ReviewActionResponse:
-    action = await repo.get_review_action(action_id)
+    action = await repo.get_review_action(action_id, org.id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
     return ReviewActionResponse(
@@ -521,7 +508,7 @@ async def delete_review_action(
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
 ) -> Response:
-    deleted = await repo.delete_review_action(action_id)
+    deleted = await repo.delete_review_action(action_id, org.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Review action not found")
     return Response(status_code=204)
@@ -537,39 +524,38 @@ async def save_review_annotations(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
-    factory: DatasetStorageFactoryDep,
-    prediction_service: PredictionServiceDep,
+    dataset_reader: DatasetReaderDep,
+    prediction_review: PredictionReviewDep,
     dataset_service: DatasetServiceDep,
     event_publisher: RedisEventPublisherDep,
 ) -> SaveReviewAnnotationsResponse:
-    action = await repo.get_review_action(action_id)
+    action = await repo.get_review_action(action_id, org.id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
-    dataset = await repo.get_dataset(action.dataset_id, org_id=org.id)
+    dataset = await dataset_reader.get_dataset(action.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    storage = await factory.open(action.dataset_id, org_id=org.id)
-    if not storage.capabilities.can_list_samples:
-        raise HTTPException(
-            status_code=409,
-            detail="Saving review annotations is not supported for this dataset's storage mode",
-        )
     try:
-        items = [item.model_dump() for item in payload.items]
+        items = [item.to_command() for item in payload.items]
         (
             annotations,
             versions,
-        ) = await prediction_service.save_review_annotations(
+        ) = await prediction_review.save_review_annotations(
             review_action_id=action_id,
             items=items,
             created_by=current_user.id,
+            org_id=org.id,
         )
         # Auto-expand label_space with final_labels from annotations
         incoming_labels = {
             item.final_label for item in payload.items if item.final_label
         }
         if incoming_labels:
-            await dataset_service.merge_label_space(dataset.id, incoming_labels)
+            await dataset_service.merge_label_space(
+                dataset.id,
+                org.id,
+                incoming_labels,
+            )
 
         if annotations or versions:
             await event_publisher.publish_prediction_refresh(
@@ -599,31 +585,40 @@ async def save_review_annotations(
 
 @router.get(
     "/prediction-reviews/{action_id}/annotation-versions",
-    response_model=list[AnnotationVersionResponse],
+    response_model=PaginatedResponse[AnnotationVersionResponse],
 )
 async def list_annotation_versions(
     action_id: str,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
-) -> list[AnnotationVersionResponse]:
-    action = await repo.get_review_action(action_id)
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedResponse[AnnotationVersionResponse]:
+    action = await repo.get_review_action(action_id, org.id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
-    versions = await repo.list_annotation_versions(action_id)
-    return [
-        AnnotationVersionResponse(
-            id=v.id,
-            review_action_id=v.review_action_id,
-            annotation_id=v.annotation_id,
-            prediction_id=v.prediction_id,
-            predicted_label=v.predicted_label,
-            final_label=v.final_label,
-            confidence=v.confidence,
-            created_at=v.created_at,
-        )
-        for v in versions
-    ]
+    versions, total = await repo.list_annotation_versions_paginated(
+        action_id,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedResponse(
+        items=[
+            AnnotationVersionResponse(
+                id=version.id,
+                review_action_id=version.review_action_id,
+                annotation_id=version.annotation_id,
+                prediction_id=version.prediction_id,
+                predicted_label=version.predicted_label,
+                final_label=version.final_label,
+                confidence=version.confidence,
+                created_at=version.created_at,
+            )
+            for version in versions
+        ],
+        total=total,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -646,12 +641,13 @@ async def export_review_version(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
+    dataset_reader: DatasetReaderDep,
     factory: DatasetStorageFactoryDep,
     format_id: str = Query(default="annotation-version-full-context-v1"),
 ) -> dict:
     from app.shared.application.artifacts import get_export_builder
 
-    action = await repo.get_review_action(action_id)
+    action = await repo.get_review_action(action_id, org.id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
 
@@ -662,28 +658,23 @@ async def export_review_version(
             status_code=400, detail=f"Unknown export format: {format_id}"
         )
 
-    dataset = await repo.get_dataset(action.dataset_id, org_id=org.id)
+    dataset = await dataset_reader.get_dataset(action.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     storage = await factory.open(action.dataset_id, org_id=org.id)
     versions = await repo.list_annotation_versions(action_id)
-    ann_ids = [v.annotation_id for v in versions]
-    annotations = []
-    sample_ids_set: set[str] = set()
-    for aid in ann_ids:
-        ann = await repo.get_annotation(aid)
-        if ann is not None:
-            annotations.append(ann)
-            sample_ids_set.add(ann.sample_id)
+    ann_ids = list(dict.fromkeys(v.annotation_id for v in versions))
+    annotations = await storage.get_annotations_batch(ann_ids)
+    sample_ids_set = {annotation.sample_id for annotation in annotations}
 
     from app.shared.api.schemas import Sample as SampleSchema
 
     sample_id_list = list(sample_ids_set)
-    rows = await storage.get_samples_batch(sample_id_list)
+    rows_by_id = await storage.get_samples_by_id(sample_id_list)
     samples: list = []
-    for i, sid in enumerate(sample_id_list):
-        row = rows[i]
+    for sid in sample_id_list:
+        row = rows_by_id.get(sid)
         if row is not None:
             samples.append(
                 SampleSchema(
@@ -713,35 +704,31 @@ async def persist_review_export(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     repo: PredictionRepositoryDep,
+    dataset_reader: DatasetReaderDep,
     factory: DatasetStorageFactoryDep,
     artifacts: ArtifactServiceDep,
 ) -> VersionExportPersistResponse:
-    action = await repo.get_review_action(action_id)
+    action = await repo.get_review_action(action_id, org.id)
     if action is None:
         raise HTTPException(status_code=404, detail="Review action not found")
 
-    dataset = await repo.get_dataset(action.dataset_id, org_id=org.id)
+    dataset = await dataset_reader.get_dataset(action.dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     storage = await factory.open(action.dataset_id, org_id=org.id)
     versions = await repo.list_annotation_versions(action_id)
-    ann_ids = [v.annotation_id for v in versions]
-    annotations = []
-    sample_ids_set: set[str] = set()
-    for aid in ann_ids:
-        ann = await repo.get_annotation(aid)
-        if ann is not None:
-            annotations.append(ann)
-            sample_ids_set.add(ann.sample_id)
+    ann_ids = list(dict.fromkeys(v.annotation_id for v in versions))
+    annotations = await storage.get_annotations_batch(ann_ids)
+    sample_ids_set = {annotation.sample_id for annotation in annotations}
 
     from app.shared.api.schemas import Sample as SampleSchema
 
     sample_id_list = list(sample_ids_set)
-    rows = await storage.get_samples_batch(sample_id_list)
+    rows_by_id = await storage.get_samples_by_id(sample_id_list)
     samples: list = []
-    for i, sid in enumerate(sample_id_list):
-        row = rows[i]
+    for sid in sample_id_list:
+        row = rows_by_id.get(sid)
         if row is not None:
             samples.append(
                 SampleSchema(

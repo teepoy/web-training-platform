@@ -51,12 +51,6 @@ export interface UploadResponse {
   index: number;
 }
 
-export interface ExtractFeaturesResponse {
-  id: string;
-  status: string;
-  summary: Record<string, unknown>;
-}
-
 export interface ScheduleRun {
   id: string;
   name: string;
@@ -308,11 +302,7 @@ export interface WaferPointsQueryResponse {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export type ViewRowV1 =
-  | LabeledImageV1Row
-  | QAInputV1Row
-  | BoxDetectionV1Row
-  | ImageInputV1Row;
+export type ViewRowV1 = LabeledImageV1Row | QAInputV1Row | BoxDetectionV1Row | ImageInputV1Row;
 
 export interface ViewPaginatedResponse<T extends ViewRowV1 = ViewRowV1> {
   items: T[];

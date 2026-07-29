@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
+
+from injector import Module, inject, provider, singleton
 
 from app.modules.training.adapter.clients.kubeflow_client import KubeflowClient
 from app.modules.training.adapter.engines.local_kubeflow import (
@@ -11,10 +13,23 @@ from app.modules.training.adapter.engines.local_kubeflow import (
 from app.modules.training.adapter.engines.prefect_engine import (
     PrefectWorkPoolEngine,
 )
+from app.modules.training.adapter.repositories.repository import TrainingJobRepository
 from app.modules.training.app.services.orchestrator import TrainingOrchestrator
+from app.modules.training.app.services.readiness import TrainingReadinessService
+from app.modules.training.domain.repository import TrainingRepository
+from app.modules.training.port.local import (
+    TrainingExecutionPort,
+    TrainingReadinessPort,
+)
+from app.modules.datasets.port.dataset_reader import DatasetReader
+from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.shared.application.artifacts import ArtifactService
 from app.shared.context import SharedInfra
-from app.shared.db.sql_repository import SqlRepository
+from app.shared.domain.protocols import (
+    ArtifactStorage as ArtifactStoragePort,
+    TrainingExecutionEngine,
+)
 
 
 @dataclass
@@ -22,7 +37,8 @@ class TrainingContext:
     """Training module context — internal implementation, not exposed to other modules."""
 
     training_orchestrator: TrainingOrchestrator
-    repository: SqlRepository
+    training_readiness: TrainingReadinessService
+    repository: TrainingRepository
     # Internal implementation details (not exposed to other modules)
     kubeflow_client: KubeflowClient | None
     training_engine: Any  # TrainingExecutionEngine
@@ -48,6 +64,7 @@ def _build_training_engine(
     cfg: Any,
     artifact_storage: Any,
     prefect_client: Any,
+    runtime_router: RuntimeRoutingPort,
     kubeflow_client: KubeflowClient | None,
 ) -> Any:
     """Build the execution engine from config.
@@ -70,6 +87,7 @@ def _build_training_engine(
             work_pool_name=str(cfg.prefect.work_pool_name),
             work_pool_type=str(cfg.prefect.work_pool_type),
             flow_name=str(cfg.prefect.flow_name),
+            runtime_router=runtime_router,
             concurrency_limit=int(cfg.prefect.concurrency_limit),
         )
     raise RuntimeError(f"Unsupported execution.engine: {engine}")
@@ -77,6 +95,9 @@ def _build_training_engine(
 
 def init_training(
     shared: SharedInfra,
+    runtime_router: RuntimeRoutingPort,
+    dataset_reader: DatasetReader,
+    storage_factory: DatasetStorageFactoryPort,
 ) -> TrainingContext:
     kube_client = (
         _build_kubeflow_client(shared.config)
@@ -87,22 +108,109 @@ def init_training(
         cfg=shared.config,
         artifact_storage=shared.artifact_storage,
         prefect_client=shared.prefect_client,
+        runtime_router=runtime_router,
         kubeflow_client=kube_client,
     )
-    repository = SqlRepository(session_factory=shared.session_factory)
+    repository = TrainingJobRepository(
+        session_factory=shared.session_factory.sessionmaker
+    )
     artifact_service = ArtifactService(
         storage=shared.artifact_storage,
         repository=repository,
+    )
+    readiness = TrainingReadinessService(
+        storage_factory=storage_factory,
+        artifact_storage=shared.artifact_storage,
     )
     orchestrator = TrainingOrchestrator(
         engine=engine,
         notification_sink=shared.notification_sink,
         repository=repository,
         artifact_service=artifact_service,
+        dataset_reader=dataset_reader,
+        prefect_client=shared.prefect_client,
+        runtime_router=runtime_router,
+        readiness=readiness,
     )
     return TrainingContext(
         training_orchestrator=orchestrator,
+        training_readiness=readiness,
         repository=repository,
         kubeflow_client=kube_client,
         training_engine=engine,
     )
+
+
+class TrainingModule(Module):
+    @inject
+    @provider
+    @singleton
+    def provide_training_context(
+        self,
+        shared: SharedInfra,
+        runtime_router: RuntimeRoutingPort,
+        dataset_reader: DatasetReader,
+        storage_factory: DatasetStorageFactoryPort,
+    ) -> TrainingContext:
+        return init_training(
+            shared,
+            runtime_router=runtime_router,
+            dataset_reader=dataset_reader,
+            storage_factory=storage_factory,
+        )
+
+    @provider
+    @singleton
+    def provide_training_orchestrator(
+        self, context: TrainingContext
+    ) -> TrainingOrchestrator:
+        return context.training_orchestrator
+
+    @provider
+    @singleton
+    def provide_training_execution(
+        self, orchestrator: TrainingOrchestrator
+    ) -> TrainingExecutionPort:
+        return orchestrator
+
+    @provider
+    @singleton
+    def provide_training_readiness_service(
+        self,
+        context: TrainingContext,
+    ) -> TrainingReadinessService:
+        return context.training_readiness
+
+    @provider
+    @singleton
+    def provide_training_readiness(
+        self,
+        service: TrainingReadinessService,
+    ) -> TrainingReadinessPort:
+        return service
+
+    @provider
+    @singleton
+    def provide_training_repository(
+        self, context: TrainingContext
+    ) -> TrainingRepository:
+        return context.repository
+
+    @provider
+    @singleton
+    def provide_training_engine(
+        self, context: TrainingContext
+    ) -> TrainingExecutionEngine:
+        return cast(TrainingExecutionEngine, context.training_engine)
+
+    @provider
+    @singleton
+    def provide_artifact_service(
+        self,
+        artifact_storage: ArtifactStoragePort,
+        repository: TrainingRepository,
+    ) -> ArtifactService:
+        return ArtifactService(
+            storage=artifact_storage,
+            repository=repository,
+        )

@@ -27,7 +27,7 @@ from app.modules.datasets.port.http.deps import (
     get_repository,
     get_dataset_storage_factory,
 )
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.sample_row import BulkSampleRow
 from app.shared.infrastructure.label_studio.client import (
     platform_annotation_to_ls,

@@ -170,7 +170,7 @@ def patch_sample_to_patch_image_v1(
             iid_q = quote(ref.image_id, safe="")
             url = (
                 getattr(ref, "access_url", None)
-                or f"/api/v1/samples/{sid_q}/images/{iid_q}?dataset_id={ds_q}"
+                or f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}"
             )
             images.append(
                 ScImageRef(

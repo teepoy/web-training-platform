@@ -12,11 +12,13 @@ WORKDIR /app
 # Copy workspace manifests and lockfile first for layer caching
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/package.json
+COPY packages/sc-map-element/package.json packages/sc-map-element/package.json
 
 RUN pnpm install --frozen-lockfile
 
 # Copy web source
 COPY apps/web/ apps/web/
+COPY packages/sc-map-element/ packages/sc-map-element/
 
 RUN pnpm --filter web build
 
@@ -33,11 +35,13 @@ WORKDIR /app
 # Copy workspace manifests and lockfile first for layer caching
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/package.json
+COPY packages/sc-map-element/package.json packages/sc-map-element/package.json
 
 RUN pnpm install --frozen-lockfile
 
 # Copy web source
 COPY apps/web/ apps/web/
+COPY packages/sc-map-element/ packages/sc-map-element/
 
 WORKDIR /app/apps/web
 

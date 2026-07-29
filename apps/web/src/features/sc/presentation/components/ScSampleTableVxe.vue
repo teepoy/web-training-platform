@@ -1,27 +1,38 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NButton, NPopover, NText } from "naive-ui";
+import type { CSSProperties } from "vue";
+import { NButton, NIcon, NPopover, NText } from "naive-ui";
 import type { Filter, Table, View, ViewConfigUpdate } from "@perspective-dev/client";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
-import { tableFromIPC } from "apache-arrow";
+import {
+  ArrowDownOutline,
+  ArrowUpOutline,
+  FunnelOutline,
+  SwapVerticalOutline,
+} from "@vicons/ionicons5";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
+import { buildPerspectiveSampleViewConfig } from "@/features/sc/presentation/composables/perspectiveSampleViewConfig";
+import { perspectiveViewConfigKey } from "@/features/sc/presentation/composables/perspectiveViewConfig";
+import { ArrowBackedRows } from "./arrowBackedRows";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
+import type { ScSampleTableBaseProps, ScSampleTableEmits } from "./scSampleTableContract";
 
-const props = defineProps<{
-  table: Table;
-  viewConfig: ViewConfigUpdate;
-  selectedDefectIds?: ReadonlySet<number>;
-  showReclassifyColumns?: boolean;
+interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
+  /** Mutable Perspective data source. */
+  perspectiveTable: Table;
+  /** Context filters/expressions applied before table-header filters and sorting. */
+  baseViewConfig: ViewConfigUpdate;
+  defectIds?: string[];
+  ignoredPerspectiveUpdatePortIds?: readonly number[];
   pageSize?: number;
-  sourceVersion?: number;
-}>();
+}
 
-const emit = defineEmits<{
-  (e: "selection-change", ids: number[]): void;
-}>();
+const props = defineProps<ScSampleTableVxeProps>();
+
+const emit = defineEmits<ScSampleTableEmits>();
 
 interface ColumnDefinition {
   key: keyof ScSampleTableDisplayRow;
@@ -32,17 +43,22 @@ interface ColumnDefinition {
 }
 
 interface VxeRowsPage {
-  items: VxeSampleTableRow[];
+  ipc: unknown | null;
   total: number;
   nextAnchor: string | null;
 }
 
 interface VxeGridRef {
   clearCheckboxRow: () => Promise<unknown> | void;
+  getScrollData: () => {
+    clientWidth: number;
+    scrollLeft: number;
+    scrollWidth: number;
+  };
   loadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
   recalculate: (refull?: boolean) => Promise<unknown> | void;
   refreshScroll: () => Promise<unknown> | void;
-  reloadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
+  scrollTo: (scrollLeft: number | null, scrollTop: number | null) => Promise<unknown> | void;
   setCheckboxRowKey: (key: string | number, checked: boolean) => Promise<unknown> | void;
 }
 
@@ -101,26 +117,37 @@ const reclassifyColumnDefinitions: ColumnDefinition[] = [
 
 const PAGE_SIZE = 1000;
 const ROW_HEIGHT = 36;
+const SCROLLBAR_SIZE = 10;
+const MIN_SCROLL_THUMB_SIZE = 24;
 const DEFAULT_TOTAL = 0;
+const DEFAULT_TABLE_SORT: ScSampleTableSort = {
+  field: "defect_id",
+  direction: "asc",
+};
 const activeColumnDefinitions = computed(() =>
   props.showReclassifyColumns
     ? [...columnDefinitions, ...reclassifyColumnDefinitions]
     : columnDefinitions,
 );
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
-const queryKey = computed(
-  () => [props.table, JSON.stringify(props.viewConfig), props.sourceVersion ?? 0] as const,
-);
 
+let arrowRows = new ArrowBackedRows();
+let rawRows = arrowRows.rows as VxeSampleTableRow[];
+let displayRows: VxeSampleTableRow[] = [];
 const gridRef = ref<VxeGridRef | null>(null);
+const gridHostRef = ref<HTMLElement | null>(null);
+const virtualRailRef = ref<HTMLElement | null>(null);
+const xScrollbarRailRef = ref<HTMLElement | null>(null);
+const yScrollbarRailRef = ref<HTMLElement | null>(null);
 const serverTotal = ref(DEFAULT_TOTAL);
+const storageStats = ref(arrowRows.getStats());
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const isFetching = ref(false);
 const selectedIds = ref<Set<number>>(new Set());
-const tableFilter = ref<ScSampleTableFilter>({});
-const tableSort = ref<ScSampleTableSort | null>(null);
-const activeFilterField = ref<string | null>(null);
+const tableFilter = ref<ScSampleTableFilter>({ ...(props.filter ?? {}) });
+const tableSort = ref<ScSampleTableSort>(normalizeTableSort(props.sort));
+const filterPopoverVersion = ref(0);
 const filterState = ref<Record<string, { min: number | null; max: number | null }>>({});
 const setFilterSearch = ref<Record<string, string>>({});
 const setFilterDraft = ref<Record<string, Set<string>>>({});
@@ -128,21 +155,123 @@ const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({}
 const searchedSetFilterValues = ref<Record<string, Array<string | number>>>({});
 const setFilterSearchLoading = ref<Record<string, boolean>>({});
 let requestVersion = 0;
-let rawRows: VxeSampleTableRow[] = [];
-const loadedPages = new Set<number>();
-const loadingPages = new Set<number>();
 const loadedDefectIds = new Set<number>();
 let activeView: View | null = null;
+let viewUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+let loadingRequest: { page: number; version: number } | null = null;
+let pendingHorizontalScrollRestore: { version: number; scrollLeft: number } | null = null;
+let pendingRowsReplacementVersion: number | null = null;
+let requestedPage = 0;
+let renderedPage = -1;
+let resizeObserver: ResizeObserver | null = null;
+let scrollbarDragState: {
+  axis: "x" | "y";
+  startPointer: number;
+  startScroll: number;
+  scrollableDistance: number;
+  trackDistance: number;
+} | null = null;
 
-const scrollYConfig = {
+interface ScrollbarMetrics {
+  xClientSize: number;
+  xScrollSize: number;
+  xPosition: number;
+  xTrackSize: number;
+  yClientSize: number;
+  yScrollSize: number;
+  yPosition: number;
+  yTrackSize: number;
+}
+
+const scrollbarMetrics = ref<ScrollbarMetrics>({
+  xClientSize: 0,
+  xScrollSize: 0,
+  xPosition: 0,
+  xTrackSize: 0,
+  yClientSize: 0,
+  yScrollSize: 0,
+  yPosition: 0,
+  yTrackSize: 0,
+});
+
+function thumbSize(clientSize: number, scrollSize: number, trackSize: number): number {
+  if (trackSize <= 0) return 0;
+  if (clientSize <= 0 || scrollSize <= clientSize) return trackSize;
+  return Math.min(
+    trackSize,
+    Math.max(MIN_SCROLL_THUMB_SIZE, (clientSize / scrollSize) * trackSize),
+  );
+}
+
+function thumbOffset(
+  position: number,
+  clientSize: number,
+  scrollSize: number,
+  trackSize: number,
+  size: number,
+): number {
+  const scrollableDistance = scrollSize - clientSize;
+  const trackDistance = trackSize - size;
+  if (scrollableDistance <= 0 || trackDistance <= 0) return 0;
+  return (position / scrollableDistance) * trackDistance;
+}
+
+const xThumbSize = computed(() =>
+  thumbSize(
+    scrollbarMetrics.value.xClientSize,
+    scrollbarMetrics.value.xScrollSize,
+    scrollbarMetrics.value.xTrackSize,
+  ),
+);
+const yThumbSize = computed(() =>
+  thumbSize(
+    scrollbarMetrics.value.yClientSize,
+    scrollbarMetrics.value.yScrollSize,
+    scrollbarMetrics.value.yTrackSize,
+  ),
+);
+const xThumbStyle = computed<CSSProperties>(() => ({
+  width: `${xThumbSize.value}px`,
+  transform: `translateX(${thumbOffset(
+    scrollbarMetrics.value.xPosition,
+    scrollbarMetrics.value.xClientSize,
+    scrollbarMetrics.value.xScrollSize,
+    scrollbarMetrics.value.xTrackSize,
+    xThumbSize.value,
+  )}px)`,
+}));
+const yThumbStyle = computed<CSSProperties>(() => ({
+  height: `${yThumbSize.value}px`,
+  transform: `translateY(${thumbOffset(
+    scrollbarMetrics.value.yPosition,
+    scrollbarMetrics.value.yClientSize,
+    scrollbarMetrics.value.yScrollSize,
+    scrollbarMetrics.value.yTrackSize,
+    yThumbSize.value,
+  )}px)`,
+}));
+
+const virtualYConfig: VxeTablePropTypes.VirtualYConfig = {
   enabled: true,
   gt: 0,
+  mode: "scroll",
   oSize: 40,
 };
-const scrollXConfig = {
+const virtualXConfig: VxeTablePropTypes.VirtualXConfig = {
   enabled: true,
   gt: 0,
   oSize: 8,
+  scrollToLeftOnChange: false,
+};
+const scrollbarConfig: VxeTablePropTypes.ScrollbarConfig = {
+  height: SCROLLBAR_SIZE,
+  width: SCROLLBAR_SIZE,
+  x: {
+    visible: "visible",
+  },
+  y: {
+    visible: "hidden",
+  },
 };
 const rowConfig = {
   keyField: "defect_id",
@@ -155,15 +284,11 @@ const cellConfig = {
 const headerCellConfig = {
   height: ROW_HEIGHT,
 };
-const sortConfig: VxeTablePropTypes.SortConfig<VxeSampleTableRow> = {
-  remote: true,
-  trigger: "cell",
-  orders: ["asc", "desc", null],
-};
 const checkboxConfig: VxeTablePropTypes.CheckboxConfig<VxeSampleTableRow> = {
   reserve: true,
   trigger: "cell",
   checkStrictly: true,
+  showHeader: true,
   highlight: true,
   checkMethod: ({ row }) => rowDefectId(row) !== null,
 };
@@ -172,112 +297,35 @@ function asRecord(data: unknown): Record<string, unknown[]> {
   return data as Record<string, unknown[]>;
 }
 
-type ArrowJsonRow = Record<string, unknown>;
-
-function arrowRowToRecord(row: unknown): ArrowJsonRow {
-  if (row && typeof row === "object" && "toJSON" in row) {
-    const toJSON = (row as { toJSON: () => unknown }).toJSON;
-    return toJSON.call(row) as ArrowJsonRow;
-  }
-  return row as ArrowJsonRow;
-}
-
-function rowsFromArrowTable(data: unknown): ArrowJsonRow[] {
-  return tableFromIPC(data as Uint8Array)
-    .toArray()
-    .map(arrowRowToRecord);
-}
-
-function rowValue<T>(row: ArrowJsonRow, key: string, fallback: T): T {
-  return (row[key] as T | undefined) ?? fallback;
-}
-
-function makeRows(rows: ArrowJsonRow[]): VxeSampleTableRow[] {
-  return rows.map((row) => ({
-    defect_id: String(row.defect_id ?? ""),
-    rough_bin: rowValue(row, "rough_bin", 0),
-    class_number: rowValue(row, "class_number", 0),
-    images: rowValue(row, "images", 0),
-    test_id: rowValue(row, "test_id", 0),
-    wafer_x: rowValue(row, "wafer_x", 0),
-    wafer_y: rowValue(row, "wafer_y", 0),
-    index_x: rowValue(row, "index_x", 0),
-    index_y: rowValue(row, "index_y", 0),
-    adder: rowValue(row, "adder", 0),
-    cluster_id: rowValue(row, "cluster_id", null),
-    die_x: rowValue(row, "die_x", 0),
-    die_y: rowValue(row, "die_y", 0),
-    reticle_x: rowValue(row, "reticle_x", 0),
-    reticle_y: rowValue(row, "reticle_y", 0),
-    size_x: rowValue(row, "size_x", 0),
-    size_y: rowValue(row, "size_y", 0),
-    size_d: rowValue(row, "size_d", 0),
-    area: rowValue(row, "area", 0),
-    final_bin: rowValue(row, "final_bin", 0),
-    manual_bin: rowValue(row, "manual_bin", 0),
-    kill_ratio: rowValue(row, "kill_ratio", null),
-    annotation_label: rowValue(row, "annotation_label", null),
-    prediction_label: rowValue(row, "prediction_label", null),
-    prediction_confidence: rowValue(row, "prediction_confidence", null),
-    _isHydrated: true,
-  }));
-}
-
-function makeDefectIdRow(value: unknown, index: number): VxeSampleTableRow {
-  return {
-    defect_id: value == null || value === "" ? `__row_${index}` : String(value),
-    _isHydrated: false,
-  };
-}
-
 function normalizeFilterValue(field: string, value: string | number): string | number {
   if (field !== "defect_id") return value;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : value;
 }
 
-function filtersFromSampleTable(filter: ScSampleTableFilter | undefined, omitField?: string) {
-  const out: Array<[string, string, unknown]> = [];
-  for (const [field, raw] of Object.entries(filter ?? {})) {
-    if (field === omitField) continue;
-    const sf = raw as {
-      filterType: string;
-      values?: Array<string | number>;
-      type?: string;
-      filter?: number;
-      filterTo?: number;
-    };
-    if (sf.filterType === "set" && sf.values?.length) {
-      out.push([field, "in", sf.values.map((value) => normalizeFilterValue(field, value))]);
-    }
-    if (
-      sf.filterType === "number" &&
-      sf.type === "inRange" &&
-      typeof sf.filter === "number" &&
-      typeof sf.filterTo === "number"
-    ) {
-      out.push([field, ">=", sf.filter], [field, "<=", sf.filterTo]);
-    }
-  }
-  return out;
+function normalizeTableSort(sort: ScSampleTableSort | null | undefined): ScSampleTableSort {
+  return sort ?? DEFAULT_TABLE_SORT;
 }
 
-function getViewConfig(omitFilterField?: string): ViewConfigUpdate {
-  const localFilters = filtersFromSampleTable(tableFilter.value, omitFilterField) as Filter[];
-  const localSort = tableSort.value?.direction
-    ? ([[tableSort.value.field, tableSort.value.direction]] as NonNullable<
-        ViewConfigUpdate["sort"]
-      >)
-    : [];
-  const config: ViewConfigUpdate = { ...props.viewConfig };
-  const filter = [...(props.viewConfig.filter ?? []), ...localFilters];
-  const sort = [...(props.viewConfig.sort ?? []), ...localSort];
-  if (filter.length > 0) config.filter = filter;
-  else delete config.filter;
-  if (sort.length > 0) config.sort = sort;
-  else delete config.sort;
-  return config;
+function buildEffectiveViewConfig(omitFilterField?: string): ViewConfigUpdate {
+  const defectIdFilters: Filter[] =
+    props.defectIds && props.defectIds.length > 0
+      ? [["defect_id", "in", props.defectIds.map(Number).filter(Number.isFinite)] as Filter]
+      : [];
+  return buildPerspectiveSampleViewConfig({
+    base: {
+      ...props.baseViewConfig,
+      columns: activeColumnDefinitions.value.map((definition) => String(definition.key)),
+    },
+    tableFilter: tableFilter.value,
+    tableSort: tableSort.value,
+    additionalFilters: defectIdFilters,
+    omitTableFilterField: omitFilterField,
+  });
 }
+
+const effectiveViewConfig = computed(() => buildEffectiveViewConfig());
+const effectiveViewConfigKey = computed(() => perspectiveViewConfigKey(effectiveViewConfig.value));
 
 function numericSearchFilter(
   field: string,
@@ -336,38 +384,78 @@ function getSetFilterOptions(definition: ColumnDefinition) {
     .map((value) => ({ label: String(value), value }));
 }
 
-async function disposeActiveView(): Promise<void> {
+function detachActiveView(): View | null {
+  if (viewUpdateTimer !== null) {
+    clearTimeout(viewUpdateTimer);
+    viewUpdateTimer = null;
+  }
   const view = activeView;
   activeView = null;
+  return view;
+}
+
+async function disposeActiveView(): Promise<void> {
+  const view = detachActiveView();
   if (view) await view.delete();
 }
 
 async function getActiveView(version: number): Promise<View | null> {
   if (activeView) return activeView;
-  const view = await props.table.view(getViewConfig());
+  const view = await props.perspectiveTable.view(effectiveViewConfig.value);
   if (version !== requestVersion) {
     await view.delete();
     return null;
   }
   activeView = view;
+  view.on_update((event: unknown) => {
+    if (version !== requestVersion || activeView !== view) return;
+    const portId = (event as { port_id?: number }).port_id;
+    if (portId != null && props.ignoredPerspectiveUpdatePortIds?.includes(portId)) return;
+    scheduleActiveViewRefresh(view, version);
+  });
   return view;
+}
+
+function scheduleActiveViewRefresh(view: View, version: number): void {
+  if (viewUpdateTimer !== null) clearTimeout(viewUpdateTimer);
+  viewUpdateTimer = setTimeout(() => {
+    viewUpdateTimer = null;
+    if (version !== requestVersion || activeView !== view) return;
+    if (loadingRequest?.version === version) {
+      scheduleActiveViewRefresh(view, version);
+      return;
+    }
+    void refreshActiveViewRows(view, version);
+  }, 100);
+}
+
+async function refreshActiveViewRows(view: View, version: number): Promise<void> {
+  if (version !== requestVersion || activeView !== view) return;
+  const scrollLeft = gridRef.value?.getScrollData().scrollLeft ?? 0;
+  pendingHorizontalScrollRestore = {
+    version,
+    scrollLeft,
+  };
+  pendingRowsReplacementVersion = version;
+  loadedDefectIds.clear();
+  resetVirtualPosition();
+  pageError.value = null;
+  isFetching.value = true;
+  streamStatus.value = "Loading sample rows...";
+  await loadPage(0);
 }
 
 async function loadWindow(start: number, end: number, version: number): Promise<VxeRowsPage> {
   const view = await getActiveView(version);
-  if (!view) return { items: [], total: DEFAULT_TOTAL, nextAnchor: null };
+  if (!view) return { ipc: null, total: DEFAULT_TOTAL, nextAnchor: null };
   try {
     const total = await view.num_rows();
     const safeStart = Math.max(0, Math.min(start, total));
     const safeEnd = Math.max(safeStart, Math.min(end, total));
-    if (safeEnd <= safeStart) return { items: [], total, nextAnchor: null };
-    console.time("view.to_arrow:loadData");
-    const rows = rowsFromArrowTable(
-      await view.to_arrow({ start_row: safeStart, end_row: safeEnd }),
-    );
-    console.timeEnd("view.to_arrow:loadData");
+    if (safeEnd <= safeStart) return { ipc: null, total, nextAnchor: null };
+    const ipc = await view.to_arrow({ start_row: safeStart, end_row: safeEnd });
     return {
-      items: makeRows(rows),
+      ipc,
       total,
       nextAnchor: safeEnd < total ? String(safeEnd) : null,
     };
@@ -379,28 +467,27 @@ async function loadWindow(start: number, end: number, version: number): Promise<
   }
 }
 
-async function loadDefectIdRows(view: View, total: number, version: number): Promise<boolean> {
+async function loadDefectIdRows(
+  rows: ArrowBackedRows,
+  view: View,
+  total: number,
+  version: number,
+): Promise<boolean> {
   const columnPaths = (await view.column_paths()) as string[];
   const defectIdColumnIndex = columnPaths.findIndex((path) => path === "defect_id");
   if (defectIdColumnIndex < 0) {
-    rawRows = Array.from({ length: total }, (_, index) => makeDefectIdRow(null, index));
+    rows.resetWithoutDefectIds(total);
     return true;
   }
-  console.time("view.to_arrow:loadDefectIdRows");
-  const rows = rowsFromArrowTable(
-    await view.to_arrow({
-      start_row: 0,
-      end_row: total,
-      start_col: defectIdColumnIndex,
-      end_col: defectIdColumnIndex + 1,
-    }),
-  );
-  console.timeEnd("view.to_arrow:loadDefectIdRows");
+  const ipc = await view.to_arrow({
+    start_row: 0,
+    end_row: total,
+    start_col: defectIdColumnIndex,
+    end_col: defectIdColumnIndex + 1,
+  });
   if (version !== requestVersion) return false;
   const defectIdColumn = columnPaths[defectIdColumnIndex];
-  rawRows = rows.map((row, index) =>
-    makeDefectIdRow(row.defect_id ?? row[defectIdColumn], index),
-  );
+  rows.reset(total, ipc, defectIdColumn);
   return true;
 }
 
@@ -410,61 +497,83 @@ async function waitForGridRef(): Promise<VxeGridRef | null> {
   return gridRef.value;
 }
 
-async function syncRawRowsToTable(reset: boolean): Promise<void> {
+async function syncRawRowsToTable(): Promise<void> {
   const table = await waitForGridRef();
   if (!table) return;
-  if (reset) await table.reloadData(rawRows);
-  else await table.loadData(rawRows);
+  await table.loadData(displayRows);
+  storageStats.value = arrowRows.getStats();
 }
 
 async function loadPage(pageIndex: number): Promise<void> {
-  if (pageIndex < 0 || loadedPages.has(pageIndex) || loadingPages.has(pageIndex)) return;
+  if (
+    pageIndex < 0 ||
+    renderedPage === pageIndex ||
+    (loadingRequest?.page === pageIndex && loadingRequest.version === requestVersion)
+  ) {
+    return;
+  }
 
   const version = requestVersion;
+  const request = { page: pageIndex, version };
   const start = pageIndex * resolvedPageSize.value;
   if (serverTotal.value > 0 && start >= serverTotal.value) return;
   const end = start + resolvedPageSize.value;
-  loadingPages.add(pageIndex);
+  loadingRequest = request;
   pageError.value = null;
   isFetching.value = true;
-  streamStatus.value = pageIndex === 0 && rawRows.length === 0 ? "Loading sample rows..." : "";
+  const replacesRows = pendingRowsReplacementVersion === version;
+  const nextArrowRows = replacesRows ? new ArrowBackedRows() : arrowRows;
+  streamStatus.value =
+    pageIndex === 0 && (replacesRows || rawRows.length === 0) ? "Loading sample rows..." : "";
   try {
     const page = await loadWindow(start, end, version);
-    if (version !== requestVersion) return;
-    serverTotal.value = page.total;
+    if (version !== requestVersion || pageIndex !== requestedPage) return;
     const view = await getActiveView(version);
     if (!view) return;
-    const shouldResetTable = rawRows.length !== page.total;
-    if (shouldResetTable) {
-      const loadedIds = await loadDefectIdRows(view, page.total, version);
+    const needsDefectIdIndex = replacesRows || nextArrowRows.rows.length !== page.total;
+    if (needsDefectIdIndex) {
+      const loadedIds = await loadDefectIdRows(nextArrowRows, view, page.total, version);
       if (!loadedIds) return;
-      loadedDefectIds.clear();
     }
-    for (let i = 0; i < page.items.length; i += 1) {
-      const row = page.items[i];
-      rawRows[start + i] = row;
+    if (version !== requestVersion || pageIndex !== requestedPage) return;
+    const items = page.ipc ? (nextArrowRows.hydrate(start, page.ipc) as VxeSampleTableRow[]) : [];
+    nextArrowRows.retainRange(start, start + items.length);
+    if (version !== requestVersion || pageIndex !== requestedPage) return;
+    if (replacesRows) {
+      arrowRows = nextArrowRows;
+      rawRows = arrowRows.rows as VxeSampleTableRow[];
+      pendingRowsReplacementVersion = null;
+    }
+    serverTotal.value = page.total;
+    displayRows = items;
+    loadedDefectIds.clear();
+    for (const row of items) {
       const id = rowDefectId(row);
       if (id !== null) loadedDefectIds.add(id);
     }
-    await syncRawRowsToTable(shouldResetTable);
-    loadedPages.add(pageIndex);
-    accumulateDiscoveredSetFilterValues(page.items);
+    await syncRawRowsToTable();
+    renderedPage = pageIndex;
+    accumulateDiscoveredSetFilterValues(items);
+    const horizontalScrollRestore =
+      pendingHorizontalScrollRestore?.version === version
+        ? pendingHorizontalScrollRestore.scrollLeft
+        : undefined;
+    if (horizontalScrollRestore !== undefined) {
+      pendingHorizontalScrollRestore = null;
+    }
     void nextTick(() => {
       syncCurrentPageSelection();
-      void refreshGridLayout();
+      void refreshGridLayout(horizontalScrollRestore);
     });
   } catch (error) {
     if (version === requestVersion) {
       pageError.value = error instanceof Error ? error.message : "Failed to load sample table rows";
-      if (pageIndex === 0) {
-        rawRows = [];
-        await syncRawRowsToTable(true);
-        serverTotal.value = DEFAULT_TOTAL;
-      }
     }
   } finally {
-    loadingPages.delete(pageIndex);
-    if (version === requestVersion && loadingPages.size === 0) {
+    if (loadingRequest === request) {
+      loadingRequest = null;
+    }
+    if (version === requestVersion && loadingRequest === null) {
       isFetching.value = false;
       streamStatus.value = "";
     }
@@ -502,19 +611,17 @@ async function searchSetFilterOptions(field: string): Promise<void> {
       searchedSetFilterValues.value = { ...searchedSetFilterValues.value, [field]: [] };
       return;
     }
-    const viewConfig = getViewConfig(field);
-    const view = await props.table.view({
-      ...viewConfig,
+    const filterOptionsViewConfig = buildEffectiveViewConfig(field);
+    const view = await props.perspectiveTable.view({
+      ...filterOptionsViewConfig,
       columns: [field],
       group_by: [field],
       aggregates: { [field]: "count" },
-      filter: [...(viewConfig.filter ?? []), ...(searchFilters as Filter[])],
+      filter: [...(filterOptionsViewConfig.filter ?? []), ...(searchFilters as Filter[])],
     });
     try {
       const total = await view.num_rows();
-      console.time("view.to_columns:loadDistinctValues");
       const data = asRecord(await view.to_columns({ start_row: 0, end_row: Math.min(total, 200) }));
-      console.timeEnd("view.to_columns:loadDistinctValues");
       const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
       searchedSetFilterValues.value = {
         ...searchedSetFilterValues.value,
@@ -533,16 +640,22 @@ async function searchSetFilterOptions(field: string): Promise<void> {
   }
 }
 
-function resetRows(): void {
-  requestVersion += 1;
-  loadedPages.clear();
-  loadingPages.clear();
+async function resetRows(): Promise<void> {
+  const scrollLeft = gridRef.value?.getScrollData().scrollLeft ?? 0;
+  const version = ++requestVersion;
+  pendingHorizontalScrollRestore = { version, scrollLeft };
+  pendingRowsReplacementVersion = version;
+  const staleView = detachActiveView();
+  loadingRequest = null;
   loadedDefectIds.clear();
-  rawRows = [];
-  void disposeActiveView();
-  void syncRawRowsToTable(true);
-  serverTotal.value = DEFAULT_TOTAL;
-  void loadPage(0);
+  resetVirtualPosition();
+  pageError.value = null;
+  isFetching.value = true;
+  streamStatus.value = "Loading sample rows...";
+
+  if (staleView) await staleView.delete();
+  if (version !== requestVersion) return;
+  await loadPage(0);
 }
 
 function applySetFilter(field: string, values: Array<string | number>): void {
@@ -556,7 +669,8 @@ function applySetFilter(field: string, values: Array<string | number>): void {
     };
   }
   tableFilter.value = next;
-  resetRows();
+  emit("filter-change", next);
+  filterPopoverVersion.value += 1;
 }
 
 function applyRangeFilter(field: string): void {
@@ -573,7 +687,8 @@ function applyRangeFilter(field: string): void {
       filterTo: state.max,
     },
   };
-  resetRows();
+  emit("filter-change", tableFilter.value);
+  filterPopoverVersion.value += 1;
 }
 
 function clearFilter(field: string): void {
@@ -581,7 +696,8 @@ function clearFilter(field: string): void {
   delete next[field];
   filterState.value[field] = { min: null, max: null };
   tableFilter.value = next;
-  resetRows();
+  emit("filter-change", next);
+  filterPopoverVersion.value += 1;
 }
 
 function clearAllFilters(): void {
@@ -589,25 +705,46 @@ function clearAllFilters(): void {
   setFilterDraft.value = {};
   filterState.value = {};
   tableFilter.value = {};
-  resetRows();
+  emit("filter-change", {});
+  filterPopoverVersion.value += 1;
 }
 
 function openFilter(definition: ColumnDefinition, open: boolean): void {
   const field = String(definition.key);
-  activeFilterField.value = open ? field : null;
   if (!open || definition.filter !== "set") return;
   setFilterDraft.value[field] = new Set(getSetFilterValues(field).map(String));
+}
+
+function closeFilterPopover(): void {
+  filterPopoverVersion.value += 1;
 }
 
 function isColumnFiltered(field: string): boolean {
   return Boolean(tableFilter.value[field]);
 }
 
-function handleSortChange(event: VxeTableDefines.SortChangeEventParams<VxeSampleTableRow>): void {
-  const field = event.field ?? event.property ?? tableSort.value?.field ?? "";
-  tableSort.value =
-    event.order === "asc" || event.order === "desc" ? { field, direction: event.order } : null;
-  resetRows();
+function cycleSort(field: string): void {
+  const currentOrder = sortOrder(field);
+  const nextOrder = currentOrder === null ? "asc" : currentOrder === "asc" ? "desc" : null;
+  tableSort.value = nextOrder ? { field, direction: nextOrder } : DEFAULT_TABLE_SORT;
+  emit("sort-change", {
+    field,
+    direction: nextOrder,
+  });
+}
+
+function sortIcon(field: string) {
+  const order = sortOrder(field);
+  if (order === "asc") return ArrowUpOutline;
+  if (order === "desc") return ArrowDownOutline;
+  return SwapVerticalOutline;
+}
+
+function sortButtonLabel(field: string): string {
+  const order = sortOrder(field);
+  if (order === "asc") return "Sorted ascending; click for descending";
+  if (order === "desc") return "Sorted descending; click to clear sorting";
+  return "Sort ascending";
 }
 
 function rowDefectId(row: VxeSampleTableRow | undefined): number | null {
@@ -623,6 +760,7 @@ function emitSelection(): void {
 function handleCheckboxChange(
   event: VxeTableDefines.CheckboxChangeEventParams<VxeSampleTableRow>,
 ): void {
+  if (props.enableSelection !== true) return;
   if (!event.row) return;
   const id = rowDefectId(event.row);
   if (id === null) return;
@@ -634,16 +772,13 @@ function handleCheckboxChange(
 }
 
 function handleCheckboxAll(event: VxeTableDefines.CheckboxAllEventParams<VxeSampleTableRow>): void {
-  const next = new Set(selectedIds.value);
-  for (const id of loadedDefectIds) {
-    if (event.checked) next.add(id);
-    else next.delete(id);
-  }
-  selectedIds.value = next;
+  if (props.enableSelection !== true) return;
+  selectedIds.value = event.checked ? new Set(arrowRows.getAllDefectIds()) : new Set();
   emitSelection();
 }
 
 function handleCellClick(event: VxeTableDefines.CellClickEventParams<VxeSampleTableRow>): void {
+  if (props.enableSelection !== true) return;
   if (!event.row || event.column?.type === "checkbox") return;
   const id = rowDefectId(event.row);
   if (id === null) return;
@@ -663,6 +798,7 @@ function syncCurrentPageSelection(): void {
 }
 
 function clearSelection(): void {
+  if (props.enableSelection !== true) return;
   selectedIds.value = new Set();
   void gridRef.value?.clearCheckboxRow();
   emitSelection();
@@ -680,28 +816,194 @@ function sortOrder(field: string): VxeTablePropTypes.SortOrder {
   return tableSort.value?.field === field ? tableSort.value.direction : null;
 }
 
-async function refreshGridLayout(): Promise<void> {
+async function refreshGridLayout(horizontalScrollLeft?: number): Promise<void> {
   await nextTick();
-  await gridRef.value?.recalculate(true);
-  await gridRef.value?.refreshScroll();
-}
-
-function handleScroll(event: VxeTableDefines.ScrollEventParams<VxeSampleTableRow>): void {
-  if (event.type !== "body" || serverTotal.value <= 0) return;
-  const startRowIndex = Math.floor(event.scrollTop / ROW_HEIGHT);
-  const visibleRowsCount = Math.ceil(event.bodyHeight / ROW_HEIGHT);
-  const endRowIndex = startRowIndex + Math.max(visibleRowsCount, 1);
-  const startPage = Math.floor(startRowIndex / resolvedPageSize.value);
-  const endPage = Math.floor(endRowIndex / resolvedPageSize.value);
-  const maxPage = Math.ceil(serverTotal.value / resolvedPageSize.value) - 1;
-  for (let page = startPage; page <= endPage; page += 1) {
-    if (page <= maxPage) void loadPage(page);
+  const grid = gridRef.value;
+  await grid?.recalculate(true);
+  await grid?.refreshScroll();
+  await syncGridToVirtualRail();
+  if (horizontalScrollLeft !== undefined) {
+    await grid?.scrollTo(horizontalScrollLeft, null);
   }
-  if (endPage + 1 <= maxPage) void loadPage(endPage + 1);
-  if (startPage - 1 >= 0) void loadPage(startPage - 1);
+  syncScrollbarMetrics();
 }
 
-watch(queryKey, resetRows, { immediate: true });
+function syncScrollbarMetrics(): void {
+  const xScroll = gridRef.value?.getScrollData();
+  const yScroll = virtualRailRef.value;
+  scrollbarMetrics.value = {
+    xClientSize: xScroll?.clientWidth ?? 0,
+    xScrollSize: xScroll?.scrollWidth ?? 0,
+    xPosition: xScroll?.scrollLeft ?? 0,
+    xTrackSize: xScrollbarRailRef.value?.clientWidth ?? 0,
+    yClientSize: yScroll?.clientHeight ?? 0,
+    yScrollSize: yScroll?.scrollHeight ?? 0,
+    yPosition: yScroll?.scrollTop ?? 0,
+    yTrackSize: yScrollbarRailRef.value?.clientHeight ?? 0,
+  };
+}
+
+function setHorizontalScroll(scrollLeft: number): void {
+  const { xClientSize, xScrollSize } = scrollbarMetrics.value;
+  const nextScrollLeft = Math.max(0, Math.min(xScrollSize - xClientSize, scrollLeft));
+  scrollbarMetrics.value = {
+    ...scrollbarMetrics.value,
+    xPosition: nextScrollLeft,
+  };
+  void Promise.resolve(gridRef.value?.scrollTo(nextScrollLeft, null)).then(syncScrollbarMetrics);
+}
+
+function setVerticalScroll(scrollTop: number): void {
+  const rail = virtualRailRef.value;
+  if (!rail) return;
+  const maxScrollTop = Math.max(0, rail.scrollHeight - rail.clientHeight);
+  rail.scrollTop = Math.max(0, Math.min(maxScrollTop, scrollTop));
+  syncScrollbarMetrics();
+  void syncGridToVirtualRail(rail);
+}
+
+function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
+  endScrollbarDrag();
+  const metrics = scrollbarMetrics.value;
+  const scrollableDistance =
+    axis === "x"
+      ? metrics.xScrollSize - metrics.xClientSize
+      : metrics.yScrollSize - metrics.yClientSize;
+  const trackDistance =
+    axis === "x" ? metrics.xTrackSize - xThumbSize.value : metrics.yTrackSize - yThumbSize.value;
+  if (scrollableDistance <= 0 || trackDistance <= 0) return;
+  scrollbarDragState = {
+    axis,
+    startPointer: axis === "x" ? event.clientX : event.clientY,
+    startScroll: axis === "x" ? metrics.xPosition : metrics.yPosition,
+    scrollableDistance,
+    trackDistance,
+  };
+  document.addEventListener("mousemove", handleScrollbarDrag);
+  document.addEventListener("mouseup", endScrollbarDrag, { once: true });
+}
+
+function handleScrollbarDrag(event: MouseEvent): void {
+  if (!scrollbarDragState) return;
+  const pointer = scrollbarDragState.axis === "x" ? event.clientX : event.clientY;
+  const delta = pointer - scrollbarDragState.startPointer;
+  const position =
+    scrollbarDragState.startScroll +
+    (delta / scrollbarDragState.trackDistance) * scrollbarDragState.scrollableDistance;
+  if (scrollbarDragState.axis === "x") {
+    setHorizontalScroll(position);
+  } else {
+    setVerticalScroll(position);
+  }
+}
+
+function endScrollbarDrag(): void {
+  scrollbarDragState = null;
+  document.removeEventListener("mousemove", handleScrollbarDrag);
+}
+
+function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) return;
+  const rect = target.getBoundingClientRect();
+  const metrics = scrollbarMetrics.value;
+  if (axis === "x") {
+    const trackDistance = metrics.xTrackSize - xThumbSize.value;
+    if (trackDistance <= 0) return;
+    const offset = event.clientX - rect.left - xThumbSize.value / 2;
+    setHorizontalScroll((offset / trackDistance) * (metrics.xScrollSize - metrics.xClientSize));
+    return;
+  }
+  const trackDistance = metrics.yTrackSize - yThumbSize.value;
+  if (trackDistance <= 0) return;
+  const offset = event.clientY - rect.top - yThumbSize.value / 2;
+  setVerticalScroll((offset / trackDistance) * (metrics.yScrollSize - metrics.yClientSize));
+}
+
+function virtualScrollPosition(rail: HTMLElement): {
+  page: number;
+  localScrollTop: number;
+} {
+  const pageHeight = resolvedPageSize.value * ROW_HEIGHT;
+  const page = pageHeight > 0 ? Math.floor(rail.scrollTop / pageHeight) : 0;
+  return {
+    page,
+    localScrollTop: rail.scrollTop - page * pageHeight,
+  };
+}
+
+async function syncGridToVirtualRail(rail = virtualRailRef.value): Promise<void> {
+  if (!rail) return;
+  const position = virtualScrollPosition(rail);
+  requestedPage = position.page;
+  if (renderedPage !== position.page) {
+    await loadPage(position.page);
+  }
+  if (renderedPage !== position.page || requestedPage !== position.page) return;
+  await gridRef.value?.scrollTo(null, position.localScrollTop);
+}
+
+function resetVirtualPosition(): void {
+  requestedPage = 0;
+  renderedPage = -1;
+  const rail = virtualRailRef.value;
+  if (rail) rail.scrollTop = 0;
+  void gridRef.value?.scrollTo(null, 0);
+  syncScrollbarMetrics();
+}
+
+function handleVirtualRailScroll(event: Event): void {
+  syncScrollbarMetrics();
+  void syncGridToVirtualRail(event.currentTarget as HTMLElement);
+}
+
+function handleGridScroll(): void {
+  syncScrollbarMetrics();
+}
+
+function handleWheel(event: WheelEvent): void {
+  const rail = virtualRailRef.value;
+  if (!rail || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  const delta =
+    event.deltaMode === 1
+      ? event.deltaY * ROW_HEIGHT
+      : event.deltaMode === 2
+        ? event.deltaY * rail.clientHeight
+        : event.deltaY;
+  const maxScrollTop = Math.max(0, rail.scrollHeight - rail.clientHeight);
+  const nextScrollTop = Math.max(0, Math.min(maxScrollTop, rail.scrollTop + delta));
+  if (nextScrollTop === rail.scrollTop) return;
+  event.preventDefault();
+  setVerticalScroll(nextScrollTop);
+}
+
+watch(
+  () => props.filter,
+  (filter) => {
+    const next = filter ?? {};
+    if (JSON.stringify(next) === JSON.stringify(tableFilter.value)) return;
+    tableFilter.value = { ...next };
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.sort,
+  (sort) => {
+    const next = normalizeTableSort(sort);
+    if (JSON.stringify(next) === JSON.stringify(tableSort.value)) return;
+    tableSort.value = next;
+  },
+  { deep: true },
+);
+
+watch(
+  [() => props.perspectiveTable, effectiveViewConfigKey, resolvedPageSize],
+  () => {
+    void resetRows();
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.selectedDefectIds,
@@ -729,13 +1031,22 @@ watch(
 
 onMounted(() => {
   if (rawRows.length > 0) {
-    void gridRef.value?.reloadData(rawRows);
+    void gridRef.value?.loadData(displayRows);
+  }
+  if (gridHostRef.value && typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      void nextTick(syncScrollbarMetrics);
+    });
+    resizeObserver.observe(gridHostRef.value);
   }
   void refreshGridLayout();
 });
 
 onBeforeUnmount(() => {
   requestVersion += 1;
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  endScrollbarDrag();
   void disposeActiveView();
 });
 
@@ -782,11 +1093,22 @@ defineExpose({
 </script>
 
 <template>
-  <div class="sst-vxe">
+  <div
+    class="sst-vxe"
+    :data-arrow-rows="storageStats.length"
+    :data-hydrated-rows="storageStats.hydratedRows"
+    :data-row-objects="storageStats.rowObjectsCreated"
+    @wheel="handleWheel"
+  >
     <div class="sst-vxe-header">
       <NText depth="2" class="sst-vxe-header-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-vxe-header-actions">
-        <NButton v-if="selectedIds.size > 0" size="tiny" quaternary @click="clearSelection">
+        <NButton
+          v-if="enableSelection && selectedIds.size > 0"
+          size="tiny"
+          quaternary
+          @click="clearSelection"
+        >
           Clear Selection ({{ selectedIds.size }})
         </NButton>
         <NButton
@@ -802,104 +1124,167 @@ defineExpose({
         </NText>
       </div>
     </div>
-    <vxe-table
-      ref="gridRef"
-      class="sst-vxe-grid"
-      border
-      auto-resize
-      show-overflow
-      size="mini"
-      height="100%"
-      :loading="isFetching && serverTotal === 0"
-      :row-config="rowConfig"
-      :cell-config="cellConfig"
-      :header-cell-config="headerCellConfig"
-      :checkbox-config="checkboxConfig"
-      :sort-config="sortConfig"
-      :scroll-y="scrollYConfig"
-      :scroll-x="scrollXConfig"
-      @sort-change="handleSortChange"
-      @checkbox-change="handleCheckboxChange"
-      @checkbox-all="handleCheckboxAll"
-      @cell-click="handleCellClick"
-      @scroll="handleScroll"
-    >
-      <vxe-column type="checkbox" width="44" fixed="left" align="center" />
-      <vxe-column
-        v-for="definition in activeColumnDefinitions"
-        :key="String(definition.key)"
-        :field="String(definition.key)"
-        :title="definition.title"
-        :width="definition.width"
-        :fixed="definition.key === 'defect_id' ? 'left' : undefined"
-        sortable
-        :order="sortOrder(String(definition.key))"
+    <div ref="gridHostRef" class="sst-vxe-grid-host">
+      <vxe-table
+        ref="gridRef"
+        class="sst-vxe-grid"
+        border
+        auto-resize
+        show-overflow
+        size="mini"
+        height="100%"
+        :loading="loading || (isFetching && serverTotal === 0)"
+        :row-config="rowConfig"
+        :cell-config="cellConfig"
+        :header-cell-config="headerCellConfig"
+        :checkbox-config="checkboxConfig"
+        :virtual-y-config="virtualYConfig"
+        :virtual-x-config="virtualXConfig"
+        :scrollbar-config="scrollbarConfig"
+        @checkbox-change="handleCheckboxChange"
+        @checkbox-all="handleCheckboxAll"
+        @cell-click="handleCellClick"
+        @scroll="handleGridScroll"
       >
-        <template #header>
-          <div class="sst-vxe-column-header">
-            <span class="sst-vxe-column-title">{{ definition.title }}</span>
-            <NPopover
-              trigger="click"
-              placement="bottom-start"
-              :show="activeFilterField === String(definition.key)"
-              @update:show="openFilter(definition, $event)"
-            >
-              <template #trigger>
+        <vxe-column v-if="enableSelection" type="checkbox" width="44" fixed="left" align="center" />
+        <vxe-column
+          v-for="definition in activeColumnDefinitions"
+          :key="String(definition.key)"
+          :field="String(definition.key)"
+          :title="definition.title"
+          :width="definition.width"
+          :fixed="definition.key === 'defect_id' ? 'left' : undefined"
+        >
+          <template #header>
+            <div class="sst-vxe-column-header">
+              <span class="sst-vxe-column-title">{{ definition.title }}</span>
+              <div class="sst-vxe-column-actions" @click.stop>
                 <NButton
                   size="tiny"
                   quaternary
-                  class="sst-vxe-filter-button"
+                  circle
+                  class="sst-vxe-sort-button"
                   :class="{
-                    'sst-vxe-filter-button--active': isColumnFiltered(String(definition.key)),
+                    'sst-vxe-sort-button--active': sortOrder(String(definition.key)) !== null,
                   }"
-                  @click.stop
+                  :aria-label="sortButtonLabel(String(definition.key))"
+                  :title="sortButtonLabel(String(definition.key))"
+                  @click="cycleSort(String(definition.key))"
                 >
-                  Filter
+                  <template #icon>
+                    <NIcon><component :is="sortIcon(String(definition.key))" /></NIcon>
+                  </template>
                 </NButton>
-              </template>
-              <ScTextFilterMenu
-                v-if="definition.key === 'defect_id'"
-                :applied-values="getSetFilterValues('defect_id')"
-                @apply="applySetFilter('defect_id', $event)"
-                @close="activeFilterField = null"
-              />
-              <ScSetFilterMenu
-                v-else-if="definition.filter === 'set'"
-                :search="setFilterSearch[String(definition.key)] ?? ''"
-                :applied-values="getSetFilterValues(String(definition.key))"
-                :draft-values="Array.from(setFilterDraft[String(definition.key)] ?? [])"
-                :options="getSetFilterOptions(definition)"
-                @update:search="setFilterSearch[String(definition.key)] = $event"
-                @update:draft-values="setFilterDraft[String(definition.key)] = new Set($event)"
-                @search-options="searchSetFilterOptions(String(definition.key))"
-                @apply="applySetFilter(String(definition.key), $event)"
-                @close="activeFilterField = null"
-              />
-              <ScRangeFilterMenu
-                v-else
-                :min="getFilterState(String(definition.key)).min"
-                :max="getFilterState(String(definition.key)).max"
-                @update:min="getFilterState(String(definition.key)).min = $event"
-                @update:max="getFilterState(String(definition.key)).max = $event"
-                @apply="applyRangeFilter(String(definition.key))"
-                @clear="clearFilter(String(definition.key))"
-                @close="activeFilterField = null"
-              />
-            </NPopover>
+                <NPopover
+                  :key="`${String(definition.key)}:${filterPopoverVersion}`"
+                  trigger="click"
+                  placement="bottom-start"
+                  @update:show="openFilter(definition, $event)"
+                >
+                  <template #trigger>
+                    <NButton
+                      size="tiny"
+                      quaternary
+                      circle
+                      class="sst-vxe-filter-button"
+                      :class="{
+                        'sst-vxe-filter-button--active': isColumnFiltered(String(definition.key)),
+                      }"
+                      :aria-label="`Filter ${definition.title}`"
+                      :title="`Filter ${definition.title}`"
+                    >
+                      <template #icon>
+                        <NIcon><FunnelOutline /></NIcon>
+                      </template>
+                    </NButton>
+                  </template>
+                  <ScTextFilterMenu
+                    v-if="definition.key === 'defect_id'"
+                    :applied-values="getSetFilterValues('defect_id')"
+                    @apply="applySetFilter('defect_id', $event)"
+                    @close="closeFilterPopover"
+                  />
+                  <ScSetFilterMenu
+                    v-else-if="definition.filter === 'set'"
+                    :search="setFilterSearch[String(definition.key)] ?? ''"
+                    :applied-values="getSetFilterValues(String(definition.key))"
+                    :draft-values="Array.from(setFilterDraft[String(definition.key)] ?? [])"
+                    :options="getSetFilterOptions(definition)"
+                    @update:search="setFilterSearch[String(definition.key)] = $event"
+                    @update:draft-values="setFilterDraft[String(definition.key)] = new Set($event)"
+                    @search-options="searchSetFilterOptions(String(definition.key))"
+                    @apply="applySetFilter(String(definition.key), $event)"
+                    @close="closeFilterPopover"
+                  />
+                  <ScRangeFilterMenu
+                    v-else
+                    :min="getFilterState(String(definition.key)).min"
+                    :max="getFilterState(String(definition.key)).max"
+                    @update:min="getFilterState(String(definition.key)).min = $event"
+                    @update:max="getFilterState(String(definition.key)).max = $event"
+                    @apply="applyRangeFilter(String(definition.key))"
+                    @clear="clearFilter(String(definition.key))"
+                    @close="closeFilterPopover"
+                  />
+                </NPopover>
+              </div>
+            </div>
+          </template>
+          <template #default="{ row }">
+            {{ renderCell(definition, row as VxeSampleTableRow) }}
+          </template>
+        </vxe-column>
+        <template #empty>
+          <div class="sst-vxe-empty">
+            <NText depth="3">
+              {{ isFetching ? "Loading sample rows..." : pageError ? pageError : "No sample rows" }}
+            </NText>
           </div>
         </template>
-        <template #default="{ row }">
-          {{ renderCell(definition, row as VxeSampleTableRow) }}
-        </template>
-      </vxe-column>
-      <template #empty>
-        <div class="sst-vxe-empty">
-          <NText depth="3">
-            {{ isFetching ? "Loading sample rows..." : pageError ? pageError : "No sample rows" }}
-          </NText>
-        </div>
-      </template>
-    </vxe-table>
+      </vxe-table>
+      <div
+        ref="virtualRailRef"
+        class="sst-vxe-virtual-rail"
+        aria-hidden="true"
+        @scroll="handleVirtualRailScroll"
+      >
+        <div :style="{ height: `${serverTotal * ROW_HEIGHT}px` }" />
+      </div>
+      <div
+        ref="yScrollbarRailRef"
+        class="sst-vxe-scrollbar-rail sst-vxe-scrollbar-rail--y"
+        role="scrollbar"
+        aria-label="Sample table vertical scroll"
+        aria-orientation="vertical"
+        :aria-valuemax="Math.max(0, scrollbarMetrics.yScrollSize - scrollbarMetrics.yClientSize)"
+        :aria-valuenow="scrollbarMetrics.yPosition"
+        aria-valuemin="0"
+        @mousedown.prevent="jumpScrollbar('y', $event)"
+      >
+        <div
+          class="sst-vxe-scrollbar-thumb"
+          :style="yThumbStyle"
+          @mousedown.stop.prevent="beginScrollbarDrag('y', $event)"
+        />
+      </div>
+      <div
+        ref="xScrollbarRailRef"
+        class="sst-vxe-scrollbar-rail sst-vxe-scrollbar-rail--x"
+        role="scrollbar"
+        aria-label="Sample table horizontal scroll"
+        aria-orientation="horizontal"
+        :aria-valuemax="Math.max(0, scrollbarMetrics.xScrollSize - scrollbarMetrics.xClientSize)"
+        :aria-valuenow="scrollbarMetrics.xPosition"
+        aria-valuemin="0"
+        @mousedown.prevent="jumpScrollbar('x', $event)"
+      >
+        <div
+          class="sst-vxe-scrollbar-thumb"
+          :style="xThumbStyle"
+          @mousedown.stop.prevent="beginScrollbarDrag('x', $event)"
+        />
+      </div>
+    </div>
 
     <NText v-if="pageError" type="error" class="sst-vxe-error">
       {{ pageError }}
@@ -909,6 +1294,7 @@ defineExpose({
 
 <style scoped>
 .sst-vxe {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -918,6 +1304,59 @@ defineExpose({
   border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+.sst-vxe-virtual-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 10px;
+  width: 10px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  opacity: 0;
+  pointer-events: none;
+  scrollbar-width: none;
+  z-index: 5;
+}
+
+.sst-vxe-virtual-rail::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.sst-vxe-scrollbar-rail {
+  position: absolute;
+  z-index: 20;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  user-select: none;
+  transition: none;
+}
+
+.sst-vxe-scrollbar-rail--y {
+  top: 0;
+  right: 0;
+  bottom: 10px;
+  width: 10px;
+}
+
+.sst-vxe-scrollbar-rail--x {
+  right: 10px;
+  bottom: 0;
+  left: 0;
+  height: 10px;
+}
+
+.sst-vxe-scrollbar-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(142, 160, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  outline: none;
+  transition: none;
 }
 
 .sst-vxe-header {
@@ -945,10 +1384,27 @@ defineExpose({
   font-size: 11px;
 }
 
-.sst-vxe-grid {
+.sst-vxe-grid-host {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.sst-vxe-grid {
+  height: 100%;
   width: 100%;
+}
+
+.sst-vxe-grid :deep(.vxe-table--scroll-x-handle) {
+  opacity: 0;
+  scrollbar-width: none;
+}
+
+.sst-vxe-grid :deep(.vxe-table--scroll-x-handle::-webkit-scrollbar) {
+  width: 0;
+  height: 0;
 }
 
 .sst-vxe-column-header {
@@ -959,20 +1415,30 @@ defineExpose({
 }
 
 .sst-vxe-column-title {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sst-vxe-filter-button {
+.sst-vxe-column-actions {
+  display: flex;
   flex: 0 0 auto;
-  padding: 0 4px;
-  font-size: 10px;
+  align-items: center;
+  gap: 1px;
 }
 
+.sst-vxe-sort-button,
+.sst-vxe-filter-button {
+  --n-width: 20px !important;
+  --n-height: 20px !important;
+  font-size: 12px;
+}
+
+.sst-vxe-sort-button--active,
 .sst-vxe-filter-button--active {
-  color: #63e6be;
+  color: var(--cv-primary, #36ad6a);
 }
 
 .sst-vxe-error {

@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.conftest import DEFAULT_ORG_ID
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
 
@@ -18,7 +18,9 @@ _ONE_PX_PNG = (
 FAKE_EMBEDDING: list[float] = [0.1] * 512
 
 
-async def _fake_embed_image(image_bytes: bytes, model_name: str = "openai/clip-vit-base-patch32") -> list[float]:
+async def _fake_embed_image(
+    image_bytes: bytes, model_name: str = "openai/clip-vit-base-patch32"
+) -> list[float]:
     return FAKE_EMBEDDING
 
 
@@ -41,16 +43,16 @@ def _create_dataset_and_sample(c: TestClient, with_image: bool = False) -> tuple
 
 def test_upsert_and_get_sample_feature() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c, with_image=False)
+        dataset_id, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            repo = app.state.app_context.prediction.prediction_repository
-            feature = await repo.upsert_sample_feature(sample_id, FAKE_EMBEDDING, "test-model")
-            assert feature.sample_id == sample_id
-            assert len(feature.embedding) == 512
-            assert feature.embed_model == "test-model"
+            storage = await app.state.app_context.storage.dataset_storage_factory.open(
+                dataset_id,
+                org_id=DEFAULT_ORG_ID,
+            )
+            await storage.upsert_sample_feature(sample_id, FAKE_EMBEDDING, "test-model")
 
-            got = await repo.get_sample_feature(sample_id)
+            got = await storage.get_sample_feature(sample_id)
             assert got is not None
             assert got.sample_id == sample_id
             assert got.embed_model == "test-model"
@@ -61,10 +63,14 @@ def test_upsert_and_get_sample_feature() -> None:
 
 def test_get_sample_feature_returns_none_for_missing() -> None:
     with TestClient(app) as c:
+        dataset_id, _ = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            repo = app.state.app_context.prediction.prediction_repository
-            result = await repo.get_sample_feature("does-not-exist-at-all")
+            storage = await app.state.app_context.storage.dataset_storage_factory.open(
+                dataset_id,
+                org_id=DEFAULT_ORG_ID,
+            )
+            result = await storage.get_sample_feature("does-not-exist-at-all")
             assert result is None
 
         asyncio.run(_run())
@@ -72,18 +78,21 @@ def test_get_sample_feature_returns_none_for_missing() -> None:
 
 def test_upsert_sample_feature_idempotent() -> None:
     with TestClient(app) as c:
-        _, sample_id = _create_dataset_and_sample(c, with_image=False)
+        dataset_id, sample_id = _create_dataset_and_sample(c, with_image=False)
 
         async def _run() -> None:
-            repo = app.state.app_context.prediction.prediction_repository
+            storage = await app.state.app_context.storage.dataset_storage_factory.open(
+                dataset_id,
+                org_id=DEFAULT_ORG_ID,
+            )
 
             first = [0.1] * 512
             second = [0.9] * 512
 
-            await repo.upsert_sample_feature(sample_id, first, "model-v1")
-            await repo.upsert_sample_feature(sample_id, second, "model-v2")
+            await storage.upsert_sample_feature(sample_id, first, "model-v1")
+            await storage.upsert_sample_feature(sample_id, second, "model-v2")
 
-            got = await repo.get_sample_feature(sample_id)
+            got = await storage.get_sample_feature(sample_id)
             assert got is not None
             assert got.embed_model == "model-v2"
             assert got.embedding[0] == 0.9

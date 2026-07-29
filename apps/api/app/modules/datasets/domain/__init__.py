@@ -5,8 +5,7 @@ from app.modules.datasets.domain.sample_row import (
     SampleRow,
     SampleRowImageRef,
 )
-from app.modules.datasets.domain.storage_agg import (
-    Capabilities,
+from app.modules.storage.domain.storage_agg import (
     DatasetStorageAgg,
     MaterializeResult,
 )
@@ -14,7 +13,6 @@ from app.modules.datasets.domain.storage_agg import (
 __all__ = [
     "BulkImageRef",
     "BulkSampleRow",
-    "Capabilities",
     "DatasetStorageAgg",
     "MaterializeResult",
     "PredictionResult",

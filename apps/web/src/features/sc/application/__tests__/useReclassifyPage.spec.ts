@@ -1,11 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, ref } from "vue";
 import { NMessageProvider } from "naive-ui";
 import { mountWithProviders, createTestQueryClient } from "@/testing";
 import { server } from "@/testing/msw/server";
 import { http, HttpResponse } from "msw";
-import { create, toBinary } from "@bufbuild/protobuf";
-import { WaferMapResponseSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import type { ScDatasetInfo } from "@/features/sc/domain/models";
 
 // ── Mock Orval bulk annotate hook (missing export in generated code) ──
@@ -37,8 +35,16 @@ const ReclassifyPageInner = defineComponent({
 
 const MakeReclassifyPageWrapper = defineComponent({
   render() {
-    return h(NMessageProvider, null, [h(ReclassifyPageInner)]);
+    return h(NMessageProvider, null, {
+      default: () => h(ReclassifyPageInner),
+    });
   },
+});
+
+const mountedWrappers: Array<{ unmount: () => void }> = [];
+
+afterEach(() => {
+  for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount();
 });
 
 /** Shortcut: mount with pre-seeded query data for the dataset route. */
@@ -104,6 +110,7 @@ async function mountPage(
     ],
     initialRoute: `/datasets/${datasetId}`,
   });
+  mountedWrappers.push(wrapper);
 
   await wrapper.vm.$nextTick();
 
@@ -363,40 +370,6 @@ describe("useReclassifyPage - train defaults", () => {
   });
 });
 
-function makeFakePlotPointsBytes(sampleCount: number): Uint8Array {
-  const pts = Array.from({ length: sampleCount * 6 }, (_, i) => i % 100);
-  const msg = create(WaferMapResponseSchema, {
-    total: sampleCount,
-    waferPoints: pts,
-    diePoints: pts,
-  });
-  return toBinary(WaferMapResponseSchema, msg);
-}
-
-function makeInt32Bytes(values: number[]): ArrayBuffer {
-  const buffer = new ArrayBuffer(values.length * 4);
-  const view = new DataView(buffer);
-  values.forEach((value, index) => view.setInt32(index * 4, value, true));
-  return buffer;
-}
-
-function makeViewSampleRows(count: number, offset = 0) {
-  return Array.from({ length: count }, (_, i) => ({
-    sample_id: `s${offset + i}`,
-    inspection_time: "2025-01-01T00:00:00",
-    wafer_key: 1,
-    defect_id: String(offset + i + 1),
-    wafer_x: 100 * (offset + i),
-    wafer_y: 200 * (offset + i),
-    die_x: (offset + i) % 10,
-    die_y: (offset + i) % 8,
-    rough_bin: (offset + i) % 5,
-    class_number: (offset + i) % 3,
-    review_images: [],
-    images: [],
-  }));
-}
-
 async function waitForCondition(condition: () => boolean, timeoutMs = 1000) {
   const startedAt = Date.now();
   while (!condition()) {
@@ -408,163 +381,24 @@ async function waitForCondition(condition: () => boolean, timeoutMs = 1000) {
 }
 
 describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", () => {
-  const DATASET_ID = "ds-split-1";
-
-  beforeEach(() => {
-    server.use(
-      http.get("/api/v1/sc/datasets/:id/plot-points/stream", () => {
-        return new HttpResponse(
-          [
-            'event: progress\ndata: {"event_type":"progress","operation":"sc.plot-points","status":"loading","message":"Preparing plot points"}\n\n',
-            'event: done\ndata: {"event_type":"done"}\n\n',
-          ].join(""),
-          {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          },
-        );
-      }),
-      http.get("/api/v1/sc/datasets/:id/plot-points", () => {
-        return new HttpResponse(makeFakePlotPointsBytes(1000), {
-          status: 200,
-          headers: { "Content-Type": "application/x-protobuf" },
-        });
-      }),
-      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
-        const url = new URL(request.url);
-        const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-        return HttpResponse.json({
-          items: makeViewSampleRows(200, offset),
-          total: 1000,
-        });
-      }),
-      http.get("/api/v1/datasets/:id/samples-with-labels", ({ request }) => {
-        const url = new URL(request.url);
-        const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-        return HttpResponse.json({
-          items: Array.from({ length: 200 }, (_, i) => ({
-            id: `s${offset + i}`,
-            latest_annotation: null,
-          })),
-          total: 1000,
-        });
-      }),
-    );
-  });
-
-  it("hasMoreSamples is true when loaded rows are less than total", async () => {
-    const { state } = await mountPage(DATASET_ID, DEFAULT_DATASET, [
-      {
-        key: ["sc", "view-samples-paged", DATASET_ID, "id"],
-        data: {
-          pages: [{ items: makeViewSampleRows(200), total: 1000 }],
-          pageParams: [0],
-        },
-      },
-    ]);
-
-    await new Promise((r) => setTimeout(r, 20));
-    expect(state.hasMoreSamples.value).toBe(true);
-  });
-
-  it("fetchMoreSamples triggers second request with offset > 0", async () => {
+  it("does not start the retired REST gallery pagination pipeline", async () => {
     const requestOffsets: number[] = [];
     server.use(
       http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
         const url = new URL(request.url);
         const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
         requestOffsets.push(offset);
-        return HttpResponse.json({
-          items: makeViewSampleRows(200, offset),
-          total: 1000,
-        });
+        return HttpResponse.json({ items: [], total: 0 });
       }),
     );
 
-    const { state } = await mountPage(DATASET_ID, DEFAULT_DATASET, []);
+    const { state } = await mountPage("ds-perspective-gallery", DEFAULT_DATASET, []);
 
-    await new Promise((r) => setTimeout(r, 100));
-
-    const countBefore = requestOffsets.filter((o) => o === 0).length;
-    expect(countBefore).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     await state.fetchMoreSamples();
-    await new Promise((r) => setTimeout(r, 100));
-
-    const secondPageOffsets = requestOffsets.filter((o) => o > 0);
-    expect(secondPageOffsets.length).toBeGreaterThan(0);
-    expect(secondPageOffsets[0]).toBe(200);
-  });
-
-  it("waits for real defect ids before loading samples to avoid an offset duplicate", async () => {
-    const sampleRequests: Array<{
-      offset: string | null;
-      sampleIds: string | null;
-    }> = [];
-    server.use(
-      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", async () => {
-        await new Promise((r) => setTimeout(r, 30));
-        return new HttpResponse(makeInt32Bytes([1, 2, 3]), {
-          status: 200,
-          headers: { "Content-Type": "application/octet-stream" },
-        });
-      }),
-      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
-        const url = new URL(request.url);
-        sampleRequests.push({
-          offset: url.searchParams.get("offset"),
-          sampleIds: url.searchParams.get("sampleIds"),
-        });
-        return HttpResponse.json({
-          items: makeViewSampleRows(3),
-          total: 3,
-        });
-      }),
-    );
-
-    await mountPage("ds-real-ids", DEFAULT_DATASET, []);
-
-    await waitForCondition(() => sampleRequests.length > 0);
-
-    expect(sampleRequests.every((req) => req.offset === null)).toBe(true);
-    expect(sampleRequests[0]?.sampleIds).toBe("1,2,3");
-  });
-
-  it("loads additional real-id pages with sample_ids instead of stopping at the first 200", async () => {
-    const requestSampleIds: string[] = [];
-    server.use(
-      http.get("/api/v1/sc/datasets/:id/defect-ids.bin", () => {
-        return new HttpResponse(makeInt32Bytes(Array.from({ length: 450 }, (_, i) => i + 1)), {
-          status: 200,
-          headers: { "Content-Type": "application/octet-stream" },
-        });
-      }),
-      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
-        const url = new URL(request.url);
-        const sampleIds = url.searchParams.get("sampleIds") ?? "";
-        requestSampleIds.push(sampleIds);
-        const ids = sampleIds.split(",").filter(Boolean).map(Number);
-        return HttpResponse.json({
-          items: ids.map((id) => ({
-            ...makeViewSampleRows(1, id - 1)[0],
-            sample_id: `s${id}`,
-            defect_id: String(id),
-          })),
-          total: 450,
-        });
-      }),
-    );
-
-    const { state } = await mountPage("ds-real-ids-paged", DEFAULT_DATASET, []);
-
-    await waitForCondition(() => state.hasMoreSamples.value);
-    await state.fetchMoreSamples();
-    await waitForCondition(() => requestSampleIds.length >= 2);
-
-    expect(requestSampleIds[0]?.split(",")[0]).toBe("1");
-    expect(requestSampleIds[0]?.split(",")).toHaveLength(200);
-    expect(requestSampleIds[1]?.split(",")[0]).toBe("201");
-    expect(requestSampleIds[1]?.split(",")).toHaveLength(200);
+    expect(requestOffsets).toEqual([]);
+    expect(state.hasMoreSamples.value).toBe(false);
   });
 
   it("uses map box-selection IDs as BlinkTable data source filter", async () => {

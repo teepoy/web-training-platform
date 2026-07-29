@@ -12,28 +12,26 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
-COPY libs/platform-runtime/pyproject.toml libs/platform-runtime/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
-COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 
 COPY libs/protos/ libs/protos/
 
 FROM base AS deps
 
-RUN uv sync --frozen --package finetune-api --no-dev --no-install-workspace
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package finetune-api --no-dev --no-install-workspace
 
 COPY apps/api/ apps/api/
-COPY libs/platform-runtime/ libs/platform-runtime/
-COPY libs/ml/ libs/ml/
 
-RUN uv sync --frozen --package finetune-api --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package finetune-api --no-dev
 
 FROM deps AS dev
 
 WORKDIR /app/apps/api
 EXPOSE 8000
-CMD ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000", "--reload-dir", "/app/apps/api", "--reload-dir", "/app/libs/platform-runtime"]
+CMD ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000", "--reload-dir", "/app/apps/api"]
 
 FROM deps AS prod
 

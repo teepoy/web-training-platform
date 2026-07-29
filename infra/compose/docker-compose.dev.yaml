@@ -12,7 +12,7 @@
 # ─────────────────────────────────────────────────────────────────────
 
 x-platform-environment: &platform-environment
-  PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src
+  PYTHONPATH: /app/libs/protos/src
   APP_CONFIG_PROFILE: dev
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
   PREFECT_API_URL: http://prefect-server:4200/api
@@ -41,6 +41,8 @@ x-platform-environment: &platform-environment
   LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
+  PERSPECTIVE_WS_MAX_RSS_MB: ${PERSPECTIVE_WS_MAX_RSS_MB:-1536}
+  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
 
 x-api-runtime: &api-runtime
   build:
@@ -52,7 +54,6 @@ x-api-runtime: &api-runtime
       PIP_INDEX_URL: ${PIP_INDEX_URL:-}
   volumes:
     - ../../apps/api:/app/apps/api
-    - ../../libs/platform-runtime:/app/libs/platform-runtime
     - ../../libs/protos:/app/libs/protos
   environment:
     <<: *platform-environment
@@ -86,7 +87,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && ( uv run --no-dev --frozen alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "cd /app/apps/api && ( uv run --no-dev --frozen alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
     ports:
       - "8000:8000"
@@ -107,9 +108,12 @@ services:
     <<: *api-runtime
     command:
       [
+        "python",
+        "/app/apps/api/scripts/perspective_container_watchdog.py",
+        "--",
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && uv run --no-dev --frozen uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/apps/api --reload-dir /app/libs/platform-runtime --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        'cd /app/apps/api && export MALLOC_CONF="$${PERSPECTIVE_WS_MALLOC_CONF}" && exec /app/.venv/bin/uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}',
       ]
     ports:
       - "8001:8001"
@@ -118,12 +122,20 @@ services:
         [
           "CMD",
           "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+          "/app/apps/api/scripts/perspective_healthcheck.py",
+          "--url",
+          "http://localhost:8001/ready",
+          "--timeout-seconds",
+          "2",
+          "--failure-threshold",
+          "3",
+          "--startup-grace-seconds",
+          "60",
+          "--force-container-restart",
         ]
-      interval: 30s
-      timeout: 20s
-      retries: 12
+      interval: 10s
+      timeout: 3s
+      retries: 3
       start_period: 60s
 
   # ───────────────────────────────────────────────────────────────────
@@ -138,6 +150,7 @@ services:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
     volumes:
       - ../../apps/web:/app/apps/web
+      - ../../packages/sc-map-element:/app/packages/sc-map-element
     environment:
       VITE_PROXY_TARGET: "http://api:8000"
       VITE_PERSPECTIVE_WS_TARGET: "http://perspective-ws:8001"
@@ -246,12 +259,11 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     volumes:
       - ../../apps/api:/app/apps/api
-      - ../../libs/platform-runtime:/app/libs/platform-runtime
       - ../../libs/protos:/app/libs/protos
-      - ../../libs/ml:/app/libs/ml
+      - ../../apps/api/app/modules/types/ml:/app/apps/api/app/modules/types/ml
     environment:
       <<: *platform-environment
-      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src
+      PYTHONPATH: /app/libs/protos/src
     depends_on:
       prefect-server:
         condition: service_healthy
@@ -281,12 +293,11 @@ services:
               capabilities: [gpu]
     volumes:
       - ../../apps/api:/app/apps/api
-      - ../../libs/platform-runtime:/app/libs/platform-runtime
       - ../../libs/protos:/app/libs/protos
-      - ../../libs/ml:/app/libs/ml
+      - ../../apps/api/app/modules/types/ml:/app/apps/api/app/modules/types/ml
     environment:
       <<: *platform-environment
-      PYTHONPATH: /app/libs/protos/src:/app/libs/platform-runtime/src:/app/libs/ml/src
+      PYTHONPATH: /app/libs/protos/src
     depends_on:
       prefect-server:
         condition: service_healthy

@@ -1,18 +1,15 @@
-"""RED tests for libs/ml task-package boundary and Protocol conformance.
+"""Tests for API-local ML type implementations and Protocol conformance.
 
-These tests define the expected contract for the new ``libs/ml`` package
-and MUST fail because the package does not exist yet (Task 5 of the
-view-type refactor plan).  They turn GREEN in Task 10 (package scaffold)
-and Tasks 15-17 (family implementations).
+These tests keep the current in-process demo trainer/predictor implementations
+honest without preserving a separate ``libs/ml`` workspace package.
 
 Test categories
 ---------------
-1. **Import existence** – ``libs.ml.classification``, ``libs.ml.detection``,
-   ``libs.ml.vqa`` are not importable yet → tests FAIL with ModuleNotFoundError.
+1. **Import existence** – worker-only demo modules under
+   ``app.runtime_compat.ml.demo`` import.
 2. **Trainer / Predictor Protocol conformance** – once the modules exist,
    the exported classes must satisfy ``app.shared.domain.runtime.Trainer``
-   and ``app.shared.domain.runtime.Predictor``.  Tests fail now because
-   imports raise ModuleNotFoundError before Protocol checks can run.
+   and ``app.shared.domain.runtime.Predictor``.
 3. **Heavy-import boundary** – importing ``app.registrations`` must NOT
    cause ``torch`` (or equivalent heavy ML frameworks) to be imported
    at API startup time.  These pass now and serve as regression guards.
@@ -36,16 +33,16 @@ def _modules_loaded() -> frozenset[str]:
 
 _EXPECTED_CLASSES: dict[str, dict[str, list[str]]] = {
     "classification": {
-        "trainer": ["libs.ml.classification.trainer", "ClassificationTrainer"],
-        "predictor": ["libs.ml.classification.predictor", "ClassificationPredictor"],
+        "trainer": ["app.runtime_compat.ml.demo.classification.trainer", "ClassificationTrainer"],
+        "predictor": ["app.runtime_compat.ml.demo.classification.predictor", "ClassificationPredictor"],
     },
     "detection": {
-        "trainer": ["libs.ml.detection.trainer", "DetectionTrainer"],
-        "predictor": ["libs.ml.detection.predictor", "DetectionPredictor"],
+        "trainer": ["app.runtime_compat.ml.demo.detection.trainer", "DetectionTrainer"],
+        "predictor": ["app.runtime_compat.ml.demo.detection.predictor", "DetectionPredictor"],
     },
     "vqa": {
-        "trainer": ["libs.ml.vqa.trainer", "VqaTrainer"],
-        "predictor": ["libs.ml.vqa.predictor", "VqaPredictor"],
+        "trainer": ["app.runtime_compat.ml.demo.vqa.trainer", "VqaTrainer"],
+        "predictor": ["app.runtime_compat.ml.demo.vqa.predictor", "VqaPredictor"],
     },
 }
 
@@ -66,31 +63,31 @@ def _import_class(family: str, role: str) -> type[Any]:
 
 class TestClassificationImports:
     def test_import_classification_trainer(self) -> None:
-        import libs.ml.classification.trainer  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.classification.trainer  # noqa: F401
 
     def test_import_classification_predictor(self) -> None:
-        import libs.ml.classification.predictor  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.classification.predictor  # noqa: F401
 
 
 class TestDetectionImports:
     def test_import_detection_trainer(self) -> None:
-        import libs.ml.detection.trainer  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.detection.trainer  # noqa: F401
 
     def test_import_detection_predictor(self) -> None:
-        import libs.ml.detection.predictor  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.detection.predictor  # noqa: F401
 
 
 class TestVqaImports:
     def test_import_vqa_trainer(self) -> None:
-        import libs.ml.vqa.trainer  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.vqa.trainer  # noqa: F401
 
     def test_import_vqa_predictor(self) -> None:
-        import libs.ml.vqa.predictor  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo.vqa.predictor  # noqa: F401
 
 
 class TestTopLevelImport:
     def test_import_libs_ml(self) -> None:
-        import libs.ml  # noqa: F401  # ← ModuleNotFoundError
+        import app.runtime_compat.ml.demo  # noqa: F401
 
 
 # ============================================================================

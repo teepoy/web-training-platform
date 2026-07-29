@@ -12,9 +12,6 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
-COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
-COPY libs/platform-runtime/pyproject.toml libs/platform-runtime/pyproject.toml
-COPY libs/python-sdk/pyproject.toml libs/python-sdk/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 
@@ -30,8 +27,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # ── Phase 2: copy application source and install the package itself ──
 COPY apps/api/ apps/api/
-COPY libs/ml/ libs/ml/
-COPY libs/platform-runtime/ libs/platform-runtime/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package finetune-api --no-dev

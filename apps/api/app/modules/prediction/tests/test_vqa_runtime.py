@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from typing import Any, cast
 
 from fastapi.testclient import TestClient
@@ -12,8 +11,10 @@ from app.shared.api.schemas import Dataset, Model, TaskSpec
 from app.main import app
 from app.modules.datasets.port.http.deps import get_label_studio_client
 from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, TrainContext
-from libs.ml.vqa import VqaPredictor, VqaTrainer
-from app.modules.prediction.app.services.prediction_service import PredictionService
+from app.runtime_compat.ml.demo.vqa import VqaPredictor, VqaTrainer
+from app.modules.prediction.app.services.prediction_runtime import (
+    PredictionRuntimeService,
+)
 from app.shared.infrastructure.storage import InMemoryArtifactStorage
 
 
@@ -191,11 +192,11 @@ async def test_dspy_vqa_predictor_loads_program_and_answers() -> None:
 @pytest.mark.skip(reason="_predict_sample removed in cpu/gpu prefect split refactor; prediction now goes through Prefect flow")
 @pytest.mark.asyncio
 async def test_prediction_prompt_override_for_vqa() -> None:
-    svc = PredictionService(
-        repository=cast(Any, _RepoStub()),
-        artifact_storage=InMemoryArtifactStorage(),
-        config=cast(Any, SimpleNamespace(label_studio=SimpleNamespace(url="", api_key=""))),
-        dataset_storage_factory=cast(Any, None),
+    repository = cast(Any, _RepoStub())
+    svc = PredictionRuntimeService(
+        dataset_reader=repository,
+        model_catalog=repository,
+        runtime_router=cast(Any, None),
     )
     sample = Sample(
         id="s3",
@@ -227,11 +228,11 @@ async def test_prediction_prompt_override_for_vqa() -> None:
 
 @pytest.mark.asyncio
 async def test_prediction_target_vqa_requires_vqa_dataset() -> None:
-    svc = PredictionService(
-        repository=cast(Any, _RepoStub()),
-        artifact_storage=InMemoryArtifactStorage(),
-        config=cast(Any, SimpleNamespace(label_studio=SimpleNamespace(url="", api_key=""))),
-        dataset_storage_factory=cast(Any, None),
+    repository = cast(Any, _RepoStub())
+    svc = PredictionRuntimeService(
+        dataset_reader=repository,
+        model_catalog=repository,
+        runtime_router=cast(Any, None),
     )
     with pytest.raises(ValueError, match="target 'vqa' requires dataset task_type 'vqa'"):
         await svc.run_prediction(

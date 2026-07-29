@@ -7,21 +7,33 @@
 import type { RunPredictionRequestSampleIds } from './runPredictionRequestSampleIds';
 import type { RunPredictionRequestModelVersion } from './runPredictionRequestModelVersion';
 import type { RunPredictionRequestPrompt } from './runPredictionRequestPrompt';
+import type { RunPredictionRequestPredictorId } from './runPredictionRequestPredictorId';
 
 /**
  * Request to run predictions on a dataset using a model.
  */
 export interface RunPredictionRequest {
-  /** ID of the model artifact to use */
+  /**
+   * ID of the model artifact to use
+   * @minLength 1
+   */
   model_id: string;
-  /** ID of the dataset to run predictions on */
+  /**
+   * ID of the dataset to run predictions on
+   * @minLength 1
+   */
   dataset_id: string;
   /** Optional list of sample IDs. If None, runs on all samples in dataset */
   sample_ids?: RunPredictionRequestSampleIds;
   /** Optional version tag for Label Studio filtering */
   model_version?: RunPredictionRequestModelVersion;
-  /** Prediction target key in trainer */
+  /**
+   * Prediction target key in trainer
+   * @minLength 1
+   */
   target?: string;
   /** Optional runtime prompt/question override */
   prompt?: RunPredictionRequestPrompt;
+  /** Explicit predictor paired with the model's trainer; required when the trainer declares multiple predictors */
+  predictor_id?: RunPredictionRequestPredictorId;
 }

@@ -1,187 +1,190 @@
-import { test, expect } from '../../fixtures'
-import { DatasetDetailPage } from '../../pages/datasets/DatasetDetailPage'
-import { makePredictionJob, makeTrainingJob } from '../../mocks/factories'
+import { test, expect } from "../../fixtures";
+import { DatasetDetailPage } from "../../pages/datasets/DatasetDetailPage";
+import { makeModel, makePredictionJob } from "../../mocks/factories";
 
-const datasetId = 'dataset-tabs-1'
+const datasetId = "dataset-tabs-1";
 
-test('Train tab disables Start New Job button when allowTrain=false @mock', async ({
+test("Train tab disables Start New Job button when allowTrain=false @mock", async ({
   authedPage,
   apiMocks,
 }) => {
-  const page = new DatasetDetailPage(authedPage)
+  const page = new DatasetDetailPage(authedPage);
 
   await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: false,
     annotated_samples: 0,
     total_samples: 10,
-  })
-  await apiMocks.training.mockListTrainingJobs([])
-  await apiMocks.training.mockListTrainers([])
+  });
+  await apiMocks.training.mockListTrainingJobs([]);
+  await apiMocks.training.mockListTrainers([]);
 
-  await page.gotoDetail(datasetId)
-  await page.waitForLoaded()
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
 
-  await page.gotoTrainTab()
-  await page.waitForTrainTabLoaded()
+  await page.gotoTrainTab();
+  await page.waitForTrainTabLoaded();
 
-  const startButton = page.getStartJobButton()
-  await expect(startButton).toBeVisible()
-  await expect(startButton).toBeDisabled()
-})
+  const startButton = page.getStartJobButton();
+  await expect(startButton).toBeVisible();
+  await expect(startButton).toBeDisabled();
+});
 
-test('Train tab enables Start New Job button when allowTrain=true @mock', async ({
+test("Train tab enables Start New Job button when allowTrain=true @mock", async ({
   authedPage,
   apiMocks,
 }) => {
-  const page = new DatasetDetailPage(authedPage)
+  const page = new DatasetDetailPage(authedPage);
 
   await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: true,
     annotated_samples: 5,
     total_samples: 10,
-  })
-  await apiMocks.training.mockListTrainingJobs([])
-  await apiMocks.training.mockListTrainers([])
+  });
+  await apiMocks.training.mockListTrainingJobs([]);
+  await apiMocks.training.mockListTrainers([]);
 
-  await page.gotoDetail(datasetId)
-  await page.waitForLoaded()
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
 
-  await page.gotoTrainTab()
-  await page.waitForTrainTabLoaded()
+  await page.gotoTrainTab();
+  await page.waitForTrainTabLoaded();
 
-  const startButton = page.getStartJobButton()
-  await expect(startButton).toBeVisible()
-  await expect(startButton).toBeEnabled()
-})
+  const startButton = page.getStartJobButton();
+  await expect(startButton).toBeVisible();
+  await expect(startButton).toBeEnabled();
+});
 
-test('Predict tab shows Start Prediction button and opens modal with training job selector @mock', async ({
+test("Predict tab shows Start Prediction button and opens modal with model selector @mock", async ({
   authedPage,
   apiMocks,
 }) => {
-  const page = new DatasetDetailPage(authedPage)
+  const page = new DatasetDetailPage(authedPage);
 
   await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
-  await apiMocks.datasets.mockDatasetStatus(datasetId)
-  await apiMocks.prediction.mockListPredictionJobs([])
-  await apiMocks.training.mockListTrainingJobs([
-    makeTrainingJob({
-      id: 'job-completed-1',
-      dataset_id: datasetId,
-      status: 'completed',
-    }),
-  ])
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId);
+  await apiMocks.prediction.mockListPredictionJobs([]);
+  await apiMocks.training.mockListTrainingJobs([]);
+  await apiMocks.prediction.mockListModels([
+    makeModel({ id: "model-1", name: "Demo Model", dataset_id: datasetId }),
+  ]);
 
-  await page.gotoDetail(datasetId)
-  await page.waitForLoaded()
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
 
-  await page.gotoPredictTab()
-  await page.waitForPredictTabLoaded()
+  await page.gotoPredictTab();
+  await page.waitForPredictTabLoaded();
 
-  const startButton = page.getStartPredictionButton()
-  await expect(startButton).toBeVisible()
+  const startButton = page.getStartPredictionButton();
+  await expect(startButton).toBeVisible();
 
-  await startButton.click()
+  await startButton.click();
 
-  await expect(authedPage.getByRole('dialog')).toBeVisible()
+  await expect(authedPage.getByRole("dialog")).toBeVisible();
 
-  const dialog = authedPage.getByRole('dialog')
-  await expect(dialog.getByText('Training Job', { exact: true })).toBeVisible()
-  await expect(dialog.getByText('Select a completed training job')).toBeVisible()
-})
+  const dialog = authedPage.getByRole("dialog");
+  await expect(dialog.getByText("Model", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Select a model")).toBeVisible();
+});
 
-test('Predict tab only shows prediction jobs for the current dataset @mock', async ({
+test("Predict tab only shows prediction jobs for the current dataset @mock", async ({
   authedPage,
   apiMocks,
 }) => {
-  const page = new DatasetDetailPage(authedPage)
+  const page = new DatasetDetailPage(authedPage);
 
   await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
-  await apiMocks.datasets.mockDatasetStatus(datasetId)
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId);
   await apiMocks.prediction.mockListPredictionJobs([
     makePredictionJob({
-      id: 'current1-prediction-job',
+      id: "current1-prediction-job",
       dataset_id: datasetId,
-      status: 'completed',
+      status: "completed",
     }),
     makePredictionJob({
-      id: 'other999-prediction-job',
-      dataset_id: 'other-dataset',
-      status: 'completed',
+      id: "other999-prediction-job",
+      dataset_id: "other-dataset",
+      status: "completed",
     }),
-  ])
-  await apiMocks.training.mockListTrainingJobs([])
+  ]);
+  await apiMocks.training.mockListTrainingJobs([]);
 
-  await page.gotoDetail(datasetId)
-  await page.waitForLoaded()
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
 
-  await page.gotoPredictTab()
-  await page.waitForPredictTabLoaded()
+  await page.gotoPredictTab();
+  await page.waitForPredictTabLoaded();
 
-  await expect(authedPage.getByText('current1…')).toBeVisible()
-  await expect(authedPage.getByText('other999…')).not.toBeVisible()
-})
+  await expect(authedPage.getByText("current1…")).toBeVisible();
+  await expect(authedPage.getByText("other999…")).not.toBeVisible();
+});
 
-test('Task Explorer returns to the source route from query @mock', async ({
-  authedPage,
-  apiMocks,
-}) => {
-  await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
-  await apiMocks.datasets.mockDatasetStatus(datasetId)
-  await authedPage.route('**/api/v1/task-tracker/tasks**', async (route) => {
+test("Task Explorer renders task table @mock", async ({ authedPage }) => {
+  await authedPage.route("**/api/v1/task-tracker/tasks**", async (route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([]),
-    })
-  })
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "task-1",
+          display_name: "Prediction task",
+          dataset_id: datasetId,
+          dataset_name: "flowers-dataset",
+          display_status: "running",
+          stage: "running",
+          task_kind: "prediction",
+          queue_priority_label: "none",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    });
+  });
 
-  await authedPage.goto(`/tasks?from=${encodeURIComponent(`/datasets/${datasetId}?tab=predict`)}`)
-  await authedPage.getByTestId('task-explorer-back').click()
+  await authedPage.goto("/tasks?kind=prediction");
 
-  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}`))
-})
+  await expect(authedPage.getByText("Task Explorer")).toBeVisible();
+  await expect(authedPage.getByText("Prediction task")).toBeVisible();
+  await expect(authedPage.getByRole("button", { name: "Insight" })).toBeVisible();
+});
 
-test('Train tab modal hides dataset selector when datasetId prop is set @mock', async ({
+test("Train tab modal hides dataset selector when datasetId prop is set @mock", async ({
   authedPage,
   apiMocks,
 }) => {
-  const page = new DatasetDetailPage(authedPage)
+  const page = new DatasetDetailPage(authedPage);
 
   await apiMocks.datasets.mockGetDataset(datasetId, {
-    task_spec: { task_type: 'classification', label_space: ['rose', 'tulip'] },
-  })
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
   await apiMocks.datasets.mockDatasetStatus(datasetId, {
     allow_train: true,
     annotated_samples: 5,
     total_samples: 10,
-  })
-  await apiMocks.training.mockListTrainingJobs([])
-  await apiMocks.training.mockListTrainers([])
+  });
+  await apiMocks.training.mockListTrainingJobs([]);
+  await apiMocks.training.mockListTrainers([]);
 
-  await page.gotoDetail(datasetId)
-  await page.waitForLoaded()
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
 
-  await page.gotoTrainTab()
-  await page.waitForTrainTabLoaded()
+  await page.gotoTrainTab();
+  await page.waitForTrainTabLoaded();
 
-  const startButton = page.getStartJobButton()
-  await startButton.click()
+  const startButton = page.getStartJobButton();
+  await startButton.click();
 
-  await expect(authedPage.getByRole('dialog')).toBeVisible()
+  await expect(authedPage.getByRole("dialog")).toBeVisible();
 
   // Dataset selector should NOT be visible — it's auto-set from props.datasetId
-  const datasetFormLabel = authedPage.getByText('Dataset', { exact: true })
-  await expect(datasetFormLabel).not.toBeVisible()
-})
+  const datasetFormLabel = authedPage.getByText("Dataset", { exact: true });
+  await expect(datasetFormLabel).not.toBeVisible();
+});

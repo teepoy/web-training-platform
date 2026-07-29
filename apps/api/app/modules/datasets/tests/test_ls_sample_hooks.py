@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.datasets.port.http.deps import get_label_studio_client
-from app.shared.db.sql_repository import SqlRepository
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 from app.shared.api.utils import _make_ls_image_url
 
 
@@ -116,7 +116,7 @@ def test_create_sample_no_ls_project_returns_500() -> None:
         repo_mock.get_dataset = AsyncMock(return_value=dataset_no_project)
 
         with TestClient(app) as c:
-            with patch.object(SqlRepository, "get_dataset", repo_mock.get_dataset):
+            with patch.object(DatasetSqlRepository, "get_dataset", repo_mock.get_dataset):
                 r = c.post(
                     f"/api/v1/datasets/{dataset_no_project.id}/samples",
                     json=_SAMPLE_PAYLOAD,
@@ -160,8 +160,8 @@ def test_create_sample_ls_task_creation_fails_returns_502() -> None:
 
     with TestClient(app) as c:
         app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
-        with patch.object(SqlRepository, "get_dataset", repo_mock.get_dataset), \
-             patch.object(SqlRepository, "create_samples", repo_mock.create_sample):
+        with patch.object(DatasetSqlRepository, "get_dataset", repo_mock.get_dataset), \
+             patch.object(DatasetSqlRepository, "create_samples", repo_mock.create_sample):
             r = c.post(
                 f"/api/v1/datasets/{dataset.id}/samples",
                 json=_SAMPLE_PAYLOAD,

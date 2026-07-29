@@ -7,4 +7,6 @@
 
 export type ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams = {
 kind?: string | null;
+offset?: number;
+limit?: number;
 };

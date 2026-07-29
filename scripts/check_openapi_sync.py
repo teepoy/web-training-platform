@@ -28,7 +28,28 @@ def _build_live() -> object:
     sys.path.insert(0, str(API_DIR))
     from app.main import app
 
-    return get_openapi(title=app.title, version=app.version, routes=app.routes)
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    _fix_uploadfile_binary_format(schema)
+    return schema
+
+
+def _fix_uploadfile_binary_format(schema: object) -> None:
+    """Match export_openapi_spec.py's UploadFile normalization."""
+    if not isinstance(schema, dict):
+        return
+    schemas = schema.get("components", {}).get("schemas", {})
+    if not isinstance(schemas, dict):
+        return
+    for obj in schemas.values():
+        if not isinstance(obj, dict):
+            continue
+        for prop_schema in obj.get("properties", {}).values():
+            if (
+                isinstance(prop_schema, dict)
+                and "contentMediaType" in prop_schema
+                and "format" not in prop_schema
+            ):
+                prop_schema["format"] = "binary"
 
 
 def main() -> int:

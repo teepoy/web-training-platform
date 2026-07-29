@@ -100,7 +100,10 @@ def test_authenticated_dataset_list_returns_200() -> None:
             headers={"Authorization": f"Bearer {token}", "X-Organization-ID": org_id},
         )
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        payload = resp.json()
+        assert isinstance(payload, dict)
+        assert isinstance(payload.get("items"), list)
+        assert payload.get("total") == 0
 
 
 @pytest.mark.no_auth_override

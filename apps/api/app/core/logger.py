@@ -9,6 +9,8 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+from app.core.config import AppConfig, _as_app_config
+
 _LOG_RECORD_BUILTINS = frozenset(
     logging.LogRecord(
         name="",
@@ -57,7 +59,8 @@ class JsonLogFormatter(logging.Formatter):
         return str(value)
 
 
-def init_logging(cfg: DictConfig) -> None:
+def init_logging(cfg: AppConfig | DictConfig) -> None:
+    cfg = _as_app_config(cfg)
     env = str(cfg.app.env)
     log_level_override = os.getenv("LOG_LEVEL", "").upper()
 
@@ -68,7 +71,8 @@ def init_logging(cfg: DictConfig) -> None:
     else:
         level = log_level_override or "WARNING"
 
-    log_cfg = cfg.get("logging", {})
+    log_cfg_value = cfg.get("logging", {}) or {}
+    log_cfg = log_cfg_value if isinstance(log_cfg_value, dict) else {}
 
     config: dict = {
         "version": 1,

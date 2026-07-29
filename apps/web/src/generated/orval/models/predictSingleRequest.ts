@@ -6,21 +6,35 @@
  */
 import type { PredictSingleRequestModelVersion } from './predictSingleRequestModelVersion';
 import type { PredictSingleRequestPrompt } from './predictSingleRequestPrompt';
+import type { PredictSingleRequestPredictorId } from './predictSingleRequestPredictorId';
 
 /**
  * Request to predict a single sample.
  */
 export interface PredictSingleRequest {
-  /** ID of the dataset containing the sample */
+  /**
+   * ID of the dataset containing the sample
+   * @minLength 1
+   */
   dataset_id: string;
-  /** ID of the model artifact to use */
+  /**
+   * ID of the model artifact to use
+   * @minLength 1
+   */
   model_id: string;
-  /** ID of the sample to predict */
+  /**
+   * ID of the sample to predict
+   * @minLength 1
+   */
   sample_id: string;
   /** Optional version tag for Label Studio filtering */
   model_version?: PredictSingleRequestModelVersion;
-  /** Prediction target key in trainer */
+  /**
+   * Prediction target key in trainer
+   * @minLength 1
+   */
   target?: string;
   /** Optional runtime prompt/question override */
   prompt?: PredictSingleRequestPrompt;
+  predictor_id?: PredictSingleRequestPredictorId;
 }

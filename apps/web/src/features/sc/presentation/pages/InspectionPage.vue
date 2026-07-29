@@ -196,30 +196,23 @@ async function startReclassifyImport(): Promise<void> {
       </div>
       <InspectionQuad
         v-else
-        :samples-error="null"
-        :inspection-item="inspectionItem ?? undefined"
         :inspection-time="inspectionTime"
         :wafer-key="waferKey"
         :active-map-tab="activeMapTab"
         :wafer-geometry="waferGeometry"
-        :reticle-x-die-count="reticleOptions.xDieCount"
-        :reticle-y-die-count="reticleOptions.yDieCount"
         :reticle-die-size-x="inspectionItem?.die_size_x ?? 100000"
         :reticle-die-size-y="inspectionItem?.die_size_y ?? 100000"
         :reticle-options="reticleOptions"
         :zoom="zoom"
         :selected-gallery-defect-ids="selectedGalleryDefectIds"
-        :table-filter="tableFilter"
-        :table-sort="tableSort"
+        v-model:table-filter="tableFilter"
+        v-model:table-sort="tableSort"
         :legend-group-by="legendGroupBy"
         @update:active-map-tab="setActiveMapTab"
         @update:reticle-options="reticleOptions = $event"
         @zoom-in="zoom = $event"
-        @table-filter-change="tableFilter = $event"
-        @table-sort-change="tableSort = $event"
         @table-selection-change="selectedGalleryDefectIds = $event"
         @legend-group-change="setLegendGroupBy"
-        @retry="inspectionQuery.refetch()"
         @select-samples="(ids) => (selectedGalleryDefectIds = ids.map(Number))"
       />
     </div>

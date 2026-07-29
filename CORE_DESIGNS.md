@@ -12,41 +12,36 @@
 
 ## 1. 系统边界
 
-平台分为四个主要运行层：
+平台分为五个主要运行层：
 
-| 层 | 包 | 职责 | 禁止事项 |
-| --- | --- | --- | --- |
-| Control plane | `apps/api` | HTTP API、权限、业务参数校验、catalog metadata、任务创建、状态与结果持久化、Prefect flow 定义与部署注册 | API route 不执行训练/预测 callable；API 进程不依赖 Torch/CUDA runtime |
-| ML library | `libs/ml` | 模型结构、训练循环、预测逻辑、Torch 数据处理 | 不依赖 API、Prefect、DB ORM、FastAPI router |
-| Shared runtime | `libs/platform-runtime` | 跨进程 contracts、DTO、Protocol、SDK/CLI、runtime client | 不反向依赖 `apps/*` |
+| 层                   | 包                                                   | 职责                                                                                             | 禁止事项                                                              |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Control plane        | `apps/api`                                           | HTTP API、权限、业务参数校验、catalog metadata、任务创建、状态与结果持久化、runtime service 调度 | API route 不执行训练/预测 callable；API 进程不依赖 Torch/CUDA runtime |
+| Runtime services     | `services/*`                                         | out-of-process trainer、predictor、image/parser/upstream adapter 等重依赖运行时                  | 不 import `apps/api` 内部 service/repository/ORM/FastAPI router       |
+| Data plane interface | API 暴露的窄接口 / manifest / object storage handoff | 向 runtime services 提供 dataset view、artifact、prediction commit、progress report 等稳定边界   | 不暴露 API module 内部对象或把内部 Python service 当 SDK 使用         |
 
-### Prefect 双池架构
+### Runtime Service 边界
 
-平台使用两个 Prefect work pool 隔离 CPU 与 GPU 负载：
+训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 out-of-process runtime services，不属于 API 进程。API 只负责 control plane：创建任务、校验权限和参数、将 catalog entry 路由到 Prefect deployment、持久化业务状态、提供前端查询表面。
 
-| Pool | Compose 服务 | Profile | 典型负载 |
-|------|-------------|---------|----------|
-| `default-cpu` | `prefect-worker-cpu` | 默认 | 后台/大批量 import、timer_sensor、dataset_size_sensor、drain_dataset |
-| `default-gpu` | `prefect-worker-gpu` | `gpu` | train_job、predict_job、embed_flow |
-
-- 所有 Prefect flow 定义位于 `apps/api/app/modules/*/flows/`。
-- `prefect-worker-gpu` 容器通过 `apps/api[gpu]` 可选依赖安装 torch、torchvision、finetune-ml。
-- 根 `pyproject.toml` 中 `ruff.flake8-tidy-imports.banned-module-level-imports = ["torch", "tensorflow"]` 禁止 API 进程模块级导入 torch；`libs/ml` 豁免此规则（`per-file-ignores`）。
-- Flow 部署注册通过 `ftapi deployments apply` + 一次性 `deployments-bootstrap` compose 服务完成。该服务在启动时创建 `default-cpu` / `default-gpu` 两个 work pool 并注册所有 flow 到对应池。
-- 宿主机 GPU worker 可通过 `make prefect-worker-gpu-host` 启动，不可与 compose `--profile gpu` 同时运行。
+- API 进程不安装也不导入 Torch/CUDA runtime。
+- 当前不保留独立 `libs/ml` 或 shared Python runtime contracts；这些包没有真实跨进程消费者时会制造假边界。API 内部 demo/type implementation 放在 API owning module 内。
+- 未来 SDK/runtime service 边界优先使用 OpenAPI、protobuf/gRPC、Arrow schema/manifest 等生成或传输 contract，而不是手写共享 Python DTO 包。
+- Runtime service 不 import `apps/api/app/modules/*` 内部 service、repository、ORM model 或 FastAPI dependency。
+- API 可以提供 gRPC/HTTP 等窄 data-plane 接口，也可以返回 manifest 与 signed object-store refs 让 runtime 批量读取；大批量图片/Parquet 不应强制走逐行 RPC。
+- Job progress、artifact metadata、prediction commit 等通过稳定 transport contract 回写 API，不通过共享内存对象或 API 内部 Python 类。
+- API control-plane module 禁止模块级导入 Torch/TensorFlow；仓库内临时
+  ML executable 只能位于 `apps/api/app/runtime_compat/ml`，并由 Prefect flow
+  在任务执行阶段懒加载。
 
 目标执行拓扑：
 
 ```text
-apps/api
-  -> Prefect server（in-app flow 定义 + ftapi deployments apply）
-  -> libs/ml（仅 GPU worker 导入）
+apps/api -> data plane interface / object storage manifest
+runtime service -> data plane interface / object storage manifest
 
-apps/api -> libs/platform-runtime
-
-prefect-worker-cpu  -> Prefect server（拉取 default-cpu 池 flow）
-prefect-worker-gpu  -> Prefect server（拉取 default-gpu 池 flow）
-                    -> libs/ml（GPU 计算）
+apps/api 不直接执行 trainer/predictor callable
+runtime service 不直接 import apps/api internals
 ```
 
 ### Perspective WebSocket 隔离
@@ -55,13 +50,35 @@ Perspective WebSocket 与普通 HTTP API 必须运行在不同进程和不同容
 
 - `app.main:app` 只提供普通 HTTP API，不注册 Perspective WebSocket 路由。
 - `app.perspective_main:app` 只提供 `/api/v1/sc/perspective/**/ws`、健康检查与就绪检查。
+- `app.perspective_main:app` 必须使用独立的最小 composition root，只装配数据库 session、Redis、SC upstream 与 dataset storage；禁止复用普通 API 的完整 `build_app_context()`。
 - Compose 中使用独立的 `perspective-ws` 服务；Kubernetes 中使用独立 Deployment/Service。
 - Web 反向代理必须把 Perspective WebSocket 路径定向到独立的 `perspective_ws` upstream，其余 `/api` 请求仍定向到 `api:8000`。
 - 生产 Perspective 容器由 Supervisor 管理四个独立 Uvicorn 进程，分别监听 `8001–8004`；禁止使用 Uvicorn `--workers` 拉起多进程。
 - Web Nginx 对 `perspective-ws:8001–8004` 使用 `least_conn` 策略分配长连接。进程数量、监听端口和 Nginx upstream 列表必须同步修改，不能隐式缺省或动态失配。
+- Perspective 健康检查必须覆盖容器内全部监听端口。Compose 在 60 秒启动宽限后每 10 秒并行探测一次，单次请求 2 秒超时；连续 3 次失败必须由 PID 1 watchdog 强制终止服务进程组并以非零状态退出，再由 restart policy 重启容器。Kubernetes 使用相同的端口覆盖与失败阈值，由 liveness probe 触发 Pod 重启。
+- `PERSPECTIVE_WS_MAX_RSS_MB` 只用于本地/开发环境定位 native allocator 异常；真实生产环境不得因 RSS 高水位把存活 worker 标记为 unready 或主动重启，以免切断活跃 WebSocket。生产内存保护应通过容量监控、连接排空和受控滚动替换处理。
 - Perspective 仍必须与普通 API worker 分离；Kubernetes 可以在此进程级拓扑之上增加 Pod 副本。
 
 > **迁移说明：** 旧版独立的 `gpu-worker` / `inference` / `embedding` 服务已并入 `apps/api` Prefect flow。原 `apps/worker`、`apps/inference`、`apps/embedding` 目录已移除。
+
+当前仓库内仍需运行的 demo/兼容 ML executable 必须放在
+`apps/api/app/runtime_compat/` 隔离区，而不是
+`apps/api/app/modules/*` control-plane module。该目录是迁移边界，不是稳定的
+API 内部扩展点：
+
+- API startup、catalog、router、service、composition 和 registration barrel
+  禁止 import `app.runtime_compat`。
+- 只有 Prefect flow entrypoint 可以在已经解析出明确 executable binding 后懒加载
+  `app.runtime_compat`；binding 本身只能保存 module path，不能在 control-plane
+  import callable。
+- `runtime_compat` 可以临时 import 明确列入 allowlist 的 API data-plane/runtime
+  contract，但不能被新的 API 业务代码反向依赖。
+- Torch、TorchVision、Ultralytics、Transformers 等 ML 依赖只允许从
+  `runtime_compat` executable module 内加载；catalog 枚举和 API import 测试必须证明
+  不会加载这些包。
+- 新的 production trainer/predictor 不得继续加入 `runtime_compat`；应实现为
+  `services/*` out-of-process runtime，通过 manifest、OpenAPI/protobuf 和 Prefect
+  deployment 接入。
 
 ## 2. 后端组织
 
@@ -70,22 +87,22 @@ Perspective WebSocket 与普通 HTTP API 必须运行在不同进程和不同容
 - Route handler 保持薄层，只做协议解析、依赖注入和错误映射。
 - 业务逻辑进入 module service；持久化进入 repository。
 - 共享基础设施只包含 DB engine/session、对象存储、外部 client 等 infra，不承载模块私有 service/repository。
-- 模块间依赖通过显式 Protocol/port，不直接读取 sibling module 内部对象。
+- `apps/api` 使用 `injector` library 做 composition。模块间依赖通过显式 Protocol/port 注入，不直接读取 sibling module 内部对象，也不跨模块注入具体 service class。
 - Registration 是模块边界的例外，只允许触发注册副作用或导出 descriptor，不允许借 registration 调用 sibling module 业务逻辑。
-- Module domain model 归属所在 module，例如 `apps/api/app/modules/sc`。`libs/platform-runtime` 只承载跨进程 shared contracts，不承载 SC 这类 module 私有 domain model。
+- Module domain model 归属所在 module，例如 `apps/api/app/modules/sc`。不要为了“未来可能复用”提前创建 shared Python contracts / ML packages；有真实外部 consumer 时优先以生成 contract 接入。
 
-API 可以通过 Prefect client 创建 flow run、查询状态、读取日志摘要。Prefect flow 定义可以 co-locate 在 `apps/api/app/modules/*/.../flows/`，但 API route 不启动 flow worker，也不直接执行可训练/可预测 callable。
+API 可以通过调度器或 runtime service client 创建后台任务、查询状态、读取日志摘要。具体编排机制可以是 Prefect、service queue、gRPC job API 或其他运行时协议；无论采用哪种机制，API route 都不直接执行可训练/可预测 callable。
 
 ## 3. Runtime 与任务状态
 
-Prefect 是后台流程编排事实来源。API 是产品业务状态事实来源。前端只通过平台 API 查询任务，不直接消费 Prefect REST payload。
+后台编排系统是运行时执行状态来源。API 是产品业务状态事实来源。前端只通过平台 API 查询任务，不直接消费 Prefect、service queue、runtime service 的内部 payload。
 
 长任务状态边界：
 
-- API 创建平台任务，校验权限和参数，持久化业务状态。
-- CPU Worker（`prefect-worker-cpu`）从 `default-cpu` 池拉取 flow，执行后台/大批量导入、传感器、数据导出等 CPU 负载。
+- API 创建平台任务，校验权限和参数，持久化业务状态，并将任务交给后台编排或 runtime service。
+- CPU runtime service / worker 执行后台/大批量导入、传感器、数据导出等 CPU 负载。
 - 低延迟、小批量导入可以由 API service 受限执行，但必须显式设置样本数、超时、并发和资源保护边界；route handler 仍保持薄层，不直接承载导入实现。
-- GPU Worker（`prefect-worker-gpu`）从 `default-gpu` 池拉取 flow，导入 libs/ml 直接执行训练/预测/嵌入等 GPU 计算。
+- GPU runtime service 执行训练、预测、嵌入等 GPU 计算，并通过 data-plane contract 读取 dataset view、提交 prediction/artifact/progress。
 - Task Tracker 表达产品视角的任务阶段、完成状态和产物位置。
 - Prometheus/Grafana/Loki 是运维观测系统，不是产品任务状态系统。
 
@@ -112,7 +129,9 @@ Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet sha
 
 `DatasetStorageAgg` 是 dataset storage 的唯一聚合入口。调用方通过 `DatasetStorageFactory.open(dataset_id, org_id)` 按 `storage_mode` 打开具体实现，然后使用统一 Protocol 完成样本枚举、批量写入、标注、预测结果、特征、删除和必要的存储级 materialize/as_hf 操作。训练、预测、导出、agent/classify 等批量读路径不得绕过它去直接使用 `SqlRepository`、`SampleAccessFactory`、`DatasetSampleService`、`RuntimeMaterializer` 或 ad-hoc shard reader。
 
-`DatasetStorageAgg.list_samples(return_lazyframe=True, ...)` 是 worker/runtime 批量读的标准表面。`with_labels=True` 由 storage 聚合层把最新标注并入 LazyFrame；trainer/predictor 只消费 LazyFrame，不请求 HTTP materialization，不读 `SampleORM` 逐行 fallback，也不依赖旧 runtime materialization artifact。View/domain projection 属于 trainer/predictor 或 domain aggregate，不属于 storage 层。
+`DatasetStorageAgg.list_samples(return_lazyframe=True, ...)` 是 API 内部 storage 聚合层的批量读标准表面。面向 out-of-process trainer/predictor 时，API/data-plane 应把对应 view 暴露为稳定 transport contract、Parquet/Arrow manifest 或 signed object-store refs；runtime service 不直接 import `DatasetStorageAgg`、`DatasetStorageFactory`、`SampleORM` 或 API repository。`with_labels=True` 由 storage/data-plane 把最新标注并入 view。View/domain projection 属于 trainer/predictor、domain aggregate 或 data-plane adapter，不属于物理 storage 层。
+
+Storage、data-plane、materializer 的主数据路径必须是 bulk/table-first：优先使用 Polars `LazyFrame`，靠近消费端可按需要 materialize 为 `DataFrame` 或 Arrow `Table`。如需额外 schema、capability、manifest metadata，应包装 lazyframe/dataframe/arrow table 或引用其 schema，不得把大数据路径转换成 dataclass/Pydantic row DTO 列表。除非明确证明数据量小且有边界，禁止对样本行做 Python `for` 循环逐行处理；应使用 LazyFrame/DataFrame/Arrow scan、projection、join、batch、streaming writer 等批量操作。Data-plane manifest 的第一版 contract 见 `docs/architecture/data-plane-manifest-contract.md`。
 
 `DatasetAgg` 是 domain-specific 聚合层：它包装一个 `DatasetStorageAgg`，承载 SC 等业务语义（如 wafer point 计算、`defect_id` 批量标注、domain 预测编排），但不拥有物理存储、manifest、Parquet shard 或通用 annotation/prediction persistence 细节。新的 domain 能力应优先放在对应 `DatasetAgg`，不是塞进通用 storage Protocol，也不是在 route/service 中新增 hardcoded switch。
 
@@ -145,10 +164,35 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 - View 使用 `@view` 注册。
 - Dataset type 使用 dataset registry 和 per-type adapter 注册。
-- API 侧 trainer/predictor registry 是 metadata catalog，用于列表展示、参数 schema、权限与兼容性校验。
-- Worker/inference 侧 runtime registry 才能持有 executable callable。
-- API catalog registry 与 runtime executable registry 不允许混用。
-- Prediction/training flow 调用 executable registry 解析出的 callable。不要保留 `container.gpu_worker` 这类过期执行入口，也不要在 flow 中硬连某个具体 ML 实现作为扩展机制。
+- 版本化 view contract 是 materializer 与 trainer/predictor 的唯一数据兼容边界。
+  每个 view descriptor 同时声明稳定 `view_id`、canonical data-plane contract 和
+  schema version；不同版本必须是不同 descriptor，可以同时存在。
+- 每个版本化 view 由一个 metadata-only `ViewDefinition` 描述。Definition 同时保存
+  `ViewContractRef`、row type import path 和 Arrow schema import path；`@view(id=...)`
+  只绑定 catalog ID，不允许在 row class 再复制 name、annotation flag 或 contract。
+  Data-plane schema registry 从 definition 构建，不维护第二份 view-to-schema map。
+- View definition、materializer、trainer、predictor metadata 必须通过 module-owned
+  `CapabilityBundle` 进入中心 `CapabilityCatalog`。中心 catalog 负责唯一性、版本、
+  引用和配对校验，不依赖目录扫描或 import executable 发现能力。
+- Materializer 声明自己产生的精确 `ViewContractRef`，以及支持的 purpose、format
+  和 storage mode。Trainer/predictor 只声明消费的精确 `ViewContractRef`，不直接
+  绑定具体 materializer；调用方按 view + purpose + storage mode 显式选择
+  materializer，没有匹配项时失败，不允许换 view fallback。
+- Trainer 必须显式声明一个或多个配对 predictor。Train-and-predict 在只有一个配对
+  predictor 时可以确定性解析；存在多个配对项时必须由请求显式选择，禁止根据同名
+  ID、目录名或模型名猜测。
+- Trainer 必须声明产出的 `ModelContractRef`，predictor 必须声明接受的
+  `ModelContractRef`。配对关系同时要求 view contract 和 model contract 精确匹配；
+  训练产物必须持久化 model contract/version，预测提交时必须验证，不能只凭
+  `trainer_id` 推断模型可加载。
+- API 侧 trainer/predictor catalog 只保存 metadata，用于列表展示、参数 schema、
+  权限与兼容性校验。
+- Prefect deployment 是 executable capability 边界。Catalog entry 通过 descriptor/config/DB metadata 路由到对应 deployment。
+- Runtime route 必须显式声明 `owner=local_compat|external`。API 只 seed/update
+  `local_compat` deployment；`external` deployment 由 runtime service 拥有，API
+  只能解析和调用，禁止覆盖其 entrypoint/work pool。
+- API catalog 与 Prefect executable deployment 不允许混用；API 不 import executable callable。
+- Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和 config-backed routing descriptor 创建 Prefect flow run。第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker` 这类过期执行入口，也不要在 API flow/service 中硬连某个具体 ML 实现作为扩展机制。
 - **Mapper** 使用全局 `MapperRegistry`（`app.core.mapper_registry.mapper`）注册类型间转换函数。`@mapper.register(from_types, to_types)` 接受 type 或 ClassVar 字符串，注册笛卡尔积 key。调用方通过 `mapper.get_mapper(src, dst)` 获取转换函数，不再调用 model 类上的 `from_sample` / `to_sample` / `get_adapter` / `as_*` 方法。每个 module 的 mapper 统一放在 `<module>/domain/mapper.py`，由 `app/registrations.py` 触发注册副作用。Mapper 函数必须包含完整转换逻辑，不允许在 model 类上保留内联转换方法；model 类只保留字段定义和 ClassVar 标识。
 
 前端：
@@ -175,7 +219,7 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 运行行为必须由配置 profile 决定，不允许在业务代码中硬编码环境分支。
 
 - `test` profile 只用于测试，可以使用 SQLite、memory storage、mock 外部服务。
-- `dev` / `prod` profile 面向 Postgres、S3-compatible object storage、Prefect、worker runtime 和 inference runtime。
+- `dev` / `prod` profile 面向 Postgres、S3-compatible object storage、后台编排系统和 out-of-process runtime services。
 - Smoke fallback 只能用于本地验证，不得被当作 dev/prod 可靠行为。
 
 如果某个能力在 test/smoke 下被 mock 或降级，必须在测试、文档或 capability matrix 中说明。

@@ -11,7 +11,7 @@ class ScImageRef(BaseModel):
     """Reference to one image embedded in the dataset's sparse shard.
 
     The ``url`` points at the generic per-sample image proxy
-    (``GET /api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...``),
+    (``GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}``),
     which streams the raw bytes from the v2 parquet shard. No external
     SC patch bucket dependency.
     """
@@ -24,11 +24,11 @@ class ScImageRef(BaseModel):
     bytes: Any = Field(default=None, exclude=True)
 
 
-@view
+@view(id="patch_image_v1")
 class ScPatchImageV1Row(BaseModel):
-    view_id: ClassVar[str] = "patch_image_v1"
-    view_name: ClassVar[str] = "Patch Image"
-    is_annotation_view: ClassVar[bool] = False
+    view_id: ClassVar[str]
+    view_name: ClassVar[str]
+    is_annotation_view: ClassVar[bool]
 
     sample_id: str
     inspection_time: str
@@ -42,6 +42,6 @@ class ScPatchImageV1Row(BaseModel):
     class_number: int | None = None
     images: list[ScImageRef] = Field(default_factory=list)
     review_images: list[dict] = Field(default_factory=list)
-    label: str = ""
-    predicted_label: str = ""
+    label: int | str = ""
+    predicted_label: int | str = ""
     confidence: float | None = None

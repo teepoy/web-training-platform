@@ -59,7 +59,7 @@ def test_register_duplicate_raises() -> None:
 
         reg = DatasetTypeRegistration(
             dataset_type=key,
-            view_types=["view_a"],
+            view_types=["image_input_v1"],
             task_type="classify",
             adapter_class=object,
         )
@@ -73,20 +73,41 @@ def test_register_duplicate_raises() -> None:
             raise AssertionError("Expected ValueError for duplicate registration")
 
 
+def test_register_dataset_type_rejects_unknown_view() -> None:
+    with save_restore_registry():
+        reg = DatasetTypeRegistration(
+            dataset_type="unknown_view_type",
+            view_types=["missing_view_v1"],
+            task_type="classify",
+            adapter_class=object,
+        )
+
+        try:
+            register_dataset_type(reg)
+        except ValueError as exc:
+            assert "missing_view_v1" in str(exc)
+        else:
+            raise AssertionError("Expected ValueError for unknown catalog view")
+
+
 # ── test_dataset_decorator_registers_adapter ───────────────────────────────
 
 def test_dataset_decorator_registers_adapter() -> None:
     with save_restore_registry():
         key = "deco_type"
 
-        @dataset(dataset_type=key, view_types=["v1", "v2"], task_type="detect")
+        @dataset(
+            dataset_type=key,
+            view_types=["image_input_v1", "box_detection_v1"],
+            task_type="detect",
+        )
         class FakeAdapter:
             pass
 
         reg = _dataset_type_registry.get(key)
         assert reg is not None, "Registry should contain the decorated type"
         assert reg.dataset_type == key
-        assert reg.view_types == ["v1", "v2"]
+        assert reg.view_types == ["image_input_v1", "box_detection_v1"]
         assert reg.task_type == "detect"
         assert reg.adapter_class is FakeAdapter
 
@@ -103,7 +124,7 @@ def test_create_adapter_returns_instance() -> None:
         key = "create_test"
         reg = DatasetTypeRegistration(
             dataset_type=key,
-            view_types=["v1"],
+            view_types=["qa_input_v1"],
             task_type="vqa",
             adapter_class=MyAdapter,
         )
@@ -160,7 +181,11 @@ def test_validate_dataset_task_match() -> None:
     with save_restore_registry():
         key = "task_validate"
 
-        @dataset(dataset_type=key, view_types=["v1"], task_type="classify")
+        @dataset(
+            dataset_type=key,
+            view_types=["labeled_image_v1"],
+            task_type="classify",
+        )
         class ValAdapter:
             pass
 
@@ -176,7 +201,7 @@ def test_list_dataset_types() -> None:
         register_dataset_type(
             DatasetTypeRegistration(
                 dataset_type="type_a",
-                view_types=["v1"],
+                view_types=["image_input_v1"],
                 task_type="classify",
                 adapter_class=object,
             )
@@ -184,7 +209,7 @@ def test_list_dataset_types() -> None:
         register_dataset_type(
             DatasetTypeRegistration(
                 dataset_type="type_b",
-                view_types=["v1", "v2"],
+                view_types=["image_input_v1", "box_detection_v1"],
                 task_type="detect",
                 adapter_class=object,
             )
@@ -202,7 +227,11 @@ def test_resolve_task_type() -> None:
     with save_restore_registry():
         key = "task_resolve"
 
-        @dataset(dataset_type=key, view_types=["v1"], task_type="detect")
+        @dataset(
+            dataset_type=key,
+            view_types=["box_detection_v1"],
+            task_type="detect",
+        )
         class TaskAdapter:
             pass
 

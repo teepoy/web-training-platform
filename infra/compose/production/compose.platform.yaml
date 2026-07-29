@@ -5,6 +5,7 @@
 
 x-platform-environment: &platform-environment
   APP_CONFIG_PROFILE: prod
+  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
   MNT: /mnt
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
   PREFECT_API_URL: http://prefect-server:4200/api
@@ -26,6 +27,8 @@ x-platform-environment: &platform-environment
   SC_REVIEW_S3_ACCESS_KEY: ${SC_REVIEW_S3_ACCESS_KEY:?Set SC_REVIEW_S3_ACCESS_KEY}
   SC_REVIEW_S3_SECRET_KEY: ${SC_REVIEW_S3_SECRET_KEY:?Set SC_REVIEW_S3_SECRET_KEY}
   SC_REVIEW_S3_BUCKET: ${SC_REVIEW_S3_BUCKET:-sc-review-images}
+  SC_UPSTREAM_ADDR: ${SC_UPSTREAM_ADDR:-sc-upstream:9091}
+  SC_UPSTREAM_FLIGHT_ADDR: ${SC_UPSTREAM_FLIGHT_ADDR:-grpc://sc-upstream:9093}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -93,6 +96,9 @@ services:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     command:
       [
+        "python",
+        "/app/apps/api/scripts/perspective_container_watchdog.py",
+        "--",
         "/usr/bin/supervisord",
         "-c",
         "/app/apps/api/supervisord.perspective.conf",
@@ -119,12 +125,26 @@ services:
         [
           "CMD",
           "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+          "/app/apps/api/scripts/perspective_healthcheck.py",
+          "--url",
+          "http://localhost:8001/ready",
+          "--url",
+          "http://localhost:8002/ready",
+          "--url",
+          "http://localhost:8003/ready",
+          "--url",
+          "http://localhost:8004/ready",
+          "--timeout-seconds",
+          "2",
+          "--failure-threshold",
+          "3",
+          "--startup-grace-seconds",
+          "60",
+          "--force-container-restart",
         ]
-      interval: 30s
-      timeout: 20s
-      retries: 12
+      interval: 10s
+      timeout: 3s
+      retries: 3
       start_period: 60s
     restart: unless-stopped
 

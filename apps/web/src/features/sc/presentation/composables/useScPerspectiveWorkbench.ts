@@ -2,6 +2,7 @@ import { onUnmounted, ref, type Ref } from "vue";
 import { useTimeoutFn } from "@vueuse/core";
 import perspective from "@perspective-dev/client";
 import type { Client, Table } from "@perspective-dev/client";
+import clientWasmUrl from "@perspective-dev/client/dist/wasm/perspective-js.wasm?url";
 import { API_BASE, getAuthToken, getOrgId } from "@/shared/api/client";
 import { managePerspectiveTable } from "@/features/sc/presentation/composables/managedPerspectiveView";
 
@@ -11,19 +12,11 @@ export interface ScPerspectivePreviewOptions {
   kind: "preview";
   inspectionTime: string;
   waferKey: number;
-  reticleXDieCount?: number;
-  reticleYDieCount?: number;
-  reticleXDieShift?: number;
-  reticleYDieShift?: number;
 }
 
 export interface ScPerspectiveReclassifyOptions {
   kind: "reclassify";
   datasetId: string;
-  reticleXDieCount?: number;
-  reticleYDieCount?: number;
-  reticleXDieShift?: number;
-  reticleYDieShift?: number;
 }
 
 export type ScPerspectiveWorkbenchOptions =
@@ -47,25 +40,32 @@ export interface ScPerspectiveWorkbenchState {
 
 export interface ScPerspectiveWorkbenchRuntime {
   websocket?: (url: string) => Promise<Client>;
+  tableNameFactory?: () => string;
+  connectionTimeoutMs?: number;
+  tableReadyTimeoutMs?: number;
+  dataReadyTimeoutMs?: number;
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
   reconnectMaxAttempts?: number;
   clientProbeIntervalMs?: number;
   clientProbeTimeoutMs?: number;
+  clientProbeFailureThreshold?: number;
   unexpectedTimeoutMs?: number;
 }
 
-const JOINED_SAMPLES_TABLE = "joined_samples";
-const TABLE_READY_TIMEOUT_MS = 60_000;
+const CONNECTION_TIMEOUT_MS = 5_000;
+const TABLE_READY_TIMEOUT_MS = 5_000;
 const TABLE_READY_RETRY_MS = 500;
 const DATA_READY_POLL_MS = 500;
-const DATA_READY_DEADLINE_MS = 60_000;
-const RECONNECT_INITIAL_DELAY_MS = 500;
-const RECONNECT_MAX_DELAY_MS = 5_000;
-const RECONNECT_MAX_ATTEMPTS = 5;
-const CLIENT_PROBE_INTERVAL_MS = 2_000;
+const DATA_READY_TIMEOUT_MS = 15_000;
+const RECONNECT_INITIAL_DELAY_MS = 250;
+const RECONNECT_MAX_DELAY_MS = 1_000;
+const RECONNECT_MAX_ATTEMPTS = 2;
+const CLIENT_PROBE_INTERVAL_MS = 15_000;
 const CLIENT_PROBE_TIMEOUT_MS = 3_000;
-const UNEXPECTED_TIMEOUT_MS = 10_000;
+const CLIENT_PROBE_FAILURE_THRESHOLD = 1;
+const UNEXPECTED_TIMEOUT_MS = 60_000;
+let perspectiveClientInitialized = false;
 
 const WEBSOCKET_CLIENT_ERROR_PATTERNS = [
   /websocket/i,
@@ -92,17 +92,10 @@ function wsBaseUrl(): string {
   return `${protocol}//${window.location.host}${API_BASE}/sc`;
 }
 
-function buildWsUrl(options: ScPerspectiveWorkbenchOptions): string {
+function buildWsUrl(options: ScPerspectiveWorkbenchOptions, tableName: string): string {
   const params = new URLSearchParams();
   addCommonParams(params);
-  if (options.reticleXDieCount != null)
-    params.set("reticleXDieCount", String(options.reticleXDieCount));
-  if (options.reticleYDieCount != null)
-    params.set("reticleYDieCount", String(options.reticleYDieCount));
-  if (options.reticleXDieShift != null)
-    params.set("reticleXDieShift", String(options.reticleXDieShift));
-  if (options.reticleYDieShift != null)
-    params.set("reticleYDieShift", String(options.reticleYDieShift));
+  params.set("table_name", tableName);
 
   if (options.kind === "preview") {
     return `${wsBaseUrl()}/perspective/inspections/${encodeURIComponent(options.inspectionTime)}/${encodeURIComponent(options.waferKey)}/ws?${params}`;
@@ -122,6 +115,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   return Promise.race([promise, timeout]).finally(() => {
     if (timer !== undefined) clearTimeout(timer);
   });
+}
+
+async function openPerspectiveWebsocket(url: string): Promise<Client> {
+  if (!perspectiveClientInitialized) {
+    perspective.init_client(fetch(clientWasmUrl));
+    perspectiveClientInitialized = true;
+  }
+  return perspective.websocket(url);
 }
 
 function perspectiveErrorMessage(err: unknown): string {
@@ -156,18 +157,29 @@ function retirePerspectiveResources(tbl: Table | null, wsClient: Client | null):
   managePerspectiveTable(tbl).retire({ onDeleted: terminateClient });
 }
 
-async function openJoinedSamplesTable(client: Client, isCurrent: () => boolean): Promise<Table> {
+async function openJoinedSamplesTable(
+  client: Client,
+  tableName: string,
+  isCurrent: () => boolean,
+  timeoutMs: number,
+): Promise<Table> {
   const startedAt = Date.now();
   let lastError: unknown = null;
 
   while (isCurrent()) {
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) break;
     try {
-      return await client.open_table(JOINED_SAMPLES_TABLE);
+      return await withTimeout(
+        client.open_table(tableName),
+        remainingMs,
+        `Perspective websocket table "${tableName}" did not open within ${timeoutMs}ms`,
+      );
     } catch (err) {
       lastError = err;
       if (isWebSocketClientError(err)) break;
-      if (Date.now() - startedAt >= TABLE_READY_TIMEOUT_MS) break;
-      await sleep(TABLE_READY_RETRY_MS);
+      if (Date.now() - startedAt >= timeoutMs) break;
+      await sleep(Math.min(TABLE_READY_RETRY_MS, remainingMs));
     }
   }
 
@@ -176,7 +188,7 @@ async function openJoinedSamplesTable(client: Client, isCurrent: () => boolean):
   }
   throw lastError instanceof Error
     ? lastError
-    : new Error(`Perspective table "${JOINED_SAMPLES_TABLE}" was not ready`);
+    : new Error(`Perspective table "${tableName}" was not ready`);
 }
 
 export function useScPerspectiveWorkbench(
@@ -185,8 +197,8 @@ export function useScPerspectiveWorkbench(
   /*
    * Workbench owns the Perspective websocket lifecycle only:
    *
-   *   connecting    websocket() is opening and joined_samples is being resolved.
-   *   loading       joined_samples is open, but the backend may still be materializing rows.
+   *   connecting    websocket() is opening and its UUID-named table is being resolved.
+   *   loading       the table is open, but the backend may still be materializing rows.
    *   ready         the first data-ready signal happened; client health checks may run.
    *   reconnecting  a transport/probe/watchdog failure scheduled a replacement connection.
    *
@@ -206,17 +218,24 @@ export function useScPerspectiveWorkbench(
   let _dataReadyPollTimer: ReturnType<typeof setTimeout> | undefined;
   let _dataReadyDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let _clientProbeTimer: ReturnType<typeof setTimeout> | undefined;
+  let _clientProbeFailures = 0;
   let _reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let _reconnectAttempts = 0;
   let _lastOptions: ScPerspectiveWorkbenchOptions | null = null;
   let _disposed = false;
   let _phase: WorkbenchPhase = "idle";
-  const websocket = runtime.websocket ?? ((url: string) => perspective.websocket(url));
+  const websocket = runtime.websocket ?? openPerspectiveWebsocket;
+  const tableNameFactory = runtime.tableNameFactory ?? (() => crypto.randomUUID());
+  const connectionTimeoutMs = runtime.connectionTimeoutMs ?? CONNECTION_TIMEOUT_MS;
+  const tableReadyTimeoutMs = runtime.tableReadyTimeoutMs ?? TABLE_READY_TIMEOUT_MS;
+  const dataReadyTimeoutMs = runtime.dataReadyTimeoutMs ?? DATA_READY_TIMEOUT_MS;
   const reconnectInitialDelayMs = runtime.reconnectInitialDelayMs ?? RECONNECT_INITIAL_DELAY_MS;
   const reconnectMaxDelayMs = runtime.reconnectMaxDelayMs ?? RECONNECT_MAX_DELAY_MS;
   const reconnectMaxAttempts = runtime.reconnectMaxAttempts ?? RECONNECT_MAX_ATTEMPTS;
   const clientProbeIntervalMs = runtime.clientProbeIntervalMs ?? CLIENT_PROBE_INTERVAL_MS;
   const clientProbeTimeoutMs = runtime.clientProbeTimeoutMs ?? CLIENT_PROBE_TIMEOUT_MS;
+  const clientProbeFailureThreshold =
+    runtime.clientProbeFailureThreshold ?? CLIENT_PROBE_FAILURE_THRESHOLD;
   const unexpectedTimeoutMs = runtime.unexpectedTimeoutMs ?? UNEXPECTED_TIMEOUT_MS;
   const unexpectedTimeout = useTimeoutFn(
     () => {
@@ -259,6 +278,7 @@ export function useScPerspectiveWorkbench(
   function _resetReadyWatchdog(): void {
     if (_disposed || _phase !== "ready" || !_lastOptions || table.value === null) return;
     unexpectedTimeout.stop();
+    _clientProbeFailures = 0;
     unexpectedTimeout.start();
   }
 
@@ -283,10 +303,11 @@ export function useScPerspectiveWorkbench(
     reconnectFailed.value = false;
     _reconnectAttempts = 0;
     reconnectAttempt.value = 0;
+    _clientProbeFailures = 0;
     dataReady.value = true;
     _clearDataReadyTimers();
-    _scheduleClientProbe(seq);
     _resetReadyWatchdog();
+    _scheduleClientProbe(seq);
   }
 
   // Data readiness polling runs before health checks. Timeout here means "still loading" unless
@@ -346,12 +367,22 @@ export function useScPerspectiveWorkbench(
         clientProbeTimeoutMs,
         `Perspective websocket client probe timed out after ${clientProbeTimeoutMs}ms`,
       );
+      _clientProbeFailures = 0;
       _resetReadyWatchdog();
     } catch (err) {
       if (seq !== connectionSeq) return;
       if (isTimeoutError(err)) {
-        requestReconnect("websocket client probe timed out");
-        return;
+        _clientProbeFailures += 1;
+        if (_clientProbeFailures >= clientProbeFailureThreshold) {
+          requestReconnect(
+            `websocket client probe timed out ${_clientProbeFailures} consecutive times`,
+          );
+          return;
+        }
+        console.warn("[sc-perspective] websocket client probe timed out; keeping connection", {
+          failures: _clientProbeFailures,
+          threshold: clientProbeFailureThreshold,
+        });
       }
       if (isWebSocketClientError(err)) {
         requestReconnect("websocket client probe failed", err);
@@ -393,13 +424,23 @@ export function useScPerspectiveWorkbench(
     _retireCurrentConnection();
     error.value = null;
     try {
-      const nextClient = await websocket(buildWsUrl(options));
+      const tableName = tableNameFactory();
+      const nextClient = await withTimeout(
+        websocket(buildWsUrl(options, tableName)),
+        connectionTimeoutMs,
+        `Perspective websocket connection timed out after ${connectionTimeoutMs}ms`,
+      );
       if (seq !== connectionSeq) {
         retirePerspectiveResources(null, nextClient);
         return;
       }
       client = nextClient;
-      const openedTable = await openJoinedSamplesTable(nextClient, () => seq === connectionSeq);
+      const openedTable = await openJoinedSamplesTable(
+        nextClient,
+        tableName,
+        () => seq === connectionSeq,
+        tableReadyTimeoutMs,
+      );
       if (seq !== connectionSeq) {
         retirePerspectiveResources(openedTable, nextClient);
         return;
@@ -411,9 +452,9 @@ export function useScPerspectiveWorkbench(
       _clearDataReadyTimers();
       _dataReadyDeadlineTimer = setTimeout(() => {
         if (seq === connectionSeq && !dataReady.value) {
-          _markReady(seq);
+          requestReconnect(`Perspective data did not become ready within ${dataReadyTimeoutMs}ms`);
         }
-      }, DATA_READY_DEADLINE_MS);
+      }, dataReadyTimeoutMs);
       void _pollDataReady(seq);
     } catch (err) {
       if (seq === connectionSeq) {

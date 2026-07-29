@@ -11,7 +11,12 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from app.shared.api.schemas import Annotation, Dataset, Sample
+from app.modules.storage.port.local import (
+    DatasetStorageFactoryPort as DatasetStorageFactoryPort,
+    SparseImportWriterFactoryPort as SparseImportWriterFactoryPort,
+    SparseImportWriterPort as SparseImportWriterPort,
+)
+from app.shared.api.schemas import Annotation, Dataset
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
 
 
@@ -24,69 +29,42 @@ class IDatasetService(Protocol):
     """Dataset-level operations (label-space merge, LS export)."""
 
     def to_response(self, dataset: Dataset) -> Dataset:
-        """Enrich a dataset with computed fields (capabilities, LS URL)."""
+        """Enrich a dataset with computed response fields such as its LS URL."""
         ...
+
+    async def to_list_responses(self, datasets: list[Dataset]) -> list[Dataset]: ...
 
     async def build_export_data(
         self,
         dataset_id: str,
+        org_id: str,
         ls_read_repository: LsReadRepository,
     ) -> tuple[Dataset, list[Any], list[Annotation]]:
         """Return (dataset, samples, annotations) sourced from Label Studio."""
         ...
 
     async def merge_label_space(
-        self, dataset_id: str, incoming_labels: set[str]
+        self,
+        dataset_id: str,
+        org_id: str,
+        incoming_labels: set[str],
     ) -> bool:
         """Merge new labels into the dataset's task_spec.label_space."""
         ...
 
 
 # =============================================================================
-# IFeatureOpsService
+# SampleSimilarityPort
 # =============================================================================
 
 
-class IFeatureOpsService(Protocol):
-    """Embedding extraction, similarity search, and scoring operations."""
-
-    async def extract_features(
-        self,
-        samples: list[Sample],
-        embed_model: str,
-        force: bool = False,
-        storage: Any = None,
-    ) -> dict: ...
+class SampleSimilarityPort(Protocol):
+    """Find samples near a given sample using stored feature vectors."""
 
     async def similarity_search(
         self,
         sample_id: str,
         dataset_id: str,
-        k: int = 5,
-    ) -> dict: ...
-
-    async def uniqueness_scores(
-        self,
-        sample_ids: list[str],
-        dataset_id: str,
-    ) -> dict: ...
-
-    async def representativeness_scores(
-        self,
-        sample_ids: list[str],
-        dataset_id: str,
-    ) -> dict: ...
-
-    async def cluster_hints(
-        self,
-        sample_ids: list[str],
-        dataset_id: str,
-        k: int = 5,
-    ) -> dict: ...
-
-    async def uncovered_hints(
-        self,
-        sample_ids: list[str],
-        dataset_id: str,
+        org_id: str,
         k: int = 5,
     ) -> dict: ...

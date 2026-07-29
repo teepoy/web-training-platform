@@ -21,7 +21,6 @@ import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from litellm.types.llms.openai import AllMessageValues, ChatCompletionToolMessage
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.modules.agent.adapter.tools.global_assembler import (
     assemble_global_prompt,
@@ -64,16 +63,14 @@ from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
-    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-    from app.shared.db.sql_repository import SqlRepository
-    from app.modules.models.app.services.model_service import ModelService
-    from app.modules.training.app.services.orchestrator import (
-        TrainingOrchestrator,
-    )
-    from app.modules.prediction.app.services.prediction_orchestrator import (
-        PredictionOrchestrator,
-    )
-    from app.modules.schedules.app.services.scheduler import SchedulerService
+    from app.modules.datasets.domain.repository import DatasetRepository
+    from app.modules.storage.port.local import DatasetStorageFactoryPort
+    from app.modules.models.port.local import ModelCatalogPort
+    from app.modules.prediction.domain.repository import PredictionRepository
+    from app.modules.prediction.port.local import PredictionExecutionPort
+    from app.modules.jobs.schedules.port.local import ScheduleManagementPort
+    from app.modules.training.domain.repository import TrainingRepository
+    from app.modules.training.port.local import TrainingExecutionPort
 
 _logger = logging.getLogger(__name__)
 
@@ -118,13 +115,14 @@ class GlobalAgent:
         llm_model: str,
         session_store: SessionStore,
         surface_store: SurfaceStore,
-        repository: SqlRepository,
-        dataset_storage_factory: DatasetStorageFactory,
-        session_factory: async_sessionmaker | None = None,
-        orchestrator: TrainingOrchestrator,
-        prediction_orchestrator: PredictionOrchestrator,
-        scheduler_service: SchedulerService,
-        model_service: ModelService,
+        dataset_repository: DatasetRepository,
+        training_repository: TrainingRepository,
+        prediction_repository: PredictionRepository,
+        dataset_storage_factory: DatasetStorageFactoryPort,
+        orchestrator: TrainingExecutionPort,
+        prediction_orchestrator: PredictionExecutionPort,
+        scheduler_service: ScheduleManagementPort,
+        model_service: ModelCatalogPort,
         label_studio_client: LabelStudioClient,
     ) -> None:
         self._llm_base_url = llm_base_url
@@ -132,9 +130,10 @@ class GlobalAgent:
         self._llm_model = llm_model
         self._session_store = session_store
         self._surface_store = surface_store
-        self._repository = repository
+        self._dataset_repository = dataset_repository
+        self._training_repository = training_repository
+        self._prediction_repository = prediction_repository
         self._dataset_storage_factory = dataset_storage_factory
-        self._session_factory = session_factory
         self._orchestrator = orchestrator
         self._prediction_orchestrator = prediction_orchestrator
         self._scheduler_service = scheduler_service
@@ -170,7 +169,7 @@ class GlobalAgent:
 
                 dataset_info = await _get_ds(
                     dataset_id=context.dataset_id,
-                    repository=self._repository,
+                    repository=self._dataset_repository,
                     factory=self._dataset_storage_factory,
                     org_id=org_id,
                 )
@@ -185,7 +184,11 @@ class GlobalAgent:
                 execute_get_dashboard as _get_dash,
             )
 
-            platform_stats = await _get_dash(repository=self._repository, org_id=org_id)
+            platform_stats = await _get_dash(
+                dataset_repository=self._dataset_repository,
+                training_repository=self._training_repository,
+                org_id=org_id,
+            )
         except Exception:
             _logger.debug("Failed to get platform stats", exc_info=True)
 
@@ -314,19 +317,19 @@ class GlobalAgent:
             # -- Read tools --
             if name == "list_datasets":
                 return await execute_list_datasets(
-                    repository=self._repository,
+                    repository=self._dataset_repository,
                     org_id=org_id,
                 )
             if name == "get_dataset":
                 return await execute_get_dataset(
                     dataset_id=args.get("dataset_id", ""),
-                    repository=self._repository,
+                    repository=self._dataset_repository,
                     factory=self._dataset_storage_factory,
                     org_id=org_id,
                 )
             if name == "list_training_jobs":
                 return await execute_list_training_jobs(
-                    repository=self._repository,
+                    repository=self._training_repository,
                     org_id=org_id,
                     dataset_id=args.get("dataset_id"),
                     status=args.get("status"),
@@ -334,7 +337,7 @@ class GlobalAgent:
             if name == "get_training_job":
                 return await execute_get_training_job(
                     job_id=args.get("job_id", ""),
-                    repository=self._repository,
+                    repository=self._training_repository,
                     org_id=org_id,
                 )
             if name == "list_trainers":
@@ -347,7 +350,7 @@ class GlobalAgent:
                 )
             if name == "list_prediction_jobs":
                 return await execute_list_prediction_jobs(
-                    repository=self._repository,
+                    repository=self._prediction_repository,
                     org_id=org_id,
                 )
             if name == "list_schedules":
@@ -357,7 +360,8 @@ class GlobalAgent:
                 )
             if name == "get_dashboard":
                 return await execute_get_dashboard(
-                    repository=self._repository,
+                    dataset_repository=self._dataset_repository,
+                    training_repository=self._training_repository,
                     org_id=org_id,
                 )
             if name == "query_data":
@@ -366,7 +370,6 @@ class GlobalAgent:
                     query_type=args.get("query_type", ""),
                     params=args.get("params"),
                     factory=self._dataset_storage_factory,
-                    session_factory=self._session_factory,
                     org_id=org_id,
                 )
 
@@ -376,7 +379,7 @@ class GlobalAgent:
                     name=args.get("name", ""),
                     label_space=args.get("label_space", []),
                     task_type=args.get("task_type"),
-                    repository=self._repository,
+                    repository=self._dataset_repository,
                     org_id=org_id,
                     label_studio_client=self._label_studio_client,
                     user_id=user_id,
@@ -385,7 +388,6 @@ class GlobalAgent:
                 return await execute_start_training_job(
                     dataset_id=args.get("dataset_id", ""),
                     trainer_id=args.get("trainer_id", ""),
-                    repository=self._repository,
                     org_id=org_id,
                     orchestrator=self._orchestrator,
                     user_id=user_id,
@@ -395,7 +397,6 @@ class GlobalAgent:
                     dataset_id=args.get("dataset_id", ""),
                     model_id=args.get("model_id", ""),
                     target=args.get("target"),
-                    repository=self._repository,
                     org_id=org_id,
                     prediction_orchestrator=self._prediction_orchestrator,
                     user_id=user_id,
@@ -415,7 +416,7 @@ class GlobalAgent:
                 return await execute_cancel_training_job(
                     job_id=args.get("job_id", ""),
                     orchestrator=self._orchestrator,
-                    repository=self._repository,
+                    repository=self._training_repository,
                     org_id=org_id,
                 )
 

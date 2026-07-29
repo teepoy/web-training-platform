@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
+from injector import inject
 
 from app.shared.api.schemas import ArtifactRef, Model
 from app.shared.application.compatibility import validate_upload_metadata
@@ -15,6 +16,7 @@ from app.shared.domain.protocols import ArtifactStorage
 
 
 class ModelService:
+    @inject
     def __init__(
         self,
         repository: ModelRepository,
@@ -33,6 +35,23 @@ class ModelService:
             org_id=org_id,
             dataset_id=dataset_id,
             job_id=job_id,
+        )
+
+    async def list_models_paginated(
+        self,
+        org_id: str,
+        dataset_id: str | None = None,
+        job_id: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Model], int]:
+        return await self.repository.list_models_paginated(
+            org_id=org_id,
+            dataset_id=dataset_id,
+            job_id=job_id,
+            offset=offset,
+            limit=limit,
         )
 
     async def get_model(self, artifact_id: str, org_id: str) -> Model:
@@ -90,10 +109,7 @@ class ModelService:
         job_artifacts = await self.repository.list_artifact_uris_by_job(model.job_id)
 
         for _, uri in job_artifacts:
-            try:
-                await self.artifact_storage.delete(uri)
-            except Exception:
-                pass
+            await self.artifact_storage.delete(uri)
 
         artifact_ids = [aid for aid, _ in job_artifacts]
         await self.repository.delete_artifacts_by_ids(artifact_ids)
@@ -105,10 +121,11 @@ class ModelService:
 
         try:
             data = await self.artifact_storage.get_bytes(model.uri)
-        except Exception as e:
+        except FileNotFoundError as exc:
             raise HTTPException(
-                status_code=404, detail=f"Model file not found in storage: {e}"
-            )
+                status_code=404,
+                detail="Model file not found in storage",
+            ) from exc
 
         filename = model.name or f"model_{artifact_id}"
         if model.format:

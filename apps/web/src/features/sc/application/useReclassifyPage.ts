@@ -124,7 +124,6 @@ export interface ReclassifyPageState {
   errorMessage: ComputedRef<string>;
   scSamples: ComputedRef<ReclassifySample[]>;
   isBlinkLoading: ComputedRef<boolean>;
-  samplesError: ComputedRef<string | null>;
   fetchMoreSamples: () => Promise<unknown>;
   hasMoreSamples: ComputedRef<boolean>;
   isFetchingMoreSamples: ComputedRef<boolean>;
@@ -149,7 +148,6 @@ export interface ReclassifyPageState {
   activeFilterCount: ComputedRef<number>;
   handleMapFilterChange: (filter: Record<string, (number | string)[]>) => void;
   handleLegendGroupByChange: (source: LegendColorSource | null) => void;
-  applySampleTableFilterAsGlobal: () => void;
   clearGlobalFilter: () => void;
   clearMapFilter: () => void;
   handleBoxSelectionChange: (ids: number[]) => void;
@@ -164,13 +162,10 @@ export interface ReclassifyPageState {
   filteredScSamples: ComputedRef<ReclassifySample[]>;
 
   waferGeometry: ComputedRef<WaferGeometryView | null>;
-  reticleXDieCount: ComputedRef<number>;
-  reticleYDieCount: ComputedRef<number>;
   reticleDieSizeX: ComputedRef<number>;
   reticleDieSizeY: ComputedRef<number>;
   reticleOptions: ComputedRef<ReticleMapOptions>;
   updateReticleOptions: (options: ReticleMapOptions) => void;
-  isReticleMapLoading: ComputedRef<boolean>;
 
   blinkTableData: ComputedRef<{
     rows: import("@/shared/types/blink-table").BlinkRow[];
@@ -543,8 +538,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const isBlinkLoading = computed(() => sampleRowsInfiniteQuery.isLoading.value);
 
-  const samplesError = computed<string | null>(() => null);
-
   const hasMoreSamples = computed(() => sampleRowsInfiniteQuery.hasNextPage.value ?? false);
   const isFetchingMoreSamples = computed(() => sampleRowsInfiniteQuery.isFetchingNextPage.value);
 
@@ -661,8 +654,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const activeTab = ref<"blink" | "map">("blink");
 
-  const reticleXDieCount = computed(() => reticleOptions.value.xDieCount);
-  const reticleYDieCount = computed(() => reticleOptions.value.yDieCount);
   const reticleDieSizeX = computed(
     () => waferGeometry.value?.dieSizeX ?? inferredReticleDieSizeX.value,
   );
@@ -686,14 +677,6 @@ export function useReclassifyPage(): ReclassifyPageState {
   function handleLegendGroupByChange(source: LegendColorSource | null): void {
     if (legendGroupBy.value === source) return;
     legendGroupBy.value = source;
-  }
-
-  function applySampleTableFilterAsGlobal(): void {
-    if (Object.keys(sampleTableFilter.value).length > 0) {
-      galleryRandomSamplingDefectIds.value = new Set();
-    }
-    globalFilter.value = { ...globalFilter.value, ...sampleTableFilter.value };
-    sampleTableFilter.value = {};
   }
 
   function clearGlobalFilter(): void {
@@ -955,7 +938,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
           const submittedLabels: Record<string, string> = {};
           for (const ann of variables.data.annotations) {
-            submittedLabels[ann.defect_id] = ann.label;
+            submittedLabels[ann.defect_id] = String(ann.label);
           }
           annotationDraft.value = {};
           pendingLabelNames.value = [];
@@ -1314,7 +1297,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     errorMessage,
     scSamples,
     isBlinkLoading,
-    samplesError,
     fetchMoreSamples,
     hasMoreSamples,
     isFetchingMoreSamples,
@@ -1339,7 +1321,6 @@ export function useReclassifyPage(): ReclassifyPageState {
     activeFilterCount,
     handleMapFilterChange,
     handleLegendGroupByChange,
-    applySampleTableFilterAsGlobal,
     clearGlobalFilter,
     clearMapFilter,
     handleBoxSelectionChange,
@@ -1354,14 +1335,10 @@ export function useReclassifyPage(): ReclassifyPageState {
     filteredScSamples,
 
     waferGeometry,
-    reticleXDieCount,
-    reticleYDieCount,
     reticleDieSizeX,
     reticleDieSizeY,
     reticleOptions,
     updateReticleOptions,
-    isReticleMapLoading: computed(() => false),
-
     blinkTableData,
 
     annotationDraft,

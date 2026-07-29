@@ -35,16 +35,33 @@ def _restore_current_user(original) -> None:
 
 def test_list_datasets_returns_paginated_response() -> None:
     with TestClient(app) as c:
+        dataset_ids: set[str] = set()
         for index in range(3):
-            create_dataset(c, name=f"page-dataset-{index}")
+            dataset_ids.add(create_dataset(c, name=f"page-dataset-{index}"))
 
-        resp = c.get("/api/v1/datasets?limit=2&offset=1")
+        first = c.get("/api/v1/datasets?limit=2&offset=0")
+        second = c.get("/api/v1/datasets?limit=2&offset=2")
 
-        assert resp.status_code == 200
-        body = resp.json()
-        assert set(body) == {"items", "total"}
-        assert body["total"] == 3
-        assert len(body["items"]) == 2
+        assert first.status_code == 200
+        assert second.status_code == 200
+        first_body = first.json()
+        second_body = second.json()
+        assert set(first_body) == {"items", "total"}
+        assert first_body["total"] == 3
+        assert second_body["total"] == 3
+        assert len(first_body["items"]) == 2
+        assert len(second_body["items"]) == 1
+        page_ids = {
+            item["id"] for item in [*first_body["items"], *second_body["items"]]
+        }
+        assert page_ids == dataset_ids
+
+
+def test_list_datasets_validates_page_bounds() -> None:
+    with TestClient(app) as c:
+        assert c.get("/api/v1/datasets?limit=0").status_code == 422
+        assert c.get("/api/v1/datasets?limit=201").status_code == 422
+        assert c.get("/api/v1/datasets?offset=-1").status_code == 422
 
 
 def test_rename_dataset_requires_creator() -> None:

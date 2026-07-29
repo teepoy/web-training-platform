@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from app.core.registry import view
 
 
-@view
+@view(id="review_image_v1")
 class ScReviewImageV1Row(BaseModel):
-    view_id: ClassVar[str] = "review_image_v1"
-    view_name: ClassVar[str] = "Review Image"
-    is_annotation_view: ClassVar[bool] = False
+    view_id: ClassVar[str]
+    view_name: ClassVar[str]
+    is_annotation_view: ClassVar[bool]
 
     sample_id: str
     inspection_time: str

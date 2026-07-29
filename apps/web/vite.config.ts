@@ -13,7 +13,7 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => tag === "perspective-viewer",
+          isCustomElement: (tag) => tag === "perspective-viewer" || tag === "sc-map",
         },
       },
     }),
@@ -32,13 +32,24 @@ export default defineConfig({
         find: "@",
         replacement: path.resolve(__dirname, "src"),
       },
+      {
+        find: /^@platform\/sc-map-element$/,
+        replacement: path.resolve(__dirname, "../../packages/sc-map-element/src/index.ts"),
+      },
+      {
+        find: /^apache-arrow$/,
+        replacement: path.resolve(__dirname, "node_modules/apache-arrow/Arrow.dom.mjs"),
+      },
     ],
   },
   optimizeDeps: {
+    esbuildOptions: {
+      target: "esnext",
+    },
     // Exclude full echarts bundle to prevent double-registration of components
     // (modular echarts/core + echarts/charts etc. are pre-bundled separately;
     // loading the full bundle on top causes registerInternalOptionCreator assertions)
-    exclude: ["echarts", "@perspective-dev/viewer/inline"],
+    exclude: ["echarts", "@perspective-dev/viewer/inline", "@perspective-dev/client/inline"],
   },
   server: {
     port: 5173,

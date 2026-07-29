@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 from uuid import uuid4
 
@@ -19,17 +19,20 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 
 from app.modules.datasets.port.http.deps import (
+    ArtifactLookupRepositoryDep,
     DatasetServiceDep,
     LabelStudioClientDep,
     RedisEventPublisherDep,
+    SampleSimilarityDep,
+    SessionFactoryDep,
     get_artifact_storage,
     get_dataset_payload_store,
     get_dataset_storage_factory,
     get_repository,
 )
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.sample_row import BulkSampleRow
-from app.modules.datasets.domain.storage_agg import DatasetStorageAgg
+from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.shared.api.schemas import (
     DatasetAnnotationStats,
     DatasetStatusResponse,
@@ -41,7 +44,7 @@ from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
 )
-from platform_runtime.sparse import SparseManifestReader
+from app.modules.storage.domain.sparse import SparseManifestReader
 from app.modules.datasets.port.http.schemas import (
     BulkAnnotationRequest,
     BulkAnnotationResponse,
@@ -50,7 +53,6 @@ from app.modules.datasets.port.http.schemas import (
     CreateAnnotationRequest,
     CreateDatasetRequest,
     CreateSampleRequest,
-    EmbedConfigResponse,
     ImportVqaJsonlResponse,
     LatestAnnotation,
     PersistExportResponse,
@@ -62,7 +64,6 @@ from app.modules.datasets.port.http.schemas import (
     SyncAnnotationsResponse,
     UpdateAnnotationRequest,
     UpdateDatasetRequest,
-    UpdateEmbedConfigRequest,
     UpdateLabelSpaceRequest,
     UpdateSampleImageResponse,
     ViewPaginatedResponse,
@@ -80,15 +81,12 @@ from app.shared.api.schemas import (
 )
 from app.shared.domain.protocols import ArtifactStorage
 from app.shared.api.schemas import DatasetStorageMode
-from platform_runtime.sparse import DatasetManifest, DatasetPayloadStore
-from app.modules.datasets.app.services.feature_ops import FeatureOpsService
+from app.modules.storage.domain.sparse import DatasetManifest, DatasetPayloadStore
 from app.modules.datasets.app.services.sparse_export import SparseExportAssembler
 from app.shared.application.artifacts import ArtifactService
-from app.shared.db.sql_repository import SqlRepository
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.prediction.port.http.deps import (
     get_artifact_service,
-    get_feature_ops_service,
 )
 from app.shared.api.utils import _infer_dataset_type, _make_ls_image_url
 from app.shared.infrastructure.label_studio.client import (
@@ -106,11 +104,7 @@ from app.shared.sse.events import (
 )
 
 
-def get_ls_read_repository_optional() -> LsReadRepository | None:
-    return None
-
-
-def _get_ls_read_repository_direct() -> LsReadRepository:
+def _create_ls_read_repository() -> LsReadRepository:
     from app.core.config import load_config
     from app.shared.infrastructure.label_studio.session import (
         create_ls_engine,
@@ -122,9 +116,30 @@ def _get_ls_read_repository_direct() -> LsReadRepository:
     return LsReadRepository(session_factory=create_ls_session_factory(engine=engine))
 
 
+LsReadRepositoryFactory = Callable[[], LsReadRepository]
+
+
+def get_ls_read_repository_factory() -> LsReadRepositoryFactory:
+    """Return a lazy LS reader factory for DB_FULL export requests."""
+    return _create_ls_read_repository
+
+
+def _open_ls_read_repository(
+    factory: LsReadRepositoryFactory,
+) -> LsReadRepository:
+    try:
+        return factory()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Label Studio database configuration failed: {exc}",
+        ) from exc
+
+
 router = APIRouter(prefix="/api/v1", tags=["datasets"])
 _logger = logging.getLogger(__name__)
 _MAX_SAMPLE_UPLOAD_BYTES = 10 * 1024 * 1024
+_ANNOTATION_SYNC_PAGE_SIZE = 1000
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -321,25 +336,22 @@ async def get_sparse_summary(
     sample_rows: list[dict[str, SparseSummaryJsonValue]] = []
     if manifest.shards:
         first_shard = manifest.shards[0]
-        try:
-            raw_rows = await reader.read_row_batch(
-                first_shard.uri,
-                0,
-                min(5, first_shard.row_count),
-                storage,
+        raw_rows = await reader.read_row_batch(
+            first_shard.uri,
+            0,
+            min(5, first_shard.row_count),
+            storage,
+        )
+        rows: list[dict[str, SparseSummaryJsonValue]] = []
+        for raw_row in raw_rows:
+            rows.append(
+                {
+                    str(k): _to_sparse_summary_json(v)
+                    for k, v in raw_row.items()
+                    if k not in {"bytes", "source_uri"}
+                }
             )
-            rows: list[dict[str, SparseSummaryJsonValue]] = []
-            for raw_row in raw_rows:
-                rows.append(
-                    {
-                        str(k): _to_sparse_summary_json(v)
-                        for k, v in raw_row.items()
-                        if k not in {"bytes", "source_uri"}
-                    }
-                )
-            sample_rows = rows
-        except Exception as exc:
-            _logger.warning("Failed to read sample rows from shard 0: %s", exc)
+        sample_rows = rows
 
     return SparseSummaryResponse(
         dataset_id=dataset.id,
@@ -372,10 +384,10 @@ async def get_sparse_summary(
 async def delete_dataset(
     dataset_id: str,
     ls_client: LabelStudioClientDep,
+    factory: DatasetStorageFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
-    storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> Response:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -388,24 +400,19 @@ async def delete_dataset(
             detail="Only the dataset creator can delete this dataset",
         )
 
-    if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-        store = DatasetPayloadStore(storage=storage)
-        await store.delete_dataset_payload(dataset_id, org_id=org.id)
-    else:
-        if dataset.ls_project_id:
-            try:
-                await ls_client.delete_project(int(dataset.ls_project_id))
-            except LabelStudioNotFoundError:
-                pass
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Failed to delete Label Studio project: {exc}",
-                )
+    if dataset.ls_project_id and dataset.ls_project_id != SPARSE_NO_LS:
+        try:
+            await ls_client.delete_project(int(dataset.ls_project_id))
+        except LabelStudioNotFoundError:
+            pass
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to delete Label Studio project: {exc}",
+            ) from exc
 
-    deleted = await repo.delete_dataset(dataset_id, org_id=org.id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    dataset_storage = await _open_storage(factory, dataset_id, org_id=org.id)
+    await dataset_storage.delete()
     return Response(status_code=204)
 
 
@@ -472,7 +479,11 @@ async def update_label_space(
         "task_type": dataset.task_spec.task_type,
         "label_space": payload.label_space,
     }
-    updated = await repo.update_dataset_meta(dataset_id, new_task_spec)
+    updated = await repo.update_dataset_meta(
+        dataset_id,
+        new_task_spec,
+        org_id=org.id,
+    )
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return service.to_response(updated)
@@ -654,7 +665,7 @@ async def import_samples(
     # ── Auto-expand label_space with newly introduced labels ──────────
     incoming_labels = {item.label for item in payload.items if item.label}
     if incoming_labels:
-        await dataset_service.merge_label_space(dataset_id, incoming_labels)
+        await dataset_service.merge_label_space(dataset_id, org.id, incoming_labels)
 
     return BulkCreateSampleResponse(
         dataset_id=dataset_id,
@@ -880,10 +891,7 @@ async def get_annotation_stats(
     org: Organization = Depends(get_current_org),
     factory: DatasetStorageFactory = Depends(get_dataset_storage_factory),
 ) -> DatasetAnnotationStats:
-    try:
-        storage = await _open_storage(factory, dataset_id, org.id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    storage = await _open_storage(factory, dataset_id, org.id)
     stats = await storage.get_annotation_stats()
     return DatasetAnnotationStats(**stats)
 
@@ -897,26 +905,14 @@ async def get_dataset_status(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     factory: DatasetStorageFactory = Depends(get_dataset_storage_factory),
-    payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
 ) -> DatasetStatusResponse:
-    try:
-        storage = await _open_storage(factory, dataset_id, org.id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    storage = await _open_storage(factory, dataset_id, org.id)
 
     stats = await storage.get_annotation_stats()
+    stats_response = DatasetAnnotationStats(**stats)
 
-    if storage.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-        # sparse returns only label_counts (dict[str, int])
-        annotated_samples = sum(stats.values())
-        payload_store.invalidate_manifest(dataset_id, org.id)
-        manifest = await payload_store.get_manifest(dataset_id, org.id)
-        total_samples = manifest.total_rows
-    else:
-        # db_full returns dict with total_samples, annotated_samples, …
-        total_samples = int(stats.get("total_samples", 0))
-        annotated_samples = int(stats.get("annotated_samples", 0))
-
+    total_samples = stats_response.total_samples
+    annotated_samples = stats_response.annotated_samples
     allow_train = annotated_samples >= 1
     return DatasetStatusResponse(
         allow_train=allow_train,
@@ -944,17 +940,6 @@ async def get_sample(
         metadata=sample_row.metadata,
         ls_task_id=sample_row.ls_task_id,
     )
-
-
-@router.get("/samples/{sample_id}", response_model=Sample, include_in_schema=False)
-async def get_sample_legacy(
-    sample_id: str,
-    factory: DatasetStorageFactoryDep,
-    dataset_id: str = Query(description="Dataset identifier for sample resolution"),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> Sample:
-    return await get_sample(dataset_id, sample_id, factory, current_user, org)
 
 
 @router.post(
@@ -1003,32 +988,6 @@ async def upload_sample_image(
         uri=uri,
         sample_id=sample_id,
         index=len(next_image_uris) - 1,
-    )
-
-
-# FIXME: why keep both /datasets/{dataset_id}/samples/{sample_id}/upload and this?
-@router.post(
-    "/samples/{sample_id}/upload",
-    response_model=UpdateSampleImageResponse,
-    include_in_schema=False,
-)
-async def upload_sample_image_legacy(
-    sample_id: str,
-    factory: DatasetStorageFactoryDep,
-    storage: ArtifactStorage = Depends(get_artifact_storage),
-    dataset_id: str = Query(description="Dataset identifier for sample resolution"),
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> UpdateSampleImageResponse:
-    return await upload_sample_image(
-        dataset_id,
-        sample_id,
-        factory,
-        storage,
-        file,
-        current_user,
-        org,
     )
 
 
@@ -1144,29 +1103,6 @@ async def serve_sparse_sample_image(
     )
 
 
-@router.get(
-    "/samples/{sample_id}/images/{image_id}",
-    response_class=Response,
-    include_in_schema=False,
-)
-async def serve_sparse_sample_image_legacy(
-    sample_id: str,
-    image_id: str,
-    dataset_id: str = Query(..., description="Dataset ID containing this sample"),
-    storage: ArtifactStorage = Depends(get_artifact_storage),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> Response:
-    return await serve_sparse_sample_image(
-        dataset_id,
-        sample_id,
-        image_id,
-        storage,
-        current_user,
-        org,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Annotations
 # ---------------------------------------------------------------------------
@@ -1217,7 +1153,11 @@ async def create_annotation(
         dataset_id=payload.dataset_id,
     )
     # ── Auto-expand label_space with newly introduced labels ──────────
-    await dataset_service.merge_label_space(payload.dataset_id, {payload.label})
+    await dataset_service.merge_label_space(
+        payload.dataset_id,
+        org.id,
+        {payload.label},
+    )
     return ann
 
 
@@ -1234,27 +1174,6 @@ async def list_annotations_for_sample(
 ) -> list[Annotation]:
     storage = await _open_storage(factory, dataset_id, org_id=org.id)
     return await storage.list_annotations(sample_id=sample_id)
-
-
-@router.get(
-    "/samples/{sample_id}/annotations",
-    response_model=list[Annotation],
-    include_in_schema=False,
-)
-async def list_annotations_for_sample_legacy(
-    sample_id: str,
-    factory: DatasetStorageFactoryDep,
-    dataset_id: str = Query(description="Dataset identifier for annotation resolution"),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-) -> list[Annotation]:
-    return await list_annotations_for_sample(
-        dataset_id,
-        sample_id,
-        factory,
-        current_user,
-        org,
-    )
 
 
 @router.patch("/annotations/{annotation_id}", response_model=Annotation)
@@ -1277,7 +1196,11 @@ async def update_annotation(
         dataset_id=payload.dataset_id,
     )
     # Auto-expand label space if the label is new
-    await dataset_service.merge_label_space(payload.dataset_id, {payload.label})
+    await dataset_service.merge_label_space(
+        payload.dataset_id,
+        org.id,
+        {payload.label},
+    )
     return Annotation(
         id=annotation_id,
         sample_id="",
@@ -1341,7 +1264,7 @@ async def bulk_create_annotations(
 
     # ── Auto-expand label_space with newly introduced labels ──────────
     incoming_labels = {a.label for a in payload.annotations}
-    await dataset_service.merge_label_space(dataset_id, incoming_labels)
+    await dataset_service.merge_label_space(dataset_id, org.id, incoming_labels)
 
     return BulkAnnotationResponse(created=created)
 
@@ -1360,8 +1283,6 @@ async def sync_annotations_to_ls(
 ) -> SyncAnnotationsResponse:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
-        dataset = await repo.get_dataset(dataset_id)
-    if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
@@ -1371,32 +1292,43 @@ async def sync_annotations_to_ls(
         )
 
     storage = await _open_storage(factory, dataset_id, org_id=org.id)
-    samples, _ = await storage.list_samples(limit=100_000)
-    sample_map = {s.sample_id: s for s in samples if s.ls_task_id}
-    annotated_rows, _ = await storage.list_samples(limit=100_000, with_labels=True)
-
     synced_count = 0
     errors: list[str] = []
     from app.shared.infrastructure.label_studio.client import platform_annotation_to_ls
 
-    for row in annotated_rows:
-        if row.latest_label is None:
-            continue
-        sample = sample_map.get(row.sample_id)
-        if not sample:
-            errors.append(f"annotation for sample {row.sample_id}: sample not found")
-            continue
-        if not sample.ls_task_id:
-            errors.append(
-                f"annotation for sample {row.sample_id}: sample has no ls_task_id — cannot sync"
+    offset = 0
+    while True:
+        annotated_rows, total = await storage.list_samples(
+            offset=offset,
+            limit=_ANNOTATION_SYNC_PAGE_SIZE,
+            with_labels=True,
+        )
+        for row in annotated_rows:
+            if row.latest_label is None:
+                continue
+            if not row.ls_task_id:
+                errors.append(
+                    f"annotation for sample {row.sample_id}: "
+                    "sample has no ls_task_id — cannot sync"
+                )
+                continue
+            try:
+                ls_result = platform_annotation_to_ls(row.latest_label)
+                await ls_client.create_annotation(row.ls_task_id, ls_result)
+                synced_count += 1
+            except Exception as exc:
+                errors.append(f"annotation for sample {row.sample_id}: {str(exc)}")
+
+        offset += len(annotated_rows)
+        if offset >= total:
+            break
+        if not annotated_rows:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Dataset storage returned an empty page before the reported total"
+                ),
             )
-            continue
-        try:
-            ls_result = platform_annotation_to_ls(row.latest_label)
-            await ls_client.create_annotation(sample.ls_task_id, ls_result)
-            synced_count += 1
-        except Exception as e:
-            errors.append(f"annotation for sample {row.sample_id}: {str(e)}")
 
     return SyncAnnotationsResponse(synced_count=synced_count, errors=errors)
 
@@ -1410,35 +1342,36 @@ async def sync_annotations_to_ls(
 async def export_dataset(
     dataset_id: str,
     service: DatasetServiceDep,
+    session_factory: SessionFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    ls_read_repository: LsReadRepository | None = Depends(
-        get_ls_read_repository_optional
+    repo: DatasetRepository = Depends(get_repository),
+    ls_read_repository_factory: LsReadRepositoryFactory = Depends(
+        get_ls_read_repository_factory
     ),
     artifacts: ArtifactService = Depends(get_artifact_service),
     payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> dict:
-    dataset_check = await repo.get_dataset(dataset_id)
-    if dataset_check is not None:
-        if dataset_check.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-            assembler = SparseExportAssembler(
-                store=payload_store,
-                reader=SparseManifestReader(),
-                storage=storage,
-                session_factory=repo.session_factory,
-            )
-            return await assembler.assemble(dataset_check, org.id)
-        if not dataset_check.ls_project_id:
-            raise HTTPException(
-                status_code=500,
-                detail="Dataset has no Label Studio project — cannot export.",
-            )
-    if ls_read_repository is None:
-        ls_read_repository = _get_ls_read_repository_direct()
+    dataset_check = await repo.get_dataset(dataset_id, org_id=org.id)
+    if dataset_check is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset_check.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        assembler = SparseExportAssembler(
+            store=payload_store,
+            reader=SparseManifestReader(),
+            storage=storage,
+            session_factory=session_factory.sessionmaker,
+        )
+        return await assembler.assemble(dataset_check, org.id)
+    if not dataset_check.ls_project_id:
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset has no Label Studio project — cannot export.",
+        )
+    ls_read_repository = _open_ls_read_repository(ls_read_repository_factory)
     dataset, samples, anns = await service.build_export_data(
-        dataset_id, ls_read_repository
+        dataset_id, org.id, ls_read_repository
     )
     return artifacts.build_dataset_export(
         dataset=dataset,
@@ -1451,36 +1384,37 @@ async def export_dataset(
 async def export_dataset_persist(
     dataset_id: str,
     service: DatasetServiceDep,
+    session_factory: SessionFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    ls_read_repository: LsReadRepository | None = Depends(
-        get_ls_read_repository_optional
+    repo: DatasetRepository = Depends(get_repository),
+    ls_read_repository_factory: LsReadRepositoryFactory = Depends(
+        get_ls_read_repository_factory
     ),
     artifacts: ArtifactService = Depends(get_artifact_service),
     payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> PersistExportResponse:
-    dataset_check = await repo.get_dataset(dataset_id)
-    if dataset_check is not None:
-        if dataset_check.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-            assembler = SparseExportAssembler(
-                store=payload_store,
-                reader=SparseManifestReader(),
-                storage=storage,
-                session_factory=repo.session_factory,
-            )
-            uri = await assembler.assemble_and_persist(dataset_check, org.id)
-            return PersistExportResponse(uri=uri)
-        if not dataset_check.ls_project_id:
-            raise HTTPException(
-                status_code=500,
-                detail="Dataset has no Label Studio project — cannot export.",
-            )
-    if ls_read_repository is None:
-        ls_read_repository = _get_ls_read_repository_direct()
+    dataset_check = await repo.get_dataset(dataset_id, org_id=org.id)
+    if dataset_check is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset_check.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
+        assembler = SparseExportAssembler(
+            store=payload_store,
+            reader=SparseManifestReader(),
+            storage=storage,
+            session_factory=session_factory.sessionmaker,
+        )
+        uri = await assembler.assemble_and_persist(dataset_check, org.id)
+        return PersistExportResponse(uri=uri)
+    if not dataset_check.ls_project_id:
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset has no Label Studio project — cannot export.",
+        )
+    ls_read_repository = _open_ls_read_repository(ls_read_repository_factory)
     dataset, samples, anns = await service.build_export_data(
-        dataset_id, ls_read_repository
+        dataset_id, org.id, ls_read_repository
     )
     uri = await artifacts.persist_dataset_export(
         dataset=dataset, samples=samples, annotations=anns
@@ -1493,11 +1427,12 @@ async def export_dataset_persist_stream(
     dataset_id: str,
     request: Request,
     service: DatasetServiceDep,
+    session_factory: SessionFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    ls_read_repository: LsReadRepository | None = Depends(
-        get_ls_read_repository_optional
+    repo: DatasetRepository = Depends(get_repository),
+    ls_read_repository_factory: LsReadRepositoryFactory = Depends(
+        get_ls_read_repository_factory
     ),
     artifacts: ArtifactService = Depends(get_artifact_service),
     payload_store: DatasetPayloadStore = Depends(get_dataset_payload_store),
@@ -1520,10 +1455,11 @@ async def export_dataset_persist_stream(
             result = await export_dataset_persist(
                 dataset_id,
                 service,
+                session_factory,
                 current_user,
                 org,
                 repo,
-                ls_read_repository,
+                ls_read_repository_factory,
                 artifacts,
                 payload_store,
                 storage,
@@ -1588,89 +1524,21 @@ async def similarity_search(
     dataset_id: str,
     sample_id: str,
     factory: DatasetStorageFactoryDep,
+    sample_similarity: SampleSimilarityDep,
     k: int = 5,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
 ):
     storage = await _open_storage(factory, dataset_id, org_id=org.id)
     sample_row = await storage.get_sample(sample_id)
     if sample_row is None:
         raise HTTPException(status_code=404, detail="sample not found")
-    return await feature_ops.similarity_search(sample_id, dataset_id=dataset_id, k=k)
-
-
-@router.get("/datasets/{dataset_id}/selection-metrics")
-async def selection_metrics(
-    dataset_id: str,
-    factory: DatasetStorageFactoryDep,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
-) -> dict:
-    storage = await _open_storage(factory, dataset_id, org_id=org.id)
-    samples, _ = await storage.list_samples(limit=100_000)
-    sample_ids = [s.sample_id for s in samples]
-    return {
-        "uniqueness": await feature_ops.uniqueness_scores(
-            sample_ids, dataset_id=dataset_id
-        ),
-        "representativeness": await feature_ops.representativeness_scores(
-            sample_ids, dataset_id=dataset_id
-        ),
-    }
-
-
-@router.get("/datasets/{dataset_id}/hints/uncovered")
-async def uncovered_hints(
-    dataset_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: DatasetRepository = Depends(get_repository),
-    feature_ops: FeatureOpsService = Depends(get_feature_ops_service),
-) -> dict:
-    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    return await feature_ops.uncovered_cluster_hints(dataset_id)
-
-
-# ---------------------------------------------------------------------------
-# Embed config
-# ---------------------------------------------------------------------------
-
-
-@router.get("/datasets/{dataset_id}/embed-config", response_model=EmbedConfigResponse)
-async def get_embed_config(
-    dataset_id: str,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: DatasetRepository = Depends(get_repository),
-) -> EmbedConfigResponse:
-    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    cfg = dataset.embed_config or {}
-    return EmbedConfigResponse(
-        model=cfg.get("model", "openai/clip-vit-base-patch32"),
-        dimension=cfg.get("dimension", 512),
+    return await sample_similarity.similarity_search(
+        sample_id,
+        dataset_id=dataset_id,
+        org_id=org.id,
+        k=k,
     )
-
-
-@router.patch("/datasets/{dataset_id}/embed-config", response_model=EmbedConfigResponse)
-async def update_embed_config(
-    dataset_id: str,
-    payload: UpdateEmbedConfigRequest,
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: DatasetRepository = Depends(get_repository),
-) -> EmbedConfigResponse:
-    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    new_config = {"model": payload.model, "dimension": payload.dimension}
-    await repo.update_dataset_embed_config(dataset_id, new_config)
-    return EmbedConfigResponse(model=payload.model, dimension=payload.dimension)
 
 
 # ---------------------------------------------------------------------------
@@ -1681,9 +1549,9 @@ async def update_embed_config(
 @router.get("/artifacts/{artifact_id}/download")
 async def download_artifact(
     artifact_id: str,
+    repo: ArtifactLookupRepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
     storage: ArtifactStorage = Depends(get_artifact_storage),
 ) -> Response:
     artifact = await repo.get_artifact(artifact_id)

@@ -1,144 +1,72 @@
-import { defineComponent } from "vue";
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mountWithProviders } from "@/testing";
 import ScMapPanelBinned from "../ScMapPanelBinned.vue";
 
-vi.mock("../ScWaferMapPerspective.vue", () => ({
-  default: defineComponent({
-    name: "ScWaferMapPerspective",
-    props: {
-      points: Array,
-      geometry: Object,
-      waferRadiusNm: Number,
-      colorMap: Object,
-      zoom: Object,
-      mode: String,
-      queryBoxSelection: Function,
-      highlightDefects: Array,
-    },
-    template: "<div data-testid='wafer-map' />",
-  }),
-}));
-vi.mock("../ScDieStackMapPerspective.vue", () => ({
-  default: defineComponent({
-    name: "ScDieStackMapPerspective",
-    props: {
-      points: Array,
-      colorMap: Object,
-      zoom: Object,
-      mode: String,
-      queryBoxSelection: Function,
-      highlightDefects: Array,
-    },
-    template: "<div data-testid='die-map' />",
-  }),
-}));
-vi.mock("../ScReticleMapPerspective.vue", () => ({
-  default: defineComponent({
-    name: "ScReticleMapPerspective",
-    props: {
-      points: Array,
-      colorMap: Object,
-      zoom: Object,
-      mode: String,
-      queryBoxSelection: Function,
-      highlightDefects: Array,
-    },
-    template: "<div data-testid='reticle-map' />",
-  }),
-}));
-
-describe("ScMapPanelBinned — highlightDefects prop", () => {
-  it("passes highlightDefects to the active wafer child map", async () => {
-    const hd = [
-      { defectId: 1, waferX: 100, waferY: 200, dieX: 10, dieY: 20, reticleX: 1, reticleY: 2 },
-    ];
+describe("ScMapPanelBinned unified map", () => {
+  it("keeps one native map element while switching modes", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
       props: {
         activeMapTab: "wafer",
-        highlightDefects: hd,
-        waferGeometry: {
-          centerX: 0,
-          centerY: 0,
-          originX: -1000,
-          originY: -1000,
-          dieSizeX: 100,
-          dieSizeY: 100,
-        },
+        arrowData: new ArrayBuffer(8),
+        mapLegendColumn: "class_number",
       },
     });
-    const waferMap = wrapper.findComponent({ name: "ScWaferMapPerspective" });
-    expect(waferMap.exists()).toBe(true);
-    expect(waferMap.props("highlightDefects")).toEqual(hd);
+
+    expect(wrapper.findAll('[data-testid="sc-unified-map"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="sc-map-settings"]').exists()).toBe(true);
+    await wrapper.setProps({ activeMapTab: "die" });
+    expect(wrapper.findAll('[data-testid="sc-unified-map"]')).toHaveLength(1);
   });
 
-  it("renders without error when highlightDefects is undefined", async () => {
+  it("forwards native zoom and box-selection events", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const map = wrapper.find('[data-testid="sc-unified-map"]');
+    const zoom = { x: 1, y: 2, w: 3, h: 4 };
+    map.element.dispatchEvent(new CustomEvent("zoom-in", { detail: zoom }));
+    map.element.dispatchEvent(new CustomEvent("box-select", { detail: zoom }));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toEqual(zoom);
+    expect(wrapper.emitted("box-select")?.at(-1)?.[0]).toEqual(zoom);
+  });
+
+  it("assigns camel-case custom-element properties and switches interaction mode", async () => {
+    const arrowData = [new ArrayBuffer(8), new ArrayBuffer(16)];
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
-      props: {
-        activeMapTab: "wafer",
-        waferGeometry: {
-          centerX: 0,
-          centerY: 0,
-          originX: -1000,
-          originY: -1000,
-          dieSizeX: 100,
-          dieSizeY: 100,
-        },
-      },
+      props: { arrowData, mapLegendColumn: "rough_bin" },
     });
-    expect(wrapper.exists()).toBe(true);
-  });
-});
+    const map = wrapper.find('[data-testid="sc-unified-map"]');
+    const element = map.element as HTMLElement & {
+      arrowData: ArrayBuffer[];
+      legendColumn: string;
+      interactionMode: string;
+      showImageMarkers: boolean;
+      defectSize: number;
+    };
 
-describe("ScMapPanelBinned — box selection", () => {
-  it("debounces die map box-select events", async () => {
-    vi.useFakeTimers();
-    const region = { x: 1, y: 2, w: 3, h: 4 };
-    try {
-      const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
-        props: {
-          activeMapTab: "die",
-          waferGeometry: {
-            centerX: 0,
-            centerY: 0,
-            originX: -1000,
-            originY: -1000,
-            dieSizeX: 100,
-            dieSizeY: 100,
-          },
-        },
-      });
-
-      wrapper.findComponent({ name: "ScDieStackMapPerspective" }).vm.$emit("box-select", region);
-
-      expect(wrapper.emitted("box-select")).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(wrapper.emitted("box-select")).toEqual([[region]]);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(element.arrowData).toHaveLength(2);
+    expect(element.arrowData[0]).toBe(arrowData[0]);
+    expect(element.arrowData[1]).toBe(arrowData[1]);
+    expect(element.legendColumn).toBe("rough_bin");
+    expect(element.showImageMarkers).toBe(true);
+    expect(element.defectSize).toBe(2);
+    expect(element.interactionMode).toBe("select");
+    await wrapper.find('[data-testid="sc-map-zoom-tool"]').trigger("click");
+    expect(element.interactionMode).toBe("zoomin");
   });
 
-  it("batch emits every queued reticle map box-select event", async () => {
-    vi.useFakeTimers();
-    const region = { x: 5, y: 6, w: 7, h: 8 };
-    const nextRegion = { x: 9, y: 10, w: 11, h: 12 };
-    try {
-      const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
-        props: {
-          activeMapTab: "reticle",
-          reticleOptions: { xDieCount: 2, yDieCount: 6, xDieShift: 0, yDieShift: 0 },
-        },
-      });
+  it("keeps the current map visible while a pan redraw is pending", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: { mapLoading: true },
+    });
+    expect(wrapper.find(".map-loading-overlay").exists()).toBe(true);
 
-      const reticleMap = wrapper.findComponent({ name: "ScReticleMapPerspective" });
-      reticleMap.vm.$emit("box-select", region);
-      reticleMap.vm.$emit("box-select", nextRegion);
+    await wrapper.find('[data-testid="sc-map-pan-tool"]').trigger("click");
+    wrapper
+      .find('[data-testid="sc-unified-map"]')
+      .element.dispatchEvent(new CustomEvent("zoom-in", { detail: { x: 1, y: 2, w: 3, h: 4 } }));
+    await wrapper.vm.$nextTick();
 
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(wrapper.emitted("box-select")).toEqual([[region], [nextRegion]]);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(wrapper.find(".map-loading-overlay").exists()).toBe(false);
   });
 });

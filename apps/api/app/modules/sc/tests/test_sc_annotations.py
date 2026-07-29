@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from tests.conftest import DEFAULT_ORG_ID
-from platform_runtime.sparse import DatasetManifest, SampleLocator
+from app.modules.storage.domain.sparse import DatasetManifest, SampleLocator
 
 _SC_TASK_SPEC = {
     "task_type": "sc",
@@ -35,10 +35,9 @@ def _seed_sc_sparse_manifest(dataset_id: str, defect_ids: list[str]) -> None:
     """Write a DatasetManifest with sample_index into the app artifact storage.
 
     The manifest is placed at the canonical key so that
-    ``DatasetPayloadStore.get_manifest()`` inside ``ScDatasetStore``
-    finds it during bulk annotation mapping.
+    the sparse storage aggregate finds it during bulk annotation mapping.
     """
-    payload_store = app.state.app_context.datasets.dataset_payload_store
+    payload_store = app.state.app_context.storage.dataset_payload_store
 
     sample_index: dict[str, SampleLocator] = {}
     for i, did in enumerate(defect_ids):
@@ -183,170 +182,58 @@ def test_bulk_create_annotations_nonexistent_dataset_404():
 
 
 def test_map_defect_ids_via_sample_index():
-    """Sparse dataset: map_defect_ids_to_sample_ids uses manifest sample_index."""
+    """Sparse identity resolution uses the canonical storage aggregate."""
     from unittest.mock import AsyncMock, MagicMock
 
-    from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
+    from app.modules.sc.sc_dataset_agg import ScDatasetAgg
     from app.shared.api.schemas import DatasetStorageMode
-    from platform_runtime.sparse import DatasetManifest, DatasetPayloadStore, SampleLocator
 
-    manifest = DatasetManifest(
+    storage = MagicMock(
         dataset_id="ds-sparse-1",
-        storage_mode="file_shard_sparse",
-        shard_count=1,
-        total_rows=100,
-        sample_index={
-            "D001": SampleLocator(
-                dataset_id="ds-sparse-1",
-                shard_index=0,
-                row_index=0,
-                upstream_item_id="D001",
-            ),
-            "D002": SampleLocator(
-                dataset_id="ds-sparse-1",
-                shard_index=0,
-                row_index=1,
-                upstream_item_id="D002",
-            ),
-        },
-    )
-
-    mock_payload_store = MagicMock(spec=DatasetPayloadStore)
-    mock_payload_store.get_manifest = AsyncMock(return_value=manifest)
-
-    mock_reader = MagicMock(spec=ScDatasetReader)
-    mock_reader.get_dataset = AsyncMock(return_value=MagicMock(
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-    ))
-
-    store = ScDatasetStore(dataset_payload_store=mock_payload_store)
+    )
+    storage.existing_sample_ids = AsyncMock(return_value={"D001", "D002"})
+    db_lookup = MagicMock()
+    db_lookup.map_defect_ids_to_sample_ids = AsyncMock()
     import asyncio as _asyncio
 
     result = _asyncio.run(
-        store.map_defect_ids_to_sample_ids(
-            mock_reader,
-            dataset_id="ds-sparse-1",
-            defect_ids={"D001", "D002", "NONEXISTENT"},
-            org_id="org-1",
+        ScDatasetAgg(storage, db_lookup).map_defect_ids_to_sample_ids(
+            {"D001", "D002", "NONEXISTENT"}
         )
     )
 
     assert result == {"D001": "D001", "D002": "D002"}
-    mock_payload_store.get_manifest.assert_called_once_with("ds-sparse-1", "org-1")
-    mock_reader.list_samples.assert_not_called()
+    storage.existing_sample_ids.assert_awaited_once_with(
+        {"D001", "D002", "NONEXISTENT"}
+    )
+    db_lookup.map_defect_ids_to_sample_ids.assert_not_awaited()
 
 
-def test_map_defect_ids_via_sample_index_empty_manifest():
-    """Empty sample_index — returns empty mapping without crashing."""
+def test_map_defect_ids_via_db_lookup():
+    """DB-full identity resolution is one explicit adapter query."""
     from unittest.mock import AsyncMock, MagicMock
 
-    from app.modules.sc.adapter import ScDatasetStore
+    from app.modules.sc.sc_dataset_agg import ScDatasetAgg
     from app.shared.api.schemas import DatasetStorageMode
-    from platform_runtime.sparse import DatasetManifest, DatasetPayloadStore
 
-    manifest = DatasetManifest(
-        dataset_id="ds-sparse-2",
-        storage_mode="file_shard_sparse",
-        shard_count=1,
-        total_rows=50,
-        sample_index={},
+    storage = MagicMock(
+        dataset_id="ds-db-1",
+        storage_mode=DatasetStorageMode.DB_FULL,
     )
-
-    mock_payload_store = MagicMock(spec=DatasetPayloadStore)
-    mock_payload_store.get_manifest = AsyncMock(return_value=manifest)
-
-    mock_reader = MagicMock()
-    mock_reader.get_dataset = AsyncMock(return_value=MagicMock(
-        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-    ))
-
-    store = ScDatasetStore(dataset_payload_store=mock_payload_store)
+    storage.existing_sample_ids = AsyncMock()
+    db_lookup = MagicMock()
+    db_lookup.map_defect_ids_to_sample_ids = AsyncMock(
+        return_value={"D001": "sample-1"}
+    )
     import asyncio as _asyncio
 
     result = _asyncio.run(
-        store.map_defect_ids_to_sample_ids(
-            mock_reader,
-            dataset_id="ds-sparse-2",
-            defect_ids={"D001"},
-            org_id="org-1",
-        )
+        ScDatasetAgg(storage, db_lookup).map_defect_ids_to_sample_ids({"D001"})
     )
 
-    assert result == {}
-
-
-def test_map_defect_ids_via_sample_index_manifest_not_found():
-    """Manifest not found — returns empty mapping, no crash."""
-    from unittest.mock import AsyncMock, MagicMock
-
-    from app.modules.sc.adapter import ScDatasetStore
-    from app.shared.api.schemas import DatasetStorageMode
-    from platform_runtime.sparse import DatasetPayloadStore
-
-    mock_payload_store = MagicMock(spec=DatasetPayloadStore)
-    mock_payload_store.get_manifest = AsyncMock(side_effect=FileNotFoundError("no manifest"))
-
-    mock_reader = MagicMock()
-    mock_reader.get_dataset = AsyncMock(return_value=MagicMock(
-        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-    ))
-
-    store = ScDatasetStore(dataset_payload_store=mock_payload_store)
-    import asyncio as _asyncio
-
-    result = _asyncio.run(
-        store.map_defect_ids_to_sample_ids(
-            mock_reader,
-            dataset_id="ds-sparse-3",
-            defect_ids={"D001"},
-            org_id="org-1",
-        )
+    assert result == {"D001": "sample-1"}
+    db_lookup.map_defect_ids_to_sample_ids.assert_awaited_once_with(
+        "ds-db-1", {"D001"}
     )
-
-    assert result == {}
-
-
-def test_map_defect_ids_unknown_defect_ids_empty():
-    """Unknown defect_ids return empty mapping without crashing."""
-    from unittest.mock import AsyncMock, MagicMock
-
-    from app.modules.sc.adapter import ScDatasetStore
-    from app.shared.api.schemas import DatasetStorageMode
-    from platform_runtime.sparse import DatasetManifest, DatasetPayloadStore, SampleLocator
-
-    manifest = DatasetManifest(
-        dataset_id="ds-sparse-4",
-        storage_mode="file_shard_sparse",
-        shard_count=1,
-        total_rows=10,
-        sample_index={
-            "D003": SampleLocator(
-                dataset_id="ds-sparse-4",
-                shard_index=0,
-                row_index=2,
-                upstream_item_id="D003",
-            ),
-        },
-    )
-
-    mock_payload_store = MagicMock(spec=DatasetPayloadStore)
-    mock_payload_store.get_manifest = AsyncMock(return_value=manifest)
-
-    mock_reader = MagicMock()
-    mock_reader.get_dataset = AsyncMock(return_value=MagicMock(
-        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-    ))
-
-    store = ScDatasetStore(dataset_payload_store=mock_payload_store)
-    import asyncio as _asyncio
-
-    result = _asyncio.run(
-        store.map_defect_ids_to_sample_ids(
-            mock_reader,
-            dataset_id="ds-sparse-4",
-            defect_ids={"UNKNOWN_DEFECT"},
-            org_id="org-1",
-        )
-    )
-
-    assert result == {}
+    storage.existing_sample_ids.assert_not_awaited()

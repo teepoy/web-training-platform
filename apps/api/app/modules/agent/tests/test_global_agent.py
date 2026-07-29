@@ -6,8 +6,11 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
+
+pytestmark = pytest.mark.integration
 
 
 # ---------------------------------------------------------------------------
@@ -710,15 +713,20 @@ class TestGlobalToolExecution:
         from app.modules.agent.adapter.tools.global_tools import execute_get_dashboard
 
         async def _run():
-            mock_repo = MagicMock()
-            mock_repo.list_datasets = AsyncMock(return_value=[MagicMock(), MagicMock()])
+            dataset_repo = MagicMock()
+            dataset_repo.list_datasets = AsyncMock(return_value=[MagicMock(), MagicMock()])
             job1 = MagicMock()
             job1.status = "running"
             job2 = MagicMock()
             job2.status = "completed"
-            mock_repo.list_jobs = AsyncMock(return_value=[job1, job2])
+            training_repo = MagicMock()
+            training_repo.list_jobs = AsyncMock(return_value=[job1, job2])
 
-            result = await execute_get_dashboard(repository=mock_repo, org_id="org-1")
+            result = await execute_get_dashboard(
+                dataset_repository=dataset_repo,
+                training_repository=training_repo,
+                org_id="org-1",
+            )
             assert result["dataset_count"] == 2
             assert result["job_count"] == 2
             assert result["jobs_running"] == 1
@@ -776,9 +784,10 @@ class TestGlobalAgentRuntime:
             llm_model="test",
             session_store=SessionStore(),
             surface_store=SurfaceStore(),
-            repository=MagicMock(),
+            dataset_repository=MagicMock(),
+            training_repository=MagicMock(),
+            prediction_repository=MagicMock(),
             dataset_storage_factory=MagicMock(),
-            session_factory=MagicMock(),
             orchestrator=MagicMock(),
             prediction_orchestrator=MagicMock(),
             scheduler_service=MagicMock(),

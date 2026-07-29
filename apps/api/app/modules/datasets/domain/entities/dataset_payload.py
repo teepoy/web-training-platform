@@ -1,6 +1,6 @@
-"""Backward-compatible re-exports — canonical definitions live in ``platform_runtime.sparse.models``."""
+"""Backward-compatible re-exports — canonical definitions live in ``app.modules.storage.domain.sparse.models``."""
 
-from platform_runtime.sparse.models import (
+from app.modules.storage.domain.sparse.models import (
     ColumnSchema,
     DatasetManifest,
     SampleLocator,

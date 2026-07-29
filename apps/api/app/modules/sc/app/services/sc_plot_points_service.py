@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from injector import inject
 import polars as pl
 
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.sc.app.services.sample_filter import (
     SAMPLE_TABLE_FILTER_COLUMNS,
     apply_sample_table_filter,
@@ -14,7 +16,6 @@ from app.modules.sc.app.services.sample_filter import (
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from app.shared.api.schemas import DatasetStorageMode
-from app.shared.db.sql_repository import SqlRepository
 
 
 class ScPlotPointsNotFoundError(Exception):
@@ -250,10 +251,21 @@ async def _join_upstream_image_counts(
     wafer_key: int,
 ) -> pl.LazyFrame:
     review_lf = await upstream_reader.list_review_images(inspection_time, wafer_key)
+    if review_lf is None:
+        raise ScPlotPointsRejectedError("upstream returned no review-image table")
+    review_columns = set(review_lf.collect_schema().names())
+    if not review_columns:
+        if "images" in lf.collect_schema().names():
+            lf = lf.drop("images")
+        return lf.with_columns(pl.lit(0).cast(pl.Int32).alias("images"))
+    if "defect_id" not in review_columns:
+        raise ScPlotPointsRejectedError(
+            "upstream review-image table requires defect_id"
+        )
     image_counts_lf = (
         review_lf.with_columns(pl.col("defect_id").cast(pl.Utf8))
         .group_by("defect_id")
-        .agg(pl.lit(1).cast(pl.Int32).alias("images"))
+        .agg(pl.len().cast(pl.Int32).alias("images"))
     )
     if "images" in lf.collect_schema().names():
         lf = lf.drop("images")
@@ -317,11 +329,12 @@ class ScPlotPointsService:
         "images",
     ]
 
+    @inject
     def __init__(
         self,
         *,
-        repository: SqlRepository,
-        storage_factory: DatasetStorageFactory,
+        repository: DatasetRepository,
+        storage_factory: DatasetStorageFactoryPort,
     ) -> None:
         self._repository = repository
         self._storage_factory = storage_factory
@@ -352,8 +365,8 @@ class ScPlotPointsService:
         legend_group_by: str | None = None,
         class_numbers: list[int] | None = None,
         rough_bins: list[int] | None = None,
-        predictions: list[str] | None = None,
-        annotations: list[str] | None = None,
+        predictions: list[int | str] | None = None,
+        annotations: list[int | str] | None = None,
         test_ids: list[int] | None = None,
         adders: list[int] | None = None,
         cluster_ids: list[int] | None = None,
@@ -430,8 +443,10 @@ class ScPlotPointsService:
             lf,
             class_number=class_numbers,
             rough_bin=rough_bins,
-            predicted_label=predictions,
-            label=annotations,
+            predicted_label=(
+                [str(value) for value in predictions] if predictions else None
+            ),
+            label=[str(value) for value in annotations] if annotations else None,
             test_id=test_ids,
             adder=adders,
             cluster_id=cluster_ids,

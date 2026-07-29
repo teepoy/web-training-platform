@@ -2,32 +2,30 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mountWithProviders } from "@/testing";
 import PerspectiveInspectionQuad from "../PerspectiveInspectionQuad.vue";
 
+vi.mock("@perspective-dev/viewer/inline", () => ({}));
+
 const modelMock = vi.hoisted(() => ({
-  waferDisplay: { value: new Float32Array(0) },
-  dieDisplay: { value: new Float32Array(0) },
-  reticleDisplay: { value: new Float32Array(0) },
+  mapArrowData: { value: null },
+  mapLegendColumn: { value: "class_number" },
   legendGroups: { value: null },
   activeMapLoading: { value: false },
   mapError: { value: null },
-  tableBaseFilters: { value: [] },
+  mapProgressMessage: { value: "" },
+  mapProgressPercent: { value: 0 },
+  sampleTableBaseViewConfig: { value: {} },
   mapSelectedDefectIds: { value: [] },
   tableSelectedDefectIds: { value: [] },
-  blinkFetching: { value: false },
-  patchBlinkView: { value: null },
-  patchBlinkViewVersion: { value: 0 },
-  reviewBlinkView: { value: null },
-  reviewBlinkViewVersion: { value: 0 },
+  galleryLoading: { value: false },
+  patchGalleryViewSnapshot: { value: null },
+  reviewGalleryViewSnapshot: { value: null },
   loadGlobalDistinctValues: vi.fn(async () => []),
   setTableSelectedDefectIds: vi.fn(),
-  setGallerySelectedDefectIds: vi.fn(),
   setReviewMode: vi.fn(),
   queryBoxSelection: vi.fn(),
   queryLegendSelection: vi.fn(),
   applyMapSelection: vi.fn(),
   appendMapSelection: vi.fn(),
   clearMapSelection: vi.fn(),
-  setHiddenLegendKeys: vi.fn(),
-  highlightDefectsFor: vi.fn(async () => []),
   highlightDefectsForIds: vi.fn(async () => []),
 }));
 
@@ -42,8 +40,8 @@ vi.mock("../ScMapPanelBinned.vue", () => ({
 vi.mock("../ScGlobalFilterBar.vue", () => ({
   default: { name: "ScGlobalFilterBar", template: "<div />" },
 }));
-vi.mock("../ScSampleTable.vue", () => ({
-  default: { name: "ScSampleTable", template: "<div />" },
+vi.mock("../ScSampleTableVxe.vue", () => ({
+  default: { name: "ScSampleTableVxe", template: "<div />" },
 }));
 vi.mock("../ScBlinkVirtualTable.vue", () => ({
   default: { name: "ScBlinkVirtualTable", template: "<div />" },
@@ -69,6 +67,20 @@ vi.mock("@/features/sc/presentation/composables/usePerspectiveInspectionModel", 
   usePerspectiveInspectionModel: () => modelMock,
 }));
 
+const requiredProps = {
+  inspectionTime: "2026-07-26T04:00:00+08:00",
+  waferKey: 1,
+  activeMapTab: "wafer" as const,
+  reticleDieSizeX: 100_000,
+  reticleDieSizeY: 100_000,
+  reticleOptions: {
+    xDieCount: 3,
+    yDieCount: 5,
+    xDieShift: 0,
+    yDieShift: 0,
+  },
+};
+
 describe("PerspectiveInspectionQuad — highlight watcher", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -83,9 +95,8 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     const largeIds = Array.from({ length: 10000 }, (_, i) => i + 1);
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
+        ...requiredProps,
         variant: "preview",
-        samplesError: null,
-        activeMapTab: "wafer",
         selectedGalleryDefectIds: largeIds,
       },
     });
@@ -97,11 +108,8 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
   it("calls model when ≤ 9999 selected (debounced)", async () => {
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
+        ...requiredProps,
         variant: "preview",
-        samples: [],
-        samplesLoading: false,
-        samplesError: null,
-        activeMapTab: "wafer",
         selectedGalleryDefectIds: [1, 2, 3],
       },
     });
@@ -115,10 +123,8 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     const region = { x: 10, y: 20, w: 30, h: 40 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
+        ...requiredProps,
         variant: "preview",
-        samples: [],
-        samplesLoading: false,
-        samplesError: null,
         activeMapTab: "die",
       },
     });
@@ -130,7 +136,9 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.queryBoxSelection).toHaveBeenCalledWith("die", region);
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3]);
     expect(modelMock.applyMapSelection).not.toHaveBeenCalled();
-    expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [1, 2, 3], region }]]);
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [1, 2, 3], region }]]);
+    });
   });
 
   it("batches queued box selection ids into one table update", async () => {
@@ -140,10 +148,8 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     modelMock.appendMapSelection.mockResolvedValueOnce([1, 2, 3, 4, 5]);
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
+        ...requiredProps,
         variant: "preview",
-        samples: [],
-        samplesLoading: false,
-        samplesError: null,
         activeMapTab: "die",
       },
     });
@@ -159,20 +165,19 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
     expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3, 4, 5]);
-    expect(wrapper.emitted("map-filter-change")).toEqual([
-      [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
-    ]);
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("map-filter-change")).toEqual([
+        [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
+      ]);
+    });
   });
 
   it("keeps legend selection as replace semantics", async () => {
     const region = { x: 0, y: 0, w: 0, h: 0 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
+        ...requiredProps,
         variant: "preview",
-        samples: [],
-        samplesLoading: false,
-        samplesError: null,
-        activeMapTab: "wafer",
       },
     });
 
@@ -185,6 +190,8 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.queryLegendSelection).toHaveBeenCalledWith(7);
     expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
     expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
-    expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [8, 9], region, key: 7 }]]);
+    await vi.waitFor(() => {
+      expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [8, 9], region, key: 7 }]]);
+    });
   });
 });

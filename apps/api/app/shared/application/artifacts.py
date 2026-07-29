@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
 from app.shared.api.schemas import (
@@ -13,6 +13,15 @@ from app.shared.api.schemas import (
     PredictionReviewAction,
     Sample,
 )
+from app.shared.domain.protocols import ArtifactStorage
+
+
+class ArtifactRepository(Protocol):
+    async def add_artifacts(
+        self,
+        job_id: str,
+        artifacts: list[ArtifactRef],
+    ) -> None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +132,11 @@ def build_compact_export(
 
 
 class ArtifactService:
-    def __init__(self, storage, repository) -> None:
+    def __init__(
+        self,
+        storage: ArtifactStorage,
+        repository: ArtifactRepository | None = None,
+    ) -> None:
         self.storage = storage
         self.repository = repository
 
@@ -171,6 +184,10 @@ class ArtifactService:
         If artifacts already have real storage URIs (s3://, memory://), they are
         stored directly. Legacy artifacts with placeholder URIs get re-wrapped.
         """
+        if self.repository is None:
+            raise RuntimeError(
+                "Artifact repository is required to persist job artifacts"
+            )
         persisted: list[ArtifactRef] = []
         for artifact in artifacts:
             if self._looks_like_real_storage_uri(artifact.uri):

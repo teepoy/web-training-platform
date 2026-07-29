@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, onUpdated, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { defineScMapElement, type ScMapGeometry } from "@platform/sc-map-element";
 import {
   NTabs,
   NTabPane,
@@ -12,65 +13,64 @@ import {
   NText,
 } from "naive-ui";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
-import { AddOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
-import ScWaferMap from "./ScWaferMapPerspective.vue";
-import ScDieStackMap from "./ScDieStackMapPerspective.vue";
-import ScReticleMap from "./ScReticleMapPerspective.vue";
+import { AddOutline, MoveOutline, ScanOutline, SearchOutline } from "@vicons/ionicons5";
 import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 import type { HighlightDefect } from "./types";
-import type { MapDisplayArray } from "./transforms/binsToDisplayArrays";
+
+if (import.meta.env.MODE !== "test") defineScMapElement();
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
 type CrosshairPoint = { x: number; y: number };
 type MapTab = "wafer" | "die" | "reticle";
-type QueuedBoxSelection = { tab: MapTab; region: BoxSelectionRegion };
 
-const BOX_SELECTION_DEBOUNCE_MS = 1000;
+const props = withDefaults(
+  defineProps<{
+    activeMapTab?: "wafer" | "die" | "reticle";
+    arrowData?: ArrayBuffer | readonly ArrayBuffer[] | null;
+    mapLegendColumn?: string;
 
-const props = defineProps<{
-  activeMapTab?: "wafer" | "die" | "reticle";
+    waferGeometry?: {
+      centerX: number;
+      centerY: number;
+      originX: number;
+      originY: number;
+      dieSizeX: number;
+      dieSizeY: number;
+    } | null;
+    waferRadiusNm?: number;
 
-  waferPoints?: MapDisplayArray | number[];
-  diePoints?: MapDisplayArray | number[];
-  reticlePoints?: MapDisplayArray | number[];
+    reticleDieSizeX?: number;
+    reticleDieSizeY?: number;
+    reticleOptions?: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number };
+    showImageMarkers?: boolean;
+    defectSize?: number;
 
-  waferGeometry?: {
-    centerX: number;
-    centerY: number;
-    originX: number;
-    originY: number;
-    dieSizeX: number;
-    dieSizeY: number;
-  } | null;
-  waferRadiusNm?: number;
+    mapLoading?: boolean;
+    mapError?: string | null;
+    mapProgressMessage?: string;
+    mapProgressPercent?: number;
 
-  reticleXDieCount?: number;
-  reticleYDieCount?: number;
-  reticleDieSizeX?: number;
-  reticleDieSizeY?: number;
-  reticleOptions?: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number };
+    legendGroupBy?: LegendSource | null;
+    legendSources?: LegendSource[];
+    legendGroups?: Record<string, DefectList> | null;
 
-  mapLoading?: boolean;
-  mapError?: string | null;
-  mapProgressMessage?: string;
-  mapProgressPercent?: number;
+    zoom?: { x: number; y: number; w: number; h: number } | null;
 
-  legendGroupBy?: LegendSource | null;
-  legendSources?: LegendSource[];
-  legendGroups?: Record<string, DefectList> | null;
-
-  zoom?: { x: number; y: number; w: number; h: number } | null;
-
-  /** Highlight defects from gallery selection (purple dots on overlay canvas). */
-  highlightDefects?: HighlightDefect[];
-  immediateCrosshairDefects?: HighlightDefect[];
-  immediateCrosshairVersion?: number;
-}>();
+    /** Highlight defects from gallery selection (purple dots on overlay canvas). */
+    highlightDefects?: HighlightDefect[];
+    immediateCrosshairDefects?: HighlightDefect[];
+    immediateCrosshairVersion?: number;
+  }>(),
+  {
+    showImageMarkers: true,
+    defectSize: 2,
+  },
+);
 
 const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
@@ -92,15 +92,29 @@ const emit = defineEmits<{
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
+  (e: "update:showImageMarkers", value: boolean): void;
+  (e: "update:defectSize", value: number): void;
 }>();
 
 const internalTab = ref<MapTab>(props.activeMapTab ?? "wafer");
-const mapMode = ref<Record<string, "select" | "zoomin">>({
+const mapMode = ref<Record<string, "select" | "zoomin" | "pan">>({
   wafer: "select",
   die: "select",
   reticle: "select",
 });
 const drawerVisible = ref<boolean>(!loadPersistedState("sc_map_panel.drawer_collapsed", false));
+const nativeMapLoading = ref(false);
+const nativeMapError = ref<string | null>(null);
+const nativeMapProgressMessage = ref("");
+const keepMapVisibleWhileRendering = ref(false);
+const showImageMarkers = ref(props.showImageMarkers ?? true);
+const defectSize = ref(props.defectSize ?? 2);
+const effectiveReticleOptions = computed(() => ({
+  xDieCount: props.reticleOptions?.xDieCount ?? 2,
+  yDieCount: props.reticleOptions?.yDieCount ?? 6,
+  xDieShift: props.reticleOptions?.xDieShift ?? 0,
+  yDieShift: props.reticleOptions?.yDieShift ?? 0,
+}));
 
 watch(
   () => props.activeMapTab,
@@ -113,7 +127,6 @@ watch(
 
 const handleTabChange = (value: string | number) => {
   const tab = value as MapTab;
-  clearQueuedBoxSelection();
   clearLocalImmediateCrosshair();
   emit("zoom-in", null);
   internalTab.value = tab;
@@ -175,12 +188,6 @@ watch(drawerVisible, (val) => {
   savePersistedState("sc_map_panel.drawer_collapsed", !val);
 });
 
-const handleSelectionChange = (ids: number[]) => {
-  selectedClassNumber.value = null;
-  if (ids.length === 0) clearQueuedBoxSelection();
-  emit("selection-change", ids);
-};
-
 const handleZoomIn = (vp: { x: number; y: number; w: number; h: number } | null) => {
   clearLocalImmediateCrosshair();
   emit("zoom-in", vp);
@@ -199,33 +206,29 @@ const handleReticleOptionsSubmit = (opts: {
   emit("update:reticleOptions", opts);
 };
 
+function handleMapDisplaySubmit(options: { showImageMarkers: boolean; defectSize: number }): void {
+  showImageMarkers.value = options.showImageMarkers;
+  defectSize.value = options.defectSize;
+  emit("update:showImageMarkers", options.showImageMarkers);
+  emit("update:defectSize", options.defectSize);
+}
+
+watch(
+  () => props.showImageMarkers,
+  (value) => {
+    if (value !== undefined) showImageMarkers.value = value;
+  },
+);
+watch(
+  () => props.defectSize,
+  (value) => {
+    if (value !== undefined) defectSize.value = value;
+  },
+);
+
 const activeHiddenLegendKeys = computed(
   () => hiddenLegendKeysBySource.value[legendSource.value] ?? [],
 );
-
-function sortLegendKeys(keys: string[]): string[] {
-  return [...keys].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
-}
-
-function colorMapKeyForLegendKey(
-  source: LegendSource,
-  rawKey: string,
-  compactGroups?: Record<string, DefectList>,
-): string {
-  if (source === "class" || source === "bin" || !compactGroups) {
-    return rawKey;
-  }
-  if (rawKey === "__unlabeled__" || rawKey === "__no_prediction__") {
-    return "-1";
-  }
-  return String(
-    sortLegendKeys(
-      Object.keys(compactGroups).filter(
-        (key) => key !== "__unlabeled__" && key !== "__no_prediction__",
-      ),
-    ).indexOf(rawKey),
-  );
-}
 
 const defaultColorMap = computed<Record<string, string>>(() => {
   const source = legendSource.value;
@@ -233,7 +236,7 @@ const defaultColorMap = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {};
   if (compactGroups && Object.keys(compactGroups).length > 0) {
     for (const rawKey of Object.keys(compactGroups)) {
-      map[colorMapKeyForLegendKey(source, rawKey, compactGroups)] = legendColor(source, rawKey);
+      map[rawKey] = legendColor(source, rawKey);
     }
   }
   return map;
@@ -242,7 +245,6 @@ const defaultColorMap = computed<Record<string, string>>(() => {
 watch(
   defaultColorMap,
   (defaults) => {
-    console.debug("[panel] ScMapPanelBinned defaultColorMap watcher → colorMap rebuild");
     const previous = previousDefaultColorMap.value;
     const next: Record<string, string> = {};
     for (const [key, defaultColor] of Object.entries(defaults)) {
@@ -269,29 +271,82 @@ const localImmediateCrosshairPoints = ref<Record<MapTab, CrosshairPoint[]>>({
   die: [],
   reticle: [],
 });
-const localImmediateCrosshairVersion = ref(0);
-const resolvedImmediateCrosshairVersion = computed(
-  () => (props.immediateCrosshairVersion ?? 0) + localImmediateCrosshairVersion.value * 1_000_000,
+const nativeGeometry = computed<ScMapGeometry>(() => ({
+  waferRadiusNm: props.waferRadiusNm ?? 150_000_000,
+  centerX: props.waferGeometry?.centerX ?? 0,
+  centerY: props.waferGeometry?.centerY ?? 0,
+  originX: props.waferGeometry?.originX ?? 0,
+  originY: props.waferGeometry?.originY ?? 0,
+  dieSizeX: props.waferGeometry?.dieSizeX ?? props.reticleDieSizeX ?? 100_000,
+  dieSizeY: props.waferGeometry?.dieSizeY ?? props.reticleDieSizeY ?? 100_000,
+  reticleXDieCount: effectiveReticleOptions.value.xDieCount,
+  reticleYDieCount: effectiveReticleOptions.value.yDieCount,
+}));
+
+const activeImmediatePoints = computed(() => {
+  if (internalTab.value === "die") return dieImmediateCrosshairPoints.value;
+  if (internalTab.value === "reticle") return reticleImmediateCrosshairPoints.value;
+  return waferImmediateCrosshairPoints.value;
+});
+
+function onNativeZoom(event: Event): void {
+  keepMapVisibleWhileRendering.value = mapMode.value[internalTab.value] === "pan";
+  handleZoomIn(
+    (event as CustomEvent<{ x: number; y: number; w: number; h: number } | null>).detail,
+  );
+}
+
+function onNativeBoxSelect(event: Event): void {
+  onBoxSelect((event as CustomEvent<BoxSelectionRegion>).detail);
+}
+
+function onNativeImmediateCrosshair(event: Event): void {
+  localImmediateCrosshairPoints.value = {
+    ...localImmediateCrosshairPoints.value,
+    [internalTab.value]: (event as CustomEvent<CrosshairPoint[]>).detail,
+  };
+}
+
+function onNativeMapProgress(event: Event): void {
+  const detail = (event as CustomEvent<{ progress: number; stage: string }>).detail;
+  nativeMapLoading.value = detail.progress < 1;
+  nativeMapProgressMessage.value = detail.stage;
+  nativeMapError.value = null;
+}
+
+function onNativeMapReady(): void {
+  nativeMapLoading.value = false;
+  keepMapVisibleWhileRendering.value = false;
+  nativeMapProgressMessage.value = "Map ready";
+}
+
+function onNativeMapError(event: Event): void {
+  nativeMapLoading.value = false;
+  keepMapVisibleWhileRendering.value = false;
+  nativeMapError.value = String((event as CustomEvent<unknown>).detail);
+}
+
+watch(
+  () => props.arrowData,
+  (arrow) => {
+    nativeMapLoading.value = arrow !== null && arrow !== undefined;
+    nativeMapError.value = null;
+  },
+);
+
+const effectiveMapLoading = computed(
+  () =>
+    !keepMapVisibleWhileRendering.value && (Boolean(props.mapLoading) || nativeMapLoading.value),
+);
+const effectiveMapError = computed(() => props.mapError ?? nativeMapError.value);
+const effectiveMapProgressMessage = computed(
+  () =>
+    (nativeMapLoading.value ? nativeMapProgressMessage.value : props.mapProgressMessage) ||
+    "Loading map...",
 );
 
 function clearLocalImmediateCrosshair(): void {
   localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
-  localImmediateCrosshairVersion.value += 1;
-}
-
-function handleImmediateCrosshairPoints(points: CrosshairPoint[]): void {
-  if (points.length === 0) {
-    localImmediateCrosshairPoints.value = {
-      ...localImmediateCrosshairPoints.value,
-      [internalTab.value]: [],
-    };
-  } else {
-    localImmediateCrosshairPoints.value = {
-      ...localImmediateCrosshairPoints.value,
-      [internalTab.value]: [...localImmediateCrosshairPoints.value[internalTab.value], ...points],
-    };
-  }
-  localImmediateCrosshairVersion.value += 1;
 }
 
 watch(
@@ -320,31 +375,8 @@ const reticleImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
   ...localImmediateCrosshairPoints.value.reticle,
 ]);
 
-let queuedBoxSelections: QueuedBoxSelection[] = [];
-let boxSelectionTimer: number | null = null;
-
-function clearQueuedBoxSelection(): void {
-  queuedBoxSelections = [];
-  if (boxSelectionTimer !== null) {
-    clearTimeout(boxSelectionTimer);
-    boxSelectionTimer = null;
-  }
-}
-
-function flushQueuedBoxSelection(): void {
-  boxSelectionTimer = null;
-  const selections = queuedBoxSelections;
-  queuedBoxSelections = [];
-  for (const selection of selections) {
-    if (selection.tab === internalTab.value) emit("box-select", selection.region);
-  }
-}
-
 function onBoxSelect(region: BoxSelectionRegion): void {
-  queuedBoxSelections.push({ tab: internalTab.value, region });
-  if (boxSelectionTimer === null) {
-    boxSelectionTimer = window.setTimeout(flushQueuedBoxSelection, BOX_SELECTION_DEBOUNCE_MS);
-  }
+  emit("box-select", region);
 }
 
 const handleLegendSelect = (key: LegendKey | null) => {
@@ -365,18 +397,12 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
   };
   emit("legend-hidden-change", { source, hiddenKeys: keys });
 }
-
-onUpdated(() => console.debug("[render] ScMapPanelBinned"));
-
-onUnmounted(() => {
-  clearQueuedBoxSelection();
-});
 </script>
 
 <template>
   <div class="sc-map-panel" data-testid="sc-map-panel">
-    <div v-if="mapError" class="sc-map-error">
-      <NResult status="error" title="Map Error" :description="mapError">
+    <div v-if="effectiveMapError" class="sc-map-error">
+      <NResult status="error" title="Map Error" :description="effectiveMapError">
         <template #footer>
           <NButton @click="handleRetry">Retry</NButton>
         </template>
@@ -434,78 +460,65 @@ onUnmounted(() => {
             </template>
             Zoom in
           </NTooltip>
+          <NTooltip placement="bottom">
+            <template #trigger>
+              <NButton
+                data-testid="sc-map-pan-tool"
+                size="small"
+                quaternary
+                :type="mapMode[internalTab] === 'pan' ? 'primary' : 'default'"
+                aria-label="Pan map"
+                @click="mapMode[internalTab] = 'pan'"
+              >
+                <template #icon
+                  ><NIcon><MoveOutline /></NIcon
+                ></template>
+              </NButton>
+            </template>
+            Pan
+          </NTooltip>
           <ScReticleMapOptionsButton
-            v-if="internalTab === 'reticle' && reticleOptions"
-            :modelValue="reticleOptions"
+            :modelValue="effectiveReticleOptions"
+            :show-image-markers="showImageMarkers"
+            :defect-size="defectSize"
             size="small"
             icon-only
             quaternary
             @submit="handleReticleOptionsSubmit"
+            @submit-display="handleMapDisplaySubmit"
           />
         </div>
       </div>
 
       <div class="sc-map-body" data-testid="sc-map-toolbar-container">
         <div class="map-area">
-          <div v-if="mapLoading" class="map-loading-overlay">
+          <div v-if="effectiveMapLoading" class="map-loading-overlay">
             <NSpin size="small" />
             <NText depth="3" class="map-loading-text">
-              {{ mapProgressMessage ?? "Loading map..." }}
+              {{ effectiveMapProgressMessage }}
             </NText>
           </div>
-          <ScWaferMap
-            v-if="internalTab === 'wafer'"
-            :points="waferPoints"
-            :geometry="waferGeometry"
-            :waferRadiusNm="waferRadiusNm"
-            :color-map="colorMap"
-            :zoom="zoom"
-            :mode="mapMode.wafer"
-            :highlightDefects="highlightDefects"
-            :immediate-crosshair-points="waferImmediateCrosshairPoints"
-            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
-            @immediate-crosshair-points="handleImmediateCrosshairPoints"
-            @selection-change="handleSelectionChange"
-            @zoom-in="handleZoomIn"
-            @box-select="onBoxSelect"
+          <sc-map
+            data-testid="sc-unified-map"
+            :arrowData.prop="arrowData ?? null"
+            :legendColumn.prop="mapLegendColumn ?? 'class_number'"
+            :hiddenLegendKeys.prop="activeHiddenLegendKeys"
+            :colorMap.prop="colorMap"
+            :showImageMarkers.prop="showImageMarkers"
+            :defectSize.prop="defectSize"
+            :mode.prop="internalTab"
+            :interactionMode.prop="mapMode[internalTab]"
+            :zoom.prop="zoom ?? null"
+            :geometry.prop="nativeGeometry"
+            :highlights.prop="highlightDefects ?? []"
+            :immediatePoints.prop="activeImmediatePoints"
+            @zoom-in="onNativeZoom"
+            @box-select="onNativeBoxSelect"
+            @immediate-crosshair-points="onNativeImmediateCrosshair"
+            @map-progress="onNativeMapProgress"
+            @map-ready="onNativeMapReady"
+            @map-error="onNativeMapError"
           />
-          <ScDieStackMap
-            v-else-if="internalTab === 'die'"
-            :points="diePoints"
-            :die-size-x="waferGeometry?.dieSizeX"
-            :die-size-y="waferGeometry?.dieSizeY"
-            :color-map="colorMap"
-            :zoom="zoom"
-            :mode="mapMode.die"
-            :highlightDefects="highlightDefects"
-            :immediate-crosshair-points="dieImmediateCrosshairPoints"
-            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
-            @immediate-crosshair-points="handleImmediateCrosshairPoints"
-            @selection-change="handleSelectionChange"
-            @zoom-in="handleZoomIn"
-            @box-select="onBoxSelect"
-          />
-          <ScReticleMap
-            v-else-if="internalTab === 'reticle'"
-            :points="reticlePoints"
-            :x-die-count="reticleXDieCount"
-            :y-die-count="reticleYDieCount"
-            :die-size-x="reticleDieSizeX"
-            :die-size-y="reticleDieSizeY"
-            :color-map="colorMap"
-            :zoom="zoom"
-            :mode="mapMode.reticle"
-            :highlightDefects="highlightDefects"
-            :immediate-crosshair-points="reticleImmediateCrosshairPoints"
-            :immediate-crosshair-version="resolvedImmediateCrosshairVersion"
-            @immediate-crosshair-points="handleImmediateCrosshairPoints"
-            @selection-change="handleSelectionChange"
-            @zoom-in="handleZoomIn"
-            @box-select="onBoxSelect"
-          />
-          <div v-else-if="internalTab === 'reticle'" class="reticle-map-placeholder">
-            Missing reticle configuration
-          </div>
         </div>
 
         <aside

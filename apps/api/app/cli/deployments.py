@@ -21,21 +21,19 @@ def apply(pool: str) -> None:
     """Register Prefect deployments from flow modules."""
     # ── Lazy imports: torch / heavy modules must not load at CLI startup ──
     from app.modules.datasets.adapter.flows.drain_dataset import drain_dataset
-    from app.modules.embedding.flows.embed import embed_flow
     from app.modules.prediction.flows.predict_job import predict_job_flow
-    from app.modules.sensors.adapter.flows.dataset_size_sensor import (
+    from app.modules.jobs.sensors.adapter.flows.dataset_size_sensor import (
         dataset_size_sensor,
     )
-    from app.modules.sensors.adapter.flows.timer_sensor import timer_sensor
+    from app.modules.jobs.sensors.adapter.flows.timer_sensor import timer_sensor
     from app.modules.training.flows.train_job import train_job_flow
-    from app.modules.training.flows.train_predict import train_and_predict_flow
+    from app.workflows.train_predict import train_and_predict_flow
 
     flows: dict[str, dict[str, Any]] = {
         "default-gpu": {
             "training-train-job": train_job_flow,
             "training-train-and-predict": train_and_predict_flow,
             "prediction-predict-job": predict_job_flow,
-            "embedding-embed": embed_flow,
         },
         "default-cpu": {
             "timer-sensor": timer_sensor,

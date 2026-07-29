@@ -1,30 +1,56 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import redis.asyncio as redis_client  # type: ignore[import-untyped]
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from perspective import Server
 from sqlalchemy import text
 
-from app.composition import build_app_context
 from app.core.config import load_config
 from app.core.logger import init_logging
 from app.modules.sc.port.http.perspective_router import router
+from app.perspective_composition import (
+    build_perspective_app_context,
+    close_perspective_app_context,
+)
 from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
-import app.registrations as _registrations  # noqa: F401
 
 _logger = logging.getLogger(__name__)
+
+_MAX_RSS_ENV = "PERSPECTIVE_WS_MAX_RSS_MB"
+
+
+def _current_rss_mb(status_path: Path = Path("/proc/self/status")) -> float:
+    for line in status_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("VmRSS:"):
+            rss_kib = int(line.split()[1])
+            return rss_kib / 1024
+    raise RuntimeError(f"VmRSS was not found in {status_path}")
+
+
+def _configured_max_rss_mb() -> float | None:
+    raw_limit = os.environ.get(_MAX_RSS_ENV)
+    if raw_limit is None:
+        return None
+    limit = float(raw_limit)
+    if limit <= 0:
+        raise ValueError(f"{_MAX_RSS_ENV} must be greater than zero")
+    return limit
 
 
 @asynccontextmanager
 async def lifespan(ws_app: FastAPI):
     cfg = load_config()
     init_logging(cfg)
-    ctx = build_app_context(cfg)
+    ctx = build_perspective_app_context(cfg)
     ws_app.state.app_context = ctx
+    ws_app.state.perspective_server = Server()
 
     redis: Any = redis_client.Redis(
         host=str(cfg.redis.host),
@@ -43,10 +69,7 @@ async def lifespan(ws_app: FastAPI):
         yield
     finally:
         await redis.aclose()
-        prefect_close = getattr(ctx.shared.prefect_client, "close", None)
-        if prefect_close is not None:
-            await prefect_close()
-        await ctx.shared.db_engine.dispose()
+        await close_perspective_app_context(ctx)
 
 
 app = FastAPI(
@@ -64,6 +87,33 @@ def health() -> dict[str, str]:
 
 @app.get("/ready", response_model=None)
 async def readiness(request: Request) -> dict[str, str] | JSONResponse:
+    try:
+        max_rss_mb = _configured_max_rss_mb()
+        if max_rss_mb is not None:
+            rss_mb = _current_rss_mb()
+            if rss_mb >= max_rss_mb:
+                _logger.error(
+                    "Readiness check failed: RSS %.1f MiB reached %.1f MiB limit",
+                    rss_mb,
+                    max_rss_mb,
+                )
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "unavailable",
+                        "reason": "memory_pressure",
+                    },
+                )
+    except (OSError, RuntimeError, ValueError):
+        _logger.exception("Readiness check failed: invalid RSS health configuration")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "reason": "memory_healthcheck_failed",
+            },
+        )
+
     try:
         async with (
             request.app.state.app_context.shared.db_engine.connect() as connection

@@ -17,6 +17,7 @@ The architecture consists of five layers:
 ### 1. Host: `DatasetListView.vue`
 
 The host is responsible for:
+
 - Fetching the dataset list via Vue Query.
 - Deriving `activeDatasetType` from `datasets[0].dataset_type` (e.g. `"image_classification"`).
 - Calling `resolveDatasetShim(activeDatasetType)` to get the correct shim component.
@@ -55,7 +56,9 @@ registerDatasetSchema({
   taskType: "detection",
   annotationType: "boxes",
   shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
-  mockSampleFactory: (index) => ({ /* ... */ }),
+  mockSampleFactory: (index) => ({
+    /* ... */
+  }),
 });
 ```
 
@@ -74,11 +77,11 @@ The `src/shared/` directory contains reusable UI components, API clients, and he
 
 Shims are per-module components defining per-type dataset list layouts using `src/shared/` helpers.
 
-| Shim | Dataset Type | Location |
-|------|-------------|----------|
+| Shim           | Dataset Type           | Location                                                                 |
+| -------------- | ---------------------- | ------------------------------------------------------------------------ |
 | `ListShim.vue` | `image_classification` | `src/features/datasets/presentation/dataset-types/classification/views/` |
-| `ListShim.vue` | `image_vqa` | `src/features/datasets/presentation/dataset-types/vqa/views/` |
-| `ListShim.vue` | `image_detection` | `src/features/datasets/presentation/dataset-types/detection/views/` |
+| `ListShim.vue` | `image_vqa`            | `src/features/datasets/presentation/dataset-types/vqa/views/`            |
+| `ListShim.vue` | `image_detection`      | `src/features/datasets/presentation/dataset-types/detection/views/`      |
 
 ## Backend Schema System
 
@@ -93,6 +96,7 @@ apps/api/app/modules/dataset_vqa/domain/schema.py             ← vqa schema mod
 ```
 
 Each Python schema module defines:
+
 - `generate_ls_config(label_space)` — Label Studio XML config
 - `platform_annotation_to_ls(label, annotation_value)` — annotation format conversion
 - `ls_annotation_to_platform(ls_results)` — reverse conversion
@@ -107,12 +111,14 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
 ### Backend
 
 1. **Add enum values** in `apps/api/app/domain/types.py`:
+
    ```python
    IMAGE_SEGMENTATION = "image_segmentation"
    SEGMENTATION = "segmentation"
    ```
 
 2. **Create the schema module** `apps/api/app/modules/dataset_segmentation/domain/schema.py`:
+
    ```python
    from app.domain.dataset_schema import DatasetSchema
    from app.domain import schema_registry
@@ -135,14 +141,20 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
 ### Frontend
 
 4. **Add type values** in `src/types.ts`:
+
    ```typescript
    export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
-   export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
+   export type DatasetType =
+     | "image_classification"
+     | "image_vqa"
+     | "image_detection"
+     | "image_segmentation";
    ```
 
 5. **Create the shim** `src/features/datasets/presentation/dataset-types/segmentation/views/ListShim.vue`.
 
 6. **Create the schema module** `src/features/datasets/presentation/dataset-types/segmentation/views/schema.ts`:
+
    ```typescript
    import { defineAsyncComponent } from "vue";
    import { registerDatasetSchema } from "@/features/datasets/presentation/pages/schema-registry";
@@ -152,7 +164,9 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
      taskType: "segmentation",
      annotationType: "masks",
      shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),
-     mockSampleFactory: (index) => ({ /* ... */ }),
+     mockSampleFactory: (index) => ({
+       /* ... */
+     }),
    });
    ```
 
@@ -163,9 +177,9 @@ To add a new dataset type end-to-end (e.g., `image_segmentation`):
 
 ### Seed script
 
-8. **Create** `libs/seedmaker/src/seedmaker/datasets/image_segmentation.py` using the same `mock_item_generator` logic.
+8. **Create** `scripts/seedmaker/datasets/image_segmentation.py` using the same `mock_item_generator` logic.
 
-9. **Register** in `libs/seedmaker/src/seedmaker/datasets/__init__.py`.
+9. **Register** in `scripts/seedmaker/datasets/__init__.py`.
 
 ## Fallback Behavior
 

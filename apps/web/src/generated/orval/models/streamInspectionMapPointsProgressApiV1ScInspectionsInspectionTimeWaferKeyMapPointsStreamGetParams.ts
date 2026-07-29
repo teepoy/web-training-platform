@@ -4,6 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem } from './streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem';
+import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem } from './streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem';
 
 export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams = {
 reticleXDieCount?: number;
@@ -19,8 +21,8 @@ zoomH?: number | null;
 mode?: 'wafer' | 'die' | 'reticle' | null;
 class_numbers?: number[] | null;
 rough_bins?: number[] | null;
-predictions?: string[] | null;
-annotations?: string[] | null;
+predictions?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem[] | null;
+annotations?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem[] | null;
 test_ids?: number[] | null;
 adders?: number[] | null;
 cluster_ids?: number[] | null;

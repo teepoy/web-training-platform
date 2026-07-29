@@ -13,11 +13,79 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("APP_CONFIG_PROFILE", "test")
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 os.environ.setdefault(
     "DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
 )
 
 _OPEN_CONTAINERS = []
+
+_INTEGRATION_TEST_PATH_PREFIXES = (
+    "tests/test_api_flows.py",
+    "tests/test_pubsub_events.py",
+    "app/modules/agent/tests/test_agent.py",
+    "app/modules/agent/tests/test_global_agent.py",
+    "app/modules/datasets/tests/",
+    "app/modules/jobs/schedules/tests/",
+    "app/modules/jobs/task_tracker/tests/",
+    "app/modules/prediction/tests/test_prediction_review.py",
+    "app/modules/prediction/tests/test_prediction_routes.py",
+    "app/modules/prediction/tests/test_vqa_runtime.py",
+    "app/modules/sc/tests/test_sc_import_endpoint.py",
+    "app/modules/sc/tests/test_sc_import_service.py",
+    "app/modules/sc/tests/test_sc_import_sparse_bytes.py",
+    "app/modules/sc/tests/test_sc_inspections.py",
+    "app/modules/sc/tests/test_sc_plot_points.py",
+    "app/modules/training/tests/test_training_runner.py",
+)
+
+_DEV_SERVER_TEST_PATH_PREFIXES = ("tests/test_data_integrity.py",)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--run-dev-server",
+        action="store_true",
+        default=False,
+        help="Collect and run tests that require a running local dev API/server.",
+    )
+
+
+def pytest_ignore_collect(
+    collection_path: Path,
+    config: pytest.Config,
+) -> bool:
+    try:
+        rel_path = collection_path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return False
+    if rel_path.startswith(_DEV_SERVER_TEST_PATH_PREFIXES):
+        return not bool(config.getoption("--run-dev-server"))
+    return False
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    integration_marker = pytest.mark.integration(
+        reason="API/module integration coverage"
+    )
+    dev_server_marker = pytest.mark.dev_server(
+        reason="Requires a running local dev API/server; run explicitly with --run-dev-server"
+    )
+    skip_dev_server_marker = pytest.mark.skip(
+        reason="Requires a running local dev API/server; pass --run-dev-server to run"
+    )
+    run_dev_server = bool(config.getoption("--run-dev-server"))
+    for item in items:
+        rel_path = item.path.relative_to(ROOT).as_posix()
+        if rel_path.startswith(_INTEGRATION_TEST_PATH_PREFIXES):
+            item.add_marker(integration_marker)
+        if rel_path.startswith(_DEV_SERVER_TEST_PATH_PREFIXES):
+            item.add_marker(dev_server_marker)
+            if not run_dev_server:
+                item.add_marker(skip_dev_server_marker)
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -145,17 +213,12 @@ def _mock_ls_client(request):
     from app.modules.agent.port.http.deps import (
         get_label_studio_client as agent_get_ls_client,
     )
-    from app.modules.preview.port.http.deps import (
-        get_label_studio_client as preview_get_ls_client,
-    )
 
     app.dependency_overrides[agent_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
-    app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
     yield
     app.dependency_overrides.pop(agent_get_ls_client, None)
     app.dependency_overrides.pop(datasets_get_ls_client, None)
-    app.dependency_overrides.pop(preview_get_ls_client, None)
 
 
 @pytest.fixture(autouse=True, scope="function")

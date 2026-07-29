@@ -14,25 +14,25 @@
 
 ## 1. Inventory
 
-| File:Line | Method | HTTP Route(s) | Sync/Job | Recommendation |
-|-----------|--------|---------------|----------|----------------|
-| `apps/api/app/modules/prediction/app/services/prediction_service.py:496` | `_predict_via_worker` → `worker.predict_batch(...)` | `POST /predictions/run` (test-env branch only)<br>`POST /predictions/single` | **SYNC** — called directly in the request/response cycle when `_should_use_inference_worker()` is `True`. In production the `/predictions/run` route delegates to Prefect via `prediction_orchestrator.start_job()`; the sync path is only exercised in `test` env or via `/predictions/single`. | `POST /predictions/run`: **ALREADY-VIA-FLOW** in prod; sync path is test-only shim — `KEEP-SYNC` for test env.<br>`POST /predictions/single`: **MIGRATE-TO-JOB** — single-sample prediction is latency-sensitive and blocks the HTTP worker thread for the full model inference round-trip. |
-| `apps/api/app/modules/datasets/app/services/feature_ops.py:135` | `extract_features_via_worker` → `worker.embed_batch(...)` | `POST /datasets/{dataset_id}/features/extract` (test-env branch only) | **SYNC** — called directly in the request/response cycle when `cfg.app.env == "test"`. In production the route delegates to Prefect via `prediction_orchestrator.start_job()`; `extract_features_via_worker` is only called from the Prefect flow (`predict_job.py`). | **ALREADY-VIA-FLOW** in prod; sync path is test-only shim — `KEEP-SYNC` for test env. |
+There are no API-side direct worker-client calls outside `**/flows/**` and
+`**/workers/**`.
 
-### Classification of all 42 raw `rg` matches
+| HTTP route                 | Application boundary                          | Runtime behavior                                                                          |
+| -------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `POST /predictions/run`    | `PredictionExecutionPort.submit_job(command)` | Resolves catalog compatibility and runtime routing, persists a job, then submits Prefect. |
+| `POST /predictions/single` | `PredictionRuntimePort.predict_single(...)`   | Resolves the same runtime route and waits synchronously for the routed Prefect flow.      |
+
+### Classification of raw `rg` matches
 
 The `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'`
-command returns 42 lines. They fall into these categories:
+results fall into these categories:
 
-| Category | Count | Examples |
-|----------|-------|---------|
-| Protocol / interface definitions (`protocols.py`, `runtime.py`) | 6 | `InferenceWorker.predict_batch`, `GpuWorker.predict_batch`, `GpuWorker.embed_batch` |
-| Concrete type implementations (not worker clients) | 3 | `clip.py:predict_batch`, `torch.py:predict_batch`, `sc/types/predictor.py:predict_batch` |
-| **Actual worker-client callsites** (service layer) | **2** | `prediction_service.py:496`, `feature_ops.py:135` |
-| Test files (`tests/`) | 31 | `test_prediction_flow.py`, `test_gpu_worker_client.py` |
-
-Only the 2 service-layer callsites are in scope for this audit. All others are either
-protocol definitions, local predictor implementations, or test code.
+| Category                                           | Examples                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Protocol / interface definitions (`runtime.py`)    | `Predictor.predict_batch`                                                       |
+| Concrete type implementations (not worker clients) | `clip.py:predict_batch`, classification/detection/VQA predictor implementations |
+| Runtime flow implementations                       | `prediction/flows/**`                                                           |
+| Tests                                              | prediction flow and predictor tests                                             |
 
 ---
 
@@ -40,48 +40,31 @@ protocol definitions, local predictor implementations, or test code.
 
 ### `POST /predictions/run`
 
-**Classification: ALREADY-VIA-FLOW (production) / KEEP-SYNC (test env)**
+**Classification: ASYNC JOB**
 
-In production (`dev`/`prod` profiles), this route immediately delegates to
-`prediction_orchestrator.start_job()`, which schedules a Prefect flow. The
-`prediction_service.run_prediction()` call — and therefore `_predict_via_worker` /
-`worker.predict_batch` — is only reached inside the `if str(cfg.app.env) == "test":` branch.
-This is an intentional test shim that allows integration tests to exercise the full prediction
-pipeline without a live Prefect deployment.
-
-**No Scope B action required** for this route. The production path is already async-via-flow.
-The test shim should remain synchronous; converting it would break test isolation.
+The route converts its strict HTTP DTO into `PredictionJobCommand` and delegates to
+`PredictionExecutionPort`. Dataset/model lookup, predictor compatibility, runtime route
+resolution, deployment availability, job persistence, and Prefect submission are owned by
+`PredictionOrchestrator` in that order. Configuration failures do not leave queued orphan jobs.
 
 ### `POST /predictions/single`
 
 **Classification: MIGRATE-TO-JOB**
 
-This route calls `prediction_service.predict_single()` unconditionally — there is no
-`cfg.app.env == "test"` guard and no Prefect delegation. When `_should_use_inference_worker()`
-returns `True` (i.e., a GPU or inference worker is configured, which is always the case in
-`dev`/`prod`), the route blocks the HTTP worker thread for the full model inference round-trip
-to the GPU worker service.
+This route calls `PredictionRuntimePort.predict_single()` and waits for a Prefect flow to
+complete. It no longer invokes a worker client or hardcodes a deployment:
+`PredictionRuntimeService` resolves the predictor from the model catalog and uses
+`RuntimeRoutingPort`; the application-layer submission mapper converts
+`PredictionJobCommand` into Prefect parameters.
 
 Depending on model size and batch complexity, this can take seconds to tens of seconds. This
 is the only route that is genuinely sync-and-latency-sensitive in production.
 
 **Scope B should address this route** by either:
+
 1. Converting it to a job-based pattern (returns a job ID, client polls for result), or
 2. Accepting the latency if the use-case is explicitly interactive (e.g., annotation assist
    where the user is waiting for a single-sample result).
-
-### `POST /datasets/{dataset_id}/features/extract`
-
-**Classification: ALREADY-VIA-FLOW (production) / KEEP-SYNC (test env)**
-
-Identical pattern to `/predictions/run`. The `feature_ops.extract_features()` call (which
-uses the embedding service, not the worker client) is inside the `if str(cfg.app.env) == "test":` guard.
-The `extract_features_via_worker` method — which calls `worker.embed_batch` — is only invoked
-from the Prefect flow (`predict_job.py`), not from any HTTP route handler.
-
-**No Scope B action required** for this route.
-
----
 
 ## 3. Follow-up Scope B Trigger Criteria
 
@@ -91,8 +74,8 @@ Scope B (sync→async route migration) is justified if **any** of the following 
    production load testing or real traffic. At that point the HTTP timeout risk outweighs the
    UX simplicity of a synchronous response.
 
-2. **New sync callsites added**: A future PR adds a new HTTP route that calls `predict_batch`
-   or `embed_batch` outside a `cfg.app.env == "test"` guard and outside a Prefect flow.
+2. **New sync callsites added**: A future PR adds a new HTTP route that calls executable
+   predictor/worker code outside a Prefect flow.
 
 3. **Worker pool exhaustion**: The GPU worker service becomes a bottleneck because multiple
    concurrent `/predictions/single` requests hold open HTTP connections to it simultaneously.
@@ -108,9 +91,11 @@ The current architecture is correct for the scale it targets.
 
 ## Evidence
 
-- `.sisyphus/evidence/task-1-audit-coverage.txt` — raw `rg` output (42 lines) with row-count reconciliation
-- `.sisyphus/evidence/task-1-line-verify.txt` — confirms both `File:Line` entries in the table are non-empty
+- `apps/api/app/modules/prediction/app/services/prediction_orchestrator.py`
+- `apps/api/app/modules/prediction/app/services/prediction_runtime.py`
+- `apps/api/app/modules/prediction/app/services/submission_parameters.py`
+- `apps/api/app/modules/prediction/domain/submission.py`
 
 ---
 
-*Generated: 2026-05-26. Re-run `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'` to verify coverage after any refactor.*
+_Updated: 2026-07-29. Re-run `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'` to verify coverage after any refactor._

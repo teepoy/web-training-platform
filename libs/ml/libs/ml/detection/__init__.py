@@ -1,1 +1,0 @@
-"""Detection trainers and predictors."""

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from injector import Module, inject, provider, singleton
+
 from app.modules.dashboard.app.dashboard_service import DashboardService
 from app.modules.dashboard.app.services.service_health import ServiceHealthService
-from app.modules.task_tracker.port.task_tracker_port import TaskTrackerPort
+from app.modules.dashboard.domain.protocols import JobRepository
+from app.modules.dashboard.port.local import DashboardQueryPort, ServiceHealthPort
+from app.modules.jobs.task_tracker.port.task_tracker_port import TaskTrackerPort
 from app.shared.context import SharedInfra
 
 
@@ -34,3 +38,47 @@ def init_dashboard(
         service_health_service=service_health,
         task_tracker_port=task_tracker_port,
     )
+
+
+class DashboardModule(Module):
+    @inject
+    @provider
+    @singleton
+    def provide_dashboard_context(
+        self,
+        shared: SharedInfra,
+        task_tracker_port: TaskTrackerPort,
+    ) -> DashboardContext:
+        return init_dashboard(
+            shared,
+            task_tracker_port=task_tracker_port,
+        )
+
+    @provider
+    @singleton
+    def provide_service_health(self, context: DashboardContext) -> ServiceHealthService:
+        return context.service_health_service
+
+    @provider
+    @singleton
+    def provide_service_health_port(
+        self, service: ServiceHealthService
+    ) -> ServiceHealthPort:
+        return service
+
+    @provider
+    @singleton
+    def provide_dashboard_job_repository(
+        self, context: DashboardContext
+    ) -> JobRepository:
+        return context.task_tracker_port
+
+    @provider
+    @singleton
+    def provide_dashboard_service(self, context: DashboardContext) -> DashboardService:
+        return context.dashboard_service
+
+    @provider
+    @singleton
+    def provide_dashboard_query(self, service: DashboardService) -> DashboardQueryPort:
+        return service

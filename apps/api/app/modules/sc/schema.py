@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 
 if TYPE_CHECKING:
-    from platform_runtime.sparse.models import DatasetManifest
+    from app.modules.storage.domain.sparse.models import DatasetManifest
 
 # ── Schema version ────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ SC_SPARSE_SHARD_SCHEMA_V2: list[dict[str, str]] = [
 Each dict has ``name`` (column name) and ``type`` (string type name)
 suitable for constructing ``ColumnSchema`` objects via::
 
-    from platform_runtime.sparse import ColumnSchema
+    from app.modules.storage.domain.sparse import ColumnSchema
     columns = [ColumnSchema(**c) for c in SC_SPARSE_SHARD_SCHEMA_V2]
 
 The ``images`` column type string ``"list<struct>"`` represents a

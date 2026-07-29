@@ -153,8 +153,8 @@ class TestReviewImageRoundTrip:
     def test_normalize_v2_row_populates_image_type_and_review_image_id(
         self,
     ) -> None:
-        from app.modules.datasets.adapter.sparse_storage import SparseDatasetStorage
-        from platform_runtime.sparse import DatasetPayloadStore
+        from app.modules.storage.adapter.sparse.storage import SparseDatasetStorage
+        from app.modules.storage.domain.sparse import DatasetPayloadStore
 
         mock_storage = MagicMock()
         mock_payload_store = MagicMock(spec=DatasetPayloadStore)
@@ -164,6 +164,8 @@ class TestReviewImageRoundTrip:
             org_id="test-org",
             storage=mock_storage,
             payload_store=mock_payload_store,
+            session_factory=MagicMock(),
+            repo=MagicMock(),
             dataset_type="image_sc",
         )
 
@@ -266,6 +268,9 @@ class TestReviewImageRoundTrip:
             SampleRow,
             SampleRowImageRef,
         )
+        from app.modules.datasets.domain.view_projection import (
+            ViewProjectionContext,
+        )
 
         row = SampleRow(
             sample_id="42",
@@ -306,7 +311,13 @@ class TestReviewImageRoundTrip:
             ],
         )
 
-        view_row = sample_row_to_sc_patch_image_v1(row, dataset_id="test-ds")
+        view_row = sample_row_to_sc_patch_image_v1(
+            row,
+            context=ViewProjectionContext(
+                dataset_id="test-ds",
+                dataset_type="image_sc",
+            ),
+        )
 
         assert len(view_row.images) == 3
         assert len(view_row.review_images) == 2
@@ -321,7 +332,7 @@ class TestScImageServingLazyFetchReview:
     def test_lazy_fetch_review_image_passes_review_image_id(self) -> None:
         import pyarrow.parquet as pq
 
-        from platform_runtime.sparse import DatasetManifest, DatasetPayloadStore, SampleLocator, ShardEntry
+        from app.modules.storage.domain.sparse import DatasetManifest, DatasetPayloadStore, SampleLocator, ShardEntry
         from app.modules.sc.schema import _build_v2_pyarrow_schema
         from app.modules.sc.port.http.deps import (
             get_dataset_payload_store,

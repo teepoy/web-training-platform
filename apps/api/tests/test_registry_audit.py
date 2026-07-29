@@ -81,34 +81,34 @@ def test_training_job_stores_trainer_id_in_view_id_field() -> None:
     )
 
 
-def test_router_looks_up_trainer_by_view_id_field() -> None:
+def test_training_submission_validates_trainer_id() -> None:
     """
-    [FIXED] The training router now correctly references payload.trainer_id
-    instead of payload.view_id.
+    [FIXED] The transport schema converts trainer_id into a domain command,
+    and the application orchestrator owns compatibility validation.
     """
     import inspect
-    from app.modules.training.port.http import router as training_router
+    from app.modules.training.app.services.orchestrator import TrainingOrchestrator
+    from app.modules.training.port.http.schemas import CreateTrainingJobRequest
 
-    source = inspect.getsource(training_router.create_training_job)
-    assert "validate_trainer_for_dataset(" in source, (
-        "GREEN: training router validates payload.trainer_id via trainer compatibility check"
+    command = CreateTrainingJobRequest(
+        dataset_id="ds-1",
+        trainer_id="resnet50-sc-v1",
+    ).to_command(org_id="org-1", created_by="user-1")
+    submission_source = inspect.getsource(TrainingOrchestrator.submit_job)
+    assert command.trainer_id == "resnet50-sc-v1"
+    assert "validate_trainer_for_dataset(" in submission_source, (
+        "GREEN: application submission validates trainer compatibility"
     )
-    assert "trainer_id=payload.trainer_id" in source, (
-        "GREEN: training router passes trainer_id to validator"
-    )
-    assert "payload.view_id" not in source, (
-        "GREEN: payload.view_id has been replaced with payload.trainer_id"
-    )
+    assert "view_id" not in submission_source
 
 
 def test_conftest_create_job_passes_trainer_id() -> None:
     """
     [FIXED] conftest.create_job now uses 'trainer_id' key.
     """
-    import inspect
     from tests import conftest as test_conftest
 
-    source = inspect.getsource(test_conftest.create_job)
+    source = Path(test_conftest.__file__).read_text()
     assert (
         '"trainer_id": trainer_id' in source
         or "'trainer_id': trainer_id" in source
@@ -125,23 +125,18 @@ def test_conftest_create_job_passes_trainer_id() -> None:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def test_get_trainer_without_by_id_looks_up_by_view_id_not_trainer_id() -> None:
+def test_get_trainer_alias_uses_executable_id_without_eager_loading() -> None:
     """
-    [FIXED] get_trainer is now an alias for get_trainer_by_id —
-    both look up trainers by trainer_id.
+    Executable lookup is keyed by trainer ID, while catalog metadata remains
+    available without importing the runtime implementation.
     """
     from app.core.registry import get_trainer, get_trainer_by_id
+    from app.modules.types import catalog
 
     t = get_trainer_by_id("resnet50-sc-v1")
-    assert t is not None, "ResNet trainer should be registered"
-
     t2 = get_trainer("resnet50-sc-v1")
-    assert t2 is not None, (
-        "GREEN: get_trainer now looks up by trainer_id (alias for get_trainer_by_id)"
-    )
-    assert t2.trainer_id == t.trainer_id, (
-        "GREEN: get_trainer returns trainer with same trainer_id as get_trainer_by_id"
-    )
+    assert t2 is t
+    assert catalog.get_trainer_meta("resnet50-sc-v1").id == "resnet50-sc-v1"
 
     # get_trainer("labeled_image_v1") no longer works — it's a view_id, not a trainer_id
     t3 = get_trainer("labeled_image_v1")
@@ -300,33 +295,26 @@ def test_registrations_import_triggers_registry_population() -> None:
         "registry should be non-empty after module import"
     )
 
-    # Executable trainers and predictors are registered by worker.runtime,
-    # not by the API barrel. The _registry._trainers / _predictors dicts
-    # may be empty here; metadata lives in app.modules.types.catalog.
-    # Verify that lazy lookup via catalog fallback works.
-    trainer = _registry.get_trainer_by_id("resnet50-sc-v1")
-    assert trainer is not None, (
-        "RED: get_trainer_by_id should return a trainer via catalog fallback"
-    )
-    assert trainer.trainer_id == "resnet50-sc-v1"
-    predictor = _registry.get_predictor_by_id("resnet50-sc-v1")
-    assert predictor is not None, (
-        "RED: get_predictor_by_id should return a predictor via catalog fallback"
-    )
-    assert predictor.predictor_id == "resnet50-sc-v1"
+    # Executable trainers and predictors are worker-owned. An isolated
+    # executable registry must not synthesize callable stubs from API metadata.
+    from app.core.registry import _Registry
+    from app.modules.types import catalog
 
-    # Confirm registrations.py explicitly imports type files (not just the barrel)
+    isolated_registry = _Registry()
+    assert isolated_registry.get_trainer_by_id("resnet50-sc-v1") is None
+    assert isolated_registry.get_predictor_by_id("resnet50-sc-v1") is None
+    assert catalog.get_trainer_meta("resnet50-sc-v1").id == "resnet50-sc-v1"
+    assert catalog.get_predictor_meta("resnet50-sc-v1").id == "resnet50-sc-v1"
+
+    # View row modules are imported from explicit catalog paths, without scanning.
     reg_path = ROOT / "app" / "registrations.py"
     content = reg_path.read_text()
     assert "app.modules.datasets.classification.models" in content, (
-        "RED: registrations.py imports views explicitly"
+        "RED: registrations.py imports dataset types explicitly"
     )
-    assert "app.modules.types.trainers." in content, (
-        "registrations.py documents that executable trainers are worker-owned"
-    )
-    assert "app.modules.types.predictors." in content, (
-        "registrations.py documents that executable predictors are worker-owned"
-    )
+    assert "app.modules.types.view_registration" in content
+    assert "app.runtime_compat" in content
+    assert "must not be imported by API startup" in content
 
     # Verify specific known metadata remains visible without executable imports.
     from app.modules.types import catalog
@@ -423,42 +411,6 @@ def test_viewrow_is_only_in_docs_not_code() -> None:
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 5.  Predictor resolution uses trainer_id
-# ═══════════════════════════════════════════════════════════════════════
-
-
-@pytest.mark.skip(reason="_resolve_predictor removed in cpu/gpu prefect split refactor")
-def test_prediction_service_resolves_trainer_id() -> None:
-    """
-    [FIXED] In prediction_service.py, the _resolve_predictor method reads
-    `model.trainer_id` (or `model.trainer_name`) and passes it to
-    catalog metadata — confirming that model.trainer_id holds
-    a predictor ID, not a view ID.
-    """
-    import inspect
-    from app.modules.prediction.app.services import (
-        prediction_service,
-    )
-
-    resolve_method = getattr(
-        prediction_service.PredictionService, "_resolve_predictor", None
-    )
-    if resolve_method is None:
-        return  # Method no longer exists — test is skipped
-
-    source = inspect.getsource(resolve_method)
-
-    # The method reads model.view_id or model.trainer_name
-    assert "model.view_id" in source or "model.trainer_name" in source, (
-        "RED: _resolve_predictor reads model.trainer_id as a predictor ID"
-    )
-    assert "catalog.get_predictor_meta(trainer_id)" in source, (
-        "RED: model.trainer_id/trainer_name is passed to catalog metadata, confirming it's a predictor ID"
-    )
-
-
-@pytest.mark.skip(reason="resnet50-sc-v1 trainer view_id changed from labeled_image_v1 to patch_image_v1")
 def test_registered_trainers_and_predictors_share_same_id_for_same_model_type() -> None:
     """
     ResNet trainer and predictor BOTH register with id="resnet50-sc-v1".
@@ -467,20 +419,14 @@ def test_registered_trainers_and_predictors_share_same_id_for_same_model_type() 
     """
     from app.modules.types import catalog
 
-    # Find trainer with id=resnet50-sc-v1 via metadata-backed lookup.
     t = catalog.get_trainer_meta("resnet50-sc-v1")
-    assert t["id"] == "resnet50-sc-v1"
+    assert t.id == "resnet50-sc-v1"
 
-    # Find predictor with id=resnet50-sc-v1 via metadata-backed lookup.
     p = catalog.get_predictor_meta("resnet50-sc-v1")
-    assert p["id"] == "resnet50-sc-v1"
+    assert p.id == "resnet50-sc-v1"
 
-    # But their view context differs
-    assert t["view_id"] == "labeled_image_v1"
-    assert p["view_id"] == "image_input_v1", (
-        "RED: trainer and predictor operate on different views but share "
-        "the same registry id — exposing the view_id ambiguity"
-    )
+    assert t.predictor_id == p.id
+    assert t.view_id == p.view_id == "patch_image_v1"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -563,8 +509,8 @@ def test_DESIRED_get_predictor_view_id_export_removed() -> None:
     [GREEN — T13] ``get_predictor`` now exists as an executable-only lookup
     (resolves by *predictor_id* from ``_predictors``).  The old dead
     ``get_predictor(view_id)`` has been replaced by this properly-named
-    executable-only variant.  ``get_predictor_by_id`` remains for
-    catalog-thru lookups.
+    executable-only variant. ``get_predictor_by_id`` is the nullable
+    executable lookup.
     """
     import app.core.registry as reg_mod
     import inspect as _inspect
@@ -579,7 +525,7 @@ def test_DESIRED_get_predictor_view_id_export_removed() -> None:
         "Current exports: %s" % [e for e in exports if "predictor" in e.lower()]
     )
     assert "get_predictor_by_id" in exports, (
-        "GREEN: get_predictor_by_id remains for catalog-thru lookups"
+        "GREEN: get_predictor_by_id remains for nullable executable lookups"
     )
     # Verify the NEW get_predictor takes predictor_id (not view_id)
     sig = _inspect.signature(reg_mod.get_predictor)
@@ -609,10 +555,9 @@ def test_DESIRED_conftest_create_job_uses_trainer_id_key() -> None:
     [FAILS NOW] After refactor, conftest.create_job should use
     'trainer_id' key, not 'view_id'.
     """
-    import inspect
     from tests import conftest as test_conftest
 
-    source = inspect.getsource(test_conftest.create_job)
+    source = Path(test_conftest.__file__).read_text()
     assert     "view_id" not in source and "'view_id'" not in source, (
         "DESIRED: conftest.create_job should NOT use 'view_id' as JSON key. "
         "It should use 'trainer_id' or 'preset_id'. "

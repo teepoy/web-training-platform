@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from omegaconf import DictConfig
 
+from app.core.config import AppConfig
 from app.shared.api.schemas import (
     DashboardResponse,
     JobQueueStats,
@@ -11,14 +11,11 @@ from app.shared.api.schemas import (
     WorkPoolStatus,
 )
 from app.shared.api.schemas import Organization, User
-from app.modules.dashboard.app.services.service_health import (
-    ServiceHealthService,
-)
+from app.modules.dashboard.port.local import ServiceHealthPort
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
 )
-from app.shared.db.sql_repository import SqlRepository
 from app.modules.dashboard.port.http.deps import (
     get_config,
     get_prefect_client,
@@ -26,6 +23,7 @@ from app.modules.dashboard.port.http.deps import (
     get_service_health,
 )
 from app.shared.domain.protocols import PrefectClient
+from app.modules.jobs.task_tracker.port.task_tracker_port import TaskTrackerPort
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
@@ -38,9 +36,9 @@ router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 async def get_dashboard(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-    repo: SqlRepository = Depends(get_repository),
-    cfg: DictConfig = Depends(get_config),
-    service_health: ServiceHealthService = Depends(get_service_health),
+    repo: TaskTrackerPort = Depends(get_repository),
+    cfg: AppConfig = Depends(get_config),
+    service_health: ServiceHealthPort = Depends(get_service_health),
     prefect_client: PrefectClient = Depends(get_prefect_client),
 ) -> DashboardResponse:
     all_jobs = await repo.list_jobs(org_id=org.id)

@@ -8,7 +8,7 @@ from app.shared.api.schemas import Sample
 from app.modules.datasets.classification.models import ClassificationSample
 from app.modules.datasets.detection.models import BoxV1, DetectionSample
 from app.modules.datasets.vqa.models import VQASample
-from app.modules.datasets.port.http.schemas import ImageInputV1Row
+from app.modules.datasets.views.image_input.v1.schemas import ImageInputV1Row
 from app.modules.datasets.views.labeled_image.v1.schemas import LabeledImageV1Row
 from app.modules.datasets.views.box_detection.v1.schemas import (
     BoxDetectionV1Row,
@@ -22,6 +22,7 @@ from app.modules.datasets.domain.sample_row import (
     SampleRow,
     SampleRowImageRef,
 )
+from app.modules.datasets.domain.view_projection import ViewProjectionContext
 from app.modules.sc.views.patch_image.v1.schemas import ScImageRef, ScPatchImageV1Row
 from app.modules.sc.views.review_image.v1.schemas import ScReviewImageV1Row
 
@@ -391,7 +392,10 @@ def dict_to_sample_row(data: dict) -> SampleRow:
                     content_type=str(img.get("content_type", "")),
                     filename=str(img.get("filename", "")),
                     bytes_=img.get("bytes"),
-                    access_url=f"/api/v1/samples/{sample_id}/images/{img_id}",
+                    access_url=(
+                        f"/api/v1/datasets/{dataset_id}/samples/"
+                        f"{sample_id}/images/{img_id}"
+                    ),
                 )
             )
 
@@ -430,44 +434,81 @@ def dict_to_sample_row(data: dict) -> SampleRow:
     [SampleRow, "sample_row"],
     [LabeledImageV1Row, "labeled_image_v1"],
 )
-def sample_row_to_labeled_image_v1(row: SampleRow, **kwargs: Any) -> LabeledImageV1Row:
-    ds_id = kwargs.pop("dataset_id", row.dataset_id)
-    sample = _sample_row_to_sample(row, dataset_id=ds_id)
-    fn = mapper.get_mapper(Sample, LabeledImageV1Row)
-    return fn(sample)
+def sample_row_to_labeled_image_v1(
+    row: SampleRow, *, context: ViewProjectionContext
+) -> LabeledImageV1Row:
+    del context
+    return LabeledImageV1Row(
+        sample_id=row.sample_id,
+        image_uris=list(row.image_uris),
+        label=row.latest_label or row.label or "",
+    )
 
 
 @mapper.register(
     [SampleRow, "sample_row"],
     [ImageInputV1Row, "image_input_v1"],
 )
-def sample_row_to_image_input_v1(row: SampleRow, **kwargs: Any) -> ImageInputV1Row:
-    ds_id = kwargs.pop("dataset_id", row.dataset_id)
-    sample = _sample_row_to_sample(row, dataset_id=ds_id)
-    fn = mapper.get_mapper(Sample, ImageInputV1Row)
-    return fn(sample)
+def sample_row_to_image_input_v1(
+    row: SampleRow, *, context: ViewProjectionContext
+) -> ImageInputV1Row:
+    del context
+    return ImageInputV1Row(
+        sample_id=row.sample_id,
+        image_uris=list(row.image_uris),
+    )
 
 
 @mapper.register(
     [SampleRow, "sample_row"],
     [BoxDetectionV1Row, "box_detection_v1"],
 )
-def sample_row_to_box_detection_v1(row: SampleRow, **kwargs: Any) -> BoxDetectionV1Row:
-    ds_id = kwargs.pop("dataset_id", row.dataset_id)
-    sample = _sample_row_to_sample(row, dataset_id=ds_id)
-    fn = mapper.get_mapper(Sample, BoxDetectionV1Row)
-    return fn(sample)
+def sample_row_to_box_detection_v1(
+    row: SampleRow, *, context: ViewProjectionContext
+) -> BoxDetectionV1Row:
+    del context
+    boxes_raw = row.annotation_value if isinstance(row.annotation_value, list) else []
+    boxes = [
+        BoxV1Row(
+            label=str(box.get("label", "")),
+            x=float(box.get("x", 0)),
+            y=float(box.get("y", 0)),
+            width=float(box.get("width", 0)),
+            height=float(box.get("height", 0)),
+        )
+        for box in boxes_raw
+        if isinstance(box, dict)
+    ]
+    return BoxDetectionV1Row(
+        sample_id=row.sample_id,
+        image_uris=list(row.image_uris),
+        boxes=boxes,
+        width=(
+            int(row.metadata["width"])
+            if row.metadata.get("width") is not None
+            else None
+        ),
+        height=(
+            int(row.metadata["height"])
+            if row.metadata.get("height") is not None
+            else None
+        ),
+    )
 
 
 @mapper.register(
     [SampleRow, "sample_row"],
     [QAInputV1Row, "qa_input_v1"],
 )
-def sample_row_to_qa_input_v1(row: SampleRow, **kwargs: Any) -> QAInputV1Row:
-    ds_id = kwargs.pop("dataset_id", row.dataset_id)
-    sample = _sample_row_to_sample(row, dataset_id=ds_id)
-    fn = mapper.get_mapper(Sample, QAInputV1Row)
-    return fn(sample)
+def sample_row_to_qa_input_v1(
+    row: SampleRow, *, context: ViewProjectionContext
+) -> QAInputV1Row:
+    del context
+    return QAInputV1Row(
+        sample_id=row.sample_id,
+        image_uris=list(row.image_uris),
+        question=str(row.metadata.get("question", "")),
+    )
 
 
 # --- SC view types (direct mapping: SampleRow → view row, no intermediate types) ---
@@ -483,13 +524,15 @@ def _embedded_bytes_to_sc_image_refs(
 
     refs: list[ScImageRef] = []
     sid_q = quote(row.sample_id, safe="")
-    ds_q = quote(dataset_id, safe="") if dataset_id else ""
-    ds_param = f"?dataset_id={ds_q}" if ds_q else ""
+    ds_q = quote(dataset_id or row.dataset_id, safe="")
 
     if row.images:
         for img in row.images:
             iid_q = quote(img.image_id, safe="")
-            url = img.access_url or f"/api/v1/samples/{sid_q}/images/{iid_q}{ds_param}"
+            url = (
+                img.access_url
+                or f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}"
+            )
             refs.append(
                 ScImageRef(
                     role=img.role or img.image_id,
@@ -513,7 +556,7 @@ def _embedded_bytes_to_sc_image_refs(
                     image_id=key,
                     image_type="",
                     content_type="",
-                    url=f"/api/v1/samples/{sid_q}/images/{iid_q}{ds_param}",
+                    url=f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}",
                     bytes=val,
                 )
             )
@@ -551,10 +594,9 @@ def _sample_row_meta_to_sc_fields(
     [SampleRow, "sample_row"],
     [ScPatchImageV1Row, ScPatchImageV1Row.view_id],
 )
-def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchImageV1Row:
-    ds_id = kwargs.pop("dataset_id", row.dataset_id)
-    die_x = kwargs.pop("die_x", 0)
-    die_y = kwargs.pop("die_y", 0)
+def sample_row_to_sc_patch_image_v1(
+    row: SampleRow, *, context: ViewProjectionContext
+) -> ScPatchImageV1Row:
     label = row.latest_label or row.label or ""
     pred = row.latest_prediction or {}
     predicted_label = str(pred.get("predicted_label") or "")
@@ -562,14 +604,14 @@ def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchIma
     if confidence is not None:
         confidence = float(confidence)
     sc_fields = _sample_row_meta_to_sc_fields(row)
-    images = _embedded_bytes_to_sc_image_refs(row, dataset_id=ds_id)
+    images = _embedded_bytes_to_sc_image_refs(row, dataset_id=context.dataset_id)
     review_images: list[dict[str, Any]] = [
         {"image_id": r.image_id} for r in images if r.role == "review"
     ]
     return ScPatchImageV1Row(
         sample_id=row.sample_id,
-        die_x=die_x,
-        die_y=die_y,
+        die_x=0,
+        die_y=0,
         images=images,
         review_images=review_images,
         label=label,
@@ -584,7 +626,7 @@ def sample_row_to_sc_patch_image_v1(row: SampleRow, **kwargs: Any) -> ScPatchIma
     [ScReviewImageV1Row, ScReviewImageV1Row.view_id],
 )
 def sample_row_to_sc_review_image_v1(
-    row: SampleRow, **kwargs: Any
+    row: SampleRow, *, context: ViewProjectionContext
 ) -> ScReviewImageV1Row:
     meta: dict[str, Any] = row.metadata if isinstance(row.metadata, dict) else {}
     sc_fields = _sample_row_meta_to_sc_fields(row)

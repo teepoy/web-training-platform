@@ -10,6 +10,7 @@ from app.core.config import load_config
 from app.shared.api.schemas import UserResponse
 from app.shared.db.registry import OrgMembershipORM, OrganizationORM, UserORM
 from app.shared.api.schemas import User
+from app.modules.auth.domain.repository import AuthRepository
 from app.modules.auth.port.http.deps import (
     get_current_user,
     require_superadmin,
@@ -46,13 +47,12 @@ from app.modules.auth.app.services.oauth import (
     get_oauth_provider_config,
     register_oauth_user,
 )
-from app.shared.db.sql_repository import SqlRepository
 from app.modules.auth.port.http.deps import get_repository
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
-Repo = Annotated[SqlRepository, Depends(get_repository)]
+Repo = Annotated[AuthRepository, Depends(get_repository)]
 
 
 @router.post("/auth/register", response_model=UserResponse, status_code=201)

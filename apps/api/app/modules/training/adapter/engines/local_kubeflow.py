@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import traceback
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -101,13 +102,14 @@ class LocalProcessEngine:
             )
         except Exception as exc:
             run["error"] = str(exc)
+            run["traceback"] = traceback.format_exc()
             run["state"] = "FAILED"
             run["events"].append(
                 TrainingEvent(
                     job_id=job.id,
                     ts=datetime.now(UTC),
                     message=f"training failed: {exc}",
-                    payload={"status": "failed"},
+                    payload={"status": "failed", "traceback": run["traceback"]},
                 )
             )
 
@@ -250,13 +252,14 @@ class KubeflowTrainingOperatorEngine:
             )
         except Exception as exc:
             run["error"] = str(exc)
+            run["traceback"] = traceback.format_exc()
             run["state"] = "FAILED"
             run["events"].append(
                 TrainingEvent(
                     job_id=job.id,
                     ts=datetime.now(UTC),
                     message=f"training failed: {exc}",
-                    payload={"status": "failed"},
+                    payload={"status": "failed", "traceback": run["traceback"]},
                 )
             )
 

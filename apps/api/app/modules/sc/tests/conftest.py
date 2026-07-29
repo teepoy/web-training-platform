@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import polars as pl
 import pytest
 
-from app.modules.sc.adapter import ScDatasetStore
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 
 
@@ -184,11 +183,6 @@ def mock_wafer_db_reader() -> ScUpstreamReader:
     mock_reader.list_review_images = AsyncMock(return_value=_review_images_df.lazy())
 
     return mock_reader
-
-
-@pytest.fixture
-def sc_store() -> ScDatasetStore:
-    return ScDatasetStore()
 
 
 @pytest.fixture

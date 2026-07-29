@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class ScInspectionSummaryItem(BaseModel):
@@ -129,17 +129,9 @@ class ScImportRequest(BaseModel):
     source_inspection_time: str
     source_wafer_key: int
     dataset_name: str = Field(..., min_length=1)
-    storage_mode: str = "file_shard_sparse"
-    filters: dict | None = None
-    label_space: list[str] = []
+    storage_mode: Literal["file_shard_sparse"] = "file_shard_sparse"
+    label_space: list[str] = Field(default_factory=list)
     max_rows: int | None = None
-
-    @field_validator("storage_mode")
-    @classmethod
-    def validate_storage_mode(cls, v: str) -> str:
-        if v != "file_shard_sparse":
-            raise ValueError(f"storage_mode must be file_shard_sparse, got: {v}")
-        return v
 
 
 class ScImportResponse(BaseModel):
@@ -151,7 +143,7 @@ class ScImportResponse(BaseModel):
 
 class ScAnnotationItem(BaseModel):
     defect_id: str
-    label: str
+    label: int | str
     annotator: str = "platform-user"
 
 
@@ -172,8 +164,8 @@ class ScFilterParams(BaseModel):
 
     class_numbers: list[int] | None = None
     rough_bins: list[int] | None = None
-    predictions: list[str] | None = None
-    annotations: list[str] | None = None
+    predictions: list[int | str] | None = None
+    annotations: list[int | str] | None = None
     test_ids: list[int] | None = None
     adders: list[int] | None = None
     cluster_ids: list[int] | None = None

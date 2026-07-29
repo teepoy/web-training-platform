@@ -177,21 +177,56 @@ class GrpcScUpstream:
         )
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
-        if "die_x" not in df.columns:
-            assert "die_size_x" in df.columns, (
-                "die_size_x column is required to compute die_x"
+        if df.height == 0 and not df.columns:
+            df = pl.DataFrame(
+                {
+                    "defect_id": pl.Series([], dtype=pl.Int64),
+                    "wafer_x": pl.Series([], dtype=pl.Int64),
+                    "wafer_y": pl.Series([], dtype=pl.Int64),
+                    "origin_x": pl.Series([], dtype=pl.Int64),
+                    "origin_y": pl.Series([], dtype=pl.Int64),
+                    "die_size_x": pl.Series([], dtype=pl.Int64),
+                    "die_size_y": pl.Series([], dtype=pl.Int64),
+                }
             )
-            die_size_x: int = int(df["die_size_x"].max())  # type: ignore[index]
-            die_size_y: int = int(df["die_size_y"].max())  # type: ignore[index]
-            origin_x: int = int(df["origin_x"].max())  # type: ignore[index]
-            origin_y: int = int(df["origin_y"].max())  # type: ignore[index]
-            if die_size_x > 0:
-                df = df.with_columns(
-                    [
-                        ((pl.col("wafer_x") - origin_x) % die_size_x).alias("die_x"),
-                        ((pl.col("wafer_y") - origin_y) % die_size_y).alias("die_y"),
-                    ]
-                )
+        elif "defect_id" not in df.columns:
+            df = (
+                df.with_row_index("_row_index")
+                .with_columns(pl.col("_row_index").cast(pl.Int64).alias("defect_id"))
+                .drop("_row_index")
+            )
+
+        geometry_exprs: list[pl.Expr] = []
+        for column, default in (
+            ("wafer_x", 0),
+            ("wafer_y", 0),
+            ("origin_x", 0),
+            ("origin_y", 0),
+            ("die_size_x", 1),
+            ("die_size_y", 1),
+        ):
+            if column not in df.columns:
+                geometry_exprs.append(pl.lit(default).cast(pl.Int64).alias(column))
+        if geometry_exprs:
+            df = df.with_columns(geometry_exprs)
+        df = df.with_columns(
+            [
+                pl.col("die_size_x").fill_null(1).clip(lower_bound=1),
+                pl.col("die_size_y").fill_null(1).clip(lower_bound=1),
+            ]
+        )
+
+        if "die_x" not in df.columns or "die_y" not in df.columns:
+            df = df.with_columns(
+                [
+                    (
+                        (pl.col("wafer_x") - pl.col("origin_x")) % pl.col("die_size_x")
+                    ).alias("die_x"),
+                    (
+                        (pl.col("wafer_y") - pl.col("origin_y")) % pl.col("die_size_y")
+                    ).alias("die_y"),
+                ]
+            )
 
         lf = df.lazy()
         lf = lf.with_columns(
@@ -241,7 +276,15 @@ class GrpcScUpstream:
             }
             for img in resp.images
         ]
-        return pl.DataFrame(rows).lazy()
+        return pl.DataFrame(
+            rows,
+            schema={
+                "defect_id": pl.Int64,
+                "image_id": pl.Int64,
+                "image_type": pl.Utf8,
+                "image_filespec": pl.Utf8,
+            },
+        ).lazy()
 
     async def close(self) -> None:
         if self._channel is not None:

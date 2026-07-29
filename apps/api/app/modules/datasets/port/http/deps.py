@@ -3,17 +3,16 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, Request
-from omegaconf import DictConfig
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.modules.datasets.app.services.dataset_capability_guard import (
-    assert_not_sparse,
+from app.core.config import AppConfig
+from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.datasets.domain.repository import (
+    ArtifactLookupRepository,
+    DatasetRepository,
 )
-from platform_runtime.sparse import DatasetPayloadStore
-from app.modules.datasets.app.services.dataset_service import DatasetService
-
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
-from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.datasets.port.local import IDatasetService, SampleSimilarityPort
+from app.shared.context import SharedInfra
+from app.shared.db.session import AppDatabaseSessionFactory
 from app.shared.domain.protocols import (
     ArtifactStorage,
     LabelStudioClient,
@@ -21,59 +20,59 @@ from app.shared.domain.protocols import (
 from app.shared.infrastructure.redis.event_publisher import (
     RedisEventPublisher,
 )
+from app.shared.injection import resolve
+from app.modules.storage.domain.sparse import DatasetPayloadStore
 
 
 def get_repository(request: Request) -> DatasetRepository:
-    return request.app.state.app_context.datasets.dataset_repository
+    return resolve(request, DatasetRepository)
 
 
-def get_dataset_storage_factory(request: Request) -> DatasetStorageFactory:
-    return request.app.state.app_context.datasets.dataset_storage_factory
+def get_artifact_lookup_repository(request: Request) -> ArtifactLookupRepository:
+    return resolve(request, ArtifactLookupRepository)
+
+
+def get_dataset_storage_factory(request: Request) -> DatasetStorageFactoryPort:
+    return resolve(request, DatasetStorageFactoryPort)
 
 
 def get_label_studio_client(request: Request) -> LabelStudioClient:
-    return request.app.state.app_context.shared.label_studio_client
+    return resolve(request, LabelStudioClient)
 
 
 def get_artifact_storage(request: Request) -> ArtifactStorage:
-    return request.app.state.app_context.shared.artifact_storage
+    return resolve(request, ArtifactStorage)
 
 
 def get_dataset_payload_store(request: Request) -> DatasetPayloadStore:
-    return request.app.state.app_context.datasets.dataset_payload_store
+    return resolve(request, DatasetPayloadStore)
 
 
-def get_config(request: Request) -> DictConfig:
-    return request.app.state.app_context.shared.config
+def get_config(request: Request) -> AppConfig:
+    return resolve(request, AppConfig)
 
 
-def get_dataset_service(
-    repository: Annotated[DatasetRepository, Depends(get_repository)],
-    storage_factory: Annotated[
-        DatasetStorageFactory, Depends(get_dataset_storage_factory)
-    ],
-    ls_client: Annotated[LabelStudioClient, Depends(get_label_studio_client)],
-    storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
-    payload_store: Annotated[DatasetPayloadStore, Depends(get_dataset_payload_store)],
-    config: Annotated[DictConfig, Depends(get_config)],
-) -> DatasetService:
-    return DatasetService(
-        repository=repository,
-        storage_factory=storage_factory,
-        ls_client=ls_client,
-        storage=storage,
-        payload_store=payload_store,
-        capability_guard=assert_not_sparse,
-        config=config,
-    )
+def get_dataset_service(request: Request) -> IDatasetService:
+    return resolve(request, IDatasetService)
 
 
-DatasetServiceDep = Annotated[DatasetService, Depends(get_dataset_service)]
+def get_sample_similarity(request: Request) -> SampleSimilarityPort:
+    return resolve(request, SampleSimilarityPort)
+
+
+DatasetServiceDep = Annotated[IDatasetService, Depends(get_dataset_service)]
 LabelStudioClientDep = Annotated[LabelStudioClient, Depends(get_label_studio_client)]
+SampleSimilarityDep = Annotated[SampleSimilarityPort, Depends(get_sample_similarity)]
+ArtifactLookupRepositoryDep = Annotated[
+    ArtifactLookupRepository, Depends(get_artifact_lookup_repository)
+]
 
 
 def get_redis_event_publisher(request: Request) -> RedisEventPublisher:
-    return request.app.state.app_context.shared.redis_event_publisher
+    publisher = resolve(request, SharedInfra).redis_event_publisher
+    if not isinstance(publisher, RedisEventPublisher):
+        raise RuntimeError("Redis event publisher is not initialized")
+    return publisher
 
 
 RedisEventPublisherDep = Annotated[
@@ -81,8 +80,8 @@ RedisEventPublisherDep = Annotated[
 ]
 
 
-def get_session_factory(request: Request) -> async_sessionmaker:
-    return request.app.state.app_context.shared.session_factory
+def get_session_factory(request: Request) -> AppDatabaseSessionFactory:
+    return resolve(request, AppDatabaseSessionFactory)
 
 
-SessionFactoryDep = Annotated[async_sessionmaker, Depends(get_session_factory)]
+SessionFactoryDep = Annotated[AppDatabaseSessionFactory, Depends(get_session_factory)]

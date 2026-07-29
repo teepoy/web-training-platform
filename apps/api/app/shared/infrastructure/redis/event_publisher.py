@@ -13,6 +13,8 @@ class _RedisPubSubClient(Protocol):
 
     async def publish(self, channel: str, message: str) -> int: ...
 
+    async def aclose(self) -> None: ...
+
 
 ANNOTATION_CHANNEL = "finetune:events:annotation"
 PREDICTION_CHANNEL = "finetune:events:prediction"
@@ -28,6 +30,11 @@ PREDICTION_REFRESH = "prediction.refresh"
 class RedisEventPublisher:
     def __init__(self, redis_client: _RedisPubSubClient | None) -> None:
         self._redis = redis_client
+
+    async def close(self) -> None:
+        if self._redis is not None:
+            await self._redis.aclose()
+            self._redis = None
 
     async def _publish(
         self, channel: str, event_type: str, data: dict[str, Any]

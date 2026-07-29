@@ -4,6 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetPredictionsAnyOfItem } from './getScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetPredictionsAnyOfItem';
+import type { GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetAnnotationsAnyOfItem } from './getScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetAnnotationsAnyOfItem';
 
 export type GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetParams = {
 sampled?: boolean;
@@ -14,8 +16,8 @@ reticleXDieShift?: number;
 reticleYDieShift?: number;
 class_numbers?: number[] | null;
 rough_bins?: number[] | null;
-predictions?: string[] | null;
-annotations?: string[] | null;
+predictions?: GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetPredictionsAnyOfItem[] | null;
+annotations?: GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetAnnotationsAnyOfItem[] | null;
 test_ids?: number[] | null;
 adders?: number[] | null;
 cluster_ids?: number[] | null;

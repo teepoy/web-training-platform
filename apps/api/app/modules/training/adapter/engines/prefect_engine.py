@@ -1,9 +1,8 @@
 """PrefectWorkPoolEngine — TrainingExecutionEngine backed by Prefect deployments.
 
 This module implements the :class:`~app.shared.infrastructure.storage.base.TrainingExecutionEngine`
-Protocol using Prefect deployments. Flow runs are submitted via a pre-registered
-deployment (``train-job-deployment``) which the embedded Prefect runner serves
-inside the API process.
+Protocol using Prefect deployments. Flow runs are submitted through the
+config-backed runtime routing descriptor.
 
 Design notes
 ------------
@@ -23,6 +22,7 @@ from datetime import UTC, datetime
 
 from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
+from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.shared.domain.protocols import PrefectClient
 
 # ---------------------------------------------------------------------------
@@ -56,8 +56,6 @@ class PrefectWorkPoolEngine:
         Work pool type (kept for compatibility, not used).
     flow_name:
         Name of the Prefect flow (kept for compatibility, not used).
-    deployment_name:
-        Name of the deployment to submit runs to (default: ``train-job-deployment``).
     concurrency_limit:
         Maximum concurrent flow runs (kept for compatibility, not used).
     """
@@ -68,20 +66,16 @@ class PrefectWorkPoolEngine:
         work_pool_name: str,
         work_pool_type: str,
         flow_name: str,
-        deployment_name: str = "train-job-deployment",
+        runtime_router: RuntimeRoutingPort,
         concurrency_limit: int = 1,
     ) -> None:
         self._client = prefect_client
         self._pool_name = work_pool_name
         self._pool_type = work_pool_type
         self._flow_name = flow_name
-        self._default_deployment_name = deployment_name
+        self._runtime_router = runtime_router
         self._concurrency_limit = concurrency_limit
         self._deployment_ids: dict[str, str] = {}
-        self._queue_to_deployment: dict[str, str] = {
-            "train-gpu": "train-job-torch-deployment",
-            "optimize-llm-cpu": "train-job-dspy-deployment",
-        }
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -106,7 +100,8 @@ class PrefectWorkPoolEngine:
         return self._deployment_ids[deployment_name]
 
     def _resolve_deployment_name(self, job: TrainingJob) -> str:
-        return self._default_deployment_name
+        route = self._runtime_router.training_route(job.trainer_id)
+        return route.deployment
 
     # ------------------------------------------------------------------
     # TrainingExecutionEngine Protocol implementation
@@ -126,6 +121,7 @@ class PrefectWorkPoolEngine:
             The Prefect flow-run UUID (used as ``external_job_id``).
         """
         deployment_name = self._resolve_deployment_name(job)
+        route = self._runtime_router.training_route(job.trainer_id)
         deployment_id = await self._ensure_deployment(deployment_name)
 
         run = await self._client.create_flow_run_from_deployment(
@@ -135,6 +131,7 @@ class PrefectWorkPoolEngine:
                 "dataset_id": job.dataset_id,
                 "trainer_id": job.trainer_id,
                 "created_by": job.created_by,
+                **route.to_parameters(),
             },
             idempotency_key=job.id,
         )

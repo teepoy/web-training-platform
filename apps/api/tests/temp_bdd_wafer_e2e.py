@@ -492,7 +492,8 @@ class TestAnnotationAndS3:
             # db_full mode: annotations are in the database, verify via API
             for ann in annotated:
                 r = httpx.get(
-                    f"{api_url}/api/v1/samples/{ann['sample_id']}/annotations",
+                    f"{api_url}/api/v1/datasets/{wafer_demo_dataset_id}/"
+                    f"samples/{ann['sample_id']}/annotations",
                     headers=api_headers,
                 )
                 assert r.status_code == 200, (
@@ -577,9 +578,9 @@ class TestAnnotationAndS3:
         """
         for ann in annotated:
             r = httpx.get(
-                f"{api_url}/api/v1/samples/{ann['defect_id']}/annotations",
+                f"{api_url}/api/v1/datasets/{wafer_demo_dataset_id}/"
+                f"samples/{ann['defect_id']}/annotations",
                 headers=api_headers,
-                params={"dataset_id": wafer_demo_dataset_id},
             )
             assert r.status_code == 200, (
                 f"API annotation retrieval failed for defect {ann['defect_id']}: "
@@ -737,7 +738,7 @@ class TestTraining:
             params={"dataset_id": wafer_demo_dataset_id},
         )
         r.raise_for_status()
-        models = r.json() if isinstance(r.json(), list) else []
+        models = r.json().get("items", [])
 
         found = any(str(m.get("job_id", "")) == job_id for m in models)
         assert found, (
@@ -819,7 +820,7 @@ class TestPrediction:
             params={"dataset_id": wafer_demo_dataset_id},
         )
         r.raise_for_status()
-        models = r.json() if isinstance(r.json(), list) else []
+        models = r.json().get("items", [])
         for m in models:
             if str(m.get("job_id", "")) == job_id:
                 return m["id"]
@@ -1034,9 +1035,9 @@ class TestAnnotationRetrieval:
         """Each sample's annotations are retrievable by defect_id via API."""
         for ann in simple_annotations:
             r = httpx.get(
-                f"{api_url}/api/v1/samples/{ann['defect_id']}/annotations",
+                f"{api_url}/api/v1/datasets/{wafer_demo_dataset_id}/"
+                f"samples/{ann['defect_id']}/annotations",
                 headers=api_headers,
-                params={"dataset_id": wafer_demo_dataset_id},
             )
             assert r.status_code == 200, (
                 f"Retrieve failed for defect {ann['defect_id']}: {r.status_code}"
@@ -1058,9 +1059,9 @@ class TestAnnotationRetrieval:
         """Annotation API responses contain required fields."""
         ann = simple_annotations[0]
         r = httpx.get(
-            f"{api_url}/api/v1/samples/{ann['defect_id']}/annotations",
+            f"{api_url}/api/v1/datasets/{wafer_demo_dataset_id}/"
+            f"samples/{ann['defect_id']}/annotations",
             headers=api_headers,
-            params={"dataset_id": wafer_demo_dataset_id},
         )
         assert r.status_code == 200, f"Retrieve failed: {r.status_code}"
         api_annotations = r.json()
@@ -1180,7 +1181,7 @@ def test_bdd_full_pipeline_snapshot(
     r = httpx.get(f"{api_url}/api/v1/models", headers=api_headers,
                   params={"dataset_id": wafer_demo_dataset_id})
     r.raise_for_status()
-    models = r.json() if isinstance(r.json(), list) else []
+    models = r.json().get("items", [])
     model_id = None
     for m in models:
         if str(m.get("job_id", "")) == train_job_id:

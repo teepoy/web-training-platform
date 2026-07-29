@@ -21,6 +21,7 @@ The core component handles high-performance rendering and common interaction pat
   - `bar-left` / `bar-right`: Floating bottom bar content for surface-specific actions.
 
 ### Component Props
+
 | Prop               | Type                 | Default  | Role                                   |
 | ------------------ | -------------------- | -------- | -------------------------------------- |
 | `items`            | `BrowserItem[]`      | `[]`     | The flattened list of items to render  |
@@ -49,13 +50,14 @@ The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a colla
 `BrowserSidebar` also provides `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY` as a fallback, but pages using the page-level provider model (see below) can pass `:context` and `:interaction` props to share the same reactive state across both in-sidebar and out-of-sidebar widgets.
 
 ### Panel Presets (`sidebarConfig.ts`)
+
 | Preset          | Surface  | Purpose                  | Included Widgets                                       |
 | --------------- | -------- | ------------------------ | ------------------------------------------------------ |
 | `defaultPanels` | Classify | Full annotation workflow | progress, **wafer-map**, viewer, distribution, summary |
 | `datasetPanels` | Dataset  | Read-only exploration    | distribution, **wafer-map**, summary                   |
 | `previewPanels` | Preview  | Remote data inspection   | distribution, **wafer-map**, summary                   |
 
-*Note: All surfaces use `wafer-map` for spatial metadata visualization (wafer_x, wafer_y). Classify and Dataset surfaces resolve points via the dataset-level `queryWaferPoints` API, while Preview resolves points from session-loaded item metadata.*
+_Note: All surfaces use `wafer-map` for spatial metadata visualization (wafer_x, wafer_y). Classify and Dataset surfaces resolve points via the dataset-level `queryWaferPoints` API, while Preview resolves points from session-loaded item metadata._
 
 ## Panel Host — Decoupled Panel Rendering
 
@@ -64,6 +66,7 @@ The shared `BrowserSidebar.vue` component in `@platform/web-ui` provides a colla
 When provided with `context` and `interaction` props, `PanelHost` injects `BROWSER_DASHBOARD_KEY` and `SIDEBAR_WIDGET_INTERACTION_KEY` so widgets resolve the same reactive context regardless of whether they sit inside or outside a `BrowserSidebar`.
 
 `BrowserSidebar` now delegates to `PanelHost` internally:
+
 - **Before**: `BrowserSidebar` rendered panels inline with its own provide() calls
 - **After**: `BrowserSidebar` delegates to `<PanelHost :panels="panels" :componentResolver="..." :context="context" :interaction="interactionContext" />`
 
@@ -104,6 +107,7 @@ For pages built around templates rather than `<script setup>`, `<PageProvider>` 
 **Location**: `libs/web-ui/src/composables/useWaferHelpers.ts`
 
 Shared wafer coordinate utilities extracted from per-surface duplication. Exports:
+
 - `metadataNumber(metadata, key)` — safe numeric extraction from metadata records
 - `metadataString(metadata, key)` — safe string extraction from metadata records
 - `normalizeWaferPoint(point)` — validates and normalizes a `WaferPoint` (identical logic previously duplicated in ClassifyView and DatasetDetailView)
@@ -148,24 +152,25 @@ Wafer coordinates (`metadata.wafer_x`, `metadata.wafer_y`) are stored and render
 ## Local Filtering (`useBrowserFilter`)
 
 The `useBrowserFilter` composable provides a pure computed pipeline for filtering loaded items without extra network requests:
+
 1. **Label Filter**: Filters by `activeLabelFilter` matching `currentLabel` or `draftLabel`.
 2. **Collection Filter**: Filters by specific ID sets (e.g., "Show Selected Only").
 
 ## Key Files
 
-| File                                               | Role                                |
-| -------------------------------------------------- | ----------------------------------- |
-| `libs/web-ui/src/components/sample-browser/SampleBrowser.vue` | Shared virtualized browser core     |
-| `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Neutral sidebar shell (delegates to PanelHost) |
-| `libs/web-ui/src/components/panel-host/PanelHost.vue` | Standalone panel renderer — usable anywhere |
-| `libs/web-ui/src/composables/usePagePanels.ts`     | Page-level provider for dashboard + interaction keys |
-| `libs/web-ui/src/components/page-provider/PageProvider.vue` | Template-friendly wrapper for usePagePanels |
-| `libs/web-ui/src/composables/useWaferHelpers.ts`   | Shared wafer coordinate utilities |
-| `libs/web-ui/src/components/<name>/`              | Widget .vue components (12 widgets, moved from plugins/) |
-| `libs/web-ui/src/plugins/sidebar-<name>/index.ts`  | Thin widget descriptor wrappers (12 widgets, .vue moved out) |
-| `apps/web/src/stores/sampleBrowser.ts`             | Presentation preference persistence |
-| `apps/web/src/composables/useBrowserFilter.ts`     | Browser-scope filtering logic       |
-| `apps/web/src/components/classify/sidebarConfig.ts` | Panel registry and surface presets  |
+| File                                                            | Role                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------ |
+| `libs/web-ui/src/components/sample-browser/SampleBrowser.vue`   | Shared virtualized browser core                              |
+| `libs/web-ui/src/components/browser-sidebar/BrowserSidebar.vue` | Neutral sidebar shell (delegates to PanelHost)               |
+| `libs/web-ui/src/components/panel-host/PanelHost.vue`           | Standalone panel renderer — usable anywhere                  |
+| `libs/web-ui/src/composables/usePagePanels.ts`                  | Page-level provider for dashboard + interaction keys         |
+| `libs/web-ui/src/components/page-provider/PageProvider.vue`     | Template-friendly wrapper for usePagePanels                  |
+| `libs/web-ui/src/composables/useWaferHelpers.ts`                | Shared wafer coordinate utilities                            |
+| `libs/web-ui/src/components/<name>/`                            | Widget .vue components (12 widgets, moved from plugins/)     |
+| `libs/web-ui/src/plugins/sidebar-<name>/index.ts`               | Thin widget descriptor wrappers (12 widgets, .vue moved out) |
+| `apps/web/src/stores/sampleBrowser.ts`                          | Presentation preference persistence                          |
+| `apps/web/src/composables/useBrowserFilter.ts`                  | Browser-scope filtering logic                                |
+| `apps/web/src/components/classify/sidebarConfig.ts`             | Panel registry and surface presets                           |
 
 ### Taxonomy note
 
@@ -174,19 +179,24 @@ Widget implementation (.vue) files now live in `libs/web-ui/src/components/<name
 ## Testing
 
 ### Widget & Composable Tests
+
 Unit tests for core logic (no DOM) using Vitest:
+
 ```bash
 cd apps/web
 pnpm run test:widgets
 ```
 
 ### E2E Integration Tests
+
 Full browser flow verification using Playwright:
+
 ```bash
 cd apps/web
 pnpm run test:e2e
 ```
-*Note: E2E tests target `[data-sb-item]` and `[data-sb-id]` attributes for stable element selection.*
+
+_Note: E2E tests target `[data-sb-item]` and `[data-sb-id]` attributes for stable element selection._
 
 ## BlinkTable
 
@@ -196,7 +206,7 @@ Resolved means browser-ready and authenticated. The component does not know abou
 
 - Generic dataset samples use `resolveImageUri()` / `resolveImageUris()` in `apps/web/src/shared/utils/image-adapters.ts`.
 - SC patch/review images use `scPatchUrl()`, `scReviewUrl()`, or `buildScBlinkImageUrls()` in `apps/web/src/features/sc/domain/models.ts`.
-- Imported sparse dataset image refs should point at `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` and include auth query parameters. Do not fall back from dataset-owned image refs to upstream inspection-time URLs inside shared browser components.
+- Imported sparse dataset image refs should point at `/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}` and include auth query parameters. Do not fall back from dataset-owned image refs to upstream inspection-time URLs inside shared browser components.
 
 **Key types** (from `libs/web-ui/src/types/blink-table.ts`): `BlinkRow` (`id`, `imageA`, `imageB`, `metadata`, `cells`), `BlinkColumnDef` (`key`, `title`, optional `width`), `BlinkTableProps` (`rows`, `columns`, optional `blinkIntervalMs` / `initialBlinkEnabled`).
 

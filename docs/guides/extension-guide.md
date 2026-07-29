@@ -46,10 +46,10 @@ sidebarConfig.ts                ← per-surface panel presets
 
 The sidebar is data-agnostic. It receives from the owning view:
 
-| Prop | Type | Purpose |
-|------|------|---------|
-| `panels` | `SidebarPanelDescriptor[]` | Ordered list of which widgets to show and with what props |
-| `context` | `Record<string, unknown>` | Injected under `BROWSER_DASHBOARD_KEY` for all widgets |
+| Prop          | Type                              | Purpose                                                                       |
+| ------------- | --------------------------------- | ----------------------------------------------------------------------------- |
+| `panels`      | `SidebarPanelDescriptor[]`        | Ordered list of which widgets to show and with what props                     |
+| `context`     | `Record<string, unknown>`         | Injected under `BROWSER_DASHBOARD_KEY` for all widgets                        |
 | `interaction` | `SidebarWidgetInteractionContext` | Interaction state + dispatch; injected under `SIDEBAR_WIDGET_INTERACTION_KEY` |
 
 ### Widgets are not sidebar-only
@@ -70,16 +70,19 @@ Reusable first-party widgets go in `libs/web-ui/src/components/<name>/<Name>Widg
 
 ```vue
 <script setup lang="ts">
-import { inject } from 'vue'
-import { BROWSER_DASHBOARD_KEY } from '@platform/widget-sdk'
+import { inject } from "vue";
+import { BROWSER_DASHBOARD_KEY } from "@platform/widget-sdk";
 
-const props = withDefaults(defineProps<{
-  myProp?: string
-}>(), {
-  myProp: 'default-value',
-})
+const props = withDefaults(
+  defineProps<{
+    myProp?: string;
+  }>(),
+  {
+    myProp: "default-value",
+  },
+);
 
-const ctx = inject(BROWSER_DASHBOARD_KEY, {})
+const ctx = inject(BROWSER_DASHBOARD_KEY, {});
 </script>
 
 <template>
@@ -92,30 +95,30 @@ const ctx = inject(BROWSER_DASHBOARD_KEY, {})
 **Reading interaction state:**
 
 ```ts
-import { inject, computed } from 'vue'
-import { SIDEBAR_WIDGET_INTERACTION_KEY } from '@platform/widget-sdk'
+import { inject, computed } from "vue";
+import { SIDEBAR_WIDGET_INTERACTION_KEY } from "@platform/widget-sdk";
 
-const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY)
-const activeLabel = computed(() => interactionRef?.value.state.activeLabelFilter ?? null)
+const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY);
+const activeLabel = computed(() => interactionRef?.value.state.activeLabelFilter ?? null);
 ```
 
 **Emitting interaction intents:**
 
 ```ts
-const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY)
+const interactionRef = inject(SIDEBAR_WIDGET_INTERACTION_KEY);
 
 function handleClick(id: string) {
   interactionRef?.value.dispatch({
-    type: 'select-samples',
-    operation: 'replace',
+    type: "select-samples",
+    operation: "replace",
     values: [id],
-    sourcePanelId: 'my-panel-id',
+    sourcePanelId: "my-panel-id",
     metadata: {
-      collection: 'browser-items',
-      entity: 'sample',
-      target: 'selection',
+      collection: "browser-items",
+      entity: "sample",
+      target: "selection",
     },
-  })
+  });
 }
 ```
 
@@ -130,37 +133,37 @@ function handleClick(id: string) {
 Each widget must define a contract using `defineDashboardWidget`:
 
 ```ts
-import { defineAsyncComponent } from 'vue'
-import { defineDashboardWidget } from '@platform/widget-sdk'
+import { defineAsyncComponent } from "vue";
+import { defineDashboardWidget } from "@platform/widget-sdk";
 
 export const myWidget = defineDashboardWidget({
-  key: 'my-widget',
-  component: defineAsyncComponent(() => import('./MyWidget.vue')),
+  key: "my-widget",
+  component: defineAsyncComponent(() => import("./MyWidget.vue")),
   contract: {
-    displayName: 'My Widget',
-    description: 'One-line description of what it shows.',
-    acceptsProps: ['myProp'],
+    displayName: "My Widget",
+    description: "One-line description of what it shows.",
+    acceptsProps: ["myProp"],
     capabilities: {
-      reads: ['browser-dashboard'],
+      reads: ["browser-dashboard"],
       emits: [],
     },
     selfTests: [
       {
-        name: 'renders with minimal props',
-        objective: 'Verify the widget shows up without crashing.',
-        steps: ['Render without extra props.'],
-        expected: ['Widget mounts without errors.'],
+        name: "renders with minimal props",
+        objective: "Verify the widget shows up without crashing.",
+        steps: ["Render without extra props."],
+        expected: ["Widget mounts without errors."],
       },
     ],
   },
-})
+});
 ```
 
 Export reusable descriptors from `libs/web-ui/src/index.ts`, then register in `apps/web/src/registrations/index.ts`:
 
 ```ts
-import { myWidget } from '@platform/web-ui'
-widgetRegistry.registerWidget(myWidget)
+import { myWidget } from "@platform/web-ui";
+widgetRegistry.registerWidget(myWidget);
 ```
 
 ### Widget Contract Requirements
@@ -188,6 +191,7 @@ Each registered widget must define:
 - `apply-filter` | `clear-selection` | `focus-item`
 
 **Multi-selection rules:**
+
 - Plain click = replace
 - Cmd/Ctrl-click = toggle
 - Drag = replace unless modifier held
@@ -198,27 +202,27 @@ Each registered widget must define:
 
 Append a `SidebarPanelDescriptor` to the appropriate array in `sidebarConfig.ts`:
 
-| Surface | Exported constant | Who uses it |
-|---------|-------------------|-------------|
-| Classify | `defaultPanels` | `ClassifyView` |
-| Dataset | `datasetPanels` | `DatasetDetailView` |
-| Preview | `previewPanels` | `PreviewClassifyView` |
+| Surface  | Exported constant | Who uses it           |
+| -------- | ----------------- | --------------------- |
+| Classify | `defaultPanels`   | `ClassifyView`        |
+| Dataset  | `datasetPanels`   | `DatasetDetailView`   |
+| Preview  | `previewPanels`   | `PreviewClassifyView` |
 
 ```ts
 export const datasetPanels: SidebarPanelDescriptor[] = [
   // ... existing panels ...
   {
-    id: 'my-panel',             // unique per surface; reused as collapse key
-    component: 'my-widget',     // must match the registered widget key
-    title: 'My Panel',
-    order: 30,                  // lower = higher in sidebar; default 50
-    size: 'compact',            // 'compact' | 'normal' | 'large'
+    id: "my-panel", // unique per surface; reused as collapse key
+    component: "my-widget", // must match the registered widget key
+    title: "My Panel",
+    order: 30, // lower = higher in sidebar; default 50
+    size: "compact", // 'compact' | 'normal' | 'large'
     collapsed: false,
     props: {
-      myProp: 'hello',
+      myProp: "hello",
     },
   },
-]
+];
 ```
 
 ### Data Source Patterns
@@ -230,7 +234,7 @@ export const datasetPanels: SidebarPanelDescriptor[] = [
 const mySidebarContext = computed(() => ({
   totalLoaded: items.value.length,
   filteredCount: filteredItems.value.length,
-}))
+}));
 ```
 
 ```html
@@ -244,10 +248,13 @@ Read in widget: `const ctx = inject(BROWSER_DASHBOARD_KEY, {})`
 ```ts
 const myPanels = computed(() =>
   datasetPanels.map((panel) => {
-    if (panel.id !== 'my-panel') return panel
-    return { ...panel, props: { ...panel.props, data: { inline: { points: myLoadedPoints.value } } } }
-  })
-)
+    if (panel.id !== "my-panel") return panel;
+    return {
+      ...panel,
+      props: { ...panel.props, data: { inline: { points: myLoadedPoints.value } } },
+    };
+  }),
+);
 ```
 
 Widget reads: `const points = computed(() => props.data?.inline?.points ?? [])`
@@ -258,16 +265,16 @@ Every item flowing into `SampleBrowser` must conform to `BrowserItem` (from `@pl
 
 ```ts
 interface BrowserItem {
-  id: string
-  imageSrcs: string[]
-  metadata: Record<string, unknown>
-  sourceKind?: 'dataset' | 'preview' | 'classify-review'
-  currentLabel: string | null
-  draftLabel: string | null
-  predictionLabel: string | null
-  predictionConfidence: number | null
-  predictionId: string | null
-  activationLabel: string | null
+  id: string;
+  imageSrcs: string[];
+  metadata: Record<string, unknown>;
+  sourceKind?: "dataset" | "preview" | "classify-review";
+  currentLabel: string | null;
+  draftLabel: string | null;
+  predictionLabel: string | null;
+  predictionConfidence: number | null;
+  predictionId: string | null;
+  activationLabel: string | null;
 }
 ```
 
@@ -277,18 +284,19 @@ The interaction system coordinates state across sidebar widgets and the main bro
 
 ```ts
 interface SidebarWidgetInteractionContext {
-  state: SidebarWidgetInteractionState
-  dispatch: (intent: SidebarWidgetIntent) => void
+  state: SidebarWidgetInteractionState;
+  dispatch: (intent: SidebarWidgetIntent) => void;
 }
 
 interface SidebarWidgetInteractionState {
-  activeLabelFilter: string | null
-  selectedLabels: string[]
-  collections?: Record<string, SidebarWidgetCollectionState>
+  activeLabelFilter: string | null;
+  selectedLabels: string[];
+  collections?: Record<string, SidebarWidgetCollectionState>;
 }
 ```
 
 **Collection-scoped interaction** links a widget to a specific data collection:
+
 1. Set `config.interaction.collection` in panel descriptor props (e.g. `'browser-items'`)
 2. Dispatch intents with `metadata.collection` set to the same key
 3. The owning view's dispatch handler calls `reduceCollectionIntent(state.collections, intent)`
@@ -306,35 +314,42 @@ interface SidebarWidgetInteractionState {
 
 ```ts
 // In <script setup>
-import { BrowserSidebar } from '@platform/web-ui'
-import { datasetPanels } from '../components/classify/sidebarConfig'
-import { useSampleBrowserPrefs } from '../stores/sampleBrowser'
+import { BrowserSidebar } from "@platform/web-ui";
+import { datasetPanels } from "../components/classify/sidebarConfig";
+import { useSampleBrowserPrefs } from "../stores/sampleBrowser";
 
-const prefs = useSampleBrowserPrefs()
-const sidebarContext = computed(() => ({ totalLoaded: items.value.length, filteredCount: filteredItems.value.length }))
+const prefs = useSampleBrowserPrefs();
+const sidebarContext = computed(() => ({
+  totalLoaded: items.value.length,
+  filteredCount: filteredItems.value.length,
+}));
 ```
 
 ```html
 <div style="display: flex; height: 100%">
   <SampleBrowser :items="filteredItems" ... />
-  <BrowserSidebar :panels="datasetPanels" :context="sidebarContext" :collapsed="prefs.sidebarCollapsed" />
+  <BrowserSidebar
+    :panels="datasetPanels"
+    :context="sidebarContext"
+    :collapsed="prefs.sidebarCollapsed"
+  />
 </div>
 ```
 
 ### Existing Widgets Reference
 
-| Component key | File | Reads context | Emits intents |
-|---|---|---|---|
-| `annotation-progress` | `AnnotationProgressWidget.vue` | `classify-dashboard` | — |
-| `label-distribution` | `LabelDistributionWidget.vue` | `classify-dashboard`, `interaction-state` | `select-labels`, `clear-selection` |
-| `echarts-generic` | `GenericEChartsWidget.vue` | — | — |
-| `markdown-log` | `MarkdownLogWidget.vue` | — | — |
-| `data-table` | `DataTableWidget.vue` | `interaction-state` | `select-samples`, `select-predictions`, `apply-filter`, `clear-selection` |
-| `metric-cards` | `MetricCardsWidget.vue` | — | — |
-| `sample-viewer` | `SampleViewerWidget.vue` | `classify-dashboard` | — |
-| `prediction-summary` | `PredictionSummaryWidget.vue` | `prediction-grid-items` | — |
-| `interactive-scatter` | `InteractiveScatterWidget.vue` | `interaction-state` | `select-samples`, `apply-filter`, `clear-selection` |
-| `browser-summary` | `BrowserSummaryWidget.vue` | `browser-dashboard` | — |
+| Component key         | File                           | Reads context                             | Emits intents                                                             |
+| --------------------- | ------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------- |
+| `annotation-progress` | `AnnotationProgressWidget.vue` | `classify-dashboard`                      | —                                                                         |
+| `label-distribution`  | `LabelDistributionWidget.vue`  | `classify-dashboard`, `interaction-state` | `select-labels`, `clear-selection`                                        |
+| `echarts-generic`     | `GenericEChartsWidget.vue`     | —                                         | —                                                                         |
+| `markdown-log`        | `MarkdownLogWidget.vue`        | —                                         | —                                                                         |
+| `data-table`          | `DataTableWidget.vue`          | `interaction-state`                       | `select-samples`, `select-predictions`, `apply-filter`, `clear-selection` |
+| `metric-cards`        | `MetricCardsWidget.vue`        | —                                         | —                                                                         |
+| `sample-viewer`       | `SampleViewerWidget.vue`       | `classify-dashboard`                      | —                                                                         |
+| `prediction-summary`  | `PredictionSummaryWidget.vue`  | `prediction-grid-items`                   | —                                                                         |
+| `interactive-scatter` | `InteractiveScatterWidget.vue` | `interaction-state`                       | `select-samples`, `apply-filter`, `clear-selection`                       |
+| `browser-summary`     | `BrowserSummaryWidget.vue`     | `browser-dashboard`                       | —                                                                         |
 
 ### Self-Test
 
@@ -368,9 +383,10 @@ Importers are discovered with `widgetRegistry.getImporters("dataset")`.
 - `DatasetDetailView.vue` uses `FlowModal` with `kind="import"` for sample-level importers (surface: `"dataset"`)
 
 Importer receives `ImporterRequiredProps`:
-  - `datasetId`
-  - `onComplete`
-  - `onCancel`
+
+- `datasetId`
+- `onComplete`
+- `onCancel`
 
 Examples:
 
@@ -387,9 +403,10 @@ Dataset export UI is descriptor-driven using a 2-step flow via `FlowModal`:
 Exporters are discovered with `widgetRegistry.getExporters("dataset")`.
 
 Exporter receives `ExporterRequiredProps`:
-  - `datasetId`
-  - `onComplete`
-  - `onCancel`
+
+- `datasetId`
+- `onComplete`
+- `onCancel`
 
 Examples:
 
@@ -406,8 +423,9 @@ Preview creation is descriptor-driven using a 2-step flow in `PreviewLaunchView.
 Launchers are discovered with `widgetRegistry.getPreviewLaunchers("preview")` or `getPreviewLaunchers("dataset-list")`.
 
 Preview launcher receives `PreviewLauncherRequiredProps`:
-  - `onComplete(result: { sessionId: string })`
-  - `onCancel`
+
+- `onComplete(result: { sessionId: string })`
+- `onCancel`
 
 On `onComplete`, the host navigates to `/preview/:sessionId`.
 
@@ -432,6 +450,7 @@ export flows use the typed frontend API client against core API endpoints.
 The platform's sensor pub/sub system allows you to trigger workflows based on external data changes. To add a new sensor, follow these steps:
 
 1. **Create a Sensor YAML**: Define your sensor's metadata and filtering capabilities in `apps/api/sensors/<your_sensor_id>.yaml`.
+
    ```yaml
    id: my_sensor
    name: My Custom Sensor
@@ -449,6 +468,7 @@ The platform's sensor pub/sub system allows you to trigger workflows based on ex
    ```
 
 2. **Implement the Prefect Flow**: Create a new flow file in `apps/api/app/flows/<your_sensor_id>.py`. This flow is responsible for polling the data source and sending events to the platform.
+
    ```python
    from prefect import flow
    import httpx
@@ -485,6 +505,7 @@ A "dataset type" controls how samples, annotations, Label Studio configuration, 
 #### Backend
 
 **a. Add enum values** in `apps/api/app/domain/types.py`:
+
 ```python
 class DatasetType(str, Enum):
     IMAGE_CLASSIFICATION = "image_classification"
@@ -500,6 +521,7 @@ class TaskType(str, Enum):
 ```
 
 **b. Create the schema module** `apps/api/app/domain/schemas/image_segmentation.py`:
+
 ```python
 from __future__ import annotations
 from app.domain.dataset_schema import DatasetSchema
@@ -528,6 +550,7 @@ schema_registry.register(SCHEMA)
 ```
 
 **c. Register in the barrel** `apps/api/app/domain/schemas/__init__.py`:
+
 ```python
 from app.domain.schemas import image_segmentation  # noqa: F401
 ```
@@ -537,14 +560,20 @@ After this, `compatibility.py` will automatically allow the new pair via `get_al
 #### Frontend
 
 **d. Add type values** in `libs/web-ui/src/api/types.ts`:
+
 ```typescript
 export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
-export type DatasetType = "image_classification" | "image_vqa" | "image_detection" | "image_segmentation";
+export type DatasetType =
+  | "image_classification"
+  | "image_vqa"
+  | "image_detection"
+  | "image_segmentation";
 ```
 
 **e. Create the shim component** `apps/web/src/views/datasets/shims/SegmentationDatasetsShim.vue` (copy `DetectionDatasetsShim.vue` as a template).
 
 **f. Create the frontend schema module** `apps/web/src/views/datasets/schemas/image-segmentation.ts`:
+
 ```typescript
 import { defineAsyncComponent } from "vue";
 import { registerDatasetSchema } from "../schema-registry";
@@ -553,23 +582,23 @@ registerDatasetSchema({
   datasetType: "image_segmentation",
   taskType: "segmentation",
   annotationType: "masks",
-  shimComponent: defineAsyncComponent(
-    () => import("../shims/SegmentationDatasetsShim.vue"),
-  ),
+  shimComponent: defineAsyncComponent(() => import("../shims/SegmentationDatasetsShim.vue")),
   mockSampleFactory: (index, labelSpace = ["object"]) => ({
     // same structure as _mock_item_generator in Python
   }),
 });
 ```
 
-**g. Register in the  add the import to `apps/web/src/views/datasets/registry.ts`:barrel**
+**g. Register in the add the import to `apps/web/src/views/datasets/registry.ts`:barrel**
+
 ```typescript
 import "./schemas/image-segmentation";
 ```
 
 #### Seed script (optional but recommended)
 
-**h. Create** `libs/seedmaker/src/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
+**h. Create** `scripts/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
+
 ```python
 from seedmaker.config import SeedConfig
 from seedmaker.runner import SeedRunner
@@ -583,7 +612,8 @@ config = SeedConfig(
 )
 ```
 
-**i. Register** in `libs/seedmaker/src/seedmaker/datasets/__init__.py`:
+**i. Register** in `scripts/seedmaker/datasets/__init__.py`:
+
 ```python
 from seedmaker.datasets import image_segmentation  # noqa: F401
 ```
@@ -600,6 +630,7 @@ The `CreateAnnotationRequest` already accepts `annotation_value: dict | list | N
 ### What you get automatically
 
 After completing all steps above:
+
 - `GET /api/v1/compatibility` will include your new pair.
 - `POST /api/v1/datasets` will accept your new `dataset_type` + `task_type`.
 - Label Studio projects will be created with the correct config.

@@ -14,12 +14,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, SelectOption } from "naive-ui";
-import {
-  NButton,
-  useMessage,
-  useDialog,
-  useThemeVars,
-} from "naive-ui";
+import { NButton, useMessage, useDialog, useThemeVars } from "naive-ui";
 import {
   bulkCreateAnnotations,
   getDataset,
@@ -51,7 +46,16 @@ import type {
   SaveReviewAnnotationItem,
   TrainingJob,
 } from "@/generated/orval/models";
-import type { Dataset, ModelResponse as Model, PredictionCollectionResponse as PredictionCollection, PredictionJobResponse as PredictionJob, PredictionResultResponse as PredictionResult, Sample, SampleWithLabels, TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
+import type {
+  Dataset,
+  ModelResponse as Model,
+  PredictionCollectionResponse as PredictionCollection,
+  PredictionJobResponse as PredictionJob,
+  PredictionResultResponse as PredictionResult,
+  Sample,
+  SampleWithLabels,
+  TaskTrackerSummaryResponse as TaskTrackerSummary,
+} from "@/generated/orval/models";
 import type { SyncResult, Trainer } from "@/shared/api/types";
 import type { AnnotationGridItem, BrowserItem, WaferPoint } from "@/shared/types/components";
 import type { DataNode } from "@/shared/composables/useDataPipeline";
@@ -59,12 +63,15 @@ import SampleBrowser from "@/shared/components/sample-browser";
 import { useSampleBrowserPrefs } from "@/features/datasets/application/sampleBrowser";
 import { useClassifyDashboard } from "@/shared/composables/useClassifyDashboard";
 import { useSampleLoader } from "@/shared/composables/useSampleLoader";
-import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY, TASK_INSIGHT_STREAM_KEY } from "@/shared/components/task-insight-modal";
+import TaskInsightModal, {
+  TASK_INSIGHT_ORG_ID_KEY,
+  TASK_INSIGHT_STREAM_KEY,
+} from "@/shared/components/task-insight-modal";
 import ClassifySidebar from "../presentation/components/ClassifySidebar.vue";
 import { defaultPanels, mergePanels, type SidebarPanelDescriptor } from "../config";
 import { GLOBAL_AGENT_PANELS_KEY } from "@/shared/keys";
 import { useTaskStream } from "@/shared/composables/useTaskHandoff";
-import { useOrgStore } from '@/features/auth/application/org';
+import { useOrgStore } from "@/features/auth/application/org";
 import { createDataPipeline, DATA_PIPELINE_KEY } from "./useDataPipeline";
 import { resolveImageUris } from "@/shared/utils/image-adapters";
 import { injectWaferPanelData, normalizeWaferPoint } from "./useWaferHelpers";
@@ -99,8 +106,7 @@ const LABEL_COLORS = [
   "#CDDC39",
 ];
 
-export const CLASSIFY_PAGE_KEY: InjectionKey<ClassifyPageState> =
-  Symbol("classifyPage");
+export const CLASSIFY_PAGE_KEY: InjectionKey<ClassifyPageState> = Symbol("classifyPage");
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ClassifyPageState {
@@ -206,17 +212,11 @@ export function useClassifyPage() {
     retry: false,
   });
 
-  const selectedDataset = computed<Dataset | undefined>(
-    () => datasetQuery.data.value,
-  );
+  const selectedDataset = computed<Dataset | undefined>(() => datasetQuery.data.value);
 
-  const isSparse = computed(
-    () => selectedDataset.value?.storage_mode === "file_shard_sparse",
-  );
+  const isSparse = computed(() => selectedDataset.value?.storage_mode === "file_shard_sparse");
 
-  const labelSpace = computed<string[]>(
-    () => selectedDataset.value?.task_spec?.label_space ?? [],
-  );
+  const labelSpace = computed<string[]>(() => selectedDataset.value?.task_spec?.label_space ?? []);
 
   const labelFilter = ref<string | null>(null);
   const orderBy = ref<string>("id");
@@ -286,9 +286,7 @@ export function useClassifyPage() {
   const filteredLabels = computed(() => {
     if (!labelSearch.value) return labelSpace.value;
     const query = labelSearch.value.toLowerCase();
-    return labelSpace.value.filter((label) =>
-      label.toLowerCase().includes(query),
-    );
+    return labelSpace.value.filter((label) => label.toLowerCase().includes(query));
   });
 
   const annotationGridItems = computed<AnnotationGridItem[]>(() =>
@@ -445,21 +443,15 @@ export function useClassifyPage() {
     };
   }
 
-  async function loadReviewRowsFromJob(
-    job: PredictionJob,
-  ): Promise<ReviewRow[]> {
-    const summaryPredictions = (
-      (job.summary!.predictions as PredictionResult[] | undefined) ?? []
-    )
+  async function loadReviewRowsFromJob(job: PredictionJob): Promise<ReviewRow[]> {
+    const summaryPredictions = ((job.summary!.predictions as PredictionResult[] | undefined) ?? [])
       .filter((item) => !item.error)
       .map(predictionResultToReviewRow);
     if (summaryPredictions.length > 0) {
       return summaryPredictions;
     }
     const fetched = await listPredictionJobPredictions(job.id);
-    return fetched
-      .filter((item) => !item.error)
-      .map(predictionResultToReviewRow);
+    return fetched.filter((item) => !item.error).map(predictionResultToReviewRow);
   }
 
   function asNumber(value: unknown): number | null {
@@ -505,11 +497,7 @@ export function useClassifyPage() {
       let offset = 0;
       let total = Infinity;
       while (offset < total) {
-        const result = await listSamplesWithLabels(
-          datasetId.value,
-          offset,
-          pageSize,
-        );
+        const result = await listSamplesWithLabels(datasetId.value, offset, pageSize);
         all.push(...result.items);
         total = result.total;
         offset += pageSize;
@@ -582,9 +570,7 @@ export function useClassifyPage() {
         }
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
       }
-      message.warning(
-        "Prediction job is still running. Refresh later to load results.",
-      );
+      message.warning("Prediction job is still running. Refresh later to load results.");
     } finally {
       pollingPredictionJob.value = false;
     }
@@ -593,9 +579,7 @@ export function useClassifyPage() {
   const syncCollectionMutation = useMutation({
     mutationFn: async () => {
       if (!selectedModelId.value || predictions.value.length === 0) {
-        throw new Error(
-          "Predictions are required before syncing to Label Studio",
-        );
+        throw new Error("Predictions are required before syncing to Label Studio");
       }
       const collection = await createPredictionCollection({
         name: `review-${new Date().toISOString()}`,
@@ -614,14 +598,10 @@ export function useClassifyPage() {
       return syncResult;
     },
     onSuccess: (data) => {
-      message.success(
-        `Synced ${data.synced_count} predictions to Label Studio`,
-      );
+      message.success(`Synced ${data.synced_count} predictions to Label Studio`);
     },
     onError: (err: Error) => {
-      message.error(
-        err.message ?? "Failed to sync predictions to Label Studio",
-      );
+      message.error(err.message ?? "Failed to sync predictions to Label Studio");
     },
   });
 
@@ -637,16 +617,13 @@ export function useClassifyPage() {
         collection_id: syncedCollection.value?.id ?? null,
         sync_tag: syncedCollectionTag.value,
       });
-      const items: SaveReviewAnnotationItem[] = predictions.value.map(
-        (row) => ({
-          sample_id: row.sample_id,
-          predicted_label: row.predicted_label,
-          final_label:
-            reviewDraftLabels.value[row.sample_id] ?? row.final_label,
-          confidence: row.confidence,
-          prediction_id: row.prediction_id,
-        }),
-      );
+      const items: SaveReviewAnnotationItem[] = predictions.value.map((row) => ({
+        sample_id: row.sample_id,
+        predicted_label: row.predicted_label,
+        final_label: reviewDraftLabels.value[row.sample_id] ?? row.final_label,
+        confidence: row.confidence,
+        prediction_id: row.prediction_id,
+      }));
       return saveReviewAnnotations(action.id, items);
     },
     onSuccess: (data: { created_count: number }) => {
@@ -685,14 +662,17 @@ export function useClassifyPage() {
     syncedCollectionTag.value = null;
   }
 
-  const { data: trainingJobs } = useListJobsApiV1TrainingJobsGet(undefined, {
-    query: {
-      select: (response: any) => response.data,
-      queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
-      refetchInterval: 5000,
-      enabled: computed(() => !!orgStore.currentOrgId),
+  const { data: trainingJobs } = useListJobsApiV1TrainingJobsGet(
+    { limit: 200, offset: 0 },
+    {
+      query: {
+        select: (response) => ("items" in response.data ? response.data.items : []),
+        queryKey: computed(() => ["jobs", orgStore.currentOrgId]),
+        refetchInterval: 5000,
+        enabled: computed(() => !!orgStore.currentOrgId),
+      },
     },
-  });
+  );
 
   const { data: trainers } = useListTrainersRouteApiV1TrainersGet({
     query: {
@@ -715,9 +695,7 @@ export function useClassifyPage() {
   const activeTrainingJob = computed<TrainingJob | null>(() => {
     if (!activeTrainingJobId.value) return null;
     return (
-      (trainingJobs.value ?? []).find(
-        (job: any) => job.id === activeTrainingJobId.value,
-      ) ?? null
+      (trainingJobs.value ?? []).find((job: any) => job.id === activeTrainingJobId.value) ?? null
     );
   });
 
@@ -758,18 +736,18 @@ export function useClassifyPage() {
 
   function toTrainingTaskSummary(job: TrainingJob): TaskTrackerSummary {
     return {
-      id: job.id ?? '',
+      id: job.id ?? "",
       task_kind: "training",
       execution_kind: "prefect",
       display_name: `Training: ${job.trainer_id}`,
-      display_status: job.status ?? '',
-      stage: job.status ?? '',
+      display_status: job.status ?? "",
+      stage: job.status ?? "",
       dataset_id: job.dataset_id,
       model_id: null,
       trainer_id: job.trainer_id,
       created_by: job.created_by,
-      created_at: job.created_at ?? '',
-      updated_at: job.updated_at ?? '',
+      created_at: job.created_at ?? "",
+      updated_at: job.updated_at ?? "",
       prefect_state: null,
       work_pool_name: null,
       work_queue_name: null,
@@ -834,8 +812,8 @@ export function useClassifyPage() {
 
   const selectedCount = ref(0);
 
-  const browserSubmitCount = computed(() =>
-    activeGridItems.value.filter((item) => item.draftLabel != null).length,
+  const browserSubmitCount = computed(
+    () => activeGridItems.value.filter((item) => item.draftLabel != null).length,
   );
 
   const isSubmitting = computed(() =>
@@ -882,18 +860,16 @@ export function useClassifyPage() {
     gridRef.value?.clearSelection();
   });
 
-  const annotationDraftCount = computed(() =>
-    Object.keys(annotationDraft.value).filter(
-      (key) => annotationDraft.value[key],
-    ).length,
+  const annotationDraftCount = computed(
+    () => Object.keys(annotationDraft.value).filter((key) => annotationDraft.value[key]).length,
   );
 
-  const reviewEditedCount = computed(() =>
-    predictions.value.filter(
-      (row) =>
-        (reviewDraftLabels.value[row.sample_id] ?? row.final_label) !==
-        row.predicted_label,
-    ).length,
+  const reviewEditedCount = computed(
+    () =>
+      predictions.value.filter(
+        (row) =>
+          (reviewDraftLabels.value[row.sample_id] ?? row.final_label) !== row.predicted_label,
+      ).length,
   );
 
   const dashboardDraftCount = computed(() =>
@@ -1002,9 +978,7 @@ export function useClassifyPage() {
       );
       return samples;
     },
-    enabled: computed(
-      () => selectedSidebarSampleHydrationIds.value.length > 0,
-    ),
+    enabled: computed(() => selectedSidebarSampleHydrationIds.value.length > 0),
     retry: false,
   });
 
@@ -1021,9 +995,7 @@ export function useClassifyPage() {
     if (hydratedGridItems.value.length === 0) {
       return activeGridItems.value;
     }
-    const merged = new Map(
-      activeGridItems.value.map((item) => [item.id, item] as const),
-    );
+    const merged = new Map(activeGridItems.value.map((item) => [item.id, item] as const));
     hydratedGridItems.value.forEach((item) => {
       if (!merged.has(item.id)) {
         merged.set(item.id, item);
@@ -1070,27 +1042,17 @@ export function useClassifyPage() {
   });
 
   const staticPanels = computed(() => {
-    const basePanels = isReviewMode.value
-      ? [reviewPanel, ...defaultPanels]
-      : defaultPanels;
-    const withWafer = injectWaferPanelData(
-      basePanels,
-      waferPoints.value,
-      "classify-samples",
-    );
+    const basePanels = isReviewMode.value ? [reviewPanel, ...defaultPanels] : defaultPanels;
+    const withWafer = injectWaferPanelData(basePanels, waferPoints.value, "classify-samples");
     return withWafer;
   });
 
-  const mergedPanels = computed(() =>
-    mergePanels(staticPanels.value, globalAgentPanels.value),
-  );
+  const mergedPanels = computed(() => mergePanels(staticPanels.value, globalAgentPanels.value));
 
   const syncToLsMutation = useMutation({
     mutationFn: () => syncAnnotationsToLs(datasetId.value),
     onSuccess: (data: SyncResult) => {
-      message.success(
-        `Synced ${data.synced_count} annotations to Label Studio`,
-      );
+      message.success(`Synced ${data.synced_count} annotations to Label Studio`);
     },
     onError: (err: Error) => {
       message.error(err.message ?? "Failed to sync to Label Studio");
@@ -1098,8 +1060,7 @@ export function useClassifyPage() {
   });
 
   const bulkAnnotateMutation = useMutation({
-    mutationFn: (body: BulkAnnotationRequest) =>
-      bulkCreateAnnotations(datasetId.value, body),
+    mutationFn: (body: BulkAnnotationRequest) => bulkCreateAnnotations(datasetId.value, body),
     onSuccess: (data: BulkAnnotationResponse) => {
       message.success(`Created ${data.created} annotations`);
       if (datasetQuery.data.value?.ls_project_id) {
@@ -1123,9 +1084,7 @@ export function useClassifyPage() {
       saveAnnotationsMutation.mutate();
       return;
     }
-    const entries = Object.entries(annotationDraft.value).filter(
-      ([, label]) => label,
-    );
+    const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
     if (entries.length === 0) {
       message.warning("No annotations to submit");
       return;
@@ -1147,38 +1106,36 @@ export function useClassifyPage() {
     });
   }
 
-  const predictionJobColumns = computed<DataTableColumns<PredictionJob>>(
-    () => [
-      {
-        title: "Job",
-        key: "id",
-        width: 180,
-        render: (row) => `${row.id.slice(0, 16)}...`,
-      },
-      { title: "Status", key: "status", width: 120 },
-      {
-        title: "Progress",
-        key: "progress",
-        width: 120,
-        render: (row) => formatPredictionJobProgress(row),
-      },
-      {
-        title: "Actions",
-        key: "actions",
-        width: 100,
-        render: (row) =>
-          h(
-            NButton,
-            {
-              size: "small",
-              disabled: row.status.toLowerCase() !== "completed",
-              onClick: () => void pollPredictionJob(row.id),
-            },
-            { default: () => "Load" },
-          ),
-      },
-    ],
-  );
+  const predictionJobColumns = computed<DataTableColumns<PredictionJob>>(() => [
+    {
+      title: "Job",
+      key: "id",
+      width: 180,
+      render: (row) => `${row.id.slice(0, 16)}...`,
+    },
+    { title: "Status", key: "status", width: 120 },
+    {
+      title: "Progress",
+      key: "progress",
+      width: 120,
+      render: (row) => formatPredictionJobProgress(row),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 100,
+      render: (row) =>
+        h(
+          NButton,
+          {
+            size: "small",
+            disabled: row.status.toLowerCase() !== "completed",
+            onClick: () => void pollPredictionJob(row.id),
+          },
+          { default: () => "Load" },
+        ),
+    },
+  ]);
 
   const showAddLabelModal = ref(false);
   const newLabelName = ref("");

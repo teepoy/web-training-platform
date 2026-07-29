@@ -2,12 +2,8 @@
 
 Covers:
 - PATCH /datasets/{id}/public
-- GET   /datasets/{id}/embed-config
-- PATCH /datasets/{id}/embed-config
 - POST  /datasets/{id}/annotations/bulk
 - GET   /datasets/{id}/similarity/{sample_id}
-- GET   /datasets/{id}/selection-metrics
-- GET   /datasets/{id}/hints/uncovered
 - POST  /datasets/{id}/samples/import — label_space invariance
 """
 from __future__ import annotations
@@ -19,9 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.app.services.feature_ops import FeatureOpsService
+from app.modules.datasets.app.services.sample_similarity import SampleSimilarityService
 from tests.conftest import DEFAULT_ORG_ID
-from platform_runtime.sparse import DatasetManifest, SampleLocator
+from app.modules.storage.domain.sparse import DatasetManifest, SampleLocator
 
 _TASK_SPEC = {"task_type": "classification", "label_space": ["cat", "dog"]}
 
@@ -64,54 +60,9 @@ def test_set_dataset_public_disabled_for_missing_dataset() -> None:
         assert resp.json()["detail"] == "Make Public is disabled"
 
 
-# ---------------------------------------------------------------------------
-# Embed config
-# ---------------------------------------------------------------------------
-
-def test_get_embed_config_default() -> None:
-    with TestClient(app) as c:
-        dataset_id = _create_dataset(c)
-        resp = c.get(f"/api/v1/datasets/{dataset_id}/embed-config")
-        assert resp.status_code == 200
-        # Default is empty dict or whatever the dataset was created with
-        assert isinstance(resp.json(), dict)
-
-
-def test_get_embed_config_not_found() -> None:
-    with TestClient(app) as c:
-        resp = c.get("/api/v1/datasets/nonexistent/embed-config")
-        assert resp.status_code == 404
-
-
-def test_update_embed_config() -> None:
-    with TestClient(app) as c:
-        dataset_id = _create_dataset(c)
-        resp = c.patch(f"/api/v1/datasets/{dataset_id}/embed-config", json={
-            "model": "clip-vit-b32",
-            "dimension": 768,
-        })
-        assert resp.status_code == 200
-        assert resp.json()["model"] == "clip-vit-b32"
-        assert resp.json()["dimension"] == 768
-
-        # Verify it persisted
-        get_resp = c.get(f"/api/v1/datasets/{dataset_id}/embed-config")
-        assert get_resp.status_code == 200
-        assert get_resp.json()["model"] == "clip-vit-b32"
-
-
-def test_update_embed_config_not_found() -> None:
-    with TestClient(app) as c:
-        resp = c.patch("/api/v1/datasets/nonexistent/embed-config", json={
-            "model": "clip",
-            "dimension": 512,
-        })
-        assert resp.status_code == 404
-
-
 def _seed_sparse_manifest(dataset_id: str, sample_ids: list[str]) -> None:
     """Seed a minimal sparse DatasetManifest so samples have identities."""
-    payload_store = app.state.app_context.datasets.dataset_payload_store
+    payload_store = app.state.app_context.storage.dataset_payload_store
 
     sample_index: dict[str, SampleLocator] = {}
     for i, sid in enumerate(sample_ids):
@@ -162,7 +113,7 @@ def test_bulk_create_annotations_dataset_not_found() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Similarity search (requires feature_ops mock)
+# Similarity search
 # ---------------------------------------------------------------------------
 
 def test_similarity_search() -> None:
@@ -172,7 +123,7 @@ def test_similarity_search() -> None:
 
         mock_result = {"neighbors": [], "sample_id": sample_id}
         with patch.object(
-            FeatureOpsService, "similarity_search",
+            SampleSimilarityService, "similarity_search",
             new_callable=AsyncMock, return_value=mock_result,
         ):
             resp = c.get(f"/api/v1/datasets/{dataset_id}/similarity/{sample_id}")
@@ -190,55 +141,6 @@ def test_similarity_search_sample_not_found() -> None:
     with TestClient(app) as c:
         dataset_id = _create_dataset(c)
         resp = c.get(f"/api/v1/datasets/{dataset_id}/similarity/nonexistent")
-        assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# Selection metrics (requires feature_ops mock)
-# ---------------------------------------------------------------------------
-
-def test_selection_metrics() -> None:
-    with TestClient(app) as c:
-        dataset_id = _create_dataset(c)
-        _create_sample(c, dataset_id)
-
-        mock_uniqueness = AsyncMock(return_value={"scores": {}})
-        mock_repr = AsyncMock(return_value={"scores": {}})
-        with patch.object(FeatureOpsService, "uniqueness_scores", mock_uniqueness), \
-             patch.object(FeatureOpsService, "representativeness_scores", mock_repr):
-            resp = c.get(f"/api/v1/datasets/{dataset_id}/selection-metrics")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "uniqueness" in body
-        assert "representativeness" in body
-
-
-def test_selection_metrics_dataset_not_found() -> None:
-    with TestClient(app) as c:
-        resp = c.get("/api/v1/datasets/nonexistent/selection-metrics")
-        assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# Uncovered hints (requires feature_ops mock)
-# ---------------------------------------------------------------------------
-
-def test_uncovered_hints() -> None:
-    with TestClient(app) as c:
-        dataset_id = _create_dataset(c)
-
-        mock_result = {"clusters": [], "uncovered": []}
-        with patch.object(
-            FeatureOpsService, "uncovered_cluster_hints",
-            new_callable=AsyncMock, return_value=mock_result,
-        ):
-            resp = c.get(f"/api/v1/datasets/{dataset_id}/hints/uncovered")
-        assert resp.status_code == 200
-
-
-def test_uncovered_hints_dataset_not_found() -> None:
-    with TestClient(app) as c:
-        resp = c.get("/api/v1/datasets/nonexistent/hints/uncovered")
         assert resp.status_code == 404
 
 
@@ -265,9 +167,6 @@ def _apply_test_overrides() -> None:
     )
     from app.modules.agent.port.http.deps import (
         get_label_studio_client as agent_get_ls_client,
-    )
-    from app.modules.preview.port.http.deps import (
-        get_label_studio_client as preview_get_ls_client,
     )
     from app.shared.api.schemas import User, Organization
 
@@ -306,7 +205,6 @@ def _apply_test_overrides() -> None:
     app.dependency_overrides[get_current_org] = lambda: _mock_org
     app.dependency_overrides[datasets_get_ls_client] = lambda: _mock_ls
     app.dependency_overrides[agent_get_ls_client] = lambda: _mock_ls
-    app.dependency_overrides[preview_get_ls_client] = lambda: _mock_ls
 
 
 def _cleanup_test_overrides() -> None:
@@ -318,15 +216,11 @@ def _cleanup_test_overrides() -> None:
     from app.modules.agent.port.http.deps import (
         get_label_studio_client as agent_get_ls_client,
     )
-    from app.modules.preview.port.http.deps import (
-        get_label_studio_client as preview_get_ls_client,
-    )
 
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_current_org, None)
     app.dependency_overrides.pop(datasets_get_ls_client, None)
     app.dependency_overrides.pop(agent_get_ls_client, None)
-    app.dependency_overrides.pop(preview_get_ls_client, None)
 
 
 def test_import_samples_auto_expand() -> None:
@@ -381,15 +275,11 @@ def test_import_samples_auto_expand() -> None:
         from app.modules.agent.port.http.deps import (
             get_label_studio_client as agent_get_ls_client,
         )
-        from app.modules.preview.port.http.deps import (
-            get_label_studio_client as preview_get_ls_client,
-        )
 
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(get_current_org, None)
         app.dependency_overrides.pop(datasets_get_ls_client, None)
         app.dependency_overrides.pop(agent_get_ls_client, None)
-        app.dependency_overrides.pop(preview_get_ls_client, None)
 
 
 # ---------------------------------------------------------------------------

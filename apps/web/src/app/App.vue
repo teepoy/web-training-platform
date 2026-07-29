@@ -136,6 +136,7 @@ import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
 import { AlbumsOutline, CubeOutline, ImagesOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
+import VxeUI from "vxe-pc-ui";
 import { useUiStore } from "@/features/auth/application/ui";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -166,6 +167,12 @@ const contentStyle = computed(() => ({
 const computedTheme = computed(() => {
   return uiStore.darkMode ? darkTheme : null;
 });
+
+watch(
+  () => uiStore.darkMode,
+  (darkMode) => VxeUI.setTheme(darkMode ? "dark" : "light"),
+  { immediate: true },
+);
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {

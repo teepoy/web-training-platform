@@ -86,7 +86,10 @@ def test_list_prediction_jobs_filters_by_dataset() -> None:
 
         resp = c.get("/api/v1/prediction-jobs", params={"dataset_id": dataset_id})
         assert resp.status_code == 200
-        assert [item["id"] for item in resp.json()] == ["prediction-current-dataset"]
+        assert [item["id"] for item in resp.json()["items"]] == [
+            "prediction-current-dataset"
+        ]
+        assert resp.json()["total"] == 1
 
 
 @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
@@ -107,7 +110,7 @@ def test_prediction_job_lifecycle() -> None:
         # List prediction jobs
         list_resp = c.get("/api/v1/prediction-jobs")
         assert list_resp.status_code == 200
-        jobs = list_resp.json()
+        jobs = list_resp.json()["items"]
         assert any(j["id"] == pjob_id for j in jobs)
 
         # Get single prediction job
@@ -124,7 +127,8 @@ def test_prediction_job_lifecycle() -> None:
         # List events for job
         events_resp = c.get(f"/api/v1/prediction-jobs/{pjob_id}/events")
         assert events_resp.status_code == 200
-        assert isinstance(events_resp.json(), list)
+        assert events_resp.json()["total"] >= 0
+        assert isinstance(events_resp.json()["items"], list)
 
 
 def test_cancel_prediction_job_not_found() -> None:
@@ -211,7 +215,7 @@ def test_list_prediction_collections_empty() -> None:
         dataset_id = create_dataset(c)
         resp = c.get("/api/v1/prediction-collections", params={"dataset_id": dataset_id})
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json() == {"items": [], "total": 0}
 
 
 def test_create_prediction_collection_bad_dataset() -> None:

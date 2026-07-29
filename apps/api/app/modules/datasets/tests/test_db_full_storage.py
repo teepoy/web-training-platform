@@ -9,18 +9,20 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio  # type: ignore[import-untyped]
 
-from app.modules.datasets.adapter.db_full_storage import DbFullDatasetStorage
+from app.modules.storage.adapter.db_full.storage import DbFullDatasetStorage
 from app.modules.datasets.domain.sample_row import PredictionResult, SampleRow
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode, TaskSpec
 from app.shared.db.registry import PredictionJobORM
-from app.shared.db.sql_repository import SqlRepository
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+
+pytestmark = pytest.mark.integration
 
 
 def _utcnow() -> datetime:
@@ -31,7 +33,9 @@ def _utcnow() -> datetime:
 
 
 @pytest_asyncio.fixture
-async def storage(_test_infra: dict, db_full_fixture: tuple[str, str]) -> DbFullDatasetStorage:
+async def storage(
+    _test_infra: dict, db_full_fixture: tuple[str, str]
+) -> DbFullDatasetStorage:
     """Return DbFullDatasetStorage wired to the test infra and fixture dataset."""
     dataset_id, org_id = db_full_fixture
     return DbFullDatasetStorage(
@@ -85,7 +89,7 @@ async def _create_prediction_job(
 
 
 async def _create_fresh_dataset(
-    repo: SqlRepository,
+    repo: DatasetSqlRepository,
     session_factory: Any,
     artifact_storage: InMemoryArtifactStorage,
     org_id: str,
@@ -134,17 +138,10 @@ class TestDbFullDatasetStorage:
 
     @pytest.mark.asyncio
     async def test_constructor(self, storage: DbFullDatasetStorage, db_full_fixture: tuple[str, str]) -> None:
-        """Create DbFullDatasetStorage, verify dataset_id, storage_mode, capabilities."""
+        """Create DbFullDatasetStorage and verify its dataset identity and mode."""
         dataset_id, _ = db_full_fixture
         assert storage.dataset_id == dataset_id
         assert storage.storage_mode == DatasetStorageMode.DB_FULL
-
-        caps = storage.capabilities
-        assert caps.can_write_samples is True
-        assert caps.can_random is True
-        assert caps.can_similarity is True
-        assert caps.can_materialize is True
-        assert caps.can_lazyframe is True
 
     # ── 2. get_dataset_metadata ──────────────────────────────────────────
 
@@ -182,6 +179,29 @@ class TestDbFullDatasetStorage:
         labelled = [r for r in rows if r.latest_label is not None]
         assert len(labelled) == 3
         assert all(r.latest_label in ("cat", "dog") for r in labelled)
+
+    @pytest.mark.asyncio
+    async def test_list_samples_lazyframe_uses_bound_filters(
+        self,
+        storage: DbFullDatasetStorage,
+    ) -> None:
+        """LazyFrame label/sample filters use portable SQL bind parameters."""
+
+        rows, _ = await storage.list_samples(limit=5)
+        selected_ids = [rows[0].sample_id, rows[1].sample_id]
+
+        lazyframe = cast(
+            Any,
+            await storage.list_samples(
+                with_labels=True,
+                sample_ids=selected_ids,
+                return_lazyframe=True,
+            ),
+        )
+        collected = lazyframe.collect()
+
+        assert set(collected["id"].to_list()) == set(selected_ids)
+        assert {"label", "latest_label"} <= set(collected.columns)
 
     # ── 4. list_samples label_filter ────────────────────────────────────
 
@@ -292,26 +312,24 @@ class TestDbFullDatasetStorage:
         sr_none = await storage.get_sample("nonexistent-00000000")
         assert sr_none is None
 
-    # ── 8. get_samples_batch ─────────────────────────────────────────────
+    # ── 8. get_samples_by_id ──────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_get_samples_batch(self, storage: DbFullDatasetStorage) -> None:
-        """Batch of 3 IDs returns 3 rows preserving order, None for missing."""
+    async def test_get_samples_by_id(self, storage: DbFullDatasetStorage) -> None:
+        """Batch lookup returns existing rows keyed by ID and omits missing IDs."""
         rows, _ = await storage.list_samples(limit=3)
         ids = [r.sample_id for r in rows]
 
-        batch = await storage.get_samples_batch(ids)
+        batch = await storage.get_samples_by_id(ids)
         assert len(batch) == 3
-        for i, sr in enumerate(batch):
-            assert sr is not None
-            assert sr.sample_id == ids[i]
+        for sample_id in ids:
+            assert batch[sample_id].sample_id == sample_id
 
         # Include a nonexistent id
-        batch2 = await storage.get_samples_batch([ids[0], "nonexistent-00000000", ids[1]])
-        assert len(batch2) == 3
-        assert batch2[0] is not None
-        assert batch2[1] is None
-        assert batch2[2] is not None
+        missing_id = "nonexistent-00000000"
+        batch2 = await storage.get_samples_by_id([ids[0], missing_id, ids[1]])
+        assert set(batch2) == {ids[0], ids[1]}
+        assert missing_id not in batch2
 
     # ── 9. create_annotations bulk ───────────────────────────────────────
 
@@ -580,7 +598,7 @@ class TestDbFullDatasetStorage:
     @pytest.mark.asyncio
     async def test_delete_cascade(self, _test_infra: dict) -> None:
         """Create a dataset with samples+annotations+predictions, delete(), verify all gone."""
-        repo: SqlRepository = _test_infra["repo"]
+        repo: DatasetSqlRepository = _test_infra["repo"]
         session_factory = _test_infra["session_factory"]
         artifact_storage: InMemoryArtifactStorage = _test_infra["storage"]
         org_id: str = _test_infra["org_id"]

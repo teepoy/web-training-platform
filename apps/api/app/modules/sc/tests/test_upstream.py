@@ -47,7 +47,7 @@ class TestSampleProjection:
 
         result = patch_sample_to_patch_image_v1(sample)
         assert result.sample_id == "s-abc"
-        assert result.inspection_time == "2024-01-15T08:30:00"
+        assert result.inspection_time == "2024-01-15T08:30:00+08:00"
         assert result.wafer_key == 1
         assert result.defect_id == "D001"
         assert result.wafer_x == 23
@@ -81,7 +81,7 @@ class TestSampleProjection:
 
         result = patch_sample_to_review_image_v1(sample)
         assert result.sample_id == "s-review"
-        assert result.inspection_time == "2024-01-15T08:30:00"
+        assert result.inspection_time == "2024-01-15T08:30:00+08:00"
         assert result.wafer_key == 1
         assert len(result.review_images) == 1
         assert result.review_images[0]["image_id"] == 1
@@ -113,12 +113,6 @@ class TestSampleProjection:
 
     def test_get_adapter_dispatches_correctly(self) -> None:
         """The mapper registry returns the correct projection method for each view type."""
-        sample = PatchSample(
-            sample_id="s-dispatch",
-            defect_id="D001",
-            inspection_time=None,
-        )
-
         assert mapper.get_mapper(PatchSample, "patch_image_v1") is patch_sample_to_patch_image_v1
         assert mapper.get_mapper(PatchSample, "review_image_v1") is patch_sample_to_review_image_v1
 

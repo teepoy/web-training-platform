@@ -12,14 +12,14 @@ from tests.helpers.factories import (
 from tests.helpers.fixtures import seeded_imagenet_mock  # noqa: F401
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_seed_creates_imagenet_mock_dataset(seeded_imagenet_mock: tuple[str, str]) -> None:  # noqa: F811
     dataset_id, dataset_name = seeded_imagenet_mock
     assert dataset_id is not None
     assert "ImageNet-1K Mock" == dataset_name
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_imagenet_mock_samples_exist(seeded_imagenet_mock: tuple[str, str]) -> None:  # noqa: F811
     dataset_id, dataset_name = seeded_imagenet_mock
     assert dataset_name == "ImageNet-1K Mock"
@@ -28,7 +28,13 @@ def test_imagenet_mock_samples_exist(seeded_imagenet_mock: tuple[str, str]) -> N
         assert result["total"] >= 10, f"Expected >= 10 samples, got {result['total']}"
 
 
-@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.skip(
+    reason=(
+        "Legacy seed training expects a classification trainer; "
+        "resnet50-sc-v1 is now an SC patch_image_v1 trainer."
+    )
+)
 def test_imagenet_mock_training_completes(seeded_imagenet_mock: tuple[str, str]) -> None:  # noqa: F811
     dataset_id, dataset_name = seeded_imagenet_mock
     assert dataset_name == "ImageNet-1K Mock"

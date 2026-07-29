@@ -4,8 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.datasets.port.http.deps import get_label_studio_client
 from tests.conftest import TRAINER_ID
+
+pytestmark = pytest.mark.integration
 
 
 def test_get_dataset_detail() -> None:
@@ -204,34 +205,6 @@ def test_bulk_sample_import() -> None:
         assert listed_body["total"] == 3
 
 
-def test_extract_features_runs_sync() -> None:
-    with TestClient(app) as c:
-        data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/4gkAAAAASUVORK5CYII="
-        ds = c.post(
-            "/api/v1/datasets",
-            json={
-                "name": "feature-ds",
-                "dataset_type": "image_classification",
-                "task_spec": {"task_type": "classification", "label_space": ["cat"]},
-            },
-        )
-        assert ds.status_code == 200
-        dataset_id = ds.json()["id"]
-        s = c.post(
-            f"/api/v1/datasets/{dataset_id}/samples",
-            json={"image_uris": [data_uri]},
-        )
-        assert s.status_code == 200
-
-        r = c.post(f"/api/v1/datasets/{dataset_id}/features/extract")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "completed"
-        assert body["target"] == "embedding"
-        assert "summary" in body
-        assert "processed" in body["summary"]
-
-
 @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
 def test_create_prediction_job_async() -> None:
     with TestClient(app) as c:
@@ -287,7 +260,7 @@ def test_create_prediction_job_async() -> None:
 
         listing = c.get("/api/v1/prediction-jobs")
         assert listing.status_code == 200
-        assert any(item["id"] == body["id"] for item in listing.json())
+        assert any(item["id"] == body["id"] for item in listing.json()["items"])
 
 
 @pytest.mark.no_auth_override

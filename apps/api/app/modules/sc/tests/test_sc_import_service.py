@@ -15,7 +15,13 @@ class _MockRepository:
     async def create_dataset(self, dataset, org_id: str | None = None):
         return dataset.model_copy(update={"org_id": org_id})
 
-    async def update_dataset_meta(self, dataset_id: str, meta_update: dict) -> None:
+    async def update_dataset_meta(
+        self,
+        dataset_id: str,
+        meta_update: dict,
+        *,
+        org_id: str | None = None,
+    ) -> None:
         self.updated_meta = meta_update
 
 
@@ -38,7 +44,7 @@ class _MockPayloadStore:
         row_count: int,
         format: str = "parquet",
     ):
-        from platform_runtime.sparse import ShardEntry
+        from app.modules.storage.domain.sparse import ShardEntry
 
         self.shards.append(data)
         return ShardEntry(
@@ -114,46 +120,17 @@ class _MockUpstream:
         return pl.LazyFrame([])
 
 
-class _MockImageFetcher:
-    async def get_image_bytes(
-        self,
-        *,
-        inspection_time: str,
-        wafer_key: int,
-        defect_id: str,
-        image_type: str,
-        s3_path: str | None = None,
-        review_image_id: int | None = None,
-    ) -> bytes:
-        return b""
-
-    async def get_image_bytes_batch(
-        self,
-        *,
-        inspection_time: str,
-        wafer_key: int,
-        images: list[dict[str, object]],
-    ) -> list[dict[str, object]]:
-        return images
-
-    async def warm_cache(
-        self,
-        *,
-        inspection_time: str,
-        wafer_key: int,
-        defect_ids: list[int] | None = None,
-    ) -> dict[str, object]:
-        return {"status": "ok"}
-
-
 def _make_service(upstream_reader=None, repository=None, payload_store=None):
+    from app.modules.storage.adapter.sparse.import_operator import (
+        SparseImportOperatorFactory,
+    )
     from app.modules.sc.app.services.sc_import_service import ScImportService
 
     return ScImportService(
+        sparse_import_factory=SparseImportOperatorFactory(),
         repository=repository or _MockRepository(),
         payload_store=payload_store or _MockPayloadStore(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
-        image_fetcher=_MockImageFetcher(),
     )
 
 
@@ -166,7 +143,6 @@ async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Hybrid exhausted",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=None,
     )
@@ -184,7 +160,6 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Direct boundary",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=30_000,
     )
@@ -224,7 +199,6 @@ async def test_direct_import_persists_geometry_metadata() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Geometry Test Dataset",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=100,
     )
@@ -260,7 +234,6 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Hybrid shuffle exhausted",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=50_000,
     )
@@ -278,7 +251,6 @@ async def test_direct_import_uses_shuffled_ids() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Shuffle direct",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=50,
     )
@@ -298,7 +270,6 @@ async def test_direct_import_shuffle_reproducible() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Reproducible A",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=50,
     )
@@ -310,7 +281,6 @@ async def test_direct_import_shuffle_reproducible() -> None:
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
         dataset_name="Reproducible B",
-        storage_mode="file_shard_sparse",
         org_id="test-org",
         max_rows=50,
     )

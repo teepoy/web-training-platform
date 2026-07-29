@@ -17,6 +17,7 @@ export interface UseBlinkVirtualScrollParams<TSample extends { reviewImages: unk
   reviewCellSize?: Ref<number>;
   extraRowHeight?: Ref<number>;
   overscan?: Ref<number>;
+  reviewSamplesArePreFiltered?: boolean;
 }
 
 export function useBlinkVirtualScroll<TSample extends { reviewImages: unknown[] }>(
@@ -34,7 +35,7 @@ export function useBlinkVirtualScroll<TSample extends { reviewImages: unknown[] 
   );
 
   const visibleSamples = computed<TSample[]>(() => {
-    if (mode.value === "review") {
+    if (mode.value === "review" && params.reviewSamplesArePreFiltered !== true) {
       return samples.value.filter((s) => s.reviewImages.length > 0);
     }
     return samples.value;
@@ -72,7 +73,9 @@ export function useBlinkVirtualScroll<TSample extends { reviewImages: unknown[] 
   const virtualRowHeightStr = computed(() => `${virtualRowHeight.value}px`);
 
   const virtualSampleCount = computed(() => {
-    if (mode.value === "review") return visibleSamples.value.length;
+    if (mode.value === "review" && params.reviewSamplesArePreFiltered !== true) {
+      return visibleSamples.value.length;
+    }
     return Math.max(
       params.totalSamples?.value ?? visibleSamples.value.length,
       visibleSamples.value.length,
@@ -86,8 +89,8 @@ export function useBlinkVirtualScroll<TSample extends { reviewImages: unknown[] 
   function samplesForVirtualRow(rowIdx: number): TSample[] {
     const perRow = effectiveSamplesPerRow.value;
     const globalStart = rowIdx * perRow;
-    const localStart =
-      mode.value === "review" ? globalStart : globalStart - (sampleOffset?.value ?? 0);
+    const usesPagedWindow = mode.value === "patch" || params.reviewSamplesArePreFiltered === true;
+    const localStart = usesPagedWindow ? globalStart - (sampleOffset?.value ?? 0) : globalStart;
     return localStart >= 0 && localStart < visibleSamples.value.length
       ? visibleSamples.value.slice(localStart, localStart + perRow)
       : [];

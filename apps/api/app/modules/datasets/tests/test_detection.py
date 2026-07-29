@@ -152,7 +152,9 @@ def test_list_detection_annotations_preserves_value() -> None:
             },
         )
 
-        resp = c.get(f"/api/v1/samples/{sample_id}/annotations?dataset_id={dataset_id}")
+        resp = c.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/annotations"
+        )
         assert resp.status_code == 200
         annotations = resp.json()
         assert len(annotations) == 1

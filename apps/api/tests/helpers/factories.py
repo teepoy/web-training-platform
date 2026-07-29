@@ -172,6 +172,8 @@ def create_test_annotations(
     client: TestClient,
     sample_ids: list[str],
     labels: list[str],
+    *,
+    dataset_id: str,
 ) -> list[dict[str, Any]]:
     """Create annotations for *sample_ids*, cycling through *labels*.
 
@@ -183,6 +185,7 @@ def create_test_annotations(
         client: An active ``TestClient`` instance.
         sample_ids: Samples to annotate.
         labels: Label pool — cycled if ``len(labels) < len(sample_ids)``.
+        dataset_id: Dataset that owns the samples.
 
     Returns:
         List of response dicts, each containing at least ``id``, ``sample_id``,
@@ -200,7 +203,7 @@ def create_test_annotations(
         label = labels[i % len(labels)]
         resp = client.post(
             "/api/v1/annotations",
-            json={"sample_id": sid, "label": label},
+            json={"dataset_id": dataset_id, "sample_id": sid, "label": label},
         )
         assert resp.status_code == 200, (
             f"Failed to create annotation for sample '{sid}': "

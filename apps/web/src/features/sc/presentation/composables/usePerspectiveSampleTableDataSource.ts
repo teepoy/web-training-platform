@@ -13,6 +13,7 @@ import {
   buildPerspectiveFilters,
   perspectiveFilterField,
 } from "@/features/sc/presentation/composables/perspectiveFilter";
+import type { PerspectiveExpressions } from "@/features/sc/presentation/composables/perspectiveReticleExpressions";
 
 function numericSearchFilter(
   field: string,
@@ -87,6 +88,7 @@ export function usePerspectiveSampleTableDataSource(
   scopeKey: Ref<string>,
   baseFilters?: Ref<Filter[]>,
   onRecoverableError?: (reason: string, err: unknown) => void,
+  reticleExpressions?: Ref<PerspectiveExpressions>,
 ) {
   let activeTable: Table | null = null;
   let cachedRowsView: { table: Table; key: string; view: ManagedPerspectiveView } | null = null;
@@ -128,6 +130,7 @@ export function usePerspectiveSampleTableDataSource(
     const managedTable = managePerspectiveTable(tbl);
     cachedRowsViewPromise = managedTable
       .view({
+        expressions: reticleExpressions?.value,
         filter: filter.length ? filter : undefined,
         sort,
       } as never)
@@ -172,7 +175,11 @@ export function usePerspectiveSampleTableDataSource(
                 string,
               ][])
             : undefined;
-          const rowsViewKey = JSON.stringify({ filter, sort });
+          const rowsViewKey = JSON.stringify({
+            filter,
+            sort,
+            reticleExpressions: reticleExpressions?.value,
+          });
           const rowsView = await getRowsView(tbl, rowsViewKey, filter, sort);
           const total = await rowsView.num_rows();
           const offset = Number.parseInt(query.anchor, 10) || 0;
@@ -212,6 +219,7 @@ export function usePerspectiveSampleTableDataSource(
           const managedTable = managePerspectiveTable(tbl);
           const managed = await managedTable.view({
             columns: [field],
+            expressions: reticleExpressions?.value,
             group_by: [field],
             aggregates: { [field]: "count" },
             filter: filter.length ? filter : undefined,

@@ -8,22 +8,19 @@ If this file conflicts with `CORE_DESIGNS.md`, treat `CORE_DESIGNS.md` as author
 
 Monorepo for an online finetune platform:
 
-| Area | Path | Role |
-| --- | --- | --- |
-| API | `apps/api` | FastAPI control plane, metadata, auth, jobs, SSE, persistence |
-| Web | `apps/web` | Vue 3 + Vite frontend, widgets, dataset/job/schedule UI |
-| ML | `libs/ml` | Torch-first model implementations and training/prediction logic |
-| Platform runtime | `libs/platform-runtime` | Shared contracts, SDK/CLI, runtime clients |
-| SDK shim | `libs/python-sdk` | Compatibility re-exports; new code should prefer `platform_runtime` |
+| Area     | Path       | Role                                                                  |
+| -------- | ---------- | --------------------------------------------------------------------- |
+| API      | `apps/api` | FastAPI control plane, metadata, auth, jobs, SSE, persistence         |
+| Web      | `apps/web` | Vue 3 + Vite frontend, widgets, dataset/job/schedule UI               |
 | Services | `services` | Out-of-process runtime services such as SC upstream and image parsing |
-| Infra | `infra` | Compose and Kubernetes manifests |
-| Docs | `docs` | Architecture, guides, protocols |
+| Infra    | `infra`    | Compose and Kubernetes manifests                                      |
+| Docs     | `docs`     | Architecture, guides, protocols                                       |
 
 Runtime topology:
 
 ```text
-apps/api -> Prefect flows co-located under apps/api -> executable trainer/predictor registries
-apps/api -> libs/platform-runtime
+apps/api -> runtime service data-plane interface / object storage manifests
+future SDK/runtime clients -> generated OpenAPI/protobuf contracts
 ```
 
 ## Core Rules
@@ -31,9 +28,9 @@ apps/api -> libs/platform-runtime
 - Read `CORE_DESIGNS.md` before non-trivial architecture, runtime, storage, dataset, auth, widget, or API contract work.
 - Keep route handlers thin; push persistence and business logic into services/repositories.
 - Do not confuse root `services/` runtime services with `apps/api/app/modules/*/app/services` business service classes.
-- Do not add executable training/prediction logic to `apps/api`.
-- Do not import FastAPI/API internals from `libs/ml`.
-- Do not put module-private domain models in `libs/platform-runtime`; keep them in the owning module.
+- Do not add production executable training/prediction logic to `apps/api`; current API-local type implementations are demo/compatibility code until runtime services exist.
+- Do not import `apps/api` internal services, repositories, ORM models, or FastAPI dependencies from root `services/*` runtime services.
+- Do not create shared Python contract or ML packages without concrete cross-process consumers; prefer generated OpenAPI/protobuf contracts for external SDK/runtime boundaries.
 - Do not change ORM schema without an Alembic migration.
 - Do not infer storage behavior from `dataset_type`; use `storage_mode` explicitly.
 - Do not couple platform `Sample.id` to upstream/domain IDs such as SC defect IDs.
@@ -47,25 +44,24 @@ apps/api -> libs/platform-runtime
 
 Prefer `make` targets from the repository root.
 
-| Task | Command |
-| --- | --- |
-| Install dependencies | `make install` |
-| Start compose dev stack | `make up-dev` |
-| Start API only | `make dev-api` |
-| Start web only | `make dev-web` |
-| Run backend tests + OpenAPI sync | `make test` |
-| Run one API test/filter | `make test-api ARGS="-k test_name"` |
-| Run frontend unit tests | `make test-web` |
-| Run frontend E2E tests | `make test-e2e` |
-| Full local verification | `make full-test` |
-| Build web | `make build-web` |
-| Generate OpenAPI spec + artifacts | `make generate` |
-| Apply migrations | `make db-migrate` |
-| Create migration | `make db-revision MSG="describe change"` |
-| Start compose backend only | `make up-dev --scale web=0` |
-| Start compose backend + local web | `make updev` |
-| Stop compose | `make down` |
-| Run CLI | `make ftctl ARGS="jobs ls"` |
+| Task                              | Command                                  |
+| --------------------------------- | ---------------------------------------- |
+| Install dependencies              | `make install`                           |
+| Start compose dev stack           | `make up-dev`                            |
+| Start API only                    | `make dev-api`                           |
+| Start web only                    | `make dev-web`                           |
+| Run backend tests + OpenAPI sync  | `make test`                              |
+| Run one API test/filter           | `make test-api ARGS="-k test_name"`      |
+| Run frontend unit tests           | `make test-web`                          |
+| Run frontend E2E tests            | `make test-e2e`                          |
+| Full local verification           | `make full-test`                         |
+| Build web                         | `make build-web`                         |
+| Generate OpenAPI spec + artifacts | `make generate`                          |
+| Apply migrations                  | `make db-migrate`                        |
+| Create migration                  | `make db-revision MSG="describe change"` |
+| Start compose backend only        | `make up-dev --scale web=0`              |
+| Start compose backend + local web | `make updev`                             |
+| Stop compose                      | `make down`                              |
 
 Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
@@ -89,7 +85,7 @@ Python:
 - Annotate function signatures and returns.
 - Keep imports ordered stdlib, third-party, local.
 - Repository methods are async and use explicit session scopes.
-- Prefer typed Protocol dependencies over `Any` containers or global service lookups.
+- Use the `injector` library for API composition. Cross-module dependencies must be typed Protocol/interface ports, not concrete service classes, `Any` containers, or global service lookups.
 
 TypeScript/Vue:
 
@@ -104,11 +100,12 @@ TypeScript/Vue:
 Backend:
 
 - Views use `@view` and are imported by the API registration barrel.
-- Trainer/predictor metadata belongs to the API catalog; executable runtime callables belong to worker/inference runtime registries.
+- Trainer/predictor metadata belongs to the API catalog; executable runtime capability is represented by Prefect deployments and explicit routing descriptors.
 - Dataset type integration must go through the dataset registry and per-type adapters, not shared hardcoded switch statements.
 - Dataset view sample APIs should resolve dataset type -> dataset class -> view adapter dynamically, not add one hardcoded route per view.
 - Dataset storage/operator code owns `db_full`, sparse shard, Parquet, manifest, and locator persistence details; domain import modules should produce generic dataset samples/import streams.
-- Prediction/training flows should execute via the runtime registry callable, not `container.gpu_worker` or hardcoded direct ML implementation calls.
+- Prediction/training jobs should dispatch by API catalog -> Prefect deployment routing, not `container.gpu_worker` or hardcoded direct ML implementation calls inside API.
+- Data-plane manifests and runtime routing should follow `docs/architecture/data-plane-manifest-contract.md` and `docs/architecture/runtime-registration-contract.md`.
 - Backend extension routers live under `apps/api/app/routers/<name>/router.py` and are listed in the extension router registry.
 
 Frontend:
@@ -137,7 +134,6 @@ Do not hand-write duplicate transport DTOs that already exist in generated OpenA
 - Root details: this file and `CORE_DESIGNS.md`.
 - API specifics: `apps/api/AGENTS.md`.
 - Web specifics: `apps/web/AGENTS.md`.
-- SDK shim specifics: `libs/python-sdk/AGENTS.md`.
 - Infra specifics: `infra/AGENTS.md`.
 
 If local `AGENTS.md` files conflict with `CORE_DESIGNS.md`, follow `CORE_DESIGNS.md` and report the conflict.

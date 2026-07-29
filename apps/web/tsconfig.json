@@ -12,11 +12,17 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@platform/sc-map-element": ["../../packages/sc-map-element/src/index.ts"]
     },
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "src/**/*.vue"],
-  "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx", "src/**/*.stories.ts", "src/**/*.stories.tsx"]
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx"
+  ]
 }

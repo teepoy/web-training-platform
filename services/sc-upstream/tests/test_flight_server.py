@@ -14,7 +14,7 @@ import pyarrow.flight as flight
 import pytest
 
 from sc_upstream.cache import QueryCache
-from sc_upstream.flight_server import UpstreamFlightServer
+from sc_upstream.flight_server import UpstreamFlightServer, _parse_ticket
 
 
 class _FakeRedis:
@@ -151,6 +151,25 @@ def make_ticket() -> flight.Ticket:
             }
         ).encode()
     )
+
+
+def test_parse_ticket_rejects_invalid_flight_ticket() -> None:
+    with pytest.raises(ValueError, match="invalid Flight ticket JSON"):
+        _parse_ticket(flight.Ticket(b"{"))
+    with pytest.raises(ValueError, match="unknown ticket type"):
+        _parse_ticket(flight.Ticket(json.dumps({"type": "other"}).encode()))
+    with pytest.raises(ValueError, match="integer wafer_key"):
+        _parse_ticket(
+            flight.Ticket(
+                json.dumps(
+                    {
+                        "type": "list_samples",
+                        "inspection_time": "2026-01-01T00:00:00",
+                        "wafer_key": "7",
+                    }
+                ).encode()
+            )
+        )
 
 
 @pytest.fixture()

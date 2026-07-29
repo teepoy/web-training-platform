@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio  # type: ignore[import-untyped]
 
-from app.modules.datasets.adapter.sparse_storage import SparseDatasetStorage
+from app.modules.storage.adapter.sparse.storage import SparseDatasetStorage
 from app.modules.datasets.domain.sample_row import (
     BulkSampleRow,
     PredictionResult,
@@ -23,6 +23,8 @@ from app.modules.datasets.domain.sample_row import (
 )
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode
 from app.shared.db.registry import PredictionJobORM
+
+pytestmark = pytest.mark.integration
 
 
 def _utcnow() -> datetime:
@@ -107,17 +109,10 @@ class TestSparseDatasetStorage:
     async def test_constructor(
         self, storage: SparseDatasetStorage, sparse_fixture: tuple[str, str]
     ) -> None:
-        """Verify dataset_id, storage_mode, and capabilities."""
+        """Verify dataset_id and storage_mode."""
         dataset_id, _ = sparse_fixture
         assert storage.dataset_id == dataset_id
         assert storage.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
-
-        caps = storage.capabilities
-        assert caps.can_write_samples is True
-        assert caps.can_random is True
-        assert caps.can_similarity is True
-        assert caps.can_materialize is True
-        assert caps.can_lazyframe is True
 
     @pytest.mark.asyncio
     async def test_write_samples_appends_to_existing_manifest(
@@ -325,6 +320,35 @@ class TestSparseDatasetStorage:
         assert ds.dataset_type == "image_classification"
         assert ds.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
 
+    @pytest.mark.asyncio
+    async def test_delete_removes_payload_sidecars_and_metadata(
+        self,
+        storage: SparseDatasetStorage,
+        _test_infra: dict,
+        sparse_fixture: tuple[str, str],
+    ) -> None:
+        dataset_id, org_id = sparse_fixture
+        rows, _ = await storage.list_samples(limit=1)
+        await storage.create_annotations(
+            [
+                Annotation(
+                    sample_id=rows[0].sample_id,
+                    label="cat",
+                    created_by="delete-test",
+                )
+            ]
+        )
+
+        await storage.delete()
+
+        assert await _test_infra["repo"].get_dataset(dataset_id, org_id) is None
+        assert (
+            await _test_infra["storage"].list_prefix(
+                f"datasets/{org_id}/{dataset_id}/"
+            )
+            == []
+        )
+
     # ── 8. get_sample ────────────────────────────────────────────────────
 
     @pytest.mark.asyncio
@@ -341,28 +365,24 @@ class TestSparseDatasetStorage:
         sr_none = await storage.get_sample("nonexistent-00000000")
         assert sr_none is None
 
-    # ── 9. get_samples_batch ─────────────────────────────────────────────
+    # ── 9. get_samples_by_id ──────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_get_samples_batch(self, storage: SparseDatasetStorage) -> None:
-        """Batch of 3 IDs returns 3 rows preserving order, None for missing."""
+    async def test_get_samples_by_id(self, storage: SparseDatasetStorage) -> None:
+        """Batch lookup returns existing rows keyed by ID and omits missing IDs."""
         rows, _ = await storage.list_samples(limit=3)
         ids = [r.sample_id for r in rows]
 
-        batch = await storage.get_samples_batch(ids)
+        batch = await storage.get_samples_by_id(ids)
         assert len(batch) == 3
-        for i, sr in enumerate(batch):
-            assert sr is not None
-            assert sr.sample_id == ids[i]
+        for sample_id in ids:
+            assert batch[sample_id].sample_id == sample_id
 
         # Include a nonexistent id
-        batch2 = await storage.get_samples_batch(
-            [ids[0], "nonexistent-00000000", ids[1]]
-        )
-        assert len(batch2) == 3
-        assert batch2[0] is not None
-        assert batch2[1] is None
-        assert batch2[2] is not None
+        missing_id = "nonexistent-00000000"
+        batch2 = await storage.get_samples_by_id([ids[0], missing_id, ids[1]])
+        assert set(batch2) == {ids[0], ids[1]}
+        assert missing_id not in batch2
 
     # ── 10. create_annotations bulk ──────────────────────────────────────
 
@@ -437,8 +457,12 @@ class TestSparseDatasetStorage:
 
         stats = await storage.get_annotation_stats()
         assert isinstance(stats, dict)
-        assert stats.get("cat") == 2
-        assert stats.get("dog") == 1
+        assert stats == {
+            "total_samples": 5,
+            "annotated_samples": 3,
+            "unlabeled_samples": 2,
+            "label_counts": {"cat": 2, "dog": 1},
+        }
 
     # ── 12. write_predictions ───────────────────────────────────────────
 

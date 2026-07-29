@@ -5,12 +5,12 @@ import uuid
 import pyarrow as pa
 import pytest
 
-from app.modules.datasets.app.services.sparse_import_operator import (
+from app.modules.storage.adapter.sparse.import_operator import (
     SparseImportOperator,
 )
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from platform_runtime.sparse.models import ColumnSchema, SampleLocator
-from platform_runtime.sparse.store import DatasetPayloadStore
+from app.modules.storage.domain.sparse.models import SampleLocator
+from app.modules.storage.domain.sparse.store import DatasetPayloadStore
 
 
 # ── fixtures ───────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ class ScImportStatus(BaseModel):
     dataset_name: str = ""
     source_inspection_time: str = ""
     source_wafer_key: int = 0
-    storage_mode: str = "file_shard_sparse"
+    storage_mode: Literal["file_shard_sparse"] = "file_shard_sparse"
     imported_count: int = 0
     remaining_count: int = 0
     error: str | None = None

@@ -13,24 +13,26 @@ from typing import Annotated, Any, Literal
 import polars as pl
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
 from app.modules.datasets.port.http.deps import (
     DatasetServiceDep,
     RedisEventPublisherDep,
     get_dataset_storage_factory,
+    get_repository,
 )
-from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.sc.port.http.deps import (
     DatasetPayloadStoreDep,
-    ScDatasetReaderDep,
-    ScDatasetStoreDep,
+    ScBatchReaderDep,
     ScImageFetcherDep,
     ScImportServiceDep,
     ScPlotPointsServiceDep,
     ScUpstreamReaderDep,
 )
+from app.modules.sc.sc_dataset_agg import ScDatasetAgg
 from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsNotFoundError,
     ScPlotPointsRejectedError,
@@ -126,8 +128,8 @@ MAX_INSPECTION_RANGE_DAYS = 365
 def get_sc_filter_params(
     class_numbers: Annotated[list[int] | None, Query()] = None,
     rough_bins: Annotated[list[int] | None, Query()] = None,
-    predictions: Annotated[list[str] | None, Query()] = None,
-    annotations: Annotated[list[str] | None, Query()] = None,
+    predictions: Annotated[list[int | str] | None, Query()] = None,
+    annotations: Annotated[list[int | str] | None, Query()] = None,
     test_ids: Annotated[list[int] | None, Query()] = None,
     adders: Annotated[list[int] | None, Query()] = None,
     cluster_ids: Annotated[list[int] | None, Query()] = None,
@@ -928,11 +930,34 @@ async def get_inspection_review_images(
         requested = requested & filtered_ids if requested else filtered_ids
 
     review_lf = await upstream_reader.list_review_images(insp_dt, wafer_key)
-    if requested:
-        review_lf = review_lf.filter(pl.col("defect_id").cast(pl.Utf8).is_in(requested))
-    elif defect_ids or sample_filter:
-        review_lf = review_lf.filter(pl.lit(False))
+    if review_lf is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Upstream returned no review-image table",
+        )
     review_df = await review_lf.collect_async()
+    if not review_df.is_empty():
+        required_columns = {
+            "defect_id",
+            "image_id",
+            "image_type",
+            "image_filespec",
+        }
+        missing_columns = required_columns - set(review_df.columns)
+        if missing_columns:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Upstream review-image table missing columns: "
+                    f"{sorted(missing_columns)}"
+                ),
+            )
+        if requested:
+            review_df = review_df.filter(
+                pl.col("defect_id").cast(pl.Utf8).is_in(requested)
+            )
+        elif defect_ids or sample_filter:
+            review_df = review_df.filter(pl.lit(False))
     items: list[ScReviewImagesByDefectItem] = []
     if len(review_df) > 0:
         for (defect_id,), group in review_df.group_by("defect_id"):
@@ -1298,25 +1323,20 @@ async def start_sc_import(
     sc_import_service: ScImportServiceDep,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-) -> ScImportResponse | JSONResponse:
+) -> ScImportResponse:
     status = await sc_import_service.submit_import(
         source_inspection_time=payload.source_inspection_time,
         source_wafer_key=payload.source_wafer_key,
         dataset_name=payload.dataset_name,
-        storage_mode=payload.storage_mode,
         org_id=org.id,
         created_by=current_user.id,
-        filters=payload.filters,
         label_space=payload.label_space,
         max_rows=payload.max_rows,
     )
     if status.status == "failed":
-        return JSONResponse(
-            content=ScImportResponse(
-                status="failed",
-                error=status.error,
-            ).model_dump(mode="json"),
-            status_code=200,
+        raise HTTPException(
+            status_code=502,
+            detail=status.error or "SC import failed",
         )
     return ScImportResponse(
         status=status.status,
@@ -1356,10 +1376,8 @@ async def stream_sc_import(
                 source_inspection_time=payload.source_inspection_time,
                 source_wafer_key=payload.source_wafer_key,
                 dataset_name=payload.dataset_name,
-                storage_mode=payload.storage_mode,
                 org_id=org.id,
                 created_by=current_user.id,
-                filters=payload.filters,
                 label_space=payload.label_space,
                 max_rows=payload.max_rows,
                 on_progress=on_progress,
@@ -1463,35 +1481,34 @@ sc_datasets_router = APIRouter(prefix="/api/v1", tags=["sc"])
 async def sc_bulk_create_annotations(
     dataset_id: str,
     payload: ScBulkAnnotationRequest,
-    dataset_reader: ScDatasetReaderDep,
-    dataset_store: ScDatasetStoreDep,
+    batch_reader: ScBatchReaderDep,
     dataset_service: DatasetServiceDep,
+    repository: Annotated[DatasetRepository, Depends(get_repository)],
     storage_factory: Annotated[
-        DatasetStorageFactory, Depends(get_dataset_storage_factory)
+        DatasetStorageFactoryPort, Depends(get_dataset_storage_factory)
     ],
     event_publisher: RedisEventPublisherDep,
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
 ) -> ScBulkAnnotationResponse:
-    ds = await dataset_reader.get_dataset(dataset_id, org_id=org.id)
-    if ds is None:
-        ds = await dataset_reader.get_dataset(dataset_id)
+    ds = await repository.get_dataset(dataset_id, org_id=org.id)
     if ds is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
+    storage = await storage_factory.open(dataset_id, org.id)
     defect_ids = {item.defect_id for item in payload.annotations}
-    mapping = await dataset_store.map_defect_ids_to_sample_ids(
-        dataset_reader, dataset_id, defect_ids, org_id=org.id
+    mapping = await ScDatasetAgg(storage, batch_reader).map_defect_ids_to_sample_ids(
+        defect_ids
     )
 
     created_labels: set[str] = set()
     items: list[tuple[str, str | None]] = []
-    storage = await storage_factory.open(dataset_id, org.id)
     for item in payload.annotations:
         sample_id = mapping.get(item.defect_id)
         if sample_id is None:
             continue
-        label = None if item.label == "0" else item.label
+        label = str(item.label)
+        label = None if label == "0" else label
         items.append((sample_id, label))
         if label is not None:
             created_labels.add(label)
@@ -1503,7 +1520,7 @@ async def sc_bulk_create_annotations(
         await event_publisher.publish_annotation_refresh(dataset_id=dataset_id)
 
     if created_labels:
-        await dataset_service.merge_label_space(dataset_id, created_labels)
+        await dataset_service.merge_label_space(dataset_id, org.id, created_labels)
 
     return ScBulkAnnotationResponse(created=created)
 
@@ -1522,7 +1539,7 @@ async def serve_sc_sample_image(
     payload_store: DatasetPayloadStoreDep,
 ) -> Response:
     from typing import cast as _cast
-    from platform_runtime.sparse.reader import SparseManifestReader
+    from app.modules.storage.domain.sparse.reader import SparseManifestReader
     from app.shared.domain.protocols import ArtifactStorage
 
     store = payload_store

@@ -13,6 +13,16 @@ class ModelRepository(Protocol):
         job_id: str | None = None,
     ) -> list[Model]: ...
 
+    async def list_models_paginated(
+        self,
+        org_id: str,
+        dataset_id: str | None = None,
+        job_id: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Model], int]: ...
+
     async def get_model(
         self,
         artifact_id: str,

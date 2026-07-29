@@ -11,38 +11,15 @@ import {
   type DataTableSortState,
 } from "naive-ui";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type {
-  ScSampleTableDataSource,
-  ScSampleTableDisplayRow,
-} from "@/features/sc/domain/workbenchInteraction";
+import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
+import type { ScSampleTableEmits, ScSampleTableProps } from "./scSampleTableContract";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 
-const props = defineProps<{
-  dataSource?: ScSampleTableDataSource;
-  defectIds?: string[];
-  loading: boolean;
-  total: number;
-  selectedDefectIds?: ReadonlySet<number>;
-  filter?: ScSampleTableFilter;
-  sort?: ScSampleTableSort | null;
-  reticleXDieCount?: number;
-  reticleYDieCount?: number;
-  reticleXDieShift?: number;
-  reticleYDieShift?: number;
-  showReclassifyColumns?: boolean;
-  showGlobalFilterAction?: boolean;
-  globalFilterActionEnabled?: boolean;
-  enableSelection?: boolean;
-}>();
+const props = defineProps<ScSampleTableProps>();
 
-const emit = defineEmits<{
-  (e: "selection-change", ids: number[]): void;
-  (e: "apply-filter-as-global", filter: ScSampleTableFilter): void;
-  (e: "filter-change", filter: ScSampleTableFilter): void;
-  (e: "sort-change", sort: { field: string; direction: "asc" | "desc" | null }): void;
-}>();
+const emit = defineEmits<ScSampleTableEmits>();
 
 interface ColumnDefinition {
   key: keyof ScSampleTableDisplayRow;
@@ -124,7 +101,7 @@ const filterOptionsScopeKey = computed(() =>
 );
 
 const rows = ref<ScSampleTableDisplayRow[]>([]);
-const serverTotal = ref(props.total);
+const serverTotal = ref(props.total ?? 0);
 const nextAnchor = ref<string | null>("0");
 const isFetching = ref(false);
 const pageError = ref<string | null>(null);
@@ -141,10 +118,6 @@ let requestVersion = 0;
 const hasMore = computed(() => nextAnchor.value !== null);
 const checkedRowKeys = computed<DataTableRowKey[]>(() => Array.from(selectedIds.value));
 const hasAnyFilter = computed(() => Object.keys(props.filter ?? {}).length > 0);
-const globalFilterActionEnabled = computed(() => props.globalFilterActionEnabled === true);
-const clearFilterActionEnabled = computed(() =>
-  props.showGlobalFilterAction ? globalFilterActionEnabled.value : hasAnyFilter.value,
-);
 const selectionEnabled = computed(() => props.enableSelection === true);
 
 function normalizeFilterValue(field: string, value: string | number): string | number {
@@ -509,10 +482,6 @@ async function fetchNextPage(): Promise<void> {
   }
 }
 
-function applyFilterAsGlobal(): void {
-  emit("apply-filter-as-global", { ...(props.filter ?? {}) });
-}
-
 function handleScroll(event: Event): void {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
@@ -542,7 +511,7 @@ watch(
   () => {
     requestVersion += 1;
     rows.value = [];
-    serverTotal.value = resolvedDefectIds.value.length || props.total;
+    serverTotal.value = resolvedDefectIds.value.length || props.total || 0;
     nextAnchor.value = "0";
     isFetching.value = false;
     pageError.value = null;
@@ -557,7 +526,7 @@ watch(
     if (!props.dataSource || !queryEnabled.value) return;
     requestVersion += 1;
     rows.value = [];
-    serverTotal.value = resolvedDefectIds.value.length || props.total;
+    serverTotal.value = resolvedDefectIds.value.length || props.total || 0;
     nextAnchor.value = "0";
     isFetching.value = false;
     pageError.value = null;
@@ -631,17 +600,8 @@ onUpdated(() => console.debug("[render] ScSampleTable"));
         >
           Clear Selection ({{ selectedIds.size }})
         </NButton>
-        <NButton
-          v-if="showGlobalFilterAction && globalFilterActionEnabled"
-          size="tiny"
-          quaternary
-          type="primary"
-          @click="applyFilterAsGlobal"
-        >
-          Set Filter as Global
-        </NButton>
-        <NButton v-if="clearFilterActionEnabled" size="tiny" quaternary @click="clearAllFilters">
-          {{ showGlobalFilterAction ? "Clear Table Filter" : "Clear All Filters" }}
+        <NButton v-if="hasAnyFilter" size="tiny" quaternary @click="clearAllFilters">
+          Clear All Filters
         </NButton>
         <NText v-if="serverTotal > 0" depth="3" class="sst-loaded-info">
           {{ rows.length }} / {{ serverTotal }} loaded

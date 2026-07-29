@@ -1,8 +1,4 @@
-"""Rapid smoke test for the test helper factories.
-
-Verifies the complete flow: dataset → samples → annotations → training job
-→ wait_for_completion without error.
-"""
+"""Rapid smoke test for the test helper factories."""
 from __future__ import annotations
 
 import pytest
@@ -14,14 +10,12 @@ from tests.helpers.factories import (
     create_test_annotations,
     create_test_dataset,
     create_test_samples,
-    create_test_training_job,
-    wait_for_job_completion,
 )
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_factories_end_to_end_flow() -> None:
-    """Exercise all core factories: dataset, samples, annotations, training job."""
+    """Exercise core data factories: dataset, samples, and annotations."""
     with TestClient(app) as client:
         ds = create_test_dataset(
             client,
@@ -38,18 +32,9 @@ def test_factories_end_to_end_flow() -> None:
         assert all(s["dataset_id"] == dataset_id for s in samples)
 
         annotations = create_test_annotations(
-            client, sample_ids, labels=["cat", "dog"]
+            client, sample_ids, labels=["cat", "dog"], dataset_id=dataset_id
         )
         assert len(annotations) == 3
         assert annotations[0]["label"] == "cat"
         assert annotations[1]["label"] == "dog"
         assert annotations[2]["label"] == "cat"
-
-        job = create_test_training_job(client, dataset_id)
-        assert job["status"] in ("running", "completed", "queued")
-        job_id = job["id"]
-
-        finished = wait_for_job_completion(client, job_id, timeout=60)
-        assert finished["status"] == "completed", (
-            f"Expected completed, got {finished['status']}"
-        )

@@ -8,8 +8,8 @@ import type { ScSampleTableFilter } from "../domain/sampleTable";
 export interface ScMapFilter {
   class_numbers?: number[];
   rough_bins?: number[];
-  predictions?: string[];
-  annotations?: string[];
+  predictions?: Array<number | string>;
+  annotations?: Array<number | string>;
   test_ids?: number[];
   adders?: number[];
   cluster_ids?: number[];

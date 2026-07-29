@@ -29,6 +29,7 @@ x-platform-environment: &platform-environment
   LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
+  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
 
 x-api-runtime: &api-runtime
   build:
@@ -86,6 +87,9 @@ services:
     <<: *api-runtime
     command:
       [
+        "python",
+        "/app/apps/api/scripts/perspective_container_watchdog.py",
+        "--",
         "/usr/bin/supervisord",
         "-c",
         "/app/apps/api/supervisord.perspective.conf",
@@ -102,12 +106,26 @@ services:
         [
           "CMD",
           "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready')",
+          "/app/apps/api/scripts/perspective_healthcheck.py",
+          "--url",
+          "http://localhost:8001/ready",
+          "--url",
+          "http://localhost:8002/ready",
+          "--url",
+          "http://localhost:8003/ready",
+          "--url",
+          "http://localhost:8004/ready",
+          "--timeout-seconds",
+          "2",
+          "--failure-threshold",
+          "3",
+          "--startup-grace-seconds",
+          "60",
+          "--force-container-restart",
         ]
-      interval: 30s
-      timeout: 20s
-      retries: 12
+      interval: 10s
+      timeout: 3s
+      retries: 3
       start_period: 60s
 
   web:

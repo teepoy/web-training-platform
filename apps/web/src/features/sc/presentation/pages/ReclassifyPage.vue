@@ -22,7 +22,7 @@ import { useReclassifyPage } from "../../application/useReclassifyPage";
 import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
-import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
@@ -36,6 +36,7 @@ const inspectionQuad = ref<{
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
 const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
+const sampleTableSort = ref<ScSampleTableSort | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
 const perspectiveSamplingAvailableCount = ref(0);
 const isPreparingSampling = ref(false);
@@ -185,10 +186,6 @@ function handleKeydown(e: KeyboardEvent): void {
 onMounted(() => document.addEventListener("keydown", handleKeydown));
 onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
-const hasLocalSampleTableFilter = computed(
-  () => Object.keys(page.sampleTableFilter.value).length > 0,
-);
-
 function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
   const local: ScSampleTableFilter = {};
   for (const [field, value] of Object.entries(filter)) {
@@ -292,13 +289,10 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             v-else
             variant="reclassify"
             :dataset-id="page.datasetId.value"
-            :samples-error="page.samplesError.value"
             :inspection-time="page.inspectionContext.value.inspectionTime"
             :wafer-key="Number(page.inspectionContext.value.waferKey)"
             :active-map-tab="page.activeMapTab.value"
             :wafer-geometry="page.waferGeometry.value"
-            :reticle-x-die-count="page.reticleXDieCount.value"
-            :reticle-y-die-count="page.reticleYDieCount.value"
             :reticle-die-size-x="page.reticleDieSizeX.value"
             :reticle-die-size-y="page.reticleDieSizeY.value"
             :reticle-options="page.reticleOptions.value"
@@ -306,7 +300,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :selected-gallery-defect-ids="Array.from(page.selectedDefectIds.value)"
             v-model:global-filter="page.globalFilter.value"
             :table-filter="page.sampleTableFilter.value"
-            :global-filter-action-enabled="hasLocalSampleTableFilter"
+            v-model:table-sort="sampleTableSort"
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
             :legend-group-by="page.legendGroupBy.value"
             :legend-sources="['class', 'bin', 'annotation', 'prediction', 'final_class']"
@@ -316,15 +310,12 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             @update:reticle-options="page.updateReticleOptions"
             @map-filter-change="({ ids }) => page.handleBoxSelectionChange(ids)"
             @zoom-in="page.setMapZoom"
-            @table-filter-change="onSampleTableFilterChange"
-            @table-apply-filter-as-global="page.applySampleTableFilterAsGlobal"
-            @table-sort-change="() => {}"
+            @update:table-filter="onSampleTableFilterChange"
             @table-selection-change="
               (ids: number[]) => page.selectDefectIds(ids.map(String), 'replace')
             "
             @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
             @legend-group-change="page.handleLegendGroupByChange"
-            @retry="() => {}"
             @select-samples="(ids, mods) => onBlinkTableSelect(ids, mods)"
           >
             <template #annotation>

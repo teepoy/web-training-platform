@@ -1,9 +1,9 @@
-"""Tests for ClipPredictor registry, factory, and mock prediction.
+"""Tests for the worker-only ClipPredictor demo.
 
 These tests verify:
-1.  clip-zero-shot-v1 is registered in the predictor registry
-2.  The factory accepts an embedding_client kwarg and returns a ClipPredictor
-3.  A mock embedding client drives predict_single correctly
+1.  The demo is not exposed as a deployed product capability.
+2.  The factory accepts an embedding_client kwarg and returns a ClipPredictor.
+3.  A mock embedding client drives predict_single correctly.
 """
 
 from __future__ import annotations
@@ -13,11 +13,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.registry import get_predictor_by_id
-from app.modules.types.predictors.clip import (
+from app.modules.types import catalog
+from app.runtime_compat.ml.demo.registrations.clip import (
     ClipPredictor,
     ClipPredictorFactory,
 )
-from libs.ml.domain import (
+from app.runtime_compat.ml.demo.domain import (
     DatasetRef,
     ModelRef,
     PredictContext,
@@ -29,18 +30,10 @@ from libs.ml.domain import (
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def test_clip_predictor_registry_resolution() -> None:
-    """Verify clip-zero-shot-v1 is registered and has correct metadata."""
-    # Ensure registrations are loaded (importing the module is enough)
-    _ = ClipPredictorFactory  # trigger side-effect import if not already
-
-    pred = get_predictor_by_id("clip-zero-shot-v1")
-    assert pred is not None, (
-        "clip-zero-shot-v1 should be registered in the predictor registry"
-    )
-    assert pred.predictor_id == "clip-zero-shot-v1"
-    assert pred.name == "CLIP Zero-Shot"
-    assert pred.view_id == "image_input_v1"
+def test_clip_demo_is_not_exposed_as_runtime_capability() -> None:
+    with pytest.raises(KeyError):
+        catalog.get_predictor_meta("clip-zero-shot-v1")
+    assert get_predictor_by_id("clip-zero-shot-v1") is None
 
 
 # ═══════════════════════════════════════════════════════════════════════

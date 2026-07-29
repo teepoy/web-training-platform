@@ -1,15 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from injector import Injector
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.core.config import AppConfig
 from app.shared.application.notification import WebhookNotificationSink
-from app.shared.db.session import create_engine, create_session_factory
+from app.shared.db.session import (
+    AppDatabaseSessionFactory,
+    create_engine,
+    create_session_factory,
+)
+from app.shared.domain.protocols import (
+    ArtifactStorage,
+    LabelStudioClient as LabelStudioClientPort,
+    LlmClient,
+    PrefectClient as PrefectClientPort,
+)
 from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.prefect.client import PrefectClient
+from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from app.shared.infrastructure.storage.minio import (
     MinioArtifactStorage,
@@ -17,21 +30,35 @@ from app.shared.infrastructure.storage.minio import (
 )
 from app.shared.infrastructure.surface_store import SurfaceStore
 
+if TYPE_CHECKING:
+    from app.modules.agent.container import AgentContext
+    from app.modules.auth.container import AuthContext
+    from app.modules.dashboard.container import DashboardContext
+    from app.modules.datasets.container import DatasetsContext
+    from app.modules.models.container import ModelsContext
+    from app.modules.prediction.container import PredictionContext
+    from app.modules.runtime.container import RuntimeContext
+    from app.modules.sc.container import ScContext
+    from app.modules.jobs.container import JobsContext
+    from app.core.settings.container import SettingsContext
+    from app.modules.storage.container import StorageContext
+    from app.modules.training.container import TrainingContext
+
 
 @dataclass
 class SharedInfra:
-    """Infrastructure shared by all modules.  Fields match composition.py:AppContainer."""
+    """Infrastructure shared by all modules."""
 
-    config: Any  # AppConfig type alias
+    config: AppConfig
     db_engine: AsyncEngine
-    session_factory: async_sessionmaker[AsyncSession]
-    artifact_storage: Any  # ArtifactStorage type alias
-    label_studio_client: Any  # LabelStudioClient
-    llm_client: Any  # OpenAICompatibleLlmClient
-    prefect_client: Any  # PrefectClient
-    notification_sink: Any  # WebhookNotificationSink
-    surface_store: Any  # SurfaceStore
-    redis_event_publisher: Any | None = None  # RedisEventPublisher
+    session_factory: AppDatabaseSessionFactory
+    artifact_storage: ArtifactStorage
+    label_studio_client: LabelStudioClientPort
+    llm_client: LlmClient
+    prefect_client: PrefectClientPort
+    notification_sink: WebhookNotificationSink
+    surface_store: SurfaceStore
+    redis_event_publisher: RedisEventPublisher | None = None
 
 
 @dataclass
@@ -40,28 +67,36 @@ class AppContext:
 
     Module context fields are all optional.  The composition root fills them
     during application bootstrap.
+
+    Current state: this still carries module contexts as a transition layer
+    from the old flat container.  Runtime consumers should prefer resolving
+    typed Protocol/port bindings from ``injector`` instead of reaching across
+    module contexts.
+
+    Next step: shrink this object toward lifecycle ownership only, and let
+    injector provider methods / constructor annotations own module service
+    construction.
     """
 
     shared: SharedInfra
 
     # Module contexts — all optional, filled by composition root
-    datasets: Any | None = None
-    prediction: Any | None = None
-    training: Any | None = None
-    models: Any | None = None
-    dashboard: Any | None = None
-    preview: Any | None = None
-    task_tracker: Any | None = None
-    schedules: Any | None = None
-    sensors: Any | None = None
-    settings: Any | None = None
-    agent: Any | None = None
-    classify: Any | None = None
-    auth: Any | None = None
-    sc: Any | None = None
+    datasets: DatasetsContext | None = None
+    prediction: PredictionContext | None = None
+    training: TrainingContext | None = None
+    storage: StorageContext | None = None
+    models: ModelsContext | None = None
+    dashboard: DashboardContext | None = None
+    jobs: JobsContext | None = None
+    settings: SettingsContext | None = None
+    agent: AgentContext | None = None
+    auth: AuthContext | None = None
+    runtime: RuntimeContext | None = None
+    sc: ScContext | None = None
+    injector: Injector | None = None
 
 
-def build_shared_infra(cfg: Any) -> SharedInfra:
+def build_shared_infra(cfg: AppConfig) -> SharedInfra:
     """Build SharedInfra from config — pure shared infrastructure, no module wiring.
 
     Extracts the shared-infra creation logic from composition.py:_build_base_container()
@@ -72,12 +107,12 @@ def build_shared_infra(cfg: Any) -> SharedInfra:
         db_url=str(cfg.db.url),
         echo=bool(cfg.db.echo),
     )
-    session_factory = create_session_factory(db_engine)
+    session_factory = AppDatabaseSessionFactory(create_session_factory(db_engine))
 
     # Inline _build_artifact_storage logic (composition.py:117-129)
     kind = str(cfg.storage.kind)
     if kind == "memory":
-        artifact_storage: Any = InMemoryArtifactStorage()
+        artifact_storage: ArtifactStorage = InMemoryArtifactStorage()
     elif kind == "minio":
         artifact_storage = MinioArtifactStorage(
             endpoint=str(cfg.storage.minio.endpoint),
@@ -117,7 +152,7 @@ def build_shared_infra(cfg: Any) -> SharedInfra:
     )
 
 
-def build_app_context(cfg: Any) -> AppContext:
+def build_app_context(cfg: AppConfig) -> AppContext:
     """Build full AppContext from config.
 
     Module contexts are initially None.  They will be filled by per-module

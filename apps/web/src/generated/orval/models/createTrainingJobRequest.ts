@@ -6,7 +6,8 @@
  */
 
 export interface CreateTrainingJobRequest {
+  /** @minLength 1 */
   dataset_id: string;
+  /** @minLength 1 */
   trainer_id: string;
-  created_by?: string;
 }

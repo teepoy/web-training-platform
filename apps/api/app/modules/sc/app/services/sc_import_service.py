@@ -4,20 +4,18 @@ import asyncio
 import gc
 import logging
 import os
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from time import perf_counter
 from typing import Any, Protocol, cast
 
+from injector import inject
 import polars as pl
 
-from app.modules.datasets.app.services.sparse_import_operator import (
-    SparseImportOperator,
-)
+from app.modules.storage.port.local import SparseImportWriterFactoryPort
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
-from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
+from app.modules.sc.port.local import ScImportProgressCallback
 from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
     iter_patch_samples_from_upstream_chunk,
@@ -32,7 +30,7 @@ from app.shared.api.schemas import (
     SPARSE_NO_LS,
     TaskSpec,
 )
-from platform_runtime.sparse import (
+from app.modules.storage.domain.sparse import (
     ColumnSchema,
     DatasetManifest,
     DatasetPayloadStore,
@@ -43,7 +41,6 @@ from platform_runtime.sparse import (
 logger = logging.getLogger(__name__)
 
 SC_IMPORT_BATCH_SIZE = int(os.getenv("SC_IMPORT_BATCH_SIZE", "25_000"))
-ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
 
 # ── SC-specific helpers ─────────────────────────────────────────────────────
@@ -189,7 +186,11 @@ class ScImportRepository(Protocol):
     ) -> Dataset: ...
 
     async def update_dataset_meta(
-        self, dataset_id: str, meta_update: dict
+        self,
+        dataset_id: str,
+        meta_update: dict,
+        *,
+        org_id: str | None = None,
     ) -> Dataset | None: ...
 
 
@@ -198,34 +199,30 @@ class ScImportPayloadStore(Protocol):
 
 
 class ScImportService:
+    @inject
     def __init__(
         self,
-        repository: ScImportRepository | None = None,
-        payload_store: ScImportPayloadStore | None = None,
-        upstream_reader: ScUpstreamReader | None = None,
-        image_fetcher: ScImageFetcher | None = None,
+        sparse_import_factory: SparseImportWriterFactoryPort,
+        repository: ScImportRepository,
+        payload_store: ScImportPayloadStore,
+        upstream_reader: ScUpstreamReader,
     ) -> None:
         self._repo = repository
         self._payload_store = payload_store
         self._upstream = upstream_reader
-        self._image_fetcher = image_fetcher
+        self._sparse_import_factory = sparse_import_factory
 
     async def submit_import(
         self,
         source_inspection_time: str,
         source_wafer_key: int,
         dataset_name: str,
-        storage_mode: str,
         org_id: str,
         created_by: str = "system",
-        filters: dict | None = None,
         label_space: list[str] | None = None,
         max_rows: int | None = None,
         on_progress: ScImportProgressCallback | None = None,
     ) -> ScImportStatus:
-        assert self._upstream is not None
-        assert self._repo is not None
-        assert self._payload_store is not None
         # ── Pre-check: skip dataset creation when upstream has no data ──
         try:
             insp_dt = _parse_source_inspection_time(source_inspection_time)
@@ -245,31 +242,35 @@ class ScImportService:
                     source_inspection_time=source_inspection_time,
                     source_wafer_key=source_wafer_key,
                     dataset_name=dataset_name,
-                    storage_mode=storage_mode,
                     imported_count=0,
                 )
-        except Exception:
-            logger.warning(
-                "SC import: upstream pre-check failed — proceeding with dataset creation",
-                exc_info=True,
-            )
-
-        dataset = await self._create_dataset(
-            source_inspection_time=source_inspection_time,
-            source_wafer_key=source_wafer_key,
-            dataset_name=dataset_name,
-            storage_mode=storage_mode,
-            org_id=org_id,
-            created_by=created_by,
-            label_space=label_space,
-        )
-        if dataset is None:
+            inspection = await self._upstream.get_inspection(insp_dt, source_wafer_key)
+        except Exception as exc:
+            logger.exception("SC import upstream pre-check failed")
             return await self._fail(
-                "Failed to create dataset",
+                f"Upstream pre-check failed: {exc}",
                 source_inspection_time,
                 source_wafer_key,
                 dataset_name,
-                storage_mode,
+            )
+
+        try:
+            dataset = await self._create_dataset(
+                source_inspection_time=source_inspection_time,
+                source_wafer_key=source_wafer_key,
+                dataset_name=dataset_name,
+                org_id=org_id,
+                created_by=created_by,
+                label_space=label_space,
+                inspection=inspection,
+            )
+        except Exception as exc:
+            logger.exception("SC dataset creation failed")
+            return await self._fail(
+                f"Failed to create dataset: {exc}",
+                source_inspection_time,
+                source_wafer_key,
+                dataset_name,
             )
 
         try:
@@ -294,7 +295,6 @@ class ScImportService:
                 dataset_name=dataset_name,
                 source_inspection_time=source_inspection_time,
                 source_wafer_key=source_wafer_key,
-                storage_mode=storage_mode,
                 imported_count=imported_count,
             )
             return completed_status
@@ -305,7 +305,6 @@ class ScImportService:
                 source_inspection_time,
                 source_wafer_key,
                 dataset_name,
-                storage_mode,
             )
 
     async def _run_direct_import(
@@ -320,8 +319,6 @@ class ScImportService:
         on_progress: ScImportProgressCallback | None = None,
     ) -> dict[str, object]:
         """Direct sparse import that keeps request handling cooperative."""
-        assert self._upstream is not None
-        assert self._payload_store is not None
         _payload_store = self._payload_store
         _upstream = self._upstream
         schema_columns = [
@@ -332,7 +329,7 @@ class ScImportService:
 
         insp_dt = _parse_source_inspection_time(source_inspection_time)
 
-        operator = SparseImportOperator(
+        operator = self._sparse_import_factory.create(
             dataset_id=dataset_id,
             org_id=org_id,
             payload_store=cast(DatasetPayloadStore, _payload_store),
@@ -560,62 +557,48 @@ class ScImportService:
         source_inspection_time: str,
         source_wafer_key: int,
         dataset_name: str,
-        storage_mode: str,
         org_id: str,
         created_by: str,
         label_space: list[str] | None,
-    ) -> Dataset | None:
-        assert self._repo is not None
-        assert self._payload_store is not None
-        assert self._upstream is not None
-        try:
-            dataset = Dataset(
-                name=dataset_name,
-                dataset_type="image_sc",
-                task_spec=TaskSpec(task_type="sc", label_space=label_space or []),
-                view_types=[
-                    "image_input_v1",
-                    "patch_image_v1",
-                    "review_image_v1",
-                ],
-                org_id=org_id,
-                created_by=created_by,
-                ls_project_id=SPARSE_NO_LS,
-                storage_mode=DatasetStorageMode(storage_mode),
-            )
-            dataset = await self._repo.create_dataset(dataset, org_id=org_id)
-            await self._payload_store.put_manifest(
-                DatasetManifest(
-                    dataset_id=dataset.id,
-                    storage_mode=dataset.storage_mode.value,
-                    shard_count=0,
-                    total_rows=0,
-                ),
-                org_id=org_id,
-            )
+        inspection: Any | None,
+    ) -> Dataset:
+        dataset = Dataset(
+            name=dataset_name,
+            dataset_type="image_sc",
+            task_spec=TaskSpec(task_type="sc", label_space=label_space or []),
+            view_types=[
+                "image_input_v1",
+                "patch_image_v1",
+                "review_image_v1",
+            ],
+            org_id=org_id,
+            created_by=created_by,
+            ls_project_id=SPARSE_NO_LS,
+            storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        )
+        dataset = await self._repo.create_dataset(dataset, org_id=org_id)
+        await self._payload_store.put_manifest(
+            DatasetManifest(
+                dataset_id=dataset.id,
+                storage_mode=dataset.storage_mode.value,
+                shard_count=0,
+                total_rows=0,
+            ),
+            org_id=org_id,
+        )
 
-            if storage_mode == "file_shard_sparse":
-                dataset_meta: dict[str, Any] = {
-                    "source_inspection_time": source_inspection_time,
-                    "source_wafer_key": source_wafer_key,
-                }
-                insp_dt_geo = _parse_source_inspection_time(source_inspection_time)
-                inspection = await self._upstream.get_inspection(
-                    insp_dt_geo, source_wafer_key
-                )
-                if inspection is not None:
-                    dataset_meta["geometry"] = _geometry_from_inspection(inspection)
-                await self._repo.update_dataset_meta(dataset.id, dataset_meta)
-
-            return dataset
-        except Exception:
-            logger.exception(
-                "Failed to create dataset: %s (%s/%s)",
-                dataset_name,
-                source_inspection_time,
-                source_wafer_key,
-            )
-            return None
+        dataset_meta: dict[str, Any] = {
+            "source_inspection_time": source_inspection_time,
+            "source_wafer_key": source_wafer_key,
+        }
+        if inspection is not None:
+            dataset_meta["geometry"] = _geometry_from_inspection(inspection)
+        await self._repo.update_dataset_meta(
+            dataset.id,
+            dataset_meta,
+            org_id=org_id,
+        )
+        return dataset
 
     async def _fail(
         self,
@@ -623,7 +606,6 @@ class ScImportService:
         source_inspection_time: str = "",
         source_wafer_key: int = 0,
         dataset_name: str = "",
-        storage_mode: str = "file_shard_sparse",
     ) -> ScImportStatus:
         failed_status = ScImportStatus(
             status="failed",
@@ -631,6 +613,5 @@ class ScImportService:
             source_inspection_time=source_inspection_time,
             source_wafer_key=source_wafer_key,
             dataset_name=dataset_name,
-            storage_mode=storage_mode,
         )
         return failed_status

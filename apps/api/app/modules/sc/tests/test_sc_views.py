@@ -91,7 +91,7 @@ def test_patch_image_v1_view_exists():
         assert len(data["items"]) >= 1
         item = data["items"][0]
         assert "sample_id" in item
-        assert item["inspection_time"] == "2024-01-15T00:30:00+00:00"
+        assert item["inspection_time"] == "2024-01-15T08:30:00+08:00"
         assert item["wafer_key"] == 1
         assert item["defect_id"] == "D001"
 
@@ -191,8 +191,8 @@ def test_invalid_sc_view_returns_422():
         assert "nonexistent_view_v1" in detail
 
 
-def test_image_input_v1_not_supported_for_sc():
-    """image_input_v1 view is not available for image_sc datasets."""
+def test_image_input_v1_is_available_for_sc():
+    """A declared generic view is projected directly from canonical SampleRow."""
     with TestClient(app) as client:
         resp = client.post(
             "/api/v1/datasets",
@@ -215,8 +215,11 @@ def test_image_input_v1_not_supported_for_sc():
         )
         assert resp2.status_code == 200
 
-        # image_input_v1 is not a valid view for image_sc datasets
         resp3 = client.get(
             f"/api/v1/datasets/{dataset_id}/views/image_input_v1/samples?limit=10"
         )
-        assert resp3.status_code == 422
+        assert resp3.status_code == 200
+        body = resp3.json()
+        assert body["total"] == 1
+        assert body["items"][0]["sample_id"] == resp2.json()["id"]
+        assert body["items"][0]["image_uris"] == ["http://example.com/img.png"]

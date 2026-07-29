@@ -6,7 +6,6 @@ SHELL := /bin/bash
 # ──────────────────────────────────────────────
 API_DIR     := apps/api
 WEB_DIR     := apps/web
-RUNTIME_DIR    := libs/platform-runtime
 COMPOSE     := infra/compose/docker-compose.yaml
 OPENAPI_SPEC := openapi/openapi.yaml
 PROTO_DIR    := protos
@@ -100,12 +99,12 @@ dev-web: ## Start frontend dev server (default: 5173)
 # GPU worker (host) — only ONE of this OR compose --profile gpu should run at a time
 .PHONY: prefect-worker-gpu-host
 prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
-	cd apps/api && uv sync --extra gpu && \
-	uvx prefect init --profile local --no-prompt && \
+	cd apps/api && uv sync --group gpu && \
+	uv run python -m prefect init --profile local --no-prompt && \
 	PREFECT_API_URL=http://localhost:4200/api \
 	PLATFORM_API_URL=http://localhost:8000 \
 	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
-	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run prefect worker start --pool default-gpu
+	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run python -m prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
 # Database
@@ -129,11 +128,11 @@ test: test-api check-openapi-sync ## Run all tests
 .PHONY: test-api
 test-api: ## Run API tests
 	@if command -v timeout >/dev/null 2>&1; then \
-		timeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		timeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	elif command -v gtimeout >/dev/null 2>&1; then \
-		gtimeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		gtimeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	else \
-		python3 scripts/run_with_timeout.py --timeout $(TEST_TIMEOUT) -- bash -lc 'cd $(API_DIR) && uv run --extra dev pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		python3 scripts/run_with_timeout.py --timeout $(TEST_TIMEOUT) -- bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	fi
 
 .PHONY: test-web
@@ -193,7 +192,7 @@ generate-openapi-spec: ## Export OpenAPI spec from FastAPI routes to openapi/ope
 
 .PHONY: generate-api-models
 generate-api-models: ## Generate backend transport models from openapi/openapi.yaml
-	cd $(API_DIR) && uv run --extra dev datamodel-codegen --input ../../$(OPENAPI_SPEC) --input-file-type openapi --output app/shared/generated/openapi_models.py
+	cd $(API_DIR) && uv run --extra dev python -m datamodel_code_generator --input ../../$(OPENAPI_SPEC) --input-file-type openapi --output app/shared/generated/openapi_models.py
 
 .PHONY: generate-web-types
 generate-web-types: ## Generate frontend transport types from openapi/openapi.yaml
@@ -263,14 +262,6 @@ reset-app-data: ## Drop and recreate all application tables
 
 
 # ──────────────────────────────────────────────
-# SDK / CLI
-# ──────────────────────────────────────────────
-
-.PHONY: ftctl
-ftctl: ## Run ftctl CLI (usage: make ftctl ARGS="jobs ls")
-	cd $(RUNTIME_DIR) && uv run ftctl $(ARGS)
-
-# ──────────────────────────────────────────────
 # Seed data
 # ──────────────────────────────────────────────
 
@@ -313,13 +304,18 @@ smoke-tests: ## Run all smoke tests (requires: make up-dev)
 	uv run python scripts/smoke_wafer_e2e.py $(ARGS)
 #  Config overrides: ARGS="--wafer-db-url /custom/path.db --trainer-id resnet50-sc-v1"
 
+.PHONY: smoke-wafer-train-predict
+smoke-wafer-train-predict: ## Run seedmaker wafer images through live train -> predict
+	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
+	uv run --directory apps/api python ../../scripts/smoke_wafer_train_predict.py $(ARGS)
+
 # ──────────────────────────────────────────────
 # Regression tests
 # ──────────────────────────────────────────────
 
 .PHONY: test-regression
 test-regression: ## Run pytest-native seed regression tests (SQLite, no Docker needed)
-	cd $(API_DIR) && uv run --extra dev pytest tests/test_seed_regression_*.py -v
+	cd $(API_DIR) && uv run --extra dev python -m pytest tests/test_seed_regression_*.py -v
 
 .PHONY: smoke-regression
 smoke-regression: ## Run live-stack smoke regression (needs Docker Compose)
@@ -587,7 +583,7 @@ help: ## Show this help message
 	@printf '  \033[36m%-16s\033[0m %s\n' "WEB_PORT" "Web dev server port (default: 5173)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for test targets in seconds (default: 300)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stuck timeout for stack dumps in seconds (default: 60)"
-	@printf '  \033[36m%-16s\033[0m %s\n' "ARGS" "Extra args passed to test/ftctl/logs"
+	@printf '  \033[36m%-16s\033[0m %s\n' "ARGS" "Extra args passed to test/seed/logs"
 	@printf '  \033[36m%-16s\033[0m %s\n' "MSG" "Alembic revision message"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_NETWORK" "Shared Docker network for production split stack (default: finetune-prod)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_STATEFUL_ENV" "Path to stateful .env file (default: /srv/finetune/stateful/.env)"

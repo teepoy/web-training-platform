@@ -13,13 +13,8 @@ import {
   exportDatasetApiV1ExportsDatasetIdGet,
   exportDatasetPersistApiV1ExportsDatasetIdPersistPost,
   similaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGet,
-  selectionMetricsApiV1DatasetsDatasetIdSelectionMetricsGet,
-  uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet,
-  getEmbedConfigApiV1DatasetsDatasetIdEmbedConfigGet,
-  updateEmbedConfigApiV1DatasetsDatasetIdEmbedConfigPatch,
   getDashboardApiV1DashboardGet,
   queryDatasetDataApiV1DatasetsDatasetIdQueryPost,
-  extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPost,
   listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGet,
   updateDatasetApiV1DatasetsDatasetIdPatch,
 } from "@/generated/orval/endpoints/api";
@@ -36,18 +31,8 @@ import type {
   BulkCreateSampleResponse,
 } from "@/generated/orval/models";
 import type { Dataset, SampleWithLabels } from "@/generated/orval/models";
-import type {
-  SyncResult,
-  CreateDatasetBody,
-  ExtractFeaturesResponse,
-  PaginatedResponse,
-} from "./types";
-import type {
-  SelectionMetricsResponse,
-  UncoveredHintsResponse,
-  DatasetExport,
-  ExportFormatItem,
-} from "./ui-helpers";
+import type { SyncResult, CreateDatasetBody, PaginatedResponse } from "./types";
+import type { DatasetExport, ExportFormatItem } from "./ui-helpers";
 
 export async function listDatasets(): Promise<Dataset[]> {
   const pageSize = 200;
@@ -200,17 +185,6 @@ export function exportViaCube(
   }).then((r) => r.data);
 }
 
-export async function extractFeatures(
-  datasetId: string,
-  force?: boolean,
-): Promise<ExtractFeaturesResponse> {
-  return (
-    await extractFeaturesApiV1DatasetsDatasetIdFeaturesExtractPost(datasetId, {
-      force,
-    })
-  ).data as ExtractFeaturesResponse;
-}
-
 export async function getSimilarity(
   datasetId: string,
   sampleId: string,
@@ -223,31 +197,6 @@ export async function getSimilarity(
       k !== undefined ? { k } : undefined,
     )
   ).data as SimilarityResponse;
-}
-
-export async function getSelectionMetrics(datasetId: string): Promise<SelectionMetricsResponse> {
-  return (await selectionMetricsApiV1DatasetsDatasetIdSelectionMetricsGet(datasetId))
-    .data as SelectionMetricsResponse;
-}
-
-export async function getUncoveredHints(datasetId: string): Promise<UncoveredHintsResponse> {
-  return (await uncoveredHintsApiV1DatasetsDatasetIdHintsUncoveredGet(datasetId))
-    .data as UncoveredHintsResponse;
-}
-
-export async function getEmbedConfig(datasetId: string): Promise<Record<string, unknown>> {
-  return (await getEmbedConfigApiV1DatasetsDatasetIdEmbedConfigGet(datasetId)).data as Record<
-    string,
-    unknown
-  >;
-}
-
-export async function updateEmbedConfig(
-  datasetId: string,
-  config: { model: string; dimension: number },
-): Promise<Record<string, unknown>> {
-  return (await updateEmbedConfigApiV1DatasetsDatasetIdEmbedConfigPatch(datasetId, config))
-    .data as Record<string, unknown>;
 }
 
 export async function getDashboard(): Promise<DashboardResponse> {

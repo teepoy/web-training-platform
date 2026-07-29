@@ -296,4 +296,4 @@ def make_wafer_map_response_pb(
     if include_reticle_points and map_mode in (None, "reticle"):
         msg.reticle_points.extend(_pack_points(reticle_df, "reticle_x", "reticle_y"))
 
-    return msg.SerializeToString()
+    return msg.SerializeToString(deterministic=True)

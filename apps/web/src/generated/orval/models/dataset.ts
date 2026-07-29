@@ -10,7 +10,6 @@ import type { DatasetEmbedConfig } from './datasetEmbedConfig';
 import type { DatasetLsProjectId } from './datasetLsProjectId';
 import type { DatasetLsProjectUrl } from './datasetLsProjectUrl';
 import type { DatasetStorageMode } from './datasetStorageMode';
-import type { DatasetCapabilities } from './datasetCapabilities';
 import type { DatasetDatasetMeta } from './datasetDatasetMeta';
 
 export interface Dataset {
@@ -29,6 +28,5 @@ export interface Dataset {
   ls_project_id?: DatasetLsProjectId;
   ls_project_url?: DatasetLsProjectUrl;
   storage_mode?: DatasetStorageMode;
-  capabilities?: DatasetCapabilities;
   dataset_meta?: DatasetDatasetMeta;
 }

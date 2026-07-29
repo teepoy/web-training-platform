@@ -8,18 +8,18 @@ from tests.helpers.factories import list_samples
 from tests.helpers.fixtures import seeded_multi_image_scatter  # noqa: F401
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_seed_creates_scatter_dataset(
-    seeded_multi_image_scatter: tuple[str, str],
+    seeded_multi_image_scatter: tuple[str, str],  # noqa: F811
 ) -> None:
     dataset_id, name = seeded_multi_image_scatter
     assert dataset_id, "Expected a non-empty dataset_id"
     assert "Scatter" in name, f"Name should contain 'Scatter', got: {name}"
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_scatter_samples_have_multi_images_and_metadata(
-    seeded_multi_image_scatter: tuple[str, str],
+    seeded_multi_image_scatter: tuple[str, str],  # noqa: F811
 ) -> None:
     dataset_id, _ = seeded_multi_image_scatter
     with TestClient(app) as client:

@@ -17,16 +17,25 @@ import base64
 import json
 import math
 from io import BytesIO
-from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
 
-from libs.ml.classification._utils import _image_embedding_from_bytes
-from libs.ml.classification.predictor import ClassificationPredictor
-from libs.ml.classification.trainer import ClassificationTrainer
-from libs.ml.detection.trainer import DetectionTrainer
-from libs.ml.domain import DatasetRef, ModelRef, PredictContext, TrainContext
+from app.runtime_compat.ml.demo.classification._utils import (
+    _image_embedding_from_bytes,
+)
+from app.runtime_compat.ml.demo.classification.predictor import (
+    ClassificationPredictor,
+)
+from app.runtime_compat.ml.demo.classification.trainer import ClassificationTrainer
+from app.runtime_compat.ml.demo.detection.predictor import DetectionPredictor
+from app.runtime_compat.ml.demo.detection.trainer import DetectionTrainer
+from app.runtime_compat.ml.demo.domain import (
+    DatasetRef,
+    ModelRef,
+    PredictContext,
+    TrainContext,
+)
 
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers
@@ -69,6 +78,9 @@ class _MockArtifactStorage:
         key = uri.split("://", 1)[1]
         self._store.pop(key, None)
 
+    async def list_prefix(self, prefix: str) -> list[str]:
+        return [f"memory://{key}" for key in self._store if key.startswith(prefix)]
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 1.  _image_embedding_from_bytes with embed_fn
@@ -80,7 +92,10 @@ class TestImageEmbeddingWithEmbedFn:
 
     def test_embed_fn_512dim_full(self) -> None:
         """embed_fn returns 512‑dim vector, ``dim=512`` → 512‑dim normalised."""
-        embed_fn: object = lambda _b: [0.1] * 512
+
+        def embed_fn(_b: bytes) -> list[float]:
+            return [0.1] * 512
+
         vec = _image_embedding_from_bytes(b"test", dim=512, embed_fn=embed_fn)
         assert len(vec) == 512
         norm = math.sqrt(sum(x * x for x in vec))
@@ -88,7 +103,10 @@ class TestImageEmbeddingWithEmbedFn:
 
     def test_embed_fn_truncate_to_64(self) -> None:
         """embed_fn returns 512‑dim vector, default ``dim=64`` → truncated + normalised."""
-        embed_fn: object = lambda _b: [0.1] * 512
+
+        def embed_fn(_b: bytes) -> list[float]:
+            return [0.1] * 512
+
         vec = _image_embedding_from_bytes(b"test", embed_fn=embed_fn)
         assert len(vec) == 64
         # First 64 values of [0.1]*512, normalised
@@ -100,7 +118,10 @@ class TestImageEmbeddingWithEmbedFn:
 
     def test_embed_fn_pad_to_64(self) -> None:
         """embed_fn returns 8‑dim vector → padded to 64‑dim, then normalised."""
-        embed_fn: object = lambda _b: [1.0] * 8
+
+        def embed_fn(_b: bytes) -> list[float]:
+            return [1.0] * 8
+
         vec = _image_embedding_from_bytes(b"test", embed_fn=embed_fn)
         assert len(vec) == 64
         raw = [1.0] * 8 + [0.0] * 56
@@ -262,7 +283,7 @@ async def test_classification_predictor_with_embed_fn() -> None:
 
 @pytest.mark.asyncio
 async def test_detection_trainer_backward_compat() -> None:
-    """DetectionTrainer without ``embed_fn`` falls back to 8×8 gray → 64‑dim prototypes."""
+    """DetectionTrainer uses the default 8×8 gray embedding."""
     storage = _MockArtifactStorage()
     img_bytes = _png_bytes()
 
@@ -296,3 +317,52 @@ async def test_detection_trainer_backward_compat() -> None:
         assert len(vec) == 64, f"{label} prototype expected 64 dims, got {len(vec)}"
         norm = math.sqrt(sum(x * x for x in vec))
         assert abs(norm - 1.0) < 1e-6, f"{label} prototype should be normalised"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trainer_cls", [ClassificationTrainer, DetectionTrainer])
+async def test_trainer_rejects_dataset_without_readable_labeled_images(
+    trainer_cls,
+) -> None:
+    storage = _MockArtifactStorage()
+    trainer = trainer_cls(artifact_storage=storage)
+    ctx = TrainContext(
+        job_id="empty-training-data",
+        model_ref=ModelRef(architecture="test", framework="pytorch"),
+        dataset_ref=DatasetRef(
+            dataset_id="test-ds",
+            label_space=["cat", "dog"],
+            metadata={"records": []},
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="no labeled samples with readable images",
+    ):
+        await trainer.train(ctx)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("predictor_cls", "message"),
+    [
+        (ClassificationPredictor, "valid classification prototype JSON"),
+        (DetectionPredictor, "valid detection prototype JSON"),
+    ],
+)
+async def test_predictor_rejects_corrupt_model_artifact(
+    predictor_cls,
+    message: str,
+) -> None:
+    storage = _MockArtifactStorage()
+    uri = await storage.put_bytes("models/corrupt.json", b"not-json")
+    predictor = predictor_cls(artifact_storage=storage)
+
+    with pytest.raises(ValueError, match=message):
+        await predictor.load_model(
+            ModelRef(
+                uri=uri,
+                metadata={"label_space": ["cat", "dog"]},
+            )
+        )

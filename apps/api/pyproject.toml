@@ -19,6 +19,7 @@ dependencies = [
   "pydantic==2.12.5",
   "omegaconf==2.3.0",
   "httpx==0.28.1",
+  "injector==0.22.0",
   "prefect==3.6.24",
   "label-studio-sdk==2.0.19",
   "sqlalchemy==2.0.48",
@@ -33,8 +34,6 @@ dependencies = [
   "pgvector==0.4.2",
   "grpcio==1.80.0",
   "proto-stubs",
-  "platform-runtime",
-  "finetune-ml",
   "croniter==6.2.2",
   "datasets>=3.0",
   "pillow==12.2.0",
@@ -50,15 +49,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest==9.0.2", "pytest-asyncio==1.3.0"]
-gpu = ["finetune-ml", "ultralytics>=8.4.58"]
+gpu = ["ultralytics>=8.4.58"]
 
 [project.scripts]
 ftapi = "app.cli:main"
 
 [tool.uv.sources]
 proto-stubs = { workspace = true }
-platform-runtime = { workspace = true }
-finetune-ml = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "app"]
@@ -69,9 +66,16 @@ markers = [
   "no_auth_override: skip the global auth dependency override for this test",
   "no_ls_override: skip the global Label Studio client override for this test",
   "boundary: import/runtime boundary harness tests",
-  "slow: marks tests as slow and skipped by default (run with -m slow)",
+  "integration: API/module integration coverage (run with -m integration)",
+  "regression: legacy regression/e2e coverage (run with -m regression)",
+  "slow: truly long-running tests skipped by default (run with -m slow)",
+  "dev_server: requires a running local dev API/server and is skipped unless --run-dev-server is passed",
 ]
-addopts = "-m 'not slow'"
+addopts = "-m 'not slow and not dev_server'"
+pythonpath = ["../../scripts"]
+filterwarnings = [
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20:label_studio_sdk.*",
+]
 
 [dependency-groups]
 dev = [
@@ -84,24 +88,25 @@ gpu = ["ultralytics>=8.4.58"]
 
 [tool.pyright]
 extraPaths = [
-  "../../libs/platform-runtime/src",
-  "../../libs/ml",
-  "../../libs/seedmaker/src",
+  "../../scripts",
 ]
 exclude = [
   "app/shared/generated/**",
   "app/modules/sc/generated/**",
   "app/_torch_boundary_test.py",
   "app/modules/embedding/flows/embed.py",
-  "app/modules/prediction/flows/_predictors/sc.py",
-  "app/modules/prediction/flows/_predictors/yolo_sc.py",
+  "app/runtime_compat/ml/predictors/sc.py",
+  "app/runtime_compat/ml/predictors/yolo_sc.py",
   "app/modules/sc/tests/test_training_preview.py",
-  "app/modules/training/flows/_trainers/sc.py",
-  "app/modules/training/flows/_trainers/yolo_sc.py",
+  "app/runtime_compat/ml/trainers/sc.py",
+  "app/runtime_compat/ml/trainers/yolo_sc.py",
 ]
 typeCheckingMode = "basic"
 reportMissingImports = true
 reportMissingModuleSource = true
+
+[tool.mypy]
+disable_error_code = ["type-abstract"]
 
 [tool.ruff]
 exclude = ["tests/", "alembic/", "**/*_test.py", "app/modules/*/tests/"]

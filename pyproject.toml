@@ -33,14 +33,10 @@ requires-dist = [
 members = [
   "apps/api",
   "services/sc-upstream",
-  "libs/ml",
-  "libs/platform-runtime",
-  "libs/python-sdk",
   "libs/protos",
 ]
 
 [tool.uv.sources]
-finetune-ml = { workspace = true }
 finetune-api = { workspace = true }
 
 [dependency-groups]
@@ -48,7 +44,6 @@ dev = [
   "boto3>=1.43.9",
   "fastapi[all]>=0.135.2",
   "finetune-api[gpu]",
-  "finetune-ml",
   "grpcio-tools==1.80.0",
   "mkdocs==1.6.1",
   "omegaconf>=2.3.0",
@@ -66,7 +61,7 @@ exclude = [
 ]
 
 [tool.pyright]
-extraPaths = ["libs/platform-runtime/src", "libs/ml"]
+extraPaths = []
 
 [tool.ruff]
 exclude = [
@@ -75,6 +70,9 @@ exclude = [
   "apps/api/alembic/",
   "libs/protos/src/proto_stubs/",
 ]
+
+[tool.mypy]
+disable_error_code = ["type-abstract"]
 
 
 [tool.pytest.ini_options]

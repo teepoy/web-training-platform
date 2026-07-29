@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://web-training-platform.local/schemas/runtime-routing.schema.json",
+  "title": "Runtime Routing Descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "training_routes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/deploymentRoute" }
+    },
+    "prediction_routes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/deploymentRoute" }
+    },
+    "train_and_predict_routes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/deploymentRoute" }
+    },
+    "materialization_routes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/deploymentRoute" }
+    }
+  },
+  "$defs": {
+    "deploymentRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deployment", "input_contract", "output_contract", "resource_profile", "owner"],
+      "properties": {
+        "deployment": { "type": "string", "minLength": 1 },
+        "input_contract": { "type": "string", "minLength": 1 },
+        "output_contract": { "type": "string", "minLength": 1 },
+        "resource_profile": { "enum": ["cpu", "gpu"] },
+        "owner": { "enum": ["local_compat", "external"] },
+        "algo_id": { "type": "string" },
+        "algo_version": { "type": "string" },
+        "missing_image_policy": { "enum": ["fail", "skip"] }
+      }
+    }
+  }
+}

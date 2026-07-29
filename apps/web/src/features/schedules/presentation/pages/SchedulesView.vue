@@ -1,82 +1,75 @@
 <template>
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
-      <div style="padding: 48px; text-align: center;">
+      <div style="padding: 48px; text-align: center">
         <n-empty description="You are not a member of any organization. Contact an admin." />
       </div>
     </template>
     <template v-else>
-    <n-page-header title="Schedules">
-      <template #extra>
-        <n-button style="margin-right: 8px" @click="openTaskExplorer">Open Task Explorer</n-button>
-        <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
-      </template>
-    </n-page-header>
+      <n-page-header title="Schedules">
+        <template #extra>
+          <n-button style="margin-right: 8px" @click="openTaskExplorer"
+            >Open Task Explorer</n-button
+          >
+          <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
+        </template>
+      </n-page-header>
 
-    <n-spin :show="isLoading">
-      <n-data-table
-        :columns="columns"
-        :data="schedules ?? []"
-        :row-props="rowProps"
-        :bordered="true"
-        :striped="true"
-        :loading="isLoading"
-      />
-    </n-spin>
+      <n-spin :show="isLoading">
+        <n-data-table
+          :columns="columns"
+          :data="schedules ?? []"
+          :row-props="rowProps"
+          :bordered="true"
+          :striped="true"
+          :loading="isLoading"
+        />
+      </n-spin>
 
-    <!-- Create Schedule Modal -->
-    <n-modal
-      v-model:show="showModal"
-      preset="dialog"
-      title="Create Schedule"
-      positive-text="Create"
-      negative-text="Cancel"
-      :loading="createMutation.isPending.value"
-      @positive-click="onSubmit"
-      @negative-click="onCancel"
-    >
-      <n-form
-        ref="formRef"
-        :model="formModel"
-        :rules="formRules"
-        label-placement="left"
-        label-width="auto"
+      <!-- Create Schedule Modal -->
+      <n-modal
+        v-model:show="showModal"
+        preset="dialog"
+        title="Create Schedule"
+        positive-text="Create"
+        negative-text="Cancel"
+        :loading="createMutation.isPending.value"
+        @positive-click="onSubmit"
+        @negative-click="onCancel"
       >
-        <n-form-item label="Name" path="name">
-          <n-input
-            v-model:value="formModel.name"
-            placeholder="my-schedule"
-          />
-        </n-form-item>
-        <n-form-item label="Flow" path="flow_name">
-          <n-select
-            v-model:value="formModel.flow_name"
-            :options="flowOptions"
-            placeholder="Select a flow"
-          />
-        </n-form-item>
-        <n-form-item label="Cron" path="cron">
-          <n-input
-            v-model:value="formModel.cron"
-            placeholder="*/5 * * * *"
-          />
-        </n-form-item>
-        <n-form-item label="Parameters" path="parameters">
-          <n-input
-            v-model:value="formModel.parameters"
-            type="textarea"
-            placeholder="{}"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-          />
-        </n-form-item>
-        <n-form-item label="Description" path="description">
-          <n-input
-            v-model:value="formModel.description"
-            placeholder="Optional description"
-          />
-        </n-form-item>
-      </n-form>
-    </n-modal>
+        <n-form
+          ref="formRef"
+          :model="formModel"
+          :rules="formRules"
+          label-placement="left"
+          label-width="auto"
+        >
+          <n-form-item label="Name" path="name">
+            <n-input v-model:value="formModel.name" placeholder="my-schedule" />
+          </n-form-item>
+          <n-form-item label="Flow" path="flow_name">
+            <n-select
+              v-model:value="formModel.flow_name"
+              :options="flowOptions"
+              placeholder="Select a flow"
+            />
+          </n-form-item>
+          <n-form-item label="Cron" path="cron">
+            <n-input v-model:value="formModel.cron" placeholder="*/5 * * * *" />
+          </n-form-item>
+          <n-form-item label="Parameters" path="parameters">
+            <n-input
+              v-model:value="formModel.parameters"
+              type="textarea"
+              placeholder="{}"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+            />
+          </n-form-item>
+          <n-form-item label="Description" path="description">
+            <n-input v-model:value="formModel.description" placeholder="Optional description" />
+          </n-form-item>
+        </n-form>
+      </n-modal>
     </template>
   </n-space>
 </template>
@@ -94,7 +87,7 @@ import {
   usePauseScheduleApiV1SchedulesScheduleIdPausePost,
   useResumeScheduleApiV1SchedulesScheduleIdResumePost,
 } from "@/generated/orval/endpoints/api";
-import { useOrgStore } from '@/features/auth/application/org';
+import { useOrgStore } from "@/features/auth/application/org";
 import type { ScheduleResponse as Schedule } from "@/generated/orval/models";
 
 const router = useRouter();
@@ -107,13 +100,21 @@ const orgStore = useOrgStore();
 // Query
 // ---------------------------------------------------------------------------
 
-const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet({
-  query: {
-    select: (response) => response.data,
-    queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
-    enabled: computed(() => !!orgStore.currentOrgId),
+const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet(
+  { offset: 0, limit: 200 },
+  {
+    query: {
+      select: (response) => {
+        if (!("items" in response.data)) {
+          throw new Error("Failed to list schedules");
+        }
+        return response.data.items;
+      },
+      queryKey: computed(() => ["schedules", orgStore.currentOrgId]),
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
   },
-});
+);
 
 // ---------------------------------------------------------------------------
 // Mutations
@@ -198,7 +199,7 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
           size: "small",
           round: true,
         },
-        { default: () => (row.is_schedule_active ? "active" : "paused") }
+        { default: () => (row.is_schedule_active ? "active" : "paused") },
       ),
   },
   {
@@ -206,64 +207,67 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
     key: "actions",
     width: 240,
     render: (row) =>
-      h(NSpace, { size: "small" }, {
-        default: () => [
-          h(
-            NButton,
-            {
-              size: "small",
-              onClick: (e: Event) => {
-                e.stopPropagation();
-                router.push("/schedules/" + row.id);
+      h(
+        NSpace,
+        { size: "small" },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: "small",
+                onClick: (e: Event) => {
+                  e.stopPropagation();
+                  router.push("/schedules/" + row.id);
+                },
               },
-            },
-            { default: () => "View" }
-          ),
-          h(
-            NButton,
-            {
-              size: "small",
-              type: row.is_schedule_active ? "warning" : "primary",
-              loading:
-                (row.is_schedule_active
+              { default: () => "View" },
+            ),
+            h(
+              NButton,
+              {
+                size: "small",
+                type: row.is_schedule_active ? "warning" : "primary",
+                loading: row.is_schedule_active
                   ? pauseMutation.isPending.value
-                  : resumeMutation.isPending.value),
-              onClick: (e: Event) => {
-                e.stopPropagation();
-                if (row.is_schedule_active) {
-                  pauseMutation.mutate({ scheduleId: row.id });
-                } else {
-                  resumeMutation.mutate({ scheduleId: row.id });
-                }
+                  : resumeMutation.isPending.value,
+                onClick: (e: Event) => {
+                  e.stopPropagation();
+                  if (row.is_schedule_active) {
+                    pauseMutation.mutate({ scheduleId: row.id });
+                  } else {
+                    resumeMutation.mutate({ scheduleId: row.id });
+                  }
+                },
               },
-            },
-            { default: () => (row.is_schedule_active ? "Pause" : "Resume") }
-          ),
-          h(
-            NPopconfirm,
-            {
-              onPositiveClick: (e: MouseEvent) => {
-                e.stopPropagation();
-                deleteMutation.mutate({ scheduleId: row.id });
+              { default: () => (row.is_schedule_active ? "Pause" : "Resume") },
+            ),
+            h(
+              NPopconfirm,
+              {
+                onPositiveClick: (e: MouseEvent) => {
+                  e.stopPropagation();
+                  deleteMutation.mutate({ scheduleId: row.id });
+                },
               },
-            },
-            {
-              trigger: () =>
-                h(
-                  NButton,
-                  {
-                    size: "small",
-                    type: "error",
-                    loading: deleteMutation.isPending.value,
-                    onClick: (e: Event) => e.stopPropagation(),
-                  },
-                  { default: () => "Delete" }
-                ),
-              default: () => "Are you sure you want to delete this schedule?",
-            }
-          ),
-        ],
-      }),
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: "small",
+                      type: "error",
+                      loading: deleteMutation.isPending.value,
+                      onClick: (e: Event) => e.stopPropagation(),
+                    },
+                    { default: () => "Delete" },
+                  ),
+                default: () => "Are you sure you want to delete this schedule?",
+              },
+            ),
+          ],
+        },
+      ),
   },
 ]);
 
@@ -290,9 +294,7 @@ const formModel = ref({
   description: "",
 });
 
-const flowOptions = [
-  { label: "drain-dataset", value: "drain-dataset" },
-];
+const flowOptions = [{ label: "drain-dataset", value: "drain-dataset" }];
 
 const formRules: FormRules = {
   name: [{ required: true, message: "Name is required", trigger: ["blur", "input"] }],
@@ -303,7 +305,10 @@ const formRules: FormRules = {
       validator: (_rule: unknown, value: string) => {
         if (!value) return true;
         const parts = value.trim().split(/\s+/);
-        return parts.length === 5 || new Error("Cron must have exactly 5 fields (min hour dom month dow)");
+        return (
+          parts.length === 5 ||
+          new Error("Cron must have exactly 5 fields (min hour dom month dow)")
+        );
       },
       trigger: ["blur"],
     },
@@ -324,7 +329,11 @@ function onSubmit() {
     let parsedParams: Record<string, unknown> = {};
     try {
       parsedParams = JSON.parse(formModel.value.parameters || "{}");
-      if (typeof parsedParams !== "object" || Array.isArray(parsedParams) || parsedParams === null) {
+      if (
+        typeof parsedParams !== "object" ||
+        Array.isArray(parsedParams) ||
+        parsedParams === null
+      ) {
         message.error("Parameters must be a JSON object");
         return;
       }

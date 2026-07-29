@@ -31,13 +31,3 @@ export interface DatasetExport {
 export interface ExportFormatItem {
   format_id: string;
 }
-
-export interface SelectionMetricsResponse {
-  uniqueness: Record<string, number>;
-  representativeness: Record<string, number>;
-}
-
-export interface UncoveredHintsResponse {
-  dataset_id?: string;
-  clusters: Array<{ cluster_id: string; size: number; hint: string }>;
-}

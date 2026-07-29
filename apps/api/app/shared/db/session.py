@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
@@ -12,6 +14,16 @@ from sqlalchemy.ext.asyncio import (
 
 from app.shared.db.registry import Base
 from app.shared.db import registry as _registry  # noqa: F401
+
+
+@dataclass(frozen=True)
+class AppDatabaseSessionFactory:
+    """Typed wrapper for the API control-plane database session maker."""
+
+    sessionmaker: async_sessionmaker[AsyncSession]
+
+    def __call__(self, **local_kw: Any) -> AsyncSession:
+        return self.sessionmaker(**local_kw)
 
 
 def _set_sqlite_pragma(dbapi_connection, _connection_record):

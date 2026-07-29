@@ -10,8 +10,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import uuid
-from typing import AsyncIterator
-from unittest.mock import patch
+from typing import AsyncIterator, cast
+from unittest.mock import AsyncMock, patch
 
 import pyarrow as pa
 import pytest
@@ -79,6 +79,64 @@ def _seed_dataset_with_samples(
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_training_pipeline_reuses_caller_context() -> None:
+    from app.modules.training.flows import train_job
+    from app.shared.context import AppContext
+
+    app_context = cast(AppContext, object())
+    expected = {"job_id": "job-1", "status": "completed"}
+    runner = AsyncMock(return_value=expected)
+
+    with (
+        patch.object(train_job, "_run_training_pipeline_with_context", runner),
+        patch("app.composition.build_flow_app_context") as build_context,
+        patch("app.composition.close_flow_app_context", new_callable=AsyncMock) as close,
+    ):
+        result = await train_job.run_training_pipeline(
+            job_id="job-1",
+            dataset_id="dataset-1",
+            trainer_id="trainer-1",
+            app_context=app_context,
+        )
+
+    assert result == expected
+    build_context.assert_not_called()
+    close.assert_not_awaited()
+    assert runner.await_args is not None
+    assert runner.await_args.kwargs["app_context"] is app_context
+
+
+@pytest.mark.asyncio
+async def test_run_training_pipeline_closes_owned_context_on_failure() -> None:
+    from app.modules.training.flows import train_job
+    from app.shared.context import AppContext
+
+    app_context = cast(AppContext, object())
+    close = AsyncMock()
+
+    with (
+        patch(
+            "app.composition.build_flow_app_context",
+            return_value=app_context,
+        ),
+        patch("app.composition.close_flow_app_context", close),
+        patch.object(
+            train_job,
+            "_run_training_pipeline_with_context",
+            AsyncMock(side_effect=RuntimeError("training failed")),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="training failed"):
+            await train_job.run_training_pipeline(
+                job_id="job-1",
+                dataset_id="dataset-1",
+                trainer_id="trainer-1",
+            )
+
+    close.assert_awaited_once_with(app_context)
 
 
 @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
@@ -279,7 +337,7 @@ def test_train_sparse_materialized() -> None:
 
     from app.modules.training.flows.train_job import run_training_pipeline
 
-    with TestClient(app) as c:
+    with TestClient(app):
         ctx = app.state.app_context
         test_storage = ctx.shared.artifact_storage
         repo = ctx.datasets.dataset_repository

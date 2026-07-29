@@ -20,6 +20,9 @@ from app.modules.auth.port.http.deps import (
     seed_dev_auth_context,
 )
 from app.modules.dashboard.port.http.deps import DashboardServiceDep
+from app.modules.runtime.app.services.deployment_seed import (
+    runtime_prefect_deployment_specs,
+)
 from app.shared.api.schemas import (
     DashboardResponse,
 )
@@ -59,48 +62,20 @@ async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
     _logger.info("Ensuring Prefect deployments (execution.engine=prefect)")
 
     deployments = [
-        # ── GPU pool ──
-        {
-            "deployment_name": "train-job-deployment",
-            "flow_name": "training-train-job",
-            "work_pool_name": "default-gpu",
-            "entrypoint": "app.modules.training.flows.train_job:train_job_flow",
-            "path": "",
-        },
-        {
-            "deployment_name": "train-and-predict-deployment",
-            "flow_name": "training-train-and-predict",
-            "work_pool_name": "default-gpu",
-            "entrypoint": "app.modules.training.flows.train_predict:train_and_predict_flow",
-            "path": "",
-        },
-        {
-            "deployment_name": "predict-job-batch-deployment",
-            "flow_name": "prediction-predict-job",
-            "work_pool_name": "default-gpu",
-            "entrypoint": "app.modules.prediction.flows.predict_job:predict_job_flow",
-            "path": "",
-        },
-        {
-            "deployment_name": "embed-job-batch-deployment",
-            "flow_name": "embedding-embed",
-            "work_pool_name": "default-gpu",
-            "entrypoint": "app.modules.embedding.flows.embed:embed_flow",
-            "path": "",
-        },
+        *runtime_prefect_deployment_specs(cfg),
         # ── CPU pool ──
         {
             "deployment_name": "timer-sensor",
             "flow_name": "timer-sensor",
             "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.sensors.adapter.flows.timer_sensor:timer_sensor",
+            "entrypoint": "app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
             "path": "",
         },
         {
             "deployment_name": "dataset-size-sensor",
             "flow_name": "dataset-size-sensor",
             "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
+            "entrypoint": "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
             "path": "",
         },
         {
@@ -154,42 +129,33 @@ async def lifespan(api: FastAPI):
     import redis.asyncio as redis_client  # type: ignore[import-untyped]
 
     metrics_redis: Any | None = None
-    try:
-        metrics_redis = redis_client.Redis(
-            host=str(cfg.redis.host),
-            port=int(cfg.redis.port),
-            password=str(cfg.redis.password) if cfg.redis.password else None,
-            db=int(cfg.redis.db),
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        )
-        await metrics_redis.ping()  # type: ignore[awaitable]
-        online_jwt_users.configure_redis(metrics_redis)
-
-        ctx.shared.redis_event_publisher = RedisEventPublisher(metrics_redis)
-        _logger.info("Metrics Redis + event publisher configured")
-    except Exception:
-        if metrics_redis is not None:
-            await metrics_redis.aclose()
+    if str(cfg.app.env) == "test":
         online_jwt_users.configure_redis(None)
         ctx.shared.redis_event_publisher = RedisEventPublisher(None)
-        _logger.warning(
-            "Metrics Redis unavailable; falling back to per-process counters"
-        )
-
-    # 3. Label Studio
-    ls_url = str(cfg.label_studio.url)
-    if ls_url:
+        _logger.info("Metrics Redis disabled for test profile")
+    else:
         try:
-            import urllib.request
-
-            urllib.request.urlopen(f"{ls_url}/health", timeout=5)
-            _logger.info("Readiness check passed: label-studio")
-        except Exception:
-            _logger.error(
-                "Readiness check failed: label-studio unreachable", exc_info=True
+            metrics_redis = redis_client.Redis(
+                host=str(cfg.redis.host),
+                port=int(cfg.redis.port),
+                password=str(cfg.redis.password) if cfg.redis.password else None,
+                db=int(cfg.redis.db),
+                socket_connect_timeout=1,
+                socket_timeout=1,
             )
-            sys.exit(1)
+            await metrics_redis.ping()  # type: ignore[awaitable]
+            online_jwt_users.configure_redis(metrics_redis)
+
+            ctx.shared.redis_event_publisher = RedisEventPublisher(metrics_redis)
+            _logger.info("Metrics Redis + event publisher configured")
+        except Exception:
+            if metrics_redis is not None:
+                await metrics_redis.aclose()
+            online_jwt_users.configure_redis(None)
+            ctx.shared.redis_event_publisher = RedisEventPublisher(None)
+            _logger.warning(
+                "Metrics Redis unavailable; falling back to per-process counters"
+            )
 
     if bool(cfg.db.auto_create):
         await init_db(ctx.shared.db_engine)
@@ -198,11 +164,11 @@ async def lifespan(api: FastAPI):
         _logger.info("auth disabled — seeding dev user on startup")
         await seed_dev_auth_context(ctx.shared.session_factory)
 
-    if ctx.sensors is None:
-        raise RuntimeError("AppContext sensors module was not initialized")
+    if ctx.jobs is None:
+        raise RuntimeError("AppContext jobs module was not initialized")
 
     try:
-        sensor_count = ctx.sensors.sensor_registry.load()
+        sensor_count = ctx.jobs.sensors.sensor_registry.load()
     except Exception:
         sensor_count = 0
     _logger.info("Sensor registry: %d sensors loaded", sensor_count)

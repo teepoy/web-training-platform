@@ -29,12 +29,14 @@ class PredictionResult:
 
     sample_id: str
     predicted_label: str
+    id: str | None = None
     confidence: float | None = None
     all_scores: dict[str, float] | None = None
     model_id: str | None = None
     target: str | None = None
     model_version: str | None = None
     job_id: str | None = None
+    created_at: datetime | None = None
     error: str | None = None
 
 

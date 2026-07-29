@@ -3,14 +3,221 @@ from __future__ import annotations
 from functools import lru_cache
 import os
 from pathlib import Path
+from typing import Any, Literal, TypeVar
 
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class SensorsConfig(BaseModel):
+T = TypeVar("T")
+
+
+class ConfigSection(BaseModel):
+    """Typed config section with temporary dict-like access for legacy callers."""
+
+    model_config = ConfigDict(extra="allow")
+
+    def get(self, key: str, default: T | None = None) -> Any | T | None:
+        if hasattr(self, key):
+            return getattr(self, key)
+        extra = self.__pydantic_extra__ or {}
+        return extra.get(key, default)
+
+
+class AppSection(ConfigSection):
+    name: str = "online-finetune-api"
+    env: str = "dev"
+    frontend_url: str = "http://localhost:5173"
+
+
+class ExecutionConfig(ConfigSection):
+    engine: str = "local"
+
+
+class DatabaseConfig(ConfigSection):
+    url: str = "sqlite+aiosqlite:///./finetune.db"
+    echo: bool = False
+    auto_create: bool = False
+
+
+class MinioLifecycleExportsConfig(ConfigSection):
+    enabled: bool = True
+    prefix: str = "exports/"
+    expiration_days: int = 1
+    abort_incomplete_multipart_upload_days: int | None = 1
+
+
+class MinioLifecycleConfig(ConfigSection):
+    exports: MinioLifecycleExportsConfig = Field(
+        default_factory=MinioLifecycleExportsConfig
+    )
+
+
+class MinioConfig(ConfigSection):
+    endpoint: str = "localhost:9000"
+    access_key: str = "minioadmin"
+    secret_key: str = "minioadmin"
+    bucket: str = "finetune-artifacts"
+    secure: bool = False
+    lifecycle: MinioLifecycleConfig = Field(default_factory=MinioLifecycleConfig)
+
+
+class StorageConfig(ConfigSection):
+    kind: str = "minio"
+    minio: MinioConfig = Field(default_factory=MinioConfig)
+    runtime_bucket: str = "finetune-runtime-inputs"
+
+
+class K8sConfig(ConfigSection):
+    namespace: str = "default"
+    incluster: bool = False
+    kubeconfig: str | None = None
+
+
+class KubeflowConfig(ConfigSection):
+    group: str = "kubeflow.org"
+    version: str = "v1"
+    plural: str = "pytorchjobs"
+    image: str = "python:3.11-slim"
+
+
+class WebhookConfig(ConfigSection):
+    endpoint: str = "http://localhost:9000/hooks/training"
+    timeout_seconds: int = 5
+
+
+class NotificationConfig(ConfigSection):
+    sink: str = "webhook"
+    webhook: WebhookConfig = Field(default_factory=WebhookConfig)
+
+
+class OAuthProviderConfig(ConfigSection):
+    display_name: str = ""
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str = ""
+    authorize_url: str = ""
+    token_url: str = ""
+    userinfo_url: str = ""
+    user_emails_url: str = ""
+    scopes: list[str] = Field(default_factory=list)
+    user_mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class OAuthConfig(ConfigSection):
+    enabled: bool = False
+    state_secret: str = "replace-me-in-production"
+    providers: dict[str, OAuthProviderConfig] = Field(default_factory=dict)
+
+
+class PrefectConfig(ConfigSection):
+    api_url: str = "http://localhost:4200/api"
+    ui_url: str = "http://localhost:4200"
+    work_pool_name: str = "default-cpu"
+    work_pool_type: str = "process"
+    flow_name: str = "train-job"
+    concurrency_limit: int = 1
+
+
+class RuntimeDeploymentConfig(ConfigSection):
+    deployment: str
+    input_contract: str
+    output_contract: str
+    resource_profile: Literal["cpu", "gpu"]
+    owner: Literal["local_compat", "external"]
+    algo_id: str
+    algo_version: str
+    missing_image_policy: Literal["fail", "skip"] | None = None
+
+
+class RuntimeRoutingConfig(ConfigSection):
+    training_routes: dict[str, RuntimeDeploymentConfig] = Field(default_factory=dict)
+    train_and_predict_routes: dict[str, RuntimeDeploymentConfig] = Field(
+        default_factory=dict
+    )
+    prediction_routes: dict[str, RuntimeDeploymentConfig] = Field(default_factory=dict)
+    materialization_routes: dict[str, RuntimeDeploymentConfig] = Field(
+        default_factory=dict
+    )
+
+
+class PredictionConfig(ConfigSection):
+    sparse_chunk_size: int = 32
+
+
+class LlmConfig(ConfigSection):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = "qwen/qwen-max"
+    timeout_seconds: float = 30
+
+
+class LabelStudioConfig(ConfigSection):
+    url: str = ""
+    external_url: str = ""
+    api_key: str = ""
+    database_url: str = ""
+
+
+class DataConfig(ConfigSection):
+    dir: str = ""
+
+
+class SensorsConfig(ConfigSection):
     dir: str = "sensors"
     strict: bool = False
+
+
+class AgentConfig(ConfigSection):
+    enabled: bool = True
+    max_panels: int = 8
+    metadata_sample_size: int = 100
+
+
+class RedisConfig(ConfigSection):
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: str = ""
+
+
+class AuthConfig(ConfigSection):
+    enabled: bool = True
+    jwt_secret_key: str = "replace-me-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
+
+class ScMockConfig(ConfigSection):
+    db_url: str = ""
+
+
+class ScConfig(ConfigSection):
+    mock: ScMockConfig = Field(default_factory=ScMockConfig)
+
+
+class AppConfig(ConfigSection):
+    app: AppSection = Field(default_factory=AppSection)
+    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
+    db: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    k8s: K8sConfig = Field(default_factory=K8sConfig)
+    kubeflow: KubeflowConfig = Field(default_factory=KubeflowConfig)
+    notification: NotificationConfig = Field(default_factory=NotificationConfig)
+    oauth: OAuthConfig = Field(default_factory=OAuthConfig)
+    prefect: PrefectConfig = Field(default_factory=PrefectConfig)
+    runtime_routing: RuntimeRoutingConfig = Field(default_factory=RuntimeRoutingConfig)
+    llm: LlmConfig = Field(default_factory=LlmConfig)
+    label_studio: LabelStudioConfig = Field(default_factory=LabelStudioConfig)
+    data: DataConfig = Field(default_factory=DataConfig)
+    sensors: SensorsConfig = Field(default_factory=SensorsConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    sc: ScConfig = Field(default_factory=ScConfig)
+    prediction: PredictionConfig = Field(default_factory=PredictionConfig)
+    model: str = "openai/clip-vit-base-patch32"
+    dimension: int = 512
 
 
 def _require(value: str, field_name: str) -> None:
@@ -18,7 +225,22 @@ def _require(value: str, field_name: str) -> None:
         raise RuntimeError(f"Missing required config: {field_name}")
 
 
-def _validate_runtime_config(cfg: DictConfig, profile: str) -> None:
+def _as_app_config(cfg: AppConfig | DictConfig) -> AppConfig:
+    if isinstance(cfg, AppConfig):
+        return cfg
+    config_data = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(config_data, dict):
+        raise RuntimeError("Application config must be a mapping")
+    return AppConfig.model_validate(config_data)
+
+
+def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
+    runtime_bucket = (
+        OmegaConf.select(cfg, "storage.runtime_bucket", default="")
+        if isinstance(cfg, DictConfig)
+        else cfg.storage.runtime_bucket
+    )
+    cfg = _as_app_config(cfg)
     env = str(cfg.app.env)
     engine = str(cfg.execution.engine)
     storage_kind = str(cfg.storage.kind)
@@ -48,7 +270,7 @@ def _validate_runtime_config(cfg: DictConfig, profile: str) -> None:
     _require(str(cfg.storage.minio.access_key), "storage.minio.access_key")
     _require(str(cfg.storage.minio.secret_key), "storage.minio.secret_key")
     _require(str(cfg.storage.minio.bucket), "storage.minio.bucket")
-    _require(str(cfg.storage.get("runtime_bucket", "")), "storage.runtime_bucket")
+    _require(str(runtime_bucket), "storage.runtime_bucket")
     _require(str(cfg.label_studio.url), "label_studio.url")
     _require(str(cfg.label_studio.api_key), "label_studio.api_key")
     _require(str(cfg.label_studio.database_url), "label_studio.database_url")
@@ -59,7 +281,7 @@ def _config_root() -> Path:
 
 
 @lru_cache(maxsize=4)
-def load_config(skip_runtime_validation: bool = False) -> DictConfig:
+def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     base = OmegaConf.load(_config_root() / "base.yaml")
     profile = os.getenv("APP_CONFIG_PROFILE", "dev")
     profile_path = _config_root() / f"{profile}.yaml"
@@ -126,6 +348,10 @@ def load_config(skip_runtime_validation: bool = False) -> DictConfig:
     if mnt:
         cfg.data.dir = mnt
     assert isinstance(cfg, DictConfig)
+    config_data = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(config_data, dict):
+        raise RuntimeError("Application config must be a mapping")
+    app_config = AppConfig.model_validate(config_data)
     if not skip_runtime_validation:
-        _validate_runtime_config(cfg, profile)
-    return cfg
+        _validate_runtime_config(app_config, profile)
+    return app_config

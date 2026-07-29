@@ -14,6 +14,7 @@ The current storage refactor standardizes both modes behind `DatasetStorageAgg`,
 >
 > The goal is **not** to rebuild full `SampleORM + Label Studio` parity for 100k+ datasets.
 > The goal is to support the real large-dataset workflow:
+>
 > - batch ingest into platform-owned shard storage
 > - run prediction/reclassification at scale
 > - allow sparse human correction where useful
@@ -45,31 +46,31 @@ Sparse mode is **opt-in only**. No existing dataset is converted to sparse autom
 
 ## Capability Matrix
 
-| Capability | `db_full` | `file_shard_sparse` | Notes |
-|---|---|---|---|
-| Dataset create | Supported | Supported | Sparse creation skips LS project setup and full sample materialization. Only dataset metadata and shard manifest are registered. |
-| Import (Parquet shards) | Supported | Supported | Primary sparse ingest path. Streams defects into Parquet shards (10k rows each), builds manifest with `sample_index` for O(1) `defect_id` resolution. v2 importer embeds image bytes in a `list<struct>` column (see [v2 Embedded Image Storage](#v2-embedded-image-storage)). For `db_full`, materializes `SampleORM` rows. |
-| List (paginated, 100k+) | Supported | Supported | Sparse datasets expose shard-level summaries and manifest-driven pagination. Full `SampleORM` pagination is not available. |
-| Sample browsing / individual materialization | Supported | Unsupported | Samples live in Parquet shard files, not `SampleORM` rows. Per-sample materialization is not available. |
-| Annotation (bulk) | Supported | Supported | Sparse bulk annotation resolves `defect_id` → `sample_id` via `manifest.sample_index` at O(1) per annotation. `sample_id` equals `defect_id` in sparse mode (no FK constraint). |
-| Annotation (individual) | Supported | Unsupported | No individual `SampleORM` rows to anchor annotations against. Sparse correction is done through prediction review. |
-| Label Studio project / task integration | Supported | Unsupported | Sparse datasets do not create an LS project. This is intentional, not a missing feature. |
-| LS annotation sync | Supported | Unsupported | No LS project means no sync surface. |
-| Prediction (batch) | Supported | Supported | Streaming shard-based prediction with bounded batches (32-64 rows per GPU call). Per-shard prediction Parquet output. `job_result.json` lightweight manifest. |
-| Prediction result readback / pagination | Supported | Supported | Offset/limit pagination via `job_result.json` manifest. Reads only the needed shard(s) and Parquet rows. |
-| Prediction collection LS sync | Supported | Unsupported | No LS project to sync prediction collections into. |
-| Training | Supported | Supported | `resnet50-sc-v1` trainer. Column-projected reads (3 of 11 columns), grouped by shard for one-read-per-shard efficiency. Epoch and metric events (loss, accuracy, macro F1). Zero-annotation datasets fail with clear error. |
-| Export (with predictions) | Supported | Supported | `sparse-export-v1` format. Joins shard rows with annotations and prediction results. Persists to object storage at `exports/{dataset_id}/sparse-export.json`. |
-| Feature extraction | Supported | Deferred | Requires sparse-native feature storage design. |
-| Similarity search | Supported | Unsupported | Depends on per-sample vectors not available for sparse datasets. |
-| Random sampling | Supported | Unsupported | No per-sample materialization to sample from. |
-| Wafer points | Supported | Unsupported | Wafer coordinate data lives on individual `SampleORM` rows and has no sparse equivalent. |
-| Selection metrics | Supported | Limited | Shard-level aggregate metadata is available. Per-sample selection statistics are not. |
-| Uncovered clusters | Supported | Deferred | Cluster analysis depends on feature extraction and sample-level vectors. |
-| Image upload | Supported | Unsupported | Individual image upload creates `SampleORM` rows. Sparse ingest is batch-oriented. |
-| Agent chat | Supported | Supported | The global agent can query dataset-level metadata for both modes. Sample-level agent operations are unavailable for sparse datasets. |
-| Dataset delete | Supported | Supported | Sparse delete cleans shard artifacts deterministically using dataset-owned prefixes. No per-image enumeration needed. LS project deletion is skipped. |
-| Runtime materialization | Deferred | Deferred | Training and prediction no longer call the HTTP materialization endpoint. They consume `DatasetStorageAgg.list_samples(return_lazyframe=True, ...)` and perform any local parquet/HF conversion inside the trainer/predictor runtime. |
+| Capability                                   | `db_full` | `file_shard_sparse` | Notes                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------- | --------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dataset create                               | Supported | Supported           | Sparse creation skips LS project setup and full sample materialization. Only dataset metadata and shard manifest are registered.                                                                                                                                                                                             |
+| Import (Parquet shards)                      | Supported | Supported           | Primary sparse ingest path. Streams defects into Parquet shards (10k rows each), builds manifest with `sample_index` for O(1) `defect_id` resolution. v2 importer embeds image bytes in a `list<struct>` column (see [v2 Embedded Image Storage](#v2-embedded-image-storage)). For `db_full`, materializes `SampleORM` rows. |
+| List (paginated, 100k+)                      | Supported | Supported           | Sparse datasets expose shard-level summaries and manifest-driven pagination. Full `SampleORM` pagination is not available.                                                                                                                                                                                                   |
+| Sample browsing / individual materialization | Supported | Unsupported         | Samples live in Parquet shard files, not `SampleORM` rows. Per-sample materialization is not available.                                                                                                                                                                                                                      |
+| Annotation (bulk)                            | Supported | Supported           | Sparse bulk annotation resolves `defect_id` → `sample_id` via `manifest.sample_index` at O(1) per annotation. `sample_id` equals `defect_id` in sparse mode (no FK constraint).                                                                                                                                              |
+| Annotation (individual)                      | Supported | Unsupported         | No individual `SampleORM` rows to anchor annotations against. Sparse correction is done through prediction review.                                                                                                                                                                                                           |
+| Label Studio project / task integration      | Supported | Unsupported         | Sparse datasets do not create an LS project. This is intentional, not a missing feature.                                                                                                                                                                                                                                     |
+| LS annotation sync                           | Supported | Unsupported         | No LS project means no sync surface.                                                                                                                                                                                                                                                                                         |
+| Prediction (batch)                           | Supported | Supported           | Streaming shard-based prediction with bounded batches (32-64 rows per GPU call). Per-shard prediction Parquet output. `job_result.json` lightweight manifest.                                                                                                                                                                |
+| Prediction result readback / pagination      | Supported | Supported           | Offset/limit pagination via `job_result.json` manifest. Reads only the needed shard(s) and Parquet rows.                                                                                                                                                                                                                     |
+| Prediction collection LS sync                | Supported | Unsupported         | No LS project to sync prediction collections into.                                                                                                                                                                                                                                                                           |
+| Training                                     | Supported | Supported           | `resnet50-sc-v1` trainer. Column-projected reads (3 of 11 columns), grouped by shard for one-read-per-shard efficiency. Epoch and metric events (loss, accuracy, macro F1). Zero-annotation datasets fail with clear error.                                                                                                  |
+| Export (with predictions)                    | Supported | Supported           | `sparse-export-v1` format. Joins shard rows with annotations and prediction results. Persists to object storage at `exports/{dataset_id}/sparse-export.json`.                                                                                                                                                                |
+| Feature extraction                           | Supported | Deferred            | Requires sparse-native feature storage design.                                                                                                                                                                                                                                                                               |
+| Similarity search                            | Supported | Unsupported         | Depends on per-sample vectors not available for sparse datasets.                                                                                                                                                                                                                                                             |
+| Random sampling                              | Supported | Unsupported         | No per-sample materialization to sample from.                                                                                                                                                                                                                                                                                |
+| Wafer points                                 | Supported | Unsupported         | Wafer coordinate data lives on individual `SampleORM` rows and has no sparse equivalent.                                                                                                                                                                                                                                     |
+| Selection metrics                            | Supported | Limited             | Shard-level aggregate metadata is available. Per-sample selection statistics are not.                                                                                                                                                                                                                                        |
+| Uncovered clusters                           | Supported | Deferred            | Cluster analysis depends on feature extraction and sample-level vectors.                                                                                                                                                                                                                                                     |
+| Image upload                                 | Supported | Unsupported         | Individual image upload creates `SampleORM` rows. Sparse ingest is batch-oriented.                                                                                                                                                                                                                                           |
+| Agent chat                                   | Supported | Supported           | The global agent can query dataset-level metadata for both modes. Sample-level agent operations are unavailable for sparse datasets.                                                                                                                                                                                         |
+| Dataset delete                               | Supported | Supported           | Sparse delete cleans shard artifacts deterministically using dataset-owned prefixes. No per-image enumeration needed. LS project deletion is skipped.                                                                                                                                                                        |
+| Runtime materialization                      | Deferred  | Deferred            | Training and prediction no longer call the HTTP materialization endpoint. They consume `DatasetStorageAgg.list_samples(return_lazyframe=True, ...)` and perform any local parquet/HF conversion inside the trainer/predictor runtime.                                                                                        |
 
 ---
 
@@ -132,7 +133,7 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 **List.** Sparse datasets expose shard-level summaries and manifest-driven pagination. The manifest's `total_rows` and `shards[]` metadata drive list views for datasets of 100k+ rows.
 
-**Annotate.** Bulk annotations resolve `defect_id` → `sample_id` via `manifest.sample_index` at O(1) per annotation. The `sample_id` equals the `defect_id` in sparse mode (no `SampleORM` rows exist). `ScDatasetStore._map_via_sample_index()` handles the mapping; unknown defect IDs are silently excluded without crashing.
+**Annotate.** Bulk annotations resolve `defect_id` → `sample_id` through `ScDatasetAgg`. Sparse mode uses the storage aggregate's manifest index, while `db_full` performs one JSON-metadata query. The `sample_id` equals the `defect_id` in sparse mode (no `SampleORM` rows exist); unknown defect IDs are excluded.
 
 **Train.** `train_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(with_labels=True, return_lazyframe=True)`. The trainer receives the raw LazyFrame, performs SC/view transforms locally, writes any temporary parquet it needs inside the trainer process, and opens it with HuggingFace datasets. No `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
 
@@ -155,19 +156,30 @@ SC sparse datasets have two distinct data models that share the same `file_shard
 
 **Upstream model.** When SC wafers are scanned by inspection equipment, each defect record carries image _references_ in the form of lightweight URIs (S3 keys, file paths). These URIs point to image files stored in the upstream wafer database or object storage. The upstream system never ships raw bytes directly into defect records.
 
-**Storage model (v2 shards).** The platform's SC v2 import flow resolves upstream URIs during ingest and embeds image bytes directly into the Parquet shard files. Instead of the legacy `image_uris` and `metadata` JSON string columns, v2 shards use a single `images` column of type `list<struct>` where each image struct carries:
+**Storage model (v2 shards).** SC v2 shards use a single `images` column of type `list<struct>` instead of the legacy `image_uris` and `metadata` JSON string columns. Image bytes should be embedded during ingest when they are available; `bytes` remains nullable so a row can retain an explicit upstream reference for runtime batch resolution. Each image struct carries:
 
-| Field | Type | Purpose |
-|---|---|---|
-| `image_id` | string | Unique per-sample identifier |
-| `image_type` | string | Image category (e.g. `REVIEW_HIGH_MAG`) |
-| `role` | string | Semantic role: `review`, `patch_template`, or `patch_defective` |
-| `content_type` | string | MIME type (e.g. `image/jpeg`) |
-| `filename` | string | Original filename |
-| `bytes` | binary | Raw image bytes |
-| `source_uri` | string (nullable) | Optional upstream provenance URI |
+| Field          | Type              | Purpose                                                         |
+| -------------- | ----------------- | --------------------------------------------------------------- |
+| `image_id`     | string            | Unique per-sample identifier                                    |
+| `image_type`   | string            | Image category (e.g. `REVIEW_HIGH_MAG`)                         |
+| `role`         | string            | Semantic role: `review`, `patch_template`, or `patch_defective` |
+| `content_type` | string            | MIME type (e.g. `image/jpeg`)                                   |
+| `filename`     | string            | Original filename                                               |
+| `bytes`        | binary            | Raw image bytes                                                 |
+| `source_uri`   | string (nullable) | Optional upstream provenance URI                                |
 
-Downstream consumers (prediction, training, materialization, image serving) read image bytes directly from the shard Parquet without out-of-band S3 fetches or URI resolution. No external image storage dependency exists for v2 datasets after import.
+Training and prediction normalize both storage modes to the same two-role SC input contract: `patch_template` and `patch_defective`. Resolution order is:
+
+1. embedded `images[].bytes` from Arrow/Parquet;
+2. a `data:image/*;base64,...` URI (used by deterministic dev seeds);
+3. an `s3://` or `memory://` object URI through artifact storage;
+4. an explicit SC upstream reference containing inspection, wafer, defect, and image-type identity.
+
+Roles must be declared in `images[].role` or `metadata.shard_images[].role`.
+The runtime does not infer roles from `image_uris` position, `image_type`, or review
+images; missing role metadata is a dataset validation failure.
+
+Rows without both roles are not silently treated as labeled training data. `POST /training-jobs/train-and-predict` runs readiness validation before it creates the training job or submits Prefect work. The report counts annotated, immediately readable, runtime-resolvable, unusable, and skipped samples; it then requires at least two active labels after applying `missing_image_policy`.
 
 **Schema version gating.** A `schema_version` field on `DatasetManifest` distinguishes v2 shards from legacy shards. Datasets imported with the v2 importer carry `schema_version="v2"`. Legacy datasets have `schema_version=None` or `"v1"` and use the old `image_uris` + `metadata` columns.
 
@@ -176,7 +188,7 @@ Downstream consumers (prediction, training, materialization, image serving) read
 **Image serving.** Individual images embedded in v2 shards are available through a dedicated endpoint that reads the `images` column only (column projection), matches the requested `image_id`, and returns raw bytes with the correct `Content-Type` header:
 
 ```
-GET /api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...
+GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}
 ```
 
 Response headers include `Content-Disposition: inline` with the original filename and `Cache-Control: public, max-age=1200` (20-minute browser cache). The endpoint intentionally does not expose `source_uri` fields to clients.
@@ -185,7 +197,7 @@ Because this endpoint is consumed by browser-native image elements (`<img>`, vir
 
 - Dataset/storage URIs (`s3://`, `memory://`) go through `resolveImageUri()` / `resolveImageUris()` in `apps/web/src/shared/utils/image-adapters.ts`, which proxies them through `/api/v1/images/resolve?...` and appends auth query parameters.
 - SC upstream-style images use `scPatchUrl()`, `scReviewUrl()`, or `buildScBlinkImageUrls()` in `apps/web/src/features/sc/domain/models.ts`. The lower-level `patchImageUrl()` and `reviewImageUrl()` helpers intentionally return raw paths and must not be used directly as `<img src>` values.
-- Imported SC dataset views should prefer dataset-owned image refs (`/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...`) over upstream inspection paths. Upstream `/api/v1/sc/images/...` remains a compatibility/preview endpoint, not the preferred imported-dataset rendering path.
+- Imported SC dataset views should prefer dataset-owned image refs (`/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}`) over upstream inspection paths. Upstream `/api/v1/sc/images/...` remains a compatibility/preview endpoint, not the preferred imported-dataset rendering path.
 
 ### Smoke Command
 
@@ -195,6 +207,9 @@ make smoke-tests
 
 # Run just the wafer e2e smoke
 uv run python scripts/smoke_wafer_e2e.py
+
+# Run db-full seed images through combined train-and-predict
+make smoke-wafer-train-predict
 
 # With config overrides
 uv run python scripts/smoke_wafer_e2e.py --import-max-rows 1000 --trainer-id resnet50-sc-v1

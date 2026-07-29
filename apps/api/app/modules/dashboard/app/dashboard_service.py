@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
+from app.core.config import AppConfig
 from app.modules.dashboard.app.services.service_health import (
     ServiceHealthService,
 )
@@ -14,15 +13,17 @@ from app.shared.api.schemas import (
     WorkPoolStatus,
 )
 from app.shared.domain.protocols import PrefectClient
+from injector import inject
 
 
 class DashboardService:
+    @inject
     def __init__(
         self,
         job_repository: JobRepository,
         service_health: ServiceHealthService,
         prefect_client: PrefectClient,
-        config: Any,
+        config: AppConfig,
     ) -> None:
         self._job_repository = job_repository
         self._service_health = service_health

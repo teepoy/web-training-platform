@@ -3,21 +3,57 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 from app.main import _ensure_prefect_deployments
 
 
+def _prefect_cfg() -> DictConfig:
+    return OmegaConf.create(
+        {
+            "execution": {"engine": "prefect"},
+            "runtime_routing": {
+                "training_routes": {
+                    "trainer-a": {
+                        "deployment": "train-job-deployment",
+                        "input_contract": "view.v1",
+                        "output_contract": "model.v1",
+                        "resource_profile": "gpu",
+                        "owner": "local_compat",
+                    }
+                },
+                "train_and_predict_routes": {
+                    "trainer-a": {
+                        "deployment": "train-and-predict-deployment",
+                        "input_contract": "view.v1",
+                        "output_contract": "predictions.v1",
+                        "resource_profile": "gpu",
+                        "owner": "local_compat",
+                    }
+                },
+                "prediction_routes": {
+                    "predictor-a": {
+                        "deployment": "predict-job-batch-deployment",
+                        "input_contract": "view.v1",
+                        "output_contract": "predictions.v1",
+                        "resource_profile": "gpu",
+                        "owner": "local_compat",
+                    }
+                },
+            },
+        }
+    )
+
+
 @pytest.mark.anyio
 async def test_ensure_prefect_deployments_all_entries() -> None:
-    cfg = OmegaConf.create({
-        "execution": {"engine": "prefect"},
-    })
+    cfg = _prefect_cfg()
     mock_client = AsyncMock()
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 7
+    assert mock_client.ensure_deployment.call_count == 6
 
     calls = mock_client.ensure_deployment.call_args_list
     called: list[dict] = []
@@ -37,7 +73,7 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
         "deployment_name": "train-and-predict-deployment",
         "flow_name": "training-train-and-predict",
         "work_pool_name": "default-gpu",
-        "entrypoint": "app.modules.training.flows.train_predict:train_and_predict_flow",
+        "entrypoint": "app.workflows.train_predict:train_and_predict_flow",
         "path": "",
     } in called
 
@@ -50,18 +86,10 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
     } in called
 
     assert {
-        "deployment_name": "embed-job-batch-deployment",
-        "flow_name": "embedding-embed",
-        "work_pool_name": "default-gpu",
-        "entrypoint": "app.modules.embedding.flows.embed:embed_flow",
-        "path": "",
-    } in called
-
-    assert {
         "deployment_name": "timer-sensor",
         "flow_name": "timer-sensor",
         "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.sensors.adapter.flows.timer_sensor:timer_sensor",
+        "entrypoint": "app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
         "path": "",
     } in called
 
@@ -69,7 +97,7 @@ async def test_ensure_prefect_deployments_all_entries() -> None:
         "deployment_name": "dataset-size-sensor",
         "flow_name": "dataset-size-sensor",
         "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
+        "entrypoint": "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
         "path": "",
     } in called
 
@@ -96,13 +124,10 @@ async def test_ensure_prefect_deployments_skips_when_engine_not_prefect() -> Non
 
 @pytest.mark.anyio
 async def test_ensure_prefect_deployments_swallows_errors_per_entry() -> None:
-    cfg = OmegaConf.create({
-        "execution": {"engine": "prefect"},
-    })
+    cfg = _prefect_cfg()
     mock_client = AsyncMock()
     mock_client.ensure_deployment.side_effect = [
         Exception("first fails"),
-        None,
         None,
         None,
         None,
@@ -112,4 +137,4 @@ async def test_ensure_prefect_deployments_swallows_errors_per_entry() -> None:
 
     await _ensure_prefect_deployments(cfg, mock_client)
 
-    assert mock_client.ensure_deployment.call_count == 7
+    assert mock_client.ensure_deployment.call_count == 6

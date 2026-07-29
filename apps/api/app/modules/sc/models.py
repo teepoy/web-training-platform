@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from pydantic import BaseModel
-
 from app.core.registry import dataset
 from app.modules.sc.domain.models import (
     InspectionSummary as _InspectionSummary,
@@ -29,13 +27,3 @@ class PatchSample(_PatchSample):
         "review_image_v1",
     }
     TASK_TYPE: ClassVar[str] = "sc"
-
-
-class ScDataset(BaseModel):
-    dataset_id: str
-    name: str
-    task_type: str = "patch"
-    storage_mode: str = "file_shard_sparse"
-    ls_project_id: str = ""
-    samples: list[PatchSample] = []
-    metadata: dict = {}

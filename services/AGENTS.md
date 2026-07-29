@@ -6,9 +6,9 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 
 ## Service Map
 
-| Service | Path | Role |
-| --- | --- | --- |
-| SC upstream | `services/sc-upstream` | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata |
+| Service      | Path                    | Role                                                                                            |
+| ------------ | ----------------------- | ----------------------------------------------------------------------------------------------- |
+| SC upstream  | `services/sc-upstream`  | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata     |
 | Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and S3-backed image reads |
 
 ## Boundaries
@@ -17,7 +17,7 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 - API code should depend on these services through explicit adapter/protocol boundaries such as SC upstream readers and image fetchers.
 - Do not make platform sample identity depend on upstream SC identities. Preserve upstream IDs as provenance only.
 - Keep image access aligned with `CORE_DESIGNS.md`: imported dataset images should prefer dataset-owned sample image endpoints; SC upstream image routes remain compatibility/preview paths.
-- Shared wire contracts belong in the proto/runtime contract locations already used by the repo, not duplicated ad hoc inside a service.
+- Shared wire contracts belong in proto/OpenAPI definitions already used by the repo, not duplicated ad hoc inside a service.
 - Service configuration should come from environment/config passed by compose or k8s; do not hardcode deployment URLs.
 
 ## Verification

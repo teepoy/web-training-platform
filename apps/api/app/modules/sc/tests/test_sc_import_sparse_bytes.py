@@ -142,7 +142,7 @@ class TestV2SparseImportBytes:
 
         import pyarrow.parquet as pq
 
-        from app.modules.datasets.app.services.sparse_import_operator import (
+        from app.modules.storage.adapter.sparse.import_operator import (
             SparseImportOperator,
         )
         from app.modules.sc.app.services.sc_import_service import (
@@ -153,7 +153,7 @@ class TestV2SparseImportBytes:
             SC_SPARSE_SHARD_SCHEMA_V2,
             _build_v2_pyarrow_schema,
         )
-        from platform_runtime.sparse import (
+        from app.modules.storage.domain.sparse import (
             ColumnSchema,
             DatasetManifest,
             DatasetPayloadStore,

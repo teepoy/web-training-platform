@@ -4,56 +4,51 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from app.modules.sc.adapter import ScDatasetReader, ScDatasetStore
-from app.modules.sc.app.services.sc_import_service import ScImportService
-from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
+from app.modules.sc.adapter.batch_reader import ScBatchReader
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
-from app.shared.infrastructure.prefect.client import PrefectClient
-from platform_runtime.sparse import DatasetPayloadStore
+from app.modules.sc.port.local import ScImportPort, ScPlotPointsPort
+from app.shared.domain.protocols import PrefectClient
+from app.shared.injection import resolve
+from app.modules.storage.domain.sparse import DatasetPayloadStore
 
 
-def get_sc_import_service(request: Request) -> ScImportService:
-    return request.app.state.app_context.sc.sc_import_service
+def get_sc_import_service(request: Request) -> ScImportPort:
+    return resolve(request, ScImportPort)
 
 
 def get_image_fetcher(request: Request) -> ScImageFetcher:
-    return request.app.state.app_context.sc.image_fetcher
+    return resolve(request, ScImageFetcher)
 
 
 def get_prefect_client(request: Request) -> PrefectClient:
-    return request.app.state.app_context.shared.prefect_client
+    return resolve(request, PrefectClient)
 
 
 def get_upstream_reader(request: Request) -> ScUpstreamReader:
-    return request.app.state.app_context.sc.upstream_reader
+    return resolve(request, ScUpstreamReader)
 
 
-def get_sc_plot_points_service(request: Request) -> ScPlotPointsService:
-    return request.app.state.app_context.sc.plot_points_service
+def get_sc_plot_points_service(request: Request) -> ScPlotPointsPort:
+    return resolve(request, ScPlotPointsPort)
 
 
 def get_dataset_payload_store(request: Request) -> DatasetPayloadStore:
-    return request.app.state.app_context.datasets.dataset_payload_store
+    return resolve(request, DatasetPayloadStore)
 
 
-def get_sc_dataset_reader(request: Request) -> ScDatasetReader:
-    return request.app.state.app_context.sc.dataset_reader
+def get_sc_batch_reader(request: Request) -> ScBatchReader:
+    return resolve(request, ScBatchReader)
 
 
-def get_sc_dataset_store(request: Request) -> ScDatasetStore:
-    return request.app.state.app_context.sc.dataset_store
-
-
-ScImportServiceDep = Annotated[ScImportService, Depends(get_sc_import_service)]
+ScImportServiceDep = Annotated[ScImportPort, Depends(get_sc_import_service)]
 PrefectClientDep = Annotated[PrefectClient, Depends(get_prefect_client)]
 ScUpstreamReaderDep = Annotated[ScUpstreamReader, Depends(get_upstream_reader)]
 ScPlotPointsServiceDep = Annotated[
-    ScPlotPointsService, Depends(get_sc_plot_points_service)
+    ScPlotPointsPort, Depends(get_sc_plot_points_service)
 ]
 DatasetPayloadStoreDep = Annotated[
     DatasetPayloadStore, Depends(get_dataset_payload_store)
 ]
-ScDatasetReaderDep = Annotated[ScDatasetReader, Depends(get_sc_dataset_reader)]
-ScDatasetStoreDep = Annotated[ScDatasetStore, Depends(get_sc_dataset_store)]
+ScBatchReaderDep = Annotated[ScBatchReader, Depends(get_sc_batch_reader)]
 ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]

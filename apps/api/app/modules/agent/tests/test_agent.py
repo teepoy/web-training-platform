@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
+
+pytestmark = pytest.mark.integration
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +444,11 @@ class TestQueryDataRoute:
 
         async def _run():
             factory = AsyncMock()
-            factory.open = AsyncMock()
+            storage = AsyncMock()
+            storage.wafer_points = AsyncMock(
+                return_value={"points": [{"id": "s1", "x": 1.0, "y": 2.0}], "total": 1}
+            )
+            factory.open = AsyncMock(return_value=storage)
             result = await execute_query_data(
                 query_type="wafer-points",
                 params=None,
@@ -449,7 +456,8 @@ class TestQueryDataRoute:
                 factory=factory,
                 org_id="org1",
             )
-            assert "error" in result  # wafer-points requires session_factory
+            assert result["total"] == 1
+            storage.wafer_points.assert_awaited_once()
 
         asyncio.run(_run())
 
@@ -532,7 +540,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.app.services.runtime._call_llm", return_value=mock_llm_response):
+                with patch("app.modules.agent.classify.app.services.runtime._call_llm", return_value=mock_llm_response):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "What does this dataset look like?"},
@@ -619,7 +627,7 @@ class TestAgentChat:
                 cfg.llm.base_url = "http://fake-llm:8080/v1"
                 cfg.llm.api_key = "fake-key"
 
-                with patch("app.modules.classify.app.services.runtime._call_llm", side_effect=_mock_call_llm):
+                with patch("app.modules.agent.classify.app.services.runtime._call_llm", side_effect=_mock_call_llm):
                     r = c.post(
                         f"/api/v1/datasets/{dataset_id}/agent/chat",
                         json={"message": "Show me an overview"},

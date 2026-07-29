@@ -4,14 +4,14 @@ These tests call the prediction flow functions directly as plain Python —
 no Prefect server required.  They exercise the full code path that runs
 inside a Prefect worker.
 
-Note: The flow resolves a fresh composition container lazily via
-_with_app_container. Tests patch this for deterministic behaviour.
+Note: The flow resolves a fresh application context lazily via
+``_with_app_context``. Tests patch this for deterministic behaviour.
 Materialization calls are mocked since the test does not stand up an API
 server for the ``/api/v1/datasets/{id}/materializations`` endpoint.
 
 After T16, prediction dispatch goes through the executable predictor
 registry (``get_predictor`` → ``Predictor`` Protocol) instead of
-``container.gpu_worker``. Tests mock ``get_predictor`` to return a
+the legacy GPU worker container. Tests mock ``get_predictor`` to return a
 factory that produces a predictor with realistic async behaviour.
 """
 
@@ -31,7 +31,7 @@ import nest_asyncio
 
 from app.main import app
 from app.shared.api.schemas import ArtifactRef, JobStatus, PredictionJob, TaskSpec
-from platform_runtime.contracts import BatchPredictResult, PredictResult
+from app.shared.domain.runtime import BatchPredictResult, PredictResult
 from tests.conftest import DEFAULT_ORG_ID, TRAINER_ID
 
 nest_asyncio.apply()
@@ -53,19 +53,6 @@ _TINY_PNG = (
 )
 
 _DATA_URI = "data:image/png;base64," + base64.b64encode(_TINY_PNG).decode()
-
-
-class _FlowContainerProxy:
-    """Lightweight container mock that delegates to the app's shared infra."""
-
-    def __init__(self, app_context):
-        self.session_factory = app_context.shared.session_factory
-        self.artifact_storage = app_context.shared.artifact_storage
-        self.config = app_context.shared.config
-        self.dataset_payload_store = app_context.datasets.dataset_payload_store
-
-    async def close(self) -> None:
-        return None
 
 
 class _multi_patch:
@@ -101,10 +88,10 @@ def _patch_prefect_tasks():
 def _install_flow_worker_mocks() -> dict[str, MagicMock]:
     predict_job_mod = _predict_flow_module()
 
-    async def _test_with_app_container():
-        return _FlowContainerProxy(app.state.app_context), False
+    async def _test_with_app_context():
+        return app.state.app_context, False
 
-    setattr(predict_job_mod, "_with_app_container", _test_with_app_container)
+    setattr(predict_job_mod, "_with_app_context", _test_with_app_context)
 
     # Build a realistic predictor mock that answers predict_batch with
     # properly-formed PredictResult/BatchPredictResult objects.
@@ -262,8 +249,8 @@ def test_run_prediction_job_classification() -> None:
 
         with _patch_prefect_tasks():
             result = asyncio.run(
-                predict_job_mod._run_prediction_job_with_container(
-                    container=_FlowContainerProxy(app.state.app_context),
+                predict_job_mod._run_prediction_job_with_context(
+                    app_context=app.state.app_context,
                     job_id=job_id,
                     dataset_id=dataset_id,
                     model_id=model_id,
@@ -292,8 +279,8 @@ def test_run_prediction_job_with_sample_subset() -> None:
 
         with _patch_prefect_tasks():
             result = asyncio.run(
-                predict_job_mod._run_prediction_job_with_container(
-                    container=_FlowContainerProxy(app.state.app_context),
+                predict_job_mod._run_prediction_job_with_context(
+                    app_context=app.state.app_context,
                     job_id=job_id,
                     dataset_id=dataset_id,
                     model_id=model_id,
@@ -317,8 +304,8 @@ def test_run_prediction_job_missing_dataset() -> None:
         with _patch_prefect_tasks():
             with pytest.raises(ValueError, match="Dataset not found"):
                 asyncio.run(
-                    predict_job_mod._run_prediction_job_with_container(
-                        container=_FlowContainerProxy(app.state.app_context),
+                    predict_job_mod._run_prediction_job_with_context(
+                        app_context=app.state.app_context,
                         job_id="pred-missing-ds",
                         dataset_id="nonexistent-dataset",
                         model_id="nonexistent-model",
@@ -343,8 +330,8 @@ def test_run_prediction_job_embedding_target() -> None:
         with _patch_prefect_tasks():
             with pytest.raises(NotImplementedError, match="embedding"):
                 asyncio.run(
-                    predict_job_mod._run_prediction_job_with_container(
-                        container=_FlowContainerProxy(app.state.app_context),
+                    predict_job_mod._run_prediction_job_with_context(
+                        app_context=app.state.app_context,
                         job_id=job_id,
                         dataset_id=dataset_id,
                         model_id=model_id,
@@ -367,11 +354,11 @@ def test_persist_worker_results_uses_storage_aggregate() -> None:
     repo = MagicMock()
     repo.add_prediction_event = AsyncMock()
     storage_agg = MagicMock()
-    storage_agg.get_samples_batch = AsyncMock(
-        return_value=[
-            SimpleNamespace(sample_id="sample-1"),
-            SimpleNamespace(sample_id="sample-2"),
-        ]
+    storage_agg.get_samples_by_id = AsyncMock(
+        return_value={
+            "sample-1": SimpleNamespace(sample_id="sample-1"),
+            "sample-2": SimpleNamespace(sample_id="sample-2"),
+        }
     )
     captured: list[Any] = []
 
@@ -452,7 +439,7 @@ def test_predict_sparse_materialized() -> None:
     """Predict via sparse materialized path.
 
     Seeds a sparse dataset with 2 shards / 10 rows, materializes,
-    and runs prediction through ``_run_prediction_job_with_container``.
+    and runs prediction through ``_run_prediction_job_with_context``.
     Asserts the job completes and results are non-empty.
     """
 
@@ -591,8 +578,8 @@ def test_predict_sparse_materialized() -> None:
 
         with _patch_prefect_tasks():
             result = asyncio.run(
-                predict_job_mod._run_prediction_job_with_container(
-                    container=_FlowContainerProxy(ctx),
+                predict_job_mod._run_prediction_job_with_context(
+                    app_context=ctx,
                     job_id=job_id,
                     dataset_id=dataset_id,
                     model_id=model_id,

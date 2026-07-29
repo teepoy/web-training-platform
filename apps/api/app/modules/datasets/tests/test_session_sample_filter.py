@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.modules.datasets.app.session import DatasetSession
-from app.modules.datasets.domain.storage_agg import DatasetStorageAgg
+from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 
 
 @pytest.mark.asyncio
@@ -19,10 +19,9 @@ async def test_dataset_session_forwards_sample_ids(
     )
     monkeypatch.setattr(
         "app.modules.datasets.app.session._resolve_row_projector",
-        lambda _view_type: lambda row: row,
+        lambda _view_type: lambda row, context: row,
     )
     session = DatasetSession(
-        model_cls=object,
         dataset_type="image_sc",
         access=cast(DatasetStorageAgg, access),
         dataset_id="dataset-1",

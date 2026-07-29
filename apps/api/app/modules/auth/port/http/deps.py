@@ -11,11 +11,13 @@ from sqlalchemy.exc import IntegrityError
 
 from typing import Annotated
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import load_config
 from app.shared.api.schemas import Organization, User
-from app.shared.db.sql_repository import SqlRepository
+from app.modules.auth.domain.repository import AuthRepository
+from app.shared.db.session import AppDatabaseSessionFactory
+from app.shared.injection import resolve
 from app.modules.auth.app.services.auth_service import (
     decode_access_token,
     verify_personal_access_token,
@@ -31,21 +33,17 @@ from app.shared.db.registry import (
 logger = logging.getLogger(__name__)
 
 
-def get_repository(request: Request) -> SqlRepository:
-    return SqlRepository(
-        session_factory=request.app.state.app_context.shared.session_factory
-    )
+def get_repository(request: Request) -> AuthRepository:
+    return resolve(request, AuthRepository)
 
 
 def get_session_factory(
     request: Request,
-) -> async_sessionmaker[AsyncSession]:
-    return request.app.state.app_context.shared.session_factory
+) -> AppDatabaseSessionFactory:
+    return resolve(request, AppDatabaseSessionFactory)
 
 
-SessionFactory = Annotated[
-    async_sessionmaker[AsyncSession], Depends(get_session_factory)
-]
+SessionFactory = Annotated[AppDatabaseSessionFactory, Depends(get_session_factory)]
 
 _DEV_USER_ID = "00000000-0000-0000-0000-000000000002"
 _DEV_ORG_ID = "00000000-0000-0000-0000-000000000001"
@@ -57,13 +55,15 @@ _DEV_USER_PASSWORD = "seed1234"
 
 def _get_session_factory(request: Request | None = None):
     if request is not None:
-        return request.app.state.app_context.shared.session_factory
+        return resolve(request, AppDatabaseSessionFactory)
     from app.core.config import load_config
     from app.shared.db.session import create_engine, create_session_factory
 
     cfg = load_config()
-    return create_session_factory(
-        create_engine(db_url=str(cfg.db.url), echo=bool(cfg.db.echo))
+    return AppDatabaseSessionFactory(
+        create_session_factory(
+            create_engine(db_url=str(cfg.db.url), echo=bool(cfg.db.echo))
+        )
     )
 
 
@@ -260,7 +260,7 @@ async def _read_dev_auth_context(request: Request) -> tuple[User, Organization]:
 
 
 async def seed_dev_auth_context(
-    session_factory: async_sessionmaker[AsyncSession],
+    session_factory: AppDatabaseSessionFactory,
 ) -> None:
     """Seed the dev user, org and membership at app startup.
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from croniter import croniter
 from pydantic import BaseModel, Field, field_validator
@@ -124,18 +124,6 @@ class UploadModelMetadataRequest(BaseModel):
     profile_id: str = "custom"
     model_spec: UploadModelSpecRequest
     compatibility: ModelCompatibilityRequest
-
-
-class BatchPredictionResponse(BaseModel):
-    model_id: str
-    dataset_id: str
-    total_samples: int
-    successful: int
-    failed: int
-    predictions: list[Any]
-    started_at: datetime
-    completed_at: datetime
-    model_version: str | None = None
 
 
 class MetadataKeyInfo(BaseModel):
@@ -269,16 +257,6 @@ class GlobalChatRequest(BaseModel):
     session_id: str | None = Field(
         default=None, description="Resume existing session; omit for auto-generated"
     )
-
-
-class PredictionCollectionRequest(BaseModel):
-    name: str
-    dataset_id: str
-    model_id: str
-    prediction_ids: list[str] = Field(default_factory=list)
-    model_version: str | None = None
-    target: str = "image_classification"
-    source_job_id: str | None = None
 
 
 class TaskTrackerCheckResult(BaseModel):

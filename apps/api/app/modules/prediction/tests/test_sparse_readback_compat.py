@@ -19,37 +19,27 @@ from uuid import uuid4
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
 
 from app.main import app
 from app.shared.db.models.auth import OrganizationORM
 from app.shared.db.models.datasets import DatasetORM
 from app.shared.db.models.prediction import PredictionJobORM
-from platform_runtime.sparse.models import (
-    DatasetManifest,
-    SampleLocator,
-    ShardEntry,
-    ColumnSchema,
-)
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
 
 
 def _build_parquet_shard_bytes(
     *,
-    dataset_id: str,
-    shard_index: int,
     rows: list[dict],
 ) -> bytes:
     """Build a Parquet shard with the canonical prediction column schema."""
-    n = len(rows)
     table = pa.table(
         {
-            "shard_index": pa.array([shard_index] * n, type=pa.int32()),
-            "row_index": pa.array([r["row_index"] for r in rows], type=pa.int32()),
-            "dataset_id": pa.array([dataset_id] * n, type=pa.string()),
+            "sample_id": pa.array(
+                [r["sample_id"] for r in rows],
+                type=pa.string(),
+            ),
             "predicted_label": pa.array(
                 [r.get("predicted_label", "") for r in rows], type=pa.string()
             ),
@@ -103,46 +93,11 @@ def _build_job_result_json(
     return json.dumps(manifest, indent=2).encode("utf-8")
 
 
-def _build_dataset_manifest_json(
-    *,
-    dataset_id: str,
-    sample_index: dict[str, SampleLocator],
-    shard_uris: list[str],
-    shard_row_counts: list[int],
-) -> bytes:
-    """Build a dataset manifest JSON for _build_reverse_locator_index."""
-    manifest = DatasetManifest(
-        dataset_id=dataset_id,
-        storage_mode="file_shard_sparse",
-        shard_count=len(shard_uris),
-        total_rows=sum(shard_row_counts),
-        schema_columns=[
-            ColumnSchema(name="image_uris", type="string"),
-            ColumnSchema(name="metadata", type="string"),
-        ],
-        shards=[
-            ShardEntry(
-                shard_index=i,
-                uri=uri,
-                row_count=count,
-                format="parquet",
-                checksum_sha256="abc123",
-                byte_size=100,
-            )
-            for i, (uri, count) in enumerate(zip(shard_uris, shard_row_counts))
-        ],
-        sample_index=sample_index,
-    )
-    return manifest.model_dump_json(indent=2).encode("utf-8")
-
-
 def test_sparse_readback_missing_job_result_returns_empty():
     """readback returns [] when job_result.json is missing (e.g. worker
     still writes result.json)."""
     with TestClient(app) as c:
-        resp = c.get(
-            f"/api/v1/prediction-jobs/nonexistent-job/predictions"
-        )
+        resp = c.get("/api/v1/prediction-jobs/nonexistent-job/predictions")
         assert resp.status_code == 404
 
 
@@ -166,14 +121,14 @@ def test_sparse_readback_canonical_fixture():
 
     prediction_rows = [
         {
-            "row_index": 0,
+            "sample_id": "sample-1",
             "predicted_label": "cat",
             "confidence": 0.95,
             "all_scores": {"cat": 0.95, "dog": 0.05},
             "error": None,
         },
         {
-            "row_index": 1,
+            "sample_id": "sample-2",
             "predicted_label": "dog",
             "confidence": 0.87,
             "all_scores": {"cat": 0.13, "dog": 0.87},
@@ -181,9 +136,7 @@ def test_sparse_readback_canonical_fixture():
         },
     ]
 
-    parquet_bytes = _build_parquet_shard_bytes(
-        dataset_id=dataset_id, shard_index=0, rows=prediction_rows
-    )
+    parquet_bytes = _build_parquet_shard_bytes(rows=prediction_rows)
     job_result_bytes = _build_job_result_json(
         job_id=job_id,
         dataset_id=dataset_id,
@@ -193,20 +146,6 @@ def test_sparse_readback_canonical_fixture():
         total_processed=2,
         total_successful=2,
     )
-    dataset_manifest_bytes = _build_dataset_manifest_json(
-        dataset_id=dataset_id,
-        sample_index={
-            "sample-1": SampleLocator(
-                dataset_id=dataset_id, shard_index=0, row_index=0
-            ),
-            "sample-2": SampleLocator(
-                dataset_id=dataset_id, shard_index=0, row_index=1
-            ),
-        },
-        shard_uris=shard_uris,
-        shard_row_counts=shard_row_counts,
-    )
-
     with TestClient(app) as c:
         # ── Seed DB ────────────────────────────────────────────────────
         api = app.state.app_context
@@ -281,15 +220,6 @@ def test_sparse_readback_canonical_fixture():
                 data=job_result_bytes,
                 content_type="application/json",
             )
-            # Dataset manifest (for _build_reverse_locator_index)
-            await storage.put_bytes(
-                object_name=(
-                    f"datasets/{org_id}/{dataset_id}/manifest.json"
-                ),
-                data=dataset_manifest_bytes,
-                content_type="application/json",
-            )
-
         asyncio.run(_populate_storage())
 
         # ── Readback ───────────────────────────────────────────────────

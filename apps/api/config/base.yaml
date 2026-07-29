@@ -89,6 +89,64 @@ prefect:
   flow_name: "train-job"
   concurrency_limit: 1
 
+runtime_routing:
+  training_routes:
+    resnet50-sc-v1:
+      deployment: "train-job-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sc.resnet50.model.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "resnet50-sc"
+      algo_version: "1"
+      missing_image_policy: "fail"
+    yolo-sc-v1:
+      deployment: "train-job-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sc.yolo.model.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "yolo-sc"
+      algo_version: "1"
+      missing_image_policy: "fail"
+  train_and_predict_routes:
+    resnet50-sc-v1:
+      deployment: "train-and-predict-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sample.predictions.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "resnet50-sc"
+      algo_version: "1"
+      missing_image_policy: "skip"
+    yolo-sc-v1:
+      deployment: "train-and-predict-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sample.predictions.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "yolo-sc"
+      algo_version: "1"
+      missing_image_policy: "skip"
+  prediction_routes:
+    resnet50-sc-v1:
+      deployment: "predict-job-batch-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sample.predictions.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "resnet50-sc"
+      algo_version: "1"
+      missing_image_policy: "skip"
+    yolo-sc-v1:
+      deployment: "predict-job-batch-deployment"
+      input_contract: "sc.patch_image.v1"
+      output_contract: "sample.predictions.v1"
+      resource_profile: "gpu"
+      owner: "local_compat"
+      algo_id: "yolo-sc"
+      algo_version: "1"
+      missing_image_policy: "skip"
 llm:
   # litellm-backed.  Model string controls provider routing:
   #   "gpt-4o-mini"             → OpenAI

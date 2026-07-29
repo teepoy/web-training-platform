@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from platform_runtime.sparse.models import DatasetManifest
+from app.modules.storage.domain.sparse.models import DatasetManifest
 
 from app.modules.datasets.app.services.dataset_service import DatasetService
 from app.shared.api.schemas import Dataset, DatasetStorageMode
@@ -24,10 +24,7 @@ def _service() -> DatasetService:
     return DatasetService(
         repository=cast(Any, SimpleNamespace()),
         storage_factory=cast(Any, SimpleNamespace()),
-        ls_client=cast(Any, SimpleNamespace()),
-        storage=cast(Any, SimpleNamespace()),
         payload_store=cast(Any, _PayloadStore()),
-        capability_guard=lambda dataset: None,
         config=cast(
             Any,
             SimpleNamespace(

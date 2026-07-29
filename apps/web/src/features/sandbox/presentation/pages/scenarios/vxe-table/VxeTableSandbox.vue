@@ -20,9 +20,8 @@
     <div class="vxe-sandbox-table">
       <ScSampleTableVxe
         v-if="table"
-        :table="table"
-        :view-config="viewConfig"
-        :source-version="sourceVersion"
+        :perspective-table="table"
+        :base-view-config="baseViewConfig"
         @selection-change="handleSelectionChange"
       />
     </div>
@@ -46,14 +45,13 @@ import serverWasmUrl from "@perspective-dev/server/dist/wasm/perspective-server.
 import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
 
 const CHUNK_SIZE = 50_000;
-const viewConfig: ViewConfigUpdate = {};
+const baseViewConfig: ViewConfigUpdate = {};
 
 const demoTotal = ref(500);
 const table = ref<Table | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const lastAction = ref("");
-const sourceVersion = ref(0);
 let client: Client | null = null;
 let rebuildSeq = 0;
 
@@ -186,7 +184,6 @@ async function buildTable(total: number, seq: number): Promise<void> {
 
   const previousTable = table.value;
   table.value = nextTable;
-  sourceVersion.value += 1;
   if (previousTable) {
     try {
       await previousTable.delete();

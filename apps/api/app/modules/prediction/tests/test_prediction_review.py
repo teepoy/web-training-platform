@@ -6,8 +6,15 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.shared.api.schemas import Sample
-from tests.conftest import create_dataset, create_sample, create_job, upload_model
+from app.shared.api.schemas import PredictionReviewAction
+from app.shared.db.models.auth import OrganizationORM
+from app.shared.db.models.datasets import DatasetORM
+from tests.conftest import (
+    DEFAULT_ORG_ID,
+    create_dataset,
+    create_job,
+    upload_model,
+)
 
 def _setup_dataset_with_model(c: TestClient) -> tuple[str, str, str]:
     """Create dataset + job + model, return (dataset_id, model_id, job_id)."""
@@ -124,3 +131,62 @@ def test_preview_export_not_found() -> None:
     with TestClient(app) as c:
         resp = c.get("/api/v1/prediction-reviews/nonexistent/export")
         assert resp.status_code == 404
+
+
+def test_review_actions_are_scoped_to_dataset_organization() -> None:
+    other_org_id = "00000000-0000-0000-0000-000000000099"
+    dataset_id = f"other-org-dataset-{uuid4()}"
+    action = PredictionReviewAction(
+        dataset_id=dataset_id,
+        model_id="model-other-org",
+        created_by="user-other-org",
+    )
+
+    with TestClient(app):
+        context = app.state.app_context
+        repository = context.prediction.prediction_repository
+
+        async def verify_scope() -> None:
+            async with context.shared.session_factory.sessionmaker() as session:
+                session.add(
+                    OrganizationORM(
+                        id=other_org_id,
+                        name="Other Org",
+                        slug=f"other-org-{uuid4()}",
+                    )
+                )
+                session.add(
+                    DatasetORM(
+                        id=dataset_id,
+                        org_id=other_org_id,
+                        name="Other Org Dataset",
+                        dataset_type="image_classification",
+                        view_types=[],
+                        dataset_meta={
+                            "task_type": "classification",
+                            "label_space": ["cat", "dog"],
+                        },
+                        created_by="user-other-org",
+                        ls_project_id="1",
+                        storage_mode="db_full",
+                    )
+                )
+                await session.commit()
+
+            await repository.create_review_action(action)
+
+            assert await repository.get_review_action(action.id, DEFAULT_ORG_ID) is None
+            assert (
+                await repository.list_review_actions(dataset_id, DEFAULT_ORG_ID) == []
+            )
+            assert (
+                await repository.delete_review_action(action.id, DEFAULT_ORG_ID)
+                is False
+            )
+
+            assert (
+                await repository.get_review_action(action.id, other_org_id) is not None
+            )
+            assert await repository.delete_review_action(action.id, other_org_id) is True
+
+        asyncio.run(verify_scope())

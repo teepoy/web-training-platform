@@ -8,11 +8,14 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import polars as pl
+import pytest
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
 from app.modules.sc.port.http.router import _apply_sample_table_sort
 from proto_stubs.sc.v1 import sample_pb2
+
+pytestmark = pytest.mark.integration
 
 PB_CONTENT_TYPE = "application/x-protobuf"
 

@@ -1,21 +1,24 @@
 <template>
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
-      <div style="padding: 48px; text-align: center;">
+      <div style="padding: 48px; text-align: center">
         <n-empty description="You are not a member of any organization. Contact an admin." />
       </div>
     </template>
     <template v-else>
       <n-page-header title="Training Jobs">
         <template #extra>
-          <n-button type="primary" :disabled="!canTrain" @click="showModal = true">Start New Job</n-button>
+          <n-button type="primary" :disabled="!canTrain" @click="showModal = true"
+            >Start New Job</n-button
+          >
         </template>
       </n-page-header>
 
       <n-spin :show="isLoading">
         <n-data-table
           :columns="columns"
-          :data="jobs ?? []"
+          :data="jobsItems"
+          :pagination="jobsPagination"
           :bordered="true"
           :striped="true"
           :loading="isLoading"
@@ -81,14 +84,18 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
 import { listDatasets } from "@/shared/api/datasets";
-import { useOrgStore } from '@/features/auth/application/org';
+import { useOrgStore } from "@/features/auth/application/org";
 import {
   useListJobsApiV1TrainingJobsGet,
   useCreateTrainingJobApiV1TrainingJobsPost,
   useListTrainersRouteApiV1TrainersGet,
 } from "@/generated/orval/endpoints/api";
 import type { ListJobsApiV1TrainingJobsGetParams } from "@/generated/orval/models/listJobsApiV1TrainingJobsGetParams";
-import type { JobStatus, TaskTrackerSummaryResponse as TaskTrackerSummary, TrainingJob } from '@/generated/orval/models';
+import type {
+  JobStatus,
+  TaskTrackerSummaryResponse as TaskTrackerSummary,
+  TrainingJob,
+} from "@/generated/orval/models";
 import type { Trainer } from "@/shared/api/types";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 
@@ -97,22 +104,52 @@ const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
-const props = defineProps<{ datasetId?: string | null; allowTrain?: boolean; compatibleViewTypes?: string[] | null }>();
+const props = defineProps<{
+  datasetId?: string | null;
+  allowTrain?: boolean;
+  compatibleViewTypes?: string[] | null;
+}>();
 const canTrain = computed(() => props.allowTrain !== false);
-provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
+provide(
+  TASK_INSIGHT_ORG_ID_KEY,
+  computed(() => orgStore.currentOrgId),
+);
 
-const jobsQueryParams = computed(() =>
-  props.datasetId ? { dataset_id: props.datasetId } : undefined,
-) as MaybeRef<ListJobsApiV1TrainingJobsGetParams>;
+const jobsPageNumber = ref(1);
+const jobsPageSize = 50;
+const jobsQueryParams = computed(() => ({
+  dataset_id: props.datasetId ?? undefined,
+  offset: (jobsPageNumber.value - 1) * jobsPageSize,
+  limit: jobsPageSize,
+})) as MaybeRef<ListJobsApiV1TrainingJobsGetParams>;
 
-const { data: jobs, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryParams, {
+const { data: jobsPage, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryParams, {
   query: {
     select: (response) => response.data,
-    queryKey: computed(() => ["jobs", orgStore.currentOrgId, props.datasetId]),
+    queryKey: computed(() => [
+      "jobs",
+      orgStore.currentOrgId,
+      props.datasetId,
+      jobsPageNumber.value,
+    ]),
     refetchInterval: 5000,
     enabled: computed(() => !!orgStore.currentOrgId),
   },
 });
+const jobsItems = computed(() =>
+  jobsPage.value && "items" in jobsPage.value ? jobsPage.value.items : [],
+);
+const jobsTotal = computed(() =>
+  jobsPage.value && "total" in jobsPage.value ? jobsPage.value.total : 0,
+);
+const jobsPagination = computed(() => ({
+  page: jobsPageNumber.value,
+  pageSize: jobsPageSize,
+  itemCount: jobsTotal.value,
+  onUpdatePage: (page: number) => {
+    jobsPageNumber.value = page;
+  },
+}));
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
   queryKey: computed(() => ["datasets", orgStore.currentOrgId]),
@@ -130,24 +167,23 @@ const { data: trainers, isLoading: trainersLoading } = useListTrainersRouteApiV1
   },
 });
 
-const datasetOptions = computed<SelectOption[]>(
-  () => (datasets.value ?? []).map((d) => ({ label: d.name, value: d.id })),
+const datasetOptions = computed<SelectOption[]>(() =>
+  (datasets.value ?? []).map((d) => ({ label: d.name, value: d.id })),
 );
 
 const selectedDataset = computed(() =>
   (datasets.value ?? []).find((d) => d.id === formModel.value.dataset_id),
 );
 
-const trainerOptions = computed<SelectOption[]>(
-  () =>
-    (trainers.value ?? [])
-      .filter((t) => t.trainable !== false)
-      .filter((t) => {
-        if (!props.compatibleViewTypes?.length) return true;
-        if (!hasTrainerViewType(t)) return false;
-        return props.compatibleViewTypes.includes(t.view_type);
-      })
-      .map((t) => ({ label: t.name, value: t.id })),
+const trainerOptions = computed<SelectOption[]>(() =>
+  (trainers.value ?? [])
+    .filter((t) => t.trainable !== false)
+    .filter((t) => {
+      if (!props.compatibleViewTypes?.length) return true;
+      if (!hasTrainerViewType(t)) return false;
+      return props.compatibleViewTypes.includes(t.view_type);
+    })
+    .map((t) => ({ label: t.name, value: t.id })),
 );
 
 function hasTrainerViewType(trainer: Trainer): trainer is Trainer & { view_type: string } {
@@ -172,7 +208,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     title: "ID",
     key: "id",
     width: 120,
-    render: (row) => (row.id ?? '').slice(0, 8) + "…",
+    render: (row) => (row.id ?? "").slice(0, 8) + "…",
   },
   {
     title: "Status",
@@ -196,7 +232,11 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
       }
       if (row.is_public && row.org_id !== orgStore.currentOrgId) {
         nodes.push(
-          h("span", { style: "margin-left: 4px; font-size: 12px; color: #aaa" }, `(${row.org_name ?? "Other Org"})`),
+          h(
+            "span",
+            { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
+            `(${row.org_name ?? "Other Org"})`,
+          ),
         );
       }
       return h("span", {}, nodes);
@@ -253,7 +293,9 @@ const formModel = ref({ dataset_id: null as string | null, trainer_id: null as s
 
 watch(
   () => props.datasetId,
-  (val) => { if (val) formModel.value.dataset_id = val; },
+  (val) => {
+    if (val) formModel.value.dataset_id = val;
+  },
   { immediate: true },
 );
 
@@ -320,7 +362,10 @@ function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
     execution_kind: "training-default",
     display_name: `Training ${row.trainer_id}`,
     display_status: row.status ?? "queued",
-    stage: row.status === "completed" || row.status === "failed" ? "validation_output" : "queue_allocation",
+    stage:
+      row.status === "completed" || row.status === "failed"
+        ? "validation_output"
+        : "queue_allocation",
     dataset_id: row.dataset_id,
     model_id: null,
     trainer_id: row.trainer_id,

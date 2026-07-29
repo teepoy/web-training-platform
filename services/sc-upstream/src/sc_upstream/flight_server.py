@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Iterator
+from typing import Any, Iterator
 
 import pyarrow.flight as flight
 import pyarrow as pa
@@ -23,9 +23,7 @@ class UpstreamFlightServer(flight.FlightServerBase):
     def do_get(
         self, context: flight.ServerCallContext, ticket: flight.Ticket
     ) -> flight.FlightDataStream:
-        req: dict = json.loads(ticket.ticket.decode())
-        if req["type"] != "list_samples":
-            raise ValueError(f"unknown ticket type: {req['type']}")
+        req = _parse_ticket(ticket)
 
         inspection_time = datetime.fromisoformat(req["inspection_time"])
         wafer_key: int = req["wafer_key"]
@@ -90,3 +88,25 @@ class UpstreamFlightServer(flight.FlightServerBase):
                 lock_ctx.__exit__(None, None, None)
 
         return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())
+
+
+def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
+    try:
+        req = json.loads(ticket.ticket.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid Flight ticket JSON") from exc
+    if not isinstance(req, dict):
+        raise ValueError("Flight ticket must decode to a JSON object")
+    if req.get("type") != "list_samples":
+        raise ValueError(f"unknown ticket type: {req.get('type')}")
+    inspection_time = req.get("inspection_time")
+    if not isinstance(inspection_time, str) or not inspection_time:
+        raise ValueError("list_samples Flight ticket requires inspection_time")
+    try:
+        datetime.fromisoformat(inspection_time)
+    except ValueError as exc:
+        raise ValueError("invalid inspection_time format") from exc
+    wafer_key = req.get("wafer_key")
+    if not isinstance(wafer_key, int):
+        raise ValueError("list_samples Flight ticket requires integer wafer_key")
+    return req

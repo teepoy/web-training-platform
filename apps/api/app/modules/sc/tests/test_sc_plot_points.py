@@ -21,6 +21,8 @@ from app.modules.sc.port.http.deps import get_sc_plot_points_service
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from proto_stubs.sc.v1.sample_pb2 import WaferMapResponse
 
+pytestmark = pytest.mark.integration
+
 PB_CONTENT_TYPE = "application/x-protobuf"
 _DATASET_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 _ENDPOINT = f"/api/v1/sc/datasets/{_DATASET_ID}/plot-points"
@@ -333,9 +335,9 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     """Geometry stored in dataset_meta propagates to WaferMapResponse."""
     from unittest.mock import AsyncMock
 
-    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+    from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.shared.db.sql_repository import SqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 
     n = 10
     df = pl.DataFrame(
@@ -384,7 +386,7 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
         },
     )
 
-    mock_repo = AsyncMock(spec=SqlRepository)
+    mock_repo = AsyncMock(spec=DatasetSqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
     mock_upstream = AsyncMock()
     mock_upstream.list_review_images = AsyncMock(
@@ -426,9 +428,9 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
     """Missing geometry key in dataset_meta is rejected instead of defaulted."""
     from unittest.mock import AsyncMock
 
-    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+    from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.shared.db.sql_repository import SqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 
     n = 5
     df = pl.DataFrame(
@@ -462,7 +464,7 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
         dataset_meta={"task_type": "sc", "label_space": []},
     )
 
-    mock_repo = AsyncMock(spec=SqlRepository)
+    mock_repo = AsyncMock(spec=DatasetSqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
 
     svc = ScPlotPointsService(
@@ -483,9 +485,9 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
     """Incomplete geometry must not silently default center/die values."""
     from unittest.mock import AsyncMock
 
-    from app.modules.datasets.adapter.storage_factory import DatasetStorageFactory
+    from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.shared.db.sql_repository import SqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 
     df = pl.DataFrame(
         {
@@ -526,7 +528,7 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
         },
     )
 
-    mock_repo = AsyncMock(spec=SqlRepository)
+    mock_repo = AsyncMock(spec=DatasetSqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
 
     svc = ScPlotPointsService(

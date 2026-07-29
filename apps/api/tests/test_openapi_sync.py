@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,15 +35,18 @@ def test_no_duplicate_operation_ids() -> None:
     assert not duplicates, f"Duplicate operationIds: {duplicates}"
 
 
-@pytest.mark.slow
+@pytest.mark.regression
 def test_openapi_sync() -> None:
+    env = os.environ.copy()
+    env.setdefault("APP_CONFIG_PROFILE", "test")
     result = subprocess.run(
-        ["make", "check-openapi-sync"],
+        [sys.executable, str(REPO_ROOT / "scripts" / "check_openapi_sync.py")],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
+        env=env,
     )
     assert result.returncode == 0, (
-        f"make check-openapi-sync failed (exit {result.returncode}):\n"
+        f"OpenAPI sync check failed (exit {result.returncode}):\n"
         f"{result.stdout}\n{result.stderr}"
     )

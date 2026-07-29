@@ -106,29 +106,96 @@ class TrainingJobRepository:
             return None if row is None else row.external_job_id
 
     async def list_jobs(
-        self, org_id: str | None = None, dataset_id: str | None = None
+        self,
+        org_id: str | None = None,
+        dataset_id: str | None = None,
     ) -> list[TrainingJob]:
+        items, _ = await self.list_jobs_paginated(
+            org_id=org_id,
+            dataset_id=dataset_id,
+            offset=0,
+            limit=None,
+        )
+        return items
+
+    async def list_jobs_paginated(
+        self,
+        org_id: str | None = None,
+        dataset_id: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int | None = 50,
+    ) -> tuple[list[TrainingJob], int]:
         async with self.session_factory() as session:
-            stmt = select(TrainingJobORM).order_by(TrainingJobORM.created_at.desc())
+            conditions = []
             if org_id is not None:
-                stmt = stmt.where(
+                conditions.append(
                     or_(
                         TrainingJobORM.org_id == org_id,
                         TrainingJobORM.is_public.is_(True),
                     )
                 )  # noqa: E712
             if dataset_id is not None:
-                stmt = stmt.where(TrainingJobORM.dataset_id == dataset_id)
-            rows = (await session.execute(stmt)).scalars().all()
-            jobs: list[TrainingJob] = []
-            for row in rows:
-                arts = await self._list_artifacts_by_job_in_session(session, row.id)
-                jobs.append(
-                    self._job_to_domain(
-                        row, arts, await _org_name_for(session, row.org_id)
-                    )
+                conditions.append(TrainingJobORM.dataset_id == dataset_id)
+
+            total = int(
+                await session.scalar(
+                    select(func.count()).select_from(TrainingJobORM).where(*conditions)
                 )
-            return jobs
+                or 0
+            )
+            stmt = (
+                select(TrainingJobORM, OrganizationORM.name)
+                .outerjoin(
+                    OrganizationORM,
+                    OrganizationORM.id == TrainingJobORM.org_id,
+                )
+                .where(*conditions)
+                .order_by(
+                    TrainingJobORM.created_at.desc(),
+                    TrainingJobORM.id.desc(),
+                )
+                .offset(offset)
+            )
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            rows = (await session.execute(stmt)).all()
+            job_ids = [row.id for row, _ in rows]
+            artifacts_by_job: dict[str, list[ArtifactRef]] = {
+                job_id: [] for job_id in job_ids
+            }
+            if job_ids:
+                artifact_rows = (
+                    (
+                        await session.execute(
+                            select(ArtifactORM)
+                            .where(ArtifactORM.job_id.in_(job_ids))
+                            .order_by(ArtifactORM.created_at, ArtifactORM.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for artifact in artifact_rows:
+                    if artifact.job_id is None:
+                        raise RuntimeError(
+                            f"Artifact {artifact.id} is missing its training job"
+                        )
+                    artifacts_by_job[artifact.job_id].append(
+                        self._artifact_to_domain(artifact)
+                    )
+
+            return (
+                [
+                    self._job_to_domain(
+                        row,
+                        artifacts_by_job[row.id],
+                        str(org_name or ""),
+                    )
+                    for row, org_name in rows
+                ],
+                total,
+            )
 
     async def get_job(
         self, job_id: str, org_id: str | None = None

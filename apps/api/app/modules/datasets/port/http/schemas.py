@@ -4,6 +4,9 @@ from typing import Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
+from app.modules.datasets.views.image_input.v1.schemas import (
+    ImageInputV1Row as ImageInputV1Row,
+)
 from app.shared.api.schemas import TaskSpec
 from app.shared.api.schemas import DatasetStorageMode
 
@@ -16,14 +19,6 @@ SparseSummaryJsonValue: TypeAlias = (
     | dict[str, SparseSummaryJsonScalar]
     | list[dict[str, SparseSummaryJsonScalar]]
 )
-
-
-# ── Per-view row schemas ────────────────────────────────────────────────
-
-
-class ImageInputV1Row(BaseModel):
-    sample_id: str
-    image_uris: list[str]
 
 
 # ── Paginated per-view response ─────────────────────────────────────────
@@ -151,16 +146,6 @@ class SampleEmbedResponse(BaseModel):
     sample_id: str
     embed_model: str
     embedding_dim: int
-
-
-class EmbedConfigResponse(BaseModel):
-    model: str
-    dimension: int = 512
-
-
-class UpdateEmbedConfigRequest(BaseModel):
-    model: str
-    dimension: int = 512
 
 
 class UpdateSampleImageResponse(BaseModel):

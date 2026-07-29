@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
+from uuid import UUID
 
 import polars as pl
 import starlette.websockets
-from fastapi import APIRouter, Query, WebSocket
+from fastapi import APIRouter, WebSocket
+from perspective import Server
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
+from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.port.http.perspective_ws import (
     _build_dataset_df,
     _build_inspection_df,
@@ -22,30 +26,35 @@ def _redis_client(websocket: WebSocket) -> Any | None:
     return getattr(publisher, "_redis", None)
 
 
+def _perspective_server(websocket: WebSocket) -> Server:
+    server = getattr(websocket.app.state, "perspective_server", None)
+    if server is None:
+        raise RuntimeError("Perspective Server was not initialized")
+    return cast(Server, server)
+
+
 @router.websocket("/inspections/{inspection_time}/{wafer_key}/ws")
 async def inspection_ws(
     websocket: WebSocket,
     inspection_time: str,
     wafer_key: int,
-    reticle_x_die_count: int = Query(default=10, alias="reticleXDieCount", ge=1),
-    reticle_y_die_count: int = Query(default=10, alias="reticleYDieCount", ge=1),
-    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
-    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    table_name: UUID,
 ) -> None:
-    upstream_reader = websocket.app.state.app_context.sc.upstream_reader
+    injector = websocket.app.state.app_context.injector
+    if injector is None:
+        raise RuntimeError("AppContext injector was not initialized")
+    upstream_reader = injector.get(ScUpstreamReader)
 
     async def samples_df_factory() -> pl.DataFrame:
         return await _build_inspection_df(
             upstream_reader=upstream_reader,
             inspection_time=inspection_time,
             wafer_key=wafer_key,
-            reticle_x_die_count=reticle_x_die_count,
-            reticle_y_die_count=reticle_y_die_count,
-            reticle_x_die_shift=reticle_x_die_shift,
-            reticle_y_die_shift=reticle_y_die_shift,
         )
 
     await run_sc_perspective_ws(
+        server=_perspective_server(websocket),
+        table_name=str(table_name),
         websocket=websocket,
         dataset_id=None,
         samples_df_factory=samples_df_factory,
@@ -57,16 +66,15 @@ async def inspection_ws(
 async def dataset_ws(
     websocket: WebSocket,
     dataset_id: str,
-    reticle_x_die_count: int = Query(default=3, alias="reticleXDieCount", ge=1),
-    reticle_y_die_count: int = Query(default=5, alias="reticleYDieCount", ge=1),
-    reticle_x_die_shift: int = Query(default=0, alias="reticleXDieShift"),
-    reticle_y_die_shift: int = Query(default=0, alias="reticleYDieShift"),
+    table_name: UUID,
 ) -> None:
-    app_context = websocket.app.state.app_context
+    injector = websocket.app.state.app_context.injector
+    if injector is None:
+        raise RuntimeError("AppContext injector was not initialized")
     current_user = await get_current_user(websocket)  # type: ignore[arg-type]
     org = await get_current_org(websocket, current_user)  # type: ignore[arg-type]
-    upstream_reader = app_context.sc.upstream_reader
-    storage_factory = app_context.datasets.dataset_storage_factory
+    upstream_reader = injector.get(ScUpstreamReader)
+    storage_factory = injector.get(DatasetStorageFactoryPort)
 
     async def build_dataset_df() -> pl.DataFrame:
         return await _build_dataset_df(
@@ -74,14 +82,12 @@ async def dataset_ws(
             org_id=org.id,
             storage_factory=storage_factory,
             upstream_reader=upstream_reader,
-            reticle_x_die_count=reticle_x_die_count,
-            reticle_y_die_count=reticle_y_die_count,
-            reticle_x_die_shift=reticle_x_die_shift,
-            reticle_y_die_shift=reticle_y_die_shift,
         )
 
     try:
         await run_sc_perspective_ws(
+            server=_perspective_server(websocket),
+            table_name=str(table_name),
             websocket=websocket,
             dataset_id=dataset_id,
             samples_df_factory=build_dataset_df,

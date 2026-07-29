@@ -45,7 +45,7 @@ def test_list_models_empty() -> None:
     with TestClient(app) as c:
         resp = c.get("/api/v1/models")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json() == {"items": [], "total": 0}
 
 
 def test_get_model_not_found() -> None:

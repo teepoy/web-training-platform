@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.classify.adapter.tools.tools import (  # noqa: F401
+from app.modules.agent.classify.adapter.tools.tools import (  # noqa: F401
     TOOL_DEFINITIONS,
     execute_get_surface_state,
     execute_query_data,

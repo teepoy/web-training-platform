@@ -5,23 +5,26 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from datetime import datetime
-
-from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from typing import Any, cast
 
-from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 import polars as pl
 from fastapi import WebSocket
-from perspective import Server, Table
-from perspective.handlers.starlette import PerspectiveStarletteHandler
+from perspective import Client, Server, Table
+from starlette.websockets import WebSocketDisconnect
 
+from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.shared.infrastructure.redis.event_publisher import (
     ANNOTATION_CHANNEL,
     PREDICTION_CHANNEL,
 )
 
 _logger = logging.getLogger(__name__)
+
+_MAX_PENDING_RESPONSES = 16
+_MAX_PENDING_RESPONSE_BYTES = 64 * 1024 * 1024
 
 
 class _RedisLike:
@@ -52,8 +55,6 @@ _PERSPECTIVE_TABLE_COLUMNS = (
     "wafer_y",
     "die_x",
     "die_y",
-    "reticle_x",
-    "reticle_y",
     "rough_bin",
     "class_number",
     "images",
@@ -88,8 +89,6 @@ _PERSPECTIVE_COLUMN_DTYPES = {
     "wafer_y": pl.Int64,
     "die_x": pl.Int64,
     "die_y": pl.Int64,
-    "reticle_x": pl.Int64,
-    "reticle_y": pl.Int64,
     "rough_bin": pl.Int64,
     "class_number": pl.Int64,
     "images": pl.Int32,
@@ -238,25 +237,24 @@ async def _fetch_upstream_samples_df(
     inspection_time: datetime,
     wafer_key: int,
     count: int | None = None,
-    reticle_x_die_count: int,
-    reticle_y_die_count: int,
-    reticle_x_die_shift: int,
-    reticle_y_die_shift: int,
 ) -> pl.DataFrame:
     lf = await upstream_reader.list_samples(
         inspection_time,
         wafer_key,
         offset=0,
         count=count,
-        reticle_size_x=reticle_x_die_count,
-        reticle_size_y=reticle_y_die_count,
-        reticle_offset_x=reticle_x_die_shift,
-        reticle_offset_y=reticle_y_die_shift,
     )
     df = await lf.collect_async()
     review_lf = await upstream_reader.list_review_images(inspection_time, wafer_key)
+    if review_lf is None:
+        raise RuntimeError("upstream returned no review-image table")
     review_df = await review_lf.collect_async()
     if not review_df.is_empty():
+        missing_columns = {"defect_id", "image_id"} - set(review_df.columns)
+        if missing_columns:
+            raise RuntimeError(
+                f"upstream review-image table missing columns: {sorted(missing_columns)}"
+            )
         review_df = (
             review_df.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
             .group_by("defect_id")
@@ -280,7 +278,11 @@ async def _fetch_upstream_samples_df(
     else:
         df = df.with_columns(
             pl.lit(0).cast(pl.Int32).alias("images"),
+            pl.lit("[]").cast(pl.Utf8).alias("review_image_ids_json"),
         )
+
+    if "review_image_ids_json" not in df.columns:
+        df = df.with_columns(pl.lit("[]").cast(pl.Utf8).alias("review_image_ids_json"))
 
     return df.with_columns(
         pl.col("images").fill_null(0).cast(pl.Int32),
@@ -293,10 +295,6 @@ async def _build_inspection_df(
     upstream_reader: Any,
     inspection_time: str,
     wafer_key: int,
-    reticle_x_die_count: int,
-    reticle_y_die_count: int,
-    reticle_x_die_shift: int,
-    reticle_y_die_shift: int,
 ) -> pl.DataFrame:
     insp_dt = _coerce_naive_to_upstream_tz(
         datetime.fromisoformat(inspection_time.replace("Z", "+00:00"))
@@ -309,10 +307,6 @@ async def _build_inspection_df(
         inspection_time=insp_dt,
         wafer_key=wafer_key,
         count=inspection.defects,
-        reticle_x_die_count=reticle_x_die_count,
-        reticle_y_die_count=reticle_y_die_count,
-        reticle_x_die_shift=reticle_x_die_shift,
-        reticle_y_die_shift=reticle_y_die_shift,
     )
     return _normalize_samples_df(df)
 
@@ -323,10 +317,6 @@ async def _build_dataset_df(
     org_id: str,
     storage_factory: Any,
     upstream_reader: Any,
-    reticle_x_die_count: int,
-    reticle_y_die_count: int,
-    reticle_x_die_shift: int,
-    reticle_y_die_shift: int,
 ) -> pl.DataFrame:
     storage = await storage_factory.open(dataset_id, org_id)
     sparse_lf = cast(
@@ -358,10 +348,6 @@ async def _build_dataset_df(
         inspection_time=source_time,
         wafer_key=source_wafer_key,
         count=None,
-        reticle_x_die_count=reticle_x_die_count,
-        reticle_y_die_count=reticle_y_die_count,
-        reticle_x_die_shift=reticle_x_die_shift,
-        reticle_y_die_shift=reticle_y_die_shift,
     )
     sparse_cols = [
         col
@@ -379,14 +365,19 @@ async def _build_dataset_df(
     )
 
 
-def _init_tables(server: Server, samples_df: pl.DataFrame) -> Table:
+def _init_tables(
+    server: Server,
+    samples_df: pl.DataFrame,
+    *,
+    table_name: str,
+) -> tuple[Client, Table]:
     client = server.new_local_client()
     joined = client.table(
         _select_perspective_columns(samples_df),
-        name="joined_samples",
+        name=table_name,
         index="defect_id",
     )
-    return joined
+    return client, joined
 
 
 async def _load_initial_samples(
@@ -396,6 +387,7 @@ async def _load_initial_samples(
     samples_df_factory: Callable[[], Awaitable[pl.DataFrame]],
     stop_event: asyncio.Event,
     update_lock: asyncio.Lock,
+    executor: ThreadPoolExecutor,
 ) -> None:
     try:
         samples_df = await samples_df_factory()
@@ -403,7 +395,11 @@ async def _load_initial_samples(
         if stop_event.is_set():
             return
         async with update_lock:
-            joined_table.update(_select_perspective_columns(samples_df))
+            await asyncio.get_running_loop().run_in_executor(
+                executor,
+                joined_table.update,
+                _select_perspective_columns(samples_df),
+            )
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -423,6 +419,7 @@ async def _redis_listener(
     refresh_dataset_overlay: Callable[[], Awaitable[pl.DataFrame | None]],
     stop_event: asyncio.Event,
     update_lock: asyncio.Lock,
+    executor: ThreadPoolExecutor,
 ) -> None:
     if redis_client is None:
         await stop_event.wait()
@@ -455,7 +452,11 @@ async def _redis_listener(
                 return
             if df is not None and len(df) > 0:
                 async with update_lock:
-                    joined_table.update(df)
+                    await asyncio.get_running_loop().run_in_executor(
+                        executor,
+                        joined_table.update,
+                        df,
+                    )
     finally:
         try:
             await pubsub.unsubscribe(ANNOTATION_CHANNEL, PREDICTION_CHANNEL)
@@ -466,6 +467,8 @@ async def _redis_listener(
 
 async def run_sc_perspective_ws(
     *,
+    server: Server,
+    table_name: str,
     websocket: WebSocket,
     dataset_id: str | None,
     samples_df_factory: Callable[[], Awaitable[pl.DataFrame]],
@@ -477,7 +480,7 @@ async def run_sc_perspective_ws(
         thread_name_prefix="sc-perspective-handler",
     )
     update_lock = asyncio.Lock()
-    server = Server()
+    local_client: Client | None = None
     joined: Table | None = None
     initial_load_task: asyncio.Task[None] | None = None
     listener_task: asyncio.Task[None] | None = None
@@ -487,7 +490,11 @@ async def run_sc_perspective_ws(
         return None
 
     try:
-        joined = _init_tables(server, _empty_samples_df())
+        local_client, joined = _init_tables(
+            server,
+            _empty_samples_df(),
+            table_name=table_name,
+        )
         initial_load_task = asyncio.create_task(
             _load_initial_samples(
                 websocket=websocket,
@@ -495,6 +502,7 @@ async def run_sc_perspective_ws(
                 samples_df_factory=samples_df_factory,
                 stop_event=stop_event,
                 update_lock=update_lock,
+                executor=executor,
             )
         )
         listener_task = asyncio.create_task(
@@ -505,15 +513,15 @@ async def run_sc_perspective_ws(
                 refresh_dataset_overlay=refresh_overlay or _noop_overlay,
                 stop_event=stop_event,
                 update_lock=update_lock,
+                executor=executor,
             )
         )
-        handler = PerspectiveStarletteHandler(
-            perspective_server=server,
-            websocket=websocket,
-            executor=executor,
-        )
         try:
-            await handler.run()
+            await _run_serialized_perspective_handler(
+                server=server,
+                websocket=websocket,
+                executor=executor,
+            )
         finally:
             stop_event.set()
             for task in (initial_load_task, listener_task):
@@ -525,9 +533,137 @@ async def run_sc_perspective_ws(
                 except asyncio.CancelledError:
                     pass
     finally:
-        executor.shutdown(wait=True)
         if joined is not None:
             try:
-                joined.delete()
+                await asyncio.get_running_loop().run_in_executor(
+                    executor,
+                    joined.delete,
+                )
             except Exception:
-                pass
+                _logger.exception("sc perspective table cleanup failed")
+        if local_client is not None:
+            try:
+                await asyncio.get_running_loop().run_in_executor(
+                    executor,
+                    local_client.terminate,
+                )
+            except Exception:
+                _logger.exception("sc perspective local client cleanup failed")
+        await asyncio.to_thread(executor.shutdown, wait=True)
+
+
+async def _run_serialized_perspective_handler(
+    *,
+    server: Server,
+    websocket: WebSocket,
+    executor: ThreadPoolExecutor,
+) -> None:
+    """Bridge Perspective to Starlette with exactly one websocket writer.
+
+    Perspective's bundled Starlette handler creates an independent task for every
+    response. Concurrent ``send_bytes`` calls violate Starlette's websocket state
+    machine under map/table load and can close the transport with code 1006.
+    """
+
+    loop = asyncio.get_running_loop()
+    outgoing: asyncio.Queue[bytes | None] = asyncio.Queue(
+        maxsize=_MAX_PENDING_RESPONSES
+    )
+    accepting_responses = True
+    pending_response_bytes = 0
+
+    def stop_overloaded_connection(message_size: int) -> None:
+        nonlocal accepting_responses, pending_response_bytes
+        if not accepting_responses:
+            return
+        accepting_responses = False
+        _logger.warning(
+            "sc perspective response backlog exceeded; closing websocket "
+            "queued_messages=%d queued_bytes=%d next_message_bytes=%d",
+            outgoing.qsize(),
+            pending_response_bytes,
+            message_size,
+        )
+        while not outgoing.empty():
+            with suppress(asyncio.QueueEmpty):
+                pending = outgoing.get_nowait()
+                if pending is not None:
+                    pending_response_bytes -= len(pending)
+                outgoing.task_done()
+        outgoing.put_nowait(None)
+
+    def enqueue_on_loop(payload: bytes) -> None:
+        nonlocal pending_response_bytes
+        if not accepting_responses:
+            return
+        if (
+            outgoing.full()
+            or pending_response_bytes + len(payload) > _MAX_PENDING_RESPONSE_BYTES
+        ):
+            stop_overloaded_connection(len(payload))
+            return
+        pending_response_bytes += len(payload)
+        outgoing.put_nowait(payload)
+
+    def enqueue_response(message: bytes) -> None:
+        if not accepting_responses:
+            return
+        payload = message if isinstance(message, bytes) else bytes(message)
+        loop.call_soon_threadsafe(enqueue_on_loop, payload)
+
+    session = server.new_session(enqueue_response)
+
+    async def write_responses() -> None:
+        nonlocal pending_response_bytes
+        while True:
+            message = await outgoing.get()
+            try:
+                if message is None:
+                    await websocket.close(code=1013)
+                    return
+                pending_response_bytes -= len(message)
+                await websocket.send_bytes(message)
+            finally:
+                outgoing.task_done()
+
+    writer_task: asyncio.Task[None] | None = None
+    try:
+        await websocket.accept()
+        writer_task = asyncio.create_task(
+            write_responses(),
+            name="sc-perspective-websocket-writer",
+        )
+        while True:
+            receive_task = asyncio.create_task(websocket.receive())
+            done, _pending = await asyncio.wait(
+                (receive_task, writer_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if writer_task in done:
+                receive_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await receive_task
+                await writer_task
+                return
+            message = receive_task.result()
+            websocket._raise_on_disconnect(message)
+            payload = message.get("bytes")
+            if payload is None:
+                await websocket.close(code=1003)
+                return
+            await loop.run_in_executor(executor, session.handle_request, payload)
+    except WebSocketDisconnect:
+        # Normal on refresh/navigation.
+        pass
+    finally:
+        accepting_responses = False
+        await loop.run_in_executor(executor, session.close)
+        if writer_task is not None:
+            if not writer_task.done():
+                writer_task.cancel()
+            with suppress(asyncio.CancelledError, WebSocketDisconnect, RuntimeError):
+                await writer_task
+        while not outgoing.empty():
+            with suppress(asyncio.QueueEmpty):
+                outgoing.get_nowait()
+                outgoing.task_done()
