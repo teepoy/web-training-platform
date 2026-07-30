@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NDropdown } from "naive-ui";
 import { mountWithProviders } from "@/testing";
 import ScMapPanelBinned from "../ScMapPanelBinned.vue";
 
@@ -30,6 +31,19 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.emitted("box-select")?.at(-1)?.[0]).toEqual(zoom);
   });
 
+  it("groups map interactions into one compact dropdown", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const dropdown = wrapper.findComponent(NDropdown);
+    const labels = (dropdown.props("options") as Array<{ label?: string }>).map(
+      (option) => option.label,
+    );
+
+    expect(wrapper.find('[data-testid="sc-map-tools-button"]').exists()).toBe(true);
+    expect(labels).toEqual(["Box selection (append)", "Drag to zoom", "Pan map"]);
+    expect(wrapper.find('[data-testid="sc-map-zoom-in-button"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-zoom-out-button"]').exists()).toBe(true);
+  });
+
   it("offers one-step zoom in and zoom out controls", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
       props: {
@@ -45,7 +59,8 @@ describe("ScMapPanelBinned unified map", () => {
       },
     });
 
-    await wrapper.get('[data-testid="sc-map-zoom-in-button"]').trigger("click");
+    await wrapper.find('[data-testid="sc-map-zoom-in-button"]').trigger("click");
+    await wrapper.vm.$nextTick();
     expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toEqual({
       x: -50,
       y: -50,
@@ -54,11 +69,12 @@ describe("ScMapPanelBinned unified map", () => {
     });
 
     await wrapper.setProps({ zoom: { x: -50, y: -50, w: 100, h: 100 } });
-    await wrapper.get('[data-testid="sc-map-zoom-out-button"]').trigger("click");
+    await wrapper.find('[data-testid="sc-map-zoom-out-button"]').trigger("click");
+    await wrapper.vm.$nextTick();
     expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toBeNull();
   });
 
-  it("assigns camel-case custom-element properties and switches interaction mode", async () => {
+  it("assigns camel-case custom-element properties and switches dropdown interaction mode", async () => {
     const arrowData = [new ArrayBuffer(8), new ArrayBuffer(16)];
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
       props: { arrowData, mapLegendColumn: "rough_bin" },
@@ -79,7 +95,8 @@ describe("ScMapPanelBinned unified map", () => {
     expect(element.showImageMarkers).toBe(true);
     expect(element.defectSize).toBe(2);
     expect(element.interactionMode).toBe("select");
-    await wrapper.find('[data-testid="sc-map-zoom-tool"]').trigger("click");
+    wrapper.findComponent(NDropdown).vm.$emit("select", "zoomin");
+    await wrapper.vm.$nextTick();
     expect(element.interactionMode).toBe("zoomin");
   });
 
@@ -89,7 +106,8 @@ describe("ScMapPanelBinned unified map", () => {
     });
     expect(wrapper.find(".map-loading-overlay").exists()).toBe(true);
 
-    await wrapper.find('[data-testid="sc-map-pan-tool"]').trigger("click");
+    wrapper.findComponent(NDropdown).vm.$emit("select", "pan");
+    await wrapper.vm.$nextTick();
     wrapper
       .find('[data-testid="sc-unified-map"]')
       .element.dispatchEvent(new CustomEvent("zoom-in", { detail: { x: 1, y: 2, w: 3, h: 4 } }));

@@ -41,7 +41,6 @@ x-platform-environment: &platform-environment
   LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
-  PERSPECTIVE_WS_MAX_RSS_MB: ${PERSPECTIVE_WS_MAX_RSS_MB:-1536}
   PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
 
 x-api-runtime: &api-runtime

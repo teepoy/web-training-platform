@@ -172,6 +172,47 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     });
   });
 
+  it("drains a second box selection after the first table update completes", async () => {
+    const firstRegion = { x: 10, y: 20, w: 30, h: 40 };
+    const secondRegion = { x: 50, y: 60, w: 70, h: 80 };
+    let resolveFirstUpdate: ((ids: number[]) => void) | undefined;
+    const firstUpdate = new Promise<number[]>((resolve) => {
+      resolveFirstUpdate = resolve;
+    });
+    modelMock.queryBoxSelection.mockResolvedValueOnce([2, 3]).mockResolvedValueOnce([4, 5]);
+    modelMock.appendMapSelection
+      .mockReturnValueOnce(firstUpdate)
+      .mockResolvedValueOnce([1, 2, 3, 4, 5]);
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+        activeMapTab: "die",
+      },
+    });
+    const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    mapPanel.vm.$emit("box-select", firstRegion);
+    await vi.waitFor(() => {
+      expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
+    });
+    mapPanel.vm.$emit("box-select", secondRegion);
+    await Promise.resolve();
+    expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
+
+    resolveFirstUpdate?.([1, 2, 3]);
+    await vi.waitFor(() => {
+      expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(2);
+    });
+
+    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(1, [2, 3]);
+    expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(2, [4, 5]);
+    expect(wrapper.emitted("map-filter-change")).toEqual([
+      [{ ids: [1, 2, 3], region: firstRegion }],
+      [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
+    ]);
+  });
+
   it("keeps legend selection as replace semantics", async () => {
     const region = { x: 0, y: 0, w: 0, h: 0 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {

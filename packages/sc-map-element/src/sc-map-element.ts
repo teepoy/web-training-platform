@@ -775,10 +775,20 @@ export class ScMapElement extends HTMLElement {
               selectedPoints.push({ x, y });
             }
           }
-          this.#immediatePoints = selectedPoints;
+          // Box selection is additive by product definition. Preserve points
+          // from earlier drags until the caller explicitly clears selection.
+          const immediatePointKeys = new Set(
+            this.#immediatePoints.map((point) => `${point.x}:${point.y}`),
+          );
+          for (const point of selectedPoints) {
+            const key = `${point.x}:${point.y}`;
+            if (immediatePointKeys.has(key)) continue;
+            immediatePointKeys.add(key);
+            this.#immediatePoints.push(point);
+          }
           this.dispatchEvent(
             new CustomEvent("immediate-crosshair-points", {
-              detail: selectedPoints,
+              detail: this.#immediatePoints.map((point) => ({ ...point })),
               bubbles: true,
             }),
           );

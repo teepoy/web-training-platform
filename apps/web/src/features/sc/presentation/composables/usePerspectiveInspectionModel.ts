@@ -291,10 +291,8 @@ export function usePerspectiveInspectionModel(args: {
     map: null,
     table: null,
   });
-  const selectionUpdatePortIds = computed(() =>
-    [selectionUpdatePorts.value.map, selectionUpdatePorts.value.table].filter(
-      (portId): portId is number => portId != null,
-    ),
+  const sampleTableIgnoredUpdatePortIds = computed(() =>
+    selectionUpdatePorts.value.table == null ? [] : [selectionUpdatePorts.value.table],
   );
   const legendGroups = ref<Record<string, DefectList> | null>(null);
 
@@ -430,7 +428,17 @@ export function usePerspectiveInspectionModel(args: {
     args.reticleExpressions,
     args.onRecoverableError,
   );
+  let mapSelectionUpdateQueue = Promise.resolve();
   let tableSelectionUpdateQueue = Promise.resolve();
+
+  function enqueueMapSelectionUpdate<T>(operation: () => Promise<T>): Promise<T> {
+    const result = mapSelectionUpdateQueue.then(operation);
+    mapSelectionUpdateQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
 
   async function syncSelectionFlags(table: Table): Promise<void> {
     if (mapSelection.value.ids.length === 0 && tableSelection.value.ids.length === 0) return;
@@ -577,23 +585,42 @@ export function usePerspectiveInspectionModel(args: {
     }
   }
 
-  async function applyMapSelection(ids: number[]): Promise<void> {
-    const table = args.perspectiveTable.value;
-    if (!table) return;
-    const next = selectionStateFor(sortedUniqueIds(ids));
-    const needsTableUpdate = mapSelection.value.ids.length > 0 || next.ids.length > 0;
-    const ports = needsTableUpdate ? await ensureSelectionUpdatePorts(table) : null;
-    const previous = mapSelection.value;
-    if (needsTableUpdate) {
-      await replaceMapSelection(table, previous.ids, next.ids, ports?.map);
-    }
-    mapSelection.value = next;
+  function applyMapSelection(ids: number[]): Promise<void> {
+    const nextIds = sortedUniqueIds(ids);
+    return enqueueMapSelectionUpdate(async () => {
+      const table = args.perspectiveTable.value;
+      if (!table) return;
+      const next = selectionStateFor(nextIds);
+      const needsTableUpdate = mapSelection.value.ids.length > 0 || next.ids.length > 0;
+      const ports = needsTableUpdate ? await ensureSelectionUpdatePorts(table) : null;
+      const previous = mapSelection.value;
+      if (needsTableUpdate) {
+        await replaceMapSelection(table, previous.ids, next.ids, ports?.map);
+      }
+      mapSelection.value = next;
+    });
   }
 
-  async function appendMapSelection(ids: number[]): Promise<number[]> {
-    const nextIds = sortedUniqueIds([...mapSelection.value.ids, ...ids]);
-    await applyMapSelection(nextIds);
-    return nextIds;
+  function appendMapSelection(ids: number[]): Promise<number[]> {
+    const requestedIds = sortedUniqueIds(ids);
+    return enqueueMapSelectionUpdate(async () => {
+      const table = args.perspectiveTable.value;
+      if (!table) return mapSelection.value.ids;
+
+      // Product contract: each box-selection drag appends to the current map
+      // selection. It must never replace the existing list; replacement is
+      // reserved for explicit legend selection and clearing.
+      const previousIds = mapSelection.value.ids;
+      const previousSet = new Set(previousIds);
+      const addedIds = requestedIds.filter((id) => !previousSet.has(id));
+      const nextIds = sortedUniqueIds([...previousIds, ...addedIds]);
+      if (addedIds.length > 0) {
+        const ports = await ensureSelectionUpdatePorts(table);
+        await updateMapSelection(table, addedIds, 1, ports.map);
+      }
+      mapSelection.value = selectionStateFor(nextIds);
+      return nextIds;
+    });
   }
 
   async function clearMapSelection(): Promise<void> {
@@ -690,7 +717,7 @@ export function usePerspectiveInspectionModel(args: {
     mapProgressPercent: map.progressPercent,
     mapSelectedDefectIds,
     tableSelectedDefectIds,
-    selectionUpdatePortIds,
+    sampleTableIgnoredUpdatePortIds,
     loadGlobalDistinctValues,
     setTableSelectedDefectIds,
     setReviewMode,

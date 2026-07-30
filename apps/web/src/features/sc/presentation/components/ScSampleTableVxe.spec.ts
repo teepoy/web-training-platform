@@ -223,6 +223,92 @@ describe("ScSampleTableVxe virtual paging", () => {
     wrapper.unmount();
   });
 
+  it("refreshes the total for repeated map-selection port updates", async () => {
+    let defectIds = [1, 2];
+    let onViewUpdate: ((event: { port_id?: number }) => void) | undefined;
+    const view = {
+      num_rows: vi.fn(async () => defectIds.length),
+      column_paths: vi.fn(async () => ["defect_id", "images"]),
+      to_arrow: vi.fn(
+        async (options: {
+          start_row?: number;
+          end_row?: number;
+          start_col?: number;
+          end_col?: number;
+        }) => {
+          if (options.start_col !== undefined) return ipc({ defect_id: defectIds });
+          const start = options.start_row ?? 0;
+          const end = Math.min(options.end_row ?? defectIds.length, defectIds.length);
+          return ipc({
+            defect_id: defectIds.slice(start, end),
+            images: Array.from({ length: end - start }, () => 5),
+          });
+        },
+      ),
+      on_update: vi.fn((callback: (event: { port_id?: number }) => void) => {
+        onViewUpdate = callback;
+      }),
+      delete: vi.fn(async () => undefined),
+    } as unknown as View;
+    const table = {
+      view: vi.fn(async () => view),
+    } as unknown as Table;
+    const VxeTableStub = defineComponent({
+      name: "VxeTable",
+      setup(_props, { expose }) {
+        expose({
+          clearCheckboxRow: vi.fn(),
+          getScrollData: vi.fn(() => ({
+            clientWidth: 400,
+            scrollLeft: 0,
+            scrollWidth: 2_400,
+          })),
+          loadData: vi.fn(async () => undefined),
+          recalculate: vi.fn(async () => undefined),
+          refreshScroll: vi.fn(async () => undefined),
+          reloadData: vi.fn(async () => undefined),
+          scrollTo: vi.fn(async () => undefined),
+          setCheckboxRowKey: vi.fn(),
+        });
+        return {};
+      },
+      template: '<div class="vxe-table-stub" />',
+    });
+    const { wrapper } = await mountWithProviders(ScSampleTableVxe, {
+      props: {
+        perspectiveTable: table,
+        baseViewConfig: {
+          filter: [["map_in_selection", "==", 1]],
+        },
+        ignoredPerspectiveUpdatePortIds: [2],
+      },
+      global: {
+        stubs: {
+          "vxe-table": VxeTableStub,
+          "vxe-column": true,
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("2");
+    });
+
+    defectIds = [1, 2, 3];
+    onViewUpdate?.({ port_id: 1 });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("3");
+    });
+
+    defectIds = [1, 2, 3, 4];
+    onViewUpdate?.({ port_id: 1 });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("4");
+    });
+
+    wrapper.unmount();
+  });
+
   it("invalidates the active page once for one header sort action", async () => {
     const defectIds = [1, 2, 3];
     const views: Array<View & { delete: ReturnType<typeof vi.fn> }> = [];

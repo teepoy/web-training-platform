@@ -460,6 +460,8 @@ function useBoxSelectionQueue() {
     if (ids.size === 0 || !lastRegion) return;
 
     try {
+      // Box selection is append-only: each drained batch extends the current
+      // map selection. Do not route this through replace-style legend logic.
       const nextIds = await model.appendMapSelection([...ids]);
       emit("map-filter-change", { ids: nextIds, region: lastRegion });
     } catch (err) {
@@ -543,7 +545,7 @@ function useBoxSelectionQueue() {
         :base-view-config="model.sampleTableBaseViewConfig.value"
         :loading="!perspectiveReady"
         :selected-defect-ids="tableHighlightIds"
-        :ignored-perspective-update-port-ids="model.selectionUpdatePortIds.value"
+        :ignored-perspective-update-port-ids="model.sampleTableIgnoredUpdatePortIds.value"
         :filter="tableFilter"
         :sort="tableSort"
         :show-reclassify-columns="isReclassify"

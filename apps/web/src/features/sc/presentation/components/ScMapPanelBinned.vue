@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, h, ref, watch, type Component } from "vue";
 import { defineScMapElement, type ScMapGeometry } from "@platform/sc-map-element";
 import {
   NTabs,
   NTabPane,
   NResult,
   NButton,
+  NDropdown,
   NSelect,
   NIcon,
-  NTooltip,
   NSpin,
   NText,
+  type DropdownOption,
 } from "naive-ui";
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import {
@@ -33,6 +34,7 @@ type LegendKey = number | string;
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
 type CrosshairPoint = { x: number; y: number };
 type MapTab = "wafer" | "die" | "reticle";
+type MapToolAction = "select" | "zoomin" | "pan";
 
 const props = withDefaults(
   defineProps<{
@@ -238,6 +240,42 @@ function zoomBy(factor: number): void {
     w: width,
     h: height,
   });
+}
+
+function mapToolIcon(icon: Component): () => ReturnType<typeof h> {
+  return () => h(NIcon, null, { default: () => h(icon) });
+}
+
+const activeMapToolIcon = computed(() => {
+  const mode = mapMode.value[internalTab.value];
+  if (mode === "zoomin") return SearchOutline;
+  if (mode === "pan") return MoveOutline;
+  return ScanOutline;
+});
+
+const mapToolOptions = computed<DropdownOption[]>(() => [
+  {
+    label: "Box selection (append)",
+    key: "select" satisfies MapToolAction,
+    icon: mapToolIcon(ScanOutline),
+  },
+  {
+    label: "Drag to zoom",
+    key: "zoomin" satisfies MapToolAction,
+    icon: mapToolIcon(SearchOutline),
+  },
+  {
+    label: "Pan map",
+    key: "pan" satisfies MapToolAction,
+    icon: mapToolIcon(MoveOutline),
+  },
+]);
+
+function handleMapToolSelect(key: string | number): void {
+  const action = String(key);
+  if (action === "select" || action === "zoomin" || action === "pan") {
+    mapMode.value[internalTab.value] = action;
+  }
 }
 
 const handleRetry = () => {
@@ -470,93 +508,50 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           <NTabPane name="reticle" tab="Reticle" data-testid="sc-map-tab-reticle" />
         </NTabs>
         <div class="map-toolbar-actions">
-          <NTooltip placement="bottom">
-            <template #trigger>
-              <NButton
-                data-testid="sc-map-select-tool"
-                size="small"
-                quaternary
-                :type="mapMode[internalTab] === 'select' ? 'primary' : 'default'"
-                aria-label="Box selection"
-                @click="mapMode[internalTab] = 'select'"
-              >
-                <template #icon
-                  ><NIcon><ScanOutline /></NIcon
-                ></template>
-              </NButton>
+          <NDropdown
+            data-testid="sc-map-tools-dropdown"
+            trigger="click"
+            placement="bottom-end"
+            :options="mapToolOptions"
+            @select="handleMapToolSelect"
+          >
+            <NButton
+              data-testid="sc-map-tools-button"
+              size="small"
+              quaternary
+              type="primary"
+              aria-label="Map tools"
+            >
+              <template #icon>
+                <NIcon><component :is="activeMapToolIcon" /></NIcon>
+              </template>
+            </NButton>
+          </NDropdown>
+          <NButton
+            data-testid="sc-map-zoom-in-button"
+            size="small"
+            quaternary
+            type="primary"
+            aria-label="Zoom in"
+            @click="zoomBy(0.5)"
+          >
+            <template #icon>
+              <NIcon><AddOutline /></NIcon>
             </template>
-            Box selection
-          </NTooltip>
-          <NTooltip placement="bottom">
-            <template #trigger>
-              <NButton
-                data-testid="sc-map-zoom-tool"
-                size="small"
-                quaternary
-                :type="mapMode[internalTab] === 'zoomin' ? 'primary' : 'default'"
-                aria-label="Zoom in"
-                @click="mapMode[internalTab] = 'zoomin'"
-              >
-                <template #icon>
-                  <span class="zoom-in-icon">
-                    <NIcon><SearchOutline /></NIcon>
-                    <NIcon class="zoom-in-icon__plus"><AddOutline /></NIcon>
-                  </span>
-                </template>
-              </NButton>
+          </NButton>
+          <NButton
+            data-testid="sc-map-zoom-out-button"
+            size="small"
+            quaternary
+            type="primary"
+            aria-label="Zoom out"
+            :disabled="zoom == null"
+            @click="zoomBy(2)"
+          >
+            <template #icon>
+              <NIcon><RemoveOutline /></NIcon>
             </template>
-            Zoom in
-          </NTooltip>
-          <NTooltip placement="bottom">
-            <template #trigger>
-              <NButton
-                data-testid="sc-map-zoom-in-button"
-                size="small"
-                quaternary
-                aria-label="Zoom in one step"
-                @click="zoomBy(0.5)"
-              >
-                <template #icon
-                  ><NIcon><AddOutline /></NIcon
-                ></template>
-              </NButton>
-            </template>
-            Zoom in one step
-          </NTooltip>
-          <NTooltip placement="bottom">
-            <template #trigger>
-              <NButton
-                data-testid="sc-map-zoom-out-button"
-                size="small"
-                quaternary
-                :disabled="zoom == null"
-                aria-label="Zoom out one step"
-                @click="zoomBy(2)"
-              >
-                <template #icon
-                  ><NIcon><RemoveOutline /></NIcon
-                ></template>
-              </NButton>
-            </template>
-            Zoom out
-          </NTooltip>
-          <NTooltip placement="bottom">
-            <template #trigger>
-              <NButton
-                data-testid="sc-map-pan-tool"
-                size="small"
-                quaternary
-                :type="mapMode[internalTab] === 'pan' ? 'primary' : 'default'"
-                aria-label="Pan map"
-                @click="mapMode[internalTab] = 'pan'"
-              >
-                <template #icon
-                  ><NIcon><MoveOutline /></NIcon
-                ></template>
-              </NButton>
-            </template>
-            Pan
-          </NTooltip>
+          </NButton>
           <ScReticleMapOptionsButton
             :modelValue="effectiveReticleOptions"
             :show-image-markers="showImageMarkers"
@@ -800,22 +795,5 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
   background-color: var(--n-color-embedded);
   color: var(--n-text-color-3);
   border-radius: var(--n-border-radius);
-}
-
-.zoom-in-icon {
-  position: relative;
-  display: inline-flex;
-  width: 1em;
-  height: 1em;
-}
-
-.zoom-in-icon__plus {
-  position: absolute;
-  top: -3px;
-  right: -5px;
-  padding: 1px;
-  font-size: 9px;
-  border-radius: 50%;
-  background: var(--n-color, #fff);
 }
 </style>

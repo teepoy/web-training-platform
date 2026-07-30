@@ -160,4 +160,49 @@ describe("usePerspectiveInspectionModel.highlightDefectsForIds", () => {
     );
     expect(model.tableSelectedDefectIds.value).toEqual([2, 3]);
   });
+
+  it("appends consecutive box selections and updates only newly added rows", async () => {
+    let nextPort = 0;
+    const update = vi.fn(async () => undefined);
+    const table = {
+      make_port: vi.fn(async () => {
+        nextPort += 1;
+        return nextPort;
+      }),
+      update,
+    } as unknown as Table;
+    const model = usePerspectiveInspectionModel({
+      perspectiveTable: ref<Table | null>(table),
+      legendGroupBy: ref("class"),
+      tableFilter: ref({}),
+      reticleExpressions: ref({ reticle_x: '"die_x"', reticle_y: '"die_y"' }),
+    });
+
+    const firstSelection = model.appendMapSelection([3, 1]);
+    const secondSelection = model.appendMapSelection([3, 2]);
+
+    await expect(firstSelection).resolves.toEqual([1, 3]);
+    await expect(secondSelection).resolves.toEqual([1, 2, 3]);
+
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      {
+        defect_id: [1, 3],
+        map_in_selection: [1, 1],
+      },
+      { port_id: 1, format: null },
+    );
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      {
+        defect_id: [2],
+        map_in_selection: [1],
+      },
+      { port_id: 1, format: null },
+    );
+    expect(model.mapSelectedDefectIds.value).toEqual([1, 2, 3]);
+    // Table-selection updates do not affect the Sample Table view and may be
+    // ignored. Map-selection updates change its filter result and must refresh.
+    expect(model.sampleTableIgnoredUpdatePortIds.value).toEqual([2]);
+  });
 });
