@@ -7,7 +7,6 @@ dependency-guard behavior is correct, and catalog entries are consistent.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,10 +15,8 @@ from app.shared.domain.runtime import DatasetRef, ModelRef, PredictContext, Trai
 from app.core.registry import get_predictor_by_id, get_trainer_by_id
 from app.modules.types import catalog
 
-import app.runtime_compat.ml.trainers.sc  # noqa: F401  @trainer(resnet50-sc-v1)
-import app.runtime_compat.ml.trainers.yolo_sc  # noqa: F401  @trainer(yolo-sc-v1)
-import app.runtime_compat.ml.predictors.sc  # noqa: F401  @predictor(resnet50-sc-v1)
-import app.runtime_compat.ml.predictors.yolo_sc  # noqa: F401  @predictor(yolo-sc-v1)
+import app.modules.sc.runtime.trainers  # noqa: F401
+import app.modules.sc.runtime.predictors  # noqa: F401
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -132,7 +129,7 @@ async def test_yolo_trainer_error_message_mentions_lazyframe() -> None:
 
 def test_yolo_predictor_resolves_in_flow_registry() -> None:
     """yolo-sc-v1 is registered in the flow runtime predictor registry."""
-    from app.runtime_compat.ml.predictors import (
+    from app.modules.runtime.app.services.executable_loader import (
         get_predictor as flow_get_predictor,
     )
 
@@ -144,7 +141,7 @@ def test_yolo_predictor_is_generator() -> None:
     """yolo-sc-v1 predictor is a generator function, not a class."""
     import inspect
 
-    from app.runtime_compat.ml.predictors import (
+    from app.modules.runtime.app.services.executable_loader import (
         get_predictor as flow_get_predictor,
     )
 
@@ -158,7 +155,7 @@ def test_yolo_predictor_is_generator() -> None:
 def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.runtime_compat.ml.predictors import yolo_sc
+    from app.modules.sc.runtime import predictors
 
     checkpoint_bytes = b"native-ultralytics-checkpoint"
     loaded_bytes: list[bytes] = []
@@ -168,31 +165,23 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
             assert uri == "memory://model.pt"
             return checkpoint_bytes
 
-    class FakeModel:
-        names = {0: "defect", 1: "clean"}
+    def fake_predict_yolo(
+        checkpoint: bytes,
+        labels: list[str],
+        samples: list[object],
+    ) -> list[object]:
+        loaded_bytes.append(checkpoint)
+        assert labels == ["defect", "clean"]
+        assert samples == []
+        return []
 
-        def to(self, device: object) -> None:
-            assert device == "cpu"
-
-    def fake_yolo(path: str) -> FakeModel:
-        loaded_bytes.append(Path(path).read_bytes())
-        return FakeModel()
-
-    fake_torch = SimpleNamespace(
-        cuda=SimpleNamespace(is_available=lambda: False),
-        mps=SimpleNamespace(is_available=lambda: False),
-        device=lambda value: value,
-    )
-    monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(
         sys.modules,
-        "ultralytics",
-        SimpleNamespace(YOLO=fake_yolo),
-    )
-    monkeypatch.setattr(
-        yolo_sc,
-        "get_run_logger",
-        lambda: SimpleNamespace(info=lambda *args: None),
+        "ml_library",
+        SimpleNamespace(
+            PredictionSample=lambda **kwargs: SimpleNamespace(**kwargs),
+            predict_yolo=fake_predict_yolo,
+        ),
     )
 
     model_ref = ModelRef(
@@ -206,7 +195,7 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     )
 
     predictions = list(
-        yolo_sc.yolo_sc_predictor.func(
+        predictors.yolo_sc_predictor.func(
                 artifact_storage=ArtifactStorage(),
                 ctx=ctx,
                 model_ref=model_ref,
@@ -218,24 +207,21 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     assert loaded_bytes == [checkpoint_bytes]
 
 
-def test_yolo_active_labels_are_compacted_from_training_rows() -> None:
-    from app.runtime_compat.ml.trainers import yolo_sc
-
-    rows = [
-        {"label": "a", "images": [{"role": "patch_defective"}, {"role": "patch_template"}]},
-        {"label": "c", "images": [{"role": "patch_defective"}, {"role": "patch_template"}]},
-    ]
-
-    assert yolo_sc._ordered_active_labels(rows, ["a", "b", "c"]) == ["a", "c"]
-
-
 def test_yolo_predictor_requires_model_metadata_label_space() -> None:
-    from app.runtime_compat.ml.predictors import yolo_sc
+    from app.modules.sc.runtime import predictors
 
-    model_ref = ModelRef(metadata={})
+    model_ref = ModelRef(uri="memory://model.pt", metadata={})
+    ctx = PredictContext(job_id="test-yolo-labels")
 
     with pytest.raises(ValueError, match="compact label_space"):
-        yolo_sc._resolve_labels(model_ref)
+        next(
+            predictors.yolo_sc_predictor.func(
+                artifact_storage=object(),
+                ctx=ctx,
+                model_ref=model_ref,
+                materialized_dataset=[],
+            )
+        )
 
 
 def test_trained_model_metadata_preserves_trainer_label_space() -> None:
@@ -256,7 +242,7 @@ def test_yolo_predictor_raises_on_missing_storage() -> None:
     """yolo-sc-v1 predictor raises ValueError when artifact_storage is None."""
     from app.shared.domain.runtime import ModelRef, PredictContext, DatasetRef
 
-    from app.runtime_compat.ml.predictors import (
+    from app.modules.runtime.app.services.executable_loader import (
         get_predictor as flow_get_predictor,
     )
 

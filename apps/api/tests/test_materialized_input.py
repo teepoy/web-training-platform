@@ -4,7 +4,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from app.runtime_compat.ml.trainers.materialized_input import (
+from app.modules.sc.runtime.materialized_input import (
     sc_materialized_lazyframe,
 )
 from app.shared.domain.data_plane import DataPlaneManifest, DataPlaneShard

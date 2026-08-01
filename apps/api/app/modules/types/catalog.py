@@ -15,7 +15,7 @@ from app.modules.types.registrations.core_image import (
     IMAGE_INPUT_V1,
     LABELED_IMAGE_V1,
 )
-from app.modules.types.registrations.sc import (
+from app.modules.sc.capabilities import (
     SC_CAPABILITIES,
     SC_PATCH_IMAGE_V1,
     SC_REVIEW_IMAGE_V1,

@@ -12,7 +12,8 @@ platform.
 
 ```text
 catalog capability
-  -> config-backed runtime route
+  + module-owned runtime capability descriptor
+  -> optional environment route override
   -> Prefect deployment
   -> runtime consumes DataPlaneManifest
   -> runtime writes model artifact or prediction result
@@ -34,15 +35,22 @@ containers, Python callables, or `DatasetStorageAgg` instances.
 
 ## Capability And Executable Separation
 
-- Metadata is aggregated by `app.modules.types.catalog`.
-- Environment routing is configured under `runtime_routing.*_routes`.
+- Product metadata is aggregated by `app.modules.types.catalog`.
+- Executable binding, algorithm identity, and default deployment routes are
+  aggregated by `app.modules.runtime.catalog`.
+- Input/model contracts are derived from product catalog metadata rather than
+  copied into runtime routes.
+- `runtime_routing.*_routes` is optional and may override only deployment name,
+  resource profile, owner, and code version for an environment.
 - Every route declares whether deployment ownership is `local_compat` or
   `external`; the API seeds only local compatibility deployments.
 - Prefect deployments are executable capabilities.
-- Temporary repository-local implementations are isolated under
-  `app.runtime_compat.ml` and imported lazily only by Prefect flow execution.
-- Catalog listing and API startup never import the compatibility runtime or
-  heavy ML packages.
+- SC repository-local adapters are owned by `app.modules.sc.runtime` and
+  imported lazily only by Prefect flow execution.
+- Catalog listing and API startup never import `ml_library` or heavy ML packages.
+- `ml_library.models` contains private in-process values only. A future external SC
+  runtime interface belongs with `libs/protos` and should use protobuf plus
+  Arrow schema/manifest definitions rather than Python DTO sharing.
 
 ## Data Input
 

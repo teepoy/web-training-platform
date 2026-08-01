@@ -5,13 +5,13 @@ runtime and data boundaries.
 
 ## Runtime Layers
 
-| Layer                 | Location                                    | Responsibility                                                                                                 |
-| --------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Control plane         | `apps/api`                                  | HTTP API, auth, capability metadata, compatibility validation, job state, Prefect dispatch, result persistence |
-| Orchestration         | Prefect deployments                         | Executes train, predict, train-and-predict, sensor, and other background flows                                 |
-| Runtime services      | `services/*` target boundary                | Out-of-process heavy execution consuming manifests and writing artifacts/predictions                           |
-| Compatibility runtime | `apps/api/app/runtime_compat/ml`            | Temporary lazy-loaded demo executables; never imported by API startup or catalog                               |
-| Data plane            | manifest, Arrow/Parquet, signed object refs | Stable dataset view handoff between control plane and runtime                                                  |
+| Layer               | Location                                    | Responsibility                                                                                                 |
+| ------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Control plane       | `apps/api`                                  | HTTP API, auth, capability metadata, compatibility validation, job state, Prefect dispatch, result persistence |
+| Orchestration       | Prefect deployments                         | Executes train, predict, train-and-predict, sensor, and other background flows                                 |
+| Runtime services    | `services/*` target boundary                | Out-of-process heavy execution consuming manifests and writing artifacts/predictions                           |
+| Optional ML library | `libs/ml`                                   | Optional Torch/Ultralytics kernels loaded only by the GPU worker                                               |
+| Data plane          | manifest, Arrow/Parquet, signed object refs | Stable dataset view handoff between control plane and runtime                                                  |
 
 ```text
 dataset storage
@@ -27,22 +27,25 @@ dataset storage
 Capability metadata is explicit and separate from executable registration:
 
 ```text
-module-owned CapabilityBundle declarations
-  -> central CapabilityCatalog validation
-  -> config-backed runtime route
+module product CapabilityBundle + module runtime capability descriptor
+  -> central product/runtime catalog validation
+  -> optional environment route override
   -> Prefect deployment
-  -> runtime-only executable binding
+  -> lazy executable adapter
 ```
 
 - `apps/api/app/modules/types/capabilities.py` defines typed view,
   materializer, trainer, predictor, and bundle descriptors.
-- `apps/api/app/modules/types/registrations/` contains declarations owned by
-  individual domains.
+- `apps/api/app/modules/sc/capabilities.py` owns SC product metadata.
 - `apps/api/app/modules/types/catalog.py` is the central aggregate/query surface.
-- `apps/api/config/*.yaml` maps catalog IDs to environment-specific Prefect
-  deployment routes.
-- `apps/api/app/runtime_compat/ml/executable_bindings.py` contains only temporary
-  worker-local lazy module paths.
+- `apps/api/app/modules/sc/runtime/descriptor.py` unifies SC executable binding,
+  algorithm identity, and default Prefect routes; `app/modules/runtime/catalog.py`
+  is their central query surface.
+- `apps/api/config/*.yaml` may override environment-specific deployment,
+  resource, owner, or code-version values; it does not repeat contracts or
+  algorithms.
+- `apps/api/app/modules/sc/runtime/` contains Torch-free worker adapters;
+  `libs/ml` contains the optional execution kernels.
 
 The API catalog never imports executable modules. Filesystem scanning is not a
 registration mechanism.
@@ -82,12 +85,12 @@ aggregates.
 ## Runtime Import Boundary
 
 - API startup, routers, services, composition, and registration code must not
-  import `app.runtime_compat`.
-- Prefect flow code may import the lightweight loader only at execution time.
-- Torch, TorchVision, Ultralytics, Transformers, and similar dependencies are
-  runtime-only.
-- New production ML implementations belong in out-of-process `services/*`
-  runtimes, not `runtime_compat`.
+  import `ml_library` or Torch packages.
+- Prefect flow code imports the lightweight module-owned adapter only at
+  execution time.
+- Torch, TorchVision and Ultralytics live only in the optional `libs/ml`.
+- New production ML implementations still target out-of-process `services/*`
+  runtimes; `libs/ml` is the local worker implementation.
 
 ## Product And Operational State
 

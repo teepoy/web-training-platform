@@ -13,35 +13,6 @@ def _prefect_cfg() -> DictConfig:
     return OmegaConf.create(
         {
             "execution": {"engine": "prefect"},
-            "runtime_routing": {
-                "training_routes": {
-                    "trainer-a": {
-                        "deployment": "train-job-deployment",
-                        "input_contract": "view.v1",
-                        "output_contract": "model.v1",
-                        "resource_profile": "gpu",
-                        "owner": "local_compat",
-                    }
-                },
-                "train_and_predict_routes": {
-                    "trainer-a": {
-                        "deployment": "train-and-predict-deployment",
-                        "input_contract": "view.v1",
-                        "output_contract": "predictions.v1",
-                        "resource_profile": "gpu",
-                        "owner": "local_compat",
-                    }
-                },
-                "prediction_routes": {
-                    "predictor-a": {
-                        "deployment": "predict-job-batch-deployment",
-                        "input_contract": "view.v1",
-                        "output_contract": "predictions.v1",
-                        "resource_profile": "gpu",
-                        "owner": "local_compat",
-                    }
-                },
-            },
         }
     )
 

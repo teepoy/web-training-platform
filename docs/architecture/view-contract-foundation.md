@@ -34,16 +34,16 @@ available = view-compatible ∩ model-type-compatible ∩ dataset-policy-allowed
 ## Current Implementation Path
 
 - **Control Plane**: JSON and Pydantic remain the primary path for UI and API interactions.
-- **Capability declarations**: Module-owned `CapabilityBundle` values under
-  `apps/api/app/modules/types/registrations/` declare versioned views,
+- **Capability declarations**: Module-owned `CapabilityBundle` values, including
+  SC's `apps/api/app/modules/sc/capabilities.py`, declare versioned views,
   canonical Pydantic row and Arrow schema paths, materializers, trainers,
   predictors, model contracts, and trainer/predictor pairings.
 - **Central catalog**: `apps/api/app/modules/types/catalog.py` aggregates the
   bundles and validates IDs, exact view versions, materializer outputs, and
   pairings without importing executable ML modules.
-- **Executable compatibility code**: Temporary demo implementations live under
-  `apps/api/app/runtime_compat/ml/` and are lazy-loaded only by Prefect flow
-  entrypoints through explicit bindings.
+- **SC executable code**: Torch-free adapters live under
+  `apps/api/app/modules/sc/runtime/`; optional Torch/Ultralytics kernels live
+  under `libs/ml` and are lazy-loaded through explicit bindings.
 
 ## Future and Deferred Scope
 
@@ -61,7 +61,7 @@ The foundation consists of the following components:
 
 1. `capabilities.py`: typed `ViewContractRef`, view/materializer/trainer/predictor
    descriptors, bundles, and central validation.
-2. `registrations/`: module-owned declarations that can be maintained separately.
+2. Module-owned manifests such as `app.modules.sc.capabilities`.
 3. `catalog.py`: central aggregation and query surface.
 
 **View row schemas**:
@@ -90,8 +90,8 @@ The foundation consists of the following components:
 
 **Model implementations**:
 
-- `apps/api/app/runtime_compat/ml/`: temporary worker-only implementations and
-  lazy executable bindings.
+- `apps/api/app/modules/sc/runtime/`: Torch-free worker adapters and
+  `libs/ml/`: optional ML kernels.
 - Production implementations belong in out-of-process `services/*` runtimes.
 
 **View service** (`apps/api/app/modules/datasets/`):

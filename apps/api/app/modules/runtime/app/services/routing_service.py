@@ -6,128 +6,109 @@ from typing import Any
 from omegaconf import OmegaConf
 from pydantic import BaseModel
 
+from app.modules.runtime.catalog import runtime_capabilities
+from app.modules.runtime.domain.executables import (
+    RuntimeCapabilityCatalog,
+    RuntimeOperation,
+)
 from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 from app.modules.types import catalog
 
+_OVERRIDABLE_ROUTE_FIELDS = frozenset(
+    {"deployment", "resource_profile", "owner", "code_version"}
+)
+
 
 class ConfigRuntimeRoutingService:
-    def __init__(self, config: Any) -> None:
-        self._routing = _get_config_value(config, "runtime_routing")
-        if self._routing is None:
-            raise RuntimeError("Missing required config: runtime_routing")
+    """Resolve module-owned routes with optional environment overrides."""
+
+    def __init__(
+        self,
+        config: Any,
+        *,
+        capability_catalog: RuntimeCapabilityCatalog = runtime_capabilities,
+    ) -> None:
+        self._routing = _get_config_value(config, "runtime_routing") or {}
+        self._capabilities = capability_catalog
 
     def training_route(self, trainer_id: str) -> RuntimeDeploymentRoute:
-        return self._route("training_routes", trainer_id)
+        return self._route(RuntimeOperation.TRAIN, trainer_id)
 
-    def prediction_route(
-        self,
-        predictor_id: str,
-    ) -> RuntimeDeploymentRoute:
-        return self._route("prediction_routes", predictor_id)
+    def prediction_route(self, predictor_id: str) -> RuntimeDeploymentRoute:
+        return self._route(RuntimeOperation.PREDICT, predictor_id)
 
-    def train_and_predict_route(
-        self,
-        trainer_id: str,
-    ) -> RuntimeDeploymentRoute:
-        return self._route("train_and_predict_routes", trainer_id)
+    def train_and_predict_route(self, trainer_id: str) -> RuntimeDeploymentRoute:
+        return self._route(RuntimeOperation.TRAIN_AND_PREDICT, trainer_id)
 
     def materialization_route(
         self,
         materializer_id: str,
     ) -> RuntimeDeploymentRoute:
-        return self._route("materialization_routes", materializer_id)
+        raise KeyError(
+            f"No module-owned materialization runtime route for {materializer_id!r}"
+        )
 
     def validate_catalog_routes(self) -> None:
-        """Verify that product catalog entries have compatible environment routes."""
-
         errors: list[str] = []
-        for trainer in catalog.list_trainers():
+        for catalog_id, definition in self._capabilities.list_routes():
             try:
-                train_route = self.training_route(trainer.id)
-                workflow_route = self.train_and_predict_route(trainer.id)
-                for predictor_id in trainer.predictor_ids:
-                    catalog.get_predictor_meta(predictor_id)
+                self._route(definition.operation, catalog_id)
             except (KeyError, RuntimeError) as exc:
                 errors.append(str(exc))
-                continue
-            if train_route.input_contract != trainer.input_view.contract:
-                errors.append(
-                    f"training_routes.{trainer.id}.input_contract="
-                    f"{train_route.input_contract!r} does not match catalog "
-                    f"view contract={trainer.input_view.contract!r}"
-                )
-            if train_route.output_contract != trainer.output_model.contract:
-                errors.append(
-                    f"training_routes.{trainer.id}.output_contract="
-                    f"{train_route.output_contract!r} does not match catalog "
-                    f"model contract={trainer.output_model.contract!r}"
-                )
-            if workflow_route.input_contract != trainer.input_view.contract:
-                errors.append(
-                    f"train_and_predict_routes.{trainer.id}.input_contract="
-                    f"{workflow_route.input_contract!r} does not match catalog "
-                    f"view contract={trainer.input_view.contract!r}"
-                )
-            if catalog.get_view_meta(trainer.view_id).image_roles:
-                _require_missing_image_policy(
-                    errors,
-                    train_route,
-                    section="training_routes",
-                )
-                _require_missing_image_policy(
-                    errors,
-                    workflow_route,
-                    section="train_and_predict_routes",
-                )
-        for predictor in catalog.list_predictors():
-            try:
-                route = self.prediction_route(predictor.id)
-            except RuntimeError as exc:
-                errors.append(str(exc))
-                continue
-            if route.input_contract != predictor.input_view.contract:
-                errors.append(
-                    f"prediction_routes.{predictor.id}.input_contract="
-                    f"{route.input_contract!r} does not match catalog "
-                    f"view contract={predictor.input_view.contract!r}"
-                )
-            if catalog.get_view_meta(predictor.view_id).image_roles:
-                _require_missing_image_policy(
-                    errors,
-                    route,
-                    section="prediction_routes",
-                )
-
         if errors:
             raise RuntimeError("Invalid runtime catalog routing: " + "; ".join(errors))
 
-    def _route(self, section: str, catalog_id: str) -> RuntimeDeploymentRoute:
-        entries = _get_config_value(self._routing, section)
-        if entries is None:
-            raise RuntimeError(f"Missing required config: runtime_routing.{section}")
-        raw = _get_config_value(entries, catalog_id)
-        if raw is None:
+    def _route(
+        self,
+        operation: RuntimeOperation,
+        catalog_id: str,
+    ) -> RuntimeDeploymentRoute:
+        executable = self._capabilities.executable(catalog_id)
+        definition = self._capabilities.route(operation, catalog_id)
+        if operation is RuntimeOperation.PREDICT:
+            metadata = catalog.get_predictor_meta(catalog_id)
+            input_contract = metadata.input_view.contract
+        else:
+            metadata = catalog.get_trainer_meta(catalog_id)
+            input_contract = metadata.input_view.contract
+
+        output_contract = definition.output_contract
+        if output_contract == "trainer_model":
+            trainer = catalog.get_trainer_meta(catalog_id)
+            output_contract = trainer.output_model.contract
+
+        raw: dict[str, Any] = {
+            "deployment": definition.deployment,
+            "input_contract": input_contract,
+            "output_contract": output_contract,
+            "resource_profile": definition.resource_profile,
+            "owner": definition.owner,
+            "algo_id": executable.algo_id,
+            "algo_version": executable.algo_version,
+            "missing_image_policy": definition.missing_image_policy,
+        }
+        override = self._override(operation.value, catalog_id)
+        unexpected = set(override) - _OVERRIDABLE_ROUTE_FIELDS
+        if unexpected:
             raise RuntimeError(
-                f"No runtime deployment route for runtime_routing.{section}.{catalog_id}"
+                f"runtime_routing.{operation.value}.{catalog_id} may override only "
+                f"{sorted(_OVERRIDABLE_ROUTE_FIELDS)}; got {sorted(unexpected)}"
             )
+        raw.update({key: value for key, value in override.items() if value is not None})
         return RuntimeDeploymentRoute.from_mapping(
             catalog_id,
-            _to_route_mapping(raw),
-            section=section,
+            raw,
+            section=operation.value,
         )
 
-
-def _require_missing_image_policy(
-    errors: list[str],
-    route: RuntimeDeploymentRoute,
-    *,
-    section: str,
-) -> None:
-    if route.missing_image_policy is None:
-        errors.append(
-            f"{section}.{route.catalog_id}.missing_image_policy must be explicit "
-            "for an image-bearing view"
-        )
+    def _override(self, section: str, catalog_id: str) -> dict[str, Any]:
+        entries = _get_config_value(self._routing, section)
+        if entries is None:
+            return {}
+        raw = _get_config_value(entries, catalog_id)
+        if raw is None:
+            return {}
+        return _to_mapping(raw)
 
 
 def _get_config_value(config: Any, key: str) -> Any:
@@ -140,14 +121,13 @@ def _get_config_value(config: Any, key: str) -> Any:
     return getattr(config, key, None)
 
 
-def _to_route_mapping(raw: Any) -> dict[str, Any]:
+def _to_mapping(raw: Any) -> dict[str, Any]:
     if OmegaConf.is_config(raw):
         raw = OmegaConf.to_container(raw, resolve=True)
     elif isinstance(raw, BaseModel):
-        raw = raw.model_dump(mode="python")
+        raw = raw.model_dump(mode="python", exclude_none=True)
     elif hasattr(raw, "model_dump"):
-        raw = raw.model_dump(mode="python")
-
+        raw = raw.model_dump(mode="python", exclude_none=True)
     if not isinstance(raw, Mapping):
-        raise RuntimeError("Runtime deployment route must be a mapping")
+        raise RuntimeError("Runtime deployment override must be a mapping")
     return dict(raw)

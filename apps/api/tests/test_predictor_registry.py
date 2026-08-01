@@ -43,7 +43,7 @@ class TestMetadataCatalogVsExecutableRegistry:
 
     def test_get_predictor_by_id_resolves_sc_predictor(self) -> None:
         """get_predictor_by_id resolves an imported executable."""
-        from app.runtime_compat.ml.predictors import get_predictor
+        from app.modules.runtime.app.services.executable_loader import get_predictor
         from app.core.registry import get_predictor_by_id
 
         get_predictor("resnet50-sc-v1")
@@ -75,7 +75,7 @@ class TestMetadataCatalogVsExecutableRegistry:
 
     def test_sc_executable_predictor_resolves_in_flow_registry(self) -> None:
         """The flow loader returns the raw centrally registered callable."""
-        from app.runtime_compat.ml.predictors import (
+        from app.modules.runtime.app.services.executable_loader import (
             get_predictor as flow_get_predictor,
         )
         from app.core.registry import get_predictor
@@ -87,11 +87,11 @@ class TestMetadataCatalogVsExecutableRegistry:
 
     def test_flow_registry_rejects_metadata_only_ids(self) -> None:
         """The flow loader rejects IDs without a flow executable module."""
-        from app.runtime_compat.ml.predictors import (
+        from app.modules.runtime.app.services.executable_loader import (
             get_predictor as flow_get_predictor,
         )
 
-        with pytest.raises(KeyError, match="no worker-local executable binding"):
+        with pytest.raises(KeyError, match="Unknown predictor capability"):
             flow_get_predictor("clip-zero-shot-v1")
 
     # ── Naming clarity ───────────────────────────────────────────────

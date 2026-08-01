@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from app.runtime_compat.ml.executable_bindings import (
-    ExecutableKind,
+from app.modules.runtime.app.services.executable_loader import (
     list_local_executable_bindings,
     validate_local_executable_bindings,
+)
+from app.modules.runtime.domain.executables import (
+    ExecutableKind,
 )
 from app.runtime_compat.materializers import (
     list_local_materializer_bindings,

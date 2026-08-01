@@ -151,7 +151,7 @@ dev-web: ## Start frontend dev server (default: 5173)
 # GPU worker (host) — only ONE of this OR compose --profile gpu should run at a time
 .PHONY: prefect-worker-gpu-host
 prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
-	cd apps/api && uv sync --group gpu && \
+	cd apps/api && uv sync --group sc-runtime && \
 	uv run python -m prefect init --profile local --no-prompt && \
 	PREFECT_API_URL=http://localhost:4200/api \
 	PLATFORM_API_URL=http://localhost:8000 \

@@ -64,7 +64,9 @@ PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
 def get_predictor(predictor_id: str) -> Any:
     """Lazy worker-boundary import kept patchable for flow tests."""
 
-    from app.runtime_compat.ml.predictors import get_predictor as load_predictor
+    from app.modules.runtime.app.services.executable_loader import (
+        get_predictor as load_predictor,
+    )
 
     return load_predictor(predictor_id)
 

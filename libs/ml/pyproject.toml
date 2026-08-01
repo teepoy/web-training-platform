@@ -1,0 +1,22 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[project]
+name = "ml-library"
+version = "0.1.0"
+description = "Optional Torch and Ultralytics execution kernels for SC capabilities"
+requires-python = ">=3.11"
+dependencies = [
+  "pillow==12.2.0",
+  "torch>=2.5.1",
+  "torchvision>=0.20.1",
+  "ultralytics>=8.4.58",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.2"]
+
+[tool.uv.build-backend]
+module-name = "ml_library"
+module-root = "src"

@@ -8,32 +8,28 @@ import polars as pl
 from app.shared.domain.data_plane import DataPlaneManifest
 
 
-def sc_materialized_lazyframe(
+def materialized_lazyframe(
     materialized_dataset: Any,
     manifest: DataPlaneManifest,
 ) -> pl.LazyFrame:
     if manifest.view_contract != "sc.patch_image.v1":
         raise ValueError(
-            "SC compatibility trainers require view contract "
-            f"'sc.patch_image.v1', got {manifest.view_contract!r}"
+            "SC trainers require view contract 'sc.patch_image.v1', got "
+            f"{manifest.view_contract!r}"
         )
     if manifest.view_schema_version != "1":
         raise ValueError(
-            "SC compatibility trainers require view schema version '1', got "
+            "SC trainers require view schema version '1', got "
             f"{manifest.view_schema_version!r}"
         )
-
-    _ = materialized_dataset
+    del materialized_dataset
     if manifest.format != "parquet" or len(manifest.shards) != 1:
-        raise ValueError("SC compatibility trainers require exactly one Parquet shard")
+        raise ValueError("SC trainers require exactly one Parquet shard")
     parsed = urlparse(manifest.shards[0].uri)
     if parsed.scheme != "file":
-        raise ValueError(
-            "API-local SC compatibility trainers require a file:// Parquet shard"
-        )
-    parquet_path = unquote(parsed.path)
+        raise ValueError("SC local trainers require a file:// Parquet shard")
     return (
-        pl.scan_parquet(parquet_path)
+        pl.scan_parquet(unquote(parsed.path))
         .with_columns(
             pl.concat_list(
                 [
@@ -54,4 +50,6 @@ def sc_materialized_lazyframe(
     )
 
 
-__all__ = ["sc_materialized_lazyframe"]
+sc_materialized_lazyframe = materialized_lazyframe
+
+__all__ = ["materialized_lazyframe", "sc_materialized_lazyframe"]

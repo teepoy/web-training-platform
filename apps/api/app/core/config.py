@@ -127,24 +127,24 @@ class PrefectConfig(ConfigSection):
     concurrency_limit: int = 1
 
 
-class RuntimeDeploymentConfig(ConfigSection):
-    deployment: str
-    input_contract: str
-    output_contract: str
-    resource_profile: Literal["cpu", "gpu"]
-    owner: Literal["local_compat", "external"]
-    algo_id: str
-    algo_version: str
-    missing_image_policy: Literal["fail", "skip"] | None = None
+class RuntimeDeploymentOverride(ConfigSection):
+    """Environment-only override for a module-owned runtime route."""
+
+    deployment: str | None = None
+    resource_profile: Literal["cpu", "gpu"] | None = None
+    owner: Literal["local_compat", "external"] | None = None
+    code_version: str | None = None
 
 
 class RuntimeRoutingConfig(ConfigSection):
-    training_routes: dict[str, RuntimeDeploymentConfig] = Field(default_factory=dict)
-    train_and_predict_routes: dict[str, RuntimeDeploymentConfig] = Field(
+    training_routes: dict[str, RuntimeDeploymentOverride] = Field(default_factory=dict)
+    train_and_predict_routes: dict[str, RuntimeDeploymentOverride] = Field(
         default_factory=dict
     )
-    prediction_routes: dict[str, RuntimeDeploymentConfig] = Field(default_factory=dict)
-    materialization_routes: dict[str, RuntimeDeploymentConfig] = Field(
+    prediction_routes: dict[str, RuntimeDeploymentOverride] = Field(
+        default_factory=dict
+    )
+    materialization_routes: dict[str, RuntimeDeploymentOverride] = Field(
         default_factory=dict
     )
 

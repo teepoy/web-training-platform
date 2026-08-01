@@ -313,8 +313,8 @@ def test_registrations_import_triggers_registry_population() -> None:
         "RED: registrations.py imports dataset types explicitly"
     )
     assert "app.modules.types.view_registration" in content
-    assert "app.runtime_compat" in content
-    assert "must not be imported by API startup" in content
+    assert "app.modules.sc.runtime" in content
+    assert "optional ML kernels are never imported here" in content
 
     # Verify specific known metadata remains visible without executable imports.
     from app.modules.types import catalog

@@ -126,7 +126,7 @@ async def _run_training_pipeline_with_context(
 ) -> dict[str, Any]:
     from app.core.registry import resolve_view_types
     from app.modules.types import catalog
-    from app.runtime_compat.ml.trainers import get_trainer
+    from app.modules.runtime.app.services.executable_loader import get_trainer
 
     import app.registrations  # noqa: F401  # trigger all mapper registrations
 

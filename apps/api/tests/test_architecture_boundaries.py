@@ -423,7 +423,7 @@ def test_api_registration_barrel_does_not_import_runtime_compat() -> None:
     )
 
 
-def test_api_main_import_does_not_load_runtime_compat_or_torch() -> None:
+def test_api_main_import_does_not_load_optional_ml_runtime() -> None:
     probe = subprocess.run(
         [
             sys.executable,
@@ -434,8 +434,14 @@ def test_api_main_import_does_not_load_runtime_compat_or_torch() -> None:
                 "name for name in sys.modules "
                 "if name == 'app.runtime_compat' "
                 "or name.startswith('app.runtime_compat.') "
+                "or name == 'ml_library' "
+                "or name.startswith('ml_library.') "
                 "or name == 'torch' "
-                "or name.startswith('torch.')); "
+                "or name.startswith('torch.') "
+                "or name == 'torchvision' "
+                "or name.startswith('torchvision.') "
+                "or name == 'ultralytics' "
+                "or name.startswith('ultralytics.')); "
                 "assert not forbidden, forbidden"
             ),
         ],

@@ -2,7 +2,7 @@
 
 This module implements the :class:`~app.shared.infrastructure.storage.base.TrainingExecutionEngine`
 Protocol using Prefect deployments. Flow runs are submitted through the
-config-backed runtime routing descriptor.
+module-owned runtime capability descriptor plus optional environment overrides.
 
 Design notes
 ------------

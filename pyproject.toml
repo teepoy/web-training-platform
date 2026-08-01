@@ -34,23 +34,28 @@ members = [
   "apps/api",
   "services/sc-upstream",
   "libs/protos",
+  "libs/ml",
 ]
 
 [tool.uv.sources]
 finetune-api = { workspace = true }
+ml-library = { workspace = true }
 
 [dependency-groups]
 dev = [
   "boto3>=1.43.9",
   "fastapi[all]>=0.135.2",
-  "finetune-api[gpu]",
+  "finetune-api",
   "grpcio-tools==1.80.0",
   "mkdocs==1.6.1",
   "omegaconf>=2.3.0",
   "pytest>=9.0.2",
   "pytest-asyncio>=1.3.0",
   "pytest-timeout>=2.4.0",
-  "torch>=2.9.1",
+]
+
+sc-runtime = [
+  "finetune-api[sc-runtime]",
 ]
 
 [tool.ty.src]

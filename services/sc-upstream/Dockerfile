@@ -7,6 +7,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
+COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 COPY libs/protos/ libs/protos/
 COPY services/sc-upstream/ services/sc-upstream/

@@ -30,8 +30,9 @@
 - Runtime service 不 import `apps/api/app/modules/*` 内部 service、repository、ORM model 或 FastAPI dependency。
 - API 可以提供 gRPC/HTTP 等窄 data-plane 接口，也可以返回 manifest 与 signed object-store refs 让 runtime 批量读取；大批量图片/Parquet 不应强制走逐行 RPC。
 - Job progress、artifact metadata、prediction commit 等通过稳定 transport contract 回写 API，不通过共享内存对象或 API 内部 Python 类。
-- API control-plane module 禁止模块级导入 Torch/TensorFlow；仓库内临时
-  ML executable 只能位于 `apps/api/app/runtime_compat/ml`，并由 Prefect flow
+- API control-plane module 禁止模块级导入 Torch/TensorFlow。SC 的无 Torch
+  executable adapter 可以由 `apps/api/app/modules/sc` 持有；Torch/torchvision/
+  Ultralytics 内核只能位于可选 workspace library `libs/ml`，并由 worker
   在任务执行阶段懒加载。
 
 目标执行拓扑：
@@ -61,24 +62,23 @@ Perspective WebSocket 与普通 HTTP API 必须运行在不同进程和不同容
 
 > **迁移说明：** 旧版独立的 `gpu-worker` / `inference` / `embedding` 服务已并入 `apps/api` Prefect flow。原 `apps/worker`、`apps/inference`、`apps/embedding` 目录已移除。
 
-当前仓库内仍需运行的 demo/兼容 ML executable 必须放在
-`apps/api/app/runtime_compat/` 隔离区，而不是
-`apps/api/app/modules/*` control-plane module。该目录是迁移边界，不是稳定的
-API 内部扩展点：
+SC 本地执行能力采用 module-owned adapter + optional library：
 
+- `apps/api/app/modules/sc` 拥有 capability metadata、惰性 executable binding
+  和无 Torch 的 Prefect/runtime adapter。
+- `libs/ml` 只拥有 Torch、TorchVision、Ultralytics 模型、训练与推理
+  内核；禁止反向 import `app.*`、Prefect、repository、ORM 或 FastAPI dependency。
+- `ml_library.models` 仅为同进程内核 value model，不是 transport contract。SC 新增
+  跨进程/跨语言接口时必须并入现有 `libs/protos`，优先使用 protobuf、Arrow
+  schema/manifest 等 language-agnostic 定义，禁止新建 Python-only contract lib。
 - API startup、catalog、router、service、composition 和 registration barrel
-  禁止 import `app.runtime_compat`。
-- 只有 Prefect flow entrypoint 可以在已经解析出明确 executable binding 后懒加载
-  `app.runtime_compat`；binding 本身只能保存 module path，不能在 control-plane
-  import callable。
-- `runtime_compat` 可以临时 import 明确列入 allowlist 的 API data-plane/runtime
-  contract，但不能被新的 API 业务代码反向依赖。
-- Torch、TorchVision、Ultralytics、Transformers 等 ML 依赖只允许从
-  `runtime_compat` executable module 内加载；catalog 枚举和 API import 测试必须证明
-  不会加载这些包。
-- 新的 production trainer/predictor 不得继续加入 `runtime_compat`；应实现为
-  `services/*` out-of-process runtime，通过 manifest、OpenAPI/protobuf 和 Prefect
-  deployment 接入。
+  禁止 import `ml_library` 或 Torch/CUDA package。只有明确选择 SC executable 后，
+  module-owned adapter 才能在 worker 中懒加载 `ml_library`。
+- 普通 API 与 CPU worker 安装不包含 `ml-library`；GPU worker 通过显式
+  `finetune-api[sc-runtime]` extra 安装。
+- 这一 SC 例外不把 optional library 变成通用 shared runtime contract；未来
+  production runtime 仍可迁移为 `services/*` out-of-process runtime，通过
+  manifest、OpenAPI/protobuf 和 Prefect deployment 接入。
 
 ## 2. 后端组织
 
@@ -193,12 +193,18 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   `trainer_id` 推断模型可加载。
 - API 侧 trainer/predictor catalog 只保存 metadata，用于列表展示、参数 schema、
   权限与兼容性校验。
-- Prefect deployment 是 executable capability 边界。Catalog entry 通过 descriptor/config/DB metadata 路由到对应 deployment。
+- Prefect deployment 是 executable capability 边界。静态 executable binding、算法版本和
+  默认 deployment route 由 module-owned `RuntimeCapabilityBundle` 合并声明并进入中心
+  runtime catalog；catalog metadata 中已有的 view/model contract 不得在 route 中重复。
+  环境配置只能覆盖 deployment name、resource profile、owner 和 code version。
 - Runtime route 必须显式声明 `owner=local_compat|external`。API 只 seed/update
   `local_compat` deployment；`external` deployment 由 runtime service 拥有，API
   只能解析和调用，禁止覆盖其 entrypoint/work pool。
 - API catalog 与 Prefect executable deployment 不允许混用；API 不 import executable callable。
-- Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和 config-backed routing descriptor 创建 Prefect flow run。第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker` 这类过期执行入口，也不要在 API flow/service 中硬连某个具体 ML 实现作为扩展机制。
+- Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和
+  module-owned runtime descriptor 创建 Prefect flow run；环境配置只提供部署差异覆盖。
+  第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker`
+  这类过期执行入口，也不要在 API flow/service 中硬连某个具体 ML 实现作为扩展机制。
 - **Mapper** 使用全局 `MapperRegistry`（`app.core.mapper_registry.mapper`）注册类型间转换函数。`@mapper.register(from_types, to_types)` 接受 type 或 ClassVar 字符串，注册笛卡尔积 key。调用方通过 `mapper.get_mapper(src, dst)` 获取转换函数，不再调用 model 类上的 `from_sample` / `to_sample` / `get_adapter` / `as_*` 方法。每个 module 的 mapper 统一放在 `<module>/domain/mapper.py`，由 `app/registrations.py` 触发注册副作用。Mapper 函数必须包含完整转换逻辑，不允许在 model 类上保留内联转换方法；model 类只保留字段定义和 ClassVar 标识。
 
 前端：
