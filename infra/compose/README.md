@@ -142,8 +142,7 @@ manifests without starting containers.
 ### Migration Notes
 
 - `make up` → now redirects to `make up-dev` (deprecated)
-- `make up-stack` → now redirects to `make up-dev --scale web=0` (deprecated)
-- `make updev` → unchanged (starts compose backend + local Vite on host)
+- `make up-stack` → now redirects to `make up-dev ARGS="--scale web=0"` (deprecated)
 - `make prod` → removed (was deprecated redirect to `make up-prod`)
 - Local prod validation: `make up-prod` performs migrations and deployment registration.
 - Split-stack production: run `make db-migrate-prod` and `make deployments-prod` explicitly.
@@ -162,14 +161,11 @@ make up-dev
 # Prod mode
 make up-prod
 
-# Interactive dev: compose backend + local Vite frontend
-make updev
 ```
 
-`make updev` is the recommended interactive dev entrypoint. It starts the
-compose backend stack without the baked `web` container, ensures the default
-mock dataset exists, and then runs the local Vite dev server on `:5173` for
-hot reload and stable `/api` proxying to `localhost:8000`.
+`make up-dev` starts the complete Compose development stack, including the
+bind-mounted Vite service on `:5173`. Run `make seed-dev` separately when the
+default demo datasets are needed.
 
 ## Services
 
@@ -177,16 +173,23 @@ The stack is split across multiple Compose files:
 
 - **Base infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, sc-upstream, image-parser, profile-gated observability, profile-gated dcgm-exporter
 - **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
-- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), isolated perspective-ws, web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), isolated sc-data-provider (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
 - **Production ops** (`production/compose.ops.yaml`): migrate, deployments (one-shot ops)
 - **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
 
 Dev, local-prod, production-platform, and production-ops manifests define a
-top-level `x-platform-environment` anchor. API, Perspective, workers, and ops
+top-level `x-platform-environment` anchor. API, SC data-provider, workers, and ops
 services inherit the same database, Prefect, Label Studio, MinIO/SC object-store,
 Redis, LLM, and runtime endpoint settings; service-specific values are merged on top.
+
+Every Compose service has an explicit memory ceiling using the current Compose
+Spec form `deploy.resources.limits.memory`; the legacy `mem_limit` key is not
+used. Each ceiling is configurable through the service-specific `*_MEMORY`
+variable shown in the manifests. Use `docker compose ... config` to inspect the
+effective limits after base, environment, profile, and pre-release overlays are
+merged.
 
 All services at a glance:
 
@@ -196,7 +199,7 @@ All services at a glance:
 - **prefect-server** (:4200): Prefect 3 control plane
 - **label-studio** (:8080): Annotation UI
 - **api** (:8000): Platform HTTP API (dev: hot reload with bind mounts; prod: uvicorn workers with baked image)
-- **perspective-ws** (:8001–:8004 internally): Isolated Perspective WebSocket container with four Supervisor-managed single-process Uvicorn instances; nginx distributes WebSockets with `least_conn`
+- **sc-data-provider** (:8001): Isolated DuckDB SQL/Arrow/SSE service with four Uvicorn-managed workers sharing one listening socket
 - **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
 - **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).
@@ -210,18 +213,25 @@ All services at a glance:
 - Dev mode uses `fastapi dev` with bind mounts for hot-reload; prod mode uses `uvicorn --workers 4` with baked images.
 - Compose services run from the image's prebuilt `/app/.venv` and do not use `uv run` at container startup.
 - The `web` service serves assets baked into the image (prod) or via Vite dev server (dev).
-- Prefer `make updev` over the baked `web` container during daily development — or use `make up-dev` for the full compose dev stack.
+- Use `make up-dev` for the complete bind-mounted development stack.
 - GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.
 - The API exposes `/health` for process liveness and `/ready` for database-backed readiness. Compose marks the API healthy only when `/ready` returns HTTP 200.
-- `PERSPECTIVE_WS_MEMORY` sets the hard memory limit for the entire
-  `perspective-ws` container. It defaults to `4g` in dev/local-prod and `8g` in
-  the split production platform; the production value covers all four
-  Supervisor-managed workers, not each worker independently.
-- `PERSPECTIVE_WS_MAX_RSS_MB` is a local-development readiness diagnostic for
-  native allocator investigation. Do not use it as production memory
-  protection because it can restart a container with active WebSocket clients.
-- Dev services default `LOG_LEVEL` to `INFO`, so Perspective memory probe
-  records are visible. Set `LOG_LEVEL=DEBUG` when additional diagnostics are
+- `SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB` sets the Compose memory limit
+  for the entire `sc-data-provider` container and defaults to `6144` MiB.
+  `SC_DATA_PROVIDER_WORKER_COUNT` defaults to four in production and one in
+  development. Each worker has an explicit 1 GiB DuckDB limit, a 1280 MiB
+  connection-recycle watermark, and a 1536 MiB readiness RSS ceiling. Startup
+  rejects worker/memory combinations that exceed the declared container limit.
+- The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
+  stored in the shared `sc-data-provider-cache` volume in development or below
+  the platform data mount in release deployments.
+- `SC_WAFER_MOCK_DEFECTS` controls both the inspection fixture and patch zip
+  generation (300,000 by default); zip seeding validates the source defect IDs
+  are the contiguous range `1..N` before uploading objects or metadata, then
+  clears stale SC upstream inspection/zip metadata after the replacement
+  succeeds.
+- Dev services default `LOG_LEVEL` to `INFO`, so data-provider memory records
+  are visible. Set `LOG_LEVEL=DEBUG` when additional diagnostics are
   needed.
 
 ## Observability

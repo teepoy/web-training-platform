@@ -61,7 +61,10 @@ def build_flow_app_context(cfg: AppConfig) -> AppContext:
         socket_connect_timeout=1,
         socket_timeout=1,
     )
-    ctx.shared.redis_event_publisher = RedisEventPublisher(cast(Any, redis))
+    ctx.shared.redis_event_publisher = RedisEventPublisher(
+        cast(Any, redis),
+        revision_namespace=cfg.sc.data_provider.revision_namespace,
+    )
     return ctx
 
 

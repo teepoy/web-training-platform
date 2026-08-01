@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sc-data-provider
+  namespace: finetune
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: sc-data-provider
+  template:
+    metadata:
+      labels:
+        app: sc-data-provider
+    spec:
+      serviceAccountName: finetune-api
+      containers:
+        - name: sc-data-provider
+          image: finetune-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+              name: http
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SC_DATA_PROVIDER_CACHE_NAMESPACE
+              value: "sc-data-provider:$(POD_NAME)"
+          command:
+            - /app/.venv/bin/uvicorn
+            - app.sc_data_provider_main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8001"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 2Gi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/sc-data-provider
+      volumes:
+        - name: cache
+          emptyDir:
+            sizeLimit: 12Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sc-data-provider
+  namespace: finetune
+spec:
+  selector:
+    app: sc-data-provider
+  ports:
+    - port: 8001
+      targetPort: 8001
+      name: http

@@ -894,3 +894,21 @@ class TestRedisEventPublisherUnit:
             )
         )
         # The exception was caught — no propagation
+
+    def test_revision_publisher_fails_explicitly_without_redis(self):
+        pub = RedisEventPublisher(None, revision_namespace="sc-data-provider")
+
+        with pytest.raises(
+            RuntimeError, match="required for SC data revision invalidation"
+        ):
+            asyncio.run(pub.publish_annotation_refresh(dataset_id="d1"))
+
+    def test_revision_publisher_propagates_atomic_publish_failure(self):
+        mock_redis = MagicMock()
+        mock_redis.eval = AsyncMock(side_effect=ConnectionError("redis down"))
+        pub = RedisEventPublisher(
+            mock_redis, revision_namespace="sc-data-provider"
+        )
+
+        with pytest.raises(ConnectionError, match="redis down"):
+            asyncio.run(pub.publish_prediction_refresh(dataset_id="d1", job_id="j1"))

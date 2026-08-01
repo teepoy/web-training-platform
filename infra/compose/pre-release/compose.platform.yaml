@@ -12,9 +12,9 @@ services:
     volumes:
       - platform-data:/mnt
 
-  perspective-ws:
+  sc-data-provider:
     ports:
-      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_PERSPECTIVE_PORT:?Set PRE_RELEASE_PERSPECTIVE_PORT}:8001"
+      - "${PRE_RELEASE_BIND_HOST:?Set PRE_RELEASE_BIND_HOST}:${PRE_RELEASE_SC_DATA_PROVIDER_PORT:?Set PRE_RELEASE_SC_DATA_PROVIDER_PORT}:8001"
     volumes:
       - platform-data:/mnt
 

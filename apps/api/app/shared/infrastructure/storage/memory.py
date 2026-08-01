@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+
 
 class InMemoryArtifactStorage:
     def __init__(self) -> None:
@@ -23,6 +26,20 @@ class InMemoryArtifactStorage:
         if object_name not in self._objects:
             raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
         return self._objects[object_name]
+
+    async def put_file(
+        self,
+        object_name: str,
+        path: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        del content_type
+        self._objects[object_name] = await asyncio.to_thread(Path(path).read_bytes)
+        return f"memory://{object_name}"
+
+    async def get_file(self, uri: str, destination: str) -> None:
+        data = await self.get_bytes(uri)
+        await asyncio.to_thread(Path(destination).write_bytes, data)
 
     async def delete(self, uri: str) -> None:
         prefix = "memory://"

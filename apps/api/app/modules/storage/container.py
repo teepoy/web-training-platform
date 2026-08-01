@@ -30,12 +30,24 @@ class StorageContext:
 
 
 def init_storage(shared: SharedInfra, repo: DatasetSqlRepository) -> StorageContext:
-    payload_store = DatasetPayloadStore(storage=shared.artifact_storage)
+    payload_store = DatasetPayloadStore(
+        storage=shared.artifact_storage,
+        manifest_cache_max_bytes=shared.config.storage.sparse_manifest_cache_max_bytes,
+    )
     storage_factory = DatasetStorageFactory(
         repo=repo,
         storage=shared.artifact_storage,
         payload_store=payload_store,
         session_factory=shared.session_factory.sessionmaker,
+        prediction_compaction_memory_limit=(
+            shared.config.prediction.compaction_memory_limit
+        ),
+        prediction_compaction_temp_limit=(
+            shared.config.prediction.compaction_temp_limit
+        ),
+        prediction_compaction_row_group_rows=(
+            shared.config.prediction.compaction_row_group_rows
+        ),
     )
     return StorageContext(
         dataset_storage_factory=storage_factory,

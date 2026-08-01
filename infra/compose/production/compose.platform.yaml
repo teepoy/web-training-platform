@@ -8,7 +8,53 @@ x-platform-environment: &platform-environment
   FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL}
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
   OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:-}
-  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
+  SC_DATA_PROVIDER_IMPLEMENTATION: duckdb
+  SC_DATA_PROVIDER_MAX_RSS_MB: "1536"
+  SC_DATA_PROVIDER_CACHE_DIR: /mnt/sc-data-provider-cache
+  SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_REVISION_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_DUCKDB_MEMORY_LIMIT: 1GiB
+  SC_DATA_PROVIDER_DUCKDB_THREADS: "1"
+  SC_DATA_PROVIDER_DUCKDB_TEMP_DIRECTORY_SIZE: 2GiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BACKGROUND_THREADS: "true"
+  SC_DATA_PROVIDER_DUCKDB_PRESERVE_INSERTION_ORDER: "false"
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_FLUSH_THRESHOLD: 64MiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BULK_DEALLOCATION_FLUSH_THRESHOLD: 128MiB
+  SC_DATA_PROVIDER_CONNECTION_RECYCLE_RSS_MB: "1280"
+  SC_DATA_PROVIDER_WORKER_COUNT: ${SC_DATA_PROVIDER_WORKER_COUNT:-4}
+  SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}
+  SC_DATA_PROVIDER_PYTHON_OVERHEAD_MB: "256"
+  SC_DATA_PROVIDER_SERVICE_HEADROOM_MB: "512"
+  SC_DATA_PROVIDER_OBJECT_CACHE_MAX_BYTES: "10737418240"
+  SC_DATA_PROVIDER_OBJECT_CACHE_LOW_WATERMARK_BYTES: "8589934592"
+  SC_DATA_PROVIDER_OBJECT_IDLE_TTL_SECONDS: "3600"
+  SC_DATA_PROVIDER_CLEANUP_INTERVAL_SECONDS: "60"
+  SC_DATA_PROVIDER_STALE_WRITE_SECONDS: "300"
+  SC_DATA_PROVIDER_LEASE_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_LEASE_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_LOCK_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_BUILD_LOCK_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_WAIT_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_BUILD_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SQL_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_MAX_RESPONSE_BYTES: "268435456"
+  SC_DATA_PROVIDER_ARROW_BATCH_ROWS: "16384"
+  SC_DATA_PROVIDER_STREAM_QUEUE_CAPACITY: "8"
+  SC_DATA_PROVIDER_STREAM_QUEUE_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS: "15"
+  SC_PIPELINE_IMPORT_BATCH_ROWS: "25000"
+  SC_PIPELINE_INDEX_ROW_GROUP_ROWS: "65536"
+  SC_PIPELINE_MATERIALIZATION_BATCH_ROWS: "512"
+  SC_PIPELINE_MATERIALIZATION_MAX_ERROR_RECORDS: "1000"
+  SC_PIPELINE_PREDICTION_MAX_MATERIALIZED_BYTES: "17179869184"
+  SC_PIPELINE_TRAINING_MAX_ROWS: "100000"
+  SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES: "8589934592"
+  PREDICTION_PROGRESS_FLUSH_ROWS: "5000"
+  PREDICTION_PROGRESS_FLUSH_SECONDS: "5.0"
+  PREDICTION_WRITE_BATCH_ROWS: "5000"
+  PREDICTION_COMPACTION_MEMORY_LIMIT: 512MiB
+  PREDICTION_COMPACTION_TEMP_LIMIT: 4GiB
+  PREDICTION_COMPACTION_ROW_GROUP_ROWS: "100000"
   MNT: /mnt
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
   PREFECT_API_URL: http://prefect-server:4200/api
@@ -43,6 +89,10 @@ x-platform-environment: &platform-environment
 services:
   prefect-server:
     image: prefecthq/prefect:3.6.25-python3.12
+    deploy:
+      resources:
+        limits:
+          memory: ${PREFECT_SERVER_MEMORY:-4g}
     command: ["prefect", "server", "start", "--host", "0.0.0.0"]
     environment:
       PREFECT_API_DATABASE_CONNECTION_URL: ${PREFECT_DATABASE_URL:?Set PREFECT_DATABASE_URL}
@@ -70,7 +120,10 @@ services:
   api:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     environment: *platform-environment
-    mem_limit: ${API_MEMORY:-8g}
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY:-8g}
     shm_size: ${API_SHM_SIZE:-1g}
     depends_on:
       prefect-server:
@@ -97,55 +150,43 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  perspective-ws:
+  sc-data-provider:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     command:
       [
-        "python",
-        "/app/apps/api/scripts/perspective_container_watchdog.py",
-        "--",
-        "/usr/bin/supervisord",
-        "-c",
-        "/app/apps/api/supervisord.perspective.conf",
+        "/app/.venv/bin/uvicorn",
+        "app.sc_data_provider_main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--workers",
+        "${SC_DATA_PROVIDER_WORKER_COUNT:-4}",
       ]
     environment: *platform-environment
-    mem_limit: ${PERSPECTIVE_WS_MEMORY:-8g}
-    shm_size: ${PERSPECTIVE_WS_SHM_SIZE:-1g}
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}m
+    shm_size: ${SC_DATA_PROVIDER_SHM_SIZE:-1g}
     depends_on:
       prefect-server:
         condition: service_healthy
     expose:
       - "8001"
-      - "8002"
-      - "8003"
-      - "8004"
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
     networks:
       finetune-prod:
         aliases:
-          - perspective-ws
+          - sc-data-provider
     healthcheck:
       test:
         [
           "CMD",
           "python",
-          "/app/apps/api/scripts/perspective_healthcheck.py",
-          "--url",
-          "http://localhost:8001/ready",
-          "--url",
-          "http://localhost:8002/ready",
-          "--url",
-          "http://localhost:8003/ready",
-          "--url",
-          "http://localhost:8004/ready",
-          "--timeout-seconds",
-          "2",
-          "--failure-threshold",
-          "3",
-          "--startup-grace-seconds",
-          "60",
-          "--force-container-restart",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=2)",
         ]
       interval: 10s
       timeout: 3s
@@ -155,11 +196,14 @@ services:
 
   web:
     image: ${FINETUNE_WEB_IMAGE:?Set FINETUNE_WEB_IMAGE to an immutable tag}
-    mem_limit: ${WEB_MEMORY:-1g}
+    deploy:
+      resources:
+        limits:
+          memory: ${WEB_MEMORY:-1g}
     depends_on:
       api:
         condition: service_healthy
-      perspective-ws:
+      sc-data-provider:
         condition: service_healthy
     expose:
       - "80"
@@ -174,7 +218,10 @@ services:
     environment:
       <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${CPU_PREFECT_WORKER_LIMIT:-2}
-    mem_limit: ${CPU_WORKER_MEMORY:-8g}
+    deploy:
+      resources:
+        limits:
+          memory: ${CPU_WORKER_MEMORY:-8g}
     shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     depends_on:
       prefect-server:
@@ -191,13 +238,14 @@ services:
     environment:
       <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${GPU_PREFECT_WORKER_LIMIT:-1}
-    mem_limit: ${GPU_WORKER_MEMORY:-16g}
     shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     depends_on:
       prefect-server:
         condition: service_healthy
     deploy:
       resources:
+        limits:
+          memory: ${GPU_WORKER_MEMORY:-16g}
         reservations:
           devices:
             - driver: nvidia
@@ -220,7 +268,10 @@ services:
       SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES: ${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
       SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS: ${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-    mem_limit: ${SC_UPSTREAM_MEMORY:-8g}
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_UPSTREAM_MEMORY:-8g}
     shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
       - "9091"
@@ -268,7 +319,10 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_USE_PATH_STYLE: "true"
       SC_UPSTREAM_ADDR: sc-upstream:9091
-    mem_limit: ${IMAGE_PARSER_MEMORY:-32g}
+    deploy:
+      resources:
+        limits:
+          memory: ${IMAGE_PARSER_MEMORY:-32g}
     shm_size: ${IMAGE_PARSER_SHM_SIZE:-2g}
     expose:
       - "8090"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from typing import Any, Callable, cast
 
 from app.core.registry import predictor
@@ -19,11 +19,11 @@ def _checkpoint_bytes(artifact_storage: Any, uri: str) -> bytes:
         ).result()
 
 
-def _prediction_samples(materialized_dataset: Any) -> list[Any]:
+def _prediction_samples(materialized_dataset: Any) -> Iterator[Any]:
     from ml_library import PredictionSample
 
-    return [
-        PredictionSample(
+    for row in materialized_dataset:
+        yield PredictionSample(
             sample_id=str(row["sample_id"]),
             defective_image=(
                 bytes(cast(bytes, row["patch_defective_bytes"]))
@@ -36,8 +36,6 @@ def _prediction_samples(materialized_dataset: Any) -> list[Any]:
                 else None
             ),
         )
-        for row in materialized_dataset
-    ]
 
 
 def _predict(

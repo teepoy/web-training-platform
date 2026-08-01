@@ -42,7 +42,53 @@ x-platform-environment: &platform-environment
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
+  SC_DATA_PROVIDER_IMPLEMENTATION: duckdb
+  SC_DATA_PROVIDER_MAX_RSS_MB: "1536"
+  SC_DATA_PROVIDER_CACHE_DIR: /var/cache/sc-data-provider
+  SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_REVISION_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_DUCKDB_MEMORY_LIMIT: 1GiB
+  SC_DATA_PROVIDER_DUCKDB_THREADS: "1"
+  SC_DATA_PROVIDER_DUCKDB_TEMP_DIRECTORY_SIZE: 2GiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BACKGROUND_THREADS: "true"
+  SC_DATA_PROVIDER_DUCKDB_PRESERVE_INSERTION_ORDER: "false"
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_FLUSH_THRESHOLD: 64MiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BULK_DEALLOCATION_FLUSH_THRESHOLD: 128MiB
+  SC_DATA_PROVIDER_CONNECTION_RECYCLE_RSS_MB: "1280"
+  SC_DATA_PROVIDER_WORKER_COUNT: ${SC_DATA_PROVIDER_DEV_WORKERS:-1}
+  SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}
+  SC_DATA_PROVIDER_PYTHON_OVERHEAD_MB: "256"
+  SC_DATA_PROVIDER_SERVICE_HEADROOM_MB: "512"
+  SC_DATA_PROVIDER_OBJECT_CACHE_MAX_BYTES: "10737418240"
+  SC_DATA_PROVIDER_OBJECT_CACHE_LOW_WATERMARK_BYTES: "8589934592"
+  SC_DATA_PROVIDER_OBJECT_IDLE_TTL_SECONDS: "3600"
+  SC_DATA_PROVIDER_CLEANUP_INTERVAL_SECONDS: "60"
+  SC_DATA_PROVIDER_STALE_WRITE_SECONDS: "300"
+  SC_DATA_PROVIDER_LEASE_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_LEASE_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_LOCK_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_BUILD_LOCK_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_WAIT_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_BUILD_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SQL_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_MAX_RESPONSE_BYTES: "268435456"
+  SC_DATA_PROVIDER_ARROW_BATCH_ROWS: "16384"
+  SC_DATA_PROVIDER_STREAM_QUEUE_CAPACITY: "8"
+  SC_DATA_PROVIDER_STREAM_QUEUE_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS: "15"
+  SC_PIPELINE_IMPORT_BATCH_ROWS: "25000"
+  SC_PIPELINE_INDEX_ROW_GROUP_ROWS: "65536"
+  SC_PIPELINE_MATERIALIZATION_BATCH_ROWS: "512"
+  SC_PIPELINE_MATERIALIZATION_MAX_ERROR_RECORDS: "1000"
+  SC_PIPELINE_PREDICTION_MAX_MATERIALIZED_BYTES: "17179869184"
+  SC_PIPELINE_TRAINING_MAX_ROWS: "100000"
+  SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES: "8589934592"
+  PREDICTION_PROGRESS_FLUSH_ROWS: "5000"
+  PREDICTION_PROGRESS_FLUSH_SECONDS: "5.0"
+  PREDICTION_WRITE_BATCH_ROWS: "5000"
+  PREDICTION_COMPACTION_MEMORY_LIMIT: 512MiB
+  PREDICTION_COMPACTION_TEMP_LIMIT: 4GiB
+  PREDICTION_COMPACTION_ROW_GROUP_ROWS: "100000"
 
 x-api-runtime: &api-runtime
   build:
@@ -83,6 +129,10 @@ services:
   # ───────────────────────────────────────────────────────────────────
   api:
     <<: *api-runtime
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY:-4g}
     command:
       [
         "/bin/sh",
@@ -104,18 +154,22 @@ services:
       retries: 12
       start_period: 60s
 
-  perspective-ws:
+  sc-data-provider:
     <<: *api-runtime
     command:
       [
-        "python",
-        "/app/apps/api/scripts/perspective_container_watchdog.py",
-        "--",
         "/bin/sh",
         "-lc",
-        'cd /app/apps/api && export MALLOC_CONF="$${PERSPECTIVE_WS_MALLOC_CONF}" && exec /app/.venv/bin/uvicorn app.perspective_main:app --host 0.0.0.0 --port 8001 --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}',
+        "cd /app/apps/api && exec /app/.venv/bin/uvicorn app.sc_data_provider_main:app --host 0.0.0.0 --port 8001 --workers $${SC_DATA_PROVIDER_WORKER_COUNT} --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
-    mem_limit: ${PERSPECTIVE_WS_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}m
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../libs/protos:/app/libs/protos
+      - sc-data-provider-cache:/var/cache/sc-data-provider
     ports:
       - "8001:8001"
     healthcheck:
@@ -123,16 +177,8 @@ services:
         [
           "CMD",
           "python",
-          "/app/apps/api/scripts/perspective_healthcheck.py",
-          "--url",
-          "http://localhost:8001/ready",
-          "--timeout-seconds",
-          "2",
-          "--failure-threshold",
-          "3",
-          "--startup-grace-seconds",
-          "60",
-          "--force-container-restart",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=2)",
         ]
       interval: 10s
       timeout: 3s
@@ -149,18 +195,22 @@ services:
       target: dev
       args:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
+    deploy:
+      resources:
+        limits:
+          memory: ${WEB_MEMORY:-2g}
     volumes:
       - ../../apps/web:/app/apps/web
       - ../../packages/sc-map-element:/app/packages/sc-map-element
     environment:
       VITE_PROXY_TARGET: "http://api:8000"
-      VITE_PERSPECTIVE_WS_TARGET: "http://perspective-ws:8001"
+      VITE_SC_DATA_PROVIDER_TARGET: "http://sc-data-provider:8001"
       VITE_API_BASE_URL: "http://api:8000"
       VITE_IMAGE_PARSER_TARGET: "http://image-parser:8090"
     command: sh -lc "rm -rf node_modules/.vite && pnpm dev --host 0.0.0.0 --port 5173 --force"
     depends_on:
       - api
-      - perspective-ws
+      - sc-data-provider
     ports:
       - "5173:5173"
     restart: on-failure
@@ -173,6 +223,10 @@ services:
       context: ../..
       dockerfile: services/image-parser/Dockerfile
       target: dev
+    deploy:
+      resources:
+        limits:
+          memory: ${IMAGE_PARSER_MEMORY:-2g}
     volumes:
       - ../../services/image-parser:/app/services/image-parser
     environment:
@@ -212,6 +266,10 @@ services:
     build:
       context: ../..
       dockerfile: services/sc-upstream/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_UPSTREAM_MEMORY:-2g}
     volumes:
       - ../../services/sc-upstream:/app/services/sc-upstream
       - ../../libs/protos:/app/libs/protos
@@ -262,6 +320,10 @@ services:
       args:
         UV_INDEX_URL: ${UV_INDEX_URL:-}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    deploy:
+      resources:
+        limits:
+          memory: ${CPU_WORKER_MEMORY:-4g}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../libs/protos:/app/libs/protos
@@ -291,6 +353,8 @@ services:
       - gpu
     deploy:
       resources:
+        limits:
+          memory: ${GPU_WORKER_MEMORY:-16g}
         reservations:
           devices:
             - driver: nvidia
@@ -321,6 +385,10 @@ services:
       args:
         UV_INDEX_URL: ${UV_INDEX_URL:-}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    deploy:
+      resources:
+        limits:
+          memory: ${DEPLOYMENTS_BOOTSTRAP_MEMORY:-1g}
     entrypoint: [""]
     command: >
       sh -c "
@@ -340,6 +408,10 @@ services:
   # ───────────────────────────────────────────────────────────────────
   pgadmin:
     image: dpage/pgadmin4:9.16
+    deploy:
+      resources:
+        limits:
+          memory: ${PGADMIN_MEMORY:-1g}
     depends_on:
       postgres:
         condition: service_healthy

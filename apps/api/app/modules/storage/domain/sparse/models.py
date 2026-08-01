@@ -32,6 +32,16 @@ class ShardEntry(BaseModel):
     byte_size: int
 
 
+class SparseIndexEntry(BaseModel):
+    """Metadata for the compact Parquet sample-locator index."""
+
+    uri: str
+    row_count: int
+    format: Literal["parquet"] = "parquet"
+    checksum_sha256: str
+    byte_size: int
+
+
 class DatasetManifest(BaseModel):
     """Top-level manifest describing the shard layout of a dataset payload.
 
@@ -52,6 +62,8 @@ class DatasetManifest(BaseModel):
     schema_columns: list[ColumnSchema] = Field(default_factory=list)
     shards: list[ShardEntry] = Field(default_factory=list)
     sample_index: dict[str, SampleLocator] = Field(default_factory=dict)
+    index: SparseIndexEntry | None = None
+    manifest_version: Literal["v2", "v3"] = "v2"
     schema_version: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

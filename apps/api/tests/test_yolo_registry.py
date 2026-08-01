@@ -7,6 +7,7 @@ dependency-guard behavior is correct, and catalog entries are consistent.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from types import SimpleNamespace
 
 import pytest
@@ -168,11 +169,11 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
     def fake_predict_yolo(
         checkpoint: bytes,
         labels: list[str],
-        samples: list[object],
+        samples: Iterable[object],
     ) -> list[object]:
         loaded_bytes.append(checkpoint)
         assert labels == ["defect", "clean"]
-        assert samples == []
+        assert list(samples) == []
         return []
 
     monkeypatch.setitem(

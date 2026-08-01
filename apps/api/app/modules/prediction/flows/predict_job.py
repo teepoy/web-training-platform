@@ -57,9 +57,6 @@ from app.shared.db.models import (
     TrainingJobORM,
 )
 
-PREDICTION_PROGRESS_FLUSH_EVERY = 50
-PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
-
 
 def get_predictor(predictor_id: str) -> Any:
     """Lazy worker-boundary import kept patchable for flow tests."""
@@ -238,10 +235,10 @@ async def _get_image_bytes(sample: Any, storage: Any) -> bytes | None:
 
 def _resolve_sparse_chunk_size(ctx: AppContext) -> int:
     """Resolve per-chunk batch size for sparse prediction from app config."""
-    try:
-        return int(ctx.shared.config.prediction.sparse_chunk_size)
-    except (TypeError, ValueError, KeyError, AttributeError):
-        return 32
+    chunk_size = int(ctx.shared.config.prediction.sparse_chunk_size)
+    if chunk_size <= 0:
+        raise ValueError("prediction.sparse_chunk_size must be greater than zero")
+    return chunk_size
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -421,6 +418,7 @@ async def persist_chunk_results(
             model_version=model_version,
             sample_ids=sample_ids,
             worker_results=worker_results,
+            write_batch_rows=app_context.shared.config.prediction.write_batch_rows,
         )
         logger.info(
             "persist_chunk_results complete: successful=%d failed=%d processed=%d",
@@ -444,6 +442,7 @@ async def _persist_worker_results(
     model_version: str | None,
     sample_ids: list[str],
     worker_results: list[dict[str, Any]],
+    write_batch_rows: int,
 ) -> dict[str, Any]:
     version_tag = model_version or f"model-{model.id[:8]}"
     worker_by_sample = {str(item.get("sample_id", "")): item for item in worker_results}
@@ -513,6 +512,7 @@ async def _persist_worker_results(
         job_id=job_id,
         model_id=model.id,
         model_version=version_tag,
+        batch_size=write_batch_rows,
     )
     await repo.add_prediction_event(
         PredictionEvent(
@@ -648,6 +648,8 @@ async def _run_prediction_job_with_context(
     }
     await repo.update_prediction_job_status(job_id, JobStatus.RUNNING, summary=summary)
     last_progress_flush_at = time.monotonic()
+    progress_flush_rows = app_context.shared.config.prediction.progress_flush_rows
+    progress_flush_seconds = app_context.shared.config.prediction.progress_flush_seconds
 
     async def flush_prediction_progress(*, force: bool = False) -> None:
         nonlocal last_progress_flush_at
@@ -655,9 +657,8 @@ async def _run_prediction_job_with_context(
         now = time.monotonic()
         should_flush = (
             force
-            or processed % PREDICTION_PROGRESS_FLUSH_EVERY == 0
-            or now - last_progress_flush_at
-            >= PREDICTION_PROGRESS_FLUSH_INTERVAL_SECONDS
+            or processed % progress_flush_rows == 0
+            or now - last_progress_flush_at >= progress_flush_seconds
         )
         if not should_flush:
             return
@@ -701,6 +702,9 @@ async def _run_prediction_job_with_context(
                 dataset_id=dataset_id,
                 job_id=job_id,
                 image_types=list(view_metadata.image_roles),
+                max_output_bytes=(
+                    app_context.shared.config.sc.pipeline.prediction_max_materialized_bytes
+                ),
             )
             exit_stack.callback(materialization.cleanup)
             if materialization.errors:
@@ -756,7 +760,7 @@ async def _run_prediction_job_with_context(
                 else:
                     summary["successful"] += 1
                 summary["processed"] += 1
-                if summary["processed"] % 50 == 0:
+                if summary["processed"] % progress_flush_rows == 0:
                     logger.info(
                         "prediction progress: %d/%d (ok=%d fail=%d)",
                         summary["processed"],
@@ -773,6 +777,7 @@ async def _run_prediction_job_with_context(
             job_id=job_id,
             model_id=model.id,
             model_version=summary["model_version"],
+            batch_size=app_context.shared.config.prediction.write_batch_rows,
         )
     event_publisher = app_context.shared.redis_event_publisher
     if event_publisher is not None:

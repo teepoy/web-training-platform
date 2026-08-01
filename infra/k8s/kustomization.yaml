@@ -13,6 +13,6 @@ resources:
   - sc-upstream-deployment.yaml
   - image-parser-deployment.yaml
   - api-deployment.yaml
-  - perspective-ws-deployment.yaml
+  - sc-data-provider-deployment.yaml
   - prefect-worker-cpu.yaml
   - prefect-worker-gpu.yaml

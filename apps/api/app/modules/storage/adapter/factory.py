@@ -32,11 +32,19 @@ class DatasetStorageFactory:
         storage: ArtifactStorage,
         payload_store: DatasetPayloadStore,
         session_factory: async_sessionmaker,
+        prediction_compaction_memory_limit: str,
+        prediction_compaction_temp_limit: str,
+        prediction_compaction_row_group_rows: int,
     ) -> None:
         self._repo = repo
         self._storage = storage
         self._payload_store = payload_store
         self._session_factory = session_factory
+        self._prediction_compaction_memory_limit = prediction_compaction_memory_limit
+        self._prediction_compaction_temp_limit = prediction_compaction_temp_limit
+        self._prediction_compaction_row_group_rows = (
+            prediction_compaction_row_group_rows
+        )
 
     async def open(self, dataset_id: str, org_id: str) -> DatasetStorageAgg:
         """Open a dataset storage backend by reading dataset metadata and
@@ -71,6 +79,13 @@ class DatasetStorageFactory:
                 session_factory=self._session_factory,
                 repo=self._repo,
                 dataset_type=dataset.dataset_type,
+                prediction_compaction_memory_limit=(
+                    self._prediction_compaction_memory_limit
+                ),
+                prediction_compaction_temp_limit=self._prediction_compaction_temp_limit,
+                prediction_compaction_row_group_rows=(
+                    self._prediction_compaction_row_group_rows
+                ),
             )
 
         raise ValueError(f"Unknown storage_mode: {dataset.storage_mode}")

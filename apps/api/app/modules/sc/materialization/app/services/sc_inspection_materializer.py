@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 from contextlib import ExitStack
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from typing import Any
 
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -29,22 +31,26 @@ from app.modules.types import catalog
 SC_PATCH_IMAGE_MATERIALIZER = catalog.get_materializer_meta(
     "sc-inspection-patch-image-v1"
 )
-_PARQUET_WRITE_BATCH_SIZE = 256
+
+
+class ScMaterializationCapacityError(RuntimeError):
+    """The configured materialized-output budget was exceeded."""
 
 
 class _ParquetRowDataset:
     """Re-iterable row view over materialized Parquet without a second cache."""
 
-    def __init__(self, path: str, row_count: int) -> None:
+    def __init__(self, path: str, row_count: int, batch_rows: int) -> None:
         self._path = path
         self._row_count = row_count
+        self._batch_rows = batch_rows
 
     def __len__(self) -> int:
         return self._row_count
 
     def __iter__(self) -> Iterator[dict[str, Any]]:
         parquet_file = pq.ParquetFile(self._path)
-        for batch in parquet_file.iter_batches(batch_size=_PARQUET_WRITE_BATCH_SIZE):
+        for batch in parquet_file.iter_batches(batch_size=self._batch_rows):
             yield from batch.to_pylist()
 
 
@@ -54,10 +60,18 @@ class ScInspectionMaterializer:
         image_source: Any,
         *,
         schema_registry: DataPlaneSchemaRegistry,
+        batch_rows: int,
+        max_error_records: int,
         temp_dir: str | None = None,
     ) -> None:
+        if batch_rows <= 0:
+            raise ValueError("batch_rows must be greater than zero")
+        if max_error_records <= 0:
+            raise ValueError("max_error_records must be greater than zero")
         self._image_source = image_source
         self._schema_registry = schema_registry
+        self._batch_rows = batch_rows
+        self._max_error_records = max_error_records
         self._temp_dir = temp_dir
 
     async def materialize(
@@ -67,149 +81,73 @@ class ScInspectionMaterializer:
         dataset_id: str = "",
         job_id: str = "",
         image_types: list[str] | None = None,
+        max_output_bytes: int,
     ) -> ScInspectionMaterialization:
+        if max_output_bytes <= 0:
+            raise ValueError("max_output_bytes must be greater than zero")
         image_types = image_types or list(DEFAULT_PATCH_IMAGE_TYPES)
-        df = rows_lazyframe.collect()
-        if df.height == 0:
-            return await self._write_rows(
-                (),
-                [],
-                row_count=0,
-                dataset_id=dataset_id,
-                job_id=job_id,
-                image_types=image_types,
-            )
-
         requested_roles = {
             _materialized_column_name(image_type): _image_role(image_type)
             for image_type in image_types
         }
-        image_bytes: dict[tuple[str, int, str, str], bytes] = {}
         errors: list[dict[str, str]] = []
-
-        missing_by_inspection: dict[tuple[str, int], set[int]] = {}
-        for raw_row in df.iter_rows(named=True):
-            row = normalize_sc_training_row(dict(raw_row))
-            inspection_time = str(row.get("inspection_time") or "")
-            wafer_key = int(row.get("wafer_key", 0) or 0)
-            defect_id = str(row.get("defect_id") or "")
-            images = row.get("images")
-            if not isinstance(images, list):
-                images = []
-            missing_role = False
-            for column, role in requested_roles.items():
-                refs = find_images_by_role(images, role)
-                raw = refs[0].get("bytes") if refs else None
-                readable = readable_image_bytes(raw)
-                if readable is not None:
-                    image_bytes[(inspection_time, wafer_key, defect_id, column)] = (
-                        readable
-                    )
-                else:
-                    missing_role = True
-            if missing_role:
-                try:
-                    numeric_defect_id = int(defect_id)
-                except ValueError:
-                    errors.append(
-                        {
-                            "defect_id": defect_id,
-                            "image_type": ",".join(requested_roles),
-                            "error": "missing local bytes and defect_id is not upstream-resolvable",
-                        }
-                    )
-                    continue
-                missing_by_inspection.setdefault(
-                    (inspection_time, wafer_key), set()
-                ).add(numeric_defect_id)
-
-        for (inspection_time, wafer_key), defect_ids in missing_by_inspection.items():
-            async for item in self._image_source.stream_inspection_images(
-                inspection_time=inspection_time,
-                wafer_key=wafer_key,
-                defect_ids=sorted(defect_ids),
-                image_types=image_types,
-            ):
-                defect_id = str(item.get("defect_id", ""))
-                image_type = _materialized_column_name(str(item.get("image_type", "")))
-                error = str(item.get("error", "") or "")
-                if error:
-                    errors.append(
-                        {
-                            "defect_id": defect_id,
-                            "image_type": image_type,
-                            "error": error,
-                        }
-                    )
-                    continue
-                image_bytes[(inspection_time, wafer_key, defect_id, image_type)] = (
-                    bytes(item.get("image_data", b""))
-                )
-
         columns = [_materialized_column_name(t) for t in image_types]
-
-        def materialized_rows() -> Iterator[dict[str, Any]]:
-            for raw_row in df.iter_rows(named=True):
-                row = normalize_sc_training_row(dict(raw_row))
-                defect_id = str(row.get("defect_id", ""))
-                inspection_time = str(row.get("inspection_time") or "")
-                wafer_key = int(row.get("wafer_key", 0) or 0)
-                out = {
-                    "sample_id": str(row.get("sample_id", "")),
-                    "defect_id": defect_id,
-                    "inspection_time": _normalize_inspection_time(
-                        row.get("inspection_time")
-                    ),
-                    "wafer_key": int(row.get("wafer_key", 0) or 0),
-                    "wafer_x": _optional_int(row.get("wafer_x")),
-                    "wafer_y": _optional_int(row.get("wafer_y")),
-                    "die_x": _optional_int(row.get("die_x")),
-                    "die_y": _optional_int(row.get("die_y")),
-                    "rough_bin": _optional_int(row.get("rough_bin")),
-                    "class_number": _optional_int(row.get("class_number")),
-                    "test_id": _optional_int(row.get("test_id")),
-                    "label": _optional_str(row.get("label")),
-                    "predicted_label": _optional_str(row.get("predicted_label")),
-                    "confidence": _optional_float(row.get("confidence")),
-                }
-                for column in columns:
-                    out[column] = image_bytes.get(
-                        (inspection_time, wafer_key, defect_id, column)
-                    )
-                yield out
-
-        return await self._write_rows(
-            materialized_rows(),
-            errors,
-            row_count=df.height,
-            dataset_id=dataset_id,
-            job_id=job_id,
-            image_types=image_types,
-        )
-
-    async def _write_rows(
-        self,
-        rows: Iterable[dict[str, Any]],
-        errors: list[dict[str, str]],
-        *,
-        row_count: int,
-        dataset_id: str,
-        job_id: str,
-        image_types: list[str],
-    ) -> ScInspectionMaterialization:
         with ExitStack() as cleanup:
             handle = tempfile.NamedTemporaryFile(
                 suffix=".parquet", delete=False, dir=self._temp_dir
             )
             handle.close()
             cleanup.callback(_unlink_if_exists, handle.name)
-            written_rows = _write_parquet_batches(rows, handle.name)
-            if written_rows != row_count:
-                raise RuntimeError(
-                    f"materializer row count changed while writing: "
-                    f"expected {row_count}, wrote {written_rows}"
-                )
+            writer: pq.ParquetWriter | None = None
+            row_count = 0
+            logical_output_bytes = 0
+            batches = rows_lazyframe.collect_batches(
+                chunk_size=self._batch_rows,
+                maintain_order=True,
+                engine="streaming",
+            )
+            try:
+                while True:
+                    batch = await asyncio.to_thread(_next_batch, batches)
+                    if batch is None:
+                        break
+                    rows = [
+                        normalize_sc_training_row(dict(raw_row))
+                        for raw_row in batch.iter_rows(named=True)
+                    ]
+                    table = await self._materialize_batch(
+                        rows,
+                        requested_roles=requested_roles,
+                        image_types=image_types,
+                        columns=columns,
+                        errors=errors,
+                    )
+                    logical_output_bytes += table.nbytes
+                    if logical_output_bytes > max_output_bytes:
+                        raise ScMaterializationCapacityError(
+                            "SC materialization exceeded configured output budget: "
+                            f"{logical_output_bytes} > {max_output_bytes} bytes"
+                        )
+                    if writer is None:
+                        writer = pq.ParquetWriter(handle.name, table.schema)
+                    await asyncio.to_thread(writer.write_table, table)
+                    row_count += table.num_rows
+                    if os.path.getsize(handle.name) > max_output_bytes:
+                        raise ScMaterializationCapacityError(
+                            "SC materialization Parquet exceeded configured output "
+                            f"budget of {max_output_bytes} bytes"
+                        )
+            finally:
+                if writer is not None:
+                    await asyncio.to_thread(writer.close)
+            if writer is None:
+                await asyncio.to_thread(pq.write_table, _rows_to_table([]), handle.name)
             size_bytes = os.path.getsize(handle.name)
+            if size_bytes > max_output_bytes:
+                raise ScMaterializationCapacityError(
+                    "SC materialization Parquet exceeded configured output budget: "
+                    f"{size_bytes} > {max_output_bytes} bytes"
+                )
             schema = self._schema_registry.get(
                 SC_PATCH_IMAGE_MATERIALIZER.output_view.contract,
                 SC_PATCH_IMAGE_MATERIALIZER.output_view.schema_version,
@@ -244,7 +182,7 @@ class ScInspectionMaterializer:
             materialization = ScInspectionMaterialization(
                 parquet_path=handle.name,
                 cache_dir=None,
-                dataset=_ParquetRowDataset(handle.name, row_count),
+                dataset=_ParquetRowDataset(handle.name, row_count, self._batch_rows),
                 row_count=row_count,
                 manifest=manifest,
                 errors=errors,
@@ -252,35 +190,119 @@ class ScInspectionMaterializer:
             cleanup.pop_all()
             return materialization
 
-
-def _write_parquet_batches(
-    rows: Iterable[dict[str, Any]],
-    path: str,
-) -> int:
-    writer: pq.ParquetWriter | None = None
-    batch: list[dict[str, Any]] = []
-    written_rows = 0
-    try:
+    async def _materialize_batch(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        requested_roles: dict[str, str],
+        image_types: list[str],
+        columns: list[str],
+        errors: list[dict[str, str]],
+    ) -> pa.Table:
+        image_bytes: dict[tuple[str, int, str, str], bytes] = {}
+        missing_by_inspection: dict[tuple[str, int], set[int]] = {}
         for row in rows:
-            batch.append(row)
-            if len(batch) < _PARQUET_WRITE_BATCH_SIZE:
+            inspection_time = str(row.get("inspection_time") or "")
+            wafer_key = int(row.get("wafer_key", 0) or 0)
+            defect_id = str(row.get("defect_id") or "")
+            images = row.get("images")
+            if not isinstance(images, list):
+                images = []
+            missing_role = False
+            for column, role in requested_roles.items():
+                refs = find_images_by_role(images, role)
+                raw = refs[0].get("bytes") if refs else None
+                readable = readable_image_bytes(raw)
+                if readable is None:
+                    missing_role = True
+                    continue
+                image_bytes[(inspection_time, wafer_key, defect_id, column)] = readable
+            if not missing_role:
                 continue
-            table = _rows_to_table(batch)
-            writer = writer or pq.ParquetWriter(path, table.schema)
-            writer.write_table(table)
-            written_rows += len(batch)
-            batch.clear()
-        if batch:
-            table = _rows_to_table(batch)
-            writer = writer or pq.ParquetWriter(path, table.schema)
-            writer.write_table(table)
-            written_rows += len(batch)
-        if writer is None:
-            pq.write_table(_rows_to_table([]), path)
-        return written_rows
-    finally:
-        if writer is not None:
-            writer.close()
+            try:
+                numeric_defect_id = int(defect_id)
+            except ValueError:
+                self._append_error(
+                    errors,
+                    {
+                        "defect_id": defect_id,
+                        "image_type": ",".join(requested_roles),
+                        "error": (
+                            "missing local bytes and defect_id is not "
+                            "upstream-resolvable"
+                        ),
+                    },
+                )
+                continue
+            missing_by_inspection.setdefault((inspection_time, wafer_key), set()).add(
+                numeric_defect_id
+            )
+
+        for (inspection_time, wafer_key), defect_ids in missing_by_inspection.items():
+            async for item in self._image_source.stream_inspection_images(
+                inspection_time=inspection_time,
+                wafer_key=wafer_key,
+                defect_ids=sorted(defect_ids),
+                image_types=image_types,
+            ):
+                defect_id = str(item.get("defect_id", ""))
+                image_type = _materialized_column_name(str(item.get("image_type", "")))
+                error = str(item.get("error", "") or "")
+                if error:
+                    self._append_error(
+                        errors,
+                        {
+                            "defect_id": defect_id,
+                            "image_type": image_type,
+                            "error": error,
+                        },
+                    )
+                    continue
+                image_bytes[(inspection_time, wafer_key, defect_id, image_type)] = (
+                    bytes(item.get("image_data", b""))
+                )
+
+        materialized_rows: list[dict[str, Any]] = []
+        for row in rows:
+            defect_id = str(row.get("defect_id", ""))
+            inspection_time = str(row.get("inspection_time") or "")
+            wafer_key = int(row.get("wafer_key", 0) or 0)
+            out = {
+                "sample_id": str(row.get("sample_id", "")),
+                "defect_id": defect_id,
+                "inspection_time": _normalize_inspection_time(
+                    row.get("inspection_time")
+                ),
+                "wafer_key": wafer_key,
+                "wafer_x": _optional_int(row.get("wafer_x")),
+                "wafer_y": _optional_int(row.get("wafer_y")),
+                "die_x": _optional_int(row.get("die_x")),
+                "die_y": _optional_int(row.get("die_y")),
+                "rough_bin": _optional_int(row.get("rough_bin")),
+                "class_number": _optional_int(row.get("class_number")),
+                "test_id": _optional_int(row.get("test_id")),
+                "label": _optional_str(row.get("label")),
+                "predicted_label": _optional_str(row.get("predicted_label")),
+                "confidence": _optional_float(row.get("confidence")),
+            }
+            for column in columns:
+                out[column] = image_bytes.get(
+                    (inspection_time, wafer_key, defect_id, column)
+                )
+            materialized_rows.append(out)
+        return _rows_to_table(materialized_rows)
+
+    def _append_error(
+        self,
+        errors: list[dict[str, str]],
+        error: dict[str, str],
+    ) -> None:
+        if len(errors) < self._max_error_records:
+            errors.append(error)
+
+
+def _next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
+    return next(batches, None)
 
 
 def _unlink_if_exists(path: str) -> None:

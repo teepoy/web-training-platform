@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections import OrderedDict
+from pathlib import Path
 
 from app.shared.domain.runtime import ArtifactStorage
-from app.modules.storage.domain.sparse.models import DatasetManifest, ShardEntry
+from app.modules.storage.domain.sparse.models import (
+    DatasetManifest,
+    SampleLocator,
+    ShardEntry,
+    SparseIndexEntry,
+)
+from app.modules.storage.domain.sparse.index import SparseIndexReader
 
 
 class DatasetPayloadStore:
@@ -18,11 +26,49 @@ class DatasetPayloadStore:
     object — no prefix-listing dependency required.
     """
 
-    def __init__(self, storage: ArtifactStorage) -> None:
+    def __init__(
+        self,
+        storage: ArtifactStorage,
+        *,
+        manifest_cache_max_bytes: int | None = None,
+    ) -> None:
         self._storage = storage
-        self._manifest_cache: dict[tuple[str, str], DatasetManifest] = {}
+        self._index_reader = SparseIndexReader()
+        if manifest_cache_max_bytes is not None and manifest_cache_max_bytes < 0:
+            raise ValueError("manifest_cache_max_bytes must not be negative")
+        self._manifest_cache_max_bytes = manifest_cache_max_bytes or 0
+        self._manifest_cache: OrderedDict[
+            tuple[str, str], tuple[DatasetManifest, int]
+        ] = OrderedDict()
+        self._manifest_cache_bytes = 0
+        self._manifest_cache_hits = 0
+        self._manifest_cache_evictions = 0
         self._uri_scheme_prefix: str | None = None
         self._scheme_lock = asyncio.Lock()
+
+    @property
+    def storage(self) -> ArtifactStorage:
+        return self._storage
+
+    async def lookup_sample_locators(
+        self,
+        manifest: DatasetManifest,
+        sample_ids: list[str] | set[str],
+    ) -> dict[str, SampleLocator]:
+        if manifest.manifest_version == "v3":
+            if manifest.index is None:
+                return {}
+            return await self._index_reader.lookup_many(
+                manifest.index,
+                sample_ids,
+                dataset_id=manifest.dataset_id,
+                storage=self._storage,
+            )
+        return {
+            sample_id: locator
+            for sample_id in sample_ids
+            if (locator := manifest.sample_index.get(sample_id)) is not None
+        }
 
     # ------------------------------------------------------------------
     # prefix helpers
@@ -40,6 +86,10 @@ class DatasetPayloadStore:
     def get_manifest_key(dataset_id: str, org_id: str) -> str:
         return f"datasets/{org_id}/{dataset_id}/manifest.json"
 
+    @staticmethod
+    def get_index_key(dataset_id: str, org_id: str) -> str:
+        return f"datasets/{org_id}/{dataset_id}/index/sample-index.parquet"
+
     # ------------------------------------------------------------------
     # manifest
     # ------------------------------------------------------------------
@@ -51,23 +101,36 @@ class DatasetPayloadStore:
         uri = await self._storage.put_bytes(
             object_name=key, data=data, content_type="application/json"
         )
-        self._manifest_cache[(manifest.dataset_id, org_id)] = manifest
+        self._cache_manifest((manifest.dataset_id, org_id), manifest, len(data))
         self._remember_scheme_from_uri(uri, key)
         return uri
 
     async def get_manifest(self, dataset_id: str, org_id: str) -> DatasetManifest:
         """Read and parse the manifest stored under the canonical key."""
-        cached = self._manifest_cache.get((dataset_id, org_id))
+        key = (dataset_id, org_id)
+        cached = self._manifest_cache.get(key)
         if cached is not None:
-            return cached
+            self._manifest_cache.move_to_end(key)
+            self._manifest_cache_hits += 1
+            return cached[0]
         uri = await self._resolve_manifest_uri(dataset_id, org_id)
         raw = await self._storage.get_bytes(uri)
         manifest = DatasetManifest.model_validate_json(raw)
-        self._manifest_cache[(dataset_id, org_id)] = manifest
+        self._cache_manifest(key, manifest, len(raw))
         return manifest
 
     def invalidate_manifest(self, dataset_id: str, org_id: str) -> None:
-        self._manifest_cache.pop((dataset_id, org_id), None)
+        cached = self._manifest_cache.pop((dataset_id, org_id), None)
+        if cached is not None:
+            self._manifest_cache_bytes -= cached[1]
+
+    def manifest_cache_stats(self) -> dict[str, int]:
+        return {
+            "entries": len(self._manifest_cache),
+            "retained_bytes": self._manifest_cache_bytes,
+            "hits": self._manifest_cache_hits,
+            "evictions": self._manifest_cache_evictions,
+        }
 
     # ------------------------------------------------------------------
     # shards
@@ -105,6 +168,61 @@ class DatasetPayloadStore:
             byte_size=byte_size,
         )
 
+    async def put_shard_file(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        shard_index: int,
+        path: str,
+        row_count: int,
+        format: str = "parquet",
+    ) -> ShardEntry:
+        checksum, byte_size = await asyncio.to_thread(_hash_file, path)
+        object_name = (
+            f"{self.get_shard_prefix(dataset_id, org_id)}/{shard_index:06d}.{format}"
+        )
+        uri = await self._storage.put_file(
+            object_name=object_name,
+            path=path,
+            content_type="application/octet-stream",
+        )
+        self._remember_scheme_from_uri(uri, object_name)
+        return ShardEntry(
+            shard_index=shard_index,
+            uri=uri,
+            row_count=row_count,
+            format=format,
+            checksum_sha256=checksum,
+            byte_size=byte_size,
+        )
+
+    async def put_index_file(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        path: str,
+        row_count: int,
+    ) -> SparseIndexEntry:
+        checksum, byte_size = await asyncio.to_thread(_hash_file, path)
+        object_name = self.get_index_key(dataset_id, org_id)
+        uri = await self._storage.put_file(
+            object_name=object_name,
+            path=path,
+            content_type="application/octet-stream",
+        )
+        self._remember_scheme_from_uri(uri, object_name)
+        return SparseIndexEntry(
+            uri=uri,
+            row_count=row_count,
+            checksum_sha256=checksum,
+            byte_size=byte_size,
+        )
+
+    async def delete_object(self, uri: str) -> None:
+        await self._storage.delete(uri)
+
     # ------------------------------------------------------------------
     # delete
     # ------------------------------------------------------------------
@@ -123,6 +241,8 @@ class DatasetPayloadStore:
 
         for shard in manifest.shards:
             await self._storage.delete(shard.uri)
+        if manifest.index is not None:
+            await self._storage.delete(manifest.index.uri)
 
         manifest_uri = await self._resolve_manifest_uri(dataset_id, org_id)
         await self._storage.delete(manifest_uri)
@@ -160,3 +280,34 @@ class DatasetPayloadStore:
                     return tmp_uri.replace(".__tmp_discovery__", "")
         assert self._uri_scheme_prefix is not None
         return f"{self._uri_scheme_prefix}{key}"
+
+    def _cache_manifest(
+        self,
+        key: tuple[str, str],
+        manifest: DatasetManifest,
+        size_bytes: int,
+    ) -> None:
+        previous = self._manifest_cache.pop(key, None)
+        if previous is not None:
+            self._manifest_cache_bytes -= previous[1]
+        if (
+            self._manifest_cache_max_bytes == 0
+            or size_bytes > self._manifest_cache_max_bytes
+        ):
+            return
+        self._manifest_cache[key] = (manifest, size_bytes)
+        self._manifest_cache_bytes += size_bytes
+        while self._manifest_cache_bytes > self._manifest_cache_max_bytes:
+            _, (_, evicted_size) = self._manifest_cache.popitem(last=False)
+            self._manifest_cache_bytes -= evicted_size
+            self._manifest_cache_evictions += 1
+
+
+def _hash_file(path: str) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size_bytes = 0
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+            size_bytes += len(chunk)
+    return digest.hexdigest(), size_bytes

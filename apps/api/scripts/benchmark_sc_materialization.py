@@ -76,6 +76,8 @@ async def _benchmark(args: argparse.Namespace) -> dict[str, float | int]:
         materializer = ScInspectionMaterializer(
             _InlineOnlyImageSource(),
             schema_registry=DataPlaneSchemaRegistry.default(),
+            batch_rows=args.batch_rows,
+            max_error_records=1_000,
             temp_dir=temp_dir,
         )
         started = time.perf_counter()
@@ -84,6 +86,7 @@ async def _benchmark(args: argparse.Namespace) -> dict[str, float | int]:
             dataset_id="benchmark",
             job_id="benchmark",
             image_types=["patch_template", "patch_defective"],
+            max_output_bytes=args.max_output_bytes,
         )
         elapsed = time.perf_counter() - started
         rss_delta = process.memory_info().rss - baseline_rss
@@ -108,9 +111,21 @@ def main() -> None:
     parser.add_argument("--classes", type=int, default=5)
     parser.add_argument("--unique-images", type=int, default=1_000)
     parser.add_argument("--image-size", type=int, default=64)
+    parser.add_argument("--batch-rows", type=int, default=512)
+    parser.add_argument("--max-output-bytes", type=int, default=17_179_869_184)
     parser.add_argument("--seed", type=int, default=17)
     args = parser.parse_args()
-    if min(args.rows, args.classes, args.unique_images, args.image_size) < 1:
+    if (
+        min(
+            args.rows,
+            args.classes,
+            args.unique_images,
+            args.image_size,
+            args.batch_rows,
+            args.max_output_bytes,
+        )
+        < 1
+    ):
         parser.error("all numeric benchmark arguments must be positive")
     print(json.dumps(asyncio.run(_benchmark(args)), sort_keys=True))
 

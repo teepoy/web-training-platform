@@ -18,6 +18,14 @@ if TYPE_CHECKING:
     )
 
 
+class SparseColumnarImportSessionPort(Protocol):
+    async def append(self, table: pa.Table, *, row_id_column: str) -> ShardEntry: ...
+
+    async def finalize(self) -> Any: ...
+
+    async def abort(self) -> None: ...
+
+
 class DatasetStorageFactoryPort(Protocol):
     """Open a dataset through its configured physical storage backend."""
 
@@ -50,6 +58,14 @@ class SparseImportWriterPort(Protocol):
         pyarrow_schema: pa.Schema,
         row_id_key: str = "sample_id",
     ) -> tuple[ShardEntry, dict[str, SampleLocator]]: ...
+
+    def begin_columnar_import(
+        self,
+        *,
+        schema_columns: list[Any],
+        schema_version: str,
+        index_row_group_rows: int,
+    ) -> SparseColumnarImportSessionPort: ...
 
 
 class SparseImportWriterFactoryPort(Protocol):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from contextlib import suppress
 from typing import Any, Iterator
 
 import pyarrow.flight as flight
@@ -27,10 +28,32 @@ class UpstreamFlightServer(flight.FlightServerBase):
 
         inspection_time = datetime.fromisoformat(req["inspection_time"])
         wafer_key: int = req["wafer_key"]
+        offset: int = req["offset"]
+        count: int | None = req["count"]
+        batch_rows: int = req["batch_rows"]
+        projection: list[str] | None = req["projection"]
 
         cached = self._cache.sync_get_list_samples(req["inspection_time"], wafer_key)
         if cached is not None:
-            return flight.RecordBatchStream(cached.collect().to_arrow())
+            bounded = (
+                cached.slice(offset, count)
+                if count is not None
+                else cached.slice(offset)
+            )
+            if projection is not None:
+                bounded = bounded.select(projection)
+            return _lazyframe_stream(bounded, batch_rows=batch_rows)
+
+        full_request = offset == 0 and count is None and projection is None
+        if not full_request:
+            return self._uncached_stream(
+                inspection_time=inspection_time,
+                wafer_key=wafer_key,
+                offset=offset,
+                count=count,
+                batch_rows=batch_rows,
+                projection=projection,
+            )
 
         lock_ctx = self._cache.sync_fill_lock(
             "samples", req["inspection_time"], str(wafer_key)
@@ -60,7 +83,7 @@ class UpstreamFlightServer(flight.FlightServerBase):
         batch_iter = self._db.iter_list_samples_batches(
             inspection_time,
             wafer_key,
-            batch_size=int(os.environ.get("SC_FLIGHT_BATCH_SIZE", "65536")),
+            batch_size=batch_rows,
         )
         try:
             first_df = next(batch_iter)
@@ -89,6 +112,58 @@ class UpstreamFlightServer(flight.FlightServerBase):
 
         return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())
 
+    def _uncached_stream(
+        self,
+        *,
+        inspection_time: datetime,
+        wafer_key: int,
+        offset: int,
+        count: int | None,
+        batch_rows: int,
+        projection: list[str] | None,
+    ) -> flight.FlightDataStream:
+        batch_iter = self._db.iter_list_samples_batches(
+            inspection_time,
+            wafer_key,
+            batch_size=batch_rows,
+            offset=offset,
+            count=count,
+        )
+        try:
+            first_df = next(batch_iter)
+        except StopIteration:
+            return flight.RecordBatchStream(pa.table({}))
+        if projection is not None:
+            first_df = first_df.select(projection)
+
+        def _stream_batches() -> Iterator[pa.Table]:
+            try:
+                yield first_df.to_arrow()
+                for frame in batch_iter:
+                    if projection is not None:
+                        frame = frame.select(projection)
+                    yield frame.to_arrow()
+            finally:
+                with suppress(Exception):
+                    batch_iter.close()  # type: ignore[attr-defined]
+
+        return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())
+
+
+def _lazyframe_stream(frame: Any, *, batch_rows: int) -> flight.FlightDataStream:
+    batches = frame.collect_batches(chunk_size=batch_rows, maintain_order=True)
+    try:
+        first = next(batches)
+    except StopIteration:
+        return flight.RecordBatchStream(pa.table({}))
+
+    def _stream() -> Iterator[pa.Table]:
+        yield first.to_arrow()
+        for batch in batches:
+            yield batch.to_arrow()
+
+    return flight.GeneratorStream(first.to_arrow().schema, _stream())
+
 
 def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
     try:
@@ -109,4 +184,33 @@ def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
     wafer_key = req.get("wafer_key")
     if not isinstance(wafer_key, int):
         raise ValueError("list_samples Flight ticket requires integer wafer_key")
+    offset = req.get("offset", 0)
+    if not isinstance(offset, int) or offset < 0:
+        raise ValueError("list_samples Flight ticket requires non-negative offset")
+    count = req.get("count")
+    if count is not None and (not isinstance(count, int) or count < 0):
+        raise ValueError(
+            "list_samples Flight ticket count must be null or non-negative"
+        )
+    batch_rows = req.get("batch_rows")
+    if batch_rows is None:
+        batch_rows = int(os.environ["SC_FLIGHT_BATCH_SIZE"])
+    if not isinstance(batch_rows, int) or batch_rows <= 0:
+        raise ValueError("list_samples Flight ticket requires positive batch_rows")
+    projection = req.get("projection")
+    if projection is not None:
+        if not isinstance(projection, list) or not all(
+            isinstance(column, str) and column.isidentifier() for column in projection
+        ):
+            raise ValueError(
+                "list_samples Flight ticket projection must be identifiers"
+            )
+        if len(set(projection)) != len(projection):
+            raise ValueError(
+                "list_samples Flight ticket projection contains duplicates"
+            )
+    req["offset"] = offset
+    req["count"] = count
+    req["batch_rows"] = batch_rows
+    req["projection"] = projection
     return req

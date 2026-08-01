@@ -115,6 +115,58 @@ class SparseAnnotationStore:
             sample_id: record for sample_id, record in latest.items() if record.label
         }
 
+    async def latest_by_sample_ids(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        sample_ids: list[str] | set[str],
+    ) -> dict[str, SparseAnnotationRecord]:
+        wanted = sorted({str(sample_id) for sample_id in sample_ids})
+        if not wanted:
+            return {}
+        prefix = self.get_annotations_prefix(dataset_id, org_id) + "/"
+        uris = await self._storage.list_prefix(prefix)
+        latest: dict[str, SparseAnnotationRecord] = {}
+        for uri in uris:
+            raw = await self._storage.get_bytes(uri)
+            table = pq.read_table(
+                io.BytesIO(raw),
+                filters=[("sample_id", "in", wanted)],
+            )
+            for row in table.to_pylist():
+                record = _record_from_row(row)
+                previous = latest.get(record.sample_id)
+                if previous is None or record.created_at >= previous.created_at:
+                    latest[record.sample_id] = record
+        return {
+            sample_id: record for sample_id, record in latest.items() if record.label
+        }
+
+    async def records_by_annotation_ids(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        annotation_ids: list[str] | set[str],
+    ) -> dict[str, SparseAnnotationRecord]:
+        wanted = sorted({str(annotation_id) for annotation_id in annotation_ids})
+        if not wanted:
+            return {}
+        prefix = self.get_annotations_prefix(dataset_id, org_id) + "/"
+        uris = await self._storage.list_prefix(prefix)
+        records: dict[str, SparseAnnotationRecord] = {}
+        for uri in uris:
+            raw = await self._storage.get_bytes(uri)
+            table = pq.read_table(
+                io.BytesIO(raw),
+                filters=[("annotation_id", "in", wanted)],
+            )
+            for row in table.to_pylist():
+                record = _record_from_row(row)
+                records[record.annotation_id] = record
+        return records
+
     async def stats(self, *, dataset_id: str, org_id: str) -> dict[str, int]:
         latest = await self.latest_by_sample(dataset_id=dataset_id, org_id=org_id)
         counter: Counter[str] = Counter()
@@ -141,4 +193,16 @@ def build_annotation_record(
         created_by=created_by,
         created_at=when,
         user_id=user_id,
+    )
+
+
+def _record_from_row(row: dict[str, object]) -> SparseAnnotationRecord:
+    return SparseAnnotationRecord(
+        annotation_id=str(row["annotation_id"]),
+        sample_id=str(row["sample_id"]),
+        label=str(row["label"]),
+        annotation_value=str(row["annotation_value"] or ""),
+        created_by=str(row["created_by"] or ""),
+        created_at=str(row["created_at"] or ""),
+        user_id=str(row["user_id"] or ""),
     )

@@ -147,10 +147,12 @@ FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
 PLATFORM_DATA_DIR=/srv/finetune/platform/data
 SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
 IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
+PREFECT_SERVER_MEMORY=4g
 API_MEMORY=8g
 API_SHM_SIZE=1g
-PERSPECTIVE_WS_MEMORY=8g
-PERSPECTIVE_WS_SHM_SIZE=1g
+SC_DATA_PROVIDER_WORKER_COUNT=4
+SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB=6144
+SC_DATA_PROVIDER_SHM_SIZE=1g
 WEB_MEMORY=1g
 CPU_WORKER_MEMORY=8g
 CPU_WORKER_SHM_SIZE=1g
@@ -160,7 +162,13 @@ SC_UPSTREAM_MEMORY=8g
 SC_UPSTREAM_SHM_SIZE=1g
 IMAGE_PARSER_MEMORY=32g
 IMAGE_PARSER_SHM_SIZE=2g
+MIGRATE_MEMORY=2g
+DEPLOYMENTS_MEMORY=2g
 ```
+
+All service ceilings use `deploy.resources.limits.memory`, which is honored by
+current Docker Compose without requiring Swarm mode. Do not reintroduce the
+legacy service-level `mem_limit` key.
 
 For the deployable test/acceptance environment, copy the platform environment
 file and set `APP_CONFIG_PROFILE=pre-release`, test-environment public URLs,
@@ -195,6 +203,15 @@ PLATFORM_NETWORK_NAME=finetune-prod
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<strong-password>
 ALERTMANAGER_CONFIG_PATH=/srv/finetune/observability/alertmanager.yml
+PROMETHEUS_MEMORY=2g
+GRAFANA_MEMORY=1g
+LOKI_MEMORY=2g
+PROMTAIL_MEMORY=512m
+ALERTMANAGER_MEMORY=512m
+CADVISOR_MEMORY=1g
+NODE_EXPORTER_MEMORY=256m
+PREFECT_EXPORTER_MEMORY=1g
+DCGM_EXPORTER_MEMORY=1g
 ```
 
 The supplied platform manifest requires credentials for the SC patch and review

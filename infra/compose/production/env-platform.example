@@ -11,6 +11,19 @@ JWT_SECRET_KEY=<random-secret-at-least-32-bytes>
 # Required only when oauth.enabled=true in the selected API profile.
 OAUTH_STATE_SECRET=
 
+# Compose memory limits (platform services and one-shot ops)
+PREFECT_SERVER_MEMORY=4g
+API_MEMORY=8g
+SC_DATA_PROVIDER_WORKER_COUNT=4
+SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB=6144
+WEB_MEMORY=1g
+CPU_WORKER_MEMORY=8g
+GPU_WORKER_MEMORY=16g
+SC_UPSTREAM_MEMORY=8g
+IMAGE_PARSER_MEMORY=32g
+MIGRATE_MEMORY=2g
+DEPLOYMENTS_MEMORY=2g
+
 # API database
 DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/finetune
 

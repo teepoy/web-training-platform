@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import datetime
 from typing import Protocol
 
 import polars as pl
+import pyarrow as pa
 
 from app.modules.sc.domain.models import ScInspectionRecord
 
@@ -32,6 +33,22 @@ class ScUpstreamReader(Protocol):
     async def get_inspection(
         self, inspection_time: datetime, wafer_key: int
     ) -> ScInspectionRecord | None: ...
+
+    async def get_sample_count(
+        self, inspection_time: datetime, wafer_key: int
+    ) -> int: ...
+
+    def stream_sample_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        offset: int = 0,
+        count: int | None = None,
+        batch_rows: int,
+        projection: Sequence[str] | None = None,
+        on_progress: ScSampleProgressCallback | None = None,
+    ) -> AsyncIterator[pa.RecordBatch]: ...
 
     async def list_samples(
         self,

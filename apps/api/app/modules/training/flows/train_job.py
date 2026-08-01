@@ -194,11 +194,22 @@ async def _run_training_pipeline_with_context(
 
         lf = parse_and_apply_workflow_sample_filter(cast(Any, lf), sample_filter)
     if dataset_type == "image_sc":
+        import polars as pl
+
         from app.modules.sc.app.services.training_selection import (
             limit_sc_training_rows_per_class,
         )
 
         lf = limit_sc_training_rows_per_class(lf)
+        selected_row_count = int(
+            (await lf.select(pl.len().alias("rows")).collect_async()).item(0, "rows")
+        )
+        training_max_rows = app_context.shared.config.sc.pipeline.training_max_rows
+        if selected_row_count > training_max_rows:
+            raise ValueError(
+                "SC training selection exceeds configured row budget: "
+                f"{selected_row_count} > {training_max_rows}"
+            )
 
     ctx = TrainContext(
         job_id=job_id,
@@ -236,6 +247,9 @@ async def _run_training_pipeline_with_context(
             dataset_id=dataset_id,
             job_id=job_id,
             image_types=list(view_metadata.image_roles),
+            max_output_bytes=(
+                app_context.shared.config.sc.pipeline.training_max_materialized_bytes
+            ),
         )
         exit_stack.callback(materialization.cleanup)
         if materialization.errors and missing_image_policy != "skip":

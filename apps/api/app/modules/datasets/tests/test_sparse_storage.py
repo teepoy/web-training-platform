@@ -47,6 +47,9 @@ async def storage(
         payload_store=_test_infra["payload_store"],
         session_factory=_test_infra["session_factory"],
         repo=_test_infra["repo"],
+        prediction_compaction_memory_limit="64MiB",
+        prediction_compaction_temp_limit="256MiB",
+        prediction_compaction_row_group_rows=1_000,
     )
 
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 import io as _io
 import json as _json
 import random
+import hashlib
+import tempfile
+import uuid as _uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -15,6 +18,7 @@ from app.modules.storage.domain.sparse import (
     DatasetPayloadStore,
     SparseAnnotationRecord,
     SparseAnnotationStore,
+    SparseIndexReader,
     SparseManifestReader,
     build_annotation_record,
 )
@@ -43,6 +47,7 @@ from app.shared.domain.protocols import ArtifactStorage
 _SCAN_PARQUET_SCHEMES = ("s3://", "file://")
 _FINAL_PREDICTION_DIR = "final"
 _ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
+_CURRENT_PREDICTION_POINTER = "current.json"
 _PREDICTION_COLUMNS = [
     "sample_id",
     "predicted_label",
@@ -98,8 +103,13 @@ class SparseDatasetStorage:
         payload_store: DatasetPayloadStore,
         session_factory: async_sessionmaker,
         repo: DatasetRepository,
+        prediction_compaction_memory_limit: str,
+        prediction_compaction_temp_limit: str,
+        prediction_compaction_row_group_rows: int,
         dataset_type: str = "",
     ) -> None:
+        if prediction_compaction_row_group_rows <= 0:
+            raise ValueError("prediction_compaction_row_group_rows must be positive")
         self._dataset_id: str = dataset_id
         self._org_id: str = org_id or ""
         self._storage: ArtifactStorage = storage
@@ -107,8 +117,14 @@ class SparseDatasetStorage:
         self._session_factory: async_sessionmaker = session_factory
         self._repo: DatasetRepository = repo
         self._reader: SparseManifestReader = SparseManifestReader()
+        self._index_reader = SparseIndexReader()
         self._annotations: SparseAnnotationStore = SparseAnnotationStore(storage)
         self._dataset_type: str = dataset_type
+        self._prediction_compaction_memory_limit = prediction_compaction_memory_limit
+        self._prediction_compaction_temp_limit = prediction_compaction_temp_limit
+        self._prediction_compaction_row_group_rows = (
+            prediction_compaction_row_group_rows
+        )
 
         # Lazy-loaded manifest cache.
         self._manifest: DatasetManifest | None = None
@@ -218,11 +234,22 @@ class SparseDatasetStorage:
     def _final_prediction_prefix(self) -> str:
         return f"{self._prediction_base_prefix()}{_FINAL_PREDICTION_DIR}/"
 
-    def _accumulated_prediction_object_name(self) -> str:
-        return f"{self._final_prediction_prefix()}{_ACCUMULATED_PREDICTION_FILE}"
-
     async def _accumulated_prediction_uris(self) -> list[str]:
         uris = await self._storage.list_prefix(self._final_prediction_prefix())
+        pointer_uri = next(
+            (
+                uri
+                for uri in uris
+                if uri.rsplit("/", 1)[-1] == _CURRENT_PREDICTION_POINTER
+            ),
+            None,
+        )
+        if pointer_uri is not None:
+            payload = _json.loads(await self._storage.get_bytes(pointer_uri))
+            current_uri = payload.get("snapshot_uri")
+            if not isinstance(current_uri, str) or not current_uri:
+                raise ValueError("prediction current pointer is missing snapshot_uri")
+            return [current_uri]
         return [
             uri
             for uri in uris
@@ -242,15 +269,18 @@ class SparseDatasetStorage:
             return None
         return await self._parquet_uris_to_lazyframe(uris)
 
-    async def _latest_annotation_lazyframe(self) -> Any | None:
-        import polars as pl
-
+    async def _annotation_history_lazyframe(self) -> Any | None:
         prefix = (
             self._annotations.get_annotations_prefix(self._dataset_id, self._org_id)
             + "/"
         )
         uris = await self._storage.list_prefix(prefix)
-        ann_lf = await self._parquet_uris_to_lazyframe(uris)
+        return await self._parquet_uris_to_lazyframe(uris)
+
+    async def _latest_annotation_lazyframe(self) -> Any | None:
+        import polars as pl
+
+        ann_lf = await self._annotation_history_lazyframe()
         if ann_lf is None:
             return None
         return (
@@ -261,11 +291,15 @@ class SparseDatasetStorage:
             .sort("created_at")
             .group_by("sample_id")
             .agg(
+                pl.col("annotation_id").last().cast(pl.Utf8).alias("annotation_id"),
                 pl.col("label").last().cast(pl.Utf8).alias("label"),
                 pl.col("annotation_value")
                 .last()
                 .cast(pl.Utf8)
                 .alias("annotation_value"),
+                pl.col("created_by").last().cast(pl.Utf8).alias("created_by"),
+                pl.col("created_at").last().cast(pl.Utf8).alias("created_at"),
+                pl.col("user_id").last().cast(pl.Utf8).alias("user_id"),
             )
         )
 
@@ -285,6 +319,18 @@ class SparseDatasetStorage:
                 pl.col("confidence").last().cast(pl.Float64).alias("confidence"),
             )
         )
+
+    async def annotation_overlay_lazyframe(self) -> tuple[Any | None, str]:
+        prefix = (
+            self._annotations.get_annotations_prefix(self._dataset_id, self._org_id)
+            + "/"
+        )
+        uris = sorted(await self._storage.list_prefix(prefix))
+        return await self._latest_annotation_lazyframe(), _fingerprint_uris(uris)
+
+    async def prediction_overlay_lazyframe(self) -> tuple[Any | None, str]:
+        uris = sorted(await self._accumulated_prediction_uris())
+        return await self._latest_prediction_lazyframe(), _fingerprint_uris(uris)
 
     def _normalize_v1_row(self, row: dict[str, object], sample_id: str) -> SampleRow:
         """Normalize a v1 shard row (image_uris + scalar metadata columns)."""
@@ -423,6 +469,67 @@ class SparseDatasetStorage:
             return None
         return rows[0]
 
+    async def _lookup_locators(
+        self,
+        manifest: DatasetManifest,
+        sample_ids: list[str] | set[str],
+    ) -> dict[str, SampleLocator]:
+        if manifest.manifest_version == "v3":
+            if manifest.index is None:
+                if manifest.total_rows == 0:
+                    return {}
+                raise ValueError("manifest v3 is missing its sample index object")
+            return await self._index_reader.lookup_many(
+                manifest.index,
+                sample_ids,
+                dataset_id=self._dataset_id,
+                storage=self._storage,
+            )
+        return {
+            sample_id: locator
+            for sample_id in sample_ids
+            if (locator := manifest.sample_index.get(sample_id)) is not None
+        }
+
+    async def _all_sample_ids(self, manifest: DatasetManifest) -> list[str]:
+        if manifest.manifest_version == "v3":
+            if manifest.index is None:
+                return []
+            return await self._index_reader.all_sample_ids(
+                manifest.index,
+                storage=self._storage,
+            )
+        return list(manifest.sample_index)
+
+    async def _read_manifest_page(
+        self,
+        manifest: DatasetManifest,
+        *,
+        offset: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        remaining_offset = offset
+        remaining_limit = limit
+        rows: list[dict[str, object]] = []
+        for shard in sorted(manifest.shards, key=lambda item: item.shard_index):
+            if remaining_limit <= 0:
+                break
+            if remaining_offset >= shard.row_count:
+                remaining_offset -= shard.row_count
+                continue
+            take = min(shard.row_count - remaining_offset, remaining_limit)
+            rows.extend(
+                await self._reader.read_row_batch(
+                    shard.uri,
+                    remaining_offset,
+                    take,
+                    self._storage,
+                )
+            )
+            remaining_limit -= take
+            remaining_offset = 0
+        return rows
+
     # ── list_samples ────────────────────────────────────────────────
 
     async def list_samples(
@@ -456,14 +563,53 @@ class SparseDatasetStorage:
 
         manifest = await self._get_manifest()
 
+        direct_manifest_page = (
+            sample_ids is None
+            and label_filter is None
+            and order_by == "id"
+            and random_seed is None
+        )
+        if direct_manifest_page:
+            raw_rows = await self._read_manifest_page(
+                manifest,
+                offset=offset,
+                limit=limit,
+            )
+            page_ids = [self._extract_sample_id(row) for row in raw_rows]
+            latest_by_sample: dict[str, Any] = {}
+            if with_labels:
+                latest_by_sample = await self._annotations.latest_by_sample_ids(
+                    dataset_id=self._dataset_id,
+                    org_id=self._org_id,
+                    sample_ids=page_ids,
+                )
+            predictions_by_sample: dict[str, Any] = {}
+            if with_predictions or prediction_job_id is not None:
+                predictions_by_sample = await self._load_predictions(
+                    prediction_job_id=prediction_job_id,
+                    manifest=manifest,
+                    sample_ids=page_ids,
+                )
+            return [
+                self._enrich_sample_row(
+                    self._row_to_sample_row(raw_row),
+                    latest_by_sample=latest_by_sample,
+                    predictions_by_sample=predictions_by_sample,
+                    with_labels=with_labels,
+                    with_predictions=with_predictions,
+                )
+                for raw_row in raw_rows
+            ], manifest.total_rows
+
         # ── resolve candidate sample_ids ─────────────────────────
         if sample_ids is not None:
             if len(sample_ids) == 0:
                 return [], 0
-            wanted = set(sample_ids)
-            all_sids = [sid for sid in manifest.sample_index if sid in wanted]
+            locators = await self._lookup_locators(manifest, sample_ids)
+            all_sids = [sid for sid in sample_ids if sid in locators]
         else:
-            all_sids = list(manifest.sample_index.keys())
+            all_sids = await self._all_sample_ids(manifest)
+            locators = await self._lookup_locators(manifest, all_sids)
 
         # ── labels (load only for filter / order, not all rows) ──
         latest_by_sample: dict[str, Any] = {}
@@ -502,13 +648,11 @@ class SparseDatasetStorage:
             rng.shuffle(all_sids)
         else:
             # Natural order: by (shard_index, row_index)
-            all_sids = self._sorted_shard_ids(manifest, all_sids)
-
-        # ── predictions ──────────────────────────────────────────
-        predictions_by_sample: dict[str, Any] = {}
-        if with_predictions or prediction_job_id is not None:
-            predictions_by_sample = await self._load_predictions(
-                prediction_job_id=prediction_job_id, manifest=manifest
+            all_sids.sort(
+                key=lambda sid: (
+                    locators[sid].shard_index,
+                    locators[sid].row_index,
+                )
             )
 
         total = len(all_sids)
@@ -516,10 +660,19 @@ class SparseDatasetStorage:
         # ── paginate ─────────────────────────────────────────────
         page_ids = all_sids[offset : offset + limit]
 
+        # ── predictions ──────────────────────────────────────────
+        predictions_by_sample: dict[str, Any] = {}
+        if with_predictions or prediction_job_id is not None:
+            predictions_by_sample = await self._load_predictions(
+                prediction_job_id=prediction_job_id,
+                manifest=manifest,
+                sample_ids=page_ids,
+            )
+
         # ── build SampleRow objects ──────────────────────────────
         result: list[SampleRow] = []
         for sid in page_ids:
-            locator = manifest.sample_index.get(sid)
+            locator = locators.get(sid)
             if locator is None:
                 continue
 
@@ -527,30 +680,47 @@ class SparseDatasetStorage:
             if raw_row is None:
                 continue
 
-            sr = self._row_to_sample_row(raw_row)
-
-            if with_labels:
-                entry = latest_by_sample.get(sid)
-                if entry is not None:
-                    sr.latest_label = entry.label
-
-            if with_predictions:
-                pred = predictions_by_sample.get(sid)
-                if pred is not None:
-                    sr.latest_prediction = {
-                        "predicted_label": pred.get("predicted_label"),
-                        "confidence": pred.get("confidence"),
-                        "all_scores": pred.get("all_scores"),
-                        "model_id": pred.get("model_id"),
-                        "target": pred.get("target"),
-                        "model_version": pred.get("model_version"),
-                        "job_id": pred.get("job_id"),
-                        "error": pred.get("error"),
-                    }
-
-            result.append(sr)
+            result.append(
+                self._enrich_sample_row(
+                    self._row_to_sample_row(raw_row),
+                    latest_by_sample=latest_by_sample,
+                    predictions_by_sample=predictions_by_sample,
+                    with_labels=with_labels,
+                    with_predictions=with_predictions,
+                )
+            )
 
         return result, total
+
+    @staticmethod
+    def _enrich_sample_row(
+        row: SampleRow,
+        *,
+        latest_by_sample: dict[str, Any],
+        predictions_by_sample: dict[str, Any],
+        with_labels: bool,
+        with_predictions: bool,
+    ) -> SampleRow:
+        if (
+            with_labels
+            and (annotation := latest_by_sample.get(row.sample_id)) is not None
+        ):
+            row.latest_label = annotation.label
+        if (
+            with_predictions
+            and (prediction := predictions_by_sample.get(row.sample_id)) is not None
+        ):
+            row.latest_prediction = {
+                "predicted_label": prediction.get("predicted_label"),
+                "confidence": prediction.get("confidence"),
+                "all_scores": prediction.get("all_scores"),
+                "model_id": prediction.get("model_id"),
+                "target": prediction.get("target"),
+                "model_version": prediction.get("model_version"),
+                "job_id": prediction.get("job_id"),
+                "error": prediction.get("error"),
+            }
+        return row
 
     async def _list_samples_lazyframe(
         self,
@@ -630,6 +800,7 @@ class SparseDatasetStorage:
         *,
         prediction_job_id: str | None,
         manifest: DatasetManifest,
+        sample_ids: list[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Load prediction results, optionally filtered by job_id.
 
@@ -639,6 +810,8 @@ class SparseDatasetStorage:
         """
         import pyarrow.parquet as pq
 
+        del manifest
+
         if prediction_job_id is None:
             uris = await self._accumulated_prediction_uris()
         else:
@@ -646,12 +819,17 @@ class SparseDatasetStorage:
                 self._prediction_job_prefix(prediction_job_id)
             )
 
+        filters = (
+            [("sample_id", "in", sorted(set(sample_ids)))]
+            if sample_ids is not None and sample_ids
+            else None
+        )
         results: dict[str, dict[str, Any]] = {}
         for uri in uris:
             if not uri.endswith(".parquet"):
                 continue
             raw = await self._storage.get_bytes(uri)
-            table = pq.read_table(_io.BytesIO(raw))
+            table = pq.read_table(_io.BytesIO(raw), filters=filters)
             rows = table.to_pylist()
             for row in rows:
                 sid = str(row.get("sample_id", ""))
@@ -677,7 +855,7 @@ class SparseDatasetStorage:
     async def get_sample(self, sample_id: str) -> SampleRow | None:
         """Look up a single sample by id via the manifest sample_index."""
         manifest = await self._get_manifest()
-        locator = manifest.sample_index.get(sample_id)
+        locator = (await self._lookup_locators(manifest, [sample_id])).get(sample_id)
         if locator is None:
             return None
 
@@ -699,10 +877,12 @@ class SparseDatasetStorage:
 
         manifest = await self._get_manifest()
 
+        locators = await self._lookup_locators(manifest, sample_ids)
+
         # Group sample_ids by shard_index
         by_shard: dict[int, list[tuple[str, int]]] = {}
         for sid in sample_ids:
-            locator = manifest.sample_index.get(sid)
+            locator = locators.get(sid)
             if locator is not None:
                 by_shard.setdefault(locator.shard_index, []).append(
                     (sid, locator.row_index)
@@ -740,7 +920,7 @@ class SparseDatasetStorage:
         if not sample_ids:
             return set()
         manifest = await self._get_manifest()
-        return sample_ids.intersection(manifest.sample_index)
+        return set(await self._lookup_locators(manifest, sample_ids))
 
     # ── write_samples ───────────────────────────────────────────────
 
@@ -780,6 +960,12 @@ class SparseDatasetStorage:
                 shards=[],
                 sample_index={},
                 schema_version="v2",
+            )
+
+        if existing_manifest.manifest_version == "v3" and existing_manifest.total_rows:
+            raise NotImplementedError(
+                "appending samples to manifest-v3 sparse datasets requires an "
+                "explicit index merge operation"
             )
 
         shard_idx = len(existing_manifest.shards)
@@ -965,14 +1151,11 @@ class SparseDatasetStorage:
             return 0
 
         update_map = dict(updates)
-        existing = await self._annotations.load_all(
-            dataset_id=self._dataset_id, org_id=self._org_id
+        id_to_rec = await self._annotations.records_by_annotation_ids(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            annotation_ids=set(update_map),
         )
-
-        # Build annotation_id → existing record lookup
-        id_to_rec: dict[str, SparseAnnotationRecord] = {}
-        for rec in existing:
-            id_to_rec[rec.annotation_id] = rec
 
         new_records: list[SparseAnnotationRecord] = []
         for ann_id, new_label in update_map.items():
@@ -1017,10 +1200,12 @@ class SparseDatasetStorage:
             return 0
 
         doomed: set[str] = set(annotation_ids)
-        existing = await self._annotations.load_all(
-            dataset_id=self._dataset_id, org_id=self._org_id
+        existing_by_id = await self._annotations.records_by_annotation_ids(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            annotation_ids=doomed,
         )
-        deleted_records = [r for r in existing if r.annotation_id in doomed]
+        deleted_records = list(existing_by_id.values())
         deleted_count = len(deleted_records)
         if deleted_count == 0:
             return 0
@@ -1051,9 +1236,21 @@ class SparseDatasetStorage:
 
     async def get_annotation_stats(self) -> dict[str, Any]:
         """Return the storage-aggregate annotation statistics contract."""
-        label_counts = await self._annotations.stats(
-            dataset_id=self._dataset_id, org_id=self._org_id
-        )
+        import polars as pl
+
+        latest = await self._latest_annotation_lazyframe()
+        if latest is None:
+            label_counts: dict[str, int] = {}
+        else:
+            stats = await (
+                latest.filter(pl.col("label").is_not_null() & (pl.col("label") != ""))
+                .group_by("label")
+                .len()
+                .collect_async(engine="streaming")
+            )
+            label_counts = {
+                str(row["label"]): int(row["len"]) for row in stats.to_dicts()
+            }
         manifest = await self._get_manifest()
         annotated_samples = sum(label_counts.values())
         return {
@@ -1131,31 +1328,20 @@ class SparseDatasetStorage:
         dataset_id: str | None = None,
         limit: int | None = None,
     ) -> list[Annotation]:
-        latest_by_sample = await self._annotations.latest_by_sample(
-            dataset_id=self._dataset_id, org_id=self._org_id
-        )
-        items = list(latest_by_sample.values())
+        import polars as pl
+
+        latest = await self._latest_annotation_lazyframe()
+        if latest is None:
+            return []
         if sample_id:
-            items = [i for i in items if i.sample_id == sample_id]
+            latest = latest.filter(pl.col("sample_id") == sample_id)
+        latest = latest.filter(
+            pl.col("label").is_not_null() & (pl.col("label") != "")
+        ).sort("created_at", descending=True)
         if limit is not None:
-            items = items[:limit]
-        return [
-            Annotation(
-                id=item.annotation_id,
-                sample_id=item.sample_id,
-                label=item.label,
-                annotation_value=(
-                    _json.loads(item.annotation_value)
-                    if item.annotation_value
-                    else None
-                ),
-                created_by=item.created_by,
-                created_at=datetime.fromisoformat(item.created_at)
-                if item.created_at
-                else datetime.now(timezone.utc),
-            )
-            for item in items
-        ]
+            latest = latest.limit(limit)
+        frame = await latest.collect_async(engine="streaming")
+        return [_annotation_from_sparse_row(row) for row in frame.to_dicts()]
 
     # ── list_annotations_by_sample_ids ──────────────────────────────
 
@@ -1164,40 +1350,31 @@ class SparseDatasetStorage:
     ) -> list[Annotation]:
         if not sample_ids:
             return []
-        sids = set(sample_ids)
-        latest_by_sample = await self._annotations.latest_by_sample(
-            dataset_id=self._dataset_id, org_id=self._org_id
-        )
-        return [
-            Annotation(
-                id=item.annotation_id,
-                sample_id=item.sample_id,
-                label=item.label,
-                annotation_value=(
-                    _json.loads(item.annotation_value)
-                    if item.annotation_value
-                    else None
-                ),
-                created_by=item.created_by,
-                created_at=datetime.fromisoformat(item.created_at)
-                if item.created_at
-                else datetime.now(timezone.utc),
-            )
-            for item in latest_by_sample.values()
-            if item.sample_id in sids
-        ]
+        import polars as pl
+
+        latest = await self._latest_annotation_lazyframe()
+        if latest is None:
+            return []
+        frame = await latest.filter(
+            pl.col("sample_id").is_in(sample_ids)
+            & pl.col("label").is_not_null()
+            & (pl.col("label") != "")
+        ).collect_async(engine="streaming")
+        return [_annotation_from_sparse_row(row) for row in frame.to_dicts()]
 
     async def get_annotations_batch(
         self, annotation_ids: list[str]
     ) -> list[Annotation]:
         if not annotation_ids:
             return []
-        wanted = set(annotation_ids)
-        annotations = await self.list_annotations()
+        records = await self._annotations.records_by_annotation_ids(
+            dataset_id=self._dataset_id,
+            org_id=self._org_id,
+            annotation_ids=annotation_ids,
+        )
         by_id = {
-            annotation.id: annotation
-            for annotation in annotations
-            if annotation.id in wanted
+            annotation_id: _annotation_from_sparse_record(record)
+            for annotation_id, record in records.items()
         }
         return [
             by_id[annotation_id]
@@ -1312,7 +1489,9 @@ class SparseDatasetStorage:
         )
         if shard_entries:
             await self._merge_accumulated_predictions(
-                [shard_uri for shard_uri, _ in shard_entries]
+                [shard_uri for shard_uri, _ in shard_entries],
+                job_id=job_id,
+                job_row_count=total,
             )
         return total
 
@@ -1355,68 +1534,93 @@ class SparseDatasetStorage:
         )
 
     async def _merge_accumulated_predictions(
-        self, new_prediction_uris: list[str]
+        self,
+        new_prediction_uris: list[str],
+        *,
+        job_id: str,
+        job_row_count: int,
     ) -> None:
-        import polars as pl
+        import duckdb
 
-        new_frames = await self._read_prediction_dataframes(new_prediction_uris)
-        if not new_frames:
+        if not new_prediction_uris:
             return
+        manifest = await self._get_manifest()
+        full_coverage = job_row_count >= manifest.total_rows
+        source_uris = list(new_prediction_uris)
+        if not full_coverage:
+            source_uris = [*await self._accumulated_prediction_uris(), *source_uris]
 
-        existing_frames = await self._read_prediction_dataframes(
-            await self._accumulated_prediction_uris()
-        )
-        merged = pl.concat(
-            [*existing_frames, *new_frames],
-            how="diagonal_relaxed",
-        )
-        merged = self._normalize_prediction_dataframe(merged)
-        merged = merged.unique(
-            subset=["sample_id"],
-            keep="last",
-            maintain_order=True,
-        ).select(_PREDICTION_COLUMNS)
+        with tempfile.TemporaryDirectory(
+            prefix="sparse-prediction-compact-"
+        ) as temporary_directory:
+            source_paths: list[str] = []
+            for index, uri in enumerate(source_uris):
+                path = f"{temporary_directory}/source-{index:06d}.parquet"
+                await self._storage.get_file(uri, path)
+                source_paths.append(path)
+            output_path = f"{temporary_directory}/current.parquet"
+            temp_path = f"{temporary_directory}/duckdb-temp"
+            connection = duckdb.connect(":memory:")
+            try:
+                connection.execute(
+                    "SET memory_limit = ?",
+                    [self._prediction_compaction_memory_limit],
+                )
+                connection.execute("SET temp_directory = ?", [temp_path])
+                connection.execute(
+                    "SET max_temp_directory_size = ?",
+                    [self._prediction_compaction_temp_limit],
+                )
+                connection.execute("SET threads = 1")
+                connection.execute("SET preserve_insertion_order = false")
+                union_sql = " UNION ALL ".join(
+                    f"SELECT *, {rank} AS _source_rank "
+                    f"FROM read_parquet({_sql_literal(path)}, union_by_name=true)"
+                    for rank, path in enumerate(source_paths)
+                )
+                columns = ", ".join(_PREDICTION_COLUMNS)
+                connection.execute(
+                    f"""
+                    COPY (
+                        SELECT {columns}
+                        FROM (
+                            SELECT *, row_number() OVER (
+                                PARTITION BY sample_id
+                                ORDER BY _source_rank DESC
+                            ) AS _latest_rank
+                            FROM ({union_sql})
+                        )
+                        WHERE _latest_rank = 1
+                    ) TO {_sql_literal(output_path)} (
+                        FORMAT PARQUET,
+                        COMPRESSION ZSTD,
+                        ROW_GROUP_SIZE {self._prediction_compaction_row_group_rows}
+                    )
+                    """
+                )
+            finally:
+                connection.close()
 
-        buf = _io.BytesIO()
-        merged.write_parquet(buf, compression="snappy")
+            snapshot_name = (
+                f"{self._final_prediction_prefix()}snapshot-"
+                f"{job_id}-{_uuid.uuid4().hex}.parquet"
+            )
+            snapshot_uri = await self._storage.put_file(
+                object_name=snapshot_name,
+                path=output_path,
+                content_type="application/octet-stream",
+            )
+        pointer = {
+            "snapshot_uri": snapshot_uri,
+            "job_id": job_id,
+            "job_row_count": job_row_count,
+            "full_coverage": full_coverage,
+        }
         await self._storage.put_bytes(
-            object_name=self._accumulated_prediction_object_name(),
-            data=buf.getvalue(),
-            content_type="application/octet-stream",
+            object_name=f"{self._final_prediction_prefix()}{_CURRENT_PREDICTION_POINTER}",
+            data=_json.dumps(pointer, sort_keys=True).encode("utf-8"),
+            content_type="application/json",
         )
-
-    async def _read_prediction_dataframes(self, uris: list[str]) -> list[Any]:
-        import polars as pl
-
-        frames: list[Any] = []
-        for uri in uris:
-            if not uri.endswith(".parquet"):
-                continue
-            raw = await self._storage.get_bytes(uri)
-            df = pl.read_parquet(_io.BytesIO(raw))
-            if "sample_id" not in df.columns:
-                raise ValueError(f"Prediction parquet is missing sample_id: {uri}")
-            frames.append(self._normalize_prediction_dataframe(df))
-        return frames
-
-    @staticmethod
-    def _normalize_prediction_dataframe(df: Any) -> Any:
-        import polars as pl
-
-        for column in _PREDICTION_COLUMNS:
-            if column not in df.columns:
-                df = df.with_columns(pl.lit(None).alias(column))
-        return df.with_columns(
-            pl.col("sample_id").cast(pl.Utf8),
-            pl.col("predicted_label").cast(pl.Utf8),
-            pl.col("confidence").cast(pl.Float64),
-            pl.col("all_scores").cast(pl.Utf8),
-            pl.col("model_id").cast(pl.Utf8),
-            pl.col("target").cast(pl.Utf8),
-            pl.col("model_version").cast(pl.Utf8),
-            pl.col("job_id").cast(pl.Utf8),
-            pl.col("error").cast(pl.Utf8),
-        ).select(_PREDICTION_COLUMNS)
 
     async def list_predictions(
         self,
@@ -1548,7 +1752,7 @@ class SparseDatasetStorage:
 
     async def get_sample_feature(self, sample_id: str) -> SampleFeature | None:
         manifest = await self._get_manifest()
-        if sample_id not in manifest.sample_index:
+        if not await self._lookup_locators(manifest, [sample_id]):
             return None
         async with self._session_factory() as session:
             row = await session.get(SampleFeatureORM, sample_id)
@@ -1578,7 +1782,7 @@ class SparseDatasetStorage:
         score.
         """
         manifest = await self._get_manifest()
-        manifest_ids = set(manifest.sample_index.keys())
+        manifest_ids = set(await self._all_sample_ids(manifest))
 
         import math
 
@@ -1754,26 +1958,37 @@ class SparseDatasetStorage:
     async def recent_annotations(self, limit: int = 20) -> dict:
         """Return the most recent annotations for this dataset.
 
-        Reads all annotation parquet sidecar files via
-        :class:`SparseAnnotationStore`, sorts by ``created_at``
-        descending, and limits to *limit* entries.
+        Projection, ordering, and limiting stay in the lazy Parquet query so
+        the caller does not build the entire annotation history in Python.
         """
-        records: list[SparseAnnotationRecord] = await self._annotations.load_all(
-            dataset_id=self._dataset_id, org_id=self._org_id
+        if limit <= 0:
+            return {"entries": []}
+        history = await self._annotation_history_lazyframe()
+        if history is None:
+            return {"entries": []}
+        frame = await (
+            history.select(
+                "annotation_id",
+                "sample_id",
+                "label",
+                "created_by",
+                "created_at",
+            )
+            .sort("created_at", descending=True)
+            .limit(limit)
+            .collect_async(engine="streaming")
         )
-        records.sort(key=lambda r: r.created_at, reverse=True)
-        recent = records[:limit]
 
         return {
             "entries": [
                 {
-                    "id": rec.annotation_id,
-                    "sample_id": rec.sample_id,
-                    "label": rec.label,
-                    "created_by": rec.created_by,
-                    "created_at": rec.created_at,
+                    "id": str(row["annotation_id"]),
+                    "sample_id": str(row["sample_id"]),
+                    "label": str(row["label"] or ""),
+                    "created_by": str(row["created_by"] or ""),
+                    "created_at": str(row["created_at"] or ""),
                 }
-                for rec in recent
+                for row in frame.to_dicts()
             ]
         }
 
@@ -1786,6 +2001,12 @@ class SparseDatasetStorage:
             return 0
 
         manifest = await self._get_manifest()
+
+        if manifest.manifest_version == "v3":
+            raise NotImplementedError(
+                "deleting samples from manifest-v3 sparse datasets requires an "
+                "atomic shard and index rewrite"
+            )
 
         to_delete: list[tuple[str, SampleLocator]] = []
         for sid in sample_ids:
@@ -1883,3 +2104,46 @@ class SparseDatasetStorage:
             raise RuntimeError(
                 f"Dataset metadata disappeared during deletion: {self._dataset_id}"
             )
+
+
+def _fingerprint_uris(uris: list[str]) -> str:
+    digest = hashlib.sha256()
+    for uri in uris:
+        digest.update(uri.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _annotation_from_sparse_record(record: SparseAnnotationRecord) -> Annotation:
+    return Annotation(
+        id=record.annotation_id,
+        sample_id=record.sample_id,
+        label=record.label,
+        annotation_value=(
+            _json.loads(record.annotation_value) if record.annotation_value else None
+        ),
+        created_by=record.created_by,
+        created_at=(
+            datetime.fromisoformat(record.created_at)
+            if record.created_at
+            else datetime.now(timezone.utc)
+        ),
+    )
+
+
+def _annotation_from_sparse_row(row: dict[str, object]) -> Annotation:
+    return _annotation_from_sparse_record(
+        SparseAnnotationRecord(
+            annotation_id=str(row["annotation_id"]),
+            sample_id=str(row["sample_id"]),
+            label=str(row["label"] or ""),
+            annotation_value=str(row["annotation_value"] or ""),
+            created_by=str(row["created_by"] or ""),
+            created_at=str(row["created_at"] or ""),
+            user_id=str(row["user_id"] or ""),
+        )
+    )
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"

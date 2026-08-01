@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator, Sequence
+from contextlib import suppress
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -71,6 +73,15 @@ class GrpcScUpstream:
         if not batches:
             return pa.table({})
         return pa.Table.from_batches(batches)
+
+    @staticmethod
+    def _read_flight_chunk(
+        reader: flight.FlightStreamReader,  # pyright: ignore[reportPrivateImportUsage]
+    ) -> pa.Table | pa.RecordBatch | None:
+        try:
+            return reader.read_chunk().data
+        except StopIteration:
+            return None
 
     async def list_inspections(
         self,
@@ -149,6 +160,61 @@ class GrpcScUpstream:
             latest_update=resp.latest_update,
         )
 
+    async def get_sample_count(self, inspection_time: datetime, wafer_key: int) -> int:
+        inspection = await self.get_inspection(inspection_time, wafer_key)
+        return max(int(inspection.defects), 0) if inspection is not None else 0
+
+    async def stream_sample_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        offset: int = 0,
+        count: int | None = None,
+        batch_rows: int,
+        projection: Sequence[str] | None = None,
+        on_progress: ScSampleProgressCallback | None = None,
+    ) -> AsyncIterator[pa.RecordBatch]:
+        if offset < 0:
+            raise ValueError("offset must not be negative")
+        if count is not None and count < 0:
+            raise ValueError("count must not be negative")
+        if batch_rows <= 0:
+            raise ValueError("batch_rows must be greater than zero")
+
+        ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
+            json.dumps(
+                {
+                    "type": "list_samples",
+                    "inspection_time": inspection_time.isoformat(),
+                    "wafer_key": wafer_key,
+                    "offset": offset,
+                    "count": count,
+                    "batch_rows": batch_rows,
+                    "projection": list(projection) if projection is not None else None,
+                }
+            ).encode()
+        )
+        client = self._ensure_flight_client()
+        reader = await asyncio.to_thread(client.do_get, ticket)
+        loaded = 0
+        try:
+            while True:
+                data = await asyncio.to_thread(self._read_flight_chunk, reader)
+                if data is None:
+                    break
+                batches = data.to_batches() if isinstance(data, pa.Table) else [data]
+                for batch in batches:
+                    if batch.num_rows == 0:
+                        continue
+                    loaded += batch.num_rows
+                    if on_progress is not None:
+                        on_progress(loaded)
+                    yield batch
+        finally:
+            with suppress(Exception):
+                await asyncio.to_thread(reader.cancel)
+
     async def list_samples(
         self,
         inspection_time: datetime,
@@ -161,20 +227,18 @@ class GrpcScUpstream:
         reticle_offset_y: int = 0,
         on_progress: ScSampleProgressCallback | None = None,
     ) -> pl.LazyFrame:
-        ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
-            json.dumps(
-                {
-                    "type": "list_samples",
-                    "inspection_time": inspection_time.isoformat(),
-                    "wafer_key": wafer_key,
-                }
-            ).encode()
-        )
-        table = await asyncio.to_thread(
-            self._read_list_samples_table,
-            ticket,
-            on_progress,
-        )
+        batches = [
+            batch
+            async for batch in self.stream_sample_batches(
+                inspection_time,
+                wafer_key,
+                offset=offset,
+                count=count,
+                batch_rows=65_536,
+                on_progress=on_progress,
+            )
+        ]
+        table = pa.Table.from_batches(batches) if batches else pa.table({})
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
         if df.height == 0 and not df.columns:
@@ -252,10 +316,6 @@ class GrpcScUpstream:
             ]
         )
 
-        if offset:
-            lf = lf.slice(offset, count or 0)
-        elif count is not None:
-            lf = lf.slice(0, count)
         return lf
 
     async def list_review_images(

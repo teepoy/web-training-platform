@@ -76,12 +76,18 @@ def _build_dataset_storage_factory(
     repository = DatasetSqlRepository(
         session_factory=session_factory.sessionmaker,
     )
-    payload_store = DatasetPayloadStore(storage=artifact_storage)
+    payload_store = DatasetPayloadStore(
+        storage=artifact_storage,
+        manifest_cache_max_bytes=cfg.storage.sparse_manifest_cache_max_bytes,
+    )
     return DatasetStorageFactory(
         repo=repository,
         storage=artifact_storage,
         payload_store=payload_store,
         session_factory=session_factory.sessionmaker,
+        prediction_compaction_memory_limit=cfg.prediction.compaction_memory_limit,
+        prediction_compaction_temp_limit=cfg.prediction.compaction_temp_limit,
+        prediction_compaction_row_group_rows=(cfg.prediction.compaction_row_group_rows),
     )
 
 

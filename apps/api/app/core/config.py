@@ -74,6 +74,7 @@ class StorageConfig(ConfigSection):
     kind: str = "minio"
     minio: MinioConfig = Field(default_factory=MinioConfig)
     runtime_bucket: str = "finetune-runtime-inputs"
+    sparse_manifest_cache_max_bytes: int = 16_777_216
 
 
 class K8sConfig(ConfigSection):
@@ -151,6 +152,12 @@ class RuntimeRoutingConfig(ConfigSection):
 
 class PredictionConfig(ConfigSection):
     sparse_chunk_size: int = 32
+    progress_flush_rows: int = 5_000
+    progress_flush_seconds: float = 5.0
+    write_batch_rows: int = 5_000
+    compaction_memory_limit: str = "512MiB"
+    compaction_temp_limit: str = "4GiB"
+    compaction_row_group_rows: int = 100_000
 
 
 class LlmConfig(ConfigSection):
@@ -200,8 +207,63 @@ class ScMockConfig(ConfigSection):
     db_url: str = ""
 
 
+class ScDataProviderConfig(ConfigSection):
+    implementation: Literal["duckdb"]
+    max_rss_mb: int
+    cache_dir: str
+    cache_namespace: str
+    revision_namespace: str
+    duckdb_memory_limit: str
+    duckdb_threads: int
+    duckdb_temp_directory_size: str
+    duckdb_allocator_background_threads: bool
+    duckdb_preserve_insertion_order: bool
+    duckdb_allocator_flush_threshold: str
+    duckdb_allocator_bulk_deallocation_flush_threshold: str
+    connection_recycle_rss_mb: int
+    worker_count: int
+    container_memory_limit_mb: int
+    python_overhead_mb: int
+    service_headroom_mb: int
+    object_cache_max_bytes: int
+    object_cache_low_watermark_bytes: int
+    object_idle_ttl_seconds: int
+    cleanup_interval_seconds: int
+    stale_write_seconds: int
+    lease_ttl_seconds: int
+    lease_heartbeat_seconds: int
+    build_lock_ttl_seconds: int
+    build_lock_heartbeat_seconds: int
+    build_wait_timeout_seconds: int
+    build_poll_interval_ms: int
+    sql_timeout_seconds: int
+    max_response_bytes: int
+    arrow_batch_rows: int
+    stream_queue_capacity: int
+    stream_queue_poll_interval_ms: int
+    sse_heartbeat_seconds: int
+
+
+class ScPipelineConfig(ConfigSection):
+    import_batch_rows: int
+    index_row_group_rows: int
+    materialization_batch_rows: int
+    materialization_max_error_records: int
+    prediction_max_materialized_bytes: int
+    training_max_rows: int
+    training_max_materialized_bytes: int
+
+
 class ScConfig(ConfigSection):
     mock: ScMockConfig = Field(default_factory=ScMockConfig)
+    data_provider: ScDataProviderConfig
+    pipeline: ScPipelineConfig
+
+
+def _default_sc_config() -> ScConfig:
+    base = OmegaConf.load(_config_root() / "base.yaml")
+    data = OmegaConf.to_container(base.sc, resolve=True)
+    return ScConfig.model_validate(data)
 
 
 class AppConfig(ConfigSection):
@@ -222,7 +284,7 @@ class AppConfig(ConfigSection):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
-    sc: ScConfig = Field(default_factory=ScConfig)
+    sc: ScConfig = Field(default_factory=_default_sc_config)
     prediction: PredictionConfig = Field(default_factory=PredictionConfig)
     model: str = "openai/clip-vit-base-patch32"
     dimension: int = 512
@@ -231,6 +293,15 @@ class AppConfig(ConfigSection):
 def _require(value: str, field_name: str) -> None:
     if not value:
         raise RuntimeError(f"Missing required config: {field_name}")
+
+
+def _parse_boolean_environment(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError(f"expected true or false, got {value!r}")
 
 
 def _as_app_config(cfg: AppConfig | DictConfig) -> AppConfig:
@@ -367,6 +438,128 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     redis_password = os.getenv("REDIS_PASSWORD")
     if redis_password:
         cfg.redis.password = redis_password
+    data_provider_environment = {
+        "SC_DATA_PROVIDER_IMPLEMENTATION": ("implementation", str),
+        "SC_DATA_PROVIDER_MAX_RSS_MB": ("max_rss_mb", int),
+        "SC_DATA_PROVIDER_CACHE_DIR": ("cache_dir", str),
+        "SC_DATA_PROVIDER_CACHE_NAMESPACE": ("cache_namespace", str),
+        "SC_DATA_PROVIDER_REVISION_NAMESPACE": ("revision_namespace", str),
+        "SC_DATA_PROVIDER_DUCKDB_MEMORY_LIMIT": ("duckdb_memory_limit", str),
+        "SC_DATA_PROVIDER_DUCKDB_THREADS": ("duckdb_threads", int),
+        "SC_DATA_PROVIDER_DUCKDB_TEMP_DIRECTORY_SIZE": (
+            "duckdb_temp_directory_size",
+            str,
+        ),
+        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BACKGROUND_THREADS": (
+            "duckdb_allocator_background_threads",
+            _parse_boolean_environment,
+        ),
+        "SC_DATA_PROVIDER_DUCKDB_PRESERVE_INSERTION_ORDER": (
+            "duckdb_preserve_insertion_order",
+            _parse_boolean_environment,
+        ),
+        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_FLUSH_THRESHOLD": (
+            "duckdb_allocator_flush_threshold",
+            str,
+        ),
+        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BULK_DEALLOCATION_FLUSH_THRESHOLD": (
+            "duckdb_allocator_bulk_deallocation_flush_threshold",
+            str,
+        ),
+        "SC_DATA_PROVIDER_CONNECTION_RECYCLE_RSS_MB": (
+            "connection_recycle_rss_mb",
+            int,
+        ),
+        "SC_DATA_PROVIDER_WORKER_COUNT": ("worker_count", int),
+        "SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB": (
+            "container_memory_limit_mb",
+            int,
+        ),
+        "SC_DATA_PROVIDER_PYTHON_OVERHEAD_MB": ("python_overhead_mb", int),
+        "SC_DATA_PROVIDER_SERVICE_HEADROOM_MB": ("service_headroom_mb", int),
+        "SC_DATA_PROVIDER_OBJECT_CACHE_MAX_BYTES": ("object_cache_max_bytes", int),
+        "SC_DATA_PROVIDER_OBJECT_CACHE_LOW_WATERMARK_BYTES": (
+            "object_cache_low_watermark_bytes",
+            int,
+        ),
+        "SC_DATA_PROVIDER_OBJECT_IDLE_TTL_SECONDS": (
+            "object_idle_ttl_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_CLEANUP_INTERVAL_SECONDS": (
+            "cleanup_interval_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_STALE_WRITE_SECONDS": ("stale_write_seconds", int),
+        "SC_DATA_PROVIDER_LEASE_TTL_SECONDS": ("lease_ttl_seconds", int),
+        "SC_DATA_PROVIDER_LEASE_HEARTBEAT_SECONDS": (
+            "lease_heartbeat_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_BUILD_LOCK_TTL_SECONDS": (
+            "build_lock_ttl_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_BUILD_LOCK_HEARTBEAT_SECONDS": (
+            "build_lock_heartbeat_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_BUILD_WAIT_TIMEOUT_SECONDS": (
+            "build_wait_timeout_seconds",
+            int,
+        ),
+        "SC_DATA_PROVIDER_BUILD_POLL_INTERVAL_MS": ("build_poll_interval_ms", int),
+        "SC_DATA_PROVIDER_SQL_TIMEOUT_SECONDS": ("sql_timeout_seconds", int),
+        "SC_DATA_PROVIDER_MAX_RESPONSE_BYTES": ("max_response_bytes", int),
+        "SC_DATA_PROVIDER_ARROW_BATCH_ROWS": ("arrow_batch_rows", int),
+        "SC_DATA_PROVIDER_STREAM_QUEUE_CAPACITY": ("stream_queue_capacity", int),
+        "SC_DATA_PROVIDER_STREAM_QUEUE_POLL_INTERVAL_MS": (
+            "stream_queue_poll_interval_ms",
+            int,
+        ),
+        "SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS": ("sse_heartbeat_seconds", int),
+    }
+    for environment_name, (field_name, converter) in data_provider_environment.items():
+        raw_value = os.getenv(environment_name)
+        if raw_value is not None:
+            cfg.sc.data_provider[field_name] = converter(raw_value)
+    sc_pipeline_environment = {
+        "SC_PIPELINE_IMPORT_BATCH_ROWS": ("import_batch_rows", int),
+        "SC_PIPELINE_INDEX_ROW_GROUP_ROWS": ("index_row_group_rows", int),
+        "SC_PIPELINE_MATERIALIZATION_BATCH_ROWS": (
+            "materialization_batch_rows",
+            int,
+        ),
+        "SC_PIPELINE_MATERIALIZATION_MAX_ERROR_RECORDS": (
+            "materialization_max_error_records",
+            int,
+        ),
+        "SC_PIPELINE_PREDICTION_MAX_MATERIALIZED_BYTES": (
+            "prediction_max_materialized_bytes",
+            int,
+        ),
+        "SC_PIPELINE_TRAINING_MAX_ROWS": ("training_max_rows", int),
+        "SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES": (
+            "training_max_materialized_bytes",
+            int,
+        ),
+    }
+    for environment_name, (field_name, converter) in sc_pipeline_environment.items():
+        raw_value = os.getenv(environment_name)
+        if raw_value is not None:
+            cfg.sc.pipeline[field_name] = converter(raw_value)
+    prediction_environment = {
+        "PREDICTION_PROGRESS_FLUSH_ROWS": ("progress_flush_rows", int),
+        "PREDICTION_PROGRESS_FLUSH_SECONDS": ("progress_flush_seconds", float),
+        "PREDICTION_WRITE_BATCH_ROWS": ("write_batch_rows", int),
+        "PREDICTION_COMPACTION_MEMORY_LIMIT": ("compaction_memory_limit", str),
+        "PREDICTION_COMPACTION_TEMP_LIMIT": ("compaction_temp_limit", str),
+        "PREDICTION_COMPACTION_ROW_GROUP_ROWS": ("compaction_row_group_rows", int),
+    }
+    for environment_name, (field_name, converter) in prediction_environment.items():
+        raw_value = os.getenv(environment_name)
+        if raw_value is not None:
+            cfg.prediction[field_name] = converter(raw_value)
     llm_base_url = os.getenv("LLM_BASE_URL")
     if llm_base_url:
         cfg.llm.base_url = llm_base_url

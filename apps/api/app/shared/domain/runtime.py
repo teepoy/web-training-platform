@@ -158,8 +158,21 @@ class ArtifactStorage(Protocol):
         """Store bytes and return the URI."""
         ...
 
+    async def put_file(
+        self,
+        object_name: str,
+        path: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Store a local file without first materializing it as one bytes object."""
+        ...
+
     async def get_bytes(self, uri: str) -> bytes:
         """Retrieve bytes from the given URI."""
+        ...
+
+    async def get_file(self, uri: str, destination: str) -> None:
+        """Stream an object into a local file."""
         ...
 
     async def delete(self, uri: str) -> None:

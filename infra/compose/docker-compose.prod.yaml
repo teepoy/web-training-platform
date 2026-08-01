@@ -31,7 +31,53 @@ x-platform-environment: &platform-environment
   LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
-  PERSPECTIVE_WS_MALLOC_CONF: ${PERSPECTIVE_WS_MALLOC_CONF:-background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000,retain:false}
+  SC_DATA_PROVIDER_IMPLEMENTATION: duckdb
+  SC_DATA_PROVIDER_MAX_RSS_MB: "1536"
+  SC_DATA_PROVIDER_CACHE_DIR: /mnt/sc-data-provider-cache
+  SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_REVISION_NAMESPACE: sc-data-provider
+  SC_DATA_PROVIDER_DUCKDB_MEMORY_LIMIT: 1GiB
+  SC_DATA_PROVIDER_DUCKDB_THREADS: "1"
+  SC_DATA_PROVIDER_DUCKDB_TEMP_DIRECTORY_SIZE: 2GiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BACKGROUND_THREADS: "true"
+  SC_DATA_PROVIDER_DUCKDB_PRESERVE_INSERTION_ORDER: "false"
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_FLUSH_THRESHOLD: 64MiB
+  SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BULK_DEALLOCATION_FLUSH_THRESHOLD: 128MiB
+  SC_DATA_PROVIDER_CONNECTION_RECYCLE_RSS_MB: "1280"
+  SC_DATA_PROVIDER_WORKER_COUNT: ${SC_DATA_PROVIDER_WORKER_COUNT:-4}
+  SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}
+  SC_DATA_PROVIDER_PYTHON_OVERHEAD_MB: "256"
+  SC_DATA_PROVIDER_SERVICE_HEADROOM_MB: "512"
+  SC_DATA_PROVIDER_OBJECT_CACHE_MAX_BYTES: "10737418240"
+  SC_DATA_PROVIDER_OBJECT_CACHE_LOW_WATERMARK_BYTES: "8589934592"
+  SC_DATA_PROVIDER_OBJECT_IDLE_TTL_SECONDS: "3600"
+  SC_DATA_PROVIDER_CLEANUP_INTERVAL_SECONDS: "60"
+  SC_DATA_PROVIDER_STALE_WRITE_SECONDS: "300"
+  SC_DATA_PROVIDER_LEASE_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_LEASE_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_LOCK_TTL_SECONDS: "60"
+  SC_DATA_PROVIDER_BUILD_LOCK_HEARTBEAT_SECONDS: "20"
+  SC_DATA_PROVIDER_BUILD_WAIT_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_BUILD_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SQL_TIMEOUT_SECONDS: "30"
+  SC_DATA_PROVIDER_MAX_RESPONSE_BYTES: "268435456"
+  SC_DATA_PROVIDER_ARROW_BATCH_ROWS: "16384"
+  SC_DATA_PROVIDER_STREAM_QUEUE_CAPACITY: "8"
+  SC_DATA_PROVIDER_STREAM_QUEUE_POLL_INTERVAL_MS: "100"
+  SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS: "15"
+  SC_PIPELINE_IMPORT_BATCH_ROWS: "25000"
+  SC_PIPELINE_INDEX_ROW_GROUP_ROWS: "65536"
+  SC_PIPELINE_MATERIALIZATION_BATCH_ROWS: "512"
+  SC_PIPELINE_MATERIALIZATION_MAX_ERROR_RECORDS: "1000"
+  SC_PIPELINE_PREDICTION_MAX_MATERIALIZED_BYTES: "17179869184"
+  SC_PIPELINE_TRAINING_MAX_ROWS: "100000"
+  SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES: "8589934592"
+  PREDICTION_PROGRESS_FLUSH_ROWS: "5000"
+  PREDICTION_PROGRESS_FLUSH_SECONDS: "5.0"
+  PREDICTION_WRITE_BATCH_ROWS: "5000"
+  PREDICTION_COMPACTION_MEMORY_LIMIT: 512MiB
+  PREDICTION_COMPACTION_TEMP_LIMIT: 4GiB
+  PREDICTION_COMPACTION_ROW_GROUP_ROWS: "100000"
 
 x-api-runtime: &api-runtime
   build:
@@ -69,7 +115,10 @@ services:
 
   api:
     <<: *api-runtime
-    mem_limit: ${API_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY:-4g}
     ports:
       - "8000:8000"
     healthcheck:
@@ -85,45 +134,32 @@ services:
       retries: 12
       start_period: 60s
 
-  perspective-ws:
+  sc-data-provider:
     <<: *api-runtime
     command:
       [
-        "python",
-        "/app/apps/api/scripts/perspective_container_watchdog.py",
-        "--",
-        "/usr/bin/supervisord",
-        "-c",
-        "/app/apps/api/supervisord.perspective.conf",
+        "/app/.venv/bin/uvicorn",
+        "app.sc_data_provider_main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--workers",
+        "${SC_DATA_PROVIDER_WORKER_COUNT:-4}",
       ]
-    mem_limit: ${PERSPECTIVE_WS_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB:-6144}m
     ports:
       - "8001:8001"
-    expose:
-      - "8002"
-      - "8003"
-      - "8004"
     healthcheck:
       test:
         [
           "CMD",
           "python",
-          "/app/apps/api/scripts/perspective_healthcheck.py",
-          "--url",
-          "http://localhost:8001/ready",
-          "--url",
-          "http://localhost:8002/ready",
-          "--url",
-          "http://localhost:8003/ready",
-          "--url",
-          "http://localhost:8004/ready",
-          "--timeout-seconds",
-          "2",
-          "--failure-threshold",
-          "3",
-          "--startup-grace-seconds",
-          "60",
-          "--force-container-restart",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=2)",
         ]
       interval: 10s
       timeout: 3s
@@ -139,8 +175,11 @@ services:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
     depends_on:
       - api
-      - perspective-ws
-    mem_limit: ${WEB_MEMORY:-1g}
+      - sc-data-provider
+    deploy:
+      resources:
+        limits:
+          memory: ${WEB_MEMORY:-1g}
     ports:
       - "5173:80"
     restart: unless-stopped
@@ -160,7 +199,10 @@ services:
     environment:
       <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${CPU_PREFECT_WORKER_LIMIT:-2}
-    mem_limit: ${CPU_WORKER_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${CPU_WORKER_MEMORY:-4g}
     shm_size: ${CPU_WORKER_SHM_SIZE:-1g}
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
@@ -175,6 +217,8 @@ services:
       - gpu
     deploy:
       resources:
+        limits:
+          memory: ${GPU_WORKER_MEMORY:-16g}
         reservations:
           devices:
             - driver: nvidia
@@ -186,7 +230,6 @@ services:
     environment:
       <<: *platform-environment
       PREFECT_WORKER_LIMIT: ${GPU_PREFECT_WORKER_LIMIT:-1}
-    mem_limit: ${GPU_WORKER_MEMORY:-16g}
     shm_size: ${GPU_WORKER_SHM_SIZE:-2g}
     volumes:
       - ${PLATFORM_DATA_DIR:-./data/platform}:/mnt
@@ -207,7 +250,10 @@ services:
       - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       - REDIS_URL=redis://redis:6379/0
       # Mock SQLite DB paths use sc-upstream service defaults.
-    mem_limit: ${SC_UPSTREAM_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_UPSTREAM_MEMORY:-4g}
     shm_size: ${SC_UPSTREAM_SHM_SIZE:-1g}
     expose:
       - "9091"
@@ -246,7 +292,10 @@ services:
       - S3_MAX_CONNS=1000
       - SC_UPSTREAM_ADDR=sc-upstream:9091
       # Mock S3 endpoint/credentials use image-parser service defaults.
-    mem_limit: ${IMAGE_PARSER_MEMORY:-8g}
+    deploy:
+      resources:
+        limits:
+          memory: ${IMAGE_PARSER_MEMORY:-8g}
     shm_size: ${IMAGE_PARSER_SHM_SIZE:-2g}
     ports:
       - "8090:8090"

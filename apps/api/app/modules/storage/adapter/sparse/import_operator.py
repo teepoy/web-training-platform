@@ -15,6 +15,9 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
+import tempfile
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -138,6 +141,47 @@ class SparseImportOperator:
 
         return shard_entry, locators
 
+    def begin_columnar_import(
+        self,
+        *,
+        schema_columns: list[ColumnSchema],
+        schema_version: str,
+        index_row_group_rows: int,
+    ) -> SparseColumnarImportSession:
+        return SparseColumnarImportSession(
+            operator=self,
+            schema_columns=schema_columns,
+            schema_version=schema_version,
+            index_row_group_rows=index_row_group_rows,
+        )
+
+    async def _flush_arrow_shard(
+        self,
+        *,
+        shard_index: int,
+        table: pa.Table,
+    ) -> ShardEntry:
+        import pyarrow.parquet as pq
+
+        handle = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+        handle.close()
+        try:
+            await asyncio.to_thread(
+                pq.write_table,
+                table,
+                handle.name,
+                compression="snappy",
+            )
+            return await self._payload_store.put_shard_file(
+                dataset_id=self._dataset_id,
+                org_id=self._org_id,
+                shard_index=shard_index,
+                path=handle.name,
+                row_count=table.num_rows,
+            )
+        finally:
+            await asyncio.to_thread(_unlink_if_exists, handle.name)
+
     # ------------------------------------------------------------------
     # manifest finalization
     # ------------------------------------------------------------------
@@ -199,3 +243,157 @@ class SparseImportOperatorFactory:
             org_id=org_id,
             payload_store=payload_store,
         )
+
+
+class SparseColumnarImportSession:
+    """Own one bounded columnar import and its manifest-v3 index lifecycle."""
+
+    def __init__(
+        self,
+        *,
+        operator: SparseImportOperator,
+        schema_columns: list[ColumnSchema],
+        schema_version: str,
+        index_row_group_rows: int,
+    ) -> None:
+        if index_row_group_rows <= 0:
+            raise ValueError("index_row_group_rows must be greater than zero")
+        self._operator = operator
+        self._schema_columns = schema_columns
+        self._schema_version = schema_version
+        self._index_row_group_rows = index_row_group_rows
+        handle = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+        handle.close()
+        self._index_path = handle.name
+        self._index_writer: Any | None = None
+        self._shards: list[Any] = []
+        self._total_rows = 0
+        self._finalized = False
+        self._index_uri: str | None = None
+
+    async def append(self, table: pa.Table, *, row_id_column: str) -> ShardEntry:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if self._finalized:
+            raise RuntimeError("columnar import session is already finalized")
+        if row_id_column not in table.column_names:
+            raise ValueError(f"row identity column is missing: {row_id_column}")
+        if table.num_rows == 0:
+            raise ValueError("cannot append an empty sparse shard")
+
+        shard_index = len(self._shards)
+        entry = await self._operator._flush_arrow_shard(
+            shard_index=shard_index,
+            table=table,
+        )
+        identities = table[row_id_column].cast(pa.string())
+        index_table = pa.table(
+            {
+                "sample_id": identities,
+                "shard_index": pa.array(
+                    [shard_index] * table.num_rows,
+                    type=pa.int32(),
+                ),
+                "row_index": pa.array(range(table.num_rows), type=pa.int32()),
+                "upstream_item_id": identities,
+            }
+        )
+
+        def _write_index() -> None:
+            if self._index_writer is None:
+                self._index_writer = pq.ParquetWriter(
+                    self._index_path,
+                    index_table.schema,
+                    compression="snappy",
+                )
+            self._index_writer.write_table(
+                index_table,
+                row_group_size=self._index_row_group_rows,
+            )
+
+        try:
+            await asyncio.to_thread(_write_index)
+        except BaseException:
+            with suppress(Exception):
+                await self._operator._payload_store.delete_object(entry.uri)
+            raise
+        self._shards.append(entry)
+        self._total_rows += table.num_rows
+        return entry
+
+    async def finalize(self) -> DatasetManifest:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        from app.modules.storage.domain.sparse import DatasetManifest
+
+        if self._finalized:
+            raise RuntimeError("columnar import session is already finalized")
+        self._finalized = True
+        try:
+            if self._index_writer is not None:
+                await asyncio.to_thread(self._index_writer.close)
+                self._index_writer = None
+            else:
+                empty_index = pa.table(
+                    {
+                        "sample_id": pa.array([], type=pa.string()),
+                        "shard_index": pa.array([], type=pa.int32()),
+                        "row_index": pa.array([], type=pa.int32()),
+                        "upstream_item_id": pa.array([], type=pa.string()),
+                    }
+                )
+                await asyncio.to_thread(
+                    pq.write_table,
+                    empty_index,
+                    self._index_path,
+                    compression="snappy",
+                )
+            index = await self._operator._payload_store.put_index_file(
+                dataset_id=self._operator._dataset_id,
+                org_id=self._operator._org_id,
+                path=self._index_path,
+                row_count=self._total_rows,
+            )
+            self._index_uri = index.uri
+            manifest = DatasetManifest(
+                dataset_id=self._operator._dataset_id,
+                storage_mode="file_shard_sparse",
+                shard_count=len(self._shards),
+                total_rows=self._total_rows,
+                schema_columns=self._schema_columns,
+                shards=self._shards,
+                sample_index={},
+                index=index,
+                manifest_version="v3",
+                schema_version=self._schema_version,
+            )
+            await self._operator._payload_store.put_manifest(
+                manifest,
+                org_id=self._operator._org_id,
+            )
+            return manifest
+        except BaseException:
+            await self.abort()
+            raise
+        finally:
+            await asyncio.to_thread(_unlink_if_exists, self._index_path)
+
+    async def abort(self) -> None:
+        if self._index_writer is not None:
+            with suppress(Exception):
+                await asyncio.to_thread(self._index_writer.close)
+            self._index_writer = None
+        for shard in self._shards:
+            with suppress(Exception):
+                await self._operator._payload_store.delete_object(shard.uri)
+        if self._index_uri is not None:
+            with suppress(Exception):
+                await self._operator._payload_store.delete_object(self._index_uri)
+        await asyncio.to_thread(_unlink_if_exists, self._index_path)
+
+
+def _unlink_if_exists(path: str) -> None:
+    with suppress(FileNotFoundError):
+        os.unlink(path)

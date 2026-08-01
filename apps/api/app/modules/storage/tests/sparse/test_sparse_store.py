@@ -9,6 +9,7 @@ Uses an in-memory mock of ``ArtifactStorage`` — no compose services required.
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import pytest
 
@@ -47,6 +48,21 @@ class _InMemoryStore:
         if key not in self._data:
             raise FileNotFoundError(f"Object not found: {uri}")
         return self._data[key]
+
+    async def put_file(
+        self,
+        object_name: str,
+        path: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        return await self.put_bytes(
+            object_name,
+            Path(path).read_bytes(),
+            content_type,
+        )
+
+    async def get_file(self, uri: str, destination: str) -> None:
+        Path(destination).write_bytes(await self.get_bytes(uri))
 
     async def delete(self, uri: str) -> None:
         key = uri.removeprefix("memory://")

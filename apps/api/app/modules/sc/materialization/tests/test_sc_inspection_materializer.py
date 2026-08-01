@@ -62,6 +62,8 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
     materializer = ScInspectionMaterializer(
         _ImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
         temp_dir=str(tmp_path),
     )
 
@@ -77,6 +79,7 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
             ).lazy(),
             dataset_id="dataset-1",
             job_id="job-1",
+            max_output_bytes=100_000_000,
         )
 
     assert list(tmp_path.iterdir()) == []
@@ -89,6 +92,8 @@ async def test_sc_materializer_returns_reiterable_parquet_rows_without_hf_cache(
     materializer = ScInspectionMaterializer(
         _ImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
         temp_dir=str(tmp_path),
     )
     result = await materializer.materialize(
@@ -103,6 +108,7 @@ async def test_sc_materializer_returns_reiterable_parquet_rows_without_hf_cache(
         dataset_id="dataset-1",
         job_id="job-1",
         image_types=["patch_template", "patch_defective"],
+        max_output_bytes=100_000_000,
     )
     try:
         first_read = list(result.dataset)
@@ -122,6 +128,8 @@ async def test_sc_inspection_materializer_returns_data_plane_manifest(
     materializer = ScInspectionMaterializer(
         _ImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
         temp_dir=str(tmp_path),
     )
     lf = pl.DataFrame(
@@ -146,6 +154,7 @@ async def test_sc_inspection_materializer_returns_data_plane_manifest(
         dataset_id="dataset-1",
         job_id="job-1",
         image_types=["patch_template", "patch_defective"],
+        max_output_bytes=100_000_000,
     )
     try:
         assert result.row_count == 1
@@ -198,6 +207,8 @@ async def test_sc_materializer_uses_inline_seed_images_before_upstream(
     materializer = ScInspectionMaterializer(
         _UnexpectedImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
         temp_dir=str(tmp_path),
     )
 
@@ -206,6 +217,7 @@ async def test_sc_materializer_uses_inline_seed_images_before_upstream(
         dataset_id="dataset-1",
         job_id="prediction-job-1",
         image_types=["patch_template", "patch_defective"],
+        max_output_bytes=100_000_000,
     )
     try:
         table = pq.read_table(result.parquet_path)

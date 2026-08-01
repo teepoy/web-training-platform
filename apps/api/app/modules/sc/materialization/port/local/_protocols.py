@@ -15,4 +15,5 @@ class ScInspectionMaterializerPort(Protocol):
         dataset_id: str = "",
         job_id: str = "",
         image_types: list[str] | None = None,
+        max_output_bytes: int,
     ) -> ScInspectionMaterialization: ...

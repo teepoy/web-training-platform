@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -29,6 +30,7 @@ class _MockPayloadStore:
     def __init__(self) -> None:
         self.manifest = None
         self.shards = []
+        self.index = b""
 
     async def put_manifest(self, manifest, *, org_id: str) -> str:
         self.manifest = manifest
@@ -56,12 +58,54 @@ class _MockPayloadStore:
             byte_size=len(data),
         )
 
+    async def put_shard_file(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        shard_index: int,
+        path: str,
+        row_count: int,
+        format: str = "parquet",
+    ):
+        return await self.put_shard(
+            dataset_id=dataset_id,
+            org_id=org_id,
+            shard_index=shard_index,
+            data=Path(path).read_bytes(),
+            row_count=row_count,
+            format=format,
+        )
+
+    async def put_index_file(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        path: str,
+        row_count: int,
+    ):
+        from app.modules.storage.domain.sparse import SparseIndexEntry
+
+        del dataset_id, org_id
+        self.index = Path(path).read_bytes()
+        return SparseIndexEntry(
+            uri="memory://sample-index.parquet",
+            row_count=row_count,
+            checksum_sha256="checksum",
+            byte_size=len(self.index),
+        )
+
+    async def delete_object(self, uri: str) -> None:
+        del uri
+
 
 class _MockUpstream:
     def __init__(self, inspection_return=None, row_count: int = 1000) -> None:
         self._inspection_return = inspection_return
         self._row_count = row_count
         self.list_samples_calls: list[tuple] = []
+        self.stream_sample_calls: list[tuple] = []
 
     async def list_inspections(
         self, start_time, end_time,
@@ -72,6 +116,50 @@ class _MockUpstream:
 
     async def get_inspection(self, inspection_time, wafer_key):
         return self._inspection_return
+
+    async def get_sample_count(self, inspection_time, wafer_key):
+        del inspection_time, wafer_key
+        return self._row_count
+
+    async def stream_sample_batches(
+        self,
+        inspection_time,
+        wafer_key,
+        *,
+        offset=0,
+        count=None,
+        batch_rows,
+        projection=None,
+        on_progress=None,
+    ):
+        del projection
+        self.stream_sample_calls.append((inspection_time, wafer_key, offset, count, batch_rows))
+        stop = self._row_count if count is None else min(offset + count, self._row_count)
+        loaded = 0
+        for start in range(offset, stop, batch_rows):
+            end = min(start + batch_rows, stop)
+            rows = [
+                {
+                    "inspection_time": str(inspection_time),
+                    "wafer_key": wafer_key,
+                    "defect_id": defect_id,
+                    "lot_id": "LOT-001",
+                    "wafer_x": defect_id,
+                    "wafer_y": defect_id,
+                    "die_x": 0,
+                    "die_y": 0,
+                    "rough_bin": 1,
+                    "class_number": 1,
+                    "test_id": None,
+                }
+                for defect_id in range(start + 1, end + 1)
+            ]
+            table = pl.DataFrame(rows).to_arrow()
+            for batch in table.to_batches():
+                loaded += batch.num_rows
+                if on_progress is not None:
+                    on_progress(loaded)
+                yield batch
 
     async def list_samples(
         self,
@@ -131,6 +219,8 @@ def _make_service(upstream_reader=None, repository=None, payload_store=None):
         repository=repository or _MockRepository(),
         payload_store=payload_store or _MockPayloadStore(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
+        import_batch_rows=25_000,
+        index_row_group_rows=65_536,
     )
 
 
@@ -256,9 +346,23 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     )
 
     assert status.status == "completed"
-    assert len(upstream.list_samples_calls) >= 1
+    assert upstream.list_samples_calls == []
+    assert len(upstream.stream_sample_calls) == 1
+    stream_time, stream_wafer, stream_offset, stream_count, stream_batch = (
+        upstream.stream_sample_calls[0]
+    )
+    assert stream_time.isoformat().startswith("2024-01-15T08:30:00")
+    assert (stream_wafer, stream_offset, stream_count, stream_batch) == (
+        1,
+        0,
+        50,
+        25_000,
+    )
     assert payload_store.manifest is not None
     assert payload_store.manifest.total_rows == 50
+    assert payload_store.manifest.manifest_version == "v3"
+    assert payload_store.manifest.sample_index == {}
+    assert payload_store.manifest.index is not None
 
 
 @pytest.mark.asyncio

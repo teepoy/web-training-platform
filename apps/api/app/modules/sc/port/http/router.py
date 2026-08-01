@@ -1539,11 +1539,12 @@ async def serve_sc_sample_image(
     payload_store: DatasetPayloadStoreDep,
 ) -> Response:
     from typing import cast as _cast
+
     from app.modules.storage.domain.sparse.reader import SparseManifestReader
     from app.shared.domain.protocols import ArtifactStorage
 
     store = payload_store
-    storage: ArtifactStorage = store._storage  # type: ignore[reportPrivateUsage]
+    storage: ArtifactStorage = store.storage
     reader = SparseManifestReader()
 
     try:
@@ -1554,7 +1555,9 @@ async def serve_sc_sample_image(
             detail=f"Dataset not found or has no manifest: {dataset_id}",
         )
 
-    locator = manifest.sample_index.get(sample_id)
+    locator = (await payload_store.lookup_sample_locators(manifest, [sample_id])).get(
+        sample_id
+    )
     if locator is None:
         raise HTTPException(
             status_code=404,

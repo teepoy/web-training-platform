@@ -49,7 +49,12 @@ def init_sc(
     repository = dataset_repository
     batch_reader = ScBatchReader(async_engine=shared.db_engine)
     if dataset_payload_store is None:
-        dataset_payload_store = DatasetPayloadStore(shared.artifact_storage)
+        dataset_payload_store = DatasetPayloadStore(
+            shared.artifact_storage,
+            manifest_cache_max_bytes=(
+                shared.config.storage.sparse_manifest_cache_max_bytes
+            ),
+        )
 
     if upstream_reader is None:
         import os
@@ -85,6 +90,8 @@ def init_sc(
         payload_store=dataset_payload_store,
         upstream_reader=upstream_reader,
         sparse_import_factory=sparse_import_factory,
+        import_batch_rows=shared.config.sc.pipeline.import_batch_rows,
+        index_row_group_rows=shared.config.sc.pipeline.index_row_group_rows,
     )
 
     plot_points_service = ScPlotPointsService(
@@ -94,6 +101,8 @@ def init_sc(
     sc_inspection_materializer = ScInspectionMaterializer(
         image_fetcher,
         schema_registry=schema_registry,
+        batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
+        max_error_records=(shared.config.sc.pipeline.materialization_max_error_records),
     )
 
     return ScContext(

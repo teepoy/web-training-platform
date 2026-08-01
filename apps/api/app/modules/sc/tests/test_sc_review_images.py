@@ -166,6 +166,9 @@ class TestReviewImageRoundTrip:
             payload_store=mock_payload_store,
             session_factory=MagicMock(),
             repo=MagicMock(),
+            prediction_compaction_memory_limit="64MiB",
+            prediction_compaction_temp_limit="256MiB",
+            prediction_compaction_row_group_rows=1_000,
             dataset_type="image_sc",
         )
 
@@ -414,7 +417,10 @@ class TestScImageServingLazyFetchReview:
 
         mock_payload_store = MagicMock(spec=DatasetPayloadStore)
         mock_payload_store.get_manifest = AsyncMock(return_value=manifest)
-        mock_payload_store._storage = mock_storage
+        mock_payload_store.storage = mock_storage
+        mock_payload_store.lookup_sample_locators = AsyncMock(
+            return_value={sample_id: locator}
+        )
 
         app.dependency_overrides[get_dataset_payload_store] = lambda: mock_payload_store
         app.dependency_overrides[get_image_fetcher] = lambda: mock_fetcher

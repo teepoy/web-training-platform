@@ -13,6 +13,8 @@ class _RedisPubSubClient(Protocol):
 
     async def publish(self, channel: str, message: str) -> int: ...
 
+    async def eval(self, script: str, numkeys: int, *keys_and_args: str) -> Any: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -28,8 +30,14 @@ PREDICTION_REFRESH = "prediction.refresh"
 
 
 class RedisEventPublisher:
-    def __init__(self, redis_client: _RedisPubSubClient | None) -> None:
+    def __init__(
+        self,
+        redis_client: _RedisPubSubClient | None,
+        *,
+        revision_namespace: str | None = None,
+    ) -> None:
         self._redis = redis_client
+        self._revision_namespace = revision_namespace
 
     async def close(self) -> None:
         if self._redis is not None:
@@ -40,6 +48,10 @@ class RedisEventPublisher:
         self, channel: str, event_type: str, data: dict[str, Any]
     ) -> None:
         if self._redis is None:
+            if self._revision_namespace is not None:
+                raise RuntimeError(
+                    "Redis is required for SC data revision invalidation"
+                )
             return
         payload = {
             "event": event_type,
@@ -47,7 +59,24 @@ class RedisEventPublisher:
             "data": data,
         }
         try:
-            await self._redis.publish(channel, json.dumps(payload))
+            dataset_id = data.get("dataset_id")
+            if self._revision_namespace is not None and isinstance(dataset_id, str):
+                revision_key = (
+                    f"{self._revision_namespace}:revision:dataset:{dataset_id}"
+                )
+                await self._redis.eval(
+                    "local revision = redis.call('incr', KEYS[1]); "
+                    "local payload = cjson.decode(ARGV[2]); "
+                    "payload['revision'] = revision; "
+                    "redis.call('publish', ARGV[1], cjson.encode(payload)); "
+                    "return revision",
+                    1,
+                    revision_key,
+                    channel,
+                    json.dumps(payload),
+                )
+            else:
+                await self._redis.publish(channel, json.dumps(payload))
         except Exception:
             _logger.warning(
                 "Failed to publish event %s to channel %s",
@@ -55,6 +84,8 @@ class RedisEventPublisher:
                 channel,
                 exc_info=True,
             )
+            if self._revision_namespace is not None:
+                raise
 
     async def publish_annotation_created(
         self, *, annotation_id: str, sample_id: str, dataset_id: str

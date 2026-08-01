@@ -44,12 +44,18 @@ class UpstreamDB(Protocol):
         wafer_key: int,
     ) -> pl.LazyFrame: ...
 
+    async def get_sample_count(
+        self, inspection_time: datetime, wafer_key: int
+    ) -> int: ...
+
     def iter_list_samples_batches(
         self,
         inspection_time: datetime,
         wafer_key: int,
         *,
         batch_size: int = 65536,
+        offset: int = 0,
+        count: int | None = None,
     ) -> Iterator[pl.DataFrame]: ...
 
     async def list_review_images(
@@ -220,14 +226,33 @@ class _MockUpstreamDB:
         )
         return lf
 
+    async def get_sample_count(self, inspection_time: datetime, wafer_key: int) -> int:
+        insp_str = inspection_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+        query = f"""
+        SELECT COUNT(*) AS sample_count
+        FROM inspect_defect
+        WHERE inspection_time = '{insp_str}' AND wafer_key = {wafer_key}
+        """
+        count_frame = await self._read(query)
+        result = await count_frame.collect_async()
+        return int(result.item(0, "sample_count"))
+
     def iter_list_samples_batches(
         self,
         inspection_time: datetime,
         wafer_key: int,
         *,
         batch_size: int = 65536,
+        offset: int = 0,
+        count: int | None = None,
     ) -> Iterator[pl.DataFrame]:
+        if offset < 0:
+            raise ValueError("offset must not be negative")
+        if count is not None and count < 0:
+            raise ValueError("count must not be negative")
         insp_str = inspection_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+        limit_clause = f"LIMIT {count}" if count is not None else ""
+        offset_clause = f"OFFSET {offset}" if offset else ""
         query = f"""
         SELECT d.*,
                s.lot_id, s.wafer_id, s.layer_id, s.inspect_equip_id,
@@ -240,6 +265,8 @@ class _MockUpstreamDB:
         JOIN insp_recipe r ON s.recipe_key = r.recipe_key
         WHERE d.inspection_time = '{insp_str}' AND d.wafer_key = {wafer_key}
         ORDER BY d.defect_id
+        {limit_clause}
+        {offset_clause}
         """
         for df in self._read_batches(query, batch_size=batch_size):
             yield df.with_columns(

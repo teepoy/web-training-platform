@@ -156,6 +156,29 @@ class MinioArtifactStorage:
         await asyncio.to_thread(_put)
         return f"s3://{self.bucket}/{object_name}"
 
+    async def put_file(
+        self,
+        object_name: str,
+        path: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        bucket = self.bucket
+        client = self.client
+
+        def _put() -> None:
+            if not client.bucket_exists(bucket):
+                client.make_bucket(bucket)
+            self._ensure_export_lifecycle(bucket)
+            client.fput_object(
+                bucket_name=bucket,
+                object_name=object_name,
+                file_path=path,
+                content_type=content_type,
+            )
+
+        await asyncio.to_thread(_put)
+        return f"s3://{bucket}/{object_name}"
+
     def _ensure_export_lifecycle(self, bucket: str) -> None:
         config = self.export_lifecycle
         if config is None or bucket in self._lifecycle_configured_buckets:
@@ -207,11 +230,32 @@ class MinioArtifactStorage:
 
         bucket, object_name = _parse_s3_uri(uri)
         client = self.client
+
+        def _get() -> bytes:
+            response = client.get_object(bucket_name=bucket, object_name=object_name)
+            try:
+                return response.read()
+            finally:
+                response.close()
+                response.release_conn()
+
         try:
-            return await asyncio.to_thread(
-                lambda: client.get_object(
-                    bucket_name=bucket, object_name=object_name
-                ).read()
+            return await asyncio.to_thread(_get)
+        except Exception as exc:
+            raise FileNotFoundError(
+                f"Object not found in MinIO bucket={bucket!r}: {uri!r}"
+            ) from exc
+
+    async def get_file(self, uri: str, destination: str) -> None:
+        if not uri.startswith("s3://"):
+            raise FileNotFoundError(f"Unsupported URI scheme: {uri!r}")
+        bucket, object_name = _parse_s3_uri(uri)
+        try:
+            await asyncio.to_thread(
+                self.client.fget_object,
+                bucket,
+                object_name,
+                destination,
             )
         except Exception as exc:
             raise FileNotFoundError(

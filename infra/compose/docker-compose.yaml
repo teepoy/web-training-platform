@@ -1,6 +1,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY:-2g}
     environment:
       POSTGRES_DB: finetune
       POSTGRES_USER: postgres
@@ -23,6 +27,10 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+    deploy:
+      resources:
+        limits:
+          memory: ${MINIO_MEMORY:-2g}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -40,6 +48,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY:-2g}
     command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-1536mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     ports:
       - "6379:6379"
@@ -49,6 +61,10 @@ services:
 
   prefect-server:
     image: prefecthq/prefect:3.6.25-python3.12
+    deploy:
+      resources:
+        limits:
+          memory: ${PREFECT_SERVER_MEMORY:-2g}
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,6 +89,10 @@ services:
 
   label-studio:
     image: heartexlabs/label-studio:1.23.0
+    deploy:
+      resources:
+        limits:
+          memory: ${LABEL_STUDIO_MEMORY:-2g}
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,6 +123,10 @@ services:
     build:
       context: ../..
       dockerfile: services/image-parser/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: ${IMAGE_PARSER_MEMORY:-2g}
     depends_on:
       sc-upstream:
         condition: service_healthy
@@ -131,6 +155,10 @@ services:
     build:
       context: ../..
       dockerfile: services/sc-upstream/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: ${SC_UPSTREAM_MEMORY:-2g}
     depends_on:
       redis:
         condition: service_started
@@ -166,6 +194,10 @@ services:
   # ═══════════════════════════════════════════════════════════════════
   prometheus:
     image: prom/prometheus:v3.3.0
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMETHEUS_MEMORY:-1g}
     profiles: ["observability"]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -183,6 +215,10 @@ services:
 
   grafana:
     image: grafana/grafana:11.6.0
+    deploy:
+      resources:
+        limits:
+          memory: ${GRAFANA_MEMORY:-512m}
     profiles: ["observability"]
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -200,6 +236,10 @@ services:
 
   loki:
     image: grafana/loki:3.4.0
+    deploy:
+      resources:
+        limits:
+          memory: ${LOKI_MEMORY:-1g}
     profiles: ["observability"]
     command: -config.file=/etc/loki/loki-config.yaml
     ports:
@@ -211,6 +251,10 @@ services:
 
   promtail:
     image: grafana/promtail:3.4.0
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMTAIL_MEMORY:-256m}
     profiles: ["observability"]
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
@@ -222,6 +266,10 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.28.1
+    deploy:
+      resources:
+        limits:
+          memory: ${ALERTMANAGER_MEMORY:-256m}
     profiles: ["observability"]
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
@@ -235,6 +283,10 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
+    deploy:
+      resources:
+        limits:
+          memory: ${CADVISOR_MEMORY:-512m}
     profiles: ["observability"]
     privileged: true
     devices:
@@ -251,6 +303,10 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.9.1
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_EXPORTER_MEMORY:-128m}
     profiles: ["observability"]
     command:
       - "--path.rootfs=/host"
@@ -261,6 +317,10 @@ services:
 
   prefect-exporter:
     image: prefecthq/prefect:3.6.25-python3.12
+    deploy:
+      resources:
+        limits:
+          memory: ${PREFECT_EXPORTER_MEMORY:-512m}
     profiles: ["observability"]
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
@@ -282,6 +342,8 @@ services:
     profiles: ["gpu"]
     deploy:
       resources:
+        limits:
+          memory: ${DCGM_EXPORTER_MEMORY:-512m}
         reservations:
           devices:
             - driver: nvidia
@@ -297,3 +359,4 @@ volumes:
   grafana_data:
   loki_data:
   alertmanager_data:
+  sc-data-provider-cache:

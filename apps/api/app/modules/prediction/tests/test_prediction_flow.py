@@ -391,6 +391,7 @@ def test_persist_worker_results_uses_storage_aggregate() -> None:
                     "confidence": 0.8,
                 },
             ],
+            write_batch_rows=5_000,
         )
     )
 

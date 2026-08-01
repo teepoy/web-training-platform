@@ -13,6 +13,7 @@ db:
 
 storage:
   kind: minio
+  sparse_manifest_cache_max_bytes: 16777216
   minio:
     endpoint: "localhost:9000"
     access_key: "minioadmin"
@@ -119,11 +120,65 @@ agent:
   max_panels: 8
   metadata_sample_size: 100
 
+prediction:
+  sparse_chunk_size: 32
+  progress_flush_rows: 5000
+  progress_flush_seconds: 5.0
+  write_batch_rows: 5000
+  compaction_memory_limit: 512MiB
+  compaction_temp_limit: 4GiB
+  compaction_row_group_rows: 100000
+
 redis:
   host: "localhost"
   port: 6379
   db: 0
   password: ""
+
+sc:
+  pipeline:
+    import_batch_rows: 25000
+    index_row_group_rows: 65536
+    materialization_batch_rows: 512
+    materialization_max_error_records: 1000
+    prediction_max_materialized_bytes: 17179869184
+    training_max_rows: 100000
+    training_max_materialized_bytes: 8589934592
+  data_provider:
+    implementation: duckdb
+    max_rss_mb: 1536
+    cache_dir: /tmp/sc-data-provider
+    cache_namespace: sc-data-provider
+    revision_namespace: sc-data-provider
+    duckdb_memory_limit: 1GiB
+    duckdb_threads: 1
+    duckdb_temp_directory_size: 2GiB
+    duckdb_allocator_background_threads: true
+    duckdb_preserve_insertion_order: false
+    duckdb_allocator_flush_threshold: 64MiB
+    duckdb_allocator_bulk_deallocation_flush_threshold: 128MiB
+    connection_recycle_rss_mb: 1280
+    worker_count: 1
+    container_memory_limit_mb: 2048
+    python_overhead_mb: 256
+    service_headroom_mb: 256
+    object_cache_max_bytes: 10737418240
+    object_cache_low_watermark_bytes: 8589934592
+    object_idle_ttl_seconds: 3600
+    cleanup_interval_seconds: 60
+    stale_write_seconds: 300
+    lease_ttl_seconds: 60
+    lease_heartbeat_seconds: 20
+    build_lock_ttl_seconds: 60
+    build_lock_heartbeat_seconds: 20
+    build_wait_timeout_seconds: 30
+    build_poll_interval_ms: 100
+    sql_timeout_seconds: 30
+    max_response_bytes: 268435456
+    arrow_batch_rows: 16384
+    stream_queue_capacity: 8
+    stream_queue_poll_interval_ms: 100
+    sse_heartbeat_seconds: 15
 
 auth:
   enabled: true

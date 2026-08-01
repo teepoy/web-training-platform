@@ -10,6 +10,7 @@ Uses in-memory parquet bytes — no disk I/O or compose services needed.
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -75,6 +76,21 @@ class _InMemoryShardStore:
     ) -> str:
         self._shards[object_name] = data
         return f"memory://{object_name}"
+
+    async def put_file(
+        self,
+        object_name: str,
+        path: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        return await self.put_bytes(
+            object_name,
+            Path(path).read_bytes(),
+            content_type,
+        )
+
+    async def get_file(self, uri: str, destination: str) -> None:
+        Path(destination).write_bytes(await self.get_bytes(uri))
 
     async def delete(self, uri: str) -> None:
         self._shards.pop(uri, None)

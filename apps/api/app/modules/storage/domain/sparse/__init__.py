@@ -15,12 +15,14 @@ from app.modules.storage.domain.sparse.models import (
     DatasetManifest,
     SampleLocator,
     ShardEntry,
+    SparseIndexEntry,
     SparsePredictionJobResult,
     SparsePredictionResult,
     SparsePredictionShard,
     SparseRowIdentity,
 )
 from app.modules.storage.domain.sparse.reader import SparseManifestReader
+from app.modules.storage.domain.sparse.index import SparseIndexReader
 from app.modules.storage.domain.sparse.store import DatasetPayloadStore
 
 __all__ = [
@@ -29,6 +31,8 @@ __all__ = [
     "DatasetPayloadStore",
     "SampleLocator",
     "ShardEntry",
+    "SparseIndexEntry",
+    "SparseIndexReader",
     "SparseAnnotationRecord",
     "SparseAnnotationStore",
     "SparseManifestReader",
