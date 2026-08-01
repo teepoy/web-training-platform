@@ -80,8 +80,33 @@ Acceptance requires:
 - cache hits remain valid after a worker restart and old revisions disappear
   only after their leases end.
 
-The checked-in local environment did not have the external PostgreSQL, Redis,
-SC upstream, and authenticated dataset fixture needed to produce an honest
-four-worker HTTP number. The harness and production-shaped deployment are part
-of the repository so that result can be recorded against the target client
-environment instead of substituting a synthetic network number.
+## Local four-worker HTTP acceptance
+
+Measured on 2026-08-02 against the Compose dev stack with an authenticated
+300,000-row sparse dataset and `SC_DATA_PROVIDER_DEV_WORKERS=4`. The provider
+was restored to the ordinary one-worker dev profile after the run.
+
+| Measurement                                  |        Observed value |
+| -------------------------------------------- | --------------------: |
+| Cold query                                   |            355.000 ms |
+| Warm query p50 / p95 (30 requests)           |   38.802 / 132.727 ms |
+| SSE reconnect + query p50 / p95 (100 cycles) |    31.976 / 66.686 ms |
+| Health p50 / p95                             |      2.258 / 4.156 ms |
+| Worker PIDs reached                          |        11, 12, 13, 14 |
+| Revisions observed                           |     2 on every worker |
+| Arrow response bytes                         | 1,592 on every worker |
+| DuckDB spill / maximum temp bytes            |                 0 / 0 |
+| Early client-disconnect cycles               |              8 passed |
+| Provider cgroup snapshot after the run       |     1.383 GiB / 6 GiB |
+
+All responses were cache hits and returned the same revision across workers.
+The disconnect probe initially exposed a stale temporary `samples` view after
+`DuckDBPyConnection.interrupt()` interrupted cleanup. Cancelled or failed
+streams now recycle their worker connection; the final run completed all
+disconnect cycles and subsequent queries without catalog errors.
+
+The HTTP health endpoint samples the worker that receives each request, so its
+first/last RSS readings cannot be treated as a single-process RSS slope under
+round-robin traffic. The cgroup snapshot proves the four-worker service stayed
+within its declared limit during this run, but a longer target-machine soak is
+still required before claiming a production memory SLO.

@@ -98,9 +98,9 @@ Browser-native image consumers (`<img>`, Naive image previews, virtualized blink
 - SC pages live under `src/features/sc/`; the SC preview route is `/sc/preview`, and imported dataset views are rendered by the dataset detail page `/datasets/:id` with the `patch_image_v1` or `review_image_v1` view type selected via the internal dropdown.
 - SC-specific image helpers and transport-facing domain helpers live in `src/features/sc/domain/models.ts`.
 - `ScBlinkTable` is a consumer only: it receives already-authenticated image URLs through `imageUrlsByDefectId`. Do not add raw URL fallback construction to the table.
-- The Perspective websocket `Client`, `Table`, and `View` instances belong to `perspective-client.worker.ts`; the main thread uses the narrow RPC proxies in `perspectiveWorkerClient.ts`. Add new RPC methods explicitly when an SC consumer needs them instead of moving Perspective ownership back to the UI thread.
-- Transfer Arrow buffers from workers rather than cloning them. Keep worker update events narrow: SC currently consumes only `port_id`.
-- Import SC workers with Vite's `?worker&inline` form. The legacy build plugin does not reliably emit assets discovered through `new Worker(new URL(...))`.
+- SC Preview/Reclassify data access goes through `ScWorkbenchDataSource`. The production adapter uses scoped HTTP SQL, Arrow IPC Stream responses, and SSE invalidations; page components do not own server table state.
+- Keep map and table selection in workbench state and express it as query constraints. Do not add selection marker columns or server-side update calls.
+- Transfer Arrow buffers to map/decoder workers rather than converting 300,000-row results to JavaScript row objects.
 
 ## CLASSIFY SIDEBAR ARCHITECTURE
 
@@ -157,6 +157,8 @@ The classify page includes an AI agent sidebar system and floating chat drawer:
 
 **SSE pattern**: The agent chat uses `POST → SSE response stream` (not `EventSource`). `useAgentCore` iterates parsed SSE frames from an async generator factory; `useAgentAdapter` provides the factory with route-context and auth-session. `streamGlobalAgentChat()` in `@platform/web-data/agent` handles `fetch` + `ReadableStream`. Event types: `agent-message`, `agent-action`, `sidebar-update`, `done`.
 
+**Agent QA refactor guard.** Any change to an app-shell/layout branch, route-context construction, auth bootstrap, the Agent adapter, or POST-SSE transport must preserve and run `e2e/specs/agent/agent-chat.spec.ts`. Keep the check outcome-based: the global entry is reachable, the request carries the current route/domain context, a configured backend produces a real SSE response, and an unconfigured backend fails visibly. Never weaken it with a silent catch, conditional pass, arbitrary sleep, or selector coupled only to styling; update the component's stable test IDs, POM, spec, and this contract together when the Agent surface is intentionally redesigned.
+
 See `docs/protocols/agent-display-protocol.md` for the full protocol specification.
 
 ## CONVENTIONS
@@ -191,13 +193,15 @@ pnpm test:e2e:smoke     # Playwright: @smoke only (fast, mock mode)
 
 ## TEST CONVENTIONS
 
-**Directory layout.** Tests split across two roots: `tests/` (Playwright E2E and integration) and `src/testing/` (Vitest unit-test helpers). The `tests/` tree is organized into `fixtures/`, `seed/`, `mocks/handlers/`, `mocks/factories/`, `pages/` (POMs), `specs/`, `helpers/`, and `scripts/`. The `src/testing/` tree provides `mountWithProviders`, MSW server/handlers/factories, and test setup. Spec files live in `tests/specs/<feature>/` for Playwright and co-located `src/**/*.spec.ts` for Vitest.
+**Directory layout.** Tests split across two roots: `e2e/` (all Playwright source, configuration, and ignored run artifacts) and `src/testing/` (Vitest unit-test helpers). The `e2e/` tree is organized into `fixtures/`, `seed/`, `mocks/handlers/`, `mocks/factories/`, `pages/` (POMs), active `specs/`, excluded `legacy/`, `helpers/`, and `scripts/`; Playwright writes auth state, reports, traces, screenshots, videos, and test results only below `e2e/.artifacts/`. The `src/testing/` tree provides `mountWithProviders`, MSW server/handlers/factories, and test setup. Active spec files live in `e2e/specs/<feature>/` for Playwright and co-located `src/**/*.spec.ts` for Vitest.
 
-**Test tags.** Every Playwright spec must be tagged with exactly one of `@mock` (mocked backend, no external services) or `@live` (real backend via `make up`). Additional tags: `@smoke` for lightweight critical-path checks (always `@mock`, sub-30s per test, total profile ≤5 min), and `@slow` for tests exceeding 15 seconds. The `mock` Playwright project runs `@mock` specs; the `live` project runs `@live` specs and requires `.auth/state.json`.
+**Test tags.** Every active Playwright spec under `e2e/specs/` must be tagged with exactly one of `@mock` (mocked backend, no external services) or `@live` (real backend via `make up-dev`). Additional tags: `@smoke` for lightweight critical-path checks (always `@mock`, sub-30s per test, total profile ≤5 min), and `@slow` for tests exceeding 15 seconds. The `mock` Playwright project runs `@mock` specs; the serial `live` command runs `@live` specs and writes its generated auth state below `e2e/.artifacts/`. Files below `e2e/legacy/` are intentionally not collected and retain `@legacy` until migrated to current contracts.
 
-**POM rules.** Page Object Models go in `tests/pages/`, extend `BasePage`, and implement `waitForLoaded()`. POMs encapsulate locators and actions but never call `expect()` directly (return `Locator` instead). Selectors must use `data-testid`, `getByRole`, `getByPlaceholder`, or `getByTestId`. No CSS class selectors or brittle DOM traversal. Each POM mirrors one page or major component under `src/features/`.
+**Timeout policy.** Shared UI, project, backend-operation, and SC workflow budgets live in `e2e/timeouts.ts`. Ordinary mock/live tests use the project defaults; only tests that start a known long-running import, training, prediction, or full workflow may call `test.setTimeout()` with the matching named budget. Do not add anonymous multi-minute literals to specs or POMs. Environment-specific overrides use the documented `PLAYWRIGHT_*_TIMEOUT_MS` variables.
 
-**Seed layer.** `tests/seed/` helpers interact with a live backend using the orval-typed API client. Raw `fetch('/api/v1/...')` calls are forbidden in seed helpers. Factories in `tests/mocks/factories/` also use orval-generated model types for type-safe test data.
+**POM rules.** Page Object Models go in `e2e/pages/`, extend `BasePage`, and implement `waitForLoaded()`. POMs encapsulate locators and actions but never call `expect()` directly (return `Locator` instead). Selectors must use `data-testid`, `getByRole`, `getByPlaceholder`, or `getByTestId`. No CSS class selectors or brittle DOM traversal. Each POM mirrors one page or major component under `src/features/`.
+
+**Seed layer.** `e2e/seed/` helpers interact with a live backend using the orval-typed API client. Raw `fetch('/api/v1/...')` calls are forbidden in seed helpers. Factories in `e2e/mocks/factories/` also use orval-generated model types for type-safe test data.
 
 **MSW for unit tests.** Unit tests use `src/testing/msw/` handlers to intercept API calls at the network level. The MSW server (`src/testing/msw/server.ts`) starts in `src/testing/setup.ts` before each test suite and resets handlers between tests. Component tests should wire MSW handlers rather than using `vi.mock('@/shared/api/...')` to stub API modules.
 
@@ -211,7 +215,7 @@ pnpm test:e2e:smoke     # Playwright: @smoke only (fast, mock mode)
 - `pnpm test:e2e:smoke` — smoke specs only (fast, mock mode)
 - `pnpm test` — runs both `test:unit` and `test:e2e`
 
-**CI notes.** No `.github/workflows/` test definitions exist yet in this repo. When CI is added, `@mock` tests should run on every PR since they work without backend services. `@live` tests require a running backend stack and are inherently slower, so they should run on merge to main or on a schedule. See `apps/web/tests/README.md` for the full test infrastructure contract.
+**CI notes.** No `.github/workflows/` test definitions exist yet in this repo. When CI is added, `@mock` tests should run on every PR since they work without backend services. `@live` tests require a running backend stack and are inherently slower, so they should run on merge to main or on a schedule. See `apps/web/e2e/README.md` for the full test infrastructure contract.
 
 ## GOTCHAS
 

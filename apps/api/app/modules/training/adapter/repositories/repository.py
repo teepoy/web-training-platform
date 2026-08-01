@@ -25,11 +25,6 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _assert_not_none(value: str | None) -> str:
-    assert value is not None
-    return value
-
-
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
     if not org_id:
         return ""
@@ -326,7 +321,7 @@ class TrainingJobRepository:
             id=row.id,
             org_id=row.org_id,
             org_name=org_name,
-            dataset_id=_assert_not_none(row.dataset_id),
+            dataset_id=row.dataset_id,
             trainer_id=row.trainer_id,
             status=cast(JobStatus, row.status),
             created_by=row.created_by,

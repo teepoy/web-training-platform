@@ -21,6 +21,7 @@ and Label Studio's structured annotation JSON format.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -47,6 +48,25 @@ class LabelStudioNotFoundError(LabelStudioError):
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+_LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH = 50
+
+
+def _normalise_project_title(name: str) -> str:
+    """Fit a platform dataset name into Label Studio's project-title limit.
+
+    Platform dataset names may be longer than Label Studio's 50-character
+    title field.  Preserve a readable prefix and add a stable digest so two
+    names that differ only after the cut point do not collapse to one title.
+    The platform continues to store and display the original dataset name.
+    """
+    if len(name) <= _LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH:
+        return name
+
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    suffix = f"-{digest}"
+    prefix_length = _LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH - len(suffix)
+    return f"{name[:prefix_length]}{suffix}"
 
 
 def _to_dict(obj: Any) -> dict[str, object]:
@@ -131,7 +151,7 @@ class LabelStudioClient:
         try:
             result = await asyncio.to_thread(
                 self._client.projects.create,
-                title=name,
+                title=_normalise_project_title(name),
                 label_config=label_config,
             )
             return _to_dict(result)

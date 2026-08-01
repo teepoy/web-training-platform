@@ -13,7 +13,7 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => tag === "perspective-viewer" || tag === "sc-map",
+          isCustomElement: (tag) => tag === "sc-map",
         },
       },
     }),
@@ -47,7 +47,7 @@ export default defineConfig({
     // Exclude full echarts bundle to prevent double-registration of components
     // (modular echarts/core + echarts/charts etc. are pre-bundled separately;
     // loading the full bundle on top causes registerInternalOptionCreator assertions)
-    exclude: ["echarts", "@perspective-dev/viewer/inline", "@perspective-dev/client/inline"],
+    exclude: ["echarts"],
   },
   server: {
     port: 5173,
@@ -71,10 +71,9 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
-      [`${API_V1_PROXY_PREFIX}/sc/perspective/`]: {
-        target: process.env.VITE_PERSPECTIVE_WS_TARGET || "http://localhost:8001",
+      [`${API_V1_PROXY_PREFIX}/sc/data/`]: {
+        target: process.env.VITE_SC_DATA_PROVIDER_TARGET || "http://localhost:8001",
         changeOrigin: true,
-        ws: true,
       },
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
@@ -86,6 +85,6 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["src/testing/setup.ts"],
-    exclude: ["tests/**", "node_modules/**"],
+    exclude: ["e2e/**", "node_modules/**"],
   },
 });

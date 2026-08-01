@@ -59,8 +59,7 @@ Prefer `make` targets from the repository root.
 | Generate OpenAPI spec + artifacts | `make generate`                          |
 | Apply migrations                  | `make db-migrate`                        |
 | Create migration                  | `make db-revision MSG="describe change"` |
-| Start compose backend only        | `make up-dev --scale web=0`              |
-| Start compose backend + local web | `make updev`                             |
+| Start compose backend only        | `make up-dev ARGS="--scale web=0"`       |
 | Stop compose                      | `make down`                              |
 
 Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.

@@ -4,10 +4,11 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { RecentJobSummaryDatasetId } from "./recentJobSummaryDatasetId";
 
 export interface RecentJobSummary {
   id: string;
-  dataset_id: string;
+  dataset_id: RecentJobSummaryDatasetId;
   trainer_id: string;
   status: string;
   created_by: string;

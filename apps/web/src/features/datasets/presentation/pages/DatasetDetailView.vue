@@ -20,6 +20,7 @@ import ParquetExportPlugin from "@/features/datasets/presentation/components/Par
 import PreviewExportPlugin from "@/features/datasets/presentation/components/PreviewExportPlugin.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
+import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -105,6 +106,7 @@ const exporterFlows: FlowCard[] = [
 
 function handleImporterComplete() {
   showImportFlow.value = false;
+  activeTab.value = "samples";
   qc.invalidateQueries({
     queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["view-samples", id.value]),
   });
@@ -207,6 +209,17 @@ function openScClassify() {
         >
       </div>
       <n-tabs v-model:value="activeTab" type="line" animated>
+        <n-tab-pane
+          v-if="dataset.dataset_type === 'image_classification'"
+          name="samples"
+          tab="Samples"
+        >
+          <DatasetViewPage
+            :dataset-id="id"
+            view-type="image_input_v1"
+            @select-sample="selectedSampleId = $event"
+          />
+        </n-tab-pane>
         <n-tab-pane name="train" tab="Train"><DatasetTrainTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane v-if="false" name="export" tab="Export">

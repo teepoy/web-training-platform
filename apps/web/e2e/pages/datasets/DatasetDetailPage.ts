@@ -1,0 +1,154 @@
+import type { Locator, Page } from "@playwright/test";
+import { BasePage } from "../BasePage";
+
+/**
+ * Page Object Model for the `/datasets/:id` detail route.
+ *
+ * Covers the dataset detail header, tabs (Samples, Train, Predict, etc.),
+ * sample statistics bar, view router, Open Workflow button, Label Studio link,
+ * and the view type selector.
+ */
+export class DatasetDetailPage extends BasePage {
+  constructor(page: Page) {
+    super(page);
+  }
+
+  /** Wait for the dataset name heading to render. */
+  async waitForLoaded(): Promise<void> {
+    await this.page.getByRole("heading").first().waitFor();
+  }
+
+  // ── Detail header ─────────────────────────────────────────────
+
+  /** Navigate to the detail page for a given dataset ID. */
+  async gotoDetail(id: string): Promise<void> {
+    await this.goto(`/datasets/${id}`);
+  }
+
+  /** Assert the "Samples" tab is visible. */
+  async expectSamplesTab(): Promise<void> {
+    const tab = this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Samples" });
+    await tab.waitFor();
+  }
+
+  // ── Sample statistics ─────────────────────────────────────────
+
+  /** Get the sample statistics bar locator. */
+  getSampleStats(): Locator {
+    return this.page.locator('[data-testid="dataset-sample-stats"]');
+  }
+
+  /** Assert the sample statistics bar is visible. */
+  async expectSampleStats(): Promise<void> {
+    await this.getSampleStats().waitFor({ timeout: 10_000 });
+  }
+
+  // ── Sample view / table ────────────────────────────────────────
+
+  /** Assert the dataset samples layout area is visible (stats bar + view router). */
+  async expectSamplesLayout(): Promise<void> {
+    await this.page.locator('[data-testid="dataset-sample-stats"]').waitFor({ timeout: 10_000 });
+    await this.page.locator('[data-testid="dataset-view-router"]').waitFor({ timeout: 10_000 });
+  }
+
+  /** Assert a view is rendered (by data-testid). */
+  async expectViewLoaded(testId: string): Promise<void> {
+    await this.page.locator(`[data-testid="${testId}"]`).waitFor({ timeout: 10_000 });
+  }
+
+  // ── Workflow / classify ───────────────────────────────────────
+
+  /** Click "Open Workflow" button to navigate to the classify page. */
+  async clickOpenWorkflow(): Promise<void> {
+    await this.page.getByRole("button", { name: "Open Workflow" }).click();
+    await this.page.waitForURL("**/datasets/**/classify");
+  }
+
+  /** Wait for the classify page shell to render. */
+  async waitForClassifyPage(): Promise<void> {
+    await this.page.locator(".classify-page").waitFor({ timeout: 10_000 });
+  }
+
+  // ── Label Studio link ──────────────────────────────────────────
+
+  /** Assert the Label Studio project link / tag is visible. */
+  async expectLabelStudioLink(): Promise<void> {
+    await this.getLabelStudioProjectText().waitFor();
+    await this.getLabelStudioLink().waitFor();
+  }
+
+  /** Get the Label Studio project caption. */
+  getLabelStudioProjectText(): Locator {
+    return this.page.getByText(/Label Studio Project #/);
+  }
+
+  /** Get the Label Studio external link. */
+  getLabelStudioLink(): Locator {
+    return this.page.getByRole("link", { name: /Open in new tab/ });
+  }
+
+  // ── View type selector ────────────────────────────────────────
+
+  /** Get the view type selector. */
+  getViewTypeSelector(): Locator {
+    return this.page.locator('[data-testid="view-type-selector"]');
+  }
+
+  // ── Add Sample button ──────────────────────────────────────────
+
+  /** Click "Add Sample" button on the detail page. */
+  async clickAddSample(): Promise<void> {
+    await this.page.getByRole("button", { name: "Add Sample" }).click();
+  }
+
+  // ── Tab navigation ────────────────────────────────────────────
+
+  /** Click the Samples tab. */
+  async gotoSamplesTab(): Promise<void> {
+    await this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Samples" }).click();
+  }
+
+  /** Click the Train tab. */
+  async gotoTrainTab(): Promise<void> {
+    await this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Train" }).click();
+  }
+
+  /** Click the Predict tab. */
+  async gotoPredictTab(): Promise<void> {
+    await this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Predict" }).click();
+  }
+
+  /** Click the Annotate tab. */
+  async gotoAnnotateTab(): Promise<void> {
+    await this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Annotate" }).click();
+  }
+
+  /** Click the Export tab. */
+  async gotoExportTab(): Promise<void> {
+    await this.page.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Export" }).click();
+  }
+
+  /** Wait for the training jobs view to render after switching to Train tab. */
+  async waitForTrainTabLoaded(): Promise<void> {
+    await this.page.getByText("Training Jobs").waitFor();
+  }
+
+  /** Wait for the prediction jobs view to render after switching to Predict tab. */
+  async waitForPredictTabLoaded(): Promise<void> {
+    await this.page.getByText("Prediction Jobs").waitFor();
+  }
+
+  // ── Train tab actions ─────────────────────────────────────────
+
+  /** Get the "Start New Job" button on the Train tab. */
+  getStartJobButton(): Locator {
+    return this.page.getByRole("button", { name: "Start New Job" });
+  }
+
+  // ── Predict tab actions ───────────────────────────────────────
+
+  /** Get the "Start Prediction" button on the Predict tab. */
+  getStartPredictionButton(): Locator {
+    return this.page.getByRole("button", { name: "Start Prediction" });
+  }
+}

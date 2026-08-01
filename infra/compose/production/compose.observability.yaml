@@ -1,6 +1,10 @@
 services:
   prometheus:
     image: prom/prometheus:v3.3.0
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMETHEUS_MEMORY:-2g}
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -19,6 +23,10 @@ services:
 
   grafana:
     image: grafana/grafana:11.6.0
+    deploy:
+      resources:
+        limits:
+          memory: ${GRAFANA_MEMORY:-1g}
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
@@ -39,6 +47,10 @@ services:
 
   loki:
     image: grafana/loki:3.4.0
+    deploy:
+      resources:
+        limits:
+          memory: ${LOKI_MEMORY:-2g}
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ${OBS_CONFIG_DIR:-../observability}/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
@@ -53,6 +65,10 @@ services:
 
   promtail:
     image: grafana/promtail:3.4.0
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMTAIL_MEMORY:-512m}
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
       - ${OBS_CONFIG_DIR:-../observability}/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
@@ -65,6 +81,10 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.28.1
+    deploy:
+      resources:
+        limits:
+          memory: ${ALERTMANAGER_MEMORY:-512m}
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
@@ -81,6 +101,10 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
+    deploy:
+      resources:
+        limits:
+          memory: ${CADVISOR_MEMORY:-1g}
     privileged: true
     devices:
       - /dev/kmsg
@@ -100,6 +124,10 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.9.1
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_EXPORTER_MEMORY:-256m}
     command:
       - "--path.rootfs=/host"
     pid: host
@@ -113,6 +141,10 @@ services:
 
   prefect-exporter:
     image: prefecthq/prefect:3.6.25-python3.12
+    deploy:
+      resources:
+        limits:
+          memory: ${PREFECT_EXPORTER_MEMORY:-1g}
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
       PREFECT_API_AUTH_STRING: ${PREFECT_SERVER_API_AUTH_STRING:?Set PREFECT_SERVER_API_AUTH_STRING}
@@ -131,6 +163,8 @@ services:
     profiles: ["gpu"]
     deploy:
       resources:
+        limits:
+          memory: ${DCGM_EXPORTER_MEMORY:-1g}
         reservations:
           devices:
             - driver: nvidia

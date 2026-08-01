@@ -120,6 +120,9 @@ class PrefectWorkPoolEngine:
         str
             The Prefect flow-run UUID (used as ``external_job_id``).
         """
+        dataset_id = job.dataset_id
+        if dataset_id is None:
+            raise ValueError(f"Source dataset for training job '{job.id}' was deleted")
         deployment_name = self._resolve_deployment_name(job)
         route = self._runtime_router.training_route(job.trainer_id)
         deployment_id = await self._ensure_deployment(deployment_name)
@@ -128,7 +131,7 @@ class PrefectWorkPoolEngine:
             deployment_id=deployment_id,
             parameters={
                 "job_id": job.id,
-                "dataset_id": job.dataset_id,
+                "dataset_id": dataset_id,
                 "trainer_id": job.trainer_id,
                 "created_by": job.created_by,
                 **route.to_parameters(),

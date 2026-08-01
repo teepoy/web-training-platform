@@ -40,6 +40,10 @@ services:
   migrate:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     profiles: ["ops"]
+    deploy:
+      resources:
+        limits:
+          memory: ${MIGRATE_MEMORY:-2g}
     environment: *platform-environment
     command: ["uv", "run", "--no-dev", "alembic", "upgrade", "head"]
     networks:
@@ -49,6 +53,10 @@ services:
   deployments:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     profiles: ["ops"]
+    deploy:
+      resources:
+        limits:
+          memory: ${DEPLOYMENTS_MEMORY:-2g}
     environment: *platform-environment
     command:
       - /bin/sh

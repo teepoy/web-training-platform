@@ -1,5 +1,5 @@
 /**
- * Converts perspective columnar data to STRIDE=6 flat display arrays for map rendering.
+ * Converts Arrow columnar data to STRIDE=6 flat display arrays for map rendering.
  * Format: [x, y, defect_id, class, rough_bin, has_review, ...]
  */
 export function columnsToDisplayArrays(data: Record<string, unknown[]>): {

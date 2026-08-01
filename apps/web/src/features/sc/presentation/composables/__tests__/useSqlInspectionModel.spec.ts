@@ -1,0 +1,118 @@
+import { computed, effectScope, ref } from "vue";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  ScInvalidation,
+  ScWorkbenchDataSource,
+} from "@/features/sc/domain/workbenchDataSource";
+import { useSqlInspectionModel } from "../useSqlInspectionModel";
+
+function createDataSource() {
+  let invalidationListener: ((event: ScInvalidation) => void) | null = null;
+  const source: ScWorkbenchDataSource = {
+    scopeKey: "dataset:ds-1",
+    loadMap: vi.fn(async () => new Uint8Array([1, 2, 3])),
+    loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
+    loadGallery: vi.fn(async () => ({ ipc: null, total: 0, nextOffset: null })),
+    loadAggregates: vi.fn(async () => ({ "1": 3 })),
+    loadDistinctValues: vi.fn(async () => []),
+    resolveSelection: vi.fn(async () => [3, 7]),
+    subscribeInvalidations: vi.fn((listener) => {
+      invalidationListener = listener;
+      return () => {
+        invalidationListener = null;
+      };
+    }),
+    close: vi.fn(),
+  };
+  return {
+    source,
+    invalidate(event: ScInvalidation) {
+      invalidationListener?.(event);
+    },
+  };
+}
+
+describe("useSqlInspectionModel", () => {
+  const scopes: ReturnType<typeof effectScope>[] = [];
+
+  afterEach(() => {
+    for (const scope of scopes) scope.stop();
+    scopes.length = 0;
+  });
+
+  function mount(source: ScWorkbenchDataSource) {
+    const scope = effectScope();
+    scopes.push(scope);
+    return scope.run(() =>
+      useSqlInspectionModel({
+        dataSource: ref(source),
+        legendGroupBy: computed(() => "class" as const),
+        globalFilter: computed(() => ({})),
+        tableFilter: computed(() => ({})),
+        tableSort: computed(() => null),
+        reticle: computed(() => ({
+          options: { xDieCount: 2, yDieCount: 2, xDieShift: 0, yDieShift: 0 },
+          dieSizeX: 10,
+          dieSizeY: 20,
+        })),
+        galleryRandomSamplingDefectIds: computed(() => undefined),
+      }),
+    );
+  }
+
+  it("keeps map and table selection in local workbench state", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+    await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalled());
+    vi.mocked(source.resolveSelection).mockClear();
+
+    await model.applyMapSelection([9, 2, 9]);
+    await model.appendMapSelection([7, 2]);
+    model.setTableSelection({ kind: "ids", ids: [8, 3, 8] });
+
+    expect(model.mapSelectedDefectIds.value).toEqual([2, 7, 9]);
+    expect(model.tableSelection.value).toEqual({ kind: "ids", ids: [3, 8] });
+    expect(model.galleryQuery.value.tableSelection).toEqual({ kind: "ids", ids: [3, 8] });
+    expect(source.resolveSelection).not.toHaveBeenCalled();
+  });
+
+  it("keeps select-all symbolic in the gallery query", () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+
+    model.setTableSelection({ kind: "all", excludedIds: [9, 3, 9] });
+
+    expect(model.tableSelection.value).toEqual({ kind: "all", excludedIds: [3, 9] });
+    expect(model.galleryQuery.value.tableSelection).toEqual({
+      kind: "all",
+      excludedIds: [3, 9],
+    });
+  });
+
+  it("reloads map queries when an SSE revision invalidates the scope", async () => {
+    const { source, invalidate } = createDataSource();
+    mount(source);
+    await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(1));
+
+    invalidate({ scope: "dataset:ds-1", revision: 2, changedKinds: ["prediction"] });
+
+    await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not reload the unchanged map snapshot when Review mode activates", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+    await vi.waitFor(() => {
+      expect(source.loadMap).toHaveBeenCalledTimes(1);
+      expect(source.loadAggregates).toHaveBeenCalledTimes(1);
+    });
+
+    model.setReviewMode(true);
+
+    await vi.waitFor(() => expect(source.loadAggregates).toHaveBeenCalledTimes(2));
+    expect(source.loadMap).toHaveBeenCalledTimes(1);
+  });
+});

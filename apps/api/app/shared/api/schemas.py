@@ -111,7 +111,10 @@ class TrainingEvent(BaseModel):
 
 class TrainingJob(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    dataset_id: str
+    # Historical jobs outlive their source dataset.  The database FK uses
+    # ON DELETE SET NULL, so read models must preserve that state instead of
+    # failing every job-list query after a dataset is removed.
+    dataset_id: str | None
     trainer_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
@@ -226,7 +229,9 @@ class PredictionEvent(BaseModel):
 
 class PredictionJob(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    dataset_id: str
+    # See TrainingJob.dataset_id: prediction history is retained after the
+    # source dataset is deleted.
+    dataset_id: str | None
     model_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
@@ -479,7 +484,7 @@ class JobQueueStats(BaseModel):
 
 class RecentJobSummary(BaseModel):
     id: str
-    dataset_id: str
+    dataset_id: str | None
     trainer_id: str
     status: str
     created_by: str
@@ -796,7 +801,7 @@ class TaskTrackerSummaryResponse(BaseModel):
     display_name: str
     display_status: str
     stage: str
-    dataset_id: str
+    dataset_id: str | None
     dataset_name: str | None = None
     model_id: str | None = None
     trainer_id: str | None = None

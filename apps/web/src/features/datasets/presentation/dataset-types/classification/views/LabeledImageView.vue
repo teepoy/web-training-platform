@@ -12,6 +12,7 @@
       :bordered="false"
       :single-line="false"
       size="small"
+      :row-props="rowProps"
     />
   </div>
 </template>
@@ -33,6 +34,18 @@ withDefaults(
     total: 0,
   },
 );
+
+const emit = defineEmits<{
+  (event: "select-sample", sampleId: string): void;
+}>();
+
+function rowProps(row: LabeledImageV1Row) {
+  return {
+    "data-testid": `dataset-sample-row-${row.sample_id}`,
+    style: "cursor: pointer",
+    onClick: () => emit("select-sample", row.sample_id),
+  };
+}
 
 const columns: DataTableColumns<LabeledImageV1Row> = [
   {

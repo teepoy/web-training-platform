@@ -14,26 +14,24 @@
 
 平台分为五个主要运行层：
 
-| 层                   | 包                                                   | 职责                                                                                             | 禁止事项                                                              |
-| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| Control plane        | `apps/api`                                           | HTTP API、权限、业务参数校验、catalog metadata、任务创建、状态与结果持久化、runtime service 调度 | API route 不执行训练/预测 callable；API 进程不依赖 Torch/CUDA runtime |
-| Runtime services     | `services/*`                                         | out-of-process trainer、predictor、image/parser/upstream adapter 等重依赖运行时                  | 不 import `apps/api` 内部 service/repository/ORM/FastAPI router       |
-| Data plane interface | API 暴露的窄接口 / manifest / object storage handoff | 向 runtime services 提供 dataset view、artifact、prediction commit、progress report 等稳定边界   | 不暴露 API module 内部对象或把内部 Python service 当 SDK 使用         |
+| 层                   | 包                                                   | 职责                                                                                             | 禁止事项                                                        |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Control plane        | `apps/api`                                           | HTTP API、权限、业务参数校验、catalog metadata、任务创建、状态与结果持久化、runtime service 调度 | API route 不执行训练/预测 callable                              |
+| Runtime services     | `services/*`                                         | out-of-process trainer、predictor、image/parser/upstream adapter 等重依赖运行时                  | 不 import `apps/api` 内部 service/repository/ORM/FastAPI router |
+| Data plane interface | API 暴露的窄接口 / manifest / object storage handoff | 向 runtime services 提供 dataset view、artifact、prediction commit、progress report 等稳定边界   | 不暴露 API module 内部对象或把内部 Python service 当 SDK 使用   |
 
 ### Runtime Service 边界
 
 训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 out-of-process runtime services，不属于 API 进程。API 只负责 control plane：创建任务、校验权限和参数、将 catalog entry 路由到 Prefect deployment、持久化业务状态、提供前端查询表面。
 
-- API 进程不安装也不导入 Torch/CUDA runtime。
 - 当前不保留独立 `libs/ml` 或 shared Python runtime contracts；这些包没有真实跨进程消费者时会制造假边界。API 内部 demo/type implementation 放在 API owning module 内。
 - 未来 SDK/runtime service 边界优先使用 OpenAPI、protobuf/gRPC、Arrow schema/manifest 等生成或传输 contract，而不是手写共享 Python DTO 包。
 - Runtime service 不 import `apps/api/app/modules/*` 内部 service、repository、ORM model 或 FastAPI dependency。
 - API 可以提供 gRPC/HTTP 等窄 data-plane 接口，也可以返回 manifest 与 signed object-store refs 让 runtime 批量读取；大批量图片/Parquet 不应强制走逐行 RPC。
 - Job progress、artifact metadata、prediction commit 等通过稳定 transport contract 回写 API，不通过共享内存对象或 API 内部 Python 类。
-- API control-plane module 禁止模块级导入 Torch/TensorFlow。SC 的无 Torch
-  executable adapter 可以由 `apps/api/app/modules/sc` 持有；Torch/torchvision/
-  Ultralytics 内核只能位于可选 workspace library `libs/ml`，并由 worker
-  在任务执行阶段懒加载。
+- SC 的算法注册、Prefect flow/task 和 executable adapter 可以由
+  `apps/api/app/modules/sc` 持有；Torch/torchvision/Ultralytics 内核位于可选
+  workspace library `libs/ml`。
 
 目标执行拓扑：
 
@@ -41,41 +39,38 @@
 apps/api -> data plane interface / object storage manifest
 runtime service -> data plane interface / object storage manifest
 
-apps/api 不直接执行 trainer/predictor callable
+HTTP API 请求路径不直接执行 trainer/predictor callable
 runtime service 不直接 import apps/api internals
 ```
 
-### Perspective WebSocket 隔离
+### SC SQL Data Provider 隔离
 
-Perspective WebSocket 与普通 HTTP API 必须运行在不同进程和不同容器中：
+SC 大表查询与普通 HTTP API 必须运行在不同进程和不同容器中：
 
-- `app.main:app` 只提供普通 HTTP API，不注册 Perspective WebSocket 路由。
-- `app.perspective_main:app` 只提供 `/api/v1/sc/perspective/**/ws`、健康检查与就绪检查。
-- `app.perspective_main:app` 必须使用独立的最小 composition root，只装配数据库 session、Redis、SC upstream 与 dataset storage；禁止复用普通 API 的完整 `build_app_context()`。
-- Compose 中使用独立的 `perspective-ws` 服务；Kubernetes 中使用独立 Deployment/Service。
-- Web 反向代理必须把 Perspective WebSocket 路径定向到独立的 `perspective_ws` upstream，其余 `/api` 请求仍定向到 `api:8000`。
-- 生产 Perspective 容器由 Supervisor 管理四个独立 Uvicorn 进程，分别监听 `8001–8004`；禁止使用 Uvicorn `--workers` 拉起多进程。
-- Web Nginx 对 `perspective-ws:8001–8004` 使用 `least_conn` 策略分配长连接。进程数量、监听端口和 Nginx upstream 列表必须同步修改，不能隐式缺省或动态失配。
-- Perspective 健康检查必须覆盖容器内全部监听端口。Compose 在 60 秒启动宽限后每 10 秒并行探测一次，单次请求 2 秒超时；连续 3 次失败必须由 PID 1 watchdog 强制终止服务进程组并以非零状态退出，再由 restart policy 重启容器。Kubernetes 使用相同的端口覆盖与失败阈值，由 liveness probe 触发 Pod 重启。
-- `PERSPECTIVE_WS_MAX_RSS_MB` 只用于本地/开发环境定位 native allocator 异常；真实生产环境不得因 RSS 高水位把存活 worker 标记为 unready 或主动重启，以免切断活跃 WebSocket。生产内存保护应通过容量监控、连接排空和受控滚动替换处理。
-- Perspective 仍必须与普通 API worker 分离；Kubernetes 可以在此进程级拓扑之上增加 Pod 副本。
+- `app.main:app` 只提供 control-plane HTTP API；`app.sc_data_provider_main:app` 只提供 `/api/v1/sc/data/**`、健康检查与就绪检查。
+- Data provider 使用独立最小 composition root，只装配数据库 session、Redis、SC upstream 与 dataset storage；禁止复用普通 API 的完整 `build_app_context()`。
+- 查询协议固定为 HTTP `POST` + 参数化只读 DuckDB SQL + Arrow IPC Stream；变更通知使用 SSE。浏览器不得依赖 Perspective 或其他 WebAssembly SIMD runtime。
+- SQL 只能访问当前授权 scope 内的只读 `samples` 与 `review_images` view；AST policy 和 DuckDB connection 必须同时禁止 DDL、DML、外部文件/网络扫描、extension 安装与加载。
+- Selection 是前端 workbench 状态和参数化查询约束，不是服务端数据列；禁止重新引入 `map_in_selection`、`table_in_selection` 或通过表更新保存 UI selection。
+- Annotation/prediction 先持久化，再通过 Redis 原子递增全局 scope revision 并发布 invalidation。查询返回自身 revision；浏览器丢弃低于已知 revision 的响应。
+- 不缓存最终 SQL result。共享 object cache 只保存不可变 base、review-image 与 overlay Parquet/Arrow object，并用 Redis build lock、metadata、lease 与 cleanup leader 协调。临时文件必须原子 rename 后才可见；有 lease 的 object 禁止清理。
+- Compose 使用独立 `sc-data-provider` 服务，由 Uvicorn `--workers 4` 在单个 `8001` socket 上管理四个 worker；Nginx 只代理 `sc-data-provider:8001`，不做容器内多端口负载均衡。
+- Kubernetes 每 Pod 只运行一个 Uvicorn worker，由 Deployment replicas 和 Service 分流。`emptyDir` cache 与 Redis cache metadata 按 Pod namespace 隔离，scope revision 在所有 Pod 间共享。
+- 每个 worker 只拥有一个 DuckDB connection、一条单线程执行队列和独立 spill 目录。内存、spill、响应大小、SQL timeout、cache 水位与 TTL 必须在配置和部署清单中显式声明。
+- `/health` 与 `/ready` 每次调用都以 info 级别记录当前 worker RSS；`/ready` 在超过 `SC_DATA_PROVIDER_MAX_RSS_MB` 时返回 503，容器/Pod 的硬内存 limit 作为最终保护。
+- Perspective WebSocket、Supervisor、watchdog、多端口 healthcheck 与相关包不属于目标架构，不得作为失败 fallback 恢复。
 
 > **迁移说明：** 旧版独立的 `gpu-worker` / `inference` / `embedding` 服务已并入 `apps/api` Prefect flow。原 `apps/worker`、`apps/inference`、`apps/embedding` 目录已移除。
 
-SC 本地执行能力采用 module-owned adapter + optional library：
+SC 本地执行能力采用 module-owned algorithm + optional library：
 
-- `apps/api/app/modules/sc` 拥有 capability metadata、惰性 executable binding
-  和无 Torch 的 Prefect/runtime adapter。
+- `apps/api/app/modules/sc` 可以在算法局部模块中共同维护 capability metadata、
+  executable binding、Prefect flow/task 和 runtime adapter。
 - `libs/ml` 只拥有 Torch、TorchVision、Ultralytics 模型、训练与推理
   内核；禁止反向 import `app.*`、Prefect、repository、ORM 或 FastAPI dependency。
 - `ml_library.models` 仅为同进程内核 value model，不是 transport contract。SC 新增
   跨进程/跨语言接口时必须并入现有 `libs/protos`，优先使用 protobuf、Arrow
   schema/manifest 等 language-agnostic 定义，禁止新建 Python-only contract lib。
-- API startup、catalog、router、service、composition 和 registration barrel
-  禁止 import `ml_library` 或 Torch/CUDA package。只有明确选择 SC executable 后，
-  module-owned adapter 才能在 worker 中懒加载 `ml_library`。
-- 普通 API 与 CPU worker 安装不包含 `ml-library`；GPU worker 通过显式
-  `finetune-api[sc-runtime]` extra 安装。
 - 这一 SC 例外不把 optional library 变成通用 shared runtime contract；未来
   production runtime 仍可迁移为 `services/*` out-of-process runtime，通过
   manifest、OpenAPI/protobuf 和 Prefect deployment 接入。
@@ -177,9 +172,10 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   `ViewContractRef`、row type import path 和 Arrow schema import path；`@view(id=...)`
   只绑定 catalog ID，不允许在 row class 再复制 name、annotation flag 或 contract。
   Data-plane schema registry 从 definition 构建，不维护第二份 view-to-schema map。
-- View definition、materializer、trainer、predictor metadata 必须通过 module-owned
-  `CapabilityBundle` 进入中心 `CapabilityCatalog`。中心 catalog 负责唯一性、版本、
-  引用和配对校验，不依赖目录扫描或 import executable 发现能力。
+- View definition、materializer、trainer、predictor metadata 和 executable routing
+  必须通过显式的 module-owned registration 进入中心 registry/catalog。一个算法注册
+  可以作为 product metadata、executable binding 和 Prefect deployment routing 的共同
+  声明来源；中心层负责唯一性、版本、引用和配对校验，不依赖目录扫描发现能力。
 - Materializer 声明自己产生的精确 `ViewContractRef`，以及支持的 purpose、format
   和 storage mode。Trainer/predictor 只声明消费的精确 `ViewContractRef`，不直接
   绑定具体 materializer；调用方按 view + purpose + storage mode 显式选择
@@ -193,18 +189,20 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   `trainer_id` 推断模型可加载。
 - API 侧 trainer/predictor catalog 只保存 metadata，用于列表展示、参数 schema、
   权限与兼容性校验。
-- Prefect deployment 是 executable capability 边界。静态 executable binding、算法版本和
-  默认 deployment route 由 module-owned `RuntimeCapabilityBundle` 合并声明并进入中心
-  runtime catalog；catalog metadata 中已有的 view/model contract 不得在 route 中重复。
+- Prefect deployment 是 executable capability 边界。算法局部模块可以共同维护 metadata、
+  executable binding、Prefect task/flow、算法版本和默认 deployment route；中心 registry
+  从同一注册声明生成 catalog 和 deployment routing，已有的 view/model contract 不得在
+  route 中重复。
   环境配置只能覆盖 deployment name、resource profile、owner 和 code version。
 - Runtime route 必须显式声明 `owner=local_compat|external`。API 只 seed/update
   `local_compat` deployment；`external` deployment 由 runtime service 拥有，API
   只能解析和调用，禁止覆盖其 entrypoint/work pool。
-- API catalog 与 Prefect executable deployment 不允许混用；API 不 import executable callable。
 - Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和
-  module-owned runtime descriptor 创建 Prefect flow run；环境配置只提供部署差异覆盖。
+  module-owned registration 创建 Prefect flow run；环境配置只提供部署差异覆盖。
+  算法可以分别提供 train、predict、train-and-predict flow，也可以由更高层 flow 组合；
+  flow 的层级、数量和 Python 模块位置不属于核心设计约束。
   第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker`
-  这类过期执行入口，也不要在 API flow/service 中硬连某个具体 ML 实现作为扩展机制。
+  这类过期执行入口，也不要在通用 API route/service 中硬连某个具体 ML 实现作为扩展机制。
 - **Mapper** 使用全局 `MapperRegistry`（`app.core.mapper_registry.mapper`）注册类型间转换函数。`@mapper.register(from_types, to_types)` 接受 type 或 ClassVar 字符串，注册笛卡尔积 key。调用方通过 `mapper.get_mapper(src, dst)` 获取转换函数，不再调用 model 类上的 `from_sample` / `to_sample` / `get_adapter` / `as_*` 方法。每个 module 的 mapper 统一放在 `<module>/domain/mapper.py`，由 `app/registrations.py` 触发注册副作用。Mapper 函数必须包含完整转换逻辑，不允许在 model 类上保留内联转换方法；model 类只保留字段定义和 ClassVar 标识。
 
 前端：

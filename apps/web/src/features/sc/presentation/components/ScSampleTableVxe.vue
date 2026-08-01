@@ -2,11 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { CSSProperties } from "vue";
 import { NButton, NIcon, NPopover, NText } from "naive-ui";
-import type { Filter, ViewConfigUpdate } from "@perspective-dev/client";
-import type {
-  ScPerspectiveTable as Table,
-  ScPerspectiveView as View,
-} from "../composables/perspectiveWorkerClient";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
 import {
   ArrowDownOutline,
@@ -15,23 +10,18 @@ import {
   SwapVerticalOutline,
 } from "@vicons/ionicons5";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
-import { buildPerspectiveSampleViewConfig } from "@/features/sc/presentation/composables/perspectiveSampleViewConfig";
-import { perspectiveViewConfigKey } from "@/features/sc/presentation/composables/perspectiveViewConfig";
+import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { ArrowBackedRows } from "./arrowBackedRows";
-import { createSampleArrowDecoder } from "./sampleArrowClient";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 import type { ScSampleTableBaseProps, ScSampleTableEmits } from "./scSampleTableContract";
 
 interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
-  /** Mutable Perspective data source. */
-  perspectiveTable: Table;
-  /** Context filters/expressions applied before table-header filters and sorting. */
-  baseViewConfig: ViewConfigUpdate;
+  dataSource: ScSampleTableDataSource;
   defectIds?: string[];
-  ignoredPerspectiveUpdatePortIds?: readonly number[];
   pageSize?: number;
 }
 
@@ -48,7 +38,7 @@ interface ColumnDefinition {
 }
 
 interface VxeRowsPage {
-  ipc: unknown | null;
+  items: ScSampleTableDisplayRow[];
   total: number;
   nextAnchor: string | null;
 }
@@ -138,7 +128,6 @@ const activeColumnDefinitions = computed(() =>
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 
 let arrowRows = new ArrowBackedRows();
-const arrowDecoder = createSampleArrowDecoder();
 let rawRows = arrowRows.rows as VxeSampleTableRow[];
 let displayRows: VxeSampleTableRow[] = [];
 const gridRef = ref<VxeGridRef | null>(null);
@@ -151,7 +140,10 @@ const storageStats = ref(arrowRows.getStats());
 const pageError = ref<string | null>(null);
 const streamStatus = ref("");
 const isFetching = ref(false);
-const selectedIds = ref<Set<number>>(new Set());
+// In explicit mode this set contains selected IDs. In all-results mode it
+// contains only the exceptions, so a 300k-row selection stays constant-size.
+const selectionDeltaIds = ref<Set<number>>(new Set());
+const allMatchingRowsSelected = ref(false);
 const tableFilter = ref<ScSampleTableFilter>({ ...(props.filter ?? {}) });
 const tableSort = ref<ScSampleTableSort>(normalizeTableSort(props.sort));
 const filterPopoverVersion = ref(0);
@@ -163,8 +155,6 @@ const searchedSetFilterValues = ref<Record<string, Array<string | number>>>({});
 const setFilterSearchLoading = ref<Record<string, boolean>>({});
 let requestVersion = 0;
 const loadedDefectIds = new Set<number>();
-let activeView: View | null = null;
-let viewUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 let loadingRequest: { page: number; version: number } | null = null;
 let pendingHorizontalScrollRestore: { version: number; scrollLeft: number } | null = null;
 let pendingRowsReplacementVersion: number | null = null;
@@ -300,10 +290,6 @@ const checkboxConfig: VxeTablePropTypes.CheckboxConfig<VxeSampleTableRow> = {
   checkMethod: ({ row }) => rowDefectId(row) !== null,
 };
 
-function asRecord(data: unknown): Record<string, unknown[]> {
-  return data as Record<string, unknown[]>;
-}
-
 function normalizeFilterValue(field: string, value: string | number): string | number {
   if (field !== "defect_id") return value;
   const numeric = Number(value);
@@ -312,40 +298,6 @@ function normalizeFilterValue(field: string, value: string | number): string | n
 
 function normalizeTableSort(sort: ScSampleTableSort | null | undefined): ScSampleTableSort {
   return sort ?? DEFAULT_TABLE_SORT;
-}
-
-function buildEffectiveViewConfig(omitFilterField?: string): ViewConfigUpdate {
-  const defectIdFilters: Filter[] =
-    props.defectIds && props.defectIds.length > 0
-      ? [["defect_id", "in", props.defectIds.map(Number).filter(Number.isFinite)] as Filter]
-      : [];
-  return buildPerspectiveSampleViewConfig({
-    base: {
-      ...props.baseViewConfig,
-      columns: activeColumnDefinitions.value.map((definition) => String(definition.key)),
-    },
-    tableFilter: tableFilter.value,
-    tableSort: tableSort.value,
-    additionalFilters: defectIdFilters,
-    omitTableFilterField: omitFilterField,
-  });
-}
-
-const effectiveViewConfig = computed(() => buildEffectiveViewConfig());
-const effectiveViewConfigKey = computed(() => perspectiveViewConfigKey(effectiveViewConfig.value));
-
-function numericSearchFilter(
-  field: string,
-  search: string,
-): Array<[string, string, unknown]> | null {
-  const trimmed = search.trim();
-  if (!trimmed) return [];
-  const values = trimmed
-    .split(",")
-    .map((part) => Number(part.trim()))
-    .filter(Number.isFinite);
-  if (values.length === 0) return null;
-  return values.length === 1 ? [[field, "==", values[0]]] : [[field, "in", values]];
 }
 
 function getFilterState(field: string): {
@@ -391,113 +343,15 @@ function getSetFilterOptions(definition: ColumnDefinition) {
     .map((value) => ({ label: String(value), value }));
 }
 
-function detachActiveView(): View | null {
-  if (viewUpdateTimer !== null) {
-    clearTimeout(viewUpdateTimer);
-    viewUpdateTimer = null;
-  }
-  const view = activeView;
-  activeView = null;
-  return view;
-}
-
-async function disposeActiveView(): Promise<void> {
-  const view = detachActiveView();
-  if (view) await view.delete();
-}
-
-async function getActiveView(version: number): Promise<View | null> {
-  if (activeView) return activeView;
-  const view = await props.perspectiveTable.view(effectiveViewConfig.value);
-  if (version !== requestVersion) {
-    await view.delete();
-    return null;
-  }
-  activeView = view;
-  view.on_update((event: unknown) => {
-    if (version !== requestVersion || activeView !== view) return;
-    const portId = (event as { port_id?: number }).port_id;
-    if (portId != null && props.ignoredPerspectiveUpdatePortIds?.includes(portId)) return;
-    scheduleActiveViewRefresh(view, version);
+async function loadWindow(start: number, end: number): Promise<VxeRowsPage> {
+  const page = await props.dataSource.loadRows({
+    defectIds: props.defectIds ?? [],
+    anchor: String(start),
+    limit: Math.max(0, end - start),
+    filter: tableFilter.value,
+    sort: tableSort.value,
   });
-  return view;
-}
-
-function scheduleActiveViewRefresh(view: View, version: number): void {
-  if (viewUpdateTimer !== null) clearTimeout(viewUpdateTimer);
-  viewUpdateTimer = setTimeout(() => {
-    viewUpdateTimer = null;
-    if (version !== requestVersion || activeView !== view) return;
-    if (loadingRequest?.version === version) {
-      scheduleActiveViewRefresh(view, version);
-      return;
-    }
-    void refreshActiveViewRows(view, version);
-  }, 100);
-}
-
-async function refreshActiveViewRows(view: View, version: number): Promise<void> {
-  if (version !== requestVersion || activeView !== view) return;
-  const scrollLeft = gridRef.value?.getScrollData().scrollLeft ?? 0;
-  pendingHorizontalScrollRestore = {
-    version,
-    scrollLeft,
-  };
-  pendingRowsReplacementVersion = version;
-  loadedDefectIds.clear();
-  resetVirtualPosition();
-  pageError.value = null;
-  isFetching.value = true;
-  streamStatus.value = "Loading sample rows...";
-  await loadPage(0);
-}
-
-async function loadWindow(start: number, end: number, version: number): Promise<VxeRowsPage> {
-  const view = await getActiveView(version);
-  if (!view) return { ipc: null, total: DEFAULT_TOTAL, nextAnchor: null };
-  try {
-    const total = await view.num_rows();
-    const safeStart = Math.max(0, Math.min(start, total));
-    const safeEnd = Math.max(safeStart, Math.min(end, total));
-    if (safeEnd <= safeStart) return { ipc: null, total, nextAnchor: null };
-    const ipc = await view.to_arrow({ start_row: safeStart, end_row: safeEnd });
-    return {
-      ipc,
-      total,
-      nextAnchor: safeEnd < total ? String(safeEnd) : null,
-    };
-  } catch (error) {
-    if (version === requestVersion) {
-      await disposeActiveView();
-    }
-    throw error;
-  }
-}
-
-async function loadDefectIdRows(
-  rows: ArrowBackedRows,
-  view: View,
-  total: number,
-  version: number,
-): Promise<boolean> {
-  const columnPaths = (await view.column_paths()) as string[];
-  const defectIdColumnIndex = columnPaths.findIndex((path) => path === "defect_id");
-  if (defectIdColumnIndex < 0) {
-    rows.resetWithoutDefectIds(total);
-    return true;
-  }
-  const ipc = await view.to_arrow({
-    start_row: 0,
-    end_row: total,
-    start_col: defectIdColumnIndex,
-    end_col: defectIdColumnIndex + 1,
-  });
-  if (version !== requestVersion) return false;
-  const decoded = await arrowDecoder.decode(ipc);
-  if (version !== requestVersion) return false;
-  const defectIdColumn = columnPaths[defectIdColumnIndex];
-  rows.reset(total, decoded, defectIdColumn);
-  return true;
+  return page;
 }
 
 async function waitForGridRef(): Promise<VxeGridRef | null> {
@@ -537,22 +391,10 @@ async function loadPage(pageIndex: number): Promise<void> {
   streamStatus.value =
     pageIndex === 0 && (replacesRows || rawRows.length === 0) ? "Loading sample rows..." : "";
   try {
-    const page = await loadWindow(start, end, version);
+    const page = await loadWindow(start, end);
     if (version !== requestVersion || pageIndex !== requestedPage) return;
-    const view = await getActiveView(version);
-    if (!view) return;
-    const needsDefectIdIndex = replacesRows || nextArrowRows.rows.length !== page.total;
-    if (needsDefectIdIndex) {
-      const loadedIds = await loadDefectIdRows(nextArrowRows, view, page.total, version);
-      if (!loadedIds) return;
-    }
-    if (version !== requestVersion || pageIndex !== requestedPage) return;
-    const decodedPage = page.ipc ? await arrowDecoder.decode(page.ipc) : null;
-    if (version !== requestVersion || pageIndex !== requestedPage) return;
-    const items = decodedPage
-      ? (nextArrowRows.hydrate(start, decodedPage) as VxeSampleTableRow[])
-      : [];
-    nextArrowRows.retainRange(start, start + items.length);
+    nextArrowRows.resetWithoutDefectIds(page.total);
+    const items = page.items.map((item) => ({ ...item, _isHydrated: true }));
     if (version !== requestVersion || pageIndex !== requestedPage) return;
     if (replacesRows) {
       arrowRows = nextArrowRows;
@@ -569,10 +411,7 @@ async function loadPage(pageIndex: number): Promise<void> {
     await syncRawRowsToTable();
     renderedPage = pageIndex;
     accumulateDiscoveredSetFilterValues(items);
-    const horizontalScrollRestore =
-      pendingHorizontalScrollRestore?.version === version
-        ? pendingHorizontalScrollRestore.scrollLeft
-        : undefined;
+    const horizontalScrollRestore = pendingHorizontalScrollRestore?.scrollLeft;
     if (horizontalScrollRestore !== undefined) {
       pendingHorizontalScrollRestore = null;
     }
@@ -621,35 +460,17 @@ async function searchSetFilterOptions(field: string): Promise<void> {
 
   setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: true };
   try {
-    const searchFilters = numericSearchFilter(field, search);
-    if (searchFilters === null) {
-      searchedSetFilterValues.value = { ...searchedSetFilterValues.value, [field]: [] };
-      return;
-    }
-    const filterOptionsViewConfig = buildEffectiveViewConfig(field);
-    const view = await props.perspectiveTable.view({
-      ...filterOptionsViewConfig,
-      columns: [field],
-      group_by: [field],
-      aggregates: { [field]: "count" },
-      filter: [...(filterOptionsViewConfig.filter ?? []), ...(searchFilters as Filter[])],
-    });
-    try {
-      const total = await view.num_rows();
-      const data = asRecord(await view.to_columns({ start_row: 0, end_row: Math.min(total, 200) }));
-      const rowPaths = data.__ROW_PATH__ as unknown[][] | undefined;
-      searchedSetFilterValues.value = {
-        ...searchedSetFilterValues.value,
-        [field]: (rowPaths ?? [])
-          .map((path) => path?.[0])
-          .filter(
-            (value): value is string | number =>
-              typeof value === "string" || typeof value === "number",
-          ),
-      };
-    } finally {
-      await view.delete();
-    }
+    searchedSetFilterValues.value = {
+      ...searchedSetFilterValues.value,
+      [field]:
+        (await props.dataSource.loadDistinctValues?.({
+          field,
+          search,
+          limit: 200,
+          filter: tableFilter.value,
+          sort: tableSort.value,
+        })) ?? [],
+    };
   } finally {
     setFilterSearchLoading.value = { ...setFilterSearchLoading.value, [field]: false };
   }
@@ -660,7 +481,6 @@ async function resetRows(): Promise<void> {
   const version = ++requestVersion;
   pendingHorizontalScrollRestore = { version, scrollLeft };
   pendingRowsReplacementVersion = version;
-  const staleView = detachActiveView();
   loadingRequest = null;
   loadedDefectIds.clear();
   resetVirtualPosition();
@@ -668,7 +488,6 @@ async function resetRows(): Promise<void> {
   isFetching.value = true;
   streamStatus.value = "Loading sample rows...";
 
-  if (staleView) await staleView.delete();
   if (version !== requestVersion) return;
   await loadPage(0);
 }
@@ -768,8 +587,24 @@ function rowDefectId(row: VxeSampleTableRow | undefined): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
+function rowIsSelected(id: number): boolean {
+  return allMatchingRowsSelected.value
+    ? !selectionDeltaIds.value.has(id)
+    : selectionDeltaIds.value.has(id);
+}
+
+const selectedCount = computed(() =>
+  allMatchingRowsSelected.value
+    ? Math.max(0, serverTotal.value - selectionDeltaIds.value.size)
+    : selectionDeltaIds.value.size,
+);
+
 function emitSelection(): void {
-  emit("selection-change", Array.from(selectedIds.value));
+  const ids = Array.from(selectionDeltaIds.value).sort((left, right) => left - right);
+  emit(
+    "selection-change",
+    allMatchingRowsSelected.value ? { kind: "all", excludedIds: ids } : { kind: "ids", ids },
+  );
 }
 
 function handleCheckboxChange(
@@ -779,16 +614,23 @@ function handleCheckboxChange(
   if (!event.row) return;
   const id = rowDefectId(event.row);
   if (id === null) return;
-  const next = new Set(selectedIds.value);
-  if (event.checked) next.add(id);
+  const next = new Set(selectionDeltaIds.value);
+  if (allMatchingRowsSelected.value) {
+    if (event.checked) next.delete(id);
+    else next.add(id);
+  } else if (event.checked) next.add(id);
   else next.delete(id);
-  selectedIds.value = next;
+  selectionDeltaIds.value = next;
   emitSelection();
 }
 
 function handleCheckboxAll(event: VxeTableDefines.CheckboxAllEventParams<VxeSampleTableRow>): void {
   if (props.enableSelection !== true) return;
-  selectedIds.value = event.checked ? new Set(arrowRows.getAllDefectIds()) : new Set();
+  // The header represents every row matching the current server-side query,
+  // not only VXE's loaded 250-row window. Keep it symbolic instead of
+  // materializing every defect ID in the browser.
+  allMatchingRowsSelected.value = event.checked;
+  selectionDeltaIds.value = new Set();
   emitSelection();
 }
 
@@ -797,24 +639,28 @@ function handleCellClick(event: VxeTableDefines.CellClickEventParams<VxeSampleTa
   if (!event.row || event.column?.type === "checkbox") return;
   const id = rowDefectId(event.row);
   if (id === null) return;
-  const next = new Set(selectedIds.value);
-  const checked = !next.has(id);
-  if (checked) next.add(id);
+  const next = new Set(selectionDeltaIds.value);
+  const checked = !rowIsSelected(id);
+  if (allMatchingRowsSelected.value) {
+    if (checked) next.delete(id);
+    else next.add(id);
+  } else if (checked) next.add(id);
   else next.delete(id);
-  selectedIds.value = next;
+  selectionDeltaIds.value = next;
   void gridRef.value?.setCheckboxRowKey(id, checked);
   emitSelection();
 }
 
 function syncCurrentPageSelection(): void {
   for (const id of loadedDefectIds) {
-    void gridRef.value?.setCheckboxRowKey(id, selectedIds.value.has(id));
+    void gridRef.value?.setCheckboxRowKey(id, rowIsSelected(id));
   }
 }
 
 function clearSelection(): void {
   if (props.enableSelection !== true) return;
-  selectedIds.value = new Set();
+  allMatchingRowsSelected.value = false;
+  selectionDeltaIds.value = new Set();
   void gridRef.value?.clearCheckboxRow();
   emitSelection();
 }
@@ -1013,20 +859,23 @@ watch(
 );
 
 watch(
-  [() => props.perspectiveTable, effectiveViewConfigKey, resolvedPageSize],
+  [() => props.dataSource.scopeKey, resolvedPageSize, tableFilter, tableSort],
   () => {
     void resetRows();
   },
-  { immediate: true },
+  { deep: true, immediate: true },
 );
 
 watch(
-  () => props.selectedDefectIds,
-  (ids) => {
-    selectedIds.value = new Set(ids ?? []);
+  () => props.selection,
+  (selection: ScTableSelectionConstraint | undefined) => {
+    allMatchingRowsSelected.value = selection?.kind === "all";
+    selectionDeltaIds.value = new Set(
+      selection?.kind === "all" ? selection.excludedIds : (selection?.ids ?? []),
+    );
     void nextTick(syncCurrentPageSelection);
   },
-  { immediate: true },
+  { deep: true, immediate: true },
 );
 
 watch(
@@ -1059,11 +908,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   requestVersion += 1;
-  arrowDecoder.dispose();
   resizeObserver?.disconnect();
   resizeObserver = null;
   endScrollbarDrag();
-  void disposeActiveView();
 });
 
 watch(
@@ -1120,12 +967,12 @@ defineExpose({
       <NText depth="2" class="sst-vxe-header-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-vxe-header-actions">
         <NButton
-          v-if="enableSelection && selectedIds.size > 0"
+          v-if="enableSelection && selectedCount > 0"
           size="tiny"
           quaternary
           @click="clearSelection"
         >
-          Clear Selection ({{ selectedIds.size }})
+          Clear Selection ({{ selectedCount }})
         </NButton>
         <NButton
           v-if="Object.keys(tableFilter).length > 0"

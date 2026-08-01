@@ -1,6 +1,6 @@
 # SC Pipeline Performance Remediation Plan
 
-Status: Implemented in code; production-shaped acceptance pending
+Status: Implemented in code; local 300k/Compose acceptance completed
 Recorded: 2026-08-01
 Scope: SC import, sparse annotation, training/prediction materialization, and
 the DuckDB SQL data provider
@@ -269,3 +269,25 @@ make e2e-live
 
 The live suite must run from a clean dev database/object store/cache namespace
 and must report the benchmark measurements in addition to pass/fail status.
+
+## 2026-08-02 acceptance follow-up
+
+The local 300k import, annotation, filtered training/prediction, DuckDB overlay,
+four-worker query, and 100-cycle reconnect checks passed. The four-worker
+numbers are recorded in
+[`sc-data-provider-benchmark.md`](sc-data-provider-benchmark.md); import timing
+is recorded in
+[`sc-import-performance-issues.md`](sc-import-performance-issues.md).
+
+Two findings remain open and must not be hidden by the bounded functional E2E:
+
+- **SC-PREDICTION-PERF-001:** the CPU-only local compatibility predictor
+  processed roughly 38-52 rows/second in an unfiltered 300k run (10,513 rows in
+  about 4.5 minutes in one observation), projecting to roughly two hours for a
+  complete job. The filtered E2E proves contract and overlay correctness, not
+  full-dataset throughput. Profile image decode, model inference, batch size,
+  and prediction persistence before setting the production acceptance gate.
+- **SC-PREDICTION-LIFECYCLE-001:** cancelling the Prefect flow during that
+  performance probe left the corresponding prediction job row in `running`.
+  Define cancellation reconciliation and add a test requiring the persisted
+  job to reach a terminal cancelled/failed state.

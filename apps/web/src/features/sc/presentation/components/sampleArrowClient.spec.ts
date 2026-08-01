@@ -22,7 +22,7 @@ describe("sample Arrow decoder", () => {
     vi.unstubAllGlobals();
   });
 
-  it("transfers Perspective Arrow IPC to a browser worker", async () => {
+  it("transfers Arrow IPC to a browser worker", async () => {
     vi.stubGlobal("Worker", FakeWorker);
     const decoder = createSampleArrowDecoder();
     const worker = FakeWorker.instances[0];

@@ -23,8 +23,11 @@ import {
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scSampleImageUrl } from "@/features/sc/domain/models";
-import type { PerspectiveViewSnapshot } from "@/features/sc/presentation/components/composables/useManagedPerspectiveView";
-import { usePagedPerspectiveGallery } from "@/features/sc/presentation/components/composables/usePagedPerspectiveGallery";
+import { usePagedDataGallery } from "@/features/sc/presentation/composables/usePagedDataGallery";
+import type {
+  ScGalleryDataQuery,
+  ScWorkbenchDataSource,
+} from "@/features/sc/domain/workbenchDataSource";
 
 interface BlinkSample {
   rowIndex: number;
@@ -37,8 +40,8 @@ interface BlinkSample {
 }
 
 interface ScBlinkVirtualTableProps {
-  patchViewSnapshot?: PerspectiveViewSnapshot | null;
-  reviewViewSnapshot?: PerspectiveViewSnapshot | null;
+  dataSource?: ScWorkbenchDataSource | null;
+  galleryQuery?: Omit<ScGalleryDataQuery, "mode" | "offset" | "limit">;
   loading?: boolean;
   datasetId?: string | null;
   patchSamplesPerRow?: number;
@@ -189,6 +192,7 @@ function parseReviewImages(value: unknown): number[] {
 }
 
 const EMPTY_REVIEW_IMAGES: number[] = [];
+const INITIAL_GALLERY_WINDOW_ROWS = 250;
 
 function samplesFromArrow(data: unknown, offset: number, review: boolean): BlinkSample[] {
   const table = tableFromIPC(data as Uint8Array);
@@ -213,27 +217,21 @@ function samplesFromArrow(data: unknown, offset: number, review: boolean): Blink
   });
 }
 
-const patchRequestedRange = ref({ start: 0, end: 1 });
-const reviewRequestedRange = ref({ start: 0, end: 1 });
-const patchGallery = usePagedPerspectiveGallery(
-  computed(() => props.patchViewSnapshot ?? null),
+const patchRequestedRange = ref({ start: 0, end: INITIAL_GALLERY_WINDOW_ROWS });
+const reviewRequestedRange = ref({ start: 0, end: INITIAL_GALLERY_WINDOW_ROWS });
+const patchDataGallery = usePagedDataGallery(
+  computed(() => props.dataSource ?? null),
+  computed(() => ({ ...(props.galleryQuery ?? {}), mode: "patch" as const })),
   patchRequestedRange,
+  computed(() => mode.value === "patch"),
   (ipc, offset) => samplesFromArrow(ipc, offset, false),
-  {
-    onRecoverableError: (_reason, error) => {
-      console.warn("[blink] patch view read failed", error);
-    },
-  },
 );
-const reviewGallery = usePagedPerspectiveGallery(
-  computed(() => props.reviewViewSnapshot ?? null),
+const reviewDataGallery = usePagedDataGallery(
+  computed(() => props.dataSource ?? null),
+  computed(() => ({ ...(props.galleryQuery ?? {}), mode: "review" as const })),
   reviewRequestedRange,
+  computed(() => mode.value === "review"),
   (ipc, offset) => samplesFromArrow(ipc, offset, true),
-  {
-    onRecoverableError: (_reason, error) => {
-      console.warn("[blink] review view read failed", error);
-    },
-  },
 );
 
 watch(
@@ -265,18 +263,26 @@ watch(
   },
 );
 const samplesRef = computed(() =>
-  mode.value === "review" ? reviewGallery.window.value.items : patchGallery.window.value.items,
+  mode.value === "review"
+    ? reviewDataGallery.window.value.items
+    : patchDataGallery.window.value.items,
 );
 const totalSamples = computed(() =>
-  mode.value === "review" ? reviewGallery.window.value.total : patchGallery.window.value.total,
+  mode.value === "review"
+    ? reviewDataGallery.window.value.total
+    : patchDataGallery.window.value.total,
 );
 const sampleOffset = computed(() =>
-  mode.value === "review" ? reviewGallery.window.value.offset : patchGallery.window.value.offset,
+  mode.value === "review"
+    ? reviewDataGallery.window.value.offset
+    : patchDataGallery.window.value.offset,
 );
 const currentLoading = computed(
   () =>
     (props.loading ||
-      (mode.value === "review" ? reviewGallery.isPending.value : patchGallery.isPending.value)) &&
+      (mode.value === "review"
+        ? reviewDataGallery.isPending.value
+        : patchDataGallery.isPending.value)) &&
     samplesRef.value.length === 0,
 );
 const patchCellSizeRef = patchImageSize;
@@ -325,7 +331,11 @@ watch(
     };
   },
   ({ mode: activeMode, start, end }) => {
-    const range = { start, end: Math.max(start + 1, end) };
+    // Until the first page returns a total, the virtualizer reports an empty
+    // range. Keep the explicit bootstrap window instead of replacing it with
+    // a one-row query that must immediately be followed by a viewport query.
+    if (end <= start) return;
+    const range = { start, end };
     if (activeMode === "review") {
       reviewRequestedRange.value = range;
     } else {
@@ -372,17 +382,16 @@ function syncPatchSwitchesFromInput() {
 syncPatchSwitchesFromInput();
 
 const discoveredReviewImageIds = ref<Set<number>>(new Set());
-let reviewImageIdsView: PerspectiveViewSnapshot["view"]["rawView"] | null = null;
+let reviewImageIdsScopeKey = "";
 
 watch(
-  [() => props.reviewViewSnapshot, () => reviewGallery.window.value],
-  ([snapshot, galleryWindow]) => {
-    const rawView = snapshot?.view.rawView ?? null;
-    if (rawView !== reviewImageIdsView) {
-      reviewImageIdsView = rawView;
+  [() => props.dataSource?.scopeKey, () => reviewDataGallery.window.value],
+  ([scopeKey, galleryWindow]) => {
+    if ((scopeKey ?? "") !== reviewImageIdsScopeKey) {
+      reviewImageIdsScopeKey = scopeKey ?? "";
       discoveredReviewImageIds.value = new Set();
     }
-    if (!snapshot) return;
+    if (!scopeKey) return;
     const next = new Set(discoveredReviewImageIds.value);
     for (const sample of galleryWindow.items) {
       for (const imageId of sample.reviewImages) {
@@ -522,7 +531,7 @@ async function defectIdsBetween(start: number, end: number): Promise<string[]> {
   const rangeStart = Math.min(start, end);
   const rangeEnd = Math.max(start, end) + 1;
   const galleryWindow =
-    mode.value === "review" ? reviewGallery.window.value : patchGallery.window.value;
+    mode.value === "review" ? reviewDataGallery.window.value : patchDataGallery.window.value;
   if (
     rangeStart >= galleryWindow.offset &&
     rangeEnd <= galleryWindow.offset + galleryWindow.items.length
@@ -532,14 +541,15 @@ async function defectIdsBetween(start: number, end: number): Promise<string[]> {
       .map((sample) => defectIdKey(sample.defectId));
   }
 
-  const snapshot = mode.value === "review" ? props.reviewViewSnapshot : props.patchViewSnapshot;
-  if (!snapshot) return [];
-  const table = tableFromIPC(
-    (await snapshot.view.to_arrow({
-      start_row: rangeStart,
-      end_row: rangeEnd,
-    })) as Uint8Array,
-  );
+  if (!props.dataSource) return [];
+  const page = await props.dataSource.loadGallery({
+    ...(props.galleryQuery ?? {}),
+    mode: mode.value,
+    offset: rangeStart,
+    limit: rangeEnd - rangeStart,
+  });
+  if (!page.ipc) return [];
+  const table = tableFromIPC(page.ipc);
   const defectIds = table.getChild("defect_id");
   return Array.from({ length: table.numRows }, (_, index) =>
     defectIdKey(numeric(defectIds?.get(index))),

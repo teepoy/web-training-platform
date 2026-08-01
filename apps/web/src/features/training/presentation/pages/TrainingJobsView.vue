@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { ref, computed, h, provide, watch } from "vue";
 import type { MaybeRef } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
@@ -105,17 +105,19 @@ import type { Trainer } from "@/shared/api/types";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 
 const router = useRouter();
-const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
-const props = defineProps<{
-  datasetId?: string | null;
-  allowTrain?: boolean;
-  trainDisabledReason?: string | null;
-  compatibleViewTypes?: string[] | null;
-}>();
-const canTrain = computed(() => props.allowTrain !== false);
+const props = withDefaults(
+  defineProps<{
+    datasetId?: string | null;
+    allowTrain?: boolean;
+    trainDisabledReason?: string | null;
+    compatibleViewTypes?: string[] | null;
+  }>(),
+  { allowTrain: true },
+);
+const canTrain = computed(() => props.allowTrain);
 const jobsQueryPrefix = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["jobs"]));
 provide(
   TASK_INSIGHT_ORG_ID_KEY,
@@ -190,13 +192,17 @@ const selectedDataset = computed(() =>
   (datasets.value ?? []).find((d) => d.id === formModel.value.dataset_id),
 );
 
+const compatibleTrainerViewTypes = computed(
+  () => props.compatibleViewTypes ?? selectedDataset.value?.view_types ?? [],
+);
+
 const trainerOptions = computed<SelectOption[]>(() =>
   (trainers.value ?? [])
     .filter((t) => t.trainable !== false)
     .filter((t) => {
-      if (!props.compatibleViewTypes?.length) return true;
+      if (!compatibleTrainerViewTypes.value.length) return true;
       if (!hasTrainerViewType(t)) return false;
-      return props.compatibleViewTypes.includes(t.view_type);
+      return compatibleTrainerViewTypes.value.includes(t.view_type);
     })
     .map((t) => ({ label: t.name, value: t.id })),
 );
@@ -261,7 +267,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
     title: "Dataset ID",
     key: "dataset_id",
     ellipsis: { tooltip: true },
-    render: (row) => row.dataset_id.slice(0, 8) + "…",
+    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted dataset"),
   },
   {
     title: "Trainer",
@@ -278,9 +284,21 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 150,
+    width: 220,
     render: (row) => {
       const nodes = [
+        h(
+          NButton,
+          {
+            size: "small",
+            disabled: !row.id,
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              openJobDetail(row);
+            },
+          },
+          { default: () => "View" },
+        ),
         h(
           NButton,
           {
@@ -356,12 +374,9 @@ function resetForm() {
   formRef.value?.restoreValidation();
 }
 
-function openTaskView(row: TrainingJob) {
+function openJobDetail(row: TrainingJob) {
   if (!row.id) return;
-  router.push({
-    path: "/tasks",
-    query: { kind: "training", task: row.id, from: route.fullPath },
-  });
+  router.push(`/jobs/${row.id}`);
 }
 
 function openInsight(row: TrainingJob) {

@@ -4,6 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { PredictionJobResponseDatasetId } from "./predictionJobResponseDatasetId";
 import type { PredictionJobResponseModelVersion } from "./predictionJobResponseModelVersion";
 import type { PredictionJobResponseExternalJobId } from "./predictionJobResponseExternalJobId";
 import type { PredictionJobResponseSampleIds } from "./predictionJobResponseSampleIds";
@@ -11,7 +12,7 @@ import type { PredictionJobResponseSummary } from "./predictionJobResponseSummar
 
 export interface PredictionJobResponse {
   id: string;
-  dataset_id: string;
+  dataset_id: PredictionJobResponseDatasetId;
   model_id: string;
   status: string;
   created_by: string;

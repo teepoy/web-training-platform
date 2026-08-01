@@ -188,7 +188,7 @@ const columns = computed<DataTableColumns<RecentJobSummary>>(() => [
     title: "Dataset",
     key: "dataset_id",
     width: 110,
-    render: (row) => row.dataset_id.slice(0, 8) + "…",
+    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted"),
   },
   {
     title: "View",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from omegaconf import OmegaConf
 
-from app.core.config import AppConfig, RuntimeDeploymentOverride
+from app.core.config import AppConfig, RuntimeDeploymentOverride, load_config
 from app.modules.runtime.app.services.deployment_seed import (
     runtime_prefect_deployment_specs,
 )
@@ -12,8 +12,12 @@ from app.modules.runtime.app.services.routing_service import (
 )
 
 
+def _config() -> AppConfig:
+    return load_config(skip_runtime_validation=True)
+
+
 def test_module_owned_sc_routes_derive_catalog_contracts() -> None:
-    service = ConfigRuntimeRoutingService(AppConfig())
+    service = ConfigRuntimeRoutingService(_config())
 
     train = service.training_route("resnet50-sc-v1")
     workflow = service.train_and_predict_route("resnet50-sc-v1")
@@ -30,7 +34,7 @@ def test_module_owned_sc_routes_derive_catalog_contracts() -> None:
 
 
 def test_environment_can_override_deployment_fields_only() -> None:
-    cfg = AppConfig()
+    cfg = _config()
     cfg.runtime_routing.training_routes["resnet50-sc-v1"] = (
         RuntimeDeploymentOverride(
             deployment="prod-resnet-train",
@@ -87,15 +91,15 @@ def test_environment_cannot_override_capability_contracts() -> None:
 
 def test_unknown_runtime_capability_fails() -> None:
     with pytest.raises(KeyError, match="Unknown runtime capability"):
-        ConfigRuntimeRoutingService(AppConfig()).training_route("missing")
+        ConfigRuntimeRoutingService(_config()).training_route("missing")
 
 
 def test_runtime_catalog_validation_uses_single_descriptor_source() -> None:
-    ConfigRuntimeRoutingService(AppConfig()).validate_catalog_routes()
+    ConfigRuntimeRoutingService(_config()).validate_catalog_routes()
 
 
 def test_prefect_deployment_specs_deduplicate_algorithms() -> None:
-    assert runtime_prefect_deployment_specs(AppConfig()) == [
+    assert runtime_prefect_deployment_specs(_config()) == [
         {
             "deployment_name": "train-job-deployment",
             "flow_name": "training-train-job",
@@ -121,7 +125,7 @@ def test_prefect_deployment_specs_deduplicate_algorithms() -> None:
 
 
 def test_prefect_deployment_specs_do_not_seed_external_route() -> None:
-    cfg = AppConfig()
+    cfg = _config()
     for catalog_id in ("resnet50-sc-v1", "yolo-sc-v1"):
         cfg.runtime_routing.training_routes[catalog_id] = RuntimeDeploymentOverride(
             owner="external"

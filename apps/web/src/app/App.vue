@@ -8,7 +8,6 @@
           </template>
           <template v-else-if="isSettingsRoute || isAdminRoute">
             <RouterView />
-            <!-- TODO: re-enable Agent Chat Drawer
             <AgentChatDrawer
               :messages="globalAgent.messages.value"
               :status="globalAgent.status.value"
@@ -16,7 +15,6 @@
               @abort="globalAgent.abort"
               @clear="globalAgent.clearHistory"
             />
-            -->
           </template>
           <template v-else>
             <n-layout has-sider style="height: 100vh">
@@ -114,7 +112,6 @@
                 </n-layout-content>
               </n-layout>
             </n-layout>
-            <!-- TODO: re-enable Agent Chat Drawer
             <AgentChatDrawer
               :messages="globalAgent.messages.value"
               :status="globalAgent.status.value"
@@ -122,7 +119,6 @@
               @abort="globalAgent.abort"
               @clear="globalAgent.clearHistory"
             />
-            -->
           </template>
         </n-dialog-provider>
       </n-notification-provider>
@@ -141,8 +137,7 @@ import { useUiStore } from "@/features/auth/application/ui";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
-// TODO: re-enable Agent Chat Drawer
-// import { AgentChatDrawer } from "@/shared";
+import { AgentChatDrawer } from "@/shared";
 
 const router = useRouter();
 const route = useRoute();

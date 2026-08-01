@@ -2,15 +2,8 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NButton, NResult, NSpin, useMessage, useThemeVars } from "naive-ui";
-import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
+import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
-import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
-import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
-import {
-  DEFAULT_RETICLE_MAP_OPTIONS,
-  normalizeReticleMapOptions,
-} from "@/features/sc/application/reticleMapOptions";
 import { useGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet } from "@/generated/orval/endpoints/api";
 import type {
   InspectionSummaryItem,
@@ -36,15 +29,6 @@ const message = useMessage();
 
 const inspectionTime = computed(() => String(route.params.inspectionTime ?? ""));
 const waferKey = computed(() => Number(route.params.waferKey));
-const activeMapTab = ref<"wafer" | "die" | "reticle">("wafer");
-const zoom = ref<{ x: number; y: number; w: number; h: number } | null>(null);
-const selectedGalleryDefectIds = ref<number[]>([]);
-const tableFilter = ref<ScSampleTableFilter>({});
-const tableSort = ref<ScSampleTableSort | null>(null);
-const legendGroupBy = ref<ScLegendSource | null>(null);
-const reticleOptions = ref<ReticleMapOptions>(
-  normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS),
-);
 const isImporting = ref(false);
 const importedDatasetId = ref<string | null>(null);
 
@@ -95,24 +79,6 @@ const containerStyle = computed(() => ({
   "--cv-border": themeVars.value.borderColor,
   "--cv-primary": themeVars.value.primaryColor,
 }));
-
-function setActiveMapTab(tab: "wafer" | "die" | "reticle"): void {
-  activeMapTab.value = tab;
-  zoom.value = null;
-}
-
-function setLegendGroupBy(groupBy: string | null): void {
-  if (
-    groupBy === "class" ||
-    groupBy === "bin" ||
-    groupBy === "annotation" ||
-    groupBy === "prediction" ||
-    groupBy === "final_class" ||
-    groupBy === null
-  ) {
-    legendGroupBy.value = groupBy;
-  }
-}
 
 function sanitizeInspectionTime(value: string): string {
   return value.replace(/[\s:]/g, "-");
@@ -199,22 +165,7 @@ async function startReclassifyImport(): Promise<void> {
         v-else
         :inspection-time="inspectionTime"
         :wafer-key="waferKey"
-        :active-map-tab="activeMapTab"
         :wafer-geometry="waferGeometry"
-        :reticle-die-size-x="inspectionItem?.die_size_x ?? 100000"
-        :reticle-die-size-y="inspectionItem?.die_size_y ?? 100000"
-        :reticle-options="reticleOptions"
-        :zoom="zoom"
-        :selected-gallery-defect-ids="selectedGalleryDefectIds"
-        v-model:table-filter="tableFilter"
-        v-model:table-sort="tableSort"
-        :legend-group-by="legendGroupBy"
-        @update:active-map-tab="setActiveMapTab"
-        @update:reticle-options="reticleOptions = $event"
-        @zoom-in="zoom = $event"
-        @table-selection-change="selectedGalleryDefectIds = $event"
-        @legend-group-change="setLegendGroupBy"
-        @select-samples="(ids) => (selectedGalleryDefectIds = ids.map(Number))"
       />
     </div>
   </FullScreenLayout>

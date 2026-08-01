@@ -31,12 +31,13 @@ class _ImageSource:
         assert image_types == ["patch_template", "patch_defective"]
         yield {
             "defect_id": "7",
-            "image_type": "patch_template",
+            # The production image-parser normalizes requested patch aliases.
+            "image_type": "Reference",
             "image_data": b"template",
         }
         yield {
             "defect_id": "7",
-            "image_type": "patch_defective",
+            "image_type": "Defective",
             "image_data": b"defective",
         }
 

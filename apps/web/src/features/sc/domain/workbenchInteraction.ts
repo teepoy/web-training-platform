@@ -3,15 +3,8 @@ import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSample
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 
-export type ScWorkbenchVariant = "preview" | "reclassify";
-export type ScMapTab = "wafer" | "die" | "reticle";
 export type ScLegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
-export type ScSelectionSource =
-  | "sample-table"
-  | "map-box"
-  | "map-legend"
-  | "blink-table"
-  | "bar-chart";
+export type ScSelectionSource = "sample-table" | "blink-table";
 
 export interface ScMapRegion {
   x: number;
@@ -20,30 +13,10 @@ export interface ScMapRegion {
   h: number;
 }
 
-export type ScMapSelectionSource = "box" | "lasso" | "legend" | "bar-chart" | "clear";
-
-/** Completed map-selection mutation published after Perspective state is updated. */
-export interface ScMapSelectionChange {
-  source: ScMapSelectionSource;
-  mode: "append" | "replace" | "clear";
-  ids: number[];
-  region?: ScMapRegion;
-  groupKey?: string | number | null;
-}
-
 export interface ScSelectionAction {
   source: ScSelectionSource;
   ids: string[];
-  mode: "replace" | "add" | "toggle" | "filter";
-  region?: ScMapRegion;
-  groupKey?: string;
-}
-
-export interface ScWorkbenchFilterState {
-  globalFilter: ScSampleTableFilter;
-  tableFilter: ScSampleTableFilter;
-  legendSource: ScLegendSource | null;
-  hiddenLegendKeys: Record<ScLegendSource, string[]>;
+  mode: "replace" | "add" | "toggle";
 }
 
 export interface ScSampleTableDisplayRow extends ScSampleTableRow {

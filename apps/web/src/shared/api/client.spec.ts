@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, configureTransport, isApiError, requestData, toUserMessage } from "./client";
+import {
+  ApiError,
+  configureTransport,
+  isApiError,
+  requestData,
+  requestRaw,
+  toUserMessage,
+} from "./client";
 
 function abortableFetch(signal: AbortSignal | null | undefined): Promise<Response> {
   return new Promise((_, reject) => {
@@ -86,7 +93,7 @@ describe("API transport", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response("perspective websocket disconnected", {
+        new Response("data provider disconnected", {
           status: 500,
           headers: { "Content-Type": "text/plain" },
         }),
@@ -97,7 +104,7 @@ describe("API transport", () => {
 
     expect(isApiError(error)).toBe(true);
     if (!isApiError(error)) throw new Error("Expected ApiError");
-    expect(error.body).toBe("perspective websocket disconnected");
+    expect(error.body).toBe("data provider disconnected");
     expect(toUserMessage(error, "Unable to load data")).toBe("Unable to load data");
   });
 
@@ -151,5 +158,15 @@ describe("API transport", () => {
     const cancelled = requestData("/api/v1/cancelled", { signal: controller.signal }, 1_000);
     controller.abort();
     await expect(cancelled).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("allows streaming callers to opt out of the ordinary request timeout", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestRaw("/api/v1/stream", {}, null);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeUndefined();
   });
 });

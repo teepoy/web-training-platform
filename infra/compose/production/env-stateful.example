@@ -4,6 +4,12 @@
 
 PLATFORM_NETWORK_NAME=finetune-prod
 
+# Compose memory limits
+POSTGRES_MEMORY=8g
+MINIO_MEMORY=4g
+REDIS_MEMORY=2g
+LABEL_STUDIO_MEMORY=4g
+
 # PostgreSQL credentials (shared with all DB consumers)
 POSTGRES_USER=finetune
 POSTGRES_PASSWORD=<strong-password>

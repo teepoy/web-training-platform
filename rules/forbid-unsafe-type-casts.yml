@@ -2,9 +2,9 @@ id: forbid-unsafe-type-casts
 language: typescript
 severity: error
 ignores:
-  - '**/generated/**'
-  - '**/*.spec.ts'
-  - '**/e2e-live/**'
+  - "**/generated/**"
+  - "**/*.spec.ts"
+  - "**/e2e/**"
 rule:
   pattern: $A as unknown as $B
 message: |

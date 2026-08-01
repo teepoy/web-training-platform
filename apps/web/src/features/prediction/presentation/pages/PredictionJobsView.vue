@@ -161,7 +161,7 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => [
     title: "Dataset ID",
     key: "dataset_id",
     ellipsis: { tooltip: true },
-    render: (row) => row.dataset_id.slice(0, 8) + "…",
+    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted dataset"),
   },
   {
     title: "Model ID",

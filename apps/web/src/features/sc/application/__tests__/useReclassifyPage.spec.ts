@@ -51,7 +51,6 @@ afterEach(() => {
 async function mountPage(
   datasetId: string,
   dataset: ScDatasetInfo,
-  extraQueries?: Array<{ key: unknown[]; data: unknown }>,
   annotationStats: Record<string, number> = { Scratch: 1, Clean: 1 },
 ) {
   const qc = createTestQueryClient();
@@ -96,11 +95,6 @@ async function mountPage(
   // Seed dataset query (Orval query key)
   qc.setQueryData(["api", "v1", "datasets", datasetId], dataset);
 
-  // Seed any extra queries
-  for (const { key, data } of extraQueries ?? []) {
-    qc.setQueryData(key, data);
-  }
-
   const { wrapper, queryClient } = await mountWithProviders(MakeReclassifyPageWrapper, {
     queryClient: qc,
     routes: [
@@ -133,97 +127,19 @@ const DEFAULT_DATASET: ScDatasetInfo = {
   },
 };
 
-describe("useReclassifyPage - predictionLabels", () => {
-  it("maps sample_id to predicted_label", async () => {
-    const viewSamplesData = {
-      pages: [
-        {
-          items: [
-            {
-              sample_id: "s1",
-              defect_id: "s1",
-              inspection_time: "2026-01-01T00:00:00",
-              wafer_key: 1,
-              wafer_x: 0,
-              wafer_y: 0,
-              die_x: 0,
-              die_y: 0,
-              rough_bin: 1,
-              class_number: 1,
-              images: [],
-              predicted_label: "Scratch",
-              confidence: 0.95,
-            },
-            {
-              sample_id: "s2",
-              defect_id: "s2",
-              inspection_time: "2026-01-01T00:00:00",
-              wafer_key: 1,
-              wafer_x: 0,
-              wafer_y: 0,
-              die_x: 0,
-              die_y: 0,
-              rough_bin: 1,
-              class_number: 1,
-              images: [],
-              predicted_label: "Clean",
-              confidence: 0.8,
-            },
-          ],
-          total: 2,
-        },
-      ],
-      pageParams: [0],
-    };
+describe("useReclassifyPage - selection actions", () => {
+  it("applies replace, add and toggle actions to the annotation selection", async () => {
+    const { state } = await mountPage("ds-selection", DEFAULT_DATASET);
 
-    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, [
-      {
-        key: ["sc", "view-samples-paged", "ds-test-1", null],
-        data: viewSamplesData,
-      },
-    ]);
+    state.applySelectionAction({
+      source: "sample-table",
+      ids: ["103"],
+      mode: "replace",
+    });
+    state.applySelectionAction({ source: "blink-table", ids: ["274"], mode: "add" });
+    state.applySelectionAction({ source: "blink-table", ids: ["103"], mode: "toggle" });
 
-    await new Promise((r) => setTimeout(r, 10));
-    expect(state.predictionLabels.value["s1"]).toBe("Scratch");
-    expect(state.predictionLabels.value["s2"]).toBe("Clean");
-  });
-
-  it("returns empty object when predictions are empty", async () => {
-    const emptySamplesData = {
-      pages: [
-        {
-          items: [
-            {
-              sample_id: "s1",
-              defect_id: "s1",
-              inspection_time: "2026-01-01T00:00:00",
-              wafer_key: 1,
-              wafer_x: 0,
-              wafer_y: 0,
-              die_x: 0,
-              die_y: 0,
-              rough_bin: 1,
-              class_number: 1,
-              images: [],
-              predicted_label: "",
-              confidence: null,
-            },
-          ],
-          total: 1,
-        },
-      ],
-      pageParams: [0],
-    };
-
-    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, [
-      {
-        key: ["sc", "view-samples-paged", "ds-test-1", null],
-        data: emptySamplesData,
-      },
-    ]);
-
-    await new Promise((r) => setTimeout(r, 10));
-    expect(Object.keys(state.predictionLabels.value)).toHaveLength(0);
+    expect([...state.selectedDefectIds.value]).toEqual(["274"]);
   });
 });
 
@@ -343,7 +259,7 @@ describe("useReclassifyPage - train defaults", () => {
   });
 
   it("requires at least two active annotation classes before training", async () => {
-    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, undefined, {
+    const { state } = await mountPage("ds-test-1", DEFAULT_DATASET, {
       Scratch: 2,
     });
 
@@ -354,7 +270,7 @@ describe("useReclassifyPage - train defaults", () => {
   });
 
   it("explains the per-class training cap and validation pool", async () => {
-    const { state } = await mountPage("ds-training-cap", DEFAULT_DATASET, undefined, {
+    const { state } = await mountPage("ds-training-cap", DEFAULT_DATASET, {
       Scratch: 1_250,
       Particle: 1_100,
     });
@@ -410,53 +326,3 @@ async function waitForCondition(condition: () => boolean, timeoutMs = 1000) {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
-
-describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", () => {
-  it("does not start the retired REST gallery pagination pipeline", async () => {
-    const requestOffsets: number[] = [];
-    server.use(
-      http.get("/api/v1/datasets/:id/views/:view/samples", ({ request }) => {
-        const url = new URL(request.url);
-        const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-        requestOffsets.push(offset);
-        return HttpResponse.json({ items: [], total: 0 });
-      }),
-    );
-
-    const { state } = await mountPage("ds-perspective-gallery", DEFAULT_DATASET, []);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    await state.fetchMoreSamples();
-    expect(requestOffsets).toEqual([]);
-    expect(state.hasMoreSamples.value).toBe(false);
-  });
-
-  it("uses map selection IDs as BlinkTable data source filter", async () => {
-    const { state } = await mountPage("ds-filter-query", DEFAULT_DATASET);
-    state.handleMapSelectionChange({
-      source: "box",
-      mode: "append",
-      ids: [274, 103],
-    });
-
-    expect([...state.mapFilteredIds.value].sort()).toEqual(["274", "103"].sort());
-  });
-
-  it("clears the BlinkTable data source filter when the map emits an empty selection", async () => {
-    const { state } = await mountPage("ds-box-filter", DEFAULT_DATASET);
-    state.handleMapSelectionChange({
-      source: "legend",
-      mode: "replace",
-      ids: [103, 274],
-      groupKey: 7,
-    });
-    state.handleMapSelectionChange({
-      source: "clear",
-      mode: "clear",
-      ids: [],
-    });
-
-    expect(state.mapFilteredIds.value.size).toBe(0);
-  });
-});

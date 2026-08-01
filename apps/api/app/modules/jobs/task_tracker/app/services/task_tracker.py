@@ -36,7 +36,7 @@ class _TaskRecord:
     task_kind: str
     platform_job: Any
     raw_platform_job: dict[str, object]
-    dataset_id: str
+    dataset_id: str | None
     model_id: str | None
     trainer_id: str | None
     external_job_id: str | None
@@ -128,7 +128,9 @@ class TaskTrackerService:
                     display_status=display_status,
                     stage=stage,
                     dataset_id=task.dataset_id,
-                    dataset_name=dataset_names.get(task.dataset_id),
+                    dataset_name=(
+                        dataset_names.get(task.dataset_id) if task.dataset_id else None
+                    ),
                     model_id=task.model_id,
                     trainer_id=task.trainer_id,
                     created_by=task.platform_job.created_by,

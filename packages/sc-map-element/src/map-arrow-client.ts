@@ -10,16 +10,27 @@ export interface MapProjectionSpec {
   hiddenLegendKeys: string[];
 }
 
+export interface MapResolvedHighlight {
+  defectId: number;
+  waferX: number;
+  waferY: number;
+  dieX: number;
+  dieY: number;
+  reticleX: number;
+  reticleY: number;
+}
+
 export interface MapArrowDataset {
   project(
     spec: MapProjectionSpec,
     onProgress?: (progress: number, stage: string) => void,
   ): Promise<Float32Array>;
+  resolveHighlights(defectIds: readonly number[]): Promise<MapResolvedHighlight[]>;
   dispose(): void;
 }
 
 interface PendingCall {
-  resolve: (value: Float32Array | null) => void;
+  resolve: (value: Float32Array | Float64Array | null) => void;
   reject: (error: Error) => void;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -38,10 +49,11 @@ export async function createMapArrowDataset(
   worker.onmessage = (
     event: MessageEvent<{
       id: number;
-      type: "progress" | "loaded" | "projected" | "error";
+      type: "progress" | "loaded" | "projected" | "highlights-resolved" | "error";
       progress?: number;
       stage?: string;
       points?: Float32Array;
+      highlights?: Float64Array;
       rowCount?: number;
       error?: string;
     }>,
@@ -62,7 +74,7 @@ export async function createMapArrowDataset(
         "[sc-map:arrow]",
         JSON.stringify({ stage: "loaded", rowCount: event.data.rowCount ?? 0 }),
       );
-    } else {
+    } else if (event.data.type === "projected") {
       console.debug(
         "[sc-map:arrow]",
         JSON.stringify({
@@ -71,7 +83,7 @@ export async function createMapArrowDataset(
         }),
       );
     }
-    call.resolve(event.data.points ?? null);
+    call.resolve(event.data.points ?? event.data.highlights ?? null);
   };
   worker.onerror = (event) => {
     const error = new Error(event.message);
@@ -84,7 +96,7 @@ export async function createMapArrowDataset(
     message: Record<string, unknown>,
     transfer: Transferable[] = [],
     progress?: (value: number, stage: string) => void,
-  ): Promise<Float32Array | null> {
+  ): Promise<Float32Array | Float64Array | null> {
     if (disposed) return Promise.reject(new Error("Arrow map dataset has been disposed"));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
@@ -110,7 +122,28 @@ export async function createMapArrowDataset(
         [],
         progress,
       );
-      return result ?? new Float32Array();
+      return result instanceof Float32Array ? result : new Float32Array();
+    },
+    async resolveHighlights(defectIds) {
+      if (defectIds.length === 0) return [];
+      const result = await request({
+        type: "resolve-highlights",
+        defectIds: [...defectIds],
+      });
+      if (!(result instanceof Float64Array)) return [];
+      const highlights: MapResolvedHighlight[] = [];
+      for (let offset = 0; offset < result.length; offset += 7) {
+        highlights.push({
+          defectId: result[offset],
+          waferX: result[offset + 1],
+          waferY: result[offset + 2],
+          dieX: result[offset + 3],
+          dieY: result[offset + 4],
+          reticleX: result[offset + 5],
+          reticleY: result[offset + 6],
+        });
+      }
+      return highlights;
     },
     dispose() {
       if (disposed) return;

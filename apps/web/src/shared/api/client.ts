@@ -152,10 +152,10 @@ export async function requestData<T>(
 export async function requestRaw(
   url: string,
   init: RequestInit = {},
-  timeoutMs = 30_000,
+  timeoutMs: number | null = 30_000,
 ): Promise<Response> {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = combineSignals(init.signal, timeoutSignal);
+  const timeoutSignal = timeoutMs === null ? null : AbortSignal.timeout(timeoutMs);
+  const signal = timeoutSignal ? combineSignals(init.signal, timeoutSignal) : init.signal;
   const token = safeGetToken();
 
   let response: Response;
@@ -167,7 +167,7 @@ export async function requestRaw(
     });
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    if (timeoutSignal.aborted) {
+    if (timeoutSignal?.aborted) {
       throw new ApiError({
         kind: "timeout",
         detail: "Request timed out",

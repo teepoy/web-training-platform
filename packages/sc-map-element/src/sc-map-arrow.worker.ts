@@ -21,7 +21,13 @@ interface ProjectMessage {
   hiddenLegendKeys: string[];
 }
 
-type WorkerMessage = LoadMessage | ProjectMessage;
+interface ResolveHighlightsMessage {
+  id: number;
+  type: "resolve-highlights";
+  defectIds: number[];
+}
+
+type WorkerMessage = LoadMessage | ProjectMessage | ResolveHighlightsMessage;
 
 const COORDINATE_COLUMNS: Record<MapMode, readonly [string, string]> = {
   wafer: ["wafer_x", "wafer_y"],
@@ -52,7 +58,15 @@ function load(message: LoadMessage): void {
       `decoding Arrow chunk ${index + 1}/${message.chunks.length}`,
     );
     const decoded = tableFromIPC(new Uint8Array(chunk));
-    for (const name of ["wafer_x", "wafer_y", "die_x", "die_y", "reticle_x", "reticle_y"]) {
+    for (const name of [
+      "defect_id",
+      "wafer_x",
+      "wafer_y",
+      "die_x",
+      "die_y",
+      "reticle_x",
+      "reticle_y",
+    ]) {
       requireColumn(decoded, name);
     }
     requireColumn(decoded, message.legendCol);
@@ -63,6 +77,58 @@ function load(message: LoadMessage): void {
     progress(message.id, 1, "retained 0 Arrow rows");
   }
   self.postMessage({ id: message.id, type: "loaded", rowCount });
+}
+
+function findDefectRow(defectIds: Vector, defectId: number): number {
+  let low = 0;
+  let high = defectIds.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    const current = Number(defectIds.get(middle));
+    if (current === defectId) return middle;
+    if (current < defectId) low = middle + 1;
+    else high = middle - 1;
+  }
+  return -1;
+}
+
+function resolveHighlights(message: ResolveHighlightsMessage): void {
+  const requestedIds = [...new Set(message.defectIds.filter(Number.isFinite))];
+  const resolved = new Float64Array(requestedIds.length * 7);
+  const searchableTables = tables.map((table) => ({
+    defectIds: requireColumn(table, "defect_id"),
+    waferX: requireColumn(table, "wafer_x"),
+    waferY: requireColumn(table, "wafer_y"),
+    dieX: requireColumn(table, "die_x"),
+    dieY: requireColumn(table, "die_y"),
+    reticleX: requireColumn(table, "reticle_x"),
+    reticleY: requireColumn(table, "reticle_y"),
+  }));
+  let resolvedCount = 0;
+
+  for (const defectId of requestedIds) {
+    for (const table of searchableTables) {
+      // The map SQL contract orders each Arrow snapshot by defect_id, allowing
+      // selected coordinates to be resolved without a 300k-entry JS Map.
+      const rowIndex = findDefectRow(table.defectIds, defectId);
+      if (rowIndex < 0) continue;
+      const offset = resolvedCount * 7;
+      resolved[offset] = defectId;
+      resolved[offset + 1] = Number(table.waferX.get(rowIndex));
+      resolved[offset + 2] = Number(table.waferY.get(rowIndex));
+      resolved[offset + 3] = Number(table.dieX.get(rowIndex));
+      resolved[offset + 4] = Number(table.dieY.get(rowIndex));
+      resolved[offset + 5] = Number(table.reticleX.get(rowIndex));
+      resolved[offset + 6] = Number(table.reticleY.get(rowIndex));
+      resolvedCount += 1;
+      break;
+    }
+  }
+
+  const highlights = resolved.slice(0, resolvedCount * 7);
+  self.postMessage({ id: message.id, type: "highlights-resolved", highlights }, [
+    highlights.buffer,
+  ]);
 }
 
 function project(message: ProjectMessage): void {
@@ -132,7 +198,8 @@ function project(message: ProjectMessage): void {
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
   try {
     if (event.data.type === "load") load(event.data);
-    else project(event.data);
+    else if (event.data.type === "project") project(event.data);
+    else resolveHighlights(event.data);
   } catch (error) {
     self.postMessage({
       id: event.data.id,

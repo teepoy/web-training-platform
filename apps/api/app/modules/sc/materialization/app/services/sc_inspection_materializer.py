@@ -320,7 +320,16 @@ def _normalize_inspection_time(raw: object) -> str:
 def _materialized_column_name(image_type: str) -> str:
     normalized = image_type.strip().lower()
     match normalized:
-        case "template" | "patch_template" | "patchtemplate":
+        # image-parser normalizes patch aliases before returning streamed
+        # results, so a patch_template request comes back as "Reference".
+        case (
+            "reference"
+            | "patch_reference"
+            | "patchreference"
+            | "template"
+            | "patch_template"
+            | "patchtemplate"
+        ):
             return "patch_template_bytes"
         case "defective" | "patch_defective" | "patchdefective":
             return "patch_defective_bytes"

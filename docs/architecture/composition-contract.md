@@ -59,8 +59,8 @@ It does not require root `services/*` runtime services to use the same injector 
 
 Each API entrypoint composition root owns a single `Injector` instance for its
 FastAPI process. Specialized entrypoints should install only the bindings their
-routes use; for example, the Perspective WebSocket process uses
-`perspective_composition.py` instead of constructing the full HTTP API graph.
+routes use; for example, the SC data-provider process uses
+`sc_data_provider_composition.py` instead of constructing the full HTTP API graph.
 
 Recommended structure:
 
@@ -88,7 +88,7 @@ class DatasetsModule(Module):
 The exact file layout can evolve, but the public rule should remain stable:
 
 - `composition.py` builds the full HTTP API injector; specialized entrypoint
-  roots such as `perspective_composition.py` build their minimal injector.
+  roots such as `sc_data_provider_composition.py` build their minimal injector.
 - `app/modules/<module>/container.py` or `composition.py` may define that module's binder.
 - `app/modules/<module>/port/local/` defines cross-module Protocols.
 - `port/http/deps.py` resolves route dependencies from the injector.

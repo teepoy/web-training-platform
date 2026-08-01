@@ -70,14 +70,21 @@ export async function* streamGlobalAgentChat(
   request: GlobalChatRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<SSEFrame> {
-  const resp = await requestRaw(`${getApiBase()}/agent/chat`, {
-    method: "POST",
-    headers: buildSSEHeaders(),
-    body: JSON.stringify(request),
-    signal,
-  });
+  const resp = await requestRaw(
+    `${getApiBase()}/agent/chat`,
+    {
+      method: "POST",
+      headers: buildSSEHeaders(),
+      body: JSON.stringify(request),
+      signal,
+    },
+    null,
+  );
 
-  const reader = resp.body!.getReader();
+  if (!resp.body) {
+    throw new Error("Agent response did not include an SSE stream");
+  }
+  const reader = resp.body.getReader();
   yield* parseSSEStream(reader);
 }
 
@@ -130,11 +137,17 @@ export async function streamApiSse(
     body = JSON.stringify(options.body);
   }
 
-  const response = await requestRaw(`${getApiBase()}${path}`, {
-    method: options.method ?? (body ? "POST" : "GET"),
-    headers,
-    body,
-  });
+  const response = await requestRaw(
+    `${getApiBase()}${path}`,
+    {
+      method: options.method ?? (body ? "POST" : "GET"),
+      headers,
+      body,
+    },
+    // A completion SSE may legitimately run for minutes. The caller owns the
+    // stream lifecycle; the ordinary request timeout must not abort its body.
+    null,
+  );
   if (!response.body) {
     throw new Error("SSE response body is not readable");
   }

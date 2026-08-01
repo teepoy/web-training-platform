@@ -2,19 +2,18 @@ id: forbid-raw-api-url
 language: typescript
 severity: error
 ignores:
-  - '**/generated/**'
-  - '**/e2e/**'
-  - '**/e2e-live/**'
-  - '**/shared/api/datasets.ts'
-  - '**/shared/utils/image-adapters.ts'
-  - '**/features/classify/application/useImageAdapters.ts'
-  - '**/features/sc/domain/models.ts'
-  - '**/tests/**'
-  - '**/__tests__/**'
-  - '**/*.spec.ts'
-  - '**/src/testing/**'
+  - "**/generated/**"
+  - "**/e2e/**"
+  - "**/shared/api/datasets.ts"
+  - "**/shared/utils/image-adapters.ts"
+  - "**/features/classify/application/useImageAdapters.ts"
+  - "**/features/sc/domain/models.ts"
+  - "**/tests/**"
+  - "**/__tests__/**"
+  - "**/*.spec.ts"
+  - "**/src/testing/**"
 rule:
   kind: string_fragment
-  regex: '/api/v1/'
+  regex: "/api/v1/"
 message: |
   Do not use raw /api/v1/... URL strings. Use generated API clients instead.

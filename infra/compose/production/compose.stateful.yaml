@@ -5,7 +5,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    mem_limit: ${POSTGRES_MEMORY:-8g}
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY:-8g}
     shm_size: ${POSTGRES_SHM_SIZE:-1g}
     environment:
       POSTGRES_DB: finetune
@@ -33,7 +36,10 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
     command: server /data --console-address ":9001"
-    mem_limit: ${MINIO_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${MINIO_MEMORY:-4g}
     shm_size: ${MINIO_SHM_SIZE:-512m}
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
@@ -54,7 +60,10 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-1536mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
-    mem_limit: ${REDIS_MEMORY:-2g}
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY:-2g}
     shm_size: ${REDIS_SHM_SIZE:-256m}
     volumes:
       - ${REDIS_DATA_DIR:-./data/redis}:/data
@@ -71,7 +80,10 @@ services:
 
   label-studio:
     image: ${LABEL_STUDIO_IMAGE:?Set LABEL_STUDIO_IMAGE to an immutable tag}
-    mem_limit: ${LABEL_STUDIO_MEMORY:-4g}
+    deploy:
+      resources:
+        limits:
+          memory: ${LABEL_STUDIO_MEMORY:-4g}
     shm_size: ${LABEL_STUDIO_SHM_SIZE:-512m}
     environment:
       DJANGO_DB: default

@@ -20,10 +20,10 @@ import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import { toUserMessage } from "@/shared/api";
-import InspectionQuad from "@/features/sc/presentation/components/PerspectiveInspectionQuad.vue";
+import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
-import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
@@ -31,15 +31,15 @@ const message = useMessage();
 const router = useRouter();
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
+  getGlobalFilter: () => ScSampleTableFilter;
   queryGlobalFilterCount: () => Promise<number>;
   queryRandomGlobalFilteredDefectIds: (count: number) => Promise<number[]>;
 } | null>(null);
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
 const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
-const sampleTableSort = ref<ScSampleTableSort | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
-const perspectiveSamplingAvailableCount = ref(0);
+const samplingAvailableCount = ref(0);
 const isPreparingSampling = ref(false);
 
 const containerStyle = computed(() => ({
@@ -82,12 +82,17 @@ function applyAnnotationCode(code: string): void {
 }
 
 async function handleTrainAndPredictClick(): Promise<void> {
-  if (Object.keys(page.globalFilter.value).length > 0) {
+  const quad = inspectionQuad.value;
+  if (!quad) {
+    message.error("Data is still loading. Try again in a moment.");
+    return;
+  }
+  const globalFilter = quad.getGlobalFilter();
+  if (Object.keys(globalFilter).length > 0) {
     isPreparingFilteredWorkflow.value = true;
     try {
-      filteredWorkflowFilter.value = { ...page.globalFilter.value };
-      const count = await inspectionQuad.value?.queryGlobalFilterCount();
-      if (count === undefined) throw new Error("Data is still loading. Try again in a moment.");
+      filteredWorkflowFilter.value = globalFilter;
+      const count = await quad.queryGlobalFilterCount();
       filteredWorkflowCount.value = count;
       filterConfirmationVisible.value = true;
     } catch (error) {
@@ -110,14 +115,14 @@ async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): 
   }
 }
 
-const globalFilterEntries = computed(() => Object.entries(page.globalFilter.value));
+const globalFilterEntries = computed(() => Object.entries(filteredWorkflowFilter.value ?? {}));
 
 async function openSamplingModal(): Promise<void> {
   isPreparingSampling.value = true;
   try {
     const count = await inspectionQuad.value?.queryGlobalFilterCount();
     if (count === undefined) throw new Error("Data is still loading. Try again in a moment.");
-    perspectiveSamplingAvailableCount.value = count;
+    samplingAvailableCount.value = count;
     page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
     page.showSamplingModal.value = true;
   } catch (error) {
@@ -127,7 +132,7 @@ async function openSamplingModal(): Promise<void> {
   }
 }
 
-async function applyPerspectiveSampling(): Promise<void> {
+async function applyRandomSampling(): Promise<void> {
   isPreparingSampling.value = true;
   try {
     const ids = await inspectionQuad.value?.queryRandomGlobalFilteredDefectIds(
@@ -140,20 +145,6 @@ async function applyPerspectiveSampling(): Promise<void> {
   } finally {
     isPreparingSampling.value = false;
   }
-}
-
-function onBlinkTableSelect(
-  defectIds: string[],
-  modifiers: {
-    shift: boolean;
-    ctrl: boolean;
-    meta: boolean;
-    selectionMode?: import("../../application/useReclassifyPage").SelectionMode;
-  },
-): void {
-  const mode: import("../../application/useReclassifyPage").SelectionMode =
-    modifiers.selectionMode ?? (modifiers.ctrl || modifiers.meta ? "toggle" : "replace");
-  page.selectDefectIds(defectIds, mode);
 }
 
 // ── Keyboard shortcuts: user-configured single keys apply annotation codes ─
@@ -184,20 +175,6 @@ function handleKeydown(e: KeyboardEvent): void {
 
 onMounted(() => document.addEventListener("keydown", handleKeydown));
 onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
-
-function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
-  const local: ScSampleTableFilter = {};
-  for (const [field, value] of Object.entries(filter)) {
-    const globalValue = page.globalFilter.value[field];
-    if (JSON.stringify(value) !== JSON.stringify(globalValue)) {
-      local[field] = value;
-    }
-  }
-  if (Object.keys(local).length > 0) {
-    page.clearGalleryRandomSamplingDefectIds();
-  }
-  page.sampleTableFilter.value = local;
-}
 </script>
 
 <template>
@@ -238,12 +215,14 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
           <div class="sc-header-right">
             <NSelect
               v-model:value="page.selectedTrainerId.value"
+              data-testid="sc-trainer-select"
               :options="page.trainerOptions.value"
               placeholder="Select trainer"
               size="small"
               :style="{ width: '160px' }"
             />
             <NButton
+              data-testid="sc-train-predict"
               size="small"
               type="primary"
               :disabled="!page.canTrainAndPredict.value"
@@ -252,7 +231,12 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             >
               Train &amp; Predict
             </NButton>
-            <NText v-if="page.trainPredictStatusMessage.value" depth="3" style="font-size: 11px">
+            <NText
+              v-if="page.trainPredictStatusMessage.value"
+              data-testid="sc-train-predict-status"
+              depth="3"
+              style="font-size: 11px"
+            >
               {{ page.trainPredictStatusMessage.value }}
             </NText>
             <NTooltip v-if="page.trainingSampleLimitNotice.value" trigger="hover">
@@ -296,32 +280,12 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :dataset-id="page.datasetId.value"
             :inspection-time="page.inspectionContext.value.inspectionTime"
             :wafer-key="Number(page.inspectionContext.value.waferKey)"
-            :active-map-tab="page.activeMapTab.value"
             :wafer-geometry="page.waferGeometry.value"
-            :reticle-die-size-x="page.reticleDieSizeX.value"
-            :reticle-die-size-y="page.reticleDieSizeY.value"
-            :reticle-options="page.reticleOptions.value"
-            :zoom="page.mapZoom.value"
-            :selected-gallery-defect-ids="Array.from(page.selectedDefectIds.value)"
-            v-model:global-filter="page.globalFilter.value"
-            :table-filter="page.sampleTableFilter.value"
-            v-model:table-sort="sampleTableSort"
+            :selected-defect-ids="Array.from(page.selectedDefectIds.value)"
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
-            :legend-group-by="page.legendGroupBy.value"
-            :legend-sources="['class', 'bin', 'annotation', 'prediction', 'final_class']"
-            :show-prediction-badges="true"
             :annotation-drafts="page.annotationDraft.value"
-            @update:active-map-tab="page.setActiveMapTab"
-            @update:reticle-options="page.updateReticleOptions"
-            @map-selection-change="page.handleMapSelectionChange"
-            @zoom-in="page.setMapZoom"
-            @update:table-filter="onSampleTableFilterChange"
-            @table-selection-change="
-              (ids: number[]) => page.selectDefectIds(ids.map(String), 'replace')
-            "
             @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
-            @legend-group-change="page.handleLegendGroupByChange"
-            @select-samples="(ids, mods) => onBlinkTableSelect(ids, mods)"
+            @selection-change="page.applySelectionAction"
           >
             <template #annotation>
               <ReclassifyAnnotationSidebar
@@ -356,11 +320,11 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
           <NInputNumber
             v-model:value="page.samplingCount.value"
             :min="1"
-            :max="perspectiveSamplingAvailableCount"
+            :max="samplingAvailableCount"
             style="width: 100%"
           />
           <NText depth="3" style="font-size: 11px; margin-top: 4px">
-            Total available: {{ perspectiveSamplingAvailableCount }} samples
+            Total available: {{ samplingAvailableCount }} samples
           </NText>
         </div>
         <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
@@ -373,8 +337,8 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
           <NButton
             type="primary"
             :loading="isPreparingSampling"
-            :disabled="perspectiveSamplingAvailableCount === 0"
-            @click="applyPerspectiveSampling"
+            :disabled="samplingAvailableCount === 0"
+            @click="applyRandomSampling"
           >
             Confirm
           </NButton>

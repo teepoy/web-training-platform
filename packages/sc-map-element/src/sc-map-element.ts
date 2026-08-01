@@ -32,7 +32,7 @@ export interface ScMapGeometry {
   reticleYDieCount: number;
 }
 
-export interface ScMapHighlight {
+interface ScMapHighlight {
   waferX: number;
   waferY: number;
   dieX: number;
@@ -92,6 +92,11 @@ export class ScMapElement extends HTMLElement {
   #dataBounds: ScMapBounds | null = null;
   #geometry: ScMapGeometry = { ...DEFAULT_GEOMETRY };
   #highlights: ScMapHighlight[] = [];
+  #highlightDefectIds: number[] = [];
+  #immediateDefectIds: number[] = [];
+  #resolvedImmediateHighlights: ScMapHighlight[] = [];
+  #highlightResolutionRevision = 0;
+  #highlightResolutionScheduled = false;
   #immediatePoints: Array<{ x: number; y: number }> = [];
   #dragStart: { x: number; y: number } | null = null;
   #dragEnd: { x: number; y: number } | null = null;
@@ -192,6 +197,7 @@ export class ScMapElement extends HTMLElement {
     this.#pointsContext = null;
     this.#datasetRevision += 1;
     this.#projectionRevision += 1;
+    this.#highlightResolutionRevision += 1;
     this.#arrowDataset?.dispose();
     this.#arrowDataset = null;
   }
@@ -260,9 +266,13 @@ export class ScMapElement extends HTMLElement {
     this.#scheduleRender();
     this.#scheduleProjection();
   }
-  set highlights(value: ScMapHighlight[]) {
-    this.#highlights = value.map((item) => ({ ...item }));
-    this.#drawOverlay();
+  set highlightDefectIds(value: number[]) {
+    this.#highlightDefectIds = [...new Set(value.filter(Number.isFinite))];
+    this.#scheduleHighlightResolution();
+  }
+  set immediateDefectIds(value: number[]) {
+    this.#immediateDefectIds = [...new Set(value.filter(Number.isFinite))];
+    this.#scheduleHighlightResolution();
   }
   set immediatePoints(value: Array<{ x: number; y: number }>) {
     this.#immediatePoints = value.map((point) => ({ ...point }));
@@ -515,7 +525,10 @@ export class ScMapElement extends HTMLElement {
     };
     drawCrosshairs(this.#highlights.map(coordinate), "#A855F7");
     drawCrosshairs(
-      this.#immediatePoints.map((point) => [point.x, point.y]),
+      [
+        ...this.#resolvedImmediateHighlights.map(coordinate),
+        ...this.#immediatePoints.map((point) => [point.x, point.y] as [number, number]),
+      ],
       "#000000",
     );
     if (this.#interactionMode === "lasso" && this.#lassoPoints.length > 1) {
@@ -561,14 +574,59 @@ export class ScMapElement extends HTMLElement {
     });
   }
 
+  #scheduleHighlightResolution(): void {
+    this.#highlightResolutionRevision += 1;
+    if (this.#highlightResolutionScheduled) return;
+    this.#highlightResolutionScheduled = true;
+    queueMicrotask(() => {
+      this.#highlightResolutionScheduled = false;
+      void this.#resolveHighlightRows();
+    });
+  }
+
+  async #resolveHighlightRows(): Promise<void> {
+    const dataset = this.#arrowDataset;
+    const revision = this.#highlightResolutionRevision;
+    if (!dataset) {
+      this.#highlights = [];
+      this.#resolvedImmediateHighlights = [];
+      this.#drawOverlay();
+      return;
+    }
+    const ids = [...new Set([...this.#highlightDefectIds, ...this.#immediateDefectIds])];
+    try {
+      const resolved = await dataset.resolveHighlights(ids);
+      if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
+      const highlightIds = new Set(this.#highlightDefectIds);
+      const immediateIds = new Set(this.#immediateDefectIds);
+      this.#highlights = resolved.filter((item) => highlightIds.has(item.defectId));
+      this.#resolvedImmediateHighlights = resolved.filter((item) =>
+        immediateIds.has(item.defectId),
+      );
+      this.#drawOverlay();
+    } catch (error) {
+      if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
+      this.dispatchEvent(
+        new CustomEvent("map-error", {
+          detail: error instanceof Error ? error.message : String(error),
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
+  }
+
   async #loadArrowDataset(): Promise<void> {
     const arrow = this.#arrowData;
     const revision = ++this.#datasetRevision;
     this.#projectionRevision += 1;
     this.#arrowDataset?.dispose();
     this.#arrowDataset = null;
+    this.#highlights = [];
+    this.#resolvedImmediateHighlights = [];
     this.#points = new Float32Array();
     this.#postData();
+    this.#drawOverlay();
     if (!arrow || !this.isConnected) return;
 
     this.#emitProgress(0, "Loading Arrow table in map worker");
@@ -583,6 +641,7 @@ export class ScMapElement extends HTMLElement {
         return;
       }
       this.#arrowDataset = dataset;
+      this.#scheduleHighlightResolution();
       this.#scheduleProjection();
     } catch (error) {
       if (revision !== this.#datasetRevision) return;

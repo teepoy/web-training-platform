@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 from app.core.config import ScDataProviderConfig
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
@@ -35,6 +38,28 @@ from app.shared.infrastructure.redis.event_publisher import (
 
 
 ARROW_STREAM_MEDIA_TYPE = "application/vnd.apache.arrow.stream"
+_logger = logging.getLogger(__name__)
+
+
+class _ManagedStreamingResponse(StreamingResponse):
+    """Close query resources even when the ASGI transport drops mid-stream."""
+
+    def __init__(
+        self,
+        content: AsyncIterator[bytes],
+        *,
+        on_close: Callable[[], Awaitable[None]],
+        media_type: str,
+        headers: dict[str, str],
+    ) -> None:
+        super().__init__(content, media_type=media_type, headers=headers)
+        self._on_close = on_close
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self._on_close()
 
 
 @dataclass(frozen=True)
@@ -168,18 +193,33 @@ async def _query_scope(
         await lease.__aexit__(type(exc), exc, exc.__traceback__)
         raise
 
+    close_task: asyncio.Task[None] | None = None
+
+    async def close_response() -> None:
+        nonlocal close_task
+        if close_task is None:
+
+            async def cleanup() -> None:
+                try:
+                    await prepared.close()
+                finally:
+                    await lease.__aexit__(None, None, None)
+
+            close_task = asyncio.create_task(
+                cleanup(), name="sc-data-provider-response-cleanup"
+            )
+        await asyncio.shield(close_task)
+
     async def body() -> AsyncIterator[bytes]:
         try:
             async for chunk in prepared.body:
                 yield chunk
         finally:
-            try:
-                await prepared.body.aclose()
-            finally:
-                await lease.__aexit__(None, None, None)
+            await close_response()
 
     headers = {
         "X-SC-Data-Revision": str(revision),
+        "X-SC-Query-Description": query.description,
         "X-SC-Worker-PID": str(os.getpid()),
         "X-SC-Cache": materialized.cache_status,
         "X-SC-Spill-Bytes": str(runtime.executor.temp_directory_size_bytes()),
@@ -188,8 +228,19 @@ async def _query_scope(
             f"duckdb;dur={prepared.query_duration_ms:.3f}"
         ),
     }
-    return StreamingResponse(
+    _logger.info(
+        "SC data query prepared description=%s scope=%s revision=%d "
+        "cache=%s materialize_ms=%.3f duckdb_ms=%.3f",
+        query.description,
+        scope.public_name,
+        revision,
+        materialized.cache_status,
+        materialize_ms,
+        prepared.query_duration_ms,
+    )
+    return _ManagedStreamingResponse(
         body(),
+        on_close=close_response,
         media_type=ARROW_STREAM_MEDIA_TYPE,
         headers=headers,
     )

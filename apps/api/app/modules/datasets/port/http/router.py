@@ -922,7 +922,7 @@ async def serve_sparse_sample_image(
             detail=f"Dataset not found or has no manifest: {dataset_id}",
         )
 
-    locator = manifest.sample_index.get(sample_id)
+    locator = (await store.lookup_sample_locators(manifest, [sample_id])).get(sample_id)
     if locator is None:
         raise HTTPException(
             status_code=404,

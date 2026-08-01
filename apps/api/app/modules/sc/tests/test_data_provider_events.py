@@ -1,16 +1,59 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
+from typing import cast
 
 import pytest
+from starlette.requests import ClientDisconnect
+from starlette.types import Message, Scope
 
 from app.modules.sc.data_provider.router import (
+    _ManagedStreamingResponse,
     _invalidation_from_message,
     _sse_event,
 )
 from app.modules.sc.data_provider.schemas import ScDataInvalidationEvent
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.shared.infrastructure.redis.event_publisher import PREDICTION_CHANNEL
+
+
+@pytest.mark.asyncio
+async def test_managed_stream_closes_resources_on_transport_disconnect() -> None:
+    closed = False
+
+    async def body() -> AsyncIterator[bytes]:
+        yield b"arrow-header"
+
+    async def close() -> None:
+        nonlocal closed
+        closed = True
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        if message["type"] == "http.response.body":
+            raise OSError("client disconnected")
+
+    response = _ManagedStreamingResponse(
+        body(),
+        on_close=close,
+        media_type="application/vnd.apache.arrow.stream",
+        headers={},
+    )
+    scope = cast(
+        Scope,
+        {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.4"},
+        },
+    )
+
+    with pytest.raises(ClientDisconnect):
+        await response(scope, receive, send)
+
+    assert closed
 
 
 def test_dataset_event_maps_atomic_revision_and_changed_kind() -> None:

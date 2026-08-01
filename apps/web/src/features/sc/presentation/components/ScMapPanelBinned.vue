@@ -31,7 +31,6 @@ import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
-import type { HighlightDefect } from "./types";
 
 if (import.meta.env.MODE !== "test") defineScMapElement();
 
@@ -75,9 +74,9 @@ const props = withDefaults(
 
     zoom?: { x: number; y: number; w: number; h: number } | null;
 
-    /** Highlight defects from gallery selection (purple dots on overlay canvas). */
-    highlightDefects?: HighlightDefect[];
-    immediateCrosshairDefects?: HighlightDefect[];
+    /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
+    highlightDefectIds?: number[];
+    immediateCrosshairDefectIds?: number[];
     immediateCrosshairVersion?: number;
   }>(),
   {
@@ -375,9 +374,7 @@ const nativeGeometry = computed<ScMapGeometry>(() => ({
 }));
 
 const activeImmediatePoints = computed(() => {
-  if (internalTab.value === "die") return dieImmediateCrosshairPoints.value;
-  if (internalTab.value === "reticle") return reticleImmediateCrosshairPoints.value;
-  return waferImmediateCrosshairPoints.value;
+  return localImmediateCrosshairPoints.value[internalTab.value];
 });
 
 function onNativeZoom(event: Event): void {
@@ -455,25 +452,6 @@ watch(
     localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
   },
 );
-
-const waferImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
-  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({
-    x: defect.waferX,
-    y: defect.waferY,
-  })),
-  ...localImmediateCrosshairPoints.value.wafer,
-]);
-const dieImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
-  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({ x: defect.dieX, y: defect.dieY })),
-  ...localImmediateCrosshairPoints.value.die,
-]);
-const reticleImmediateCrosshairPoints = computed<CrosshairPoint[]>(() => [
-  ...(props.immediateCrosshairDefects ?? []).map((defect) => ({
-    x: defect.reticleX,
-    y: defect.reticleY,
-  })),
-  ...localImmediateCrosshairPoints.value.reticle,
-]);
 
 function onBoxSelect(region: BoxSelectionRegion): void {
   emit("box-select", region);
@@ -608,7 +586,8 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :interactionMode.prop="mapMode[internalTab]"
             :zoom.prop="zoom ?? null"
             :geometry.prop="nativeGeometry"
-            :highlights.prop="highlightDefects ?? []"
+            :highlightDefectIds.prop="highlightDefectIds ?? []"
+            :immediateDefectIds.prop="immediateCrosshairDefectIds ?? []"
             :immediatePoints.prop="activeImmediatePoints"
             @zoom-in="onNativeZoom"
             @box-select="onNativeBoxSelect"

@@ -779,7 +779,9 @@ export function useClassifyPage() {
       id: job.id,
       task_kind: "prediction",
       execution_kind: "prefect",
-      display_name: `Prediction: ${job.dataset_id.slice(0, 8)}...`,
+      display_name: job.dataset_id
+        ? `Prediction: ${job.dataset_id.slice(0, 8)}...`
+        : "Prediction: deleted dataset",
       display_status: status,
       stage: status,
       dataset_id: job.dataset_id,

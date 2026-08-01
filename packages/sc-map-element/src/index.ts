@@ -6,7 +6,6 @@ export {
 } from "./sc-map-element";
 export type {
   ScMapGeometry,
-  ScMapHighlight,
   ScMapInteractionMode,
   ScMapLassoSelection,
   ScMapMode,

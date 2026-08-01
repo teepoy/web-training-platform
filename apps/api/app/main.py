@@ -146,15 +146,22 @@ async def lifespan(api: FastAPI):
             await metrics_redis.ping()  # type: ignore[awaitable]
             online_jwt_users.configure_redis(metrics_redis)
 
-            ctx.shared.redis_event_publisher = RedisEventPublisher(metrics_redis)
+            ctx.shared.redis_event_publisher = RedisEventPublisher(
+                metrics_redis,
+                revision_namespace=cfg.sc.data_provider.revision_namespace,
+            )
             _logger.info("Metrics Redis + event publisher configured")
         except Exception:
             if metrics_redis is not None:
                 await metrics_redis.aclose()
             online_jwt_users.configure_redis(None)
-            ctx.shared.redis_event_publisher = RedisEventPublisher(None)
+            ctx.shared.redis_event_publisher = RedisEventPublisher(
+                None,
+                revision_namespace=cfg.sc.data_provider.revision_namespace,
+            )
             _logger.warning(
-                "Metrics Redis unavailable; falling back to per-process counters"
+                "Metrics Redis unavailable; counters are per-process and "
+                "revision-dependent writes will fail explicitly"
             )
 
     if bool(cfg.db.auto_create):

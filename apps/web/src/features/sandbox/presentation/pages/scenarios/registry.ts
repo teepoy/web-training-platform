@@ -18,10 +18,4 @@ export const sandboxDemos: SandboxDemo[] = [
     description: "Sandbox environment for the classify workflow",
     route: "/sandbox/classify",
   },
-  {
-    id: "sc-perspective-reconnect",
-    name: "SC Perspective Reconnect",
-    description: "Mock websocket reconnect and active probe timeout demo",
-    route: "/sandbox/sc-perspective-reconnect",
-  },
 ];

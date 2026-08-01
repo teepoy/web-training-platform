@@ -2,30 +2,30 @@ id: forbid-handwritten-api-dto
 language: typescript
 severity: error
 ignores:
-  - '**/generated/**'
-  - '**/*.spec.ts'
-  - '**/e2e-live/**'
-  - '**/shared/api/**'
-  - '**/tests/**'
-  - '**/src/testing/**'
-  - '**/sc/api/**'
+  - "**/generated/**"
+  - "**/*.spec.ts"
+  - "**/e2e/**"
+  - "**/shared/api/**"
+  - "**/tests/**"
+  - "**/src/testing/**"
+  - "**/sc/api/**"
 rule:
   any:
     - kind: interface_declaration
       has:
         field: name
         stopBy: end
-        regex: 'Response$'
+        regex: "Response$"
     - kind: interface_declaration
       has:
         field: name
         stopBy: end
-        regex: 'Request$'
+        regex: "Request$"
     - kind: call_expression
       has:
         field: function
         stopBy: end
-        regex: '^req$'
+        regex: "^req$"
 message: |
   Handwritten API DTOs and raw req() calls are disallowed.
   Use the orval-generated client instead.

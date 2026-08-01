@@ -6,7 +6,7 @@ import queue
 import shutil
 import threading
 import time
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
@@ -43,6 +43,7 @@ _StreamItem = bytes | BaseException | object
 class PreparedArrowStream:
     body: AsyncGenerator[bytes, None]
     query_duration_ms: float
+    close: Callable[[], Awaitable[None]]
 
 
 class DuckDbQueryExecutor:
@@ -131,8 +132,42 @@ class DuckDbQueryExecutor:
             raise RuntimeError("DuckDB returned no Arrow stream header")
 
         query_duration_ms = (time.monotonic() - started_at) * 1000
+        timeout_task: asyncio.Task[None] | None = None
+        close_task: asyncio.Task[None] | None = None
+
+        async def cleanup(*, cancel_timeout: bool) -> None:
+            cancelled.set()
+            if not future.done():
+                self._connection.interrupt()
+            if cancel_timeout and timeout_task is not None:
+                timeout_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await timeout_task
+            await asyncio.to_thread(_wait_future, future)
+            self._lock.release()
+
+        def ensure_close_task(*, cancel_timeout: bool) -> asyncio.Task[None]:
+            nonlocal close_task
+            if close_task is None:
+                close_task = asyncio.create_task(
+                    cleanup(cancel_timeout=cancel_timeout),
+                    name="sc-duckdb-query-cleanup",
+                )
+            return close_task
+
+        async def close() -> None:
+            await asyncio.shield(ensure_close_task(cancel_timeout=True))
+
+        async def close_at_deadline() -> None:
+            await asyncio.sleep(max(0, deadline - time.monotonic()))
+            # The response coroutine can remain blocked in ASGI send() after a
+            # client disappears. Close independently at the query deadline so
+            # one stalled transport cannot retain the worker's only connection
+            # lock forever.
+            await asyncio.shield(ensure_close_task(cancel_timeout=False))
+
         timeout_task = asyncio.create_task(
-            self._interrupt_at_deadline(cancelled, deadline),
+            close_at_deadline(),
             name="sc-duckdb-query-timeout",
         )
 
@@ -147,14 +182,13 @@ class DuckDbQueryExecutor:
                         raise item
                     yield cast(bytes, item)
             finally:
-                cancelled.set()
-                timeout_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await timeout_task
-                await asyncio.to_thread(_wait_future, future)
-                self._lock.release()
+                await close()
 
-        return PreparedArrowStream(body=body(), query_duration_ms=query_duration_ms)
+        return PreparedArrowStream(
+            body=body(),
+            query_duration_ms=query_duration_ms,
+            close=close,
+        )
 
     def _create_connection(
         self, config: ScDataProviderConfig
@@ -229,14 +263,23 @@ class DuckDbQueryExecutor:
                 self._config.stream_queue_poll_interval_ms / 1000,
             )
         finally:
-            for view in ("samples", "review_images"):
-                with suppress(Exception):
-                    self._connection.execute(f"DROP VIEW IF EXISTS {view}")
-            for name in registered:
-                with suppress(Exception):
-                    self._connection.unregister(name)
+            cleanup_failed = cancelled.is_set()
+            if not cleanup_failed:
+                for view in ("samples", "review_images"):
+                    try:
+                        self._connection.execute(f"DROP VIEW IF EXISTS {view}")
+                    except Exception:
+                        cleanup_failed = True
+                for name in registered:
+                    try:
+                        self._connection.unregister(name)
+                    except Exception:
+                        cleanup_failed = True
             try:
-                self._recycle_connection_under_memory_pressure()
+                if cleanup_failed:
+                    self._replace_connection()
+                else:
+                    self._recycle_connection_under_memory_pressure()
             except BaseException as exc:
                 _put_stream_item(
                     output,
@@ -254,7 +297,11 @@ class DuckDbQueryExecutor:
     def _recycle_connection_under_memory_pressure(self) -> None:
         if self._current_rss_mb() < self._config.connection_recycle_rss_mb:
             return
-        self._connection.close()
+        self._replace_connection()
+
+    def _replace_connection(self) -> None:
+        with suppress(Exception):
+            self._connection.close()
         self._connection = self._create_connection(self._config)
 
     @staticmethod
@@ -333,13 +380,6 @@ class DuckDbQueryExecutor:
             INNER JOIN _samples_base AS base USING (defect_id)
             """
         )
-
-    async def _interrupt_at_deadline(
-        self, cancelled: threading.Event, deadline: float
-    ) -> None:
-        await asyncio.sleep(max(0, deadline - time.monotonic()))
-        cancelled.set()
-        self._connection.interrupt()
 
 
 class _QueueSink:

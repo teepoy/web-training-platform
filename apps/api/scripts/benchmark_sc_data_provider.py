@@ -7,6 +7,7 @@ Example:
       --health-url http://localhost:8001/health \
       --sql 'SELECT defect_id, rough_bin FROM samples ORDER BY defect_id LIMIT ?' \
       --parameters-json '[300000]' \
+      --description benchmark.sc-data-provider \
       --org-id default \
       --iterations 30 \
       --reconnect-cycles 100
@@ -18,6 +19,7 @@ import argparse
 import json
 import statistics
 import time
+import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -54,7 +56,11 @@ def _query(args: argparse.Namespace) -> QuerySample:
     request = urllib.request.Request(
         args.query_url,
         data=json.dumps(
-            {"sql": args.sql, "parameters": json.loads(args.parameters_json)}
+            {
+                "description": args.description,
+                "sql": args.sql,
+                "parameters": json.loads(args.parameters_json),
+            }
         ).encode(),
         headers=_headers(args),
         method="POST",
@@ -99,13 +105,23 @@ def _disconnect_query(args: argparse.Namespace) -> None:
     request = urllib.request.Request(
         args.query_url,
         data=json.dumps(
-            {"sql": args.sql, "parameters": json.loads(args.parameters_json)}
+            {
+                "description": args.description,
+                "sql": args.sql,
+                "parameters": json.loads(args.parameters_json),
+            }
         ).encode(),
         headers=_headers(args),
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:
-        response.read(args.disconnect_after_bytes)
+    try:
+        with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:
+            response.read(args.disconnect_after_bytes)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"disconnect probe returned HTTP {exc.code}: {detail}"
+        ) from exc
 
 
 def _read_int(path: Path) -> int | None:
@@ -178,6 +194,7 @@ def main() -> None:
     parser.add_argument("--query-url", required=True)
     parser.add_argument("--events-url")
     parser.add_argument("--health-url", required=True)
+    parser.add_argument("--description", required=True)
     parser.add_argument("--sql", required=True)
     parser.add_argument("--parameters-json", default="[]")
     parser.add_argument("--token")

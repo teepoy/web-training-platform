@@ -15,6 +15,9 @@ const props = defineProps<{
   datasetId: string;
   viewType: string;
 }>();
+const emit = defineEmits<{
+  (event: "select-sample", sampleId: string): void;
+}>();
 
 const id = computed(() => props.datasetId);
 const viewType = computed(() => props.viewType);
@@ -94,6 +97,7 @@ function handlePrevPage() {
           :view-type="viewType"
           :items="viewData?.items ?? []"
           :total="viewData?.total ?? 0"
+          @select-sample="emit('select-sample', $event)"
         />
 
         <div

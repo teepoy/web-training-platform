@@ -7,16 +7,6 @@ export interface DieStackPoint {
   defectId: string;
 }
 
-export interface HighlightDefect {
-  defectId: number;
-  waferX: number;
-  waferY: number;
-  dieX: number;
-  dieY: number;
-  reticleX: number;
-  reticleY: number;
-}
-
 export interface MapPointVisual {
   label: string;
   color: string;

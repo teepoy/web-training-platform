@@ -16,15 +16,4 @@ export const sandboxRoutes: RouteRecordRaw[] = [
     component: () =>
       import("./presentation/pages/scenarios/rchannel-denoise/RChannelDenoiseSandboxView.vue"),
   },
-  {
-    path: "/sandbox/vxe-table",
-    name: "sandbox-vxe-table",
-    component: () => import("./presentation/pages/scenarios/vxe-table/VxeTableSandbox.vue"),
-  },
-  {
-    path: "/sandbox/sc-perspective-reconnect",
-    name: "sandbox-sc-perspective-reconnect",
-    component: () =>
-      import("./presentation/pages/scenarios/sc-perspective-reconnect/ScPerspectiveReconnectSandbox.vue"),
-  },
 ];

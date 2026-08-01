@@ -1,6 +1,6 @@
 # SC 300k Import Performance Issues
 
-Status: Bounded-execution remediation implemented; live acceptance pending
+Status: Bounded-execution remediation implemented; local 300k acceptance passed
 Recorded: 2026-08-01
 Scope: SC inspection to `file_shard_sparse` dataset import
 
@@ -17,11 +17,24 @@ prediction, training, and SQL data-provider paths are defined in
 | Issue              | Code status                                                                                                                                                                                                     | Remaining verification                                                                        |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | SC-IMPORT-PERF-001 | Resolved: Flight count and bounded async Arrow batches are used by import and provider cache construction.                                                                                                      | Clean-process 1M RSS slope and Flight cancellation against Compose.                           |
-| SC-IMPORT-PERF-002 | Resolved: SC import transforms Arrow batches columnarly and writes each batch directly to Parquet/object storage.                                                                                               | Production CPU profile and the 3x wall-time gate.                                             |
+| SC-IMPORT-PERF-002 | Resolved: SC import transforms Arrow batches columnarly and writes each batch directly to Parquet/object storage.                                                                                               | Production CPU profile; the local 300k wall-time gate passed.                                 |
 | SC-IMPORT-PERF-003 | Resolved: manifest v3 stores an external Parquet index; manifest cache is byte-bounded; natural pages avoid the full identity index.                                                                            | Live random/filter workloads at 1M rows.                                                      |
 | SC-IMPORT-PERF-004 | Resolved: forced full `gc.collect()` calls were removed from the request loop.                                                                                                                                  | Health latency sampling during live import.                                                   |
 | SC-IMPORT-PERF-005 | Still open by architecture decision: execution is bounded and synchronous transforms run off the event loop, but import still occupies an API worker/request. Moving it to a runtime job remains separate work. | Runtime job submission, persistent progress, retry/idempotency, and importer fault injection. |
-| SC-IMPORT-PERF-006 | Implemented: phase timings, HTTP health latency, response/cache/spill/PID data, cgroup current/peak/events, deterministic 300k/1M fixtures, and disconnect recovery are available.                              | Run and record the production-shaped four-worker report.                                      |
+| SC-IMPORT-PERF-006 | Implemented: phase timings, HTTP health latency, response/cache/spill/PID data, cgroup current/peak/events, deterministic 300k/1M fixtures, and disconnect recovery are available.                              | Local four-worker report recorded; repeat on the target client machine.                       |
+
+## Post-remediation local acceptance
+
+The 2026-08-02 dev-stack run imported the aligned 300,000-row inspection in
+12.781 seconds through the browser workflow. The resulting DuckDB workspace
+cold load completed in 4.344 seconds. Annotation, prediction-overlay revision,
+cache reuse, and repeated page reconnects were exercised against the same
+dataset; detailed provider timings are recorded in
+[`sc-data-provider-benchmark.md`](sc-data-provider-benchmark.md).
+
+This closes the local 3x import wall-time gate relative to the 171.114-second
+historical baseline below. It does not close the clean-process 1M RSS gate or
+the target-machine production acceptance.
 
 ## Reproduction and baseline
 

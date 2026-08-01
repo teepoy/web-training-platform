@@ -75,10 +75,15 @@ class PredictionQueryService:
         job = await self._repository.get_prediction_job(job_id, org_id)
         if job is None:
             raise ValueError(f"Prediction job not found: {job_id}")
-        dataset = await self._dataset_reader.get_dataset(job.dataset_id, org_id)
+        dataset_id = job.dataset_id
+        if dataset_id is None:
+            raise ValueError(
+                f"Source dataset for prediction job '{job_id}' was deleted"
+            )
+        dataset = await self._dataset_reader.get_dataset(dataset_id, org_id)
         if dataset is None:
-            raise ValueError(f"Dataset not found: {job.dataset_id}")
-        storage = await self._dataset_storage_factory.open(job.dataset_id, org_id)
+            raise ValueError(f"Dataset not found: {dataset_id}")
+        storage = await self._dataset_storage_factory.open(dataset_id, org_id)
         return await storage.list_predictions(
             job_id=job_id,
             offset=offset,

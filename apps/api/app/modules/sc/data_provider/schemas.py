@@ -13,6 +13,14 @@ ScSqlParameter: TypeAlias = ScSqlScalar | ScSqlArray
 class ScSqlQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
+    description: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=120,
+            pattern=r"^[a-z0-9][a-z0-9._:-]*$",
+        ),
+    ]
     sql: str
     parameters: list[ScSqlParameter]
 

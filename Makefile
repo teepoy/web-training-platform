@@ -18,7 +18,7 @@ COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-co
 LOCAL_PROD_PREFECT_AUTH ?= dangerous:dangerous
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
-SC_PATCH_ZIP_DEFECTS ?= 200000
+SC_WAFER_MOCK_DEFECTS ?= 300000
 SC_PATCH_ZIP_BUCKET ?= sc-patch-images
 SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
 
@@ -69,7 +69,7 @@ PRE_RELEASE_REDIS_PORT       ?= 16379
 PRE_RELEASE_LABEL_STUDIO_PORT ?= 18080
 PRE_RELEASE_PREFECT_PORT     ?= 14200
 PRE_RELEASE_API_PORT         ?= 18000
-PRE_RELEASE_PERSPECTIVE_PORT ?= 18001
+PRE_RELEASE_SC_DATA_PROVIDER_PORT ?= 18001
 PRE_RELEASE_WEB_PORT         ?= 15173
 PRE_RELEASE_SC_GRPC_PORT     ?= 19091
 PRE_RELEASE_SC_FLIGHT_PORT   ?= 19093
@@ -92,7 +92,7 @@ PRE_RELEASE_RUNTIME_ENV      := \
 	PRE_RELEASE_LABEL_STUDIO_PORT=$(PRE_RELEASE_LABEL_STUDIO_PORT) \
 	PRE_RELEASE_PREFECT_PORT=$(PRE_RELEASE_PREFECT_PORT) \
 	PRE_RELEASE_API_PORT=$(PRE_RELEASE_API_PORT) \
-	PRE_RELEASE_PERSPECTIVE_PORT=$(PRE_RELEASE_PERSPECTIVE_PORT) \
+	PRE_RELEASE_SC_DATA_PROVIDER_PORT=$(PRE_RELEASE_SC_DATA_PROVIDER_PORT) \
 	PRE_RELEASE_WEB_PORT=$(PRE_RELEASE_WEB_PORT) \
 	PRE_RELEASE_SC_GRPC_PORT=$(PRE_RELEASE_SC_GRPC_PORT) \
 	PRE_RELEASE_SC_FLIGHT_PORT=$(PRE_RELEASE_SC_FLIGHT_PORT) \
@@ -327,18 +327,20 @@ seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed dev demo data (wafer-dem
 	$(MAKE) seed ARGS="wafer-demo --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth'"
 
 .PHONY: seed-wafer-mock
-seed-wafer-mock: ## Seed mock wafer inspection SQLite database (300k defects)
+seed-wafer-mock: ## Seed mock wafer inspection SQLite database
 	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
-		--defects 300000 --imaged 100 --images-per 5 --reset
+		--defects "$(SC_WAFER_MOCK_DEFECTS)" --imaged 100 --images-per 5 --reset
 
 .PHONY: seed-wafer-patch-zips
 seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
 	uv run python infra/compose/seed_patch_zips.py \
 		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" \
 		--bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
-		--total-defects "$(SC_PATCH_ZIP_DEFECTS)"
+		--upstream-cache-dir "$(CURDIR)/$(DATA_DIR)/cache" \
+		--total-defects "$(SC_WAFER_MOCK_DEFECTS)"
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
@@ -388,15 +390,15 @@ WEB_URL ?= http://localhost:5173
 .PHONY: e2e-live
 e2e-live: ## Run live-stack Playwright browser tests (needs Docker Compose)
 	@curl -s --fail --show-error $(API_URL)/health > /dev/null 2>&1 || (echo "ERROR: API not healthy at $(API_URL)" && exit 1)
-	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm test:e2e-live
+	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm test:e2e:live
 
 .PHONY: e2e-live-ui
 e2e-live-ui: ## Run live-stack Playwright tests in headed mode (debugging)
-	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm exec playwright test --config e2e-live/playwright.config.ts --headed
+	cd $(WEB_DIR) && WEB_URL=$(WEB_URL) API_URL=$(API_URL) pnpm test:e2e:live:ui
 
 .PHONY: e2e-live-report
 e2e-live-report: ## Open Playwright HTML report
-	cd $(WEB_DIR) && pnpm exec playwright show-report e2e-live/playwright-report-live
+	cd $(WEB_DIR) && pnpm test:e2e:live:report
 
 
 # ──────────────────────────────────────────────
@@ -416,7 +418,7 @@ up-prod: ensure-fixtures ## Migrate, register deployments, and start the local p
 	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d postgres minio redis label-studio prefect-server sc-upstream image-parser
 	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /app/.venv/bin/alembic upgrade head
 	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /bin/sh -lc '/app/.venv/bin/prefect work-pool create default-cpu --type process || true; /app/.venv/bin/prefect work-pool create default-gpu --type process || true; /app/.venv/bin/ftapi deployments apply'
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d api perspective-ws web prefect-worker-cpu $(ARGS)
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d api sc-data-provider web prefect-worker-cpu $(ARGS)
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
@@ -476,9 +478,9 @@ ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent;
 	done
 
 .PHONY: up-stack
-up-stack: ensure-fixtures ## [DEPRECATED] Use `make up-dev --scale web=0`. Redirects to dev mode without web.
-	@echo "⚠️  'make up-stack' is deprecated. Use 'make up-dev --scale web=0' instead." >&2
-	@echo "⏳ Redirecting to 'make up-dev --scale web=0'..." >&2
+up-stack: ensure-fixtures ## [DEPRECATED] Use `make up-dev ARGS="--scale web=0"`. Redirects to dev mode without web.
+	@echo "⚠️  'make up-stack' is deprecated. Use 'make up-dev ARGS=\"--scale web=0\"' instead." >&2
+	@echo "⏳ Redirecting to 'make up-dev ARGS=\"--scale web=0\"'..." >&2
 	@docker compose -f $(COMPOSE_DEV) up -d --scale web=0
 
 .PHONY: prune-dev
@@ -499,7 +501,7 @@ prune-dev: ## Wipe ALL dev data: compose volumes (postgres, minio, label-studio,
 		-not -path "*/.venv/*" \
 		-not -path "*/dist/*" \
 		-print -delete 2>/dev/null || true
-	@echo "Prune complete. Run 'make up-dev' or 'make updev' to start fresh (bind-mount fixtures auto-recreated)."
+	@echo "Prune complete. Run 'make up-dev' to start fresh (bind-mount fixtures auto-recreated)."
 
 .PHONY: reset-db-compose
 reset-db-compose: ## Reset the compose database (drops and recreates finetune DB) — requires postgres running (dev mode)
@@ -523,15 +525,6 @@ ensure-sandbox-datasets: wait-api ## Seed demo datasets for the /sandbox dev rou
 	$(MAKE) seed ARGS="wafer-demo --samples 2000 $(ARGS)"
 	$(MAKE) seed ARGS="multi-image-scatter --samples 18 $(ARGS)"
 	$(MAKE) seed ARGS="imagenet-100-rchannel --max-samples 200 --no-model $(ARGS)"
-
-.PHONY: updev
-updev: ## Start compose backend + local Vite frontend with hot reload + wafer-demo seed
-	@trap 'kill 0' EXIT; \
-	$(MAKE) up-dev --scale web=0 && \
-	$(MAKE) wait-api && \
-	$(MAKE) seed-dev && \
-	$(MAKE) dev-web & \
-	wait
 
 .PHONY: db-migrate-compose
 db-migrate-compose: ## Run Alembic migrations inside Compose API container (dev mode)

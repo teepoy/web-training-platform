@@ -77,7 +77,7 @@ class PredictionResultResponse(BaseModel):
 
 class PredictionJobResponse(BaseModel):
     id: str
-    dataset_id: str
+    dataset_id: str | None
     model_id: str
     status: str
     created_by: str

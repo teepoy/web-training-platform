@@ -8,11 +8,12 @@ the matching SQLite metadata for local dev.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+from datetime import datetime
 import io
 import os
 import struct
 import zipfile
-from datetime import datetime, timedelta, timezone
 import zlib
 
 import boto3
@@ -30,7 +31,113 @@ PATCH_IMAGE_TYPES = (
 )
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+INSPECTION_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'wafer_inspection.db')}"
 ZIPS_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'inspection_zips.db')}"
+
+
+@dataclass(frozen=True)
+class InspectionSeed:
+    inspection_time: datetime
+    wafer_key: int
+    lot_id: str
+    wafer_id: str
+    device: str
+    layer_id: str
+    total_defects: int
+
+
+def load_inspection_seed(
+    inspection_db_url: str,
+    wafer_key: int,
+    expected_total_defects: int,
+) -> InspectionSeed:
+    """Load and validate the latest inspection used to build patch zip files.
+
+    Zip lookup relies on positional 500-defect ranges, so a count-only check is
+    insufficient. The source IDs must be unique and contiguous from 1 through
+    the configured count before any object or metadata is written.
+    """
+    from sqlalchemy import text
+
+    if expected_total_defects <= 0:
+        raise ValueError("expected total defects must be greater than zero")
+
+    engine = create_engine(inspection_db_url)
+    with engine.connect() as conn:
+        summary = (
+            conn.execute(
+                text(
+                    "SELECT inspection_time, wafer_key, lot_id, wafer_id, device, "
+                    "layer_id, defects FROM insp_wafer_summary "
+                    "WHERE wafer_key = :wafer_key "
+                    "ORDER BY inspection_time DESC LIMIT 1"
+                ),
+                {"wafer_key": wafer_key},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if summary is None:
+            raise ValueError(f"inspection not found for wafer_key={wafer_key}")
+
+        inspection_time_value = summary["inspection_time"]
+        stats = (
+            conn.execute(
+                text(
+                    "SELECT COUNT(*) AS row_count, "
+                    "COUNT(DISTINCT defect_id) AS distinct_count, "
+                    "MIN(defect_id) AS min_id, MAX(defect_id) AS max_id "
+                    "FROM inspect_defect "
+                    "WHERE wafer_key = :wafer_key "
+                    "AND inspection_time = :inspection_time"
+                ),
+                {
+                    "wafer_key": wafer_key,
+                    "inspection_time": inspection_time_value,
+                },
+            )
+            .mappings()
+            .one()
+        )
+
+    summary_count = int(summary["defects"])
+    row_count = int(stats["row_count"])
+    distinct_count = int(stats["distinct_count"])
+    min_id = stats["min_id"]
+    max_id = stats["max_id"]
+    expected_stats = (
+        expected_total_defects,
+        expected_total_defects,
+        1,
+        expected_total_defects,
+    )
+    actual_stats = (row_count, distinct_count, min_id, max_id)
+    if summary_count != expected_total_defects:
+        raise ValueError(
+            "inspection summary defect count does not match configured count: "
+            f"summary={summary_count}, configured={expected_total_defects}"
+        )
+    if actual_stats != expected_stats:
+        raise ValueError(
+            "inspection defect IDs are not aligned with patch zip ranges: "
+            f"rows={row_count}, distinct={distinct_count}, min={min_id}, "
+            f"max={max_id}, expected=1..{expected_total_defects}"
+        )
+
+    if isinstance(inspection_time_value, datetime):
+        inspection_time = inspection_time_value
+    else:
+        inspection_time = datetime.fromisoformat(str(inspection_time_value))
+
+    return InspectionSeed(
+        inspection_time=inspection_time,
+        wafer_key=int(summary["wafer_key"]),
+        lot_id=str(summary["lot_id"]),
+        wafer_id=str(summary["wafer_id"]),
+        device=str(summary["device"]),
+        layer_id=str(summary["layer_id"]),
+        total_defects=expected_total_defects,
+    )
 
 
 def _png_chunk(tag: bytes, data: bytes) -> bytes:
@@ -170,6 +277,17 @@ def insert_zips(
     print(f"Inserted {len(refs)} zip references into {zips_db_url}")
 
 
+def clear_upstream_metadata_cache(cache_dir: str) -> int:
+    """Clear cached inspection/zip queries after replacing the seed sources."""
+    from diskcache import Cache
+
+    cache = Cache(cache_dir)
+    try:
+        return int(cache.clear())
+    finally:
+        cache.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed mock SC patch zip images")
     parser.add_argument(
@@ -185,31 +303,41 @@ def main() -> None:
         "--bucket", default=os.environ.get("SC_PATCH_S3_BUCKET", PATCH_BUCKET)
     )
     parser.add_argument(
+        "--inspection-db-url",
+        default=os.environ.get("UPSTREAM_DB_URL", INSPECTION_DB_URL),
+    )
+    parser.add_argument(
         "--zips-db-url", default=os.environ.get("ZIPS_DB_URL", ZIPS_DB_URL)
+    )
+    parser.add_argument(
+        "--upstream-cache-dir",
+        default=os.environ.get(
+            "SC_UPSTREAM_CACHE_DIR", os.path.join(DATA_DIR, "cache")
+        ),
     )
     parser.add_argument(
         "--total-defects",
         type=int,
-        default=int(os.environ.get("SC_PATCH_ZIP_DEFECTS", "200000")),
+        default=int(os.environ.get("SC_WAFER_MOCK_DEFECTS", "300000")),
     )
     parser.add_argument("--defects-per-zip", type=int, default=DEFECTS_PER_ZIP)
     parser.add_argument("--wafer-key", type=int, default=1)
-    parser.add_argument("--inspection-time", default=None)
-    parser.add_argument("--lot-id", default="A123456")
-    parser.add_argument("--wafer-id", default="24")
-    parser.add_argument("--device", default="DEVICE-DEMO-A")
-    parser.add_argument("--layer-id", default="LAYER-M1")
     args = parser.parse_args()
 
-    if args.inspection_time:
-        inspection_time = datetime.fromisoformat(args.inspection_time)
-        if inspection_time.tzinfo is None:
-            inspection_time = inspection_time.replace(tzinfo=timezone.utc)
-    else:
-        now = datetime.now().astimezone()
-        inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
-        if now < inspection_time:
-            inspection_time -= timedelta(days=1)
+    if args.defects_per_zip <= 0:
+        raise ValueError("defects per zip must be greater than zero")
+
+    inspection = load_inspection_seed(
+        args.inspection_db_url,
+        args.wafer_key,
+        args.total_defects,
+    )
+    print(
+        "Validated inspection alignment: "
+        f"wafer_key={inspection.wafer_key}, "
+        f"inspection_time={inspection.inspection_time.isoformat()}, "
+        f"defects={inspection.total_defects}"
+    )
 
     s3 = boto3.client(
         "s3",
@@ -221,13 +349,13 @@ def main() -> None:
     ensure_buckets(s3, (args.bucket, REVIEW_BUCKET))
 
     print(
-        f"Generating patch zips for {args.total_defects} defects, "
+        f"Generating patch zips for {inspection.total_defects} defects, "
         f"{args.defects_per_zip} per zip..."
     )
     refs = create_patch_zips(
-        args.wafer_key,
-        inspection_time,
-        args.total_defects,
+        inspection.wafer_key,
+        inspection.inspection_time,
+        inspection.total_defects,
         s3,
         bucket=args.bucket,
         defects_per_zip=args.defects_per_zip,
@@ -235,13 +363,18 @@ def main() -> None:
     print(f"Uploaded {len(refs)} zips to s3://{args.bucket}/")
 
     insert_zips(
-        inspection_time,
-        args.lot_id,
-        args.wafer_id,
-        args.device,
-        args.layer_id,
+        inspection.inspection_time,
+        inspection.lot_id,
+        inspection.wafer_id,
+        inspection.device,
+        inspection.layer_id,
         refs,
         args.zips_db_url,
+    )
+    cleared_entries = clear_upstream_metadata_cache(args.upstream_cache_dir)
+    print(
+        "Cleared SC upstream metadata cache after seed replacement: "
+        f"entries={cleared_entries}, directory={args.upstream_cache_dir}"
     )
     print("Done.")
 

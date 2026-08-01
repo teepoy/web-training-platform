@@ -41,6 +41,11 @@ class LocalProcessEngine:
             run["state"] = "CANCELLED"
             return
         try:
+            dataset_id = job.dataset_id
+            if dataset_id is None:
+                raise ValueError(
+                    f"Source dataset for training job '{job.id}' was deleted"
+                )
             run["events"].append(
                 TrainingEvent(
                     job_id=job.id,
@@ -53,7 +58,7 @@ class LocalProcessEngine:
 
             result = await run_training_pipeline(
                 job_id=job.id,
-                dataset_id=job.dataset_id,
+                dataset_id=dataset_id,
                 trainer_id=job.trainer_id,
                 artifact_storage=self.storage,
             )
@@ -222,6 +227,11 @@ class KubeflowTrainingOperatorEngine:
             run["state"] = "CANCELLED"
             return
         try:
+            dataset_id = job.dataset_id
+            if dataset_id is None:
+                raise ValueError(
+                    f"Source dataset for training job '{job.id}' was deleted"
+                )
             run["events"].append(
                 TrainingEvent(
                     job_id=job.id,
@@ -234,7 +244,7 @@ class KubeflowTrainingOperatorEngine:
                 deployment_name="training-train-job",
                 parameters={
                     "job_id": job.id,
-                    "dataset_id": job.dataset_id,
+                    "dataset_id": dataset_id,
                     "trainer_id": job.trainer_id,
                     "created_by": job.created_by,
                 },

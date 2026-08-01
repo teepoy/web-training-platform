@@ -8,8 +8,8 @@ export interface SimpleMapPoint {
   isSelectedFlag: boolean;
 }
 
-/** Point type for Perspective-binned map with 4-pass overlay rendering. */
-export interface PerspectiveMapPoint {
+/** Point type for binned-map overlay rendering. */
+export interface ScBinnedMapPoint {
   x: number;
   y: number;
   label: string;

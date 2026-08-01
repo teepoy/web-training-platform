@@ -2,10 +2,10 @@ id: forbid-index-external-import
 language: typescript
 severity: error
 files:
-  - '**/index.ts'
+  - "**/index.ts"
 ignores:
-  - '**/shared/components/*/index.ts'
-  - '**/tests/fixtures/index.ts'
+  - "**/shared/components/*/index.ts"
+  - "**/e2e/fixtures/index.ts"
 rule:
   any:
     - kind: import_statement

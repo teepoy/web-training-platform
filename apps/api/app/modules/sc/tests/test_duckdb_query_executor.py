@@ -191,6 +191,100 @@ async def test_closing_stream_early_releases_worker_and_temp_directory(
 
 
 @pytest.mark.asyncio
+async def test_closing_prepared_stream_before_iteration_releases_worker(
+    tmp_path: Path,
+) -> None:
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path), "arrow_batch_rows": 1}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    prepared = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT * FROM samples"),
+        parameters=[],
+        materialized=_materialized(tmp_path),
+    )
+    await prepared.close()
+
+    second = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+        parameters=[],
+        materialized=_materialized(tmp_path),
+    )
+    payload = b"".join([chunk async for chunk in second.body])
+    await executor.close()
+
+    assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_blocked_producer_recycles_connection_catalog(
+    tmp_path: Path,
+) -> None:
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={
+            "cache_dir": str(tmp_path),
+            "arrow_batch_rows": 1,
+            "stream_queue_capacity": 1,
+        }
+    )
+    materialized = _materialized(tmp_path)
+    executor = DuckDbQueryExecutor(config=config)
+    prepared = await executor.prepare_stream(
+        sql=validate_sc_sql(
+            "SELECT left_samples.defect_id "
+            "FROM samples AS left_samples CROSS JOIN samples AS right_samples"
+        ),
+        parameters=[],
+        materialized=materialized,
+    )
+    await prepared.close()
+
+    second = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+        parameters=[],
+        materialized=materialized,
+    )
+    payload = b"".join([chunk async for chunk in second.body])
+    await executor.close()
+
+    assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
+
+
+@pytest.mark.asyncio
+async def test_unconsumed_stream_releases_worker_at_query_deadline(
+    tmp_path: Path,
+) -> None:
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={
+            "cache_dir": str(tmp_path),
+            "arrow_batch_rows": 1,
+            "sql_timeout_seconds": 1,
+        }
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    first = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT * FROM samples"),
+        parameters=[],
+        materialized=_materialized(tmp_path),
+    )
+
+    await asyncio.sleep(1.1)
+    second = await asyncio.wait_for(
+        executor.prepare_stream(
+            sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+            parameters=[],
+            materialized=_materialized(tmp_path),
+        ),
+        timeout=1,
+    )
+    payload = b"".join([chunk async for chunk in second.body])
+    await first.close()
+    await executor.close()
+
+    assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
+
+
+@pytest.mark.asyncio
 async def test_cancelling_before_first_arrow_chunk_releases_worker(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
