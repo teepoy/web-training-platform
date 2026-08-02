@@ -82,10 +82,19 @@ they migrate. Import and cache construction are forbidden from using it.
 
 ### 2. Write sparse data columnarly
 
-Transform each Arrow batch with Arrow/Polars expressions, including the nested
-image-reference column, and give the resulting RecordBatch/Table directly to a
-streaming sparse writer. The writer owns Parquet encoding, checksum, object
-upload, and phase metrics. It never accepts `list[dict]` for the SC bulk path.
+Transform each Arrow batch with Arrow/Polars expressions and give the resulting
+RecordBatch/Table directly to a streaming sparse writer. New SC source schema
+v3 shards preserve the complete upstream Arrow columns plus required platform
+identity columns; they do not repeat three deterministic patch-image structs
+per defect. The first batch establishes the concrete schema recorded in the
+manifest, and later batches must match it. Patch and review images are resolved
+on demand. Existing source schema v2 shards retain their explicit embedded
+`images`-column read path.
+
+The writer persists the SC source `schema_version` in both the dataset manifest
+and Parquet metadata. This source version is independent of the manifest layout
+`manifest_version`; both currently use the string `v3`, but describe different
+contracts.
 
 Remove per-row coroutine calls and forced full `gc.collect()` calls after the
 bounded ownership model is verified. Record transfer, transform, Parquet,
@@ -93,7 +102,7 @@ checksum, upload, manifest, and cleanup time separately.
 
 ### 3. Replace the inline sample index
 
-Introduce sparse manifest schema v3:
+Introduce sparse manifest layout v3:
 
 - `manifest.json` contains dataset, schema, shard, row-count, checksum, and
   index-object metadata only, so its size is O(shards);
@@ -104,9 +113,11 @@ Introduce sparse manifest schema v3:
 - ID lookup and bulk validation query the index sidecar with predicate
   pushdown and only materialize requested locators.
 
-Readers support explicit v2 and v3 schemas during migration; all new writes use
-v3. This is schema compatibility, not a failure fallback. The manifest cache
-becomes byte-bounded and exposes hits, evictions, and retained bytes.
+Readers support explicit v2 and v3 manifest layouts during migration; all new
+writes use manifest layout v3. Independently, SC rows support source schema v2
+for reads and v3 for current writes. These are schema compatibility paths, not
+failure fallbacks. The manifest cache becomes byte-bounded and exposes hits,
+evictions, and retained bytes.
 
 ### 4. Split mutable overlays by kind
 

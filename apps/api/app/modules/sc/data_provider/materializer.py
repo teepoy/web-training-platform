@@ -6,7 +6,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, overload
 
 import polars as pl
 import pyarrow as pa
@@ -49,6 +49,16 @@ _SAMPLE_COLUMN_DTYPES = {
     "final_class": pl.Utf8,
     "review_image_ids_json": pl.Utf8,
 }
+
+_WORKBENCH_OWNED_SOURCE_COLUMNS = (
+    "images",
+    "review_image_ids_json",
+    "annotation_label",
+    "prediction_label",
+    "prediction_confidence",
+    "final_class",
+)
+_SAMPLES_BASE_FORMAT_VERSION = "v2-full-source-columns"
 
 
 @dataclass(frozen=True)
@@ -135,7 +145,7 @@ class ScDataMaterializer:
         base_key = f"inspection:{inspection_time}/{wafer_key}"
         samples, review_images = await asyncio.gather(
             self._cache.get_or_build_file(
-                logical_key=f"{base_key}:samples-base",
+                logical_key=f"{base_key}:samples-base:{_SAMPLES_BASE_FORMAT_VERSION}",
                 scope=scope.cache_name,
                 revision=0,
                 revision_tracked=False,
@@ -197,7 +207,10 @@ class ScDataMaterializer:
         )
         base_lf = _normalize_dataset_base_lazyframe(sparse_lf, review_df)
         base = await self._cache.get_or_build_file(
-            logical_key=f"dataset:{scope.org_id}/{scope.identity}:samples-base",
+            logical_key=(
+                f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
+                f"{_SAMPLES_BASE_FORMAT_VERSION}"
+            ),
             scope=scope.cache_name,
             revision=0,
             revision_tracked=False,
@@ -396,13 +409,7 @@ def _attach_review_metadata(
     samples: pl.DataFrame,
     aggregate: pl.DataFrame,
 ) -> pl.DataFrame:
-    removable = [
-        column
-        for column in ("images", "review_image_ids_json")
-        if column in samples.columns
-    ]
-    if removable:
-        samples = samples.drop(removable)
+    samples = _rename_workbench_owned_source_columns(samples)
     return (
         samples.with_columns(pl.col("defect_id").cast(pl.Int32, strict=False))
         .join(aggregate, on="defect_id", how="left")
@@ -417,22 +424,19 @@ def _normalize_dataset_base_lazyframe(
     sparse_lf: pl.LazyFrame,
     review_df: pl.DataFrame,
 ) -> pl.LazyFrame:
-    schema_names = set(sparse_lf.collect_schema().names())
+    sparse_schema = sparse_lf.collect_schema()
+    schema_names = set(sparse_schema.names())
     if "defect_id" not in schema_names:
         raise ValueError("SC dataset rows must include defect_id")
-    removable = [
-        column
-        for column in (
-            "images",
-            "review_image_ids_json",
-            "annotation_label",
-            "prediction_label",
-            "prediction_confidence",
-            "final_class",
-        )
-        if column in schema_names
-    ]
-    base = sparse_lf.drop(removable).with_columns(
+    # V2's nested image structs may contain bytes and remain read-compatible,
+    # but must not be copied into the SQL cache.  A v3 scalar upstream images
+    # column is metadata and is retained as upstream_images.
+    if "images" in schema_names and not _is_viewer_scalar_dtype(
+        sparse_schema["images"]
+    ):
+        sparse_lf = sparse_lf.drop("images")
+        schema_names.remove("images")
+    base = _rename_workbench_owned_source_columns(sparse_lf).with_columns(
         pl.col("defect_id").cast(pl.Int32, strict=False)
     )
     base = base.join(_review_aggregate(review_df).lazy(), on="defect_id", how="left")
@@ -440,14 +444,23 @@ def _normalize_dataset_base_lazyframe(
     expressions: list[pl.Expr] = []
     for column, dtype in _SAMPLE_COLUMN_DTYPES.items():
         if column in available:
-            expressions.append(pl.col(column).cast(dtype, strict=False).alias(column))
+            expression = pl.col(column).cast(dtype, strict=False)
+            if column == "images":
+                expression = expression.fill_null(0)
+            elif column == "review_image_ids_json":
+                expression = expression.fill_null("[]")
+            expressions.append(expression.alias(column))
+        elif column == "cluster_id" and "cluster" in available:
+            expressions.append(
+                pl.col("cluster").cast(dtype, strict=False).alias(column)
+            )
         elif column == "images":
             expressions.append(pl.lit(0).cast(dtype).alias(column))
         elif column == "review_image_ids_json":
             expressions.append(pl.lit("[]").cast(dtype).alias(column))
         else:
             expressions.append(pl.lit(None).cast(dtype).alias(column))
-    return base.with_columns(expressions).select(*_SAMPLE_COLUMN_DTYPES)
+    return base.with_columns(expressions)
 
 
 def _isoformat(value: object) -> str:
@@ -461,7 +474,11 @@ def _normalize_samples_frame(df: pl.DataFrame) -> pl.DataFrame:
     for column, dtype in _SAMPLE_COLUMN_DTYPES.items():
         if column == "defect_id" or column in df.columns:
             continue
-        if column == "images":
+        if column == "cluster_id" and "cluster" in df.columns:
+            expressions.append(
+                pl.col("cluster").cast(dtype, strict=False).alias(column)
+            )
+        elif column == "images":
             expressions.append(pl.lit(0).cast(dtype).alias(column))
         elif column == "review_image_ids_json":
             expressions.append(pl.lit("[]").cast(dtype).alias(column))
@@ -471,4 +488,41 @@ def _normalize_samples_frame(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(
         pl.col(column).cast(dtype, strict=False)
         for column, dtype in _SAMPLE_COLUMN_DTYPES.items()
-    ).select(*_SAMPLE_COLUMN_DTYPES)
+    )
+
+
+@overload
+def _rename_workbench_owned_source_columns(frame: pl.DataFrame) -> pl.DataFrame: ...
+
+
+@overload
+def _rename_workbench_owned_source_columns(frame: pl.LazyFrame) -> pl.LazyFrame: ...
+
+
+def _rename_workbench_owned_source_columns(
+    frame: pl.DataFrame | pl.LazyFrame,
+) -> pl.DataFrame | pl.LazyFrame:
+    """Retain source values that collide with computed workbench columns."""
+    names = set(frame.collect_schema().names())
+    renames: dict[str, str] = {}
+    for column in _WORKBENCH_OWNED_SOURCE_COLUMNS:
+        if column not in names:
+            continue
+        shadow = f"upstream_{column}"
+        if shadow in names:
+            raise ValueError(
+                "SC source contains both a workbench-owned column and its "
+                f"reserved shadow column: {column!r}, {shadow!r}"
+            )
+        renames[column] = shadow
+    return frame.rename(renames) if renames else frame
+
+
+def _is_viewer_scalar_dtype(dtype: pl.DataType) -> bool:
+    return dtype.is_numeric() or dtype in {
+        pl.Boolean,
+        pl.String,
+        pl.Date,
+        pl.Datetime,
+        pl.Time,
+    }

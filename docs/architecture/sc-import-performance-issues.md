@@ -14,14 +14,14 @@ prediction, training, and SQL data-provider paths are defined in
 
 ## Remediation status
 
-| Issue              | Code status                                                                                                                                                                                                     | Remaining verification                                                                        |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| SC-IMPORT-PERF-001 | Resolved: Flight count and bounded async Arrow batches are used by import and provider cache construction.                                                                                                      | Clean-process 1M RSS slope and Flight cancellation against Compose.                           |
-| SC-IMPORT-PERF-002 | Resolved: SC import transforms Arrow batches columnarly and writes each batch directly to Parquet/object storage.                                                                                               | Production CPU profile; the local 300k wall-time gate passed.                                 |
-| SC-IMPORT-PERF-003 | Resolved: manifest v3 stores an external Parquet index; manifest cache is byte-bounded; natural pages avoid the full identity index.                                                                            | Live random/filter workloads at 1M rows.                                                      |
-| SC-IMPORT-PERF-004 | Resolved: forced full `gc.collect()` calls were removed from the request loop.                                                                                                                                  | Health latency sampling during live import.                                                   |
-| SC-IMPORT-PERF-005 | Still open by architecture decision: execution is bounded and synchronous transforms run off the event loop, but import still occupies an API worker/request. Moving it to a runtime job remains separate work. | Runtime job submission, persistent progress, retry/idempotency, and importer fault injection. |
-| SC-IMPORT-PERF-006 | Implemented: phase timings, HTTP health latency, response/cache/spill/PID data, cgroup current/peak/events, deterministic 300k/1M fixtures, and disconnect recovery are available.                              | Local four-worker report recorded; repeat on the target client machine.                       |
+| Issue              | Code status                                                                                                                                                                                                                                              | Remaining verification                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| SC-IMPORT-PERF-001 | Resolved: Flight count and bounded async Arrow batches are used by import and provider cache construction.                                                                                                                                               | Clean-process 1M RSS slope and Flight cancellation against Compose.                           |
+| SC-IMPORT-PERF-002 | Resolved: SC import transforms Arrow batches columnarly and writes source schema v3 directly to Parquet/object storage without projecting away upstream metadata columns. Existing source schema v2 shards with nested image references remain readable. | Production CPU profile; repeat the local 300k wall-time gate after the v3 switch.             |
+| SC-IMPORT-PERF-003 | Resolved: manifest v3 stores an external Parquet index; manifest cache is byte-bounded; natural pages avoid the full identity index.                                                                                                                     | Live random/filter workloads at 1M rows.                                                      |
+| SC-IMPORT-PERF-004 | Resolved: forced full `gc.collect()` calls were removed from the request loop.                                                                                                                                                                           | Health latency sampling during live import.                                                   |
+| SC-IMPORT-PERF-005 | Still open by architecture decision: execution is bounded and synchronous transforms run off the event loop, but import still occupies an API worker/request. Moving it to a runtime job remains separate work.                                          | Runtime job submission, persistent progress, retry/idempotency, and importer fault injection. |
+| SC-IMPORT-PERF-006 | Implemented: phase timings, HTTP health latency, response/cache/spill/PID data, cgroup current/peak/events, deterministic 300k/1M fixtures, and disconnect recovery are available.                                                                       | Local four-worker report recorded; repeat on the target client machine.                       |
 
 ## Post-remediation local acceptance
 
@@ -35,6 +35,13 @@ dataset; detailed provider timings are recorded in
 This closes the local 3x import wall-time gate relative to the 171.114-second
 historical baseline below. It does not close the clean-process 1M RSS gate or
 the target-machine production acceptance.
+
+After switching new SC source shards to the columnar v3 schema, a local
+in-process microbenchmark measured a median 25,000-row transform at 0.001559
+seconds and twelve transforms (300,000 rows) at 0.017948 seconds. One synthetic
+25,000-row Snappy Parquet shard was 624,213 bytes. This isolates transform and
+encoding shape only; the live import acceptance must still include Flight,
+object storage, index finalization, and container RSS.
 
 ## Reproduction and baseline
 
@@ -100,10 +107,9 @@ Acceptance:
 
 ## SC-IMPORT-PERF-002: Per-row Python conversion dominates shard time
 
-Each batch is converted with `DataFrame.to_dicts()`, then each row becomes a
-Pydantic `PatchSample`, image dictionaries are built per row, and another row
-dictionary is produced for `pa.Table.from_pylist()`. `_build_image_structs()` is
-also async despite performing no I/O and is awaited 300,000 times.
+The historical path converted each batch with `DataFrame.to_dicts()`, then each
+row became a Pydantic `PatchSample`, image dictionaries were built per row, and
+another row dictionary was produced for `pa.Table.from_pylist()`.
 
 The logged Parquet flushes took only 0.215-0.468 seconds each, while most 25k
 batch intervals took 11-20 seconds. This makes row normalization and object
@@ -116,13 +122,23 @@ Relevant code:
 - `apps/api/app/modules/sc/app/services/sc_import_service.py`
 - `apps/api/app/modules/storage/adapter/sparse/import_operator.py`
 
-Follow-up:
+Implemented:
 
 - Replace row-wise Pydantic construction with Arrow/Polars column expressions.
-- Build the nested image column in columnar form.
+- Remove the unused nested image-reference column from new source schema v3
+  shards. Patch and review bytes are resolved on demand from scalar inspection,
+  wafer, defect, patch-role, and review-image identity. Source schema v2 remains
+  an explicit read-only compatibility path.
+- Preserve every additional upstream Arrow column in the v3 Parquet shards and
+  record the first batch's complete concrete schema in
+  `DatasetManifest.schema_columns`. A column-set change within one import fails
+  explicitly instead of producing inconsistent shards.
 - Pass Arrow record batches/tables to the sparse writer rather than round
   tripping through `list[dict]` and `pa.Table.from_pylist()`.
 - Remove coroutine overhead from pure synchronous transformations.
+- Persist `schema_version=v3` in both `manifest.json` and new Parquet shard
+  metadata. Older v2 shards without Parquet metadata continue to use the
+  manifest as their authoritative version marker.
 
 Acceptance:
 

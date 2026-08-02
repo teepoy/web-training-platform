@@ -135,9 +135,9 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 **Annotate.** Bulk annotations resolve `defect_id` → `sample_id` through `ScDatasetAgg`. Sparse mode uses the storage aggregate's manifest index, while `db_full` performs one JSON-metadata query. The `sample_id` equals the `defect_id` in sparse mode (no `SampleORM` rows exist); unknown defect IDs are excluded.
 
-**Train.** `train_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(with_labels=True, return_lazyframe=True)`. External runtimes consume the data-plane manifest. API-local compatibility trainers use the registered SC view materializer, which writes temporary Parquet in bounded batches and scans that Parquet directly. No legacy `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
+**Train.** `train_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(with_labels=True, return_lazyframe=True)`. External runtimes consume the data-plane manifest. API-local compatibility trainers use the registered SC view materializer, which writes temporary Parquet in bounded batches; the current bounded SC trainer then explicitly loads it with `collect_parquet_dataset`. No legacy `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
 
-**Predict.** `predict_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(return_lazyframe=True, sample_ids=...)`. Predictors that declare a `lazyframe` input consume it directly; API-local compatibility predictors that declare `materialized_dataset` use the registered bounded Parquet materializer. Predicting the full dataset should pass `sample_ids=None`; sending 100k IDs through Prefect parameters exceeds Prefect's serialized-parameter limit.
+**Predict.** `predict_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(return_lazyframe=True, sample_ids=...)`. Predictors that declare a `lazyframe` input consume it directly; API-local compatibility predictors that declare `materialization_manifest` use the registered bounded Parquet materializer and explicitly select a runtime loader. Current SC prediction has an explicit materialized-byte budget and uses `collect_parquet_dataset`; it does not ask storage to construct a Torch or Hugging Face Dataset. Predicting the full dataset should pass `sample_ids=None`; sending 100k IDs through Prefect parameters exceeds Prefect's serialized-parameter limit.
 
 **Export.** The `SparseExportAssembler` joins shard rows with annotations and prediction results, producing `sparse-export-v1` format output. Annotations are resolved via `sample_id IN (manifest.sample_index keys)` (batched at 500). Prediction results are joined by `(shard_index, row_index)` from the latest completed prediction job's per-shard Parquet output.
 
@@ -150,9 +150,26 @@ These capabilities are explicitly NOT supported for sparse SC datasets. The desi
 - **Random sampling.** No per-sample materialization exists to draw random samples from. The sparse interaction model is prediction review, not exploratory browsing.
 - **Per-sample materialization.** Individual `SampleORM` rows are never created for sparse datasets. All sample data lives in Parquet shards.
 
-### v2 Embedded Image Storage
+### SC source schema v3 and v2 compatibility
 
-SC sparse datasets have two distinct data models that share the same `file_shard_sparse` storage mode.
+SC sparse datasets have versioned source data models that share the same
+`file_shard_sparse` storage mode.
+
+**Storage model (v3 shards).** All new imports preserve the full upstream Arrow
+schema in Parquet, add the required platform identity columns, and record the
+complete concrete column list and Arrow type strings in
+`DatasetManifest.schema_columns`. The importer does not construct embedded
+patch-image structs. Patch and review images resolve on demand from inspection,
+wafer, defect, image-role, and review-image identity. If an upstream metadata
+column collides with a workbench-computed column, the SQL `samples` view exposes
+the source value as `upstream_<name>` and keeps the computed name for current
+workbench semantics; for example, `upstream_images` is the source count and
+`images` is the live review-image count.
+
+The SC data viewer discovers this concrete list from the SQL data provider with
+`SELECT * FROM samples LIMIT 0`. Known fields retain their curated labels and
+filter behavior; additional scalar fields receive generic viewer columns, while
+nested/binary values remain visible without unsafe filter controls.
 
 **Upstream model.** When SC wafers are scanned by inspection equipment, each defect record carries image _references_ in the form of lightweight URIs (S3 keys, file paths). These URIs point to image files stored in the upstream wafer database or object storage. The upstream system never ships raw bytes directly into defect records.
 
@@ -199,9 +216,15 @@ PYTHONPATH=apps/api .venv/bin/python \
   --rows 5000 --classes 5 --unique-images 1000 --image-size 64
 ```
 
-**Schema version gating.** A `schema_version` field on `DatasetManifest` distinguishes v2 shards from legacy shards. Datasets imported with the v2 importer carry `schema_version="v2"`. Legacy datasets have `schema_version=None` or `"v1"` and use the old `image_uris` + `metadata` columns.
+**Schema version gating.** `DatasetManifest.schema_version` distinguishes v3,
+v2, and legacy source rows. Current imports carry `schema_version="v3"`; v2
+datasets retain the embedded `images` list; legacy datasets have `None` or
+`"v1"` and use the old `image_uris` + `metadata` columns.
 
-**Legacy shards are not supported.** Old URI-only sparse shards (datasets imported before the v2 importer, including dev and smoke shards from earlier workflow runs) must be re-imported. The `check_sc_v2_or_raise()` guard in `app.modules.sc.schema` rejects manifests where `schema_version != "v2"` and directs operators to re-import. There is no backward compatibility path: v2-only consumers (materialization, image serving, v2 prediction path) fail fast on legacy shards, and v2 predictors do not attempt URI fallback.
+V2 remains an explicit read compatibility path. The v2 image endpoint reads the
+embedded list with column projection; v3 image access derives on-demand refs
+from scalar identity. Legacy URI-only behavior remains limited to legacy-aware
+readers and is not a fallback for a versioned v2 or v3 manifest.
 
 **Image serving.** Individual images embedded in v2 shards are available through a dedicated endpoint that reads the `images` column only (column projection), matches the requested `image_id`, and returns raw bytes with the correct `Content-Type` header:
 

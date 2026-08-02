@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
-from contextlib import ExitStack
 from collections.abc import Iterator
+from contextlib import ExitStack
 from typing import Any
 
 import polars as pl
@@ -35,23 +35,6 @@ SC_PATCH_IMAGE_MATERIALIZER = catalog.get_materializer_meta(
 
 class ScMaterializationCapacityError(RuntimeError):
     """The configured materialized-output budget was exceeded."""
-
-
-class _ParquetRowDataset:
-    """Re-iterable row view over materialized Parquet without a second cache."""
-
-    def __init__(self, path: str, row_count: int, batch_rows: int) -> None:
-        self._path = path
-        self._row_count = row_count
-        self._batch_rows = batch_rows
-
-    def __len__(self) -> int:
-        return self._row_count
-
-    def __iter__(self) -> Iterator[dict[str, Any]]:
-        parquet_file = pq.ParquetFile(self._path)
-        for batch in parquet_file.iter_batches(batch_size=self._batch_rows):
-            yield from batch.to_pylist()
 
 
 class ScInspectionMaterializer:
@@ -181,8 +164,6 @@ class ScInspectionMaterializer:
             manifest.validate_transport()
             materialization = ScInspectionMaterialization(
                 parquet_path=handle.name,
-                cache_dir=None,
-                dataset=_ParquetRowDataset(handle.name, row_count, self._batch_rows),
                 row_count=row_count,
                 manifest=manifest,
                 errors=errors,

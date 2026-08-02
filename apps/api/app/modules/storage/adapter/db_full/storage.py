@@ -625,57 +625,6 @@ class DbFullDatasetStorage:
             row_count=row_count,
         )
 
-    # ── as_hf_dataset ──────────────────────────────────────────
-
-    async def as_hf_dataset(
-        self,
-        view_id: str,
-        *,
-        sampling: int | None = None,
-        sample_ids: list[str] | None = None,
-    ) -> Any:
-        """Materialize the dataset, load the resulting parquet as a
-        HuggingFace ``Dataset``, apply optional filtering / sampling,
-        and clean up temp files afterwards."""
-        result = await self.materialize()
-
-        import os
-        import tempfile
-
-        manifest_uri = result.manifest_uri
-
-        parquet_bytes = await self._storage.get_bytes(manifest_uri)
-        tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
-        tmp.write(parquet_bytes)
-        tmp.close()
-        parquet_path: str = tmp.name
-
-        try:
-            from datasets import load_dataset
-
-            cache_dir = tempfile.mkdtemp(prefix="finetune-hf-datasets-")
-            ds = load_dataset(
-                "parquet",
-                data_files=parquet_path,
-                split="train",
-                cache_dir=cache_dir,
-            )
-
-            if sample_ids is not None:
-                sid_set = frozenset(sample_ids)
-                ds = ds.filter(lambda x: x["sample_id"] in sid_set)
-
-            if sampling is not None and len(ds) > sampling:
-                ds = ds.select(range(sampling))
-
-            return ds
-        finally:
-            if os.path.isfile(parquet_path):
-                try:
-                    os.unlink(parquet_path)
-                except OSError:
-                    pass
-
     # ── recent_annotations ─────────────────────────────────────
 
     async def recent_annotations(self, limit: int = 20) -> dict:

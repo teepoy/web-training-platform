@@ -282,6 +282,10 @@ class SparseColumnarImportSession:
         if table.num_rows == 0:
             raise ValueError("cannot append an empty sparse shard")
 
+        metadata = dict(table.schema.metadata or {})
+        metadata[b"schema_version"] = self._schema_version.encode("utf-8")
+        table = table.replace_schema_metadata(metadata)
+
         shard_index = len(self._shards)
         entry = await self._operator._flush_arrow_shard(
             shard_index=shard_index,

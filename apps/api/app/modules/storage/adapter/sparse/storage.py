@@ -165,9 +165,33 @@ class SparseDatasetStorage:
             raise ValueError("Row missing required 'id' or 'sample_id' column")
         return str(row_id)
 
-    def _row_to_sample_row(self, row: dict[str, object]) -> SampleRow:
+    def _row_to_sample_row(
+        self,
+        row: dict[str, object],
+        *,
+        schema_version: str | None,
+    ) -> SampleRow:
         """Convert a raw parquet row dict to a :class:`SampleRow`."""
         sample_id = self._extract_sample_id(row)
+
+        if self._dataset_type == "image_sc":
+            if schema_version == "v3":
+                return self._normalize_v3_row(row, sample_id)
+            if schema_version == "v2":
+                if "images" not in row:
+                    raise ValueError("SC v2 shard row is missing its images column")
+                return self._normalize_v2_row(row, sample_id)
+            if schema_version not in (None, "v1"):
+                raise ValueError(
+                    f"Unsupported SC sparse schema version: {schema_version!r}"
+                )
+
+            # Legacy manifests did not persist a source schema version.  Keep
+            # their historical column-based dispatch, but never use it for a
+            # versioned manifest.
+            if "images" in row:
+                return self._normalize_v2_row(row, sample_id)
+            return self._normalize_v1_row(row, sample_id)
 
         images_raw = row.get("images")
         if images_raw is not None:
@@ -437,6 +461,19 @@ class SparseDatasetStorage:
             metadata=scalar_meta,
         )
 
+    def _normalize_v3_row(self, row: dict[str, object], sample_id: str) -> SampleRow:
+        """Normalize a scalar-only SC row whose images resolve on demand."""
+        scalar_meta = {
+            col: value for col, value in row.items() if col not in ("id", "sample_id")
+        }
+        return SampleRow(
+            sample_id=sample_id,
+            dataset_id=self._dataset_id,
+            image_uris=[],
+            images=None,
+            metadata=scalar_meta,
+        )
+
     # ── shard navigation ────────────────────────────────────────────
 
     @staticmethod
@@ -592,7 +629,10 @@ class SparseDatasetStorage:
                 )
             return [
                 self._enrich_sample_row(
-                    self._row_to_sample_row(raw_row),
+                    self._row_to_sample_row(
+                        raw_row,
+                        schema_version=manifest.schema_version,
+                    ),
                     latest_by_sample=latest_by_sample,
                     predictions_by_sample=predictions_by_sample,
                     with_labels=with_labels,
@@ -682,7 +722,10 @@ class SparseDatasetStorage:
 
             result.append(
                 self._enrich_sample_row(
-                    self._row_to_sample_row(raw_row),
+                    self._row_to_sample_row(
+                        raw_row,
+                        schema_version=manifest.schema_version,
+                    ),
                     latest_by_sample=latest_by_sample,
                     predictions_by_sample=predictions_by_sample,
                     with_labels=with_labels,
@@ -863,7 +906,10 @@ class SparseDatasetStorage:
         if raw_row is None:
             return None
 
-        return self._row_to_sample_row(raw_row)
+        return self._row_to_sample_row(
+            raw_row,
+            schema_version=manifest.schema_version,
+        )
 
     # ── get_samples_by_id ───────────────────────────────────────────
 
@@ -911,7 +957,10 @@ class SparseDatasetStorage:
                     shard_rows[sid] = raw
 
         return {
-            sid: self._row_to_sample_row(raw)
+            sid: self._row_to_sample_row(
+                raw,
+                schema_version=manifest.schema_version,
+            )
             for sid in sample_ids
             if (raw := shard_rows.get(sid)) is not None
         }
@@ -1898,60 +1947,6 @@ class SparseDatasetStorage:
             prefix=prefix,
             row_count=row_count,
         )
-
-    # ── as_hf_dataset ───────────────────────────────────────────────
-
-    async def as_hf_dataset(
-        self,
-        view_id: str,
-        *,
-        sampling: int | None = None,
-        sample_ids: list[str] | None = None,
-    ) -> Any:
-        """Materialize the dataset, load the resulting parquet as a
-        HuggingFace ``Dataset``, apply optional filtering / sampling,
-        and clean up temp files afterwards."""
-        result = await self.materialize()
-
-        import os
-        import tempfile
-
-        manifest_uri = result.manifest_uri
-
-        if not os.path.isfile(manifest_uri):
-            parquet_bytes = await self._storage.get_bytes(manifest_uri)
-            tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
-            tmp.write(parquet_bytes)
-            tmp.close()
-            parquet_path: str = tmp.name
-        else:
-            parquet_path = manifest_uri
-
-        try:
-            from datasets import load_dataset
-
-            cache_dir = tempfile.mkdtemp(prefix="finetune-hf-datasets-")
-            ds = load_dataset(
-                "parquet",
-                data_files=parquet_path,
-                split="train",
-                cache_dir=cache_dir,
-            )
-
-            if sample_ids is not None:
-                sid_set: frozenset[str] = frozenset(sample_ids)
-                ds = ds.filter(lambda x: x["sample_id"] in sid_set)
-
-            if sampling is not None and len(ds) > sampling:
-                ds = ds.select(range(sampling))
-
-            return ds
-        finally:
-            if os.path.isfile(parquet_path):
-                try:
-                    os.unlink(parquet_path)
-                except OSError:
-                    pass
 
     # ── recent_annotations ──────────────────────────────────────────
 

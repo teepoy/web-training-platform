@@ -135,25 +135,26 @@ def row_has_readable_training_images(row: dict[str, Any]) -> bool:
 def row_has_runtime_resolvable_training_images(row: dict[str, Any]) -> bool:
     """Return whether missing bytes have enough identity for runtime fetching."""
 
-    images = row.get("images")
-    if not isinstance(images, list):
-        return False
     inspection_time = str(row.get("inspection_time") or "")
     defect_id = str(row.get("defect_id") or "")
     wafer_key = row.get("wafer_key")
     if not inspection_time or not defect_id or wafer_key is None or wafer_key == "":
         return False
+
+    images = row.get("images")
+    if not isinstance(images, list):
+        images = []
     for role in SC_TRAINING_IMAGE_ROLES:
         refs = find_images_by_role(images, role)
         if not refs:
-            return False
+            # The materializer requests the known patch image types using the
+            # scalar SC identity, so v3 rows need no per-row image locator.
+            continue
         ref = refs[0]
         raw_bytes = ref.get("bytes")
         if image_bytes_are_readable(raw_bytes):
             continue
         if raw_bytes is not None:
-            return False
-        if not str(ref.get("image_type") or ""):
             return False
     return True
 

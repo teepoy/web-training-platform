@@ -8,8 +8,7 @@ from prefect import get_run_logger
 
 from app.core.registry import trainer
 from app.modules.sc.app.services.training_images import image_bytes_are_readable
-from app.modules.sc.runtime.materialized_input import materialized_lazyframe
-from app.modules.sc.schema import find_images_by_role
+from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
 from app.shared.domain.data_plane import DataPlaneManifest
 from app.shared.domain.runtime import TrainContext, TrainResult
 
@@ -24,26 +23,22 @@ def _runtime_logger() -> Any:
 
 
 def _training_samples(
-    materialized_dataset: Any,
     manifest: DataPlaneManifest,
     *,
     missing_image_policy: str,
 ) -> list[Any]:
     from ml_library import TrainingSample
+    from ml_library.data_loading import collect_parquet_dataset
 
     samples: list[Any] = []
-    rows = materialized_lazyframe(materialized_dataset, manifest).collect()
-    for raw_row in rows.iter_rows(named=True):
-        row = dict(raw_row)
+    dataset = collect_parquet_dataset(parquet_paths_from_manifest(manifest))
+    for row in dataset:
         label_value = row.get("label")
         label = str(label_value) if label_value is not None else ""
         if not label:
             continue
-        images = [dict(image) for image in row.get("images") or []]
-        defective_refs = find_images_by_role(images, "patch_defective")
-        reference_refs = find_images_by_role(images, "patch_template")
-        defective = defective_refs[0].get("bytes") if defective_refs else None
-        reference = reference_refs[0].get("bytes") if reference_refs else None
+        defective = row.get("patch_defective_bytes")
+        reference = row.get("patch_template_bytes")
         missing_roles = []
         if not image_bytes_are_readable(defective):
             missing_roles.append("patch_defective")
@@ -72,7 +67,6 @@ async def _train(
     ctx: TrainContext,
     *,
     artifact_storage: Any,
-    materialized_dataset: Any,
     materialization_manifest: DataPlaneManifest,
     kernel: Callable[..., Any],
     missing_image_policy: str,
@@ -80,7 +74,6 @@ async def _train(
     if artifact_storage is None:
         raise ValueError(f"artifact_storage is required for {ctx.trainer_id} training")
     samples = _training_samples(
-        materialized_dataset,
         materialization_manifest,
         missing_image_policy=missing_image_policy,
     )
@@ -115,7 +108,6 @@ async def resnet_sc_train(
     ctx: TrainContext,
     *,
     artifact_storage: Any = None,
-    materialized_dataset: Any,
     materialization_manifest: DataPlaneManifest,
     **kwargs: Any,
 ) -> TrainResult:
@@ -124,7 +116,6 @@ async def resnet_sc_train(
     return await _train(
         ctx,
         artifact_storage=artifact_storage,
-        materialized_dataset=materialized_dataset,
         materialization_manifest=materialization_manifest,
         kernel=train_resnet,
         missing_image_policy=str(kwargs.get("missing_image_policy") or "fail"),
@@ -136,7 +127,6 @@ async def yolo_sc_train(
     ctx: TrainContext,
     *,
     artifact_storage: Any = None,
-    materialized_dataset: Any,
     materialization_manifest: DataPlaneManifest,
     **kwargs: Any,
 ) -> TrainResult:
@@ -145,7 +135,6 @@ async def yolo_sc_train(
     return await _train(
         ctx,
         artifact_storage=artifact_storage,
-        materialized_dataset=materialized_dataset,
         materialization_manifest=materialization_manifest,
         kernel=train_yolo,
         missing_image_policy=str(kwargs.get("missing_image_policy") or "fail"),

@@ -162,10 +162,12 @@ async def test_readiness_scans_multiple_bounded_batches() -> None:
 
 @pytest.mark.asyncio
 async def test_readiness_applies_skip_before_active_label_validation() -> None:
+    unusable = _row(2, "Ignored", with_images=False)
+    unusable["metadata_json"]["inspection_time"] = ""
     rows = [
         _row(0, "Scratch"),
         _row(1, "Particle"),
-        _row(2, "Ignored", with_images=False),
+        unusable,
     ]
     service = TrainingReadinessService(
         storage_factory=_factory(rows),
@@ -186,7 +188,7 @@ async def test_readiness_applies_skip_before_active_label_validation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_readiness_rejects_dataset_before_runtime_submission() -> None:
+async def test_readiness_accepts_v3_scalar_rows_for_runtime_resolution() -> None:
     rows = [
         _row(0, "Scratch", with_images=False),
         _row(1, "Particle", with_images=False),
@@ -203,20 +205,22 @@ async def test_readiness_rejects_dataset_before_runtime_submission() -> None:
         missing_image_policy="skip",
     )
 
-    assert not report.ready
+    assert report.ready
     assert report.readable_samples == 0
-    assert report.skipped_samples == 2
-    assert "got []" in report.failure_reasons[-1]
+    assert report.runtime_resolvable_samples == 2
+    assert report.skipped_samples == 0
+    assert report.active_labels == ["Particle", "Scratch"]
 
 
 @pytest.mark.asyncio
-async def test_readiness_does_not_infer_roles_from_image_uri_order() -> None:
+async def test_readiness_rejects_scalar_row_without_upstream_identity() -> None:
     sample = build_patch_sample(0)
     row = _row(0, "Scratch", with_images=False)
     row["image_uris"] = [image.image_id for image in sample.shard_images]
     row["metadata_json"]["review_images"] = [
         image.model_dump(mode="json") for image in sample.review_images
     ]
+    row["metadata_json"]["defect_id"] = ""
     service = TrainingReadinessService(
         storage_factory=_factory([row]),
         artifact_storage=InMemoryArtifactStorage(),

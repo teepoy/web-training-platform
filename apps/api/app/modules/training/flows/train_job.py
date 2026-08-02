@@ -263,7 +263,6 @@ async def _run_training_pipeline_with_context(
         result = trainer_callable(
             ctx,
             artifact_storage=artifact_storage,
-            materialized_dataset=materialization.dataset,
             materialization_manifest=materialization.manifest,
             missing_image_policy=missing_image_policy,
         )

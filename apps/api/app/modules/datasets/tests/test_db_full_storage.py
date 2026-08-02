@@ -565,21 +565,7 @@ class TestDbFullDatasetStorage:
             assert "sample_id" in table.column_names
             os.unlink(result.manifest_uri)
 
-    # ── 18. as_hf_dataset ────────────────────────────────────────────────
-
-    @pytest.mark.asyncio
-    async def test_as_hf_dataset(self, storage: DbFullDatasetStorage) -> None:
-        """Materialize and load as HuggingFace Dataset."""
-        try:
-            import datasets  # noqa: F401
-        except ImportError:
-            pytest.skip("datasets library not installed")
-
-        ds = await storage.as_hf_dataset("test-view")
-        assert len(ds) == 5
-        assert "sample_id" in ds.column_names
-
-    # ── 19. delete_samples ───────────────────────────────────────────────
+    # ── 18. delete_samples ───────────────────────────────────────────────
 
     @pytest.mark.asyncio
     async def test_delete_samples(self, storage: DbFullDatasetStorage) -> None:
@@ -593,7 +579,7 @@ class TestDbFullDatasetStorage:
         _, total = await storage.list_samples()
         assert total == 3
 
-    # ── 20. delete cascade ───────────────────────────────────────────────
+    # ── 19. delete cascade ───────────────────────────────────────────────
 
     @pytest.mark.asyncio
     async def test_delete_cascade(self, _test_infra: dict) -> None:

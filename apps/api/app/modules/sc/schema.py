@@ -1,9 +1,11 @@
-"""SC v2 image-in-shard schema contract.
+"""SC sparse source schema contracts.
 
-Defines the SC-owned source shard image schema using PyArrow ``list<struct>``
-for multi-image storage.  Each image struct carries identity, role, bytes,
-and optional provenance so that downstream consumers (materializer, views,
-training flows) can resolve images without out-of-band URI fetches.
+Version 3 is the current write schema.  It preserves the complete upstream
+Arrow schema and adds the platform identity columns required by sparse
+storage.  Images are still fetched on demand: v3 does not construct the v2
+``list<struct>`` patch-image payload.  Version 2 remains defined here as a
+read-compatibility contract for existing datasets whose shards contain that
+embedded ``images`` column.
 
 Image role mapping
 ------------------
@@ -24,11 +26,21 @@ Image role mapping
 
 Schema version
 --------------
-``SC_SOURCE_SCHEMA_VERSION = "v2"`` — embedded in Parquet key-value metadata
-so cross-deployment readers can detect schema drift.
+``SC_SOURCE_SCHEMA_VERSION = "v3"`` is persisted in both the dataset manifest
+and new Parquet shard key-value metadata.  Older v2 shards may not contain the
+Parquet metadata, so their manifest remains the authoritative version marker.
 
-Differences from v1
--------------------
+V3 write behavior
+-----------------
+- Preserve every upstream Arrow column and type supported by the Parquet
+  writer; do not project rows to the required-core list below.
+- Add/normalize the platform identity fields and persist the complete concrete
+  schema in the dataset manifest.
+- Do not construct deterministic patch image structs; resolve images on
+  demand.
+
+V2 differences from v1
+----------------------
 - ``image_uris`` (JSON string) and ``metadata`` (JSON string) columns are
   removed.
 - Replaced by a single ``images`` column of type ``list<struct>``.
@@ -46,7 +58,9 @@ if TYPE_CHECKING:
 
 # ── Schema version ────────────────────────────────────────────────────────
 
-SC_SOURCE_SCHEMA_VERSION = "v2"
+SC_SOURCE_SCHEMA_VERSION_V2 = "v2"
+SC_SOURCE_SCHEMA_VERSION_V3 = "v3"
+SC_SOURCE_SCHEMA_VERSION = SC_SOURCE_SCHEMA_VERSION_V3
 
 # ── Image struct dtype ────────────────────────────────────────────────────
 
@@ -136,6 +150,23 @@ for table construction.
       **identical** in name and type.
 """
 
+SC_SPARSE_SHARD_SCHEMA_V3: list[dict[str, str]] = [
+    column for column in SC_SPARSE_SHARD_SCHEMA_V2 if column["name"] != "images"
+]
+"""Minimum columns guaranteed by every SC v3 sparse shard.
+
+The concrete schema is established from the first upstream Arrow batch and may
+contain any number of additional upstream metadata columns.  The complete
+concrete schema is persisted in ``DatasetManifest.schema_columns``.  This list
+is therefore a required-core contract for empty imports and compatibility
+tests, not a projection allowlist.
+
+Image identity is deterministic from ``sample_id``/``defect_id`` for patch
+images and supplied by the review-image query for review images.  V3 never
+constructs the v2 embedded image structs, but an upstream scalar ``images``
+metadata column is preserved like any other upstream column.
+"""
+
 # ── Image role constants ──────────────────────────────────────────────────
 
 IMAGE_ROLES: dict[str, str] = {
@@ -175,11 +206,11 @@ def check_sc_v2_or_raise(manifest: DatasetManifest) -> None:
     was produced by a legacy importer (``schema_version`` is ``None`` or not
     ``"v2"``).
     """
-    if manifest.schema_version != SC_SOURCE_SCHEMA_VERSION:
+    if manifest.schema_version != SC_SOURCE_SCHEMA_VERSION_V2:
         desc = manifest.schema_version or "legacy (no version)"
         raise ValueError(
             f"Dataset {manifest.dataset_id!r} uses SC source shard schema "
-            f"{desc!r}, expected {SC_SOURCE_SCHEMA_VERSION!r}. "
+            f"{desc!r}, expected {SC_SOURCE_SCHEMA_VERSION_V2!r}. "
             f"Please re-import the dataset using the v2 importer."
         )
 
@@ -229,7 +260,16 @@ def _build_v2_pyarrow_schema() -> pa.Schema:
     -------
     pa.Schema
     """
-    _SCALAR_TYPE_MAP: dict[str, pa.DataType] = {
+    return _build_pyarrow_schema(SC_SPARSE_SHARD_SCHEMA_V2)
+
+
+def _build_v3_pyarrow_schema() -> pa.Schema:
+    """Build the minimum v3 schema used when an import has no data rows."""
+    return _build_pyarrow_schema(SC_SPARSE_SHARD_SCHEMA_V3)
+
+
+def _build_pyarrow_schema(columns: list[dict[str, str]]) -> pa.Schema:
+    scalar_type_map: dict[str, pa.DataType] = {
         "string": pa.string(),
         "int32": pa.int32(),
         "int64": pa.int64(),
@@ -239,13 +279,13 @@ def _build_v2_pyarrow_schema() -> pa.Schema:
     }
 
     fields: list[pa.Field] = []
-    for col in SC_SPARSE_SHARD_SCHEMA_V2:
+    for col in columns:
         name = col["name"]
         type_name = col["type"]
         if name == "images":
             fields.append(pa.field(name, pa.list_(SC_IMAGE_STRUCT_DTYPE)))
         else:
-            dt = _SCALAR_TYPE_MAP.get(type_name)
+            dt = scalar_type_map.get(type_name)
             if dt is None:
                 raise ValueError(f"Unknown scalar type: {type_name}")
             fields.append(pa.field(name, dt))

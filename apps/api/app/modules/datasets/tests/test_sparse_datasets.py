@@ -303,6 +303,40 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         assert defect_ref["image_id"] == "img-defect-1"
 
 
+def test_sparse_dataset_export_v3_derives_patch_refs_from_scalar_row() -> None:
+    from app.modules.datasets.app.services.sparse_export import SparseExportAssembler
+
+    row = {
+        "sample_id": "42",
+        "defect_id": "42",
+        "inspection_time": "2026-05-26T08:00:00+00:00",
+        "wafer_key": 1,
+        "wafer_x": 100,
+        "wafer_y": 200,
+    }
+
+    sample = SparseExportAssembler._assemble_v3_row(
+        row=row,
+        dataset_id="dataset-v3",
+        sample_id="42",
+    )
+
+    assert sample["image_uri"] is None
+    assert sample["reference_uri"] == (
+        "/api/v1/sc/datasets/dataset-v3/samples/42/images/42_template"
+    )
+    assert sample["defective_uri"] == (
+        "/api/v1/sc/datasets/dataset-v3/samples/42/images/42_defective"
+    )
+    assert [image["role"] for image in sample["images"]] == [
+        "patch_template",
+        "patch_defective",
+        "patch_difference",
+    ]
+    assert all("bytes" not in image for image in sample["images"])
+    assert sample["metadata"]["inspection_time"] == row["inspection_time"]
+
+
 def test_sparse_dataset_persist_export_accepted() -> None:
     """Sparse dataset persist export is accepted (returns placeholder, not 500)."""
     with TestClient(app) as c:

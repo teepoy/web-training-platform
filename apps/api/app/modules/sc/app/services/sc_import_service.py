@@ -10,7 +10,6 @@ from injector import inject
 import polars as pl
 import pyarrow as pa
 
-from app.modules.storage.port.local import SparseImportWriterFactoryPort
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
@@ -19,8 +18,8 @@ from app.modules.sc.app.services.import_rows import (
     _geometry_from_inspection,
 )
 from app.modules.sc.schema import (
-    SC_SPARSE_SHARD_SCHEMA_V2,
-    _build_v2_pyarrow_schema,
+    SC_SOURCE_SCHEMA_VERSION,
+    _build_v3_pyarrow_schema,
 )
 from app.shared.api.schemas import (
     Dataset,
@@ -34,6 +33,10 @@ from app.modules.storage.domain.sparse import (
     DatasetPayloadStore,
     ShardEntry,
 )
+from app.modules.storage.port.local import (
+    SparseColumnarImportSessionPort,
+    SparseImportWriterFactoryPort,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,36 +45,6 @@ logger = logging.getLogger(__name__)
 
 def _parse_source_inspection_time(value: str) -> datetime:
     return _coerce_naive_to_upstream_tz(datetime.fromisoformat(value))
-
-
-def _patch_sample_to_parquet_row(
-    ps: Any, images: list[dict[str, object]]
-) -> dict[str, Any]:
-    inspection_time_str = ""
-    if ps.inspection_time is not None:
-        dt = ps.inspection_time
-        dt = _coerce_naive_to_upstream_tz(dt)
-        inspection_time_str = dt.isoformat()
-
-    review_images = getattr(ps, "review_images", []) or []
-    has_review = 1 if review_images else 0
-
-    return {
-        "sample_id": ps.sample_id,
-        "defect_id": ps.defect_id,
-        "inspection_time": inspection_time_str,
-        "wafer_key": ps.wafer_key,
-        "wafer_x": ps.wafer_x,
-        "wafer_y": ps.wafer_y,
-        "die_x": ps.die_x,
-        "die_y": ps.die_y,
-        "rough_bin": ps.rough_bin,
-        "class_number": ps.class_number,
-        "test_id": ps.test_id,
-        "lot_id": ps.lot_id,
-        "has_review": has_review,
-        "images": images,
-    }
 
 
 def _process_memory_summary() -> str:
@@ -99,9 +72,14 @@ def _transform_upstream_batch(
     *,
     inspection_time: datetime,
     wafer_key: int,
-    schema: pa.Schema,
+    schema: pa.Schema | None = None,
 ) -> pa.Table:
-    """Project one upstream batch directly into the SC sparse Arrow schema."""
+    """Normalize one upstream batch without projecting away metadata columns.
+
+    The first batch establishes the concrete v3 schema.  Later batches are
+    reordered and cast to that schema, and fail explicitly if the upstream
+    changes its set of columns during one import.
+    """
     frame: pl.DataFrame = pl.from_arrow(batch)  # type: ignore[assignment]
     required = {
         "defect_id",
@@ -117,25 +95,6 @@ def _transform_upstream_batch(
 
     inspection_value = inspection_time.isoformat()
     defect_id = pl.col("defect_id").cast(pl.Utf8)
-
-    def patch_image(image_type: str, role: str) -> pl.Expr:
-        filename = f"{image_type}.png"
-        return pl.struct(
-            pl.concat_str([defect_id, pl.lit(f"_{image_type}")]).alias("image_id"),
-            pl.lit(image_type).alias("image_type"),
-            pl.lit(role).alias("role"),
-            pl.lit("image/png").alias("content_type"),
-            pl.lit(filename).alias("filename"),
-            pl.lit(None).cast(pl.Binary).alias("bytes"),
-            pl.lit(None).cast(pl.Int32).alias("review_image_id"),
-            pl.concat_str(
-                [
-                    pl.lit(f"mock-sc://patch/{inspection_value}/{wafer_key}/"),
-                    defect_id,
-                    pl.lit(f"/{filename}"),
-                ]
-            ).alias("source_uri"),
-        )
 
     optional_expressions: list[pl.Expr] = []
     for column, dtype, default in (
@@ -161,96 +120,36 @@ def _transform_upstream_batch(
         pl.col("class_number").cast(pl.Int32),
         pl.col("test_id").cast(pl.Int32),
         pl.col("lot_id").cast(pl.Utf8),
-        pl.lit(0).cast(pl.Int32).alias("has_review"),
-        pl.concat_list(
-            [
-                patch_image("template", "patch_template"),
-                patch_image("defective", "patch_defective"),
-                patch_image("difference", "patch_difference"),
-            ]
-        ).alias("images"),
-    ).select(schema.names)
-    return cast(pa.Table, output.to_arrow()).cast(schema, safe=False)
-
-
-async def _build_image_structs(
-    *,
-    patch_sample: Any,
-    inspection_time: Any,
-    wafer_key: int,
-) -> list[dict[str, object]]:
-    images: list[dict[str, object]] = []
-    defect_id = patch_sample.defect_id
-    insp_time_str = (
-        inspection_time.isoformat()
-        if hasattr(inspection_time, "isoformat")
-        else str(inspection_time)
+        (
+            pl.col("has_review").cast(pl.Int32, strict=False)
+            if "has_review" in frame.columns
+            else pl.lit(0).cast(pl.Int32)
+        ).alias("has_review"),
+        *(
+            [pl.col("cluster").cast(pl.Int64, strict=False).alias("cluster_id")]
+            if "cluster" in frame.columns and "cluster_id" not in frame.columns
+            else []
+        ),
     )
+    table = cast(pa.Table, output.to_arrow())
+    if schema is None:
+        return table
 
-    review_images: list[Any] = getattr(patch_sample, "review_images", []) or []
-    for review_image in review_images:
-        images.append(
-            {
-                "image_id": str(review_image.image_id),
-                "image_type": "review",
-                "role": "review",
-                "content_type": "image/png",
-                "filename": review_image.image_name,
-                "bytes": None,
-                "review_image_id": review_image.image_id,
-                "source_uri": (
-                    f"mock-sc://review/{insp_time_str}/{wafer_key}/{defect_id}/"
-                    f"{review_image.image_id}"
-                ),
-            }
+    actual_names = set(table.column_names)
+    expected_names = set(schema.names)
+    if actual_names != expected_names:
+        missing = sorted(expected_names - actual_names)
+        added = sorted(actual_names - expected_names)
+        raise ValueError(
+            "SC upstream schema changed during import: "
+            f"missing columns={missing}, added columns={added}"
         )
+    return table.select(schema.names).cast(schema, safe=False)
 
-    images.append(
-        {
-            "image_id": f"{defect_id}_template",
-            "image_type": "template",
-            "role": "patch_template",
-            "content_type": "image/png",
-            "filename": "template.png",
-            "bytes": None,
-            "review_image_id": None,
-            "source_uri": (
-                f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/template.png"
-            ),
-        }
-    )
 
-    images.append(
-        {
-            "image_id": f"{defect_id}_defective",
-            "image_type": "defective",
-            "role": "patch_defective",
-            "content_type": "image/png",
-            "filename": "defective.png",
-            "bytes": None,
-            "review_image_id": None,
-            "source_uri": (
-                f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/defective.png"
-            ),
-        }
-    )
-
-    images.append(
-        {
-            "image_id": f"{defect_id}_difference",
-            "image_type": "difference",
-            "role": "patch_difference",
-            "content_type": "image/png",
-            "filename": "difference.png",
-            "bytes": None,
-            "review_image_id": None,
-            "source_uri": (
-                f"mock-sc://patch/{insp_time_str}/{wafer_key}/{defect_id}/difference.png"
-            ),
-        }
-    )
-
-    return images
+def _schema_columns(schema: pa.Schema) -> list[ColumnSchema]:
+    """Serialize the complete concrete Arrow schema into the manifest."""
+    return [ColumnSchema(name=field.name, type=str(field.type)) for field in schema]
 
 
 class ScImportRepository(Protocol):
@@ -401,12 +300,6 @@ class ScImportService:
         """Direct sparse import that keeps request handling cooperative."""
         _payload_store = self._payload_store
         _upstream = self._upstream
-        schema_columns = [
-            ColumnSchema(name=c["name"], type=c["type"])
-            for c in SC_SPARSE_SHARD_SCHEMA_V2
-        ]
-        pyarrow_schema = _build_v2_pyarrow_schema()
-
         insp_dt = _parse_source_inspection_time(source_inspection_time)
 
         operator = self._sparse_import_factory.create(
@@ -475,12 +368,13 @@ class ScImportService:
             return {"dataset_id": dataset_id, "imported_count": 0, "total_available": 0}
 
         if target_rows == 0:
-            session = operator.begin_columnar_import(
-                schema_columns=schema_columns,
-                schema_version="v2",
+            empty_schema = _build_v3_pyarrow_schema()
+            empty_session = operator.begin_columnar_import(
+                schema_columns=_schema_columns(empty_schema),
+                schema_version=SC_SOURCE_SCHEMA_VERSION,
                 index_row_group_rows=self._index_row_group_rows,
             )
-            await session.finalize()
+            await empty_session.finalize()
             await publish_progress(0)
             log.info(
                 "SC direct import target row count is zero: dataset_id=%s "
@@ -496,11 +390,8 @@ class ScImportService:
             }
 
         await publish_progress(0)
-        session = operator.begin_columnar_import(
-            schema_columns=schema_columns,
-            schema_version="v2",
-            index_row_group_rows=self._index_row_group_rows,
-        )
+        session: SparseColumnarImportSessionPort | None = None
+        pyarrow_schema: pa.Schema | None = None
         transfer_seconds = 0.0
         transform_seconds = 0.0
         write_seconds = 0.0
@@ -531,6 +422,13 @@ class ScImportService:
                     schema=pyarrow_schema,
                 )
                 transform_seconds += perf_counter() - transform_started
+                if session is None:
+                    pyarrow_schema = table.schema
+                    session = operator.begin_columnar_import(
+                        schema_columns=_schema_columns(pyarrow_schema),
+                        schema_version=SC_SOURCE_SCHEMA_VERSION,
+                        index_row_group_rows=self._index_row_group_rows,
+                    )
                 write_started = perf_counter()
                 shard_entry = await session.append(table, row_id_column="sample_id")
                 write_seconds += perf_counter() - write_started
@@ -553,11 +451,14 @@ class ScImportService:
                 raise RuntimeError(
                     f"upstream stream ended after {total_rows} rows; expected {target_rows}"
                 )
+            if session is None:
+                raise RuntimeError("upstream stream returned no Arrow batches")
             manifest_started = perf_counter()
             await session.finalize()
             manifest_seconds = perf_counter() - manifest_started
         except BaseException:
-            await session.abort()
+            if session is not None:
+                await session.abort()
             raise
 
         log.info(

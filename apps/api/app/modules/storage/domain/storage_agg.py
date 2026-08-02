@@ -142,14 +142,6 @@ class DatasetStorageAgg(Protocol):
 
     async def materialize(self) -> Any: ...
 
-    async def as_hf_dataset(
-        self,
-        view_id: str,
-        *,
-        sampling: int | None = None,
-        sample_ids: list[str] | None = None,
-    ) -> Any: ...
-
     async def recent_annotations(self, limit: int = 20) -> dict: ...
 
     async def delete_samples(self, sample_ids: list[str]) -> int: ...

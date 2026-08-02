@@ -9,13 +9,15 @@ description = "Optional Torch and Ultralytics execution kernels for SC capabilit
 requires-python = ">=3.11"
 dependencies = [
   "pillow==12.2.0",
+  "pyarrow>=14.0",
   "torch>=2.5.1",
   "torchvision>=0.20.1",
   "ultralytics>=8.4.58",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==9.0.2"]
+huggingface = ["datasets>=3.0"]
+dev = ["datasets>=3.0", "pytest==9.0.2"]
 
 [tool.uv.build-backend]
 module-name = "ml_library"

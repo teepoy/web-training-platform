@@ -6,6 +6,8 @@ from collections.abc import Generator, Iterator, Sequence
 from typing import Any, Callable, cast
 
 from app.core.registry import predictor
+from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
+from app.shared.domain.data_plane import DataPlaneManifest
 from app.shared.domain.runtime import ModelRef, PredictContext
 
 
@@ -19,10 +21,12 @@ def _checkpoint_bytes(artifact_storage: Any, uri: str) -> bytes:
         ).result()
 
 
-def _prediction_samples(materialized_dataset: Any) -> Iterator[Any]:
+def _prediction_samples(manifest: DataPlaneManifest) -> Iterator[Any]:
     from ml_library import PredictionSample
+    from ml_library.data_loading import collect_parquet_dataset
 
-    for row in materialized_dataset:
+    dataset = collect_parquet_dataset(parquet_paths_from_manifest(manifest))
+    for row in dataset:
         yield PredictionSample(
             sample_id=str(row["sample_id"]),
             defective_image=(
@@ -42,7 +46,7 @@ def _predict(
     *,
     artifact_storage: Any,
     model_ref: ModelRef,
-    materialized_dataset: Any,
+    materialization_manifest: DataPlaneManifest,
     kernel: Callable[..., Any],
     label_space: Sequence[str] | None = None,
 ) -> Generator[dict[str, Any], None, None]:
@@ -51,7 +55,7 @@ def _predict(
     if not model_ref.uri:
         raise ValueError("model_ref.uri is required")
     checkpoint = _checkpoint_bytes(artifact_storage, model_ref.uri)
-    samples = _prediction_samples(materialized_dataset)
+    samples = _prediction_samples(materialization_manifest)
     outputs = (
         kernel(checkpoint, list(label_space), samples)
         if label_space is not None
@@ -76,7 +80,7 @@ def resnet_sc_predictor(
     artifact_storage: Any,
     ctx: PredictContext,
     model_ref: ModelRef,
-    materialized_dataset: Any,
+    materialization_manifest: DataPlaneManifest,
 ) -> Generator[dict[str, Any], None, None]:
     del ctx
     from ml_library import predict_resnet
@@ -84,7 +88,7 @@ def resnet_sc_predictor(
     yield from _predict(
         artifact_storage=artifact_storage,
         model_ref=model_ref,
-        materialized_dataset=materialized_dataset,
+        materialization_manifest=materialization_manifest,
         kernel=predict_resnet,
     )
 
@@ -95,7 +99,7 @@ def yolo_sc_predictor(
     artifact_storage: Any,
     ctx: PredictContext,
     model_ref: ModelRef,
-    materialized_dataset: Any,
+    materialization_manifest: DataPlaneManifest,
 ) -> Generator[dict[str, Any], None, None]:
     del ctx
     metadata_labels = model_ref.metadata.get("label_space", [])
@@ -111,7 +115,7 @@ def yolo_sc_predictor(
     yield from _predict(
         artifact_storage=artifact_storage,
         model_ref=model_ref,
-        materialized_dataset=materialized_dataset,
+        materialization_manifest=materialization_manifest,
         kernel=predict_yolo,
         label_space=labels,
     )

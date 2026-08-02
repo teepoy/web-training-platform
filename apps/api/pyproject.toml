@@ -35,7 +35,6 @@ dependencies = [
   "grpcio==1.80.0",
   "proto-stubs",
   "croniter==6.2.2",
-  "datasets>=3.0",
   "duckdb==1.5.5",
   "pillow==12.2.0",
   "litellm>=1",
@@ -51,9 +50,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest==9.0.2", "pytest-asyncio==1.3.0"]
 sc-runtime = ["ml-library"]
-
-[project.scripts]
-ftapi = "app.cli:main"
 
 [tool.uv.sources]
 proto-stubs = { workspace = true }

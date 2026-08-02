@@ -87,7 +87,7 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
 
 
 @pytest.mark.asyncio
-async def test_sc_materializer_returns_reiterable_parquet_rows_without_hf_cache(
+async def test_sc_materializer_returns_parquet_without_runtime_dataset(
     tmp_path,
 ) -> None:
     materializer = ScInspectionMaterializer(
@@ -112,12 +112,10 @@ async def test_sc_materializer_returns_reiterable_parquet_rows_without_hf_cache(
         max_output_bytes=100_000_000,
     )
     try:
-        first_read = list(result.dataset)
-        second_read = list(result.dataset)
-        assert first_read == second_read
-        assert len(result.dataset) == 1
-        assert first_read[0]["patch_template_bytes"] == b"template"
-        assert result.cache_dir is None
+        table = pq.read_table(result.parquet_path)
+        assert table.num_rows == 1
+        assert table["patch_template_bytes"].to_pylist() == [b"template"]
+        assert not hasattr(result, "dataset")
     finally:
         result.cleanup()
 

@@ -24,7 +24,9 @@
 
 训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 out-of-process runtime services，不属于 API 进程。API 只负责 control plane：创建任务、校验权限和参数、将 catalog entry 路由到 Prefect deployment、持久化业务状态、提供前端查询表面。
 
-- 当前不保留独立 `libs/ml` 或 shared Python runtime contracts；这些包没有真实跨进程消费者时会制造假边界。API 内部 demo/type implementation 放在 API owning module 内。
+- `libs/ml` 是可选的同进程 ML kernel/data-loading library，不是 transport
+  contract。API-local compatibility runtime 只能在选中的 executable callable 内
+  延迟导入它；跨进程边界仍使用 manifest、OpenAPI、protobuf 或 Arrow contract。
 - 未来 SDK/runtime service 边界优先使用 OpenAPI、protobuf/gRPC、Arrow schema/manifest 等生成或传输 contract，而不是手写共享 Python DTO 包。
 - Runtime service 不 import `apps/api/app/modules/*` 内部 service、repository、ORM model 或 FastAPI dependency。
 - API 可以提供 gRPC/HTTP 等窄 data-plane 接口，也可以返回 manifest 与 signed object-store refs 让 runtime 批量读取；大批量图片/Parquet 不应强制走逐行 RPC。
@@ -122,11 +124,17 @@ Dataset view samples 必须通过 dataset registry / dataset class / adapter 动
 
 Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet shard、manifest、locator 等持久化细节。SC import 这类 domain ingest 只负责 upstream/domain model 到通用 dataset sample/import stream 的转换，不直接拥有 sparse shard 或 Parquet 写入逻辑。
 
-`DatasetStorageAgg` 是 dataset storage 的唯一聚合入口。调用方通过 `DatasetStorageFactory.open(dataset_id, org_id)` 按 `storage_mode` 打开具体实现，然后使用统一 Protocol 完成样本枚举、批量写入、标注、预测结果、特征、删除和必要的存储级 materialize/as_hf 操作。训练、预测、导出、agent/classify 等批量读路径不得绕过它去直接使用 `SqlRepository`、`SampleAccessFactory`、`DatasetSampleService`、`RuntimeMaterializer` 或 ad-hoc shard reader。
+`DatasetStorageAgg` 是 dataset storage 的唯一聚合入口。调用方通过 `DatasetStorageFactory.open(dataset_id, org_id)` 按 `storage_mode` 打开具体实现，然后使用统一 Protocol 完成样本枚举、批量写入、标注、预测结果、特征、删除和必要的存储级 materialize 操作。Storage materialize 只返回 data-plane manifest、materialized file 或 object reference，不返回 Torch/Hugging Face Dataset。训练、预测、导出、agent/classify 等批量读路径不得绕过它去直接使用 `SqlRepository`、`SampleAccessFactory`、`DatasetSampleService`、`RuntimeMaterializer` 或 ad-hoc shard reader。
 
 `DatasetStorageAgg.list_samples(return_lazyframe=True, ...)` 是 API 内部 storage 聚合层的批量读标准表面。面向 out-of-process trainer/predictor 时，API/data-plane 应把对应 view 暴露为稳定 transport contract、Parquet/Arrow manifest 或 signed object-store refs；runtime service 不直接 import `DatasetStorageAgg`、`DatasetStorageFactory`、`SampleORM` 或 API repository。`with_labels=True` 由 storage/data-plane 把最新标注并入 view。View/domain projection 属于 trainer/predictor、domain aggregate 或 data-plane adapter，不属于物理 storage 层。
 
 Storage、data-plane、materializer 的主数据路径必须是 bulk/table-first：优先使用 Polars `LazyFrame`，靠近消费端可按需要 materialize 为 `DataFrame` 或 Arrow `Table`。如需额外 schema、capability、manifest metadata，应包装 lazyframe/dataframe/arrow table 或引用其 schema，不得把大数据路径转换成 dataclass/Pydantic row DTO 列表。除非明确证明数据量小且有边界，禁止对样本行做 Python `for` 循环逐行处理；应使用 LazyFrame/DataFrame/Arrow scan、projection、join、batch、streaming writer 等批量操作。Data-plane manifest 的第一版 contract 见 `docs/architecture/data-plane-manifest-contract.md`。
+
+Runtime consumer 必须显式选择数据加载函数，不提供按规模猜测的统一 factory：
+小且有明确上限的 Parquet 输入使用 `collect_parquet_dataset`；需要 map-style
+indexed shuffle 的中等数据先 materialize 为带整数 `__row_index` 的 Arrow IPC
+stream，再使用 `open_hf_arrow_dataset` mmap；大数据/预训练使用
+`stream_parquet_dataset`。文件与 manifest 的生命周期由调用链外层显式管理。
 
 `DatasetAgg` 是 domain-specific 聚合层：它包装一个 `DatasetStorageAgg`，承载 SC 等业务语义（如 wafer point 计算、`defect_id` 批量标注、domain 预测编排），但不拥有物理存储、manifest、Parquet shard 或通用 annotation/prediction persistence 细节。新的 domain 能力应优先放在对应 `DatasetAgg`，不是塞进通用 storage Protocol，也不是在 route/service 中新增 hardcoded switch。
 

@@ -91,7 +91,7 @@ class SparseExportAssembler:
             return self._empty_export(dataset)
 
         if not manifest.shards:
-            return self._empty_export(dataset)
+            return self._empty_export(dataset, schema_version=manifest.schema_version)
 
         # ── 2. load annotations from DB ───────────────────────────────
         ann_label_by_sample: dict[str, str] = await self._load_annotations(
@@ -108,9 +108,24 @@ class SparseExportAssembler:
         # ── 4. stream shards, join, assemble rows ─────────────────────
         shards_sorted = sorted(manifest.shards, key=lambda s: s.shard_index)
 
-        is_v2 = manifest.schema_version == "v2"
-        columns = _SPARSE_EXPORT_COLUMNS_V2 if is_v2 else _SPARSE_EXPORT_COLUMNS
-        export_format = "sparse-export-v2" if is_v2 else "sparse-export-v1"
+        schema_version = manifest.schema_version
+        if schema_version == "v3":
+            columns = [column.name for column in manifest.schema_columns]
+            if not columns:
+                raise ValueError(
+                    "SC v3 manifest is missing its concrete schema columns"
+                )
+            export_format = "sparse-export-v3"
+        elif schema_version == "v2":
+            columns = _SPARSE_EXPORT_COLUMNS_V2
+            export_format = "sparse-export-v2"
+        elif schema_version in (None, "v1"):
+            columns = _SPARSE_EXPORT_COLUMNS
+            export_format = "sparse-export-v1"
+        else:
+            raise ValueError(
+                f"Unsupported sparse export schema version: {schema_version!r}"
+            )
 
         samples: list[dict] = []
 
@@ -135,7 +150,13 @@ class SparseExportAssembler:
                 # ── prediction join ───────────────────────────────
                 pred = pred_by_sample.get(sample_id)
 
-                if is_v2:
+                if schema_version == "v3":
+                    sample_row = self._assemble_v3_row(
+                        row=row,
+                        dataset_id=dataset_id,
+                        sample_id=sample_id,
+                    )
+                elif schema_version == "v2":
                     sample_row = self._assemble_v2_row(
                         row=row,
                         dataset_id=dataset_id,
@@ -318,8 +339,51 @@ class SparseExportAssembler:
         return result
 
     # ------------------------------------------------------------------
-    # v2 embedded-image helpers
+    # versioned image helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _assemble_v3_row(
+        *,
+        row: dict[str, object],
+        dataset_id: str,
+        sample_id: str,
+    ) -> dict:
+        """Build deterministic patch references from a scalar-only v3 row."""
+        image_specs = (
+            ("template", "patch_template"),
+            ("defective", "patch_defective"),
+            ("difference", "patch_difference"),
+        )
+        images = [
+            {
+                "image_id": f"{sample_id}_{image_type}",
+                "image_type": image_type,
+                "role": role,
+                "content_type": "image/png",
+                "filename": f"{image_type}.png",
+                "access_url": SparseExportAssembler._make_sc_sample_image_url(
+                    dataset_id,
+                    sample_id,
+                    f"{sample_id}_{image_type}",
+                ),
+            }
+            for image_type, role in image_specs
+        ]
+        by_role = {str(image["role"]): image for image in images}
+        return {
+            "sample_id": sample_id,
+            "defect_id": str(row.get("defect_id") or sample_id),
+            "image_uri": None,
+            "defective_uri": by_role["patch_defective"]["access_url"],
+            "reference_uri": by_role["patch_template"]["access_url"],
+            "metadata": {
+                key: value
+                for key, value in row.items()
+                if key not in ("id", "sample_id")
+            },
+            "images": images,
+        }
 
     @staticmethod
     def _assemble_v2_row(
@@ -412,6 +476,12 @@ class SparseExportAssembler:
         return f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}"
 
     @staticmethod
+    def _make_sc_sample_image_url(
+        dataset_id: str, sample_id: str, image_id: str
+    ) -> str:
+        return f"/api/v1/sc/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}"
+
+    @staticmethod
     def _parse_images_column(value: object) -> list[dict[str, object]]:
         """Parse the ``images`` column value into a list of dicts.
 
@@ -428,10 +498,24 @@ class SparseExportAssembler:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _empty_export(dataset: Dataset) -> dict:
+    def _empty_export(
+        dataset: Dataset,
+        *,
+        schema_version: str | None = None,
+    ) -> dict:
         """Return a minimal export with no sample rows."""
+        export_format = {
+            None: "sparse-export-v1",
+            "v1": "sparse-export-v1",
+            "v2": "sparse-export-v2",
+            "v3": "sparse-export-v3",
+        }.get(schema_version)
+        if export_format is None:
+            raise ValueError(
+                f"Unsupported sparse export schema version: {schema_version!r}"
+            )
         return {
-            "format": "sparse-export-v1",
+            "format": export_format,
             "dataset": dataset.model_dump(mode="json"),
             "samples": [],
         }

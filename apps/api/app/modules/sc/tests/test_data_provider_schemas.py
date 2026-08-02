@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import pytest
+import polars as pl
 from pydantic import ValidationError
 
+from app.modules.sc.data_provider.materializer import (
+    _normalize_dataset_base_lazyframe,
+)
 from app.modules.sc.data_provider.schemas import ScSqlQueryRequest
 
 
@@ -45,3 +49,38 @@ def test_query_description_requires_a_bounded_machine_readable_usage(
                 "parameters": [],
             }
         )
+
+
+def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
+    source = pl.DataFrame(
+        {
+            "sample_id": ["1"],
+            "defect_id": [1],
+            "inspection_time": ["2026-08-01T04:00:00+08:00"],
+            "wafer_key": [1],
+            "wafer_x": [100],
+            "wafer_y": [200],
+            "die_x": [3],
+            "die_y": [4],
+            "rough_bin": [5],
+            "images": [7],
+            "cluster": [8],
+            "future_metric": [12.5],
+            "upstream_payload": ["kept"],
+        }
+    ).lazy()
+    review_images = pl.DataFrame(
+        {
+            "defect_id": pl.Series([], dtype=pl.Int32),
+            "image_id": pl.Series([], dtype=pl.Int64),
+        }
+    )
+
+    row = _normalize_dataset_base_lazyframe(source, review_images).collect().to_dicts()[0]
+
+    assert row["upstream_images"] == 7
+    assert row["images"] == 0
+    assert row["cluster"] == 8
+    assert row["cluster_id"] == 8
+    assert row["future_metric"] == 12.5
+    assert row["upstream_payload"] == "kept"

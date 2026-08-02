@@ -8,12 +8,11 @@ from app.core.registry import view
 
 
 class ScImageRef(BaseModel):
-    """Reference to one image embedded in the dataset's sparse shard.
+    """Reference to one SC image exposed through a dataset-owned proxy.
 
-    The ``url`` points at the generic per-sample image proxy
-    (``GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}``),
-    which streams the raw bytes from the v2 parquet shard. No external
-    SC patch bucket dependency.
+    Existing source schema v2 rows may resolve embedded bytes or persisted
+    locators. Source schema v3 rows derive patch references from scalar sample
+    identity when this view is requested; no image structs are stored per row.
     """
 
     role: str

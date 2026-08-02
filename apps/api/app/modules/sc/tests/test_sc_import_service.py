@@ -151,6 +151,8 @@ class _MockUpstream:
                     "rough_bin": 1,
                     "class_number": 1,
                     "test_id": None,
+                    "index_x": defect_id % 11,
+                    "future_metric": defect_id / 10,
                 }
                 for defect_id in range(start + 1, end + 1)
             ]
@@ -333,6 +335,10 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
 
 @pytest.mark.asyncio
 async def test_direct_import_uses_shuffled_ids() -> None:
+    import io
+
+    import pyarrow.parquet as pq
+
     payload_store = _MockPayloadStore()
     upstream = _MockUpstream(row_count=100)
     service = _make_service(upstream_reader=upstream, payload_store=payload_store)
@@ -361,8 +367,19 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     assert payload_store.manifest is not None
     assert payload_store.manifest.total_rows == 50
     assert payload_store.manifest.manifest_version == "v3"
+    assert payload_store.manifest.schema_version == "v3"
+    assert "images" not in {
+        column.name for column in payload_store.manifest.schema_columns
+    }
+    assert {"index_x", "future_metric"} <= {
+        column.name for column in payload_store.manifest.schema_columns
+    }
     assert payload_store.manifest.sample_index == {}
     assert payload_store.manifest.index is not None
+    assert payload_store.shards
+    parquet = pq.ParquetFile(io.BytesIO(payload_store.shards[0]))
+    assert parquet.schema_arrow.metadata == {b"schema_version": b"v3"}
+    assert {"index_x", "future_metric"} <= set(parquet.schema_arrow.names)
 
 
 @pytest.mark.asyncio

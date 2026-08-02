@@ -1577,13 +1577,27 @@ async def serve_sc_sample_image(
             detail=f"Row index out of range for sample {sample_id}",
         )
 
+    if manifest.schema_version == "v3":
+        columns = ["inspection_time", "wafer_key", "defect_id"]
+    elif manifest.schema_version == "v2":
+        columns = ["images", "inspection_time", "wafer_key", "defect_id"]
+    elif manifest.schema_version in (None, "v1"):
+        # Unversioned legacy rows require their complete schema because the
+        # manifest cannot tell us whether an images column exists.
+        columns = None
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Unsupported SC sparse schema: {manifest.schema_version}",
+        )
+
     try:
         rows = await reader.read_row_batch(
             shard.uri,
             locator.row_index,
             1,
             storage,
-            columns=["images", "inspection_time", "wafer_key", "defect_id"],
+            columns=columns,
         )
     except Exception as exc:
         raise HTTPException(
@@ -1598,14 +1612,8 @@ async def serve_sc_sample_image(
         )
 
     row = rows[0]
-    images_raw = row.get("images")
-    if images_raw is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No images column for sample: {sample_id}",
-        )
-
     images_list: list[dict[str, object]] = []
+    images_raw = row.get("images")
     if isinstance(images_raw, list):
         images_list = [dict(img) if isinstance(img, dict) else {} for img in images_raw]
 
@@ -1614,6 +1622,40 @@ async def serve_sc_sample_image(
         if str(img.get("image_id", "")) == image_id:
             matched = img
             break
+
+    if matched is None and manifest.schema_version == "v3":
+        patch_types = {"template", "defective", "difference"}
+        image_type = next(
+            (
+                candidate
+                for candidate in patch_types
+                if image_id in (candidate, f"{sample_id}_{candidate}")
+            ),
+            None,
+        )
+        review_image_id: int | None = None
+        if image_type is None:
+            try:
+                review_image_id = int(image_id)
+            except ValueError:
+                review_image_id = None
+            if review_image_id is not None and review_image_id >= 0:
+                image_type = "review"
+            else:
+                review_image_id = None
+
+        if image_type is not None:
+            matched = {
+                "image_id": image_id,
+                "image_type": image_type,
+                "content_type": (
+                    "image/jpeg" if image_type == "review" else "image/png"
+                ),
+                "filename": (
+                    f"{image_id}.jpg" if image_type == "review" else f"{image_type}.png"
+                ),
+                "review_image_id": review_image_id,
+            }
 
     if matched is None:
         raise HTTPException(

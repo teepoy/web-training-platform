@@ -184,6 +184,11 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
             predict_yolo=fake_predict_yolo,
         ),
     )
+    monkeypatch.setattr(
+        predictors,
+        "_prediction_samples",
+        lambda _manifest: iter(()),
+    )
 
     model_ref = ModelRef(
         uri="memory://model.pt",
@@ -200,7 +205,7 @@ def test_yolo_predictor_loads_native_ultralytics_checkpoint(
                 artifact_storage=ArtifactStorage(),
                 ctx=ctx,
                 model_ref=model_ref,
-                materialized_dataset=[],
+                materialization_manifest=object(),
             )
     )
 
@@ -220,7 +225,7 @@ def test_yolo_predictor_requires_model_metadata_label_space() -> None:
                 artifact_storage=object(),
                 ctx=ctx,
                 model_ref=model_ref,
-                materialized_dataset=[],
+                materialization_manifest=object(),
             )
         )
 

@@ -1301,7 +1301,6 @@ dependencies = [
     { name = "asyncstdlib" },
     { name = "bcrypt" },
     { name = "croniter" },
-    { name = "datasets" },
     { name = "duckdb" },
     { name = "fastapi", extra = ["standard"] },
     { name = "grpcio" },
@@ -1357,7 +1356,6 @@ requires-dist = [
     { name = "asyncstdlib", specifier = ">=3.13.1" },
     { name = "bcrypt", specifier = "==5.0.0" },
     { name = "croniter", specifier = "==6.2.2" },
-    { name = "datasets", specifier = ">=3.0" },
     { name = "duckdb", specifier = "==1.5.5" },
     { name = "fastapi", extras = ["standard"], specifier = "==0.135.2" },
     { name = "grpcio", specifier = "==1.80.0" },
@@ -2733,6 +2731,7 @@ version = "0.1.0"
 source = { editable = "libs/ml" }
 dependencies = [
     { name = "pillow" },
+    { name = "pyarrow" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "ultralytics" },
@@ -2740,18 +2739,25 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "datasets" },
     { name = "pytest" },
+]
+huggingface = [
+    { name = "datasets" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "datasets", marker = "extra == 'dev'", specifier = ">=3.0" },
+    { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3.0" },
     { name = "pillow", specifier = "==12.2.0" },
+    { name = "pyarrow", specifier = ">=14.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.0.2" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "torchvision", specifier = ">=0.20.1" },
     { name = "ultralytics", specifier = ">=8.4.58" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["huggingface", "dev"]
 
 [[package]]
 name = "mpmath"

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from app.modules.sc.runtime.materialized_input import (
-    sc_materialized_lazyframe,
-)
+from app.modules.sc.runtime.materialized_input import sc_parquet_paths_from_manifest
 from app.shared.domain.data_plane import DataPlaneManifest, DataPlaneShard
 
 
@@ -39,7 +40,7 @@ def _manifest(path: str) -> DataPlaneManifest:
     )
 
 
-def test_sc_materialized_lazyframe_scans_manifest_parquet(tmp_path) -> None:
+def test_sc_manifest_resolves_local_parquet_paths_in_order(tmp_path) -> None:
     parquet_path = tmp_path / "materialized.parquet"
     pq.write_table(
         pa.table(
@@ -52,31 +53,12 @@ def test_sc_materialized_lazyframe_scans_manifest_parquet(tmp_path) -> None:
         parquet_path,
     )
 
-    row = (
-        sc_materialized_lazyframe(
-            materialized_dataset=object(),
-            manifest=_manifest(str(parquet_path)),
-        )
-        .collect()
-        .to_dicts()[0]
+    assert sc_parquet_paths_from_manifest(_manifest(str(parquet_path))) == (
+        parquet_path,
     )
 
-    assert row["sample_id"] == "sample-1"
-    assert row["images"] == [
-        {
-            "role": "patch_template",
-            "image_type": "patch_template",
-            "bytes": b"template",
-        },
-        {
-            "role": "patch_defective",
-            "image_type": "patch_defective",
-            "bytes": b"defective",
-        },
-    ]
 
-
-def test_sc_materialized_lazyframe_rejects_non_file_shards(tmp_path) -> None:
+def test_sc_manifest_rejects_non_file_shards(tmp_path) -> None:
     manifest = _manifest(str(tmp_path / "materialized.parquet"))
     remote_manifest = DataPlaneManifest(
         **{
@@ -92,4 +74,54 @@ def test_sc_materialized_lazyframe_rejects_non_file_shards(tmp_path) -> None:
     )
 
     with pytest.raises(ValueError, match="file://"):
-        sc_materialized_lazyframe(object(), remote_manifest)
+        sc_parquet_paths_from_manifest(remote_manifest)
+
+
+def test_sc_runtime_consumers_explicitly_collect_manifest_parquet(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.sc.runtime import predictors, trainers
+
+    parquet_path = tmp_path / "materialized.parquet"
+    manifest = _manifest(str(parquet_path))
+    rows = [
+        {
+            "sample_id": "sample-1",
+            "label": "defect",
+            "patch_template_bytes": b"template",
+            "patch_defective_bytes": b"defective",
+        }
+    ]
+    collected_paths: list[tuple] = []
+
+    def collect_parquet_dataset(paths):
+        collected_paths.append(tuple(paths))
+        return rows
+
+    monkeypatch.setitem(
+        sys.modules,
+        "ml_library",
+        SimpleNamespace(
+            PredictionSample=lambda **kwargs: SimpleNamespace(**kwargs),
+            TrainingSample=lambda **kwargs: SimpleNamespace(**kwargs),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "ml_library.data_loading",
+        SimpleNamespace(collect_parquet_dataset=collect_parquet_dataset),
+    )
+    monkeypatch.setattr(trainers, "image_bytes_are_readable", lambda value: bool(value))
+
+    prediction = list(predictors._prediction_samples(manifest))[0]
+    training = trainers._training_samples(
+        manifest,
+        missing_image_policy="fail",
+    )[0]
+
+    assert collected_paths == [(parquet_path,), (parquet_path,)]
+    assert prediction.sample_id == training.sample_id == "sample-1"
+    assert prediction.reference_image == training.reference_image == b"template"
+    assert prediction.defective_image == training.defective_image == b"defective"
+    assert training.label == "defect"

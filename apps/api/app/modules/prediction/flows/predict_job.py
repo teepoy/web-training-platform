@@ -672,8 +672,8 @@ async def _run_prediction_job_with_context(
     async def prediction_results(exit_stack: AsyncExitStack):
         materialization = None
         predictor_parameters = inspect.signature(predictor_fn).parameters
-        supports_materialized_dataset = "materialized_dataset" in predictor_parameters
-        if supports_materialized_dataset:
+        supports_materialized_input = "materialization_manifest" in predictor_parameters
+        if supports_materialized_input:
             materializers = catalog.capabilities.materializers_for(
                 view_id,
                 purpose="predict",
@@ -719,8 +719,8 @@ async def _run_prediction_job_with_context(
         }
         if "lazyframe" in predictor_parameters:
             predictor_kwargs["lazyframe"] = lf
-        if materialization is not None and supports_materialized_dataset:
-            predictor_kwargs["materialized_dataset"] = materialization.dataset
+        if materialization is not None and supports_materialized_input:
+            predictor_kwargs["materialization_manifest"] = materialization.manifest
         predictions = predictor_fn(**predictor_kwargs)
         if inspect.isawaitable(predictions):
             predictions = await predictions
