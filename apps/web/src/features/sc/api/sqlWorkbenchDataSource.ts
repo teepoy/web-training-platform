@@ -228,6 +228,16 @@ function orderBy(
   return ` ORDER BY ${quotedColumn(field, allowedColumns)} ${direction}`;
 }
 
+function stableTableOrderBy(
+  sort: ScSampleTableSort | null | undefined,
+  allowedColumns: ReadonlySet<string>,
+): string {
+  const ordered = orderBy(sort, allowedColumns);
+  return sort?.direction && sort.field !== "defect_id"
+    ? `${ordered}, ${quotedColumn("defect_id", allowedColumns)} ASC`
+    : ordered;
+}
+
 function rowRecord(table: Table, index: number): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const field of table.schema.fields)
@@ -291,6 +301,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   private eventSource: EventSource | null = null;
   private readonly inFlightQueries = new Set<AbortController>();
   private columnsPromise: Promise<ScDataColumn[]> | null = null;
+  private rowCountCache: { key: string; total: number } | null = null;
   private knownRevision = 0;
   private closed = false;
 
@@ -379,13 +390,24 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         .filter((field) => !sourceColumns.some((column) => column.name === field))
         .map((field) => selectColumn(field, reticle, allowedColumns)),
     ];
-    const result = await this.query(
-      "sc-workbench.table.rows",
-      `SELECT ${columns.join(", ")}, COUNT(*) OVER () AS "__total" FROM samples${compiled.sql}` +
-        `${orderBy(query.sort, allowedColumns)} LIMIT ? OFFSET ?`,
-      [...compiled.parameters, query.limit, offset],
+    const stableOrder = stableTableOrderBy(query.sort, allowedColumns);
+    const countKey = JSON.stringify([this.knownRevision, compiled.sql, compiled.parameters]);
+    const totalRequest = this.loadRowCount(
+      countKey,
+      compiled.sql,
+      compiled.parameters,
+      query.signal,
     );
-    const total = result.table.numRows > 0 ? numeric(result.table.getChild("__total")?.get(0)) : 0;
+    const rowsRequest = this.query(
+      "sc-workbench.table.rows",
+      `WITH "__sc_page_ids" AS (` +
+        `SELECT "defect_id" FROM samples${compiled.sql}${stableOrder} LIMIT ? OFFSET ?` +
+        `) SELECT ${columns.join(", ")} FROM samples ` +
+        `INNER JOIN "__sc_page_ids" USING ("defect_id")${stableOrder}`,
+      [...compiled.parameters, query.limit, offset],
+      query.signal,
+    );
+    const [total, result] = await Promise.all([totalRequest, rowsRequest]);
     const items = Array.from({ length: result.table.numRows }, (_, index) =>
       sampleRow(rowRecord(result.table, index)),
     );
@@ -601,6 +623,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   close(): void {
     this.closed = true;
     this.listeners.clear();
+    this.rowCountCache = null;
     this.eventSource?.close();
     this.eventSource = null;
     for (const controller of this.inFlightQueries) controller.abort();
@@ -622,9 +645,13 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     description: string,
     sql: string,
     parameters: ScDataParameter[],
+    signal?: AbortSignal,
   ): Promise<ScArrowQueryResult & { ipc: Uint8Array }> {
     if (this.closed) throw new Error("SC workbench data source is closed");
     const controller = new AbortController();
+    const abortQuery = () => controller.abort(signal?.reason);
+    if (signal?.aborted) abortQuery();
+    else signal?.addEventListener("abort", abortQuery, { once: true });
     this.inFlightQueries.add(controller);
     try {
       for (let attempt = 1; attempt <= QUERY_MAX_ATTEMPTS; attempt += 1) {
@@ -651,7 +678,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
           this.assertCurrentRevision(revision);
           const ipc = new Uint8Array(await response.arrayBuffer());
           this.assertCurrentRevision(revision);
-          this.knownRevision = revision;
+          this.observeRevision(revision);
           return { ipc, table: tableFromIPC(ipc), revision };
         } catch (error) {
           if (attempt >= QUERY_MAX_ATTEMPTS || this.closed || !isRetryableQueryError(error)) {
@@ -665,8 +692,33 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       }
       throw new Error(`SC data query exhausted its retry attempts: ${description}`);
     } finally {
+      signal?.removeEventListener("abort", abortQuery);
       this.inFlightQueries.delete(controller);
     }
+  }
+
+  private async loadRowCount(
+    key: string,
+    whereSql: string,
+    parameters: ScDataParameter[],
+    signal?: AbortSignal,
+  ): Promise<number> {
+    if (this.rowCountCache?.key === key) return this.rowCountCache.total;
+    const result = await this.query(
+      "sc-workbench.table.count",
+      `SELECT COUNT(*) AS "__total" FROM samples${whereSql}`,
+      parameters,
+      signal,
+    );
+    const total = result.table.numRows > 0 ? numeric(result.table.getChild("__total")?.get(0)) : 0;
+    const currentKey = JSON.stringify([this.knownRevision, whereSql, parameters]);
+    this.rowCountCache = { key: currentKey, total };
+    return total;
+  }
+
+  private observeRevision(revision: number): void {
+    if (revision > this.knownRevision) this.rowCountCache = null;
+    this.knownRevision = revision;
   }
 
   private assertCurrentRevision(revision: number): void {
@@ -690,7 +742,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       }
       if (payload.scope !== this.scopeKey) return;
       if (!Number.isSafeInteger(payload.revision) || payload.revision < this.knownRevision) return;
-      this.knownRevision = payload.revision;
+      this.observeRevision(payload.revision);
       const invalidation: ScInvalidation = {
         scope: payload.scope,
         revision: payload.revision,

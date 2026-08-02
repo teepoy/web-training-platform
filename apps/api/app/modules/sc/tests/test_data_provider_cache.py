@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import json
 import os
 import time
 from collections.abc import AsyncIterator
@@ -31,6 +32,20 @@ class _FakeRedis:
         self, script: str, numkeys: int, *keys_and_args: str
     ) -> int:
         del numkeys
+        if "cjson.decode" in script:
+            key, requested_raw = keys_and_args[:2]
+            raw = self.values.get(key)
+            if raw is None:
+                return -1
+            metadata = json.loads(raw)
+            requested = int(requested_raw)
+            if not metadata["revision_tracked"]:
+                metadata["revision_tracked"] = True
+                metadata["revision"] = requested
+            elif requested > int(metadata["revision"]):
+                metadata["revision"] = requested
+            self.values[key] = json.dumps(metadata)
+            return int(metadata["revision"])
         key, token = keys_and_args[:2]
         if self.values.get(key) != token:
             return 0
@@ -216,6 +231,85 @@ async def test_cleanup_keeps_content_addressed_base_after_public_revision_change
 
     assert await cache.cleanup_once()
     assert cached.path.is_file()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_removes_superseded_overlay_but_keeps_promoted_peer(
+    tmp_path: Path,
+) -> None:
+    redis = _FakeRedis()
+    cache = ScDataObjectCache(redis, config=_config(tmp_path))
+    await cache.initialize()
+    scope = "org:o:dataset:one"
+
+    old_annotation = await cache.get_or_build(
+        logical_key="dataset:one:annotations",
+        scope=scope,
+        revision=101,
+        scope_revision=1,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+    prediction = await cache.get_or_build(
+        logical_key="dataset:one:predictions",
+        scope=scope,
+        revision=201,
+        scope_revision=1,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+    current_annotation = await cache.get_or_build(
+        logical_key="dataset:one:annotations",
+        scope=scope,
+        revision=102,
+        scope_revision=2,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+    promoted_prediction = await cache.get_or_build(
+        logical_key="dataset:one:predictions",
+        scope=scope,
+        revision=201,
+        scope_revision=2,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+    await redis.set("cache-test:revision:dataset:one", "2")
+
+    assert promoted_prediction.object_id == prediction.object_id
+    assert promoted_prediction.revision == 2
+    assert await cache.cleanup_once()
+    assert not old_annotation.path.exists()
+    assert current_annotation.path.exists()
+    assert prediction.path.exists()
+
+
+@pytest.mark.asyncio
+async def test_overlay_hit_migrates_legacy_untracked_metadata(
+    tmp_path: Path,
+) -> None:
+    redis = _FakeRedis()
+    cache = ScDataObjectCache(redis, config=_config(tmp_path))
+    await cache.initialize()
+    legacy = await cache.get_or_build(
+        logical_key="dataset:one:annotations",
+        scope="org:o:dataset:one",
+        revision=101,
+        revision_tracked=False,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+
+    migrated = await cache.get_or_build(
+        logical_key="dataset:one:annotations",
+        scope="org:o:dataset:one",
+        revision=101,
+        scope_revision=4,
+        builder=lambda: asyncio.sleep(0, result=pa.table({"defect_id": [1]})),
+    )
+
+    raw = await redis.get(f"cache-test:object:{legacy.object_id}")
+    assert raw is not None
+    metadata = json.loads(raw)
+    assert migrated.object_id == legacy.object_id
+    assert migrated.revision == 4
+    assert metadata["revision_tracked"] is True
+    assert metadata["revision"] == 4
 
 
 @pytest.mark.asyncio

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import cast
 
 import pytest
-from starlette.requests import ClientDisconnect
+from starlette.requests import ClientDisconnect, Request
 from starlette.types import Message, Scope
 
 from app.modules.sc.data_provider.router import (
     _ManagedStreamingResponse,
+    _ScQueryClientDisconnected,
+    _await_or_disconnect,
     _invalidation_from_message,
     _sse_event,
 )
@@ -54,6 +57,31 @@ async def test_managed_stream_closes_resources_on_transport_disconnect() -> None
         await response(scope, receive, send)
 
     assert closed
+
+
+@pytest.mark.asyncio
+async def test_disconnect_cancels_query_before_the_first_arrow_chunk() -> None:
+    cancelled = False
+
+    async def query() -> None:
+        nonlocal cancelled
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled = True
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    request = Request(
+        cast(Scope, {"type": "http", "method": "POST", "path": "/query"}),
+        receive,
+    )
+
+    with pytest.raises(_ScQueryClientDisconnected, match="client disconnected"):
+        await _await_or_disconnect(request, query())
+
+    assert cancelled
 
 
 def test_dataset_event_maps_atomic_revision_and_changed_kind() -> None:

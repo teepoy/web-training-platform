@@ -40,9 +40,12 @@ async def storage(
 ) -> SparseDatasetStorage:
     """Return SparseDatasetStorage wired to the test infra and fixture dataset."""
     dataset_id, org_id = sparse_fixture
+    dataset = await _test_infra["repo"].get_dataset(dataset_id, org_id)
+    assert dataset is not None
     return SparseDatasetStorage(
         dataset_id=dataset_id,
         org_id=org_id,
+        dataset_metadata=dataset,
         storage=_test_infra["storage"],
         payload_store=_test_infra["payload_store"],
         session_factory=_test_infra["session_factory"],

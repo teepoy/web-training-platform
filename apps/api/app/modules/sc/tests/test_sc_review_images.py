@@ -80,6 +80,7 @@ def _sparse_storage() -> SparseDatasetStorage:
     return SparseDatasetStorage(
         dataset_id="test-ds",
         org_id="test-org",
+        dataset_metadata=MagicMock(),
         storage=MagicMock(),
         payload_store=MagicMock(spec=DatasetPayloadStore),
         session_factory=MagicMock(),

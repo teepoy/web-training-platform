@@ -74,6 +74,13 @@ export default defineConfig({
       [`${API_V1_PROXY_PREFIX}/sc/data/`]: {
         target: process.env.VITE_SC_DATA_PROVIDER_TARGET || "http://localhost:8001",
         changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", (proxyRequest, _request, response) => {
+            response.once("close", () => {
+              if (!response.writableEnded) proxyRequest.destroy();
+            });
+          });
+        },
       },
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",

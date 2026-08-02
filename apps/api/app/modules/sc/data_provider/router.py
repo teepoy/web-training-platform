@@ -7,11 +7,11 @@ import os
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol, TypeVar, cast
 
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from starlette.types import Receive, Scope, Send
 
 from app.core.config import ScDataProviderConfig
@@ -39,6 +39,11 @@ from app.shared.infrastructure.redis.event_publisher import (
 
 ARROW_STREAM_MEDIA_TYPE = "application/vnd.apache.arrow.stream"
 _logger = logging.getLogger(__name__)
+_T = TypeVar("_T")
+
+
+class _ScQueryClientDisconnected(Exception):
+    """Stop work quietly when the downstream HTTP client has gone away."""
 
 
 class _ManagedStreamingResponse(StreamingResponse):
@@ -103,7 +108,7 @@ async def query_inspection(
     request: Request,
     _user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> StreamingResponse:
+) -> Response:
     scope = ScDataScope.inspection(
         inspection_time=inspection_time,
         wafer_key=wafer_key,
@@ -119,7 +124,7 @@ async def query_dataset(
     request: Request,
     _user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
-) -> StreamingResponse:
+) -> Response:
     scope = ScDataScope.dataset(dataset_id=dataset_id, org_id=org.id)
     return await _query_scope(request, scope, query)
 
@@ -155,7 +160,7 @@ async def _query_scope(
     request: Request,
     scope: ScDataScope,
     query: ScSqlQueryRequest,
-) -> StreamingResponse:
+) -> Response:
     runtime = _runtime(request)
     try:
         validated_sql = validate_sc_sql(query.sql)
@@ -169,15 +174,23 @@ async def _query_scope(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     materialize_ms = (time.monotonic() - materialize_started) * 1000
+    if await request.is_disconnected():
+        return Response(status_code=499)
 
     lease = runtime.cache.lease(materialized.objects)
     await lease.__aenter__()
     try:
-        prepared = await runtime.executor.prepare_stream(
-            sql=validated_sql,
-            parameters=query.parameters,
-            materialized=materialized,
+        prepared = await _await_or_disconnect(
+            request,
+            runtime.executor.prepare_stream(
+                sql=validated_sql,
+                parameters=query.parameters,
+                materialized=materialized,
+            ),
         )
+    except _ScQueryClientDisconnected as exc:
+        await lease.__aexit__(type(exc), exc, exc.__traceback__)
+        return Response(status_code=499)
     except ScQueryTimeoutError as exc:
         await lease.__aexit__(type(exc), exc, exc.__traceback__)
         raise HTTPException(status_code=504, detail=str(exc)) from exc
@@ -244,6 +257,39 @@ async def _query_scope(
         media_type=ARROW_STREAM_MEDIA_TYPE,
         headers=headers,
     )
+
+
+async def _await_or_disconnect(request: Request, awaitable: Awaitable[_T]) -> _T:
+    work = asyncio.ensure_future(awaitable)
+    disconnected = asyncio.create_task(
+        _wait_for_disconnect(request), name="sc-data-provider-client-disconnect"
+    )
+    try:
+        done, _pending = await asyncio.wait(
+            {work, disconnected}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if work in done:
+            return await work
+        await disconnected
+        work.cancel()
+        try:
+            await work
+        except asyncio.CancelledError:
+            pass
+        raise _ScQueryClientDisconnected("SC data query client disconnected")
+    finally:
+        disconnected.cancel()
+        try:
+            await disconnected
+        except asyncio.CancelledError:
+            pass
+
+
+async def _wait_for_disconnect(request: Request) -> None:
+    while True:
+        message = await request.receive()
+        if message["type"] == "http.disconnect":
+            return
 
 
 def _events_response(request: Request, scope: ScDataScope) -> StreamingResponse:

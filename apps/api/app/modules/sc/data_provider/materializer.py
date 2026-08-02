@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -178,43 +178,69 @@ class ScDataMaterializer:
         self, scope: ScDataScope, *, revision: int
     ) -> MaterializedScScope:
         storage = await self._storage_factory.open(scope.identity, scope.org_id)
-        sparse_lf = cast(
-            pl.LazyFrame,
-            await storage.list_samples(
-                return_lazyframe=True,
-                with_labels=False,
-                with_predictions=False,
-            ),
-        )
-        meta = (
-            await sparse_lf.select("inspection_time", "wafer_key")
-            .drop_nulls()
-            .head(1)
-            .collect_async()
-        ).to_dicts()
-        if not meta:
-            raise ValueError(f"SC dataset {scope.identity} has no inspection scope")
-        inspection_time = _isoformat(meta[0]["inspection_time"])
-        wafer_key = int(meta[0]["wafer_key"])
+        dataset = await storage.get_dataset_metadata()
+        inspection_time, wafer_key = _dataset_source_scope(dataset, scope.identity)
+        sparse_task: asyncio.Task[pl.LazyFrame] | None = None
+
+        async def load_sparse_lazyframe() -> pl.LazyFrame:
+            nonlocal sparse_task
+            if sparse_task is None:
+
+                async def load() -> pl.LazyFrame:
+                    return cast(
+                        pl.LazyFrame,
+                        await storage.list_samples(
+                            return_lazyframe=True,
+                            with_labels=False,
+                            with_predictions=False,
+                        ),
+                    )
+
+                sparse_task = asyncio.create_task(
+                    load(), name=f"sc-dataset-samples-{scope.identity}"
+                )
+            return await sparse_task
+
         parsed_time = _parse_inspection_time(inspection_time)
-        review_df = await self._load_review_images(parsed_time, wafer_key)
-        review_images = await self._cache.get_or_build(
-            logical_key=f"inspection:{inspection_time}/{wafer_key}:review-images",
-            scope=scope.cache_name,
-            revision=0,
-            revision_tracked=False,
-            builder=lambda: asyncio.sleep(0, result=review_df.to_arrow()),
-        )
-        base_lf = _normalize_dataset_base_lazyframe(sparse_lf, review_df)
-        base = await self._cache.get_or_build_file(
-            logical_key=(
-                f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
-                f"{_SAMPLES_BASE_FORMAT_VERSION}"
+        review_task: asyncio.Task[pl.DataFrame] | None = None
+
+        async def load_review_images() -> pl.DataFrame:
+            nonlocal review_task
+            if review_task is None:
+                review_task = asyncio.create_task(
+                    self._load_review_images(parsed_time, wafer_key),
+                    name=f"sc-review-images-{wafer_key}",
+                )
+            return await review_task
+
+        async def build_review_images() -> pa.Table:
+            return (await load_review_images()).to_arrow()
+
+        async def build_samples_base(path: Path) -> None:
+            sparse_lf = await load_sparse_lazyframe()
+            review_df = await load_review_images()
+            await _sink_lazyframe(
+                _normalize_dataset_base_lazyframe(sparse_lf, review_df), path
+            )
+
+        review_images, base = await asyncio.gather(
+            self._cache.get_or_build(
+                logical_key=(f"inspection:{inspection_time}/{wafer_key}:review-images"),
+                scope=scope.cache_name,
+                revision=0,
+                revision_tracked=False,
+                builder=build_review_images,
             ),
-            scope=scope.cache_name,
-            revision=0,
-            revision_tracked=False,
-            builder=lambda path: _sink_lazyframe(base_lf, path),
+            self._cache.get_or_build_file(
+                logical_key=(
+                    f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
+                    f"{_SAMPLES_BASE_FORMAT_VERSION}"
+                ),
+                scope=scope.cache_name,
+                revision=0,
+                revision_tracked=False,
+                builder=build_samples_base,
+            ),
         )
         overlay_storage = cast(_MutableOverlayStorage, storage)
         (
@@ -229,10 +255,16 @@ class ScDataMaterializer:
         )
         annotation_overlay, prediction_overlay = await asyncio.gather(
             self._materialize_annotation_overlay(
-                scope, annotation_lf, annotation_fingerprint
+                scope,
+                annotation_lf,
+                annotation_fingerprint,
+                scope_revision=revision,
             ),
             self._materialize_prediction_overlay(
-                scope, prediction_lf, prediction_fingerprint
+                scope,
+                prediction_lf,
+                prediction_fingerprint,
+                scope_revision=revision,
             ),
         )
         return MaterializedScScope(
@@ -312,6 +344,8 @@ class ScDataMaterializer:
         scope: ScDataScope,
         lazyframe: Any | None,
         fingerprint: str,
+        *,
+        scope_revision: int,
     ) -> CachedDataObject | None:
         if lazyframe is None:
             return None
@@ -323,7 +357,7 @@ class ScDataMaterializer:
             logical_key=f"dataset:{scope.org_id}/{scope.identity}:annotations",
             scope=scope.cache_name,
             revision=_fingerprint_revision(fingerprint),
-            revision_tracked=False,
+            scope_revision=scope_revision,
             builder=lambda path: _sink_lazyframe(overlay, path),
         )
 
@@ -332,6 +366,8 @@ class ScDataMaterializer:
         scope: ScDataScope,
         lazyframe: Any | None,
         fingerprint: str,
+        *,
+        scope_revision: int,
     ) -> CachedDataObject | None:
         if lazyframe is None:
             return None
@@ -346,9 +382,36 @@ class ScDataMaterializer:
             logical_key=f"dataset:{scope.org_id}/{scope.identity}:predictions",
             scope=scope.cache_name,
             revision=_fingerprint_revision(fingerprint),
-            revision_tracked=False,
+            scope_revision=scope_revision,
             builder=lambda path: _sink_lazyframe(overlay, path),
         )
+
+
+def _dataset_source_scope(dataset: Any, dataset_id: str) -> tuple[str, int]:
+    if dataset is None:
+        raise ValueError(f"Dataset not found: {dataset_id}")
+    metadata = getattr(dataset, "dataset_meta", None)
+    if not isinstance(metadata, Mapping):
+        raise ValueError(
+            f"SC dataset {dataset_id} is missing dataset_meta source identity"
+        )
+    raw_inspection_time = metadata.get("source_inspection_time")
+    if not isinstance(raw_inspection_time, str) or not raw_inspection_time.strip():
+        raise ValueError(
+            f"SC dataset {dataset_id} is missing dataset_meta.source_inspection_time"
+        )
+    try:
+        inspection_time = _parse_inspection_time(raw_inspection_time)
+    except ValueError as exc:
+        raise ValueError(
+            f"SC dataset {dataset_id} has invalid dataset_meta.source_inspection_time"
+        ) from exc
+    raw_wafer_key = metadata.get("source_wafer_key")
+    if not isinstance(raw_wafer_key, int) or isinstance(raw_wafer_key, bool):
+        raise ValueError(
+            f"SC dataset {dataset_id} has invalid dataset_meta.source_wafer_key"
+        )
+    return inspection_time.isoformat(), raw_wafer_key
 
 
 def _parse_inspection_time(value: str) -> datetime:
@@ -461,12 +524,6 @@ def _normalize_dataset_base_lazyframe(
         else:
             expressions.append(pl.lit(None).cast(dtype).alias(column))
     return base.with_columns(expressions)
-
-
-def _isoformat(value: object) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
 
 
 def _normalize_samples_frame(df: pl.DataFrame) -> pl.DataFrame:

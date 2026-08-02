@@ -61,6 +61,7 @@ class DatasetStorageFactory:
             return DbFullDatasetStorage(
                 dataset_id=dataset_id,
                 org_id=org_id,
+                dataset_metadata=dataset,
                 repo=self._repo,
                 session_factory=self._session_factory,
                 storage=self._storage,
@@ -74,6 +75,7 @@ class DatasetStorageFactory:
             return SparseDatasetStorage(
                 dataset_id=dataset_id,
                 org_id=org_id,
+                dataset_metadata=dataset,
                 storage=self._storage,
                 payload_store=self._payload_store,
                 session_factory=self._session_factory,

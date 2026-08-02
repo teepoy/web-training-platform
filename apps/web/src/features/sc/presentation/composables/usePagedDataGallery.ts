@@ -3,14 +3,13 @@ import type {
   ScGalleryDataQuery,
   ScWorkbenchDataSource,
 } from "@/features/sc/domain/workbenchDataSource";
+import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "./scrollQueryDebounce";
 
 interface GalleryWindow<T> {
   items: T[];
   offset: number;
   total: number;
 }
-
-const GALLERY_RANGE_DEBOUNCE_MS = 100;
 
 export function usePagedDataGallery<T>(
   dataSource: ComputedRef<ScWorkbenchDataSource | null>,
@@ -87,7 +86,7 @@ export function usePagedDataGallery<T>(
     loadTimer = setTimeout(() => {
       loadTimer = null;
       void load();
-    }, GALLERY_RANGE_DEBOUNCE_MS);
+    }, SC_SCROLL_QUERY_DEBOUNCE_MS);
   }
 
   watch([dataSource, query, requestedRange, revision, enabled], scheduleLoad, {

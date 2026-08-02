@@ -19,6 +19,7 @@ from app.modules.datasets.domain.sample_row import (
 from app.modules.storage.domain.storage_agg import MaterializeResult
 from app.shared.api.schemas import (
     Annotation,
+    Dataset,
     DatasetStorageMode,
     Sample,
     SampleFeature,
@@ -54,12 +55,14 @@ class DbFullDatasetStorage:
         self,
         dataset_id: str,
         org_id: str | None,
+        dataset_metadata: Dataset,
         repo: DatasetSqlRepository,
         session_factory: async_sessionmaker,
         storage: ArtifactStorage,
     ) -> None:
         self._dataset_id: str = dataset_id
         self._org_id: str | None = org_id
+        self._dataset_metadata = dataset_metadata
         self._repo: DatasetSqlRepository = repo
         self._session_factory: async_sessionmaker = session_factory
         self._storage: ArtifactStorage = storage
@@ -81,8 +84,8 @@ class DbFullDatasetStorage:
     # ── get_dataset_metadata ────────────────────────────────────────────
 
     async def get_dataset_metadata(self) -> Any:
-        """Return the Dataset domain object for this storage instance."""
-        return await self._repo.get_dataset(self._dataset_id, self._org_id)
+        """Return metadata already loaded while opening this storage instance."""
+        return self._dataset_metadata
 
     async def _resolve_latest_prediction_job_id(self) -> str | None:
         async with self._session_factory() as session:

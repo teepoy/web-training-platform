@@ -40,7 +40,12 @@ from app.modules.datasets.domain.sample_row import (
 )
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.storage.domain.storage_agg import MaterializeResult
-from app.shared.api.schemas import Annotation, DatasetStorageMode, SampleFeature
+from app.shared.api.schemas import (
+    Annotation,
+    Dataset,
+    DatasetStorageMode,
+    SampleFeature,
+)
 from app.shared.db.registry import SampleFeatureORM
 from app.shared.domain.protocols import ArtifactStorage
 
@@ -99,6 +104,7 @@ class SparseDatasetStorage:
         self,
         dataset_id: str,
         org_id: str | None,
+        dataset_metadata: Dataset,
         storage: ArtifactStorage,
         payload_store: DatasetPayloadStore,
         session_factory: async_sessionmaker,
@@ -112,6 +118,7 @@ class SparseDatasetStorage:
             raise ValueError("prediction_compaction_row_group_rows must be positive")
         self._dataset_id: str = dataset_id
         self._org_id: str = org_id or ""
+        self._dataset_metadata = dataset_metadata
         self._storage: ArtifactStorage = storage
         self._payload_store: DatasetPayloadStore = payload_store
         self._session_factory: async_sessionmaker = session_factory
@@ -142,8 +149,8 @@ class SparseDatasetStorage:
     # ── metadata ────────────────────────────────────────────────────
 
     async def get_dataset_metadata(self) -> Any:
-        """Return the Dataset metadata record via the injected repository."""
-        return await self._repo.get_dataset(self._dataset_id, self._org_id)
+        """Return metadata already loaded while opening this storage instance."""
+        return self._dataset_metadata
 
     # ── helpers ─────────────────────────────────────────────────────
 

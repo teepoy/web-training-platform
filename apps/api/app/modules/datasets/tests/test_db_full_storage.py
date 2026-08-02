@@ -38,9 +38,12 @@ async def storage(
 ) -> DbFullDatasetStorage:
     """Return DbFullDatasetStorage wired to the test infra and fixture dataset."""
     dataset_id, org_id = db_full_fixture
+    dataset = await _test_infra["repo"].get_dataset(dataset_id, org_id)
+    assert dataset is not None
     return DbFullDatasetStorage(
         dataset_id=dataset_id,
         org_id=org_id,
+        dataset_metadata=dataset,
         repo=_test_infra["repo"],
         session_factory=_test_infra["session_factory"],
         storage=_test_infra["storage"],
@@ -106,7 +109,7 @@ async def _create_fresh_dataset(
         storage_mode=DatasetStorageMode.DB_FULL,
         ls_project_id="DB_FULL_TEST",
     )
-    await repo.create_dataset(dataset, org_id=org_id)
+    dataset = await repo.create_dataset(dataset, org_id=org_id)
 
     sample_ids = [str(uuid4()) for _ in range(sample_count)]
     from app.shared.api.schemas import Sample
@@ -120,6 +123,7 @@ async def _create_fresh_dataset(
     return DbFullDatasetStorage(
         dataset_id=dataset_id,
         org_id=org_id,
+        dataset_metadata=dataset,
         repo=repo,
         session_factory=session_factory,
         storage=artifact_storage,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { CSSProperties } from "vue";
 import { NButton, NIcon, NPopover, NText } from "naive-ui";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
@@ -16,6 +16,7 @@ import type {
 } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
+import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
 import { ArrowBackedRows } from "./arrowBackedRows";
 import { SC_RECLASSIFY_TABLE_COLUMNS, SC_SAMPLE_TABLE_COLUMNS } from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
@@ -80,8 +81,9 @@ const knownColumnDefinitions = new Map(
 const reclassifyColumnKeys = new Set(
   reclassifyColumnDefinitions.map((definition) => definition.key),
 );
-const PAGE_SIZE = 250;
+const PAGE_SIZE = 50;
 const ROW_HEIGHT = 36;
+const PAGE_WINDOW_OVERSCAN_ROWS = 2;
 const SCROLLBAR_SIZE = 10;
 const MIN_SCROLL_THUMB_SIZE = 24;
 const DEFAULT_TOTAL = 0;
@@ -135,6 +137,8 @@ let pendingHorizontalScrollRestore: { version: number; scrollLeft: number } | nu
 let pendingRowsReplacementVersion: number | null = null;
 let requestedPage = 0;
 let renderedPage = -1;
+let virtualRailSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let pageLoadController: AbortController | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let scrollbarDragState: {
   axis: "x" | "y";
@@ -227,7 +231,7 @@ const virtualYConfig: VxeTablePropTypes.VirtualYConfig = {
   enabled: true,
   gt: 0,
   mode: "scroll",
-  oSize: 40,
+  oSize: 2,
 };
 const virtualXConfig: VxeTablePropTypes.VirtualXConfig = {
   enabled: true,
@@ -347,13 +351,14 @@ function getSetFilterOptions(definition: ColumnDefinition) {
     .map((value) => ({ label: String(value), value }));
 }
 
-async function loadWindow(start: number, end: number): Promise<VxeRowsPage> {
+async function loadWindow(start: number, end: number, signal: AbortSignal): Promise<VxeRowsPage> {
   const page = await props.dataSource.loadRows({
     defectIds: props.defectIds ?? [],
     anchor: String(start),
     limit: Math.max(0, end - start),
     filter: tableFilter.value,
     sort: tableSort.value,
+    signal,
   });
   return page;
 }
@@ -368,7 +373,11 @@ async function syncRawRowsToTable(): Promise<void> {
   const table = await waitForGridRef();
   if (!table) return;
   const scrollLeft = table.getScrollData().scrollLeft;
-  await table.reloadData(displayRows);
+  // Server paging already replaces the complete in-memory window. loadData
+  // avoids reloadData's full table-state reset, which dominates deep-page
+  // scroll latency when the viewer exposes many metadata columns. Selection
+  // and scroll state are restored explicitly below.
+  await table.loadData(displayRows);
   await table.scrollTo(scrollLeft, null);
   storageStats.value = arrowRows.getStats();
 }
@@ -386,7 +395,14 @@ async function loadPage(pageIndex: number): Promise<void> {
   const request = { page: pageIndex, version };
   const start = pageIndex * resolvedPageSize.value;
   if (serverTotal.value > 0 && start >= serverTotal.value) return;
-  const end = start + resolvedPageSize.value;
+  const visibleRows = Math.ceil((gridHostRef.value?.clientHeight ?? 0) / ROW_HEIGHT);
+  // Page stride controls when the server window changes. The extra viewport
+  // rows let VXE reach the end of each stride without clamping its local
+  // scroll position or showing a blank gap at a page boundary.
+  const end = start + resolvedPageSize.value + visibleRows + PAGE_WINDOW_OVERSCAN_ROWS;
+  pageLoadController?.abort();
+  const controller = new AbortController();
+  pageLoadController = controller;
   loadingRequest = request;
   pageError.value = null;
   isFetching.value = true;
@@ -395,10 +411,10 @@ async function loadPage(pageIndex: number): Promise<void> {
   streamStatus.value =
     pageIndex === 0 && (replacesRows || rawRows.length === 0) ? "Loading sample rows..." : "";
   try {
-    const page = await loadWindow(start, end);
+    const page = await loadWindow(start, end, controller.signal);
     if (version !== requestVersion || pageIndex !== requestedPage) return;
     nextArrowRows.resetWithoutDefectIds(page.total);
-    const items = page.items.map((item) => ({ ...item, _isHydrated: true }));
+    const items = page.items.map((item) => markRaw({ ...item, _isHydrated: true }));
     if (version !== requestVersion || pageIndex !== requestedPage) return;
     if (replacesRows) {
       arrowRows = nextArrowRows;
@@ -424,10 +440,11 @@ async function loadPage(pageIndex: number): Promise<void> {
       void refreshGridLayout(horizontalScrollRestore);
     });
   } catch (error) {
-    if (version === requestVersion) {
+    if (!isAbortError(error) && version === requestVersion) {
       pageError.value = error instanceof Error ? error.message : "Failed to load sample table rows";
     }
   } finally {
+    if (pageLoadController === controller) pageLoadController = null;
     if (loadingRequest === request) {
       loadingRequest = null;
     }
@@ -436,6 +453,10 @@ async function loadPage(pageIndex: number): Promise<void> {
       streamStatus.value = "";
     }
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function accumulateDiscoveredSetFilterValues(items: VxeSampleTableRow[]): void {
@@ -483,6 +504,7 @@ async function searchSetFilterOptions(field: string): Promise<void> {
 async function resetRows(): Promise<void> {
   const scrollLeft = gridRef.value?.getScrollData().scrollLeft ?? 0;
   const version = ++requestVersion;
+  pageLoadController?.abort();
   pendingHorizontalScrollRestore = { version, scrollLeft };
   pendingRowsReplacementVersion = version;
   loadingRequest = null;
@@ -693,7 +715,8 @@ async function refreshGridLayout(horizontalScrollLeft?: number): Promise<void> {
   const grid = gridRef.value;
   await grid?.recalculate(true);
   await grid?.refreshScroll();
-  await syncGridToVirtualRail();
+  const rail = virtualRailRef.value;
+  if (rail) scheduleGridSyncToVirtualRail(rail);
   if (horizontalScrollLeft !== undefined) {
     await grid?.scrollTo(horizontalScrollLeft, null);
   }
@@ -731,7 +754,7 @@ function setVerticalScroll(scrollTop: number): void {
   const maxScrollTop = Math.max(0, rail.scrollHeight - rail.clientHeight);
   rail.scrollTop = Math.max(0, Math.min(maxScrollTop, scrollTop));
   syncScrollbarMetrics();
-  void syncGridToVirtualRail(rail);
+  scheduleGridSyncToVirtualRail(rail);
 }
 
 function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
@@ -815,7 +838,38 @@ async function syncGridToVirtualRail(rail = virtualRailRef.value): Promise<void>
   await gridRef.value?.scrollTo(null, position.localScrollTop);
 }
 
+function cancelScheduledGridSync(): void {
+  if (virtualRailSyncTimer === null) return;
+  clearTimeout(virtualRailSyncTimer);
+  virtualRailSyncTimer = null;
+}
+
+function scheduleGridSyncToVirtualRail(rail: HTMLElement): void {
+  const position = virtualScrollPosition(rail);
+  // Mark an in-flight request stale immediately, while delaying only the next
+  // cross-page request. Scrolling inside the rendered page remains responsive.
+  requestedPage = position.page;
+  if (renderedPage === position.page) {
+    cancelScheduledGridSync();
+    void gridRef.value?.scrollTo(null, position.localScrollTop);
+    return;
+  }
+
+  if (loadingRequest && loadingRequest.page !== position.page) {
+    pageLoadController?.abort();
+  }
+
+  cancelScheduledGridSync();
+  const scheduledPage = position.page;
+  virtualRailSyncTimer = setTimeout(() => {
+    virtualRailSyncTimer = null;
+    if (requestedPage !== scheduledPage) return;
+    void syncGridToVirtualRail(rail);
+  }, SC_SCROLL_QUERY_DEBOUNCE_MS);
+}
+
 function resetVirtualPosition(): void {
+  cancelScheduledGridSync();
   requestedPage = 0;
   renderedPage = -1;
   const rail = virtualRailRef.value;
@@ -826,7 +880,7 @@ function resetVirtualPosition(): void {
 
 function handleVirtualRailScroll(event: Event): void {
   syncScrollbarMetrics();
-  void syncGridToVirtualRail(event.currentTarget as HTMLElement);
+  scheduleGridSyncToVirtualRail(event.currentTarget as HTMLElement);
 }
 
 function handleGridScroll(): void {
@@ -925,6 +979,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   requestVersion += 1;
+  pageLoadController?.abort();
+  pageLoadController = null;
+  cancelScheduledGridSync();
   resizeObserver?.disconnect();
   resizeObserver = null;
   endScrollbarDrag();

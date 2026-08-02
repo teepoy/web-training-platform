@@ -33,6 +33,7 @@ export interface ScSampleTableRowsQuery {
   filter?: ScSampleTableFilter;
   sort?: ScSampleTableSort | null;
   reticleOptions?: ReticleMapOptions;
+  signal?: AbortSignal;
 }
 
 export interface ScSampleTableRowsPage {

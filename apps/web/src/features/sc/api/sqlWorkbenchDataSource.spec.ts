@@ -244,12 +244,14 @@ describe("SQL workbench data source", () => {
             1,
           );
         }
+        if (body.description === "sc-workbench.table.count") {
+          return arrowResponse({ __total: BigInt64Array.from([1n]) }, 1);
+        }
         return arrowResponse(
           {
             defect_id: Int32Array.from([42]),
             future_metric: Float64Array.from([12.5]),
             upstream_payload: ["kept"],
-            __total: BigInt64Array.from([1n]),
           },
           1,
         );
@@ -278,13 +280,98 @@ describe("SQL workbench data source", () => {
       future_metric: 12.5,
       upstream_payload: "kept",
     });
-    expect(requests.map((request) => request.description)).toEqual([
+    expect(requests.map((request) => request.description).sort()).toEqual([
       "sc-workbench.schema",
+      "sc-workbench.table.count",
       "sc-workbench.table.rows",
     ]);
-    expect(requests[1]?.sql).toContain('"future_metric"');
-    expect(requests[1]?.sql).toContain('ORDER BY "future_metric" DESC');
-    expect(requests[1]?.parameters).toEqual([10, 20, 25, 0]);
+    const countRequest = requests.find(
+      (request) => request.description === "sc-workbench.table.count",
+    );
+    expect(countRequest).toEqual({
+      description: "sc-workbench.table.count",
+      sql: 'SELECT COUNT(*) AS "__total" FROM samples WHERE "future_metric" >= ? AND "future_metric" <= ?',
+      parameters: [10, 20],
+    });
+    const rowsRequest = requests.find(
+      (request) => request.description === "sc-workbench.table.rows",
+    );
+    expect(rowsRequest?.sql).toContain('WITH "__sc_page_ids" AS (SELECT "defect_id" FROM samples');
+    expect(rowsRequest?.sql).not.toContain("COUNT(*) OVER");
+    expect(rowsRequest?.sql).toContain('ORDER BY "future_metric" DESC, "defect_id" ASC');
+    expect(rowsRequest?.parameters).toEqual([10, 20, 25, 0]);
+  });
+
+  it("reuses the table count until the filter or data revision changes", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const descriptions: string[] = [];
+    let revision = 1;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as { description: string };
+        descriptions.push(body.description);
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse({ defect_id: Int32Array.from([]) }, revision);
+        }
+        if (body.description === "sc-workbench.table.count") {
+          return arrowResponse({ __total: BigInt64Array.from([300_000n]) }, revision);
+        }
+        return arrowResponse({ defect_id: Int32Array.from([1]) }, revision);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+    source.subscribeInvalidations(() => undefined);
+
+    await source.loadRows({ defectIds: [], anchor: "0", limit: 250 });
+    await source.loadRows({ defectIds: [], anchor: "250", limit: 250 });
+    expect(
+      descriptions.filter((description) => description === "sc-workbench.table.count"),
+    ).toHaveLength(1);
+
+    revision = 2;
+    FakeEventSource.instance?.emit(
+      "invalidation",
+      JSON.stringify({ scope: "dataset:ds-1", revision, changed_kinds: ["annotation"] }),
+    );
+    await source.loadRows({ defectIds: [], anchor: "500", limit: 250 });
+
+    expect(
+      descriptions.filter((description) => description === "sc-workbench.table.count"),
+    ).toHaveLength(2);
+  });
+
+  it("aborts table count and row fetches when the caller cancels a stale page", async () => {
+    server.use(http.post(QUERY_URL, () => arrowResponse({ defect_id: Int32Array.from([]) }, 1)));
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+    await source.loadColumns();
+
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const query = source.loadRows({
+      defectIds: [],
+      anchor: "250000",
+      limit: 250,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    controller.abort();
+
+    await expect(query).rejects.toThrow("aborted");
+    expect(
+      fetchMock.mock.calls.every((call) => (call[1] as RequestInit | undefined)?.signal?.aborted),
+    ).toBe(true);
   });
 
   it("keeps gallery select-all compact and sends only explicit exclusions", async () => {

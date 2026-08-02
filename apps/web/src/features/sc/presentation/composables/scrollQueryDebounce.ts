@@ -1,0 +1,1 @@
+export const SC_SCROLL_QUERY_DEBOUNCE_MS = 300;

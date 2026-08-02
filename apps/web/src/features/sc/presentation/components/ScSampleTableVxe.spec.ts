@@ -1,8 +1,9 @@
 import { defineComponent } from "vue";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { mountWithProviders } from "@/testing";
+import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
 import ScSampleTableVxe from "./ScSampleTableVxe.vue";
 
 function sampleRow(defectId: string, images: number): ScSampleTableDisplayRow {
@@ -30,7 +31,7 @@ function sampleRow(defectId: string, images: number): ScSampleTableDisplayRow {
   };
 }
 
-function tableStubs(reloadData: ReturnType<typeof vi.fn>) {
+function tableStubs(loadData: ReturnType<typeof vi.fn>) {
   const VxeTable = defineComponent({
     name: "VxeTable",
     inheritAttrs: false,
@@ -43,10 +44,10 @@ function tableStubs(reloadData: ReturnType<typeof vi.fn>) {
           scrollLeft: 120,
           scrollWidth: 2_400,
         })),
-        loadData: vi.fn(async () => undefined),
+        loadData,
         recalculate: vi.fn(async () => undefined),
         refreshScroll: vi.fn(async () => undefined),
-        reloadData,
+        reloadData: vi.fn(async () => undefined),
         scrollTo: vi.fn(async () => undefined),
         setCheckboxRowKey: vi.fn(),
       });
@@ -64,6 +65,81 @@ function tableStubs(reloadData: ReturnType<typeof vi.fn>) {
 }
 
 describe("ScSampleTableVxe server query state", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("coalesces rapid cross-page scrolling into the final rows query", async () => {
+    vi.useFakeTimers();
+    const reloadData = vi.fn(async () => undefined);
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async (query) => ({
+      items: [sampleRow(query.anchor ?? "0", 1)],
+      total: 1_000,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:one", loadRows };
+    const { wrapper } = await mountWithProviders(ScSampleTableVxe, {
+      props: { dataSource, pageSize: 10 },
+      global: { stubs: tableStubs(reloadData) },
+    });
+
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(1));
+    const rail = wrapper.find<HTMLElement>(".sst-vxe-virtual-rail");
+    for (const page of [1, 2, 3]) {
+      rail.element.scrollTop = page * 10 * 36;
+      await rail.trigger("scroll");
+    }
+
+    await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS - 1);
+    expect(loadRows).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(2));
+    expect(loadRows.mock.calls[1]?.[0]).toMatchObject({ anchor: "30", limit: 12 });
+
+    wrapper.unmount();
+  }, 15_000);
+
+  it("aborts an in-flight page query as soon as scrolling targets another page", async () => {
+    vi.useFakeTimers();
+    const reloadData = vi.fn(async () => undefined);
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async (query) => {
+      if (query.anchor === "10") {
+        return await new Promise((_resolve, reject) => {
+          const rejectAbort = () => reject(new DOMException("aborted", "AbortError"));
+          if (query.signal?.aborted) rejectAbort();
+          else query.signal?.addEventListener("abort", rejectAbort, { once: true });
+        });
+      }
+      return {
+        items: [sampleRow(query.anchor, 1)],
+        total: 1_000,
+        nextAnchor: null,
+      };
+    });
+    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:one", loadRows };
+    const { wrapper } = await mountWithProviders(ScSampleTableVxe, {
+      props: { dataSource, pageSize: 10 },
+      global: { stubs: tableStubs(reloadData) },
+    });
+
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(1));
+    const rail = wrapper.find<HTMLElement>(".sst-vxe-virtual-rail");
+    rail.element.scrollTop = 10 * 36;
+    await rail.trigger("scroll");
+    await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(2));
+
+    rail.element.scrollTop = 20 * 36;
+    await rail.trigger("scroll");
+    expect(loadRows.mock.calls[1]?.[0].signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(3));
+
+    expect(loadRows.mock.calls[2]?.[0]).toMatchObject({ anchor: "20", limit: 12 });
+    expect(wrapper.find(".sst-vxe-error").exists()).toBe(false);
+    wrapper.unmount();
+  }, 15_000);
+
   it("represents all filtered rows without resolving every defect ID", async () => {
     const reloadData = vi.fn(async () => undefined);
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({

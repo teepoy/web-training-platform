@@ -98,11 +98,21 @@ class ScDataObjectCache:
         revision: int,
         builder: Callable[[], Awaitable[pa.Table]],
         revision_tracked: bool = True,
+        scope_revision: int | None = None,
     ) -> CachedDataObject:
+        tracked_revision = self._tracked_revision(
+            object_revision=revision,
+            revision_tracked=revision_tracked,
+            scope_revision=scope_revision,
+        )
         object_id = hashlib.sha256(
             f"{logical_key}\0{revision}".encode("utf-8")
         ).hexdigest()
-        cached = await self._read_valid_object(object_id, cache_status="hit")
+        cached = await self._read_valid_object(
+            object_id,
+            cache_status="hit",
+            tracked_revision=tracked_revision,
+        )
         if cached is not None:
             return cached
 
@@ -115,7 +125,9 @@ class ScDataObjectCache:
             nx=True,
         )
         if not acquired:
-            return await self._wait_for_build(object_id)
+            return await self._wait_for_build(
+                object_id, tracked_revision=tracked_revision
+            )
 
         heartbeat_stop = asyncio.Event()
         heartbeat = asyncio.create_task(
@@ -123,14 +135,20 @@ class ScDataObjectCache:
             name=f"sc-data-build-lock-{object_id}",
         )
         try:
-            cached = await self._read_valid_object(object_id, cache_status="hit")
+            cached = await self._read_valid_object(
+                object_id,
+                cache_status="hit",
+                tracked_revision=tracked_revision,
+            )
             if cached is not None:
                 return cached
             table = await builder()
             return await self._write_object(
                 object_id=object_id,
                 scope=scope,
-                revision=revision,
+                revision=(
+                    tracked_revision if tracked_revision is not None else revision
+                ),
                 table=table,
                 revision_tracked=revision_tracked,
             )
@@ -149,12 +167,22 @@ class ScDataObjectCache:
         revision: int,
         builder: Callable[[Path], Awaitable[None]],
         revision_tracked: bool = True,
+        scope_revision: int | None = None,
     ) -> CachedDataObject:
         """Build a Parquet object directly on disk without a full Arrow table."""
+        tracked_revision = self._tracked_revision(
+            object_revision=revision,
+            revision_tracked=revision_tracked,
+            scope_revision=scope_revision,
+        )
         object_id = hashlib.sha256(
             f"{logical_key}\0{revision}".encode("utf-8")
         ).hexdigest()
-        cached = await self._read_valid_object(object_id, cache_status="hit")
+        cached = await self._read_valid_object(
+            object_id,
+            cache_status="hit",
+            tracked_revision=tracked_revision,
+        )
         if cached is not None:
             return cached
 
@@ -167,7 +195,9 @@ class ScDataObjectCache:
             nx=True,
         )
         if not acquired:
-            return await self._wait_for_build(object_id)
+            return await self._wait_for_build(
+                object_id, tracked_revision=tracked_revision
+            )
 
         heartbeat_stop = asyncio.Event()
         heartbeat = asyncio.create_task(
@@ -176,7 +206,11 @@ class ScDataObjectCache:
         )
         temporary_path = self._tmp / f"{uuid4().hex}.parquet"
         try:
-            cached = await self._read_valid_object(object_id, cache_status="hit")
+            cached = await self._read_valid_object(
+                object_id,
+                cache_status="hit",
+                tracked_revision=tracked_revision,
+            )
             if cached is not None:
                 return cached
             await builder(temporary_path)
@@ -184,7 +218,9 @@ class ScDataObjectCache:
             return await self._publish_object_file(
                 object_id=object_id,
                 scope=scope,
-                revision=revision,
+                revision=(
+                    tracked_revision if tracked_revision is not None else revision
+                ),
                 temporary_path=temporary_path,
                 revision_tracked=revision_tracked,
             )
@@ -315,18 +351,28 @@ class ScDataObjectCache:
             cache_status="miss",
         )
 
-    async def _wait_for_build(self, object_id: str) -> CachedDataObject:
+    async def _wait_for_build(
+        self, object_id: str, *, tracked_revision: int | None
+    ) -> CachedDataObject:
         deadline = time.monotonic() + self._config.build_wait_timeout_seconds
         interval = self._config.build_poll_interval_ms / 1000
         while time.monotonic() < deadline:
-            cached = await self._read_valid_object(object_id, cache_status="hit-wait")
+            cached = await self._read_valid_object(
+                object_id,
+                cache_status="hit-wait",
+                tracked_revision=tracked_revision,
+            )
             if cached is not None:
                 return cached
             await asyncio.sleep(interval)
         raise TimeoutError(f"timed out waiting for cache object {object_id}")
 
     async def _read_valid_object(
-        self, object_id: str, *, cache_status: str
+        self,
+        object_id: str,
+        *,
+        cache_status: str,
+        tracked_revision: int | None,
     ) -> CachedDataObject | None:
         raw = await self._redis.get(self._metadata_key(object_id))
         if raw is None:
@@ -348,13 +394,21 @@ class ScDataObjectCache:
         except (OSError, pa.ArrowInvalid, TypeError, ValueError, json.JSONDecodeError):
             await self._redis.delete(self._metadata_key(object_id))
             return None
+        revision = metadata.revision
+        if tracked_revision is not None:
+            promoted_revision = await self._promote_tracked_revision(
+                object_id, tracked_revision
+            )
+            if promoted_revision is None:
+                return None
+            revision = promoted_revision
         await self._touch(object_id)
         return CachedDataObject(
             object_id=metadata.object_id,
             path=path,
             size_bytes=metadata.size_bytes,
             scope=metadata.scope,
-            revision=metadata.revision,
+            revision=revision,
             cache_status=cache_status,
         )
 
@@ -510,6 +564,45 @@ class ScDataObjectCache:
         now = time.time()
         await self._redis.zadd(self._access_key, {object_id: now})
         await self._redis.set(self._key("last-access", object_id), str(now))
+
+    async def _promote_tracked_revision(
+        self, object_id: str, scope_revision: int
+    ) -> int | None:
+        promoted = await self._redis.eval(
+            "local raw = redis.call('get', KEYS[1]); "
+            "if not raw then return -1 end; "
+            "local metadata = cjson.decode(raw); "
+            "local requested = tonumber(ARGV[1]); "
+            "local current = tonumber(metadata['revision']); "
+            "if not metadata['revision_tracked'] then "
+            "metadata['revision_tracked'] = true; metadata['revision'] = requested; "
+            "redis.call('set', KEYS[1], cjson.encode(metadata)); return requested; end; "
+            "if requested > current then metadata['revision'] = requested; "
+            "redis.call('set', KEYS[1], cjson.encode(metadata)); return requested; end; "
+            "return current",
+            1,
+            self._metadata_key(object_id),
+            str(scope_revision),
+        )
+        revision = int(promoted)
+        return None if revision < 0 else revision
+
+    @staticmethod
+    def _tracked_revision(
+        *,
+        object_revision: int,
+        revision_tracked: bool,
+        scope_revision: int | None,
+    ) -> int | None:
+        if scope_revision is not None and scope_revision < 0:
+            raise ValueError("scope_revision must be non-negative")
+        if not revision_tracked:
+            if scope_revision is not None:
+                raise ValueError(
+                    "scope_revision cannot be set when revision_tracked is false"
+                )
+            return None
+        return object_revision if scope_revision is None else scope_revision
 
     async def _release_owned_key(self, key: str, token: str) -> None:
         await self._redis.eval(
