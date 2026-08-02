@@ -14,8 +14,9 @@ API_PORT    ?= 8000
 API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
-COMPOSE_PROD     := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
+COMPOSE_RELEASE_LOCAL := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
 LOCAL_PROD_PREFECT_AUTH ?= dangerous:dangerous
+LOCAL_RELEASE_PREFECT_AUTH ?= $(LOCAL_PROD_PREFECT_AUTH)
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
 SC_WAFER_MOCK_DEFECTS ?= 300000
@@ -42,12 +43,28 @@ DEV_API_HOST_ENV := \
 	IMAGE_PARSER_GRPC_ADDR=127.0.0.1:9092
 
 # ──────────────────────────────────────────────
-# Production split-stack (infra/compose/production/)
+# Canonical deployed release stack (infra/compose/production/)
 # ──────────────────────────────────────────────
 PROD_NETWORK                ?= finetune-prod
 PROD_STATEFUL_ENV           ?= /srv/finetune/stateful/.env
 PROD_PLATFORM_ENV           ?= /srv/finetune/platform/.env
 PROD_OBSERVABILITY_ENV      ?= /srv/finetune/observability/.env
+PRE_RELEASE_NETWORK         ?= finetune-pre-release
+PRE_RELEASE_PROJECT         ?= finetune-pre-release
+PRE_RELEASE_STATEFUL_ENV    ?= /srv/finetune-pre-release/stateful/.env
+PRE_RELEASE_PLATFORM_ENV    ?= /srv/finetune-pre-release/platform/.env
+PRE_RELEASE_OBSERVABILITY_ENV ?= /srv/finetune-pre-release/observability/.env
+PRE_RELEASE_PROFILES        ?=
+
+RELEASE_PROFILE             ?= prod
+RELEASE_NETWORK             ?= $(PROD_NETWORK)
+RELEASE_PROJECT             ?= finetune
+RELEASE_STATEFUL_ENV        ?= $(PROD_STATEFUL_ENV)
+RELEASE_PLATFORM_ENV        ?= $(PROD_PLATFORM_ENV)
+RELEASE_OBSERVABILITY_ENV   ?= $(PROD_OBSERVABILITY_ENV)
+RELEASE_PROFILES            ?=
+RELEASE_RUNTIME_ENV         := APP_CONFIG_PROFILE=$(RELEASE_PROFILE) PLATFORM_NETWORK_NAME=$(RELEASE_NETWORK)
+
 COMPOSE_PROD_STATEFUL       := infra/compose/production/compose.stateful.yaml
 COMPOSE_PROD_PLATFORM       := infra/compose/production/compose.platform.yaml
 COMPOSE_PROD_OPS            := infra/compose/production/compose.ops.yaml
@@ -55,55 +72,55 @@ COMPOSE_PROD_OBSERVABILITY  := infra/compose/production/compose.observability.ya
 
 # Local pre-release acceptance stack. It reuses the production manifests,
 # builds production Docker targets, and keeps projects/network/volumes isolated.
-PRE_RELEASE_ENV              ?= infra/compose/pre-release/.env
-PRE_RELEASE_NETWORK          ?= finetune-pre-release
-PRE_RELEASE_PROJECT          ?= finetune-pre-release
-PRE_RELEASE_TAG              ?= $(shell git describe --always --dirty 2>/dev/null)
-PRE_RELEASE_IMAGE_PREFIX     ?= web-training-platform
-PRE_RELEASE_PROFILES         ?=
-PRE_RELEASE_BIND_HOST        ?= 127.0.0.1
-PRE_RELEASE_POSTGRES_PORT    ?= 15432
-PRE_RELEASE_MINIO_PORT       ?= 19000
-PRE_RELEASE_MINIO_CONSOLE_PORT ?= 19001
-PRE_RELEASE_REDIS_PORT       ?= 16379
-PRE_RELEASE_LABEL_STUDIO_PORT ?= 18080
-PRE_RELEASE_PREFECT_PORT     ?= 14200
-PRE_RELEASE_API_PORT         ?= 18000
-PRE_RELEASE_SC_DATA_PROVIDER_PORT ?= 18001
-PRE_RELEASE_WEB_PORT         ?= 15173
-PRE_RELEASE_SC_GRPC_PORT     ?= 19091
-PRE_RELEASE_SC_FLIGHT_PORT   ?= 19093
-PRE_RELEASE_IMAGE_PARSER_HTTP_PORT ?= 18090
-PRE_RELEASE_IMAGE_PARSER_GRPC_PORT ?= 19092
+PRE_RELEASE_LOCAL_ENV        ?= infra/compose/pre-release/.env
+PRE_RELEASE_LOCAL_NETWORK    ?= finetune-pre-release-local
+PRE_RELEASE_LOCAL_PROJECT    ?= finetune-pre-release-local
+PRE_RELEASE_LOCAL_TAG        ?= $(shell git describe --always --dirty 2>/dev/null)
+PRE_RELEASE_LOCAL_IMAGE_PREFIX ?= web-training-platform
+PRE_RELEASE_LOCAL_PROFILES   ?=
+PRE_RELEASE_LOCAL_BIND_HOST  ?= 127.0.0.1
+PRE_RELEASE_LOCAL_POSTGRES_PORT ?= 15432
+PRE_RELEASE_LOCAL_MINIO_PORT ?= 19000
+PRE_RELEASE_LOCAL_MINIO_CONSOLE_PORT ?= 19001
+PRE_RELEASE_LOCAL_REDIS_PORT ?= 16379
+PRE_RELEASE_LOCAL_LABEL_STUDIO_PORT ?= 18080
+PRE_RELEASE_LOCAL_PREFECT_PORT ?= 14200
+PRE_RELEASE_LOCAL_API_PORT   ?= 18000
+PRE_RELEASE_LOCAL_SC_DATA_PROVIDER_PORT ?= 18001
+PRE_RELEASE_LOCAL_WEB_PORT   ?= 15173
+PRE_RELEASE_LOCAL_SC_GRPC_PORT ?= 19091
+PRE_RELEASE_LOCAL_SC_FLIGHT_PORT ?= 19093
+PRE_RELEASE_LOCAL_IMAGE_PARSER_HTTP_PORT ?= 18090
+PRE_RELEASE_LOCAL_IMAGE_PARSER_GRPC_PORT ?= 19092
 COMPOSE_PRE_RELEASE_BUILD    := infra/compose/pre-release/compose.build.yaml
 COMPOSE_PRE_RELEASE_STATEFUL := infra/compose/pre-release/compose.stateful.yaml
 COMPOSE_PRE_RELEASE_PLATFORM := infra/compose/pre-release/compose.platform.yaml
-PRE_RELEASE_RUNTIME_ENV      := \
+PRE_RELEASE_LOCAL_RUNTIME_ENV := \
 	APP_CONFIG_PROFILE=pre-release \
-	PLATFORM_NETWORK_NAME=$(PRE_RELEASE_NETWORK) \
-	FRONTEND_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT) \
-	PREFECT_UI_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_PREFECT_PORT) \
-	LABEL_STUDIO_EXTERNAL_URL=http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_LABEL_STUDIO_PORT) \
-	PRE_RELEASE_BIND_HOST=$(PRE_RELEASE_BIND_HOST) \
-	PRE_RELEASE_POSTGRES_PORT=$(PRE_RELEASE_POSTGRES_PORT) \
-	PRE_RELEASE_MINIO_PORT=$(PRE_RELEASE_MINIO_PORT) \
-	PRE_RELEASE_MINIO_CONSOLE_PORT=$(PRE_RELEASE_MINIO_CONSOLE_PORT) \
-	PRE_RELEASE_REDIS_PORT=$(PRE_RELEASE_REDIS_PORT) \
-	PRE_RELEASE_LABEL_STUDIO_PORT=$(PRE_RELEASE_LABEL_STUDIO_PORT) \
-	PRE_RELEASE_PREFECT_PORT=$(PRE_RELEASE_PREFECT_PORT) \
-	PRE_RELEASE_API_PORT=$(PRE_RELEASE_API_PORT) \
-	PRE_RELEASE_SC_DATA_PROVIDER_PORT=$(PRE_RELEASE_SC_DATA_PROVIDER_PORT) \
-	PRE_RELEASE_WEB_PORT=$(PRE_RELEASE_WEB_PORT) \
-	PRE_RELEASE_SC_GRPC_PORT=$(PRE_RELEASE_SC_GRPC_PORT) \
-	PRE_RELEASE_SC_FLIGHT_PORT=$(PRE_RELEASE_SC_FLIGHT_PORT) \
-	PRE_RELEASE_IMAGE_PARSER_HTTP_PORT=$(PRE_RELEASE_IMAGE_PARSER_HTTP_PORT) \
-	PRE_RELEASE_IMAGE_PARSER_GRPC_PORT=$(PRE_RELEASE_IMAGE_PARSER_GRPC_PORT) \
-	FINETUNE_API_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/api:$(PRE_RELEASE_TAG) \
-	FINETUNE_WEB_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/web:$(PRE_RELEASE_TAG) \
-	FINETUNE_CPU_WORKER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/cpu-worker:$(PRE_RELEASE_TAG) \
-	FINETUNE_GPU_WORKER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/gpu-worker:$(PRE_RELEASE_TAG) \
-	SC_UPSTREAM_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/sc-upstream:$(PRE_RELEASE_TAG) \
-	IMAGE_PARSER_IMAGE=$(PRE_RELEASE_IMAGE_PREFIX)/image-parser:$(PRE_RELEASE_TAG)
+	PLATFORM_NETWORK_NAME=$(PRE_RELEASE_LOCAL_NETWORK) \
+	FRONTEND_URL=http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_WEB_PORT) \
+	PREFECT_UI_URL=http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_PREFECT_PORT) \
+	LABEL_STUDIO_EXTERNAL_URL=http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_LABEL_STUDIO_PORT) \
+	PRE_RELEASE_BIND_HOST=$(PRE_RELEASE_LOCAL_BIND_HOST) \
+	PRE_RELEASE_POSTGRES_PORT=$(PRE_RELEASE_LOCAL_POSTGRES_PORT) \
+	PRE_RELEASE_MINIO_PORT=$(PRE_RELEASE_LOCAL_MINIO_PORT) \
+	PRE_RELEASE_MINIO_CONSOLE_PORT=$(PRE_RELEASE_LOCAL_MINIO_CONSOLE_PORT) \
+	PRE_RELEASE_REDIS_PORT=$(PRE_RELEASE_LOCAL_REDIS_PORT) \
+	PRE_RELEASE_LABEL_STUDIO_PORT=$(PRE_RELEASE_LOCAL_LABEL_STUDIO_PORT) \
+	PRE_RELEASE_PREFECT_PORT=$(PRE_RELEASE_LOCAL_PREFECT_PORT) \
+	PRE_RELEASE_API_PORT=$(PRE_RELEASE_LOCAL_API_PORT) \
+	PRE_RELEASE_SC_DATA_PROVIDER_PORT=$(PRE_RELEASE_LOCAL_SC_DATA_PROVIDER_PORT) \
+	PRE_RELEASE_WEB_PORT=$(PRE_RELEASE_LOCAL_WEB_PORT) \
+	PRE_RELEASE_SC_GRPC_PORT=$(PRE_RELEASE_LOCAL_SC_GRPC_PORT) \
+	PRE_RELEASE_SC_FLIGHT_PORT=$(PRE_RELEASE_LOCAL_SC_FLIGHT_PORT) \
+	PRE_RELEASE_IMAGE_PARSER_HTTP_PORT=$(PRE_RELEASE_LOCAL_IMAGE_PARSER_HTTP_PORT) \
+	PRE_RELEASE_IMAGE_PARSER_GRPC_PORT=$(PRE_RELEASE_LOCAL_IMAGE_PARSER_GRPC_PORT) \
+	FINETUNE_API_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/api:$(PRE_RELEASE_LOCAL_TAG) \
+	FINETUNE_WEB_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/web:$(PRE_RELEASE_LOCAL_TAG) \
+	FINETUNE_CPU_WORKER_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/cpu-worker:$(PRE_RELEASE_LOCAL_TAG) \
+	FINETUNE_GPU_WORKER_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/gpu-worker:$(PRE_RELEASE_LOCAL_TAG) \
+	SC_UPSTREAM_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/sc-upstream:$(PRE_RELEASE_LOCAL_TAG) \
+	IMAGE_PARSER_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/image-parser:$(PRE_RELEASE_LOCAL_TAG)
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 LITELLM_LOCAL_MODEL_COST_MAP="True"
@@ -142,7 +159,7 @@ dev-api: ## Start API dev server (default: 8000)
 
 .PHONY: dev-api-host
 dev-api-host: up-dev-host-api ## Start compose dependencies, then run API on host
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen alembic upgrade head && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen python scripts/prepare_platform.py && $(DEV_API_HOST_ENV) uv run --no-dev --frozen uvicorn app.main:app --reload --port $(API_PORT) --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}
 
 .PHONY: dev-web
 dev-web: ## Start frontend dev server (default: 5173)
@@ -306,11 +323,11 @@ docs-serve: ## Serve the MkDocs documentation site locally
 
 .PHONY: create-superadmin
 create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
-	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli create-superadmin --email=$(EMAIL) --password=$(PASSWORD) --name=$(NAME)
+	cd $(API_DIR) && APP_CONFIG_PROFILE=dev BOOTSTRAP_SUPERADMIN_EMAIL='$(EMAIL)' BOOTSTRAP_SUPERADMIN_PASSWORD='$(PASSWORD)' BOOTSTRAP_SUPERADMIN_NAME='$(NAME)' uv run python scripts/create_superadmin.py
 
-.PHONY: reset-app-data
-reset-app-data: ## Drop and recreate all application tables
-	cd $(API_DIR) && APP_CONFIG_PROFILE=dev uv run python -m app.cli reset-app-data
+.PHONY: reset-dev-database
+reset-dev-database: ## Destructively reset the dev database through Alembic
+	cd $(API_DIR) && APP_CONFIG_PROFILE=dev ALLOW_RESET_APP_DATA=1 uv run python scripts/reset_dev_database.py
 
 
 # ──────────────────────────────────────────────
@@ -407,50 +424,67 @@ e2e-live-report: ## Open Playwright HTML report
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
+	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server sc-upstream image-parser
+	docker compose -f $(COMPOSE_DEV) --profile ops run --rm prepare-platform
 	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
 
 .PHONY: up-dev-host-api
 up-dev-host-api: ensure-fixtures ## Start compose dev dependencies without Docker API/Web
 	docker compose -f $(COMPOSE_DEV) up -d --scale api=0 --scale web=0 $(ARGS)
 
+.PHONY: up-release-local
+up-release-local: ensure-fixtures ## Start the legacy local release-validation stack (not production)
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) up -d --wait --wait-timeout 300 postgres minio redis label-studio prefect-server sc-upstream image-parser
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) run --rm api /app/.venv/bin/python scripts/prepare_platform.py
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) up -d --wait --wait-timeout 300 api sc-data-provider web prefect-worker-cpu $(ARGS)
+
 .PHONY: up-prod
-up-prod: ensure-fixtures ## Migrate, register deployments, and start the local prod validation stack
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d postgres minio redis label-studio prefect-server sc-upstream image-parser
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /app/.venv/bin/alembic upgrade head
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) run --rm api /bin/sh -lc '/app/.venv/bin/prefect work-pool create default-cpu --type process || true; /app/.venv/bin/prefect work-pool create default-gpu --type process || true; /app/.venv/bin/ftapi deployments apply'
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) up -d api sc-data-provider web prefect-worker-cpu $(ARGS)
+up-prod: ## [DEPRECATED] Use `make up-release-local`; real production uses `make up-prod-all`
+	@echo "WARNING: 'make up-prod' is local validation, not production. Redirecting to 'make up-release-local'." >&2
+	@$(MAKE) up-release-local ARGS="$(ARGS)"
 
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
 	docker compose -f $(COMPOSE_DEV) build $(ARGS)
 
+.PHONY: build-release-local
+build-release-local: ## Build prod-target images for the legacy local validation stack
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) $(PROFILES) build $(ARGS)
+
 .PHONY: build-prod
-build-prod: ## Build all prod-target Docker images (local validation stack)
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) $(PROFILES) build $(ARGS)
+build-prod: ## [DEPRECATED] Use `make build-release-local`
+	@echo "WARNING: 'make build-prod' builds only the local validation stack." >&2
+	@$(MAKE) build-release-local ARGS="$(ARGS)" PROFILES="$(PROFILES)"
 
 .PHONY: check-config
 check-config: ## Render dev, local release-validation, pre-release, and production Compose configurations
 	docker compose -f $(COMPOSE_DEV) config --quiet
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) config --quiet
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) config --quiet
 	docker compose --env-file infra/compose/production/env-stateful.example -f $(COMPOSE_PROD_STATEFUL) config --quiet
 	APP_CONFIG_PROFILE=pre-release docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
 	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
 	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
 	docker compose --env-file infra/compose/production/env-observability.example -f $(COMPOSE_PROD_OBSERVABILITY) config --quiet
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) config --quiet
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	python3 scripts/check_compose_parity.py
 
 .PHONY: logs-dev
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS)
 
+.PHONY: logs-release-local
+logs-release-local: ## Tail legacy local release-validation logs (usage: ARGS="api")
+	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) logs -f $(ARGS)
+
 .PHONY: logs-prod
-logs-prod: ## Tail local prod validation stack logs (usage: make logs-prod ARGS="api")
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_PROD_PREFECT_AUTH) docker compose -f $(COMPOSE_PROD) logs -f $(ARGS)
+logs-prod: ## [DEPRECATED] Use `make logs-release-local`
+	@echo "WARNING: 'make logs-prod' refers to local validation, not production." >&2
+	@$(MAKE) logs-release-local ARGS="$(ARGS)"
 
 .PHONY: build
-build: ## Build all dev-target Docker images (use build-dev/build-prod explicitly)
+build: ## Build all dev-target Docker images (use build-dev/build-release-local explicitly)
 	docker compose -f $(COMPOSE_DEV) build
 
 .PHONY: export-bundle
@@ -459,7 +493,7 @@ export-bundle: ## Export source snapshot and docker images to a tar bundle
 
 .PHONY: up
 up: ensure-fixtures ## [DEPRECATED] Use `make up-dev` instead. Redirects to dev mode.
-	@echo "⚠️  'make up' is deprecated. Use 'make up-dev' for development or 'make up-prod' for production." >&2
+	@echo "⚠️  'make up' is deprecated. Use 'make up-dev' for development." >&2
 	@echo "⏳ Redirecting to 'make up-dev'..." >&2
 	@docker compose -f $(COMPOSE_DEV) up -d
 
@@ -535,153 +569,193 @@ down: ## Stop dev compose stack only
 	@docker compose -f $(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
 
 .PHONY: logs
-logs: ## Tail dev compose logs (use logs-dev/logs-prod explicitly)
+logs: ## Tail dev compose logs (use logs-dev/logs-release-local explicitly)
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS) -n 1000
 
 # ──────────────────────────────────────────────
-# Local pre-release acceptance targets
+# Canonical deployed release targets. Pre-release and prod use these exact
+# commands and production manifests; only RELEASE_* environment inputs differ.
 # ──────────────────────────────────────────────
 
-.PHONY: init-pre-release-env
-init-pre-release-env: ## Create the ignored local pre-release env file
-	@test ! -e $(PRE_RELEASE_ENV) || { echo "ERROR: $(PRE_RELEASE_ENV) already exists"; exit 1; }
-	cp infra/compose/pre-release/env.example $(PRE_RELEASE_ENV)
-	@echo "Created $(PRE_RELEASE_ENV). Credentials are local-only; replace them before using a shared host."
+.PHONY: require-release-config
+require-release-config:
+	@case "$(RELEASE_PROFILE)" in pre-release|prod) ;; *) echo "ERROR: RELEASE_PROFILE must be pre-release or prod" >&2; exit 1 ;; esac
+	@test -f "$(RELEASE_STATEFUL_ENV)" || { echo "ERROR: missing $(RELEASE_STATEFUL_ENV)" >&2; exit 1; }
+	@test -f "$(RELEASE_PLATFORM_ENV)" || { echo "ERROR: missing $(RELEASE_PLATFORM_ENV)" >&2; exit 1; }
+	@test -f "$(RELEASE_OBSERVABILITY_ENV)" || { echo "ERROR: missing $(RELEASE_OBSERVABILITY_ENV)" >&2; exit 1; }
 
-.PHONY: require-pre-release-env
-require-pre-release-env:
-	@test -f $(PRE_RELEASE_ENV) || { echo "ERROR: missing $(PRE_RELEASE_ENV); run 'make init-pre-release-env'"; exit 1; }
+.PHONY: create-release-network
+create-release-network: require-release-config ## Create the selected release network
+	@docker network inspect $(RELEASE_NETWORK) >/dev/null 2>&1 || docker network create $(RELEASE_NETWORK)
 
-.PHONY: create-pre-release-network
-create-pre-release-network: ## Create the isolated pre-release Docker network
-	@docker network inspect $(PRE_RELEASE_NETWORK) >/dev/null 2>&1 || docker network create $(PRE_RELEASE_NETWORK)
+.PHONY: check-release-config
+check-release-config: require-release-config ## Render one deployed release from canonical manifests
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) config --quiet
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) --profile '*' config --quiet
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) --profile '*' config --quiet
+
+.PHONY: up-release-stateful
+up-release-stateful: create-release-network ## Start and wait for deployed stateful services
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) up -d --wait --wait-timeout 300
+
+.PHONY: prepare-release-platform
+prepare-release-platform: create-release-network ## Prepare database, MinIO, and Prefect
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) up -d --wait --wait-timeout 180 prefect-server
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm prepare-platform
+
+.PHONY: up-release-platform
+up-release-platform: create-release-network ## Start and wait for deployed application services
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) up -d --wait --wait-timeout 300 $(ARGS)
+
+.PHONY: up-release-observability
+up-release-observability: create-release-network ## Start deployed observability services
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) $(RELEASE_PROFILES) up -d
+
+.PHONY: up-release
+up-release: require-release-config ## Start a canonical pre-release or production deployment
+	$(MAKE) check-release-config
+	$(MAKE) up-release-stateful
+	$(MAKE) prepare-release-platform
+	$(MAKE) up-release-platform
+	$(MAKE) up-release-observability
+
+.PHONY: ps-release
+ps-release: require-release-config ## Show all projects for the selected release
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) ps
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) ps
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) $(RELEASE_PROFILES) ps
+
+.PHONY: logs-release
+logs-release: require-release-config ## Tail selected release platform logs (ARGS="api")
+	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) logs -f $(ARGS)
+
+.PHONY: down-release
+down-release: require-release-config ## Stop all selected release projects without deleting data
+	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) $(RELEASE_PROFILES) down --remove-orphans
+	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) down --remove-orphans
+	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) down --remove-orphans
+
+PRE_RELEASE_DEPLOY_ARGS := RELEASE_PROFILE=pre-release RELEASE_NETWORK=$(PRE_RELEASE_NETWORK) RELEASE_PROJECT=$(PRE_RELEASE_PROJECT) RELEASE_STATEFUL_ENV=$(PRE_RELEASE_STATEFUL_ENV) RELEASE_PLATFORM_ENV=$(PRE_RELEASE_PLATFORM_ENV) RELEASE_OBSERVABILITY_ENV=$(PRE_RELEASE_OBSERVABILITY_ENV)
+PROD_RELEASE_ARGS := RELEASE_PROFILE=prod RELEASE_NETWORK=$(PROD_NETWORK) RELEASE_PROJECT=finetune RELEASE_STATEFUL_ENV=$(PROD_STATEFUL_ENV) RELEASE_PLATFORM_ENV=$(PROD_PLATFORM_ENV) RELEASE_OBSERVABILITY_ENV=$(PROD_OBSERVABILITY_ENV)
 
 .PHONY: check-pre-release-config
-check-pre-release-config: require-pre-release-env ## Render the complete local pre-release configuration
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) config --quiet
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
-
-.PHONY: build-pre-release
-build-pre-release: require-pre-release-env ## Build production-target images for pre-release acceptance
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) build $(ARGS)
-
-.PHONY: up-pre-release-stateful
-up-pre-release-stateful: require-pre-release-env create-pre-release-network ## Start and wait for the isolated pre-release data plane
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) up -d --wait --wait-timeout 180
-
-.PHONY: db-migrate-pre-release
-db-migrate-pre-release: require-pre-release-env ## Run Alembic migrations against pre-release
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm migrate
-
-.PHONY: deployments-pre-release
-deployments-pre-release: require-pre-release-env ## Register Prefect pools and deployments in pre-release
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm deployments
-
-.PHONY: up-pre-release-platform
-up-pre-release-platform: require-pre-release-env create-pre-release-network ## Start production-built pre-release platform services
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) up -d --no-build --wait --wait-timeout 300 $(ARGS)
+check-pre-release-config: ## Render deployed pre-release using production manifests
+	$(MAKE) check-release-config $(PRE_RELEASE_DEPLOY_ARGS) RELEASE_PROFILES="$(PRE_RELEASE_PROFILES)"
 
 .PHONY: up-pre-release
-up-pre-release: require-pre-release-env ## Build and start the complete local pre-release acceptance stack
-	$(MAKE) check-pre-release-config
-	$(MAKE) build-pre-release
-	$(MAKE) up-pre-release-stateful
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) up -d --no-build --wait --wait-timeout 180 prefect-server
-	$(MAKE) db-migrate-pre-release
-	$(MAKE) deployments-pre-release
-	$(MAKE) up-pre-release-platform
-	$(MAKE) verify-pre-release
-
-.PHONY: verify-pre-release
-verify-pre-release: ## Verify public pre-release service health endpoints
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT)/ >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_API_PORT)/health >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_API_PORT)/ready >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_PREFECT_PORT)/api/health >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_LABEL_STUDIO_PORT)/health >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_MINIO_PORT)/minio/health/live >/dev/null
-	curl --fail --show-error --silent http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_IMAGE_PARSER_HTTP_PORT)/health >/dev/null
-	@echo "Pre-release is healthy: http://$(PRE_RELEASE_BIND_HOST):$(PRE_RELEASE_WEB_PORT)"
+up-pre-release: ## Deploy pre-release from the same immutable images/manifests as prod
+	$(MAKE) up-release $(PRE_RELEASE_DEPLOY_ARGS) RELEASE_PROFILES="$(PRE_RELEASE_PROFILES)" ARGS="$(ARGS)"
 
 .PHONY: ps-pre-release
-ps-pre-release: require-pre-release-env ## Show stateful and platform pre-release containers
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) ps
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) ps
+ps-pre-release:
+	$(MAKE) ps-release $(PRE_RELEASE_DEPLOY_ARGS) RELEASE_PROFILES="$(PRE_RELEASE_PROFILES)"
 
 .PHONY: logs-pre-release
-logs-pre-release: require-pre-release-env ## Tail pre-release platform logs (usage: make logs-pre-release ARGS="api")
-	$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) logs -f $(ARGS)
+logs-pre-release:
+	$(MAKE) logs-release $(PRE_RELEASE_DEPLOY_ARGS) RELEASE_PROFILES="$(PRE_RELEASE_PROFILES)" ARGS="$(ARGS)"
 
 .PHONY: down-pre-release
-down-pre-release: require-pre-release-env ## Stop pre-release containers without deleting their volumes
-	@$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_PROFILES) down --remove-orphans
-	@$(PRE_RELEASE_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_ENV) -p $(PRE_RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) down --remove-orphans
-
-# ──────────────────────────────────────────────
-# Production split-stack targets
-# ──────────────────────────────────────────────
+down-pre-release:
+	$(MAKE) down-release $(PRE_RELEASE_DEPLOY_ARGS) RELEASE_PROFILES="$(PRE_RELEASE_PROFILES)"
 
 .PHONY: create-prod-network
-create-prod-network: ## Create the shared finetune-prod Docker network
-	@docker network create $(PROD_NETWORK) 2>/dev/null || true
+create-prod-network:
+	$(MAKE) create-release-network $(PROD_RELEASE_ARGS)
 
 .PHONY: up-prod-stateful
-up-prod-stateful: ## Start production stateful data plane (postgres, minio, redis, label-studio)
-	docker compose --env-file $(PROD_STATEFUL_ENV) -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) up -d
+up-prod-stateful:
+	$(MAKE) up-release-stateful $(PROD_RELEASE_ARGS)
 
-.PHONY: down-prod-stateful
-down-prod-stateful: ## Stop production stateful data plane
-	@docker compose -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) down --remove-orphans 2>/dev/null || true
-
-.PHONY: logs-prod-stateful
-logs-prod-stateful: ## Tail production stateful logs (usage: make logs-prod-stateful ARGS="postgres")
-	docker compose -p finetune-stateful -f $(COMPOSE_PROD_STATEFUL) logs -f $(ARGS)
+.PHONY: prepare-platform-prod
+prepare-platform-prod:
+	$(MAKE) prepare-release-platform $(PROD_RELEASE_ARGS)
 
 .PHONY: up-prod-platform
-up-prod-platform: ## Start production app platform (prefect-server, api, web, workers)
-	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) up -d
-
-.PHONY: down-prod-platform
-down-prod-platform: ## Stop production app platform
-	@docker compose -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) down --remove-orphans 2>/dev/null || true
-
-.PHONY: logs-prod-platform
-logs-prod-platform: ## Tail production platform logs (usage: make logs-prod-platform ARGS="api")
-	docker compose -p finetune-platform -f $(COMPOSE_PROD_PLATFORM) logs -f $(ARGS)
-
-.PHONY: up-prod-ops
-up-prod-ops: ## Run production ops one-shots (migrate + deployments) — requires platform env
-	@echo "Running production ops (migrate + deployments)..."
-	$(MAKE) db-migrate-prod && $(MAKE) deployments-prod
-
-.PHONY: db-migrate-prod
-db-migrate-prod: ## Run Alembic migrations in production (one-shot)
-	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm migrate
-
-.PHONY: deployments-prod
-deployments-prod: ## Apply Prefect deployments in production (one-shot)
-	docker compose --env-file $(PROD_PLATFORM_ENV) -p finetune-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm deployments
+up-prod-platform:
+	$(MAKE) up-release-platform $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)" ARGS="$(ARGS)"
 
 .PHONY: up-prod-observability
-up-prod-observability: ## Start production observability stack (prometheus, grafana, loki, ...)
-	docker compose --env-file $(PROD_OBSERVABILITY_ENV) -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) up -d
-
-.PHONY: down-prod-observability
-down-prod-observability: ## Stop production observability stack
-	@docker compose -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) down --remove-orphans 2>/dev/null || true
-
-.PHONY: logs-prod-observability
-logs-prod-observability: ## Tail production observability logs (usage: make logs-prod-observability ARGS="prometheus")
-	docker compose -p finetune-observability -f $(COMPOSE_PROD_OBSERVABILITY) logs -f $(ARGS)
+up-prod-observability:
+	$(MAKE) up-release-observability $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)"
 
 .PHONY: up-prod-all
-up-prod-all: ## Start stateful + platform + observability (with 60s sleep between stateful and platform)
-	$(MAKE) up-prod-stateful
-	@echo "Waiting 60s for stateful services to be ready..."
-	@sleep 60
-	$(MAKE) up-prod-platform
-	$(MAKE) up-prod-observability
+up-prod-all: ## Deploy prod through the canonical release workflow
+	$(MAKE) up-release $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)" ARGS="$(ARGS)"
+
+.PHONY: ps-prod
+ps-prod:
+	$(MAKE) ps-release $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)"
+
+.PHONY: logs-prod-platform
+logs-prod-platform:
+	$(MAKE) logs-release $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)" ARGS="$(ARGS)"
+
+.PHONY: down-prod-all
+down-prod-all:
+	$(MAKE) down-release $(PROD_RELEASE_ARGS) RELEASE_PROFILES="$(PROFILES)"
+
+# Local workstation acceptance. These overlays are intentionally excluded from
+# deployed pre-release and production.
+# ──────────────────────────────────────────────
+
+.PHONY: init-pre-release-local-env
+init-pre-release-local-env:
+	@test ! -e $(PRE_RELEASE_LOCAL_ENV) || { echo "ERROR: $(PRE_RELEASE_LOCAL_ENV) already exists"; exit 1; }
+	cp infra/compose/pre-release/env.example $(PRE_RELEASE_LOCAL_ENV)
+	@echo "Created $(PRE_RELEASE_LOCAL_ENV) for loopback-only local acceptance."
+
+.PHONY: require-pre-release-local-env
+require-pre-release-local-env:
+	@test -f $(PRE_RELEASE_LOCAL_ENV) || { echo "ERROR: missing $(PRE_RELEASE_LOCAL_ENV); run 'make init-pre-release-local-env'"; exit 1; }
+
+.PHONY: create-pre-release-local-network
+create-pre-release-local-network:
+	@docker network inspect $(PRE_RELEASE_LOCAL_NETWORK) >/dev/null 2>&1 || docker network create $(PRE_RELEASE_LOCAL_NETWORK)
+
+.PHONY: check-pre-release-local-config
+check-pre-release-local-config: require-pre-release-local-env
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+
+.PHONY: build-pre-release-local
+build-pre-release-local: require-pre-release-local-env
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) build $(ARGS)
+
+.PHONY: up-pre-release-local
+up-pre-release-local: require-pre-release-local-env create-pre-release-local-network ## Build and start loopback-only local acceptance
+	$(MAKE) check-pre-release-local-config
+	$(MAKE) build-pre-release-local
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) up -d --wait --wait-timeout 180
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) up -d --no-build --wait --wait-timeout 180 prefect-server
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm prepare-platform
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) up -d --no-build --wait --wait-timeout 300 $(ARGS)
+	$(MAKE) verify-pre-release-local
+
+.PHONY: verify-pre-release-local
+verify-pre-release-local:
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_WEB_PORT)/ >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_API_PORT)/ready >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_PREFECT_PORT)/api/health >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_LABEL_STUDIO_PORT)/health >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_MINIO_PORT)/minio/health/live >/dev/null
+	curl --fail --show-error --silent http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_IMAGE_PARSER_HTTP_PORT)/health >/dev/null
+	@echo "Local pre-release is healthy: http://$(PRE_RELEASE_LOCAL_BIND_HOST):$(PRE_RELEASE_LOCAL_WEB_PORT)"
+
+.PHONY: ps-pre-release-local
+ps-pre-release-local: require-pre-release-local-env
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) ps
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) ps
+
+.PHONY: logs-pre-release-local
+logs-pre-release-local: require-pre-release-local-env
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) logs -f $(ARGS)
+
+.PHONY: down-pre-release-local
+down-pre-release-local: require-pre-release-local-env
+	@$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) down --remove-orphans
+	@$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file $(PRE_RELEASE_LOCAL_ENV) -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) down --remove-orphans
 
 .PHONY: save-images
 save-images: ## Save all compose Docker images as .tar archives
@@ -696,8 +770,22 @@ image-parser-export: ## Build and export image-parser as offline loadable tar.gz
 	docker save image-parser:local | gzip > dist/image-parser.tar.gz
 	@echo "Done: dist/image-parser.tar.gz ($(shell du -h dist/image-parser.tar.gz | cut -f1))"
 
+.PHONY: k8s-prepare
+k8s-prepare: ## Run the Kubernetes platform preparation Job and wait for it
+	-kubectl delete job finetune-platform-prepare -n finetune --ignore-not-found
+	kubectl create -f infra/k8s/platform-prepare-job.yaml
+	kubectl wait --for=condition=complete job/finetune-platform-prepare -n finetune --timeout=10m
+
 .PHONY: k8s-apply
-k8s-apply: ## Apply Kubernetes manifests
+k8s-apply: ## Apply dependencies, prepare the platform, then apply API/runtime workloads
+	kubectl apply -f infra/k8s/namespace.yaml -f infra/k8s/rbac.yaml -f infra/k8s/configmap.yaml
+	kubectl apply -f infra/k8s/postgres.yaml -f infra/k8s/minio.yaml -f infra/k8s/redis.yaml -f infra/k8s/prefect-server.yaml -f infra/k8s/label-studio.yaml
+	kubectl rollout status deployment/postgres -n finetune --timeout=10m
+	kubectl rollout status deployment/minio -n finetune --timeout=10m
+	kubectl rollout status deployment/redis -n finetune --timeout=10m
+	kubectl rollout status deployment/prefect-server -n finetune --timeout=10m
+	kubectl rollout status deployment/label-studio -n finetune --timeout=10m
+	$(MAKE) k8s-prepare
 	kubectl apply -k infra/k8s
 
 # ──────────────────────────────────────────────
@@ -727,4 +815,9 @@ help: ## Show this help message
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_STATEFUL_ENV" "Path to stateful .env file (default: /srv/finetune/stateful/.env)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_PLATFORM_ENV" "Path to platform .env file (default: /srv/finetune/platform/.env)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_OBSERVABILITY_ENV" "Path to observability .env file (default: /srv/finetune/observability/.env)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_STATEFUL_ENV" "Deployed pre-release stateful env file"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_PLATFORM_ENV" "Deployed pre-release platform env file"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_OBSERVABILITY_ENV" "Deployed pre-release observability env file"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_PROFILES" "Optional deployed pre-release Compose profiles"
+	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_LOCAL_PROFILES" "Optional local acceptance Compose profiles"
 	@echo

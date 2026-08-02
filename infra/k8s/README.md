@@ -5,23 +5,24 @@ The manifests mirror the docker-compose stack so both environments run the same 
 
 ## Files
 
-| File                    | What it deploys                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `namespace.yaml`        | `finetune` namespace                                                            |
-| `rbac.yaml`             | API service account + role for `pytorchjobs`                                    |
-| `configmap.yaml`        | Non-secret env vars (`APP_CONFIG_PROFILE`, Prefect/LS/embedding URLs)           |
-| `secret.example.yaml`   | Copy to `secret.yaml` — DB URLs, MinIO creds, LS keys                           |
-| `postgres.yaml`         | PostgreSQL (pgvector) with init script for `prefect` + `labelstudio` DBs        |
-| `minio.yaml`            | MinIO (API :9000, console :9001)                                                |
-| `prefect-server.yaml`   | Prefect 3 server (:4200)                                                        |
-| `embedding.yaml`        | Embedding gRPC service (:50051)                                                 |
-| `gpu-worker.yaml`       | GPU runtime API for train/predict/embed (:8010), requests `nvidia.com/gpu: 1`   |
-| `label-studio.yaml`     | Label Studio (:8080)                                                            |
-| `api-deployment.yaml`   | Platform API (:8000)                                                            |
-| `prefect-worker.yaml`   | CPU-only Prefect V2 worker (orchestration, flow management, CPU queues)         |
-| `pytorchjob-smoke.yaml` | Manual Kubeflow smoke job                                                       |
-| `kustomization.yaml`    | Kustomize entrypoint — applies all base resources                               |
-| `observability/`        | Monitoring stack manifests (Prometheus, Grafana, Loki, Alertmanager, exporters) |
+| File                        | What it deploys                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `namespace.yaml`            | `finetune` namespace                                                            |
+| `rbac.yaml`                 | API service account + role for `pytorchjobs`                                    |
+| `configmap.yaml`            | Non-secret env vars (`APP_CONFIG_PROFILE`, Prefect/LS/embedding URLs)           |
+| `secret.example.yaml`       | Copy to `secret.yaml` — DB URLs, MinIO creds, LS keys                           |
+| `postgres.yaml`             | PostgreSQL (pgvector) with init script for `prefect` + `labelstudio` DBs        |
+| `minio.yaml`                | MinIO (API :9000, console :9001)                                                |
+| `prefect-server.yaml`       | Prefect 3 server (:4200)                                                        |
+| `embedding.yaml`            | Embedding gRPC service (:50051)                                                 |
+| `gpu-worker.yaml`           | GPU runtime API for train/predict/embed (:8010), requests `nvidia.com/gpu: 1`   |
+| `label-studio.yaml`         | Label Studio (:8080)                                                            |
+| `api-deployment.yaml`       | Platform API (:8000)                                                            |
+| `platform-prepare-job.yaml` | One-shot migrations, MinIO policy, and Prefect registration                     |
+| `prefect-worker.yaml`       | CPU-only Prefect V2 worker (orchestration, flow management, CPU queues)         |
+| `pytorchjob-smoke.yaml`     | Manual Kubeflow smoke job                                                       |
+| `kustomization.yaml`        | Kustomize entrypoint — applies all base resources                               |
+| `observability/`            | Monitoring stack manifests (Prometheus, Grafana, Loki, Alertmanager, exporters) |
 
 Legacy worker manifests have been removed. Prefect flows now run in-process
 within `apps/api`.
@@ -42,13 +43,13 @@ prefect-worker            — CPU-only Prefect V2 worker (no exposed port)
 ## Apply
 
 ```bash
-# 1. Apply base resources (namespace, RBAC, infra, services)
-kubectl apply -k infra/k8s
-
-# 2. Create secrets (edit values first!)
+# 1. Create secrets (edit values first!)
 cp infra/k8s/secret.example.yaml infra/k8s/secret.yaml
 # Edit secret.yaml with real credentials
 kubectl apply -f infra/k8s/secret.yaml
+
+# 2. Apply dependencies, run preparation, then start API/runtime workloads
+make k8s-apply
 ```
 
 ## Verify
@@ -86,6 +87,9 @@ pulled from public registries.
 - The Prefect worker is CPU-only and must not have `nvidia.com/gpu` resource requests
   or NVIDIA environment variables.
 - API, workers, and orchestration run as separate services in both dev and prod topologies.
+- The API never applies migrations or external configuration. `make k8s-apply`
+  waits for dependencies, runs `platform-prepare-job.yaml`, then applies the API
+  and runtime workloads. `make k8s-prepare` reruns that one-shot for an upgrade.
 
 ## Observability
 

@@ -125,7 +125,8 @@ x-api-runtime: &api-runtime
 
 services:
   # ───────────────────────────────────────────────────────────────────
-  # API — dev mode with bind mounts, hot reload, alembic auto‑migration
+  # API — dev mode with bind mounts and hot reload. Platform preparation is
+  # performed by the explicit prepare-platform one-shot before this starts.
   # ───────────────────────────────────────────────────────────────────
   api:
     <<: *api-runtime
@@ -137,7 +138,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && ( uv run --no-dev --frozen alembic upgrade head || echo '[WARN] alembic upgrade skipped (migrations may be missing)' ) && uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "cd /app/apps/api && exec uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
     ports:
       - "8000:8000"
@@ -375,32 +376,16 @@ services:
     restart: unless-stopped
 
   # ───────────────────────────────────────────────────────────────────
-  # Deployments bootstrap — creates work pools, registers flows
+  # Platform preparation — migrations, MinIO policy, Prefect registrations
   # ───────────────────────────────────────────────────────────────────
-  deployments-bootstrap:
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile.prefect-worker-cpu
-      target: dev
-      args:
-        UV_INDEX_URL: ${UV_INDEX_URL:-}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+  prepare-platform:
+    <<: *api-runtime
+    profiles: ["ops"]
     deploy:
       resources:
         limits:
-          memory: ${DEPLOYMENTS_BOOTSTRAP_MEMORY:-1g}
-    entrypoint: [""]
-    command: >
-      sh -c "
-        uv run --no-dev --frozen --directory apps/api prefect work-pool create default-cpu --type process || true;
-        uv run --no-dev --frozen --directory apps/api prefect work-pool create default-gpu --type process || true;
-        uv run --no-dev --frozen --directory apps/api ftapi deployments apply
-      "
-    environment:
-      <<: *platform-environment
-    depends_on:
-      prefect-server:
-        condition: service_healthy
+          memory: ${PLATFORM_PREPARE_MEMORY:-2g}
+    command: ["/app/.venv/bin/python", "scripts/prepare_platform.py"]
     restart: "no"
 
   # ───────────────────────────────────────────────────────────────────

@@ -10,17 +10,19 @@ The deployable split manifests are:
 - `production/compose.ops.yaml`
 - `production/compose.observability.yaml`
 
-## Local Dev vs Release Validation
+## Compose Modes
 
-The compose stack now supports two modes via override files:
+The repository separates canonical deployed releases from local override stacks:
 
-| Mode                    | Command               | Compose Files                                             | Hot Reload                | Volume Mounts                  |
-| ----------------------- | --------------------- | --------------------------------------------------------- | ------------------------- | ------------------------------ |
-| Dev                     | `make up-dev`         | `docker-compose.yaml` + `docker-compose.dev.yaml`         | ✅ fastapi dev + vite dev | ✅ All code mounted            |
-| Legacy local validation | `make up-prod`        | `docker-compose.yaml` + `docker-compose.prod.yaml`        | ❌                        | ❌ Baked images                |
-| Pre-release acceptance  | `make up-pre-release` | production manifests + `pre-release/` acceptance overlays | ❌                        | ❌ Production-built image code |
+| Mode                    | Command                     | Compose files                                    | Code source          |
+| ----------------------- | --------------------------- | ------------------------------------------------ | -------------------- |
+| Dev                     | `make up-dev`               | base + dev override                              | Bind-mounted source  |
+| Deployed pre-release    | `make up-pre-release`       | production manifests only                        | Released images      |
+| Production              | `make up-prod-all`          | production manifests only                        | Same released images |
+| Local pre-release       | `make up-pre-release-local` | production manifests + local acceptance overlays | Locally built images |
+| Legacy local validation | `make up-release-local`     | base + legacy prod override                      | Locally built images |
 
-### Base Infrastructure (shared by both modes)
+### Base Infrastructure (local stacks)
 
 `docker-compose.yaml` contains always-on infrastructure:
 
@@ -42,16 +44,16 @@ The compose stack now supports two modes via override files:
 
 Adds via `docker-compose.dev.yaml`:
 
-- **api** with bind mounts + `fastapi dev` hot reload
+- **api** with bind mounts + `uvicorn --reload`
 - **web** with bind mount + Vite dev server hot reload
 - **prefect-worker-cpu** with bind mounts for flow code changes
-- **deployments-bootstrap**: one-shot pool creation + flow deployment registration
+- **prepare-platform** (ops profile): one-shot database, MinIO, and Prefect preparation
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
 - **sc-upstream** with `watchfiles` reload for Python service and protobuf changes
 - **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
-### Local Release Validation (`make up-prod`)
+### Legacy Local Release Validation (`make up-release-local`)
 
 Adds via `docker-compose.prod.yaml`:
 
@@ -60,11 +62,16 @@ Adds via `docker-compose.prod.yaml`:
 - **prefect-worker-cpu** with baked image (no bind mounts)
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
-Prod mode does **not** include pgadmin or a long-running deployments bootstrap.
-`make up-prod` performs Alembic migration and idempotent Prefect pool/deployment
-registration as one-shot steps before it starts the application services. The local
+This local validation mode does **not** include pgadmin or a long-running
+bootstrap process. `make up-release-local` runs the idempotent platform
+preparation script before it starts
+the application services. The local
 Prefect auth value defaults to `dangerous:dangerous` and can be overridden with
-`LOCAL_PROD_PREFECT_AUTH=...`.
+`LOCAL_RELEASE_PREFECT_AUTH=...`.
+
+`make up-prod` remains only as a deprecated compatibility redirect. It is not a
+production deployment command; use `make up-prod-all` for the split production
+stack.
 
 When invoking the two Compose files directly instead of using Make, export the
 same value explicitly:
@@ -73,20 +80,47 @@ same value explicitly:
 export PREFECT_SERVER_API_AUTH_STRING=dangerous:dangerous
 ```
 
-### Pre-release and Production Split-Stack
+### Deployed Pre-release and Production
 
-For a local acceptance run of the production-built services:
+Deployed pre-release and production use the exact same four manifests under
+`production/`. Prepare three isolated pre-release environment files, then run:
 
 ```bash
-make init-pre-release-env
 make up-pre-release
 ```
 
-This path builds the production Docker targets, then runs them against the same
-PostgreSQL, MinIO, Redis, Label Studio, Prefect, SC upstream, and image-parser
-boundaries used by the production manifests. The overlays under
-`infra/compose/pre-release/` only add local builds, loopback host ports, and
-project-scoped named volumes. They do not replace the production topology.
+The default deployed pre-release paths are
+`/srv/finetune-pre-release/{stateful,platform,observability}/.env`. Override
+`PRE_RELEASE_STATEFUL_ENV`, `PRE_RELEASE_PLATFORM_ENV`, or
+`PRE_RELEASE_OBSERVABILITY_ENV` when needed. The platform env must reference
+the same candidate immutable image digests that will be promoted to prod.
+
+The intended release-environment differences are deliberately narrow:
+
+| Concern                        | Pre-release                                          | Production                                  |
+| ------------------------------ | ---------------------------------------------------- | ------------------------------------------- |
+| Application profile            | `pre-release`                                        | `prod`                                      |
+| Application code               | Pulls candidate immutable image digests              | Promotes the accepted digests               |
+| Service topology and commands  | Same production manifests                            | Canonical production manifests              |
+| Dependencies and health checks | Same as production                                   | Canonical                                   |
+| Capacity                       | May use lower memory, worker, and concurrency values | Sized for production load                   |
+| Persistent storage source      | Explicit isolated durable test paths                 | Explicit durable production paths           |
+| Public access                  | No host ports; test TLS reverse proxy                | No host ports; production TLS reverse proxy |
+| Credentials and URLs           | Isolated test values                                 | Production secrets and public URLs          |
+| Observability                  | Same manifest, optionally lower capacity             | Same manifest, production capacity          |
+
+`make check-config` enforces identical deployed service membership and runtime
+behavior across pre-release and prod.
+
+### Local Pre-release Acceptance
+
+The overlays under `infra/compose/pre-release/` are now workstation-only. They
+add local builds, loopback ports, and project-scoped named volumes:
+
+```bash
+make init-pre-release-local-env
+make up-pre-release-local
+```
 
 The default endpoints are:
 
@@ -98,32 +132,32 @@ The default endpoints are:
 | Label Studio  | `http://127.0.0.1:18080` |
 | MinIO console | `http://127.0.0.1:19001` |
 
-Use `make verify-pre-release`, `make ps-pre-release`, and
-`make logs-pre-release ARGS=api` for inspection. `make down-pre-release` stops
-containers but preserves the isolated volumes. Enable the GPU worker only on a
-compatible NVIDIA host:
+Use `make verify-pre-release-local`, `make ps-pre-release-local`, and
+`make logs-pre-release-local ARGS=api` for inspection. Enable the GPU worker
+only on a compatible NVIDIA host:
 
 ```bash
-make up-pre-release PRE_RELEASE_PROFILES="--profile gpu"
+make up-pre-release-local PRE_RELEASE_LOCAL_PROFILES="--profile gpu"
 ```
 
 `infra/compose/pre-release/.env` is ignored by Git. The supplied `env.example`
 credentials are safe only for a loopback-bound local machine; replace them
 before using the stack on a shared host.
 
-For production use the split-stack manifests under `infra/compose/production/`:
+For production, these compatibility targets delegate to the same generic
+release workflow used by `make up-pre-release`:
 
-| Step             | Command                      | Description                                                  |
-| ---------------- | ---------------------------- | ------------------------------------------------------------ |
-| 1. Network       | `make create-prod-network`   | Create shared `finetune-prod` network                        |
-| 2. Stateful      | `make up-prod-stateful`      | `postgres`, `minio`, `redis`, `label-studio`                 |
-| 3. Platform      | `make up-prod-platform`      | `prefect-server`, `api`, `web`, `workers`                    |
-| 4. Ops           | `make db-migrate-prod`       | Alembic migrations (one-shot)                                |
-| 5. Ops           | `make deployments-prod`      | Prefect work pools + deployments (one-shot)                  |
-| 6. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ...                         |
-| 7. All-in-one    | `make up-prod-all`           | Steps 2 + 3 + 6 with 60s sleep between stateful and platform |
+| Step             | Command                      | Description                                     |
+| ---------------- | ---------------------------- | ----------------------------------------------- |
+| 1. Network       | `make create-prod-network`   | Create shared `finetune-prod` network           |
+| 2. Stateful      | `make up-prod-stateful`      | `postgres`, `minio`, `redis`, `label-studio`    |
+| 3. Prepare       | `make prepare-platform-prod` | Migrations, MinIO policy, Prefect registrations |
+| 4. Platform      | `make up-prod-platform`      | `prefect-server`, `api`, `web`, `workers`       |
+| 5. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ...            |
+| 6. All-in-one    | `make up-prod-all`           | Stateful, prepare, platform, and observability  |
 
-The API performs startup readiness checks against `postgres`, `redis`, and `label-studio`.
+The API performs read-only startup checks against the database revision, MinIO
+buckets/ILM, Prefect pools/deployments, Redis, and Label Studio.
 If any dependency is unreachable, the container exits with code 1 so the orchestrator
 restarts it after a delay. This replaces cross-project `depends_on` which is silently
 ignored across separate Compose projects.
@@ -137,20 +171,28 @@ unit/integration-test-only and is never deployed.
 
 Run `make check-config` before starting or releasing a stack. It renders the
 dev, local release-validation, pre-release, production, ops, and observability
-manifests without starting containers.
+manifests without starting containers. It also runs
+`scripts/check_compose_parity.py`, which rejects pre-release drift in service
+sets, commands, dependencies, health checks, environment keys, mount targets,
+shared environment values, or other runtime behavior. Lower resource limits,
+environment-specific credentials and public URLs, local build metadata,
+loopback ports, image names, and volume sources are intentional differences.
 
 ### Migration Notes
 
 - `make up` → now redirects to `make up-dev` (deprecated)
 - `make up-stack` → now redirects to `make up-dev ARGS="--scale web=0"` (deprecated)
-- `make prod` → removed (was deprecated redirect to `make up-prod`)
-- Local prod validation: `make up-prod` performs migrations and deployment registration.
-- Split-stack production: run `make db-migrate-prod` and `make deployments-prod` explicitly.
+- `make prod` → removed
+- `make up-prod` → deprecated redirect to `make up-release-local`
+- `make up-pre-release` now means deployed pre-release using released images.
+- Workstation acceptance moved to `make up-pre-release-local`.
+- Local release validation: `make up-release-local` performs platform preparation.
+- Split-stack production: run `make prepare-platform-prod` before starting the API.
 
 `docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
 local infrastructure (postgres, minio, redis, prefect-server, label-studio,
-sc-upstream, image-parser). Dev and prod overrides add API, web, and workers —
-see [Dev vs Prod Modes](#dev-vs-prod-modes) above.
+sc-upstream, image-parser). Dev and legacy local release overrides add API,
+web, and workers.
 
 Quick start:
 
@@ -158,8 +200,15 @@ Quick start:
 # Dev mode (recommended for daily work)
 make up-dev
 
-# Prod mode
-make up-prod
+# Production-shaped local acceptance
+make init-pre-release-local-env
+make up-pre-release-local
+
+# Deployed pre-release (requires deployed pre-release env files)
+make up-pre-release
+
+# Actual split-stack production (requires production env files)
+make up-prod-all
 
 ```
 
@@ -172,14 +221,14 @@ default demo datasets are needed.
 The stack is split across multiple Compose files:
 
 - **Base infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, sc-upstream, image-parser, profile-gated observability, profile-gated dcgm-exporter
-- **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), deployments-bootstrap, pgadmin
-- **Prod add-ons** (`docker-compose.prod.yaml`): api (uvicorn --workers 4), isolated sc-data-provider (uvicorn --workers 4), web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), prepare-platform (ops profile), pgadmin
+- **Legacy local release add-ons** (`docker-compose.prod.yaml`): api (uvicorn workers), isolated sc-data-provider, web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
-- **Production ops** (`production/compose.ops.yaml`): migrate, deployments (one-shot ops)
+- **Production ops** (`production/compose.ops.yaml`): prepare-platform (one-shot ops)
 - **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
 
-Dev, local-prod, production-platform, and production-ops manifests define a
+Dev, local release, production-platform, and production-ops manifests define a
 top-level `x-platform-environment` anchor. API, SC data-provider, workers, and ops
 services inherit the same database, Prefect, Label Studio, MinIO/SC object-store,
 Redis, LLM, and runtime endpoint settings; service-specific values are merged on top.
@@ -203,15 +252,13 @@ All services at a glance:
 - **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
 - **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).
-- **deployments-bootstrap** (dev-only): One-shot service that creates work pools and registers flow deployments.
+- **prepare-platform** (one-shot): Applies migrations, reconciles managed MinIO lifecycle rules, and creates Prefect pools/deployments under a global lock.
 - **pgadmin** (:5050, dev-only): Optional PostgreSQL admin UI
-- **migrate** (ops profile, one-shot): Runs Alembic migrations in production.
-- **deployments** (ops profile, one-shot): Creates Prefect work pools and applies flow deployments.
 
 ## Notes
 
-- Dev mode uses `fastapi dev` with bind mounts for hot-reload; prod mode uses `uvicorn --workers 4` with baked images.
-- Compose services run from the image's prebuilt `/app/.venv` and do not use `uv run` at container startup.
+- Dev mode uses `uvicorn --reload` with bind mounts; release modes use baked images without source mounts.
+- Release services run from the image's prebuilt `/app/.venv`. The dev API uses `uv run` to execute the bind-mounted workspace environment.
 - The `web` service serves assets baked into the image (prod) or via Vite dev server (dev).
 - Use `make up-dev` for the complete bind-mounted development stack.
 - GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.

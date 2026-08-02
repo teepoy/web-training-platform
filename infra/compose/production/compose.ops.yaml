@@ -37,34 +37,15 @@ x-platform-environment: &platform-environment
   LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
 
 services:
-  migrate:
+  prepare-platform:
     image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
     profiles: ["ops"]
     deploy:
       resources:
         limits:
-          memory: ${MIGRATE_MEMORY:-2g}
+          memory: ${PLATFORM_PREPARE_MEMORY:-2g}
     environment: *platform-environment
-    command: ["uv", "run", "--no-dev", "alembic", "upgrade", "head"]
-    networks:
-      finetune-prod:
-    restart: "no"
-
-  deployments:
-    image: ${FINETUNE_API_IMAGE:?Set FINETUNE_API_IMAGE to an immutable tag}
-    profiles: ["ops"]
-    deploy:
-      resources:
-        limits:
-          memory: ${DEPLOYMENTS_MEMORY:-2g}
-    environment: *platform-environment
-    command:
-      - /bin/sh
-      - -lc
-      - >-
-        /app/.venv/bin/prefect work-pool create default-cpu --type process || true;
-        /app/.venv/bin/prefect work-pool create default-gpu --type process || true;
-        /app/.venv/bin/ftapi deployments apply
+    command: ["/app/.venv/bin/python", "scripts/prepare_platform.py"]
     networks:
       finetune-prod:
     restart: "no"

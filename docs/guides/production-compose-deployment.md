@@ -23,9 +23,11 @@ The repository provides split production manifests under
 - `compose.ops.yaml`
 - `compose.observability.yaml`
 
-The older base plus prod override files (`docker-compose.yaml` + `docker-compose.prod.yaml`)
-still deploy services as one logical project and contain literal development credentials.
-Use those files for local validation, not as the final production manifests.
+The older base plus prod override files (`docker-compose.yaml` +
+`docker-compose.prod.yaml`) still deploy services as one logical project and
+contain literal development credentials. `make up-release-local` keeps this as
+a legacy local validation path. Do not use it as a production manifest;
+`make up-prod` is only a deprecated compatibility redirect.
 
 ## Required Hardening
 
@@ -90,8 +92,8 @@ pre-release overlays instead of adding ports or build directives to these
 production manifests:
 
 ```bash
-make init-pre-release-env
-make up-pre-release
+make init-pre-release-local-env
+make up-pre-release-local
 ```
 
 The command forces the `pre-release` API profile, builds every application and
@@ -99,6 +101,19 @@ runtime service from its production Docker target, and uses isolated Compose
 projects, network, and named volumes. See
 `infra/compose/pre-release/env.example` for the loopback endpoints. The example
 credentials must be replaced before running on a shared host.
+
+For a deployed pre-release environment, do not use those overlays. Prepare
+isolated stateful, platform, and observability env files under
+`/srv/finetune-pre-release/`, reference the candidate production image digests,
+and run:
+
+```bash
+make up-pre-release
+```
+
+This invokes the same manifests, health waits, preparation step, and startup
+order as `make up-prod-all`. Only environment inputs and Compose project/network
+names differ.
 
 ## Configuration
 
@@ -162,16 +177,15 @@ SC_UPSTREAM_MEMORY=8g
 SC_UPSTREAM_SHM_SIZE=1g
 IMAGE_PARSER_MEMORY=32g
 IMAGE_PARSER_SHM_SIZE=2g
-MIGRATE_MEMORY=2g
-DEPLOYMENTS_MEMORY=2g
+PLATFORM_PREPARE_MEMORY=2g
 ```
 
 All service ceilings use `deploy.resources.limits.memory`, which is honored by
 current Docker Compose without requiring Swarm mode. Do not reintroduce the
 legacy service-level `mem_limit` key.
 
-For the deployable test/acceptance environment, copy the platform environment
-file and set `APP_CONFIG_PROFILE=pre-release`, test-environment public URLs,
+For the deployable test/acceptance environment, copy all three production env
+examples and set `APP_CONFIG_PROFILE=pre-release`, test-environment public URLs,
 unique credentials, separate host data paths, and
 `PLATFORM_NETWORK_NAME=finetune-pre-release`. The `test` profile is reserved
 for automated tests using SQLite and memory storage and must not be deployed.
@@ -238,7 +252,13 @@ Render each manifest with its environment file before starting services. Compose
 will fail fast when a required value is missing.
 
 From a repository checkout, `make check-config` renders every supported local
-and split-stack variant with the committed example files.
+and split-stack variant with the committed example files. It also compares the
+rendered pre-release and production projects. The check permits lower resource
+limits, local build metadata, loopback ports, image names, and different volume
+sources, while requiring identical services, commands, dependency conditions,
+health checks, environment keys, shared environment values, mount targets, and
+other runtime behavior. Credentials, public URLs, database connection strings,
+and the selected application profile remain environment-specific.
 
 Build and publish the four application images from these Dockerfiles:
 
@@ -249,10 +269,11 @@ Build and publish the four application images from these Dockerfiles:
 | `FINETUNE_CPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-cpu`, target `prod` |
 | `FINETUNE_GPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-gpu`, target `prod` |
 
-## Validate The Current Bundle
+## Legacy Local Bundle Validation
 
-The existing combined stack can be used on a private host to validate images and
-runtime integration while the hardened split overlays are being prepared:
+The combined stack can be used on a private workstation for fast image and
+runtime validation. Prefer deployed `make up-pre-release` for release acceptance
+because it exercises the actual released images and split production manifests:
 
 ```bash
 docker compose \
@@ -281,7 +302,9 @@ docker compose \
   up -d postgres minio prefect-server label-studio redis
 ```
 
-Run database migrations as a one-shot production container:
+Prepare the platform once before starting the API. This applies Alembic
+migrations, reconciles MinIO buckets and managed ILM rules, and registers
+Prefect pools and deployments under one PostgreSQL advisory lock:
 
 ```bash
 docker compose \
@@ -289,26 +312,7 @@ docker compose \
   -f infra/compose/docker-compose.yaml \
   -f infra/compose/docker-compose.prod.yaml \
   run --rm api \
-  /bin/sh -lc 'cd /app/apps/api && uv run --no-dev alembic upgrade head'
-```
-
-Create Prefect pools and apply deployments:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  run --rm api \
-  /bin/sh -lc \
-  'uv run --no-dev prefect work-pool create default-cpu --type process || true; uv run --no-dev prefect work-pool create default-gpu --type process || true'
-
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  run --rm api \
-  /bin/sh -lc 'cd /app/apps/api && uv run --no-dev ftapi deployments apply'
+  /app/.venv/bin/python scripts/prepare_platform.py
 ```
 
 Start the application:
@@ -342,9 +346,8 @@ make create-prod-network
 # 2. Start the stateful data plane
 make up-prod-stateful
 
-# 3. Run ops (migrations + deployments)
-make db-migrate-prod
-make deployments-prod
+# 3. Prepare database, MinIO, and Prefect
+make prepare-platform-prod
 
 # 4. Start the app platform
 make up-prod-platform
@@ -352,12 +355,20 @@ make up-prod-platform
 # 5. Start observability
 make up-prod-observability
 
-# Or start everything in one shot (with 60s sleep between stateful and platform)
+# Or use the generic production wrapper
 make up-prod-all
 ```
 
-The API performs startup readiness checks against `postgres`, `redis`, and
-`label-studio`. If any dependency is unreachable, the container exits with code 1
+The two complete deployed release commands are therefore:
+
+```bash
+make up-pre-release  # pre-release env files and isolated project/network
+make up-prod-all     # production env files and production project/network
+```
+
+The API performs read-only startup checks against the database revision, MinIO,
+Prefect, Redis, and Label Studio. If any dependency is unavailable or stale,
+the container exits with code 1
 so the orchestrator restarts it. This replaces the silently ignored `depends_on`
 that used to span across separate Compose projects.
 
@@ -411,11 +422,10 @@ For each release:
 2. Back up PostgreSQL and verify object-storage replication or backup status.
 3. Pull or load the new images on the host.
 4. Render and review `docker compose config`.
-5. Run Alembic migrations once.
-6. Apply Prefect deployments from the new API image.
-7. Recreate API, web, and workers.
-8. Run readiness and smoke checks.
-9. Monitor errors, queue depth, and worker health.
+5. Run `make prepare-platform-prod` once from the new API image.
+6. Recreate API, web, and workers.
+7. Run readiness and smoke checks.
+8. Monitor errors, queue depth, and worker health.
 
 Do not recreate PostgreSQL or MinIO as part of a routine application release.
 

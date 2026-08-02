@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: finetune-platform-prepare
+  namespace: finetune
+  labels:
+    app: finetune-platform-prepare
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: finetune-platform-prepare
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: prepare-platform
+          image: finetune-api:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
+          command:
+            - /app/.venv/bin/python
+            - scripts/prepare_platform.py

@@ -29,12 +29,11 @@ The platform uses two Prefect work pools, each with a dedicated Dockerfile:
 | `default-cpu` | `prefect-worker-cpu` | No  | `apps/api/Dockerfile.prefect-worker-cpu` |
 | `default-gpu` | `prefect-worker-gpu` | Yes | `apps/api/Dockerfile.prefect-worker-gpu` |
 
-Both pools are created by the `deployments-bootstrap` service in `docker-compose.yaml`:
+Both pools and platform-owned deployments are prepared by the one-shot
+`prepare-platform` service before the API starts:
 
 ```yaml
-uv run --directory apps/api prefect work-pool create default-cpu --type process || true;
-uv run --directory apps/api prefect work-pool create default-gpu --type process || true;
-uv run --directory apps/api ftapi deployments apply
+uv run --directory apps/api python scripts/prepare_platform.py
 ```
 
 - The GPU worker container (`prefect-worker-gpu`) is **profile-gated** (`profiles: [gpu]`) and only starts when `--profile gpu` is passed to `docker compose up`.
@@ -57,11 +56,13 @@ When running the GPU worker **on the host** (outside Compose) simultaneously wit
 - Production split-stack uses 4 independent Compose projects sharing an external `finetune-prod` network:
   - `finetune-stateful` (postgres, minio, redis, label-studio)
   - `finetune-platform` (prefect-server, api, web, workers)
-  - `finetune-ops` (migrate, deployments — one-shot)
+  - `finetune-ops` (platform preparation — one-shot)
   - `finetune-observability` (prometheus, grafana, loki, exporters)
-- Pre-release uses the same split-stack manifests and service topology as
-  production, with `APP_CONFIG_PROFILE=pre-release` and isolated test
-  credentials, URLs, data paths, and Compose project/network names.
+- Deployed pre-release uses the exact same split-stack manifests, released
+  image digests, health waits, and startup workflow as production, with
+  `APP_CONFIG_PROFILE=pre-release` and isolated test credentials, URLs, data
+  paths, and Compose project/network names. The overlays under
+  `compose/pre-release/` are workstation-only local acceptance helpers.
 
 ## ANTI-PATTERNS
 
